@@ -3,6 +3,7 @@ import {
   FLOW_INTERVAL_OPTIONS,
   buildAppUsageSummaries,
   buildFlowBlocks,
+  buildDailyTotals,
   buildHourlyBuckets,
   buildProductivityPersona,
   classifyActivity,
@@ -153,6 +154,41 @@ describe('domain helpers', () => {
     expect(sites[0].siteDomain).toBe('tauri.app');
     expect(blocks).toHaveLength(6);
     expect(blocks[0].siteDomain).toBe('tauri.app');
+  });
+
+  it('assigns pre-4am activity to the previous logical day', () => {
+    const logicalSegments = [
+      segment({
+        id: 'boundary-crossing',
+        start: localIsoAt(1, 3, 0),
+        end: localIsoAt(1, 5, 0),
+        appName: 'Code',
+        windowTitle: 'Project docs',
+      }),
+    ];
+
+    expect(buildDailyTotals(logicalSegments, '2026-04-06', '2026-04-07', 4 * 60)).toEqual([
+      { day: '2026-04-06', totalSeconds: 60 * 60 },
+      { day: '2026-04-07', totalSeconds: 60 * 60 },
+    ]);
+  });
+
+  it('builds flow blocks for the configured logical day window', () => {
+    const logicalSegments = [
+      segment({
+        id: 'late-night-docs',
+        start: localIsoAt(1, 3, 50),
+        end: localIsoAt(1, 4, 5),
+        appName: 'Safari',
+        siteTitle: 'Developer docs',
+      }),
+    ];
+
+    const previousLogicalDayBlocks = buildFlowBlocks(logicalSegments, '2026-04-06', 5, undefined, 4 * 60);
+    const nextLogicalDayBlocks = buildFlowBlocks(logicalSegments, '2026-04-07', 5, undefined, 4 * 60);
+
+    expect(previousLogicalDayBlocks.map((block) => block.minuteOfDay)).toEqual([3 * 60 + 50, 3 * 60 + 55]);
+    expect(nextLogicalDayBlocks.map((block) => block.minuteOfDay)).toEqual([4 * 60]);
   });
 
   it('builds ranked app usage summaries', () => {
