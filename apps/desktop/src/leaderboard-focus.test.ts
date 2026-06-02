@@ -55,6 +55,26 @@ describe("buildRollingFocusSeconds", () => {
     expect(total).toBe(7 * 600);
   });
 
+  it("uses a 4am start boundary for local leaderboard windows", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "early-morning-previous-logical-day",
+          new Date(2026, 3, 7, 3, 30).toISOString(),
+          new Date(2026, 3, 7, 4, 30).toISOString(),
+          "Safari",
+          { siteTitle: "Developer docs" },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+      undefined,
+      4 * 60,
+    );
+
+    expect(total).toBe(30 * 60);
+  });
+
   it("counts only focus-labeled categories", () => {
     const total = buildRollingFocusSeconds(
       [

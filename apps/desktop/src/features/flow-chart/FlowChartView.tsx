@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
-import { FLOW_INTERVAL_OPTIONS, secondsToLabel, type ActivityCategory, type ClassificationSource, type FlowBlock, type FlowIntervalMinutes, type ProductivityLabel } from "@dtime/domain";
+import { FLOW_INTERVAL_OPTIONS, logicalMinuteOfDay, secondsToLabel, type ActivityCategory, type ClassificationSource, type FlowBlock, type FlowIntervalMinutes, type ProductivityLabel } from "@dtime/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+const MINUTES_PER_DAY = 24 * 60;
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
 const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
@@ -47,6 +48,19 @@ function formatHourLabel(hour: number): string {
   const period = hour < 12 ? "am" : "pm";
   const displayHour = hour % 12 || 12;
   return `${displayHour}${period}`;
+}
+
+function normalizeStartOfDayMinutes(minutes?: number): number {
+  if (!Number.isFinite(minutes)) return 0;
+  return Math.min(MINUTES_PER_DAY - 1, Math.max(0, Math.round(minutes ?? 0)));
+}
+
+function clockHourForLogicalHour(logicalHour: number, startOfDayMinutes: number): number {
+  return Math.floor((logicalHour * 60 + startOfDayMinutes) / 60) % 24;
+}
+
+function minuteOfDayForCell(logicalHour: number, minuteOffset: number, startOfDayMinutes: number): number {
+  return (logicalHour * 60 + minuteOffset + startOfDayMinutes) % MINUTES_PER_DAY;
 }
 
 function formatMinuteOfDay(minuteOfDay: number): string {
@@ -142,12 +156,14 @@ export function FlowChartView({
   currentMinuteOfDay,
   intervalMinutes = 3,
   onIntervalChange,
+  startOfDayMinutes = 0,
 }: {
   blocks: FlowBlock[];
   appIcons: Record<string, string | null>;
   currentMinuteOfDay?: number | null;
   intervalMinutes?: FlowIntervalMinutes;
   onIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
+  startOfDayMinutes?: number;
 }) {
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
@@ -155,9 +171,11 @@ export function FlowChartView({
     () => Array.from({ length: 60 / intervalMinutes }, (_, index) => index * intervalMinutes),
     [intervalMinutes],
   );
-  const currentHour = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined ? Math.floor(currentMinuteOfDay / 60) : null;
-  const currentMinuteOffset = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined
-    ? Math.floor((currentMinuteOfDay % 60) / intervalMinutes) * intervalMinutes
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const currentLogicalMinute = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined ? logicalMinuteOfDay(currentMinuteOfDay, boundaryMinutes) : null;
+  const currentHourIndex = currentLogicalMinute !== null ? Math.floor(currentLogicalMinute / 60) : null;
+  const currentMinuteOffset = currentLogicalMinute !== null
+    ? Math.floor((currentLogicalMinute % 60) / intervalMinutes) * intervalMinutes
     : null;
   const blockByCell = useMemo(() => {
     const next = new Map<string, FlowBlock>();
@@ -233,11 +251,14 @@ export function FlowChartView({
 
       <div className="flow-chart-hours" aria-hidden="true">
         <span />
-        {HOURS.map((hour) => (
-          <span className={hour === currentHour ? "flow-chart-hour--now" : undefined} key={hour}>
-            {hour === currentHour || hour % 3 === 0 ? formatHourLabel(hour) : ""}
-          </span>
-        ))}
+        {HOURS.map((hour) => {
+          const clockHour = clockHourForLogicalHour(hour, boundaryMinutes);
+          return (
+            <span className={hour === currentHourIndex ? "flow-chart-hour--now" : undefined} key={hour}>
+              {hour === currentHourIndex || hour % 3 === 0 ? formatHourLabel(clockHour) : ""}
+            </span>
+          );
+        })}
       </div>
       <div className="flow-chart-grid">
         {rowMinuteOffsets.map((minuteOffset) => {
@@ -252,13 +273,13 @@ export function FlowChartView({
           <div
             className={`flow-chart-row${isCurrentMinuteRow ? " flow-chart-row--now" : ""}${isTerminalCurrentMinuteRow ? " flow-chart-row--now-terminal" : ""}${isCurrentTimeLabelRow ? " flow-chart-row--time-label" : ""}`}
             key={minuteOffset}
-            style={isCurrentMinuteRow && currentHour !== null ? { "--flow-current-hour": currentHour } as CSSProperties & Record<"--flow-current-hour", number> : undefined}
+            style={isCurrentMinuteRow && currentHourIndex !== null ? { "--flow-current-hour": currentHourIndex } as CSSProperties & Record<"--flow-current-hour", number> : undefined}
           >
             <div className="flow-chart-row-label">:{`${minuteOffset}`.padStart(2, "0")}</div>
             {HOURS.map((hour) => {
-              const minuteOfDay = hour * 60 + minuteOffset;
+              const minuteOfDay = minuteOfDayForCell(hour, minuteOffset, boundaryMinutes);
               const block = blockByCell.get(`${minuteOfDay}`);
-              const isCurrentHourCell = hour === currentHour && minuteOffset === currentMinuteOffset;
+              const isCurrentHourCell = hour === currentHourIndex && minuteOffset === currentMinuteOffset;
               if (!block) {
                 return (
                   <span

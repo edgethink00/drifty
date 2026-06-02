@@ -406,7 +406,7 @@ describe("App leaderboard participation", () => {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
     getTimeline.mockImplementation(async (query: { day?: string; start?: string; end?: string }) => {
-      if (query.day === previousDay) {
+      if (query.day === previousDay || (query.start === `${previousDay}T04:00:00` && query.end === `${today}T03:59:59`)) {
         return [
           {
             id: "previous-day",
@@ -422,8 +422,8 @@ describe("App leaderboard participation", () => {
       }
 
       if (
-        (query.start === `${windowStartDay}T00:00:00` || query.start === `${monthStartDay}T00:00:00`) &&
-        query.end === `${today}T23:59:59`
+        (query.start === `${windowStartDay}T04:00:00` || query.start === `${monthStartDay}T04:00:00`) &&
+        query.end === `${shiftIsoDate(today, 1)}T03:59:59`
       ) {
         return [
           {
