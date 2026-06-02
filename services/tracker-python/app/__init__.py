@@ -1,2 +1,1 @@
-"""Python sidecar package for dtime_mac."""
-
+"""Python sidecar package for Drifty Mac."""
