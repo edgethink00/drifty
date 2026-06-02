@@ -1,5 +1,5 @@
 /* =========================================================
-   deTime — design system  ·  light/dark · olive green
+   Drifty — design system  ·  light/dark · olive green
    ========================================================= */
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
 
@@ -5221,7 +5221,7 @@ input, textarea { color: inherit; }
 
 /* ========================================================
    PROTOTYPE ALIGNMENT — adds class names used by App.tsx
-   to match the deTime prototype layout exactly.
+   to match the Drifty prototype layout exactly.
    ======================================================== */
 
 /* Nav items (prototype uses `.nav-item` instead of `.nav-button`) */
@@ -10098,7 +10098,7 @@ button.flow-cell:focus {
 }
 
 
-/* Corrected dtime.html parity: Insights top focus/drift graph */
+/* Corrected Drifty prototype parity: Insights top focus/drift graph */
 .focus-drift {
   --focus-drift-left-bleed: var(--space-3);
   --focus-drift-right-bleed: var(--space-5);
@@ -10124,7 +10124,7 @@ button.flow-cell:focus {
   opacity: 0.82;
 }
 
-/* Corrected dtime.html parity: Insights chart panel exact inset */
+/* Corrected Drifty prototype parity: Insights chart panel exact inset */
 .insight-chart-panel.editorial-panel {
   margin-top: var(--space-1);
   padding: 10px var(--space-3) 12px;
@@ -10135,19 +10135,19 @@ button.flow-cell:focus {
 }
 
 
-/* Corrected dtime.html parity: hide non-mock Insights support/copy blocks */
+/* Corrected Drifty prototype parity: hide non-mock Insights support/copy blocks */
 .insights-page .monthly-pattern-preview__copy--compact,
 .insights-page .insight-grid--supporting {
   display: none;
 }
 
 
-/* Corrected dtime.html parity: Day flow header has no explanatory copy. */
+/* Corrected Drifty prototype parity: Day flow header has no explanatory copy. */
 .flow-chart-copy {
   display: none;
 }
 
-/* Corrected dtime.html parity: Week calendar header lives inside the scroller. */
+/* Corrected Drifty prototype parity: Week calendar header lives inside the scroller. */
 .week-v2 {
   gap: var(--block-gap-compact);
 }
@@ -10297,7 +10297,7 @@ button.flow-cell:focus {
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 42%, transparent), inset -1px 0 0 color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-/* Corrected dtime.html parity: Week calendar event cards are solid category blocks. */
+/* Corrected Drifty prototype parity: Week calendar event cards are solid category blocks. */
 .week-v2-calendar__event {
   left: 4px;
   right: 4px;
@@ -10497,7 +10497,7 @@ button.flow-cell:focus {
   font-size: 9.5px;
 }
 
-/* Corrected dtime.html parity: compact Classification, Insights analysis, and quiet leaderboard ledger. */
+/* Corrected Drifty prototype parity: compact Classification, Insights analysis, and quiet leaderboard ledger. */
 .content--classify .clf-stat {
   min-width: 0;
   min-height: 0;
@@ -11228,7 +11228,7 @@ button.flow-cell:focus {
 
 
 
-/* dtime_v1.1 parity: tighter Your Day app usage ranking. */
+/* Drifty prototype parity: tighter Your Day app usage ranking. */
 .app-usage-panel.editorial-panel {
   gap: var(--space-2);
   padding: 10px 12px;
@@ -11345,7 +11345,7 @@ button.flow-cell:focus {
 }
 
 
-/* dtime_v1.1 exact stat footer sizing for top app card. */
+/* Drifty prototype exact stat footer sizing for top app card. */
 .app-usage-feature__stats {
   border-radius: var(--radius-md);
 }
