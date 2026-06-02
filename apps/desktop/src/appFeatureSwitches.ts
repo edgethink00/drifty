@@ -1,8 +1,8 @@
-export type ReleaseChannel = "dev" | "beta" | "production";
+export type ReleaseChannel = "dev" | "production";
 
 function resolveReleaseChannel(): ReleaseChannel {
   const raw = String(import.meta.env.VITE_DRIFTY_CHANNEL ?? "").trim().toLowerCase();
-  if (raw === "production" || raw === "beta" || raw === "dev") return raw;
+  if (raw === "production" || raw === "dev") return raw;
   return "dev";
 }
 
