@@ -11776,7 +11776,7 @@ button.flow-cell:focus {
     margin-left: 0;
   }
 
-  /* 접힘 시: standalone 아이콘 표시 */
+  /* Show the standalone icon while collapsed. */
   .sidebar--collapsed .brand__logo {
     width: 28px;
     height: 28px;
