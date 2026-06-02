@@ -10798,8 +10798,15 @@ button.flow-cell:focus {
   grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.5fr);
   align-items: center;
   gap: var(--space-4);
-  padding: 0;
-  border-radius: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.leaderboard-hero::before {
+  content: none;
 }
 
 .leaderboard-hero__identity {
@@ -11007,7 +11014,7 @@ button.flow-cell:focus {
   display: grid;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
