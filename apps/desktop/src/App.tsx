@@ -437,6 +437,8 @@ type ClassificationActivityRow = {
   count: number;
   startedLabel: string;
   endedLabel: string;
+  segments: ActivitySegment[];
+  hasDetails: boolean;
 };
 
 const THEME_STORAGE_KEY = "drifty.theme";
@@ -674,6 +676,113 @@ function classifySegmentSourceKey(segment: ActivitySegment): string {
   return `app:${segment.appName}`;
 }
 
+function classificationActivityLabel(segment: ActivitySegment): string {
+  return (segment.windowTitle || "").trim()
+    || (segment.siteTitle || "").trim()
+    || (segment.siteDomain || "").trim()
+    || segment.appName;
+}
+
+function segmentHasUsefulCaptureDetails(segment: ActivitySegment, rowLabel: string): boolean {
+  const title = (segment.youtubeTitle || segment.siteTitle || segment.windowTitle || "").trim();
+  return Boolean(
+    segment.browserName
+    || segment.siteDomain
+    || segment.youtubeChannelName
+    || (title && title !== rowLabel)
+    || segment.classification?.source
+    || segment.classification?.reason
+    || segment.classification?.confidence != null,
+  );
+}
+
+function hashStringForDomId(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function classificationActivityDetailsId(rowId: string): string {
+  const readableId = rowId
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "activity";
+  return `classification-activity-details-${readableId}-${hashStringForDomId(rowId)}`;
+}
+
+function formatClassificationConfidence(confidence: number): string {
+  return `${Math.round(Math.min(Math.max(confidence, 0), 1) * 100)}%`;
+}
+
+function truncateCaptureSummary(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+}
+
+function safeCaptureSummary(value: string): string {
+  return truncateCaptureSummary(value.replace(/https?:\/\/\S+/gi, "[link]").replace(/\bwww\.\S+/gi, "[link]"));
+}
+
+function captureSurfaceDetails(segment: ActivitySegment): string[] {
+  return [
+    segment.appName ? `App: ${segment.appName}` : null,
+    segment.browserName ? `Browser: ${segment.browserName}` : null,
+    segment.siteDomain ? `Domain: ${segment.siteDomain}` : null,
+    segment.youtubeChannelName ? `Channel: ${safeCaptureSummary(segment.youtubeChannelName)}` : null,
+  ].filter((item): item is string => Boolean(item));
+}
+
+function captureRowSurfaceDetails(segments: ActivitySegment[]): string[] {
+  const details = new Set<string>();
+  for (const segment of segments) {
+    for (const detail of captureSurfaceDetails(segment)) details.add(detail);
+  }
+  return Array.from(details);
+}
+
+type ClassificationRowSummary = {
+  categoryLabel: string;
+  productivityLabel: string;
+  sourceLabel: string;
+  confidenceLabel: string;
+};
+
+export function classificationRowSummary(segments: ActivitySegment[], options?: ClassificationOptions): ClassificationRowSummary | null {
+  const classifications = segments.map((segment) => classifyActivityDetailed(segment, options));
+  const firstClassification = classifications[0];
+  if (!firstClassification) return null;
+
+  const categoryValues = new Set(classifications.map((classification) => classification.category));
+  const productivityValues = new Set(classifications.map((classification) => classification.productivity));
+  const sourceValues = new Set(classifications.map((classification) => classification.source));
+  let confidenceTotal = 0;
+  let positiveConfidenceCount = 0;
+
+  for (const classification of classifications) {
+    if (Number.isFinite(classification.confidence) && classification.confidence > 0) {
+      confidenceTotal += classification.confidence;
+      positiveConfidenceCount += 1;
+    }
+  }
+
+  let confidenceLabel = "Confidence unavailable";
+  if (positiveConfidenceCount === classifications.length) {
+    confidenceLabel = formatClassificationConfidence(confidenceTotal / positiveConfidenceCount);
+  } else if (positiveConfidenceCount > 0) {
+    confidenceLabel = "Mixed confidence";
+  }
+
+  return {
+    categoryLabel: categoryValues.size > 1 ? "Mixed" : categoryLabel(firstClassification.category),
+    productivityLabel: productivityValues.size > 1 ? "Mixed" : productivityLabel(firstClassification.productivity),
+    sourceLabel: sourceValues.size > 1 ? "Mixed" : classificationSourceLabel(firstClassification.source, firstClassification.source === "llm"),
+    confidenceLabel,
+  };
+}
+
 function buildClassificationSourceSummaries(segments: ActivitySegment[]): ClassificationSourceSummary[] {
   const sourceMap = new Map<string, ClassificationSourceSummary>();
   for (const segment of segments) {
@@ -707,10 +816,7 @@ function buildClassificationActivityRows(segs: ActivitySegment[]): Classificatio
   const rows = new Map<string, ClassificationActivityRow>();
   const ordered = segs.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   for (const item of ordered) {
-    const label = (item.windowTitle || "").trim()
-      || (item.siteTitle || "").trim()
-      || (item.siteDomain || "").trim()
-      || item.appName;
+    const label = classificationActivityLabel(item);
     const key = `${classifySegmentSourceKey(item)}:${label}`;
     const current = rows.get(key) ?? {
       id: key,
@@ -719,13 +825,21 @@ function buildClassificationActivityRows(segs: ActivitySegment[]): Classificatio
       count: 0,
       startedLabel: formatTimeLabel(item.startedAt),
       endedLabel: formatTimeLabel(item.endedAt),
+      segments: [],
+      hasDetails: false,
     };
     current.totalSeconds += item.durationSeconds;
     current.count += 1;
     current.endedLabel = formatTimeLabel(item.endedAt);
+    current.segments.push(item);
     rows.set(key, current);
   }
-  return Array.from(rows.values()).sort((a, b) => b.totalSeconds - a.totalSeconds);
+  return Array.from(rows.values())
+    .map((row) => ({
+      ...row,
+      hasDetails: row.count > 1 || row.segments.some((segment) => segmentHasUsefulCaptureDetails(segment, row.label)),
+    }))
+    .sort((a, b) => b.totalSeconds - a.totalSeconds);
 }
 
 export default function App() {
@@ -758,6 +872,7 @@ export default function App() {
   const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<string | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
+  const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("aiSetup");
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
@@ -1529,6 +1644,9 @@ export default function App() {
     () => Math.max(...classificationActivityRows.map((r) => r.totalSeconds), 0),
     [classificationActivityRows],
   );
+  useEffect(() => {
+    setExpandedClassificationActivityRows(new Set());
+  }, [selectedDay, effectiveClassifyCategoryId, effectiveClassifySourceId]);
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(segments, { limit: 1, groupBy: "app" })[0] ?? null, [segments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
@@ -2808,8 +2926,10 @@ export default function App() {
                           <div className="classification-panel-view__list" role="list">
                             {classificationActivityRows.map((row) => {
                               const rowMeta = `${row.count} ${row.count === 1 ? "activity" : "activities"} · ${row.startedLabel} - ${row.endedLabel}`;
-                              return (
-                                <div key={row.id} className="classification-panel-view__activity-row">
+                              const isExpanded = row.hasDetails && expandedClassificationActivityRows.has(row.id);
+                              const detailsId = classificationActivityDetailsId(row.id);
+                              const rowSummary = (
+                                <>
                                   <div className="classification-panel-view__activity-copy">
                                     <strong title={row.label}>{row.label}</strong>
                                     <span title={rowMeta}>{rowMeta}</span>
@@ -2820,6 +2940,75 @@ export default function App() {
                                     </div>
                                     <strong>{formatCompactDurationFromSeconds(row.totalSeconds)}</strong>
                                   </div>
+                                </>
+                              );
+                              return (
+                                <div key={row.id} className="classification-panel-view__activity-row" role="listitem" data-expandable={String(row.hasDetails)} data-expanded={String(isExpanded)}>
+                                  {row.hasDetails ? (
+                                    <button
+                                      type="button"
+                                      className="classification-panel-view__activity-toggle"
+                                      aria-expanded={isExpanded}
+                                      aria-controls={detailsId}
+                                      onClick={() => {
+                                        setExpandedClassificationActivityRows((current) => {
+                                          const next = new Set(current);
+                                          if (next.has(row.id)) next.delete(row.id);
+                                          else next.add(row.id);
+                                          return next;
+                                        });
+                                      }}
+                                    >
+                                      {rowSummary}
+                                      <span className="sr-only">Capture details {isExpanded ? "expanded" : "collapsed"}</span>
+                                      <span className="classification-panel-view__activity-chevron" aria-hidden="true">{isExpanded ? "⌄" : ">"}</span>
+                                    </button>
+                                  ) : (
+                                    <div className="classification-panel-view__activity-summary">
+                                      {rowSummary}
+                                    </div>
+                                  )}
+                                  {isExpanded ? (() => {
+                                    const surfaceDetails = captureRowSurfaceDetails(row.segments);
+                                    const summary = classificationRowSummary(row.segments, selectedDayClassificationOptions);
+                                    return (
+                                      <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={`Capture details for ${row.label}`}>
+                                        <div className="classification-panel-view__activity-overview">
+                                          {surfaceDetails.length > 0 ? (
+                                            <div className="classification-panel-view__activity-surface" aria-label="Capture surface">
+                                              <span className="label-mono">Surface</span>
+                                              <div className="classification-panel-view__activity-surface-list">
+                                                {surfaceDetails.map((detail) => <span key={detail}>{detail}</span>)}
+                                              </div>
+                                            </div>
+                                          ) : null}
+                                          {summary ? (
+                                            <dl className="classification-panel-view__activity-classification" aria-label="Classification summary">
+                                              <div><dt>Category</dt><dd>{summary.categoryLabel}</dd></div>
+                                              <div><dt>Productivity</dt><dd>{summary.productivityLabel}</dd></div>
+                                              <div><dt>Source</dt><dd>{summary.sourceLabel}</dd></div>
+                                              <div><dt>Confidence</dt><dd>{summary.confidenceLabel}</dd></div>
+                                            </dl>
+                                          ) : null}
+                                        </div>
+                                        <div className="classification-panel-view__capture-timeline">
+                                          <span className="label-mono">Capture slices</span>
+                                          <div className="classification-panel-view__capture-slice-list" role="list" aria-label={`Capture slices for ${row.label}`}>
+                                            {row.segments.map((segment, index) => {
+                                              const segmentRange = `${formatTimeLabel(segment.startedAt)} - ${formatTimeLabel(segment.endedAt)}`;
+                                              const segmentDuration = formatCompactDurationFromSeconds(segment.durationSeconds);
+                                              return (
+                                                <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentRange}, ${segmentDuration}`}>
+                                                  <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
+                                                  <strong className="classification-panel-view__capture-slice-duration">{segmentDuration}</strong>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })() : null}
                                 </div>
                               );
                             })}
