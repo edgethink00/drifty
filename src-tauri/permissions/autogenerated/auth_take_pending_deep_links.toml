@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-auth-take-pending-deep-links"
+description = "Enables the auth_take_pending_deep_links command without any pre-configured scope."
+commands.allow = ["auth_take_pending_deep_links"]
+
+[[permission]]
+identifier = "deny-auth-take-pending-deep-links"
+description = "Denies the auth_take_pending_deep_links command without any pre-configured scope."
+commands.deny = ["auth_take_pending_deep_links"]

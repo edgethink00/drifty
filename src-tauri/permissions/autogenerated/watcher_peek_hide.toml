@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-peek-hide"
+description = "Enables the watcher_peek_hide command without any pre-configured scope."
+commands.allow = ["watcher_peek_hide"]
+
+[[permission]]
+identifier = "deny-watcher-peek-hide"
+description = "Denies the watcher_peek_hide command without any pre-configured scope."
+commands.deny = ["watcher_peek_hide"]

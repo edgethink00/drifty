@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-raw-events"
+description = "Enables the tracker_get_raw_events command without any pre-configured scope."
+commands.allow = ["tracker_get_raw_events"]
+
+[[permission]]
+identifier = "deny-tracker-get-raw-events"
+description = "Denies the tracker_get_raw_events command without any pre-configured scope."
+commands.deny = ["tracker_get_raw_events"]

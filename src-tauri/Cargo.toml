@@ -1,0 +1,32 @@
+[package]
+name = "drifty"
+version = "0.1.1"
+description = "Tauri 2 time-tracking shell for Drifty"
+authors = ["EdgeThink"]
+edition = "2021"
+
+[lib]
+name = "dtime_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+core-foundation = "0.10"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3.2", features = ["NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
+objc2-foundation = { version = "0.3.2", features = ["NSString", "NSURL", "NSData", "NSDictionary", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri-plugin-notification = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"

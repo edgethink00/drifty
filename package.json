@@ -1,0 +1,22 @@
+{
+  "name": "drifty",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/desktop",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --prefix apps/desktop run dev",
+    "dev:web:auth-required": "VITE_DRIFTY_AUTH_MODE=required npm --prefix apps/desktop run dev",
+    "build:web": "npm --prefix apps/desktop run build",
+    "typecheck": "npm --prefix apps/desktop run typecheck",
+    "test:python": "PYTHONPATH=services/tracker-python python3 -m unittest discover -s services/tracker-python/tests -v"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.4.1",
+    "playwright": "^1.60.0"
+  },
+  "license": "AGPL-3.0-only"
+}

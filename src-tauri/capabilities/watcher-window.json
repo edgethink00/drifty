@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "watcher-window",
+  "description": "Least-privilege capability for the companion watcher overlay window.",
+  "windows": ["watcher-peek"],
+  "platforms": ["macOS"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    "allow-watcher-peek-dismiss",
+    "allow-watcher-peek-set-interactive",
+    "allow-watcher-peek-respond"
+  ]
+}

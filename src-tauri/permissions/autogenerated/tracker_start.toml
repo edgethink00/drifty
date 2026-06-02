@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-start"
+description = "Enables the tracker_start command without any pre-configured scope."
+commands.allow = ["tracker_start"]
+
+[[permission]]
+identifier = "deny-tracker-start"
+description = "Denies the tracker_start command without any pre-configured scope."
+commands.deny = ["tracker_start"]

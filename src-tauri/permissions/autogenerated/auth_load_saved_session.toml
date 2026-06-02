@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-auth-load-saved-session"
+description = "Enables the auth_load_saved_session command without any pre-configured scope."
+commands.allow = ["auth_load_saved_session"]
+
+[[permission]]
+identifier = "deny-auth-load-saved-session"
+description = "Denies the auth_load_saved_session command without any pre-configured scope."
+commands.deny = ["auth_load_saved_session"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-save-classifications"
+description = "Enables the tracker_save_classifications command without any pre-configured scope."
+commands.allow = ["tracker_save_classifications"]
+
+[[permission]]
+identifier = "deny-tracker-save-classifications"
+description = "Denies the tracker_save_classifications command without any pre-configured scope."
+commands.deny = ["tracker_save_classifications"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-stop"
+description = "Enables the tracker_stop command without any pre-configured scope."
+commands.allow = ["tracker_stop"]
+
+[[permission]]
+identifier = "deny-tracker-stop"
+description = "Denies the tracker_stop command without any pre-configured scope."
+commands.deny = ["tracker_stop"]

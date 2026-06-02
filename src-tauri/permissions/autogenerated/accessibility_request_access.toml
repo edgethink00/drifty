@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-accessibility-request-access"
+description = "Enables the accessibility_request_access command without any pre-configured scope."
+commands.allow = ["accessibility_request_access"]
+
+[[permission]]
+identifier = "deny-accessibility-request-access"
+description = "Denies the accessibility_request_access command without any pre-configured scope."
+commands.deny = ["accessibility_request_access"]

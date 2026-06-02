@@ -1,0 +1,11 @@
+{
+  "name": "@dtime/charts",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "license": "AGPL-3.0-only"
+}

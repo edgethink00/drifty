@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-unclassified-segments"
+description = "Enables the tracker_get_unclassified_segments command without any pre-configured scope."
+commands.allow = ["tracker_get_unclassified_segments"]
+
+[[permission]]
+identifier = "deny-tracker-get-unclassified-segments"
+description = "Denies the tracker_get_unclassified_segments command without any pre-configured scope."
+commands.deny = ["tracker_get_unclassified_segments"]

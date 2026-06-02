@@ -1,0 +1,41 @@
+fn main() {
+    println!("cargo:rerun-if-changed=tauri.conf.json");
+    println!("cargo:rerun-if-changed=icons/icon.png");
+    println!("cargo:rerun-if-changed=icons/icon.icns");
+    println!("cargo:rerun-if-changed=icons/menu-bar-template.rgba");
+    println!("cargo:rerun-if-changed=icons/32x32.png");
+    println!("cargo:rerun-if-changed=icons/128x128.png");
+    println!("cargo:rerun-if-changed=icons/128x128@2x.png");
+
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "accessibility_get_status",
+            "accessibility_request_access",
+            "tracker_get_status",
+            "tracker_start",
+            "tracker_stop",
+            "tracker_get_timeline",
+            "tracker_get_current_snapshot",
+            "tracker_get_hourly_summary",
+            "tracker_get_raw_events",
+            "tracker_get_top_sites",
+            "tracker_get_app_icons",
+            "tracker_get_unclassified_segments",
+            "tracker_save_classifications",
+            "tracker_refresh_non_ai_classifications",
+            "tracker_get_classification_metrics",
+            "tray_update_productivity_icon",
+            "auth_take_pending_deep_links",
+            "auth_load_saved_session",
+            "auth_save_session",
+            "auth_clear_saved_session",
+            "system_open_settings_pane",
+            "watcher_peek_show",
+            "watcher_peek_hide",
+            "watcher_peek_dismiss",
+            "watcher_peek_set_interactive",
+            "watcher_peek_respond",
+        ]),
+    ))
+    .expect("failed to build tauri app manifest");
+}

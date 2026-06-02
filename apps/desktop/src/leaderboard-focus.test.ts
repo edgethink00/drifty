@@ -1,0 +1,155 @@
+import { describe, expect, it } from "vitest";
+import { buildRollingFocusSeconds, type ActivitySegment } from "@dtime/domain";
+
+function makeSegment(
+  id: string,
+  startedAt: string,
+  endedAt: string,
+  appName: string,
+  extra: Partial<ActivitySegment> = {},
+): ActivitySegment {
+  return {
+    id,
+    startedAt,
+    endedAt,
+    durationSeconds: Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000),
+    appName,
+    platform: "macos",
+    source: "nsworkspace",
+    ...extra,
+  };
+}
+
+describe("buildRollingFocusSeconds", () => {
+  it("clips midnight overlap to the requested local window", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "midnight",
+          new Date(2026, 3, 5, 23, 30).toISOString(),
+          new Date(2026, 3, 6, 0, 30).toISOString(),
+          "Safari",
+          { siteTitle: "Developer docs" },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+    );
+
+    expect(total).toBe(1800);
+  });
+
+  it("includes today and the previous six local dates", () => {
+    const segments = Array.from({ length: 8 }, (_, offset) =>
+        makeSegment(
+          `day-${offset}`,
+          new Date(2026, 3, 5 + offset, 10, 0).toISOString(),
+          new Date(2026, 3, 5 + offset, 10, 10).toISOString(),
+          "Safari",
+          { siteTitle: "Developer docs" },
+        ),
+    );
+
+    const total = buildRollingFocusSeconds(segments, "2026-04-06", "2026-04-12");
+
+    expect(total).toBe(7 * 600);
+  });
+
+  it("counts only focus-labeled categories", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "learning-app",
+          new Date(2026, 3, 6, 9, 0).toISOString(),
+          new Date(2026, 3, 6, 9, 20).toISOString(),
+          "Safari",
+          { siteTitle: "Developer guide" },
+        ),
+        makeSegment(
+          "learning",
+          new Date(2026, 3, 6, 10, 0).toISOString(),
+          new Date(2026, 3, 6, 10, 30).toISOString(),
+          "Safari",
+          { siteTitle: "TypeScript docs" },
+        ),
+        makeSegment(
+          "communication",
+          new Date(2026, 3, 6, 11, 0).toISOString(),
+          new Date(2026, 3, 6, 11, 15).toISOString(),
+          "Slack",
+        ),
+        makeSegment(
+          "drift",
+          new Date(2026, 3, 6, 12, 0).toISOString(),
+          new Date(2026, 3, 6, 12, 25).toISOString(),
+          "Safari",
+          { siteDomain: "youtube.com", siteTitle: "YouTube" },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+    );
+
+    expect(total).toBe(50 * 60);
+  });
+
+  it("does not count unknown uncaptured activity as focus", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "unknown",
+          new Date(2026, 3, 6, 13, 0).toISOString(),
+          new Date(2026, 3, 6, 13, 20).toISOString(),
+          "Unknown",
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+    );
+
+    expect(total).toBe(0);
+  });
+
+  it("works with fewer than seven days of input", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "first",
+          new Date(2026, 3, 6, 8, 0).toISOString(),
+          new Date(2026, 3, 6, 8, 15).toISOString(),
+          "Safari",
+          { siteTitle: "Developer docs" },
+        ),
+        makeSegment(
+          "second",
+          new Date(2026, 3, 8, 8, 0).toISOString(),
+          new Date(2026, 3, 8, 8, 20).toISOString(),
+          "Safari",
+          { siteTitle: "Docs" },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-12",
+    );
+
+    expect(total).toBe(35 * 60);
+  });
+
+  it("counts a segment that stays within the local day", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "dst",
+          new Date(2026, 2, 8, 1, 30).toISOString(),
+          new Date(2026, 2, 8, 3, 30).toISOString(),
+          "Safari",
+          { siteTitle: "Developer docs" },
+        ),
+      ],
+      "2026-03-08",
+      "2026-03-08",
+    );
+
+    expect(total).toBe(7200);
+  });
+});
