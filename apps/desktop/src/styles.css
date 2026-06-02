@@ -769,7 +769,7 @@ input, textarea { color: inherit; }
 
 /* ── PAGE ── */
 .page-stack {
-  padding: 12px 28px 20px;
+  padding: 12px var(--space-4) 20px;
   max-width: 1160px;
   margin: 0 auto;
   width: 100%;
@@ -786,7 +786,7 @@ input, textarea { color: inherit; }
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
-  padding: 12px 28px 0.75rem;
+  padding: 12px var(--space-4) 0.75rem;
   margin-bottom: 0;
   border-bottom: none;
 }
@@ -5553,7 +5553,7 @@ input, textarea { color: inherit; }
 
 /* Page wrapper (each page in App.tsx uses `<div class="page">`) */
 .page {
-  padding: 12px 28px 28px;
+  padding: 12px var(--space-4) 28px;
   max-width: 1160px;
   margin: 0 auto;
   width: 100%;
