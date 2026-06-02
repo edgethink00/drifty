@@ -165,7 +165,7 @@ vi.mock("./features/leaderboard/leaderboardService", () => ({
 }));
 
 vi.mock("./features/profile/profileService", () => ({
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0] ?? "egt",
+  fallbackDisplayName: (email?: string | null) => email?.split("@")[0] ?? "drifty",
   fetchOwnProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
   fetchPublicProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
   saveOwnProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),

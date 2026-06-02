@@ -351,7 +351,7 @@ function resolvePublicNamePreview(profileDisplayName?: string | null, email?: st
   if (trimmedName) return trimmedName;
 
   const emailPrefix = email?.split("@")[0]?.trim();
-  return emailPrefix || "egt";
+  return emailPrefix || "drifty";
 }
 
 function buildProfileLinks(website?: string | null, github?: string | null, linkedin?: string | null) {

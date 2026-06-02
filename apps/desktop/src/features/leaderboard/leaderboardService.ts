@@ -63,7 +63,7 @@ function shiftDay(day: string, offset: number) {
 function previewLeaderboardRows(period: LeaderboardPeriod, limit: number): LeaderboardRow[] {
   const today = isoDay(new Date());
   const windowStart = period === "daily" ? today : shiftDay(today, period === "monthly" ? -29 : -6);
-  const names = ["Testing1", "arishin220", "minji_kim", "junseo", "haruka", "egt", "soonjae", "yuki"];
+  const names = ["Testing1", "arishin220", "minji_kim", "junseo", "haruka", "drifty", "soonjae", "yuki"];
   const focusSeconds = [141_540, 9_960, 8_520, 6_240, 4_520, 3_120, 2_400, 1_830];
   return names.slice(0, limit).map((name, index) => ({
     rank: index + 1,

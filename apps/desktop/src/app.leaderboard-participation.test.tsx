@@ -67,7 +67,7 @@ vi.mock("./features/profile/profileService", () => ({
   fetchOwnProfile,
   saveOwnProfile,
   fetchPublicProfile,
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "egt",
+  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "drifty",
 }));
 
 vi.mock("./lib/api/trackerClient", () => ({
@@ -265,7 +265,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).toHaveBeenCalledTimes(1);
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "egt",
+        display_name: "drifty",
         bio: "",
         avatar_url: "",
         website_url: "",
@@ -391,7 +391,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).not.toHaveBeenCalled();
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "egt",
+        display_name: "drifty",
         bio: "",
         avatar_url: "",
         website_url: "",
