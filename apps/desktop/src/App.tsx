@@ -4288,7 +4288,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="empty-state">
       <span className="eyebrow">{title}</span>
-      <strong>데이터가 충분히 없습니다</strong>
+      <strong>Not enough data yet</strong>
       <p>{detail}</p>
     </div>
   );
