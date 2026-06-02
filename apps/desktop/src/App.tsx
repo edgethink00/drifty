@@ -885,6 +885,18 @@ export default function App() {
     }),
     [segments, showAiClassificationImpact],
   );
+  const localAiClassificationOptions = useMemo(() => {
+    if (localAiSetup.provider === "openrouter_byok") {
+      const apiKey = localAiSetup.openRouterApiKey.trim();
+      if (!apiKey) return null;
+      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model: localAiSetup.openRouterModel.trim() || DEFAULT_LOCAL_AI_SETUP.openRouterModel } };
+    }
+
+    const baseUrl = localAiSetup.selfHostedBaseUrl.trim();
+    const model = localAiSetup.selfHostedModel.trim();
+    if (!baseUrl || !model) return null;
+    return { localProvider: { provider: "self_hosted" as const, baseUrl, model } };
+  }, [localAiSetup]);
   const {
     user,
     status: authStatus,
@@ -1759,7 +1771,7 @@ export default function App() {
   }, []);
 
   const runAutoAiClassificationBatch = useCallback(async () => {
-    if (!isSupabaseConfigured || !isPolicySignedIn) return;
+    if (!localAiClassificationOptions && (!isSupabaseConfigured || !isPolicySignedIn)) return;
     if (shouldBlockLocalTrackerAccess) return;
     if (!hasLoadedOnce) return;
     if (classificationActionLoading) return;
@@ -1773,7 +1785,9 @@ export default function App() {
     aiClassificationInFlightRef.current = true;
     try {
       const query = toClassificationQueryForDay(today, threshold);
-      const summary = await runAiClassificationForUnknownThreshold(query, threshold);
+      const summary = localAiClassificationOptions
+        ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
+        : await runAiClassificationForUnknownThreshold(query, threshold);
       if (summary.status === "empty" && summary.savedRecords === 0) return;
       if (selectedDayRef.current === today) {
         setClassificationSummary(summary);
@@ -1793,7 +1807,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [classificationActionLoading, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [classificationActionLoading, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -2026,8 +2040,8 @@ export default function App() {
   }
 
   async function handleRunAiClassificationNow() {
-    if (!user) {
-      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in to run AI classification." });
+    if (!user && !localAiClassificationOptions) {
+      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
       return;
     }
 
@@ -2039,7 +2053,9 @@ export default function App() {
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: "Running AI classification..." });
     try {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
-      const summary = await runAiClassification(toClassificationQueryForDay(selectedDay));
+      const summary = localAiClassificationOptions
+        ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
+        : await runAiClassification(toClassificationQueryForDay(selectedDay));
       setClassificationSummary(summary);
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
@@ -2057,8 +2073,8 @@ export default function App() {
   }
 
   async function handleRunSelectedDayAiClassification() {
-    if (!user) {
-      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in to run AI classification." });
+    if (!user && !localAiClassificationOptions) {
+      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
       return;
     }
 
@@ -2071,7 +2087,9 @@ export default function App() {
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: `Classifying all unclassified activity for ${formatDayLabel(targetDay)}...` });
     try {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
-      const summary = await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
+      const summary = localAiClassificationOptions
+        ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, localAiClassificationOptions)
+        : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
       setClassificationSummary({
         ...summary,
         message: `${summary.message} Target: ${formatDayLabel(targetDay)}.`,
@@ -4073,35 +4091,86 @@ function InsightSourceGroup({
 function ProductivityPersonaCard({ report, hasData }: { report: ReturnType<typeof buildProductivityPersona>; hasData: boolean }) {
   const content = PERSONA_CONTENT[report.personaId] ?? PERSONA_CONTENT.balanced_builder;
   const activeDays = report.metrics.activeDays;
+  const tagPills = content.tags.split(" · ");
+  const radarCenter = { x: 150, y: 116 };
+  const radarRadius = 86;
+  const radarAxes = report.axes.map((axis) => ({
+    ...axis,
+    displayLabel: PERSONA_AXIS_LABELS[axis.key] ?? axis.label,
+    value: Math.min(1, Math.max(0, axis.value)),
+  }));
+  const pointFor = (index: number, value: number, radius = radarRadius) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarAxes.length;
+    return {
+      x: radarCenter.x + Math.cos(angle) * radius * value,
+      y: radarCenter.y + Math.sin(angle) * radius * value,
+    };
+  };
+  const polygonPoints = (value: number) => radarAxes.map((_, index) => {
+    const point = pointFor(index, value);
+    return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }).join(" ");
+  const radarShape = radarAxes.map((axis, index) => {
+    const point = pointFor(index, axis.value);
+    return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }).join(" ");
+  const radarLabel = `${report.personaName} persona radar: ${radarAxes.map((axis) => `${axis.displayLabel} ${formatSharePercent(axis.value * 100)}`).join(", ")}`;
+  const cardClassName = [
+    "editorial-panel editorial-panel--soft insight-section productivity-persona-card",
+    hasData ? "persona-profile-card" : null,
+  ].filter(Boolean).join(" ");
+
   return (
-    <section className="editorial-panel editorial-panel--soft insight-section productivity-persona-card" aria-label="Local productivity persona report">
-      <div className="productivity-persona-card__head">
-        <div>
-          <span className="label-mono insight-section__label">Productivity persona</span>
-          <h2>{hasData ? report.personaName : "Waiting for local patterns"}</h2>
-        </div>
-        {hasData ? <span className="chip green">Based on {activeDays} active {activeDays === 1 ? "day" : "days"}</span> : null}
-      </div>
+    <section className={cardClassName} aria-label="Local productivity persona report">
       {hasData ? (
         <>
-          <div className="productivity-persona-card__intro">
-            <p className="productivity-persona-card__tags">{content.tags}</p>
-            <p className="productivity-persona-card__copy">{content.copy[0]}</p>
-            <p className="productivity-persona-card__copy">{content.copy[1]}</p>
-          </div>
-          <div className="productivity-persona-card__traits-head">
-            <span className="label-mono productivity-persona-card__traits-label">Key traits</span>
-          </div>
-          <div className="productivity-persona-card__axes" aria-label="Persona signals">
-            {report.axes.map((axis) => (
-              <div className="productivity-persona-axis" key={axis.key}>
-                <div className="productivity-persona-axis__label"><span>{PERSONA_AXIS_LABELS[axis.key] ?? axis.label}</span><strong>{formatSharePercent(axis.value * 100)}</strong></div>
-                <div className="productivity-persona-axis__track" aria-hidden="true"><span style={{ "--persona-axis-value": `${Math.round(axis.value * 100)}%` } as CSSProperties} /></div>
+          <div className="persona-profile-card__identity">
+            <div className="persona-profile-card__intro">
+              <span className="label-mono insight-section__label">Productivity persona</span>
+              <h2 className="persona-profile-card__title">{report.personaName}</h2>
+              <p className="persona-profile-card__subtitle productivity-persona-card__copy">{content.copy[0]}</p>
+              <p className="productivity-persona-card__copy">{content.copy[1]}</p>
+              <div className="persona-profile-card__tags" aria-label="Persona traits">
+                {tagPills.map((tag) => <span className="persona-profile-card__tag" key={tag}>{tag}</span>)}
               </div>
-            ))}
+              <span className="chip green productivity-persona-card__badge">Based on {activeDays} active {activeDays === 1 ? "day" : "days"}</span>
+            </div>
+          </div>
+          <div className="persona-radar-card">
+            <div className="persona-radar-card__chart">
+              <svg className="persona-radar" viewBox="0 0 300 232" role="img" aria-label={radarLabel}>
+                {[1, 0.8, 0.6, 0.4, 0.2].map((level) => <polygon className="persona-radar__grid" points={polygonPoints(level)} key={level} />)}
+                {radarAxes.map((axis, index) => {
+                  const point = pointFor(index, 1);
+                  return <line className="persona-radar__axis" x1={radarCenter.x} y1={radarCenter.y} x2={point.x.toFixed(1)} y2={point.y.toFixed(1)} key={axis.key} />;
+                })}
+                <polygon className="persona-radar__shape" points={radarShape} />
+                {radarAxes.map((axis, index) => {
+                  const point = pointFor(index, axis.value);
+                  return <circle className="persona-radar__point" cx={point.x.toFixed(1)} cy={point.y.toFixed(1)} r="2.35" key={axis.key} />;
+                })}
+                {radarAxes.map((axis, index) => {
+                  const point = pointFor(index, 1, radarRadius + 22);
+                  return <text className="persona-radar__label" x={point.x.toFixed(1)} y={point.y.toFixed(1)} textAnchor="middle" dominantBaseline="middle" key={axis.key}>{axis.displayLabel}</text>;
+                })}
+              </svg>
+            </div>
+            <div className="persona-radar-card__axis-list" aria-hidden="true">
+              {radarAxes.map((axis) => <span key={axis.key}>{axis.displayLabel}<strong>{formatSharePercent(axis.value * 100)}</strong></span>)}
+            </div>
           </div>
         </>
-      ) : <EmptyState title="No persona yet" detail="The local report appears after tracker history exists in this insight window." />}
+      ) : (
+        <>
+          <div className="productivity-persona-card__head">
+            <div>
+              <span className="label-mono insight-section__label">Productivity persona</span>
+              <h2>Waiting for local patterns</h2>
+            </div>
+          </div>
+          <EmptyState title="No persona yet" detail="The local report appears after tracker history exists in this insight window." />
+        </>
+      )}
     </section>
   );
 }

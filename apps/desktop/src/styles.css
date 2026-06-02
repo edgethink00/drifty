@@ -6517,6 +6517,18 @@ button.flow-cell:focus {
   margin-bottom: var(--space-3);
 }
 
+.insights-page .insight-section__label,
+.insights-page .od-cat-title,
+.insights-page .drift-time-trend__sources-label {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  font-weight: 650;
+  letter-spacing: .14em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
+}
+
 .insight-grid--support,
 .insight-grid--wide {
   display: grid;
@@ -10129,11 +10141,8 @@ button.flow-cell:focus {
 
 .productivity-persona-card {
   display: grid;
-  gap: var(--space-4);
-  border-color: color-mix(in srgb, var(--accent) 18%, var(--line));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 34%, transparent), transparent 42%),
-    var(--surface);
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 .productivity-persona-card__head {
@@ -10153,69 +10162,175 @@ button.flow-cell:focus {
 }
 
 .productivity-persona-card__copy {
-  max-width: 48rem;
+  max-width: 65ch;
   margin: 0;
-  color: var(--text-soft);
+  color: var(--text-muted);
   font-size: 0.78rem;
   line-height: 1.55;
 }
 
-.productivity-persona-card__metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--line);
-}
-
-.productivity-persona-card__metric {
-  border: 0;
-  background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft));
-}
-
-.productivity-persona-card__axes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.persona-profile-card {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
   gap: var(--space-3);
+  padding: var(--space-2);
+  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 3%, transparent), transparent 62%),
+    var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-.productivity-persona-axis {
+.persona-profile-card__identity,
+.persona-radar-card {
+  min-width: 0;
+  min-height: 14.5rem;
+  border: 1px solid color-mix(in srgb, var(--line) 42%, transparent);
+  border-radius: var(--radius-md);
+}
+
+.persona-profile-card__identity {
+  position: relative;
   display: grid;
+  align-content: start;
+  padding: var(--space-5) var(--space-4) var(--space-4);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.persona-profile-card__intro {
+  min-width: 0;
+  display: grid;
+  align-content: start;
   gap: var(--space-2);
 }
 
-.productivity-persona-axis__label {
-  display: flex;
+.persona-profile-card .insight-section__label {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  width: fit-content;
+  margin-bottom: 0;
+  color: color-mix(in srgb, var(--text-muted) 86%, var(--accent));
+}
+
+.persona-profile-card__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: clamp(1.82rem, 2.5vw, 2.25rem);
+  font-weight: 660;
+  letter-spacing: -0.038em;
+  line-height: 1;
+}
+
+.persona-profile-card__subtitle {
+  margin-top: var(--space-1);
+}
+
+.persona-profile-card__tags {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.persona-profile-card__tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface-strong));
+  color: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.productivity-persona-card__badge {
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+
+.persona-radar-card {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--canvas) 32%, var(--surface));
+}
+
+.persona-radar-card__chart {
+  display: grid;
+  place-items: center;
+  min-height: 13rem;
+}
+
+.persona-radar {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  height: 13.6rem;
+  overflow: visible;
+}
+
+.persona-radar__grid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-soft) 19%, transparent);
+  stroke-width: 0.78;
+}
+
+.persona-radar__axis {
+  stroke: color-mix(in srgb, var(--text-soft) 14%, transparent);
+  stroke-width: 0.74;
+}
+
+.persona-radar__shape {
+  fill: color-mix(in srgb, var(--accent) 24%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 88%, var(--text));
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.persona-radar__point {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--accent) 84%, var(--text));
+  stroke-width: 1.25;
+}
+
+.persona-radar__label {
+  fill: color-mix(in srgb, var(--text-muted) 94%, var(--text));
+  font-family: var(--font-display);
+  font-size: var(--type-overline-size);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.persona-radar-card__axis-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.persona-radar-card__axis-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: var(--type-overline-size);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.productivity-persona-axis__label strong {
+.persona-radar-card__axis-list strong {
   color: var(--text-muted);
   font-weight: 650;
-}
-
-.productivity-persona-axis__track {
-  height: 0.38rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-2) 82%, var(--surface));
-}
-
-.productivity-persona-axis__track span {
-  display: block;
-  width: var(--persona-axis-value);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
 }
 
 @media (max-width: 920px) {
@@ -10224,16 +10339,13 @@ button.flow-cell:focus {
     flex-direction: column;
   }
 
-  .productivity-persona-card__metrics,
-  .productivity-persona-card__axes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .productivity-persona-card__metrics,
-  .productivity-persona-card__axes {
+  .persona-profile-card {
     grid-template-columns: 1fr;
+  }
+
+  .persona-profile-card__identity,
+  .persona-radar-card {
+    min-height: auto;
   }
 }
 
@@ -12601,29 +12713,4 @@ button.flow-cell:focus {
   border-radius: inherit;
   background: var(--trend-tone, var(--warn));
   transition: width 0.45s ease;
-}
-
-/* Persona card additions */
-.productivity-persona-card__intro {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.productivity-persona-card__tags {
-  margin: 0;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.productivity-persona-card__traits-head {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.productivity-persona-card__traits-label {
-  color: var(--text-soft);
 }

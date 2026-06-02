@@ -7,6 +7,7 @@ import type {
   ClassificationQuery,
   ProductivityLabel,
 } from "@dtime/domain";
+import { invoke } from "@tauri-apps/api/core";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
@@ -18,6 +19,7 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0.25, output: 1.5 },
   "deepseek/deepseek-v4-flash:free": { input: 0, output: 0 },
@@ -73,6 +75,24 @@ type EdgeClassificationResponse = {
   classifications?: unknown;
   model?: unknown;
   latencyMs?: unknown;
+};
+
+type LocalAiProviderConfig =
+  | { provider: "openrouter_byok"; apiKey: string; model: string }
+  | { provider: "self_hosted"; baseUrl: string; model: string };
+
+type AiClassificationRunOptions = {
+  localProvider?: LocalAiProviderConfig | null;
+};
+
+type NativeOpenAiChatResponse = {
+  status?: unknown;
+  body?: unknown;
+  latencyMs?: unknown;
+};
+
+type OpenAiChatResponse = {
+  choices?: Array<{ message?: { content?: unknown } }>;
 };
 
 type AiClassificationUsageRow = {
@@ -194,26 +214,7 @@ export function diffAiClassificationUsageSummary(
   };
 }
 
-export async function runAiClassification(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE): Promise<AiClassificationSummary> {
-  if (!supabase) {
-    return {
-      status: "disabled",
-      selectedSegments: 0,
-      savedRecords: 0,
-      message: "Supabase is not configured.",
-    };
-  }
-
-  const { data: authData } = await supabase.auth.getSession();
-  if (!authData.session) {
-    return {
-      status: "disabled",
-      selectedSegments: 0,
-      savedRecords: 0,
-      message: "Sign in to run AI classification.",
-    };
-  }
-
+export async function runAiClassification(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = Math.min(query.limit ?? batchSize, EDGE_MAX_BATCH_SIZE);
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
   const payload = await Promise.all(segments.map(toMinimizedPayload));
@@ -247,7 +248,16 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     };
   }
 
-  const { data, error } = await supabase.functions.invoke("classify-activity", {
+  if (options.localProvider) {
+    return await runLocalAiClassification(query, payload.length, deterministicSaveResult.saved, unknownPayload, options.localProvider);
+  }
+
+  const cloudAvailability = await requireCloudAiClassification();
+  if (cloudAvailability) return cloudAvailability;
+  const cloudClient = supabase;
+  if (!cloudClient) return { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
+
+  const { data, error } = await cloudClient.functions.invoke("classify-activity", {
     body: {
       ...cloudApiClientMetadata,
       items: unknownPayload.map((item) => ({
@@ -291,26 +301,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
   };
 }
 
-export async function runAiClassificationForUnknownThreshold(query: ClassificationQuery, threshold: number): Promise<AiClassificationSummary> {
-  if (!supabase) {
-    return {
-      status: "disabled",
-      selectedSegments: 0,
-      savedRecords: 0,
-      message: "Supabase is not configured.",
-    };
-  }
-
-  const { data: authData } = await supabase.auth.getSession();
-  if (!authData.session) {
-    return {
-      status: "disabled",
-      selectedSegments: 0,
-      savedRecords: 0,
-      message: "Sign in to run AI classification.",
-    };
-  }
-
+export async function runAiClassificationForUnknownThreshold(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = EDGE_MAX_BATCH_SIZE;
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
   const payload = await Promise.all(segments.map(toMinimizedPayload));
@@ -334,7 +325,16 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     };
   }
 
-  const { data, error } = await supabase.functions.invoke("classify-activity", {
+  if (options.localProvider) {
+    return await runLocalAiClassification(query, unknownPayload.length, deterministicSaveResult.saved, unknownPayload, options.localProvider);
+  }
+
+  const cloudAvailability = await requireCloudAiClassification();
+  if (cloudAvailability) return cloudAvailability;
+  const cloudClient = supabase;
+  if (!cloudClient) return { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
+
+  const { data, error } = await cloudClient.functions.invoke("classify-activity", {
     body: {
       ...cloudApiClientMetadata,
       items: unknownPayload.map((item) => ({
@@ -378,14 +378,14 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   };
 }
 
-export async function runAiClassificationUntilEmpty(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE): Promise<AiClassificationSummary> {
+export async function runAiClassificationUntilEmpty(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   let selectedSegments = 0;
   let savedRecords = 0;
   let processedBatches = 0;
   let latestMetrics: ClassificationMetrics | undefined;
 
   for (let batchIndex = 0; batchIndex < MAX_CLASSIFY_ALL_BATCHES; batchIndex += 1) {
-    const summary = await runAiClassification(query, batchSize);
+    const summary = await runAiClassification(query, batchSize, options);
     latestMetrics = summary.metrics ?? latestMetrics;
     selectedSegments += summary.selectedSegments;
     savedRecords += summary.savedRecords;
@@ -579,6 +579,150 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
       classifiedAt,
     }];
   });
+}
+
+async function runLocalAiClassification(
+  query: ClassificationQuery,
+  selectedSegments: number,
+  deterministicSavedRecords: number,
+  unknownPayload: MinimizedActivityPayload[],
+  provider: LocalAiProviderConfig,
+): Promise<AiClassificationSummary> {
+  const providerRequest = toLocalProviderRequest(provider, unknownPayload);
+  if (!providerRequest) {
+    return {
+      status: "disabled",
+      selectedSegments: 0,
+      savedRecords: 0,
+      message: "Local AI provider is not fully configured.",
+    };
+  }
+
+  const response = await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: providerRequest.request });
+  const status = typeof response.status === "number" ? response.status : 0;
+  if (status < 200 || status >= 300) {
+    throw new Error(`Local AI classification failed with HTTP ${status || "unknown"}.`);
+  }
+
+  const data = toLocalClassificationResponse(response, providerRequest.model);
+  const aiRecords = toClassificationRecords(data, unknownPayload);
+  if (aiRecords.length === 0) {
+    const metrics = await trackerClient.getClassificationMetrics(query);
+    return {
+      status: "error",
+      selectedSegments,
+      savedRecords: deterministicSavedRecords,
+      message: `AI classification returned no usable classifications for ${unknownPayload.length} unknown ${unknownPayload.length === 1 ? "segment" : "segments"}.`,
+      metrics,
+    };
+  }
+
+  const aiSaveResult = await trackerClient.saveClassifications(aiRecords);
+  const metrics = await trackerClient.getClassificationMetrics(query);
+  const savedRecords = deterministicSavedRecords + aiSaveResult.saved;
+  return {
+    status: "saved",
+    selectedSegments,
+    savedRecords,
+    message: `Saved ${aiSaveResult.saved} AI and ${deterministicSavedRecords} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+    metrics,
+  };
+}
+
+function toLocalProviderRequest(provider: LocalAiProviderConfig, payload: MinimizedActivityPayload[]): { model: string; request: Record<string, unknown> } | null {
+  if (provider.provider === "openrouter_byok") {
+    const apiKey = provider.apiKey.trim();
+    const model = provider.model.trim() || "openrouter/auto";
+    if (!apiKey || !model) return null;
+    return {
+      model,
+      request: {
+        baseUrl: OPENROUTER_BASE_URL,
+        apiKey,
+        model,
+        headers: {
+          "HTTP-Referer": "https://drifty.so",
+          "X-OpenRouter-Title": "Drifty",
+        },
+        messages: [{ role: "user", content: buildClassificationPrompt(payload) }],
+      },
+    };
+  }
+
+  const baseUrl = provider.baseUrl.trim();
+  const model = provider.model.trim();
+  if (!baseUrl || !model) return null;
+  return {
+    model,
+    request: {
+      baseUrl,
+      model,
+      messages: [{ role: "user", content: buildClassificationPrompt(payload) }],
+    },
+  };
+}
+
+function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model: string): EdgeClassificationResponse {
+  const bodyText = typeof response.body === "string" ? response.body : "";
+  const body = JSON.parse(bodyText) as OpenAiChatResponse;
+  const content = body.choices?.[0]?.message?.content;
+  const text = typeof content === "string" ? content : Array.isArray(content)
+    ? content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n")
+    : "";
+  if (!text.trim()) return { model, latencyMs: responseLatencyMs(response), results: [] };
+  const parsed = JSON.parse(stripJsonCodeFence(text)) as EdgeClassificationResponse;
+  return {
+    ...parsed,
+    model,
+    latencyMs: responseLatencyMs(response),
+  };
+}
+
+function buildClassificationPrompt(payload: MinimizedActivityPayload[]): string {
+  return [
+    "Classify each activity into Drifty category, productivity label, confidence, and short reason.",
+    "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
+    "Use only these productivity labels: focus, neutral, drift.",
+    "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles or domains in the reason.",
+    JSON.stringify(payload.map((item) => ({
+      id: item.segmentId,
+      appName: item.appName,
+      domain: item.siteDomain,
+      urlHost: item.siteDomain,
+      windowTitle: item.windowTitle,
+      title: item.siteTitle ?? item.youtubeTitle,
+      durationSeconds: item.durationSeconds,
+    }))),
+  ].join("\n");
+}
+
+function stripJsonCodeFence(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match?.[1]?.trim() ?? trimmed;
+}
+
+async function requireCloudAiClassification(): Promise<AiClassificationSummary | null> {
+  if (!supabase) {
+    return {
+      status: "disabled",
+      selectedSegments: 0,
+      savedRecords: 0,
+      message: "Supabase is not configured.",
+    };
+  }
+
+  const { data: authData } = await supabase.auth.getSession();
+  if (!authData.session) {
+    return {
+      status: "disabled",
+      selectedSegments: 0,
+      savedRecords: 0,
+      message: "Sign in to run AI classification.",
+    };
+  }
+
+  return null;
 }
 
 function isActivityCategory(value: unknown): value is ActivityCategory {
