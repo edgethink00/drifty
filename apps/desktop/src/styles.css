@@ -4092,6 +4092,36 @@ input, textarea { color: inherit; }
 
 .settings-input:focus { border-color: var(--accent); }
 
+.settings-color-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  width: 100%;
+}
+
+.settings-color-field {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text-soft);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  gap: 8px;
+  justify-content: space-between;
+  padding: 7px 8px;
+}
+
+.settings-color-field input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  height: 24px;
+  padding: 0;
+  width: 32px;
+}
+
 .settings-input--compact {
   text-align: center;
   width: 64px;
@@ -9326,6 +9356,169 @@ button.flow-cell:focus {
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   color: var(--text);
+}
+
+.content--settings .settings-section--general {
+  --settings-control-height: 2.25rem;
+  --settings-control-radius: var(--radius-sm);
+  --settings-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
+  --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
+  --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --settings-swatch-size: 1.25rem;
+}
+
+.content--settings .settings-section--general .settings-input,
+.content--settings .settings-section--general .settings-select,
+.content--settings .settings-section--general .settings-btn {
+  min-width: 10rem;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  background: var(--settings-control-bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  line-height: 1;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .settings-section--general .settings-select {
+  cursor: pointer;
+}
+
+.content--settings .settings-section--general .settings-input:hover,
+.content--settings .settings-section--general .settings-select:hover,
+.content--settings .settings-section--general .settings-btn:hover {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: var(--settings-control-bg-hover);
+  color: var(--text);
+  transform: none;
+}
+
+.content--settings .settings-section--general .settings-input:focus-visible,
+.content--settings .settings-section--general .settings-select:focus-visible,
+.content--settings .settings-section--general .settings-btn:focus-visible,
+.content--settings .settings-section--general .settings-mode-option:focus-visible,
+.content--settings .settings-section--general .settings-color-field:has(input:focus-visible) {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
+}
+
+.content--settings .settings-section--general .settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.content--settings .settings-section--general .settings-mode-switch {
+  min-height: var(--settings-control-height);
+  padding: var(--space-1);
+  border: 1px solid var(--settings-control-border);
+  border-radius: calc(var(--settings-control-radius) + var(--space-1));
+  background: var(--settings-control-bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.content--settings .settings-section--general .settings-mode-option {
+  align-items: center;
+  min-height: calc(var(--settings-control-height) - var(--space-1));
+  justify-content: center;
+  padding: 0 var(--space-3);
+  border-radius: var(--settings-control-radius);
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .settings-section--general .settings-mode-option:hover {
+  background: var(--settings-control-bg-hover);
+  color: var(--text);
+}
+
+.content--settings .settings-section--general .settings-mode-option.is-active {
+  background: color-mix(in srgb, var(--accent-soft) 64%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.content--settings .settings-section--general .settings-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.content--settings .settings-section--general .settings-row__actions .settings-btn {
+  flex: 0 0 auto;
+}
+
+.content--settings .settings-section--general .settings-color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.75rem), 10.5rem));
+  justify-content: end;
+  gap: var(--space-2);
+  flex: 0 1 34rem;
+  min-width: 0;
+}
+
+.content--settings .settings-section--general .settings-color-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--settings-control-height);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  overflow: visible;
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  background: var(--settings-control-bg);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  line-height: 1.2;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .settings-section--general .settings-color-field:hover {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: var(--settings-control-bg-hover);
+}
+
+.content--settings .settings-section--general .settings-color-field span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.content--settings .settings-section--general .settings-color-field input[type="color"] {
+  flex: 0 0 var(--settings-swatch-size);
+  width: var(--settings-swatch-size);
+  height: var(--settings-swatch-size);
+  min-width: var(--settings-swatch-size);
+  padding: 2px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
+  border-radius: calc(var(--settings-control-radius) - 2px);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  cursor: pointer;
+}
+
+.content--settings .settings-section--general .settings-color-field input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.content--settings .settings-section--general .settings-color-field input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--settings-control-radius) - 4px);
 }
 
 .settings-row--classification-metrics .classification-metrics-grid {
