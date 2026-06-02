@@ -399,7 +399,7 @@ type MonthCellStyle = CSSProperties & {
   "--activity-ink"?: string;
 };
 
-type SettingsSection = "aiSetup" | "tracking" | "notifications" | "privacy" | "integrations" | "data" | "dev";
+type SettingsSection = "aiSetup" | "notifications" | "privacy" | "integrations" | "data" | "dev";
 type LocalAiProvider = "openrouter_byok" | "self_hosted";
 type LocalAiSetupState = {
   provider: LocalAiProvider;
@@ -759,7 +759,7 @@ export default function App() {
   const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<string | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("tracking");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("aiSetup");
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
@@ -792,7 +792,7 @@ export default function App() {
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const openSettingsTab = useCallback(() => {
-    setSettingsSection("tracking");
+    setSettingsSection("aiSetup");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -1405,7 +1405,6 @@ export default function App() {
       : selectedDayContext === "Yesterday"
         ? selectedDayContext
         : selectedDayLabel;
-  const lastCaptureLabel = status?.lastEventAt ? formatTimeLabel(status.lastEventAt) : "\u2014";
   const lastCaptureDistanceLabel = status?.lastEventAt ? formatRelativeTime(status.lastEventAt) : "No captures yet";
   const uniqueAppsCount = useMemo(() => new Set(dashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [dashboardSegments]);
   const averageSessionMinutes = dashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / dashboardSegments.length) : 0;
@@ -2940,7 +2939,6 @@ export default function App() {
               <nav className="settings-nav">
                   {([
                     { id: "aiSetup" as const, label: "AI setup" },
-                    { id: "tracking" as const, label: "Tracking" },
                     { id: "notifications" as const, label: "Notifications" },
                     { id: "privacy" as const, label: "Privacy" },
                   { id: "integrations" as const, label: "Integrations" },
@@ -2988,13 +2986,6 @@ export default function App() {
                       <button type="button" className="settings-btn settings-btn--primary" onClick={handleConfigureDriftyCloud}>{hasRequiredAccountAuth ? "Configure Drifty Cloud" : "Connect Drifty Cloud"}</button>
                     </div>
                   </div>
-                )}
-                {settingsSection === "tracking" && (
-                  <div className="settings-section"><div className="settings-block"><h3>Tracker</h3>
-                    <div className="settings-row"><div><div className="lbl">Status</div><div className="desc">{trackerStateLabel}. Use the sidebar control to pause or resume capture.</div></div><div className="ctrl ctrl--value">{status?.running ? "On" : isTrackerUnavailable ? "Unavailable" : "Paused"}</div></div>
-                    <div className="settings-row"><div><div className="lbl">Mode</div><div className="desc">{isDemoMode ? "Preview / demo mode" : "Live tracking"}</div></div><div className="ctrl ctrl--value">{trackerModeLabel}</div></div>
-                    <div className="settings-row"><div><div className="lbl">Last capture</div></div><div className="ctrl ctrl--value">{lastCaptureLabel}</div></div>
-                  </div></div>
                 )}
                 {settingsSection === "notifications" && (
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
