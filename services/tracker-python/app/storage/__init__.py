@@ -1,2 +1,1 @@
-"""SQLite storage for dtime_mac tracker."""
-
+"""SQLite storage for the Drifty Mac tracker."""

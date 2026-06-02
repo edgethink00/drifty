@@ -1,2 +1,1 @@
-"""Tracking helpers for dtime_mac."""
-
+"""Tracking helpers for Drifty Mac."""
