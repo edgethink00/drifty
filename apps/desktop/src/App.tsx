@@ -4477,40 +4477,39 @@ function WeekDashboard({
 
   return (
     <section className="week-v2" aria-label="Your week overview">
-      <div className="week-v2-summary week-v2-summary--compact" aria-label="Week summary">
-        <div className="week-v2-summary__main">
-          <span className="label-mono">Week focus</span>
-          <strong>{isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}</strong>
-        </div>
-        <div className="week-v2-summary__bars" aria-hidden="true">
-          {calendarRows.map((row) => {
-            const ratio = row.focusSeconds > 0 ? row.focusSeconds / summaryPeakSeconds : 0;
-            const barHeight = row.focusSeconds > 0 ? Math.max(4, Math.round(ratio * 30)) : 2;
-            const isPeak = bestDay?.day === row.day && row.focusSeconds > 0;
-            const isToday = todayDay === row.day;
-            const dayLetter = row.dayName.charAt(0);
-            return (
-              <span
-                className={`week-v2-summary__bar${isPeak ? " is-peak" : ""}${isToday ? " is-today" : ""}${row.focusSeconds === 0 ? " is-empty" : ""}`}
-                key={row.day}
-                title={`${row.dayName} ${row.dayNumber} · ${row.focusSeconds > 0 ? formatCompactDurationFromSeconds(row.focusSeconds) : "No focus"}`}
-              >
-                <span className="week-v2-summary__bar-fill" style={{ height: `${barHeight}px` }} />
-                <small>{dayLetter}</small>
-              </span>
-            );
-          })}
-        </div>
-        <div className="week-v2-summary__meta">
-          <span>{focusDeltaPercent !== null ? `${focusDeltaPercent >= 0 ? "▲" : "▼"} ${Math.abs(focusDeltaPercent)}% vs last week` : "No prior week"}</span>
-          <span>Best {isPreviewSurface ? "Wed 13" : bestDay ? `${bestDay.dayName} ${bestDay.dayNumber}` : "—"}</span>
-          <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
-          <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
-        </div>
-      </div>
-
       <div className="week-v2-grid week-v2-grid--calendar">
         <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label="Week calendar schedule">
+          <div className="week-v2-summary week-v2-summary--compact week-v2-summary--integrated" aria-label="Week summary">
+            <div className="week-v2-summary__main">
+              <span className="label-mono">Week focus</span>
+              <strong>{isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}</strong>
+            </div>
+            <div className="week-v2-summary__bars" aria-hidden="true">
+              {calendarRows.map((row) => {
+                const ratio = row.focusSeconds > 0 ? row.focusSeconds / summaryPeakSeconds : 0;
+                const barHeight = row.focusSeconds > 0 ? Math.max(4, Math.round(ratio * 30)) : 2;
+                const isPeak = bestDay?.day === row.day && row.focusSeconds > 0;
+                const isToday = todayDay === row.day;
+                const dayLetter = row.dayName.charAt(0);
+                return (
+                  <span
+                    className={`week-v2-summary__bar${isPeak ? " is-peak" : ""}${isToday ? " is-today" : ""}${row.focusSeconds === 0 ? " is-empty" : ""}`}
+                    key={row.day}
+                    title={`${row.dayName} ${row.dayNumber} · ${row.focusSeconds > 0 ? formatCompactDurationFromSeconds(row.focusSeconds) : "No focus"}`}
+                  >
+                    <span className="week-v2-summary__bar-fill" style={{ height: `${barHeight}px` }} />
+                    <small>{dayLetter}</small>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="week-v2-summary__meta">
+              <span>{focusDeltaPercent !== null ? `${focusDeltaPercent >= 0 ? "▲" : "▼"} ${Math.abs(focusDeltaPercent)}% vs last week` : "No prior week"}</span>
+              <span>Best {isPreviewSurface ? "Wed 13" : bestDay ? `${bestDay.dayName} ${bestDay.dayNumber}` : "—"}</span>
+              <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
+              <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
+            </div>
+          </div>
           {activeCategories.length > 0 ? (
             <div className="week-v2-calendar__legend" aria-label="Week category legend">
               {activeCategories.map((entry) => (
