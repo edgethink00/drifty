@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { shiftIsoDate, todayIsoDate } from "@dtime/domain";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
 const {
@@ -116,7 +116,13 @@ function formatDayLabel(day: string) {
 }
 
 describe("App leaderboard participation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 2, 13, 15, 0, 0));
     vi.clearAllMocks();
     window.localStorage.clear();
     markOnboardingCompleted("local");
