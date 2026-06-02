@@ -144,7 +144,7 @@ describe("runAiClassification cloud contract", () => {
     };
   }
 
-  async function importServiceWithSegments(segments: ActivitySegment[]) {
+  async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown } = {}) {
     vi.resetModules();
 
     const invoke = vi.fn().mockResolvedValue({
@@ -163,13 +163,34 @@ describe("runAiClassification cloud contract", () => {
     const getUnclassifiedSegments = vi.fn().mockResolvedValue(segments);
     const saveClassifications = vi.fn((records: unknown[]) => Promise.resolve({ saved: records.length }));
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
+    const nativeInvoke = vi.fn().mockResolvedValue({
+      status: 200,
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              results: segments.map((segment) => ({
+                id: segment.id,
+                category: "workspace",
+                productivity: "focus",
+                confidence: 0.82,
+                reason: "Local work context",
+              })),
+            }),
+          },
+        }],
+        usage: { prompt_tokens: 120, completion_tokens: 24 },
+      }),
+      latencyMs: 321,
+    });
 
     vi.doMock("../../lib/supabase/client", () => ({
       supabase: {
-        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token" } } }) },
+        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: options.session ?? { access_token: "token" } } }) },
         functions: { invoke },
       },
     }));
+    vi.doMock("@tauri-apps/api/core", () => ({ invoke: nativeInvoke }));
     vi.doMock("../../lib/api/trackerClient", () => ({
       trackerClient: {
         getUnclassifiedSegments,
@@ -179,11 +200,12 @@ describe("runAiClassification cloud contract", () => {
     }));
 
     const service = await import("./aiClassificationService");
-    return { ...service, invoke, getUnclassifiedSegments, saveClassifications, getClassificationMetrics };
+    return { ...service, invoke, nativeInvoke, getUnclassifiedSegments, saveClassifications, getClassificationMetrics };
   }
 
   function cleanupServiceMocks() {
     vi.doUnmock("../../lib/supabase/client");
+    vi.doUnmock("@tauri-apps/api/core");
     vi.doUnmock("../../lib/api/trackerClient");
     vi.resetModules();
   }
@@ -363,6 +385,56 @@ describe("runAiClassification cloud contract", () => {
       expect(JSON.stringify(body)).not.toContain("raw youtube description must stay local");
       expect(JSON.stringify(body)).not.toContain("private/raw-url");
       expect(JSON.stringify(body)).not.toContain("keywords");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("runs OpenRouter BYOK classification locally without a Supabase session", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, invoke, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "openrouter/auto" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(invoke).not.toHaveBeenCalled();
+      expect(nativeInvoke).toHaveBeenCalledWith("ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          baseUrl: "https://openrouter.ai/api/v1",
+          apiKey: "sk-or-v1-test",
+          model: "openrouter/auto",
+          headers: expect.objectContaining({
+            "HTTP-Referer": "https://drifty.so",
+            "X-OpenRouter-Title": "Drifty",
+          }),
+        }),
+      });
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        aiResult: true,
+        model: "openrouter/auto",
+        latencyMs: 321,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not call local AI when self-hosted setup is incomplete", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "" },
+      });
+
+      expect(result.status).toBe("disabled");
+      expect(nativeInvoke).not.toHaveBeenCalled();
+      expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
       cleanupServiceMocks();
     }

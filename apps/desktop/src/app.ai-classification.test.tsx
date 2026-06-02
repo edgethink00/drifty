@@ -533,6 +533,7 @@ describe("App AI classification controls", () => {
   it("does not auto-run AI classification when signed out", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
+    markOnboardingCompleted("local");
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD));
     render(<App />);
@@ -541,6 +542,23 @@ describe("App AI classification controls", () => {
 
     expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
     expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+  });
+
+  it("auto-runs signed-out AI classification when self-hosted AI is configured locally", async () => {
+    const today = todayIsoDate();
+    authState.user = null;
+    authState.status = "unauthenticated";
+    markOnboardingCompleted("local");
+    setRendererFocus(false);
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({ provider: "self_hosted", selfHostedBaseUrl: "http://localhost:11434/v1", selfHostedModel: "llama3.1:8b" }));
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
+      { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
+      AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      { localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.1:8b" } },
+    ));
   });
 
   it("auto-runs one 5-item batch after 20 focused idle minutes", async () => {

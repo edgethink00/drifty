@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 use commands::{
     accessibility_get_status, accessibility_request_access,
+    ai_classification_openai_chat,
     setup_watcher_window, system_open_settings_pane, tracker_get_app_icons,
     tracker_get_classification_metrics, tracker_get_current_snapshot,
     tracker_get_hourly_summary, tracker_get_raw_events, tracker_get_status, tracker_get_timeline,
@@ -220,6 +221,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             accessibility_get_status,
             accessibility_request_access,
+            ai_classification_openai_chat,
             tracker_get_status,
             tracker_start,
             tracker_stop,
