@@ -116,9 +116,13 @@ function formatDayLabel(day: string) {
 }
 
 describe("App leaderboard participation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(new Date(2026, 5, 3, 10, 0, 0, 0));
+    vi.setSystemTime(new Date(2026, 5, 2, 13, 15, 0, 0));
     vi.clearAllMocks();
     window.localStorage.clear();
     markOnboardingCompleted("local");
@@ -150,10 +154,6 @@ describe("App leaderboard participation", () => {
       },
     });
     fetchPublicProfile.mockResolvedValue({ success: true, error: null, data: null });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it("lets signed-out local users browse the public leaderboard without publishing until they join", async () => {
