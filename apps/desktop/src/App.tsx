@@ -3019,6 +3019,7 @@ export default function App() {
               appIcons={appIcons}
               productivityTotals={{
                 focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
+                neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
                 drift: activeInsightProductivityTotals.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0,
               }}
             />
@@ -3733,7 +3734,7 @@ function WeeklyCategoryRow({
 }: {
   weekly: WeeklyBreakdownDay[];
   categoryTotals: Array<{ category: ActivityCategory; totalSeconds: number }>;
-  productivityTotals: { focus: number; drift: number };
+  productivityTotals: Record<ProductivityLabel, number>;
   segments: ActivitySegment[];
   classificationOptions: ClassificationOptions;
   appIcons: AppIconMap;
@@ -3750,7 +3751,7 @@ function WeeklyCategoryRow({
 
   const hoverPayloads = useMemo(() => {
     const totalSeconds = mode === "productivity"
-      ? productivityTotals.focus + productivityTotals.drift
+      ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.reduce((sum, productivity) => sum + productivityTotals[productivity], 0)
       : categoryTotals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
     const entries = new Map<string, CompactClassificationHoverPayload>();
 
@@ -3759,10 +3760,13 @@ function WeeklyCategoryRow({
     }
 
     if (mode === "productivity") {
-      const productivityEntries = [
-        { key: "focus", label: "Focus", seconds: productivityTotals.focus, color: "var(--accent)", dotClassName: "productivity-dot--focus" },
-        { key: "drift", label: "Drift", seconds: productivityTotals.drift, color: "var(--warn)", dotClassName: "productivity-dot--drift" },
-      ];
+      const productivityEntries = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
+        key: productivity,
+        label: productivityLabel(productivity),
+        seconds: productivityTotals[productivity],
+        color: PRODUCTIVITY_COLORS[productivity],
+        dotClassName: `productivity-dot--${productivity}`,
+      }));
 
       for (const entry of productivityEntries) {
         if (entry.seconds <= 0) continue;
@@ -3792,7 +3796,7 @@ function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [categoryTotals, classificationOptions, mode, productivityTotals.drift, productivityTotals.focus, segments]);
+  }, [categoryTotals, classificationOptions, mode, productivityTotals, segments]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -4284,7 +4288,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="empty-state">
       <span className="eyebrow">{title}</span>
-      <strong>데이터가 충분히 없습니다</strong>
+      <strong>Not enough data yet</strong>
       <p>{detail}</p>
     </div>
   );
@@ -5871,12 +5875,13 @@ function buildWeeklyChartView(
   categorySeries: DonutCategorySlice[],
 ): WeeklyChartView {
   const series = mode === "productivity"
-    ? [{ key: "focus", color: "var(--accent)" }, { key: "drift", color: "var(--warn)" }]
+    ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({ key: productivity, color: PRODUCTIVITY_COLORS[productivity] }))
     : categorySeries.map((slice) => ({ key: slice.category, color: CATEGORY_COLORS[slice.category] }));
 
   const valueFor = (day: WeeklyBreakdownDay, key: string): number => {
     if (mode === "productivity") {
       if (key === "focus") return day.focusSeconds;
+      if (key === "neutral") return day.neutralSeconds;
       if (key === "drift") return day.driftSeconds;
       return 0;
     }
@@ -5887,7 +5892,7 @@ function buildWeeklyChartView(
 
   // Shared y-axis across both modes so toggling keeps a consistent scale.
   const categoryKeys = categorySeries.map((slice) => slice.category);
-  const productivityHours = weekly.map((day) => (day.focusSeconds + day.driftSeconds) / 3600);
+  const productivityHours = weekly.map((day) => (day.focusSeconds + day.neutralSeconds + day.driftSeconds) / 3600);
   const categoryHours = weekly.map((day) => categoryKeys.reduce((sum, key) => sum + (day.categorySeconds[key] ?? 0), 0) / 3600);
   const maxHours = Math.max(0, ...productivityHours, ...categoryHours);
   const axisMax = maxHours > 0 ? maxHours / 0.93 : 1;
@@ -5916,7 +5921,7 @@ function buildWeeklyChartView(
               const value = valueFor(day, ser.key);
               return value > 0 ? { key: ser.key, heightPct: (value / total) * 100, color: ser.color, seconds: value } : null;
             })
-            .filter((segment): segment is { key: string; heightPct: number; color: string; seconds: number } => segment !== null),
+            .filter((segment): segment is { key: ProductivityLabel | ActivityCategory; heightPct: number; color: string; seconds: number } => segment !== null),
     };
   });
 
@@ -5935,13 +5940,15 @@ const DONUT_CIRCUMFERENCE = 2 * Math.PI * 40;
 function buildDonutView(
   mode: WeeklyChartMode,
   categorySeries: DonutCategorySlice[],
-  productivityTotals: { focus: number; drift: number },
+  productivityTotals: Record<ProductivityLabel, number>,
 ): DonutView {
   const items = mode === "productivity"
-    ? [
-        { key: "focus", name: "Focus", color: "var(--accent)", seconds: productivityTotals.focus },
-        { key: "drift", name: "Drift", color: "var(--warn)", seconds: productivityTotals.drift },
-      ].filter((item) => item.seconds > 0)
+    ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
+        key: productivity,
+        name: productivityLabel(productivity),
+        color: PRODUCTIVITY_COLORS[productivity],
+        seconds: productivityTotals[productivity],
+      })).filter((item) => item.seconds > 0)
     : categorySeries.map((slice) => ({
         key: slice.category,
         name: categoryLabel(slice.category),
