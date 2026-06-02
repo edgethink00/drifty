@@ -49,6 +49,40 @@ def _run_command(command: list[str]) -> str:
     return result.stdout.strip()
 
 
+def _optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned or cleaned == "missing value":
+        return None
+    return cleaned
+
+
+def _frontmost_via_system_events() -> tuple[str | None, str | None, str | None]:
+    result = _run_osascript(
+        '''
+        tell application "System Events"
+          set frontApp to first application process whose frontmost is true
+          set appName to name of frontApp
+          set bundleId to bundle identifier of frontApp
+          if bundleId is missing value then set bundleId to ""
+          set windowTitle to ""
+          tell frontApp
+            if exists front window then
+              set windowTitle to name of front window
+            end if
+          end tell
+          return appName & linefeed & bundleId & linefeed & windowTitle
+        end tell
+        '''
+    )
+    parts = result.splitlines()
+    app_name = _optional_text(parts[0] if len(parts) > 0 else None)
+    bundle_id = _optional_text(parts[1] if len(parts) > 1 else None)
+    window_title = _optional_text(parts[2] if len(parts) > 2 else None)
+    return app_name, bundle_id, window_title
+
+
 def _frontmost_via_lsappinfo() -> tuple[str | None, str | None]:
     front = _run_command(["lsappinfo", "front"])
     if "NULL" in front:
@@ -170,34 +204,14 @@ def _browser_metadata(app_name: str | None) -> tuple[str | None, str | None, str
 
 def current_snapshot() -> Snapshot:
     try:
-        app_name = _run_osascript(
-            'tell application "System Events" to get name of first application process whose frontmost is true'
-        )
+        app_name, bundle_id, window_title = _frontmost_via_system_events()
     except Exception:
-        app_name = None
-
-    bundle_id = None
-    if app_name:
-        try:
-            raw = _run_osascript(
-                f'''
-                tell application "System Events"
-                  set frontApp to first application process whose name is "{app_name}"
-                  return bundle identifier of frontApp
-                end tell
-                '''
-            )
-            bundle_id = raw if raw and raw != "missing value" else None
-        except Exception:
-            bundle_id = None
-
-    if not app_name:
         app_name, bundle_id = _frontmost_via_lsappinfo()
+        window_title = read_front_window_title() if app_name else None
 
     if not app_name:
         app_name = "Unavailable"
 
-    window_title = read_front_window_title()
     browser_name, site_domain, site_title, site_url, youtube_video_id, youtube_playlist_id, youtube_is_shorts = _browser_metadata(app_name)
 
     return Snapshot(

@@ -124,8 +124,8 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_current_snapshot_preserves_app_tracking_without_window_title(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
-             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)):
-            mock_run.side_effect = ['Notes', 'com.apple.Notes']
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)) as mock_browser_metadata:
+            mock_run.return_value = 'Notes\ncom.apple.Notes'
 
             snapshot = current_snapshot()
 
@@ -133,6 +133,37 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.bundle_id, 'com.apple.Notes')
         self.assertIsNone(snapshot.window_title)
         self.assertEqual(snapshot.source, 'nsworkspace')
+        mock_browser_metadata.assert_called_once_with('Notes')
+
+    def test_current_snapshot_uses_atomic_window_title_when_available(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace.read_front_window_title') as mock_window_title, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)) as mock_browser_metadata:
+            mock_run.return_value = 'Claude\ncom.anthropic.claude\nClaude Chat'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.app_name, 'Claude')
+        self.assertEqual(snapshot.bundle_id, 'com.anthropic.claude')
+        self.assertEqual(snapshot.window_title, 'Claude Chat')
+        self.assertEqual(snapshot.source, 'accessibility')
+        mock_window_title.assert_not_called()
+        mock_browser_metadata.assert_called_once_with('Claude')
+
+    def test_current_snapshot_uses_same_frontmost_process_for_app_and_window_title(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace.read_front_window_title', return_value='Virev AI - Google Chrome') as mock_window_title, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)) as mock_browser_metadata:
+            mock_run.return_value = 'Claude\ncom.anthropic.claude'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.app_name, 'Claude')
+        self.assertEqual(snapshot.bundle_id, 'com.anthropic.claude')
+        self.assertIsNone(snapshot.window_title)
+        self.assertEqual(snapshot.source, 'nsworkspace')
+        mock_window_title.assert_not_called()
+        mock_browser_metadata.assert_called_once_with('Claude')
 
     def test_current_snapshot_falls_back_to_lsappinfo_when_system_events_lookup_fails(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events lookup failed')) as mock_run, \
