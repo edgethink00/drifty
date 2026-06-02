@@ -103,7 +103,7 @@ describe("LeaderboardView", () => {
     renderView({
       profileDisplayName: "Alex",
       profileBio: "Building quiet tools for deeper work.",
-      profileWebsiteUrl: "https://drifty.so/egt",
+      profileWebsiteUrl: "https://drifty.so/drifty",
       profileGithubUrl: "github.com/edgethink00",
       profileLinkedinUrl: "https://www.linkedin.com/in/drifty/",
       email: "alex@example.com",
@@ -116,7 +116,7 @@ describe("LeaderboardView", () => {
 
     expect(within(nameRow).getByRole("button", { name: /edit profile/i })).toBeTruthy();
     expect(within(hero).getByText("Building quiet tools for deeper work.")).toBeTruthy();
-    expect(within(hero).getByText("drifty.so/egt")).toBeTruthy();
+    expect(within(hero).getByText("drifty.so/drifty")).toBeTruthy();
     expect(within(hero).getByText("github.com/edgethink00")).toBeTruthy();
     expect(within(hero).getByText("linkedin.com/in/drifty")).toBeTruthy();
     expect(screen.queryByText("alex@example.com")).toBeNull();

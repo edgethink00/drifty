@@ -93,7 +93,7 @@ function resolveClient(client?: ProfileClient | null): ProfileClient | null {
 
 export function fallbackDisplayName(email?: string | null) {
   const name = email?.split("@")[0]?.trim();
-  return name || "egt";
+  return name || "drifty";
 }
 
 function normalizeProfile(row: ProfileRow, email?: string | null): UserProfile {
@@ -114,7 +114,7 @@ function normalizeProfile(row: ProfileRow, email?: string | null): UserProfile {
 function normalizePublicProfile(row: PublicProfileRpcRow): PublicProfile {
   return {
     public_id: row.public_id ?? "",
-    display_name: row.display_name ?? "egt",
+    display_name: row.display_name ?? "drifty",
     bio: row.bio ?? "",
     avatar_url: row.avatar_url ?? "",
     website_url: row.website_url ?? "",

@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { shiftIsoDate, todayIsoDate } from "@dtime/domain";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
 const {
@@ -67,7 +67,7 @@ vi.mock("./features/profile/profileService", () => ({
   fetchOwnProfile,
   saveOwnProfile,
   fetchPublicProfile,
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "egt",
+  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "drifty",
 }));
 
 vi.mock("./lib/api/trackerClient", () => ({
@@ -117,6 +117,8 @@ function formatDayLabel(day: string) {
 
 describe("App leaderboard participation", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 3, 10, 0, 0, 0));
     vi.clearAllMocks();
     window.localStorage.clear();
     markOnboardingCompleted("local");
@@ -148,6 +150,10 @@ describe("App leaderboard participation", () => {
       },
     });
     fetchPublicProfile.mockResolvedValue({ success: true, error: null, data: null });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("lets signed-out local users browse the public leaderboard without publishing until they join", async () => {
@@ -259,7 +265,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).toHaveBeenCalledTimes(1);
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "egt",
+        display_name: "drifty",
         bio: "",
         avatar_url: "",
         website_url: "",
@@ -385,7 +391,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).not.toHaveBeenCalled();
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "egt",
+        display_name: "drifty",
         bio: "",
         avatar_url: "",
         website_url: "",
