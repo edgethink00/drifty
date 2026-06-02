@@ -2673,8 +2673,8 @@ export default function App() {
                         <strong className="panel-header__title">{classificationCategoryBreakdowns.length} tracked</strong>
                       </div>
                       <div className="panel-header__right">
-                        <strong className="panel-header__value">{formatDuration(dayTotalSeconds)}</strong>
                         <span className="panel-header__meta">Total</span>
+                        <strong className="panel-header__value">{formatDuration(dayTotalSeconds)}</strong>
                       </div>
                     </header>
                     <div className="classification-panel-view__panel-body">
@@ -2721,8 +2721,8 @@ export default function App() {
                         </strong>
                       </div>
                       <div className="panel-header__right">
-                        <strong className="panel-header__value">{classificationSourceSummaries.length}</strong>
                         <span className="panel-header__meta">{classificationSourceSummaries.length === 1 ? "source" : "sources"}</span>
+                        <strong className="panel-header__value">{classificationSourceSummaries.length}</strong>
                       </div>
                     </header>
                     <div className="classification-panel-view__panel-body">
@@ -2780,10 +2780,10 @@ export default function App() {
                             </strong>
                           </div>
                           <div className="panel-header__right classification-panel-view__detail-meta">
-                            <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
                             <span className="panel-header__meta">
                               {selectedClassificationSourceSummary.sessionCount} {selectedClassificationSourceSummary.sessionCount === 1 ? "session" : "sessions"}
                             </span>
+                            <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
                           </div>
                         </header>
                         <div className="classification-panel-view__panel-body">

@@ -409,6 +409,31 @@ describe("App AI classification controls", () => {
     expect(title.closest(".classification-panel-view__activity-row")).toBeTruthy();
   });
 
+  it("places classification panel header labels above their values", async () => {
+    const selectedDay = todayIsoDate();
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
+      query.day === selectedDay ? [createSegmentForDay(selectedDay)] : [],
+    ));
+    render(<App />);
+
+    const primaryNavigation = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(primaryNavigation).getByRole("button", { name: /^classification$/i }));
+
+    const panel = await screen.findByLabelText("Classification panel view") as HTMLElement;
+    const headers = panel.querySelectorAll(".classification-panel-view__panel-header");
+    const rightStacks = Array.from(headers).slice(0, 2).map((header) => header.querySelector(".panel-header__right"));
+
+    expect(rightStacks).toHaveLength(2);
+    for (const stack of rightStacks) {
+      expect(Array.from(stack?.children ?? []).map((child) => child.className)).toEqual([
+        "panel-header__meta",
+        "panel-header__value",
+      ]);
+    }
+    expect(rightStacks[0]?.textContent).toBe("Total30m");
+    expect(rightStacks[1]?.textContent).toBe("source1");
+  });
+
   it("uses the selected category tone for classification selections and activity detail bars", async () => {
     const selectedDay = todayIsoDate();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
