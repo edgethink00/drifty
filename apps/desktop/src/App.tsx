@@ -837,6 +837,18 @@ export default function App() {
     }),
     [segments, showAiClassificationImpact],
   );
+  const localAiClassificationOptions = useMemo(() => {
+    if (localAiSetup.provider === "openrouter_byok") {
+      const apiKey = localAiSetup.openRouterApiKey.trim();
+      if (!apiKey) return null;
+      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model: localAiSetup.openRouterModel.trim() || DEFAULT_LOCAL_AI_SETUP.openRouterModel } };
+    }
+
+    const baseUrl = localAiSetup.selfHostedBaseUrl.trim();
+    const model = localAiSetup.selfHostedModel.trim();
+    if (!baseUrl || !model) return null;
+    return { localProvider: { provider: "self_hosted" as const, baseUrl, model } };
+  }, [localAiSetup]);
   const {
     user,
     status: authStatus,
@@ -1687,7 +1699,7 @@ export default function App() {
   }, []);
 
   const runAutoAiClassificationBatch = useCallback(async () => {
-    if (!isSupabaseConfigured || !isPolicySignedIn) return;
+    if (!localAiClassificationOptions && (!isSupabaseConfigured || !isPolicySignedIn)) return;
     if (shouldBlockLocalTrackerAccess) return;
     if (!hasLoadedOnce) return;
     if (classificationActionLoading) return;
@@ -1701,7 +1713,9 @@ export default function App() {
     aiClassificationInFlightRef.current = true;
     try {
       const query = toClassificationQueryForDay(today, threshold);
-      const summary = await runAiClassificationForUnknownThreshold(query, threshold);
+      const summary = localAiClassificationOptions
+        ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
+        : await runAiClassificationForUnknownThreshold(query, threshold);
       if (summary.status === "empty" && summary.savedRecords === 0) return;
       if (selectedDayRef.current === today) {
         setClassificationSummary(summary);
@@ -1721,7 +1735,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [classificationActionLoading, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [classificationActionLoading, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -1954,8 +1968,8 @@ export default function App() {
   }
 
   async function handleRunAiClassificationNow() {
-    if (!user) {
-      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in to run AI classification." });
+    if (!user && !localAiClassificationOptions) {
+      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
       return;
     }
 
@@ -1967,7 +1981,9 @@ export default function App() {
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: "Running AI classification..." });
     try {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
-      const summary = await runAiClassification(toClassificationQueryForDay(selectedDay));
+      const summary = localAiClassificationOptions
+        ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
+        : await runAiClassification(toClassificationQueryForDay(selectedDay));
       setClassificationSummary(summary);
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
@@ -1985,8 +2001,8 @@ export default function App() {
   }
 
   async function handleRunSelectedDayAiClassification() {
-    if (!user) {
-      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in to run AI classification." });
+    if (!user && !localAiClassificationOptions) {
+      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
       return;
     }
 
@@ -1999,7 +2015,9 @@ export default function App() {
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: `Classifying all unclassified activity for ${formatDayLabel(targetDay)}...` });
     try {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
-      const summary = await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
+      const summary = localAiClassificationOptions
+        ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, localAiClassificationOptions)
+        : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
       setClassificationSummary({
         ...summary,
         message: `${summary.message} Target: ${formatDayLabel(targetDay)}.`,
