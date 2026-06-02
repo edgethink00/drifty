@@ -3023,6 +3023,8 @@ export default function App() {
               }}
             />
 
+            <ProductivityPersonaCard report={productivityPersonaReport} hasData={insightSegments.length > 0} />
+
             <AttentionRhythmCard
               appIcons={appIcons}
               cells={attentionRhythm}
@@ -3034,8 +3036,6 @@ export default function App() {
               <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
               <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
             </div>
-
-            <ProductivityPersonaCard report={productivityPersonaReport} hasData={insightSegments.length > 0} />
           </div>
         ) : null}
 
