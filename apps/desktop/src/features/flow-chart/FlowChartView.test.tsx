@@ -83,6 +83,12 @@ describe("FlowChartView", () => {
     expect(visibleHourLabels()).toEqual(["12am", "3am", "6am", "9am", "12pm", "3pm", "6pm", "9pm"]);
   });
 
+  it("orders hour labels from the configured logical start of day", () => {
+    render(<FlowChartView blocks={[makeFlowBlock({ minuteOfDay: 4 * 60 })]} appIcons={{}} intervalMinutes={3} startOfDayMinutes={4 * 60} />);
+
+    expect(visibleHourLabels()).toEqual(["4am", "7am", "10am", "1pm", "4pm", "7pm", "10pm", "1am"]);
+  });
+
   it("uses a desktop right rail while keeping the flow chart full width in its grid cell", () => {
     const flowBreakdownLayoutRule = cssRule(".flow-breakdown-layout");
     const flowBreakdownChartRule = cssRule(".flow-breakdown-layout__chart");

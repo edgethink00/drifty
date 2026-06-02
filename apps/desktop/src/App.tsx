@@ -16,6 +16,10 @@ import {
   buildDayRibbonSegments,
   buildHourlySummary,
   buildProductivityPersona,
+  logicalDayEndExclusiveMs,
+  logicalDayIsoDateForDate,
+  logicalDayStartMs,
+  logicalMinuteOfDay,
   type CategoryDuration,
   type ProductivityDuration,
   formatTimelineItems,
@@ -80,6 +84,10 @@ import {
 } from "./features/billing/billingService";
 
 type ThemeMode = "light" | "dark";
+type StartOfWeek = "sunday" | "monday" | "saturday";
+type CategoryColorOverrides = Partial<Record<ActivityCategory, string>>;
+type AppThemeColorKey = "accent" | "productivityFocus" | "productivityDrift" | "productivityNeutral";
+type AppThemeColorOverrides = Partial<Record<AppThemeColorKey, string>>;
 type TabId = "dashboard" | "classify" | "drift" | "leaderboard" | "settings";
 type DashboardPeriod = "Today" | "Week" | "Month";
 type NavigationSnapshot = {
@@ -398,7 +406,7 @@ type MonthCellStyle = CSSProperties & {
   "--activity-ink"?: string;
 };
 
-type SettingsSection = "aiSetup" | "notifications" | "privacy" | "data" | "dev";
+type SettingsSection = "general" | "aiSetup" | "notifications" | "privacy" | "data" | "dev";
 type LocalAiProvider = "openrouter_byok" | "self_hosted";
 type LocalAiSetupState = {
   provider: LocalAiProvider;
@@ -460,6 +468,42 @@ const LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY = "dtime.sidebar.collapsed";
 const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 const LEGACY_AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "dtime.dev.showAiClassificationImpact";
 const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
+const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
+const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
+const CATEGORY_COLOR_STORAGE_KEY = "drifty.theme.categoryColors.v1";
+const APP_THEME_COLOR_STORAGE_KEY = "drifty.theme.appColors.v1";
+const DEFAULT_START_OF_DAY_MINUTES = 4 * 60;
+const DEFAULT_START_OF_WEEK: StartOfWeek = "monday";
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+const START_OF_DAY_OPTIONS: Array<{ value: string; label: string; minutes: number }> = Array.from({ length: 24 }, (_, hour) => {
+  const value = `${String(hour).padStart(2, "0")}:00`;
+  return { value, label: formatStartOfDayOptionLabel(hour * 60), minutes: hour * 60 };
+});
+const START_OF_WEEK_OPTIONS = [
+  { value: "monday", label: "Monday" },
+  { value: "sunday", label: "Sunday" },
+  { value: "saturday", label: "Saturday" },
+] satisfies ReadonlyArray<{ value: StartOfWeek; label: string }>;
+const APP_THEME_COLOR_OPTIONS: Array<{ key: AppThemeColorKey; label: string; cssVariable: string; defaultColor: string }> = [
+  { key: "accent", label: "Accent", cssVariable: "--accent", defaultColor: "#6b7a22" },
+  { key: "productivityFocus", label: "Focus", cssVariable: "--productivity-focus", defaultColor: "#536414" },
+  { key: "productivityDrift", label: "Drift", cssVariable: "--productivity-drift", defaultColor: "#8f352d" },
+  { key: "productivityNeutral", label: "Neutral", cssVariable: "--productivity-neutral", defaultColor: "#b8b3a7" },
+];
+const APP_THEME_ACCENT_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filter((option) => option.key === "accent");
+const APP_THEME_PRODUCTIVITY_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filter((option) => option.key !== "accent");
+const CATEGORY_COLOR_OPTIONS: Array<{ key: ActivityCategory; label: string; cssVariable: string; defaultColor: string }> = [
+  { key: "workspace", label: "Workspace", cssVariable: "--category-workspace", defaultColor: "#7f912b" },
+  { key: "learning", label: "Learning", cssVariable: "--category-learning", defaultColor: "#577b72" },
+  { key: "communication", label: "Communication", cssVariable: "--category-communication", defaultColor: "#9b978b" },
+  { key: "music", label: "Music", cssVariable: "--category-music", defaultColor: "#7c6d95" },
+  { key: "game", label: "Game", cssVariable: "--category-game", defaultColor: "#9a633d" },
+  { key: "social_media", label: "Social media", cssVariable: "--category-social-media", defaultColor: "#a8564f" },
+  { key: "entertainment", label: "Entertainment", cssVariable: "--category-entertainment", defaultColor: "#b76055" },
+  { key: "shopping", label: "Shopping", cssVariable: "--category-shopping", defaultColor: "#a9783f" },
+  { key: "utility", label: "Utility", cssVariable: "--category-utility", defaultColor: "#817e75" },
+  { key: "unknown", label: "Unknown", cssVariable: "--category-unknown", defaultColor: "#5f5d56" },
+];
 const DEFAULT_THEME: ThemeMode = "light";
 const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   provider: "openrouter_byok",
@@ -855,7 +899,7 @@ export default function App() {
     setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
   }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(resolveInitialSidebarCollapsed);
-  const [selectedDay, setSelectedDay] = useState(todayIsoDate());
+  const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
@@ -873,7 +917,11 @@ export default function App() {
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<string | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("aiSetup");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [startOfDayMinutes, setStartOfDayMinutes] = useState(resolveInitialStartOfDayMinutes);
+  const [startOfWeek, setStartOfWeek] = useState<StartOfWeek>(resolveInitialStartOfWeek);
+  const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
+  const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
@@ -906,7 +954,7 @@ export default function App() {
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const openSettingsTab = useCallback(() => {
-    setSettingsSection("aiSetup");
+    setSettingsSection("general");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -1010,13 +1058,13 @@ export default function App() {
     autoSelectedLatestDayRef.current = true;
     setSelectedDay((currentDay) => {
       const nextDay = typeof day === "function" ? day(currentDay) : day;
-      userSelectedDayRef.current = nextDay !== todayIsoDate();
+      userSelectedDayRef.current = nextDay !== logicalTodayIsoDate(startOfDayMinutes);
       return nextDay;
     });
   }
 
   const selectTodayAfterDateRollover = useCallback(() => {
-    const currentDay = todayIsoDate();
+    const currentDay = logicalTodayIsoDate(startOfDayMinutes);
     if (selectedDay === currentDay) return false;
     if (activeTab !== "dashboard" || dashPeriod !== "Today") return false;
     if (userSelectedDayRef.current) return false;
@@ -1024,7 +1072,7 @@ export default function App() {
     autoSelectedLatestDayRef.current = true;
     setSelectedDay(currentDay);
     return true;
-  }, [activeTab, dashPeriod, selectedDay]);
+  }, [activeTab, dashPeriod, selectedDay, startOfDayMinutes]);
 
   function shiftDashboardPeriod(direction: -1 | 1) {
     if (direction === 1 && !canShiftDashboardForward) return;
@@ -1124,10 +1172,11 @@ export default function App() {
     setError(null);
 
     const historyStartDay = shiftIsoDate(day, -89);
-    const historySummaryRange = { start: `${historyStartDay}T00:00:00`, end: `${day}T23:59:59` };
-    const selectedWeekRange = getDashboardPeriodRange(day, "Week");
+    const historySummaryRange = getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
+    const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
     const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
-    const historyTimelineRange = { start: `${historyStartDay}T00:00:00`, end: `${historyTimelineEndDay}T23:59:59` };
+    const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
+    const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
 
     try {
       const archiveTimelineRequest = trackerClient
@@ -1142,7 +1191,7 @@ export default function App() {
       });
 
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
-        trackerClient.getTimeline({ day }),
+        trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
         trackerClient.getHourlySummary(historySummaryRange),
         trackerClient.getTopSites({ ...historySummaryRange, limit: 8 }),
@@ -1168,7 +1217,7 @@ export default function App() {
 
       void (async () => {
         try {
-          const hourlySummary = await trackerClient.getHourlySummary({ day });
+          const hourlySummary = await trackerClient.getHourlySummary(selectedDayRange);
           if (refreshRequestRef.current !== requestId) return;
           setHourly(hourlySummary.length > 0 ? hourlySummary : buildHourlySummary(timeline));
         } catch {
@@ -1221,7 +1270,7 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     void refresh(selectedDay);
-  }, [selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1281,6 +1330,32 @@ export default function App() {
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(START_OF_DAY_STORAGE_KEY, String(startOfDayMinutes));
+  }, [startOfDayMinutes]);
+
+  useEffect(() => {
+    window.localStorage.setItem(START_OF_WEEK_STORAGE_KEY, startOfWeek);
+  }, [startOfWeek]);
+
+  useEffect(() => {
+    for (const option of CATEGORY_COLOR_OPTIONS) {
+      const color = categoryColorOverrides[option.key];
+      if (color) document.documentElement.style.setProperty(option.cssVariable, color);
+      else document.documentElement.style.removeProperty(option.cssVariable);
+    }
+    window.localStorage.setItem(CATEGORY_COLOR_STORAGE_KEY, JSON.stringify(categoryColorOverrides));
+  }, [categoryColorOverrides]);
+
+  useEffect(() => {
+    for (const option of APP_THEME_COLOR_OPTIONS) {
+      const color = appThemeColorOverrides[option.key];
+      if (color) document.documentElement.style.setProperty(option.cssVariable, color);
+      else document.documentElement.style.removeProperty(option.cssVariable);
+    }
+    window.localStorage.setItem(APP_THEME_COLOR_STORAGE_KEY, JSON.stringify(appThemeColorOverrides));
+  }, [appThemeColorOverrides]);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
@@ -1392,7 +1467,7 @@ export default function App() {
 
   useEffect(() => {
     if (!driftAlertsEnabled) return;
-    if (selectedDay !== todayIsoDate()) return;
+    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return;
     if (!status?.running) return;
 
     const driftSegments = segments
@@ -1452,7 +1527,7 @@ export default function App() {
     };
   }, [selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
 
-  const dashboardRange = useMemo(() => getDashboardPeriodRange(selectedDay, dashPeriod), [dashPeriod, selectedDay]);
+  const dashboardRange = useMemo(() => getDashboardPeriodRange(selectedDay, dashPeriod, startOfDayMinutes, startOfWeek), [dashPeriod, selectedDay, startOfDayMinutes, startOfWeek]);
   const dashboardSegments = useMemo(() => {
     const source = dashPeriod === "Today" ? segments : historySegments;
     return filterSegmentsForRange(source, dashboardRange.start, dashboardRange.end);
@@ -1462,10 +1537,10 @@ export default function App() {
     [dashboardSegments, showAiClassificationImpact],
   );
   const dashboardActiveDays = useMemo(
-    () => buildDailyTotals(dashboardSegments, dashboardRange.startDay, dashboardRange.endDay).filter((day) => day.totalSeconds > 0).length,
-    [dashboardRange.endDay, dashboardRange.startDay, dashboardSegments],
+    () => buildDailyTotals(dashboardSegments, dashboardRange.startDay, dashboardRange.endDay, startOfDayMinutes).filter((day) => day.totalSeconds > 0).length,
+    [dashboardRange.endDay, dashboardRange.startDay, dashboardSegments, startOfDayMinutes],
   );
-  const insightRange = useMemo(() => getInsightPeriodRange(selectedDay), [selectedDay]);
+  const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
   const insightSegments = useMemo(
     () => filterSegmentsForRange(historySegments, insightRange.start, insightRange.end),
     [historySegments, insightRange.end, insightRange.start],
@@ -1514,17 +1589,17 @@ export default function App() {
     const client = trackerClient as Partial<typeof trackerClient>;
     if (typeof client.updateTrayProductivityIcon !== "function") return;
     void client.updateTrayProductivityIcon(trayProductivityMix).catch(() => undefined);
-  }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, trayProductivityMix]);
+  }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, trayProductivityMix]);
   const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 6 }), [dashboardSegments]);
   const dashboardTopApps = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 1, groupBy: "app" }), [dashboardSegments]);
-  const dayField = useMemo(() => buildQuarterHourDayField(segments, selectedDay), [segments, selectedDay]);
+  const dayField = useMemo(() => buildQuarterHourDayField(segments, selectedDay, startOfDayMinutes), [segments, selectedDay, startOfDayMinutes]);
   const selectedDayLabel = formatDayLabel(selectedDay);
   const aiClassificationUsageDayLabel = formatDayLabel(aiClassificationUsageDay ?? selectedDay);
   const aiClassificationCostProjection = useMemo(
     () => projectAiClassificationCost(aiClassificationUsage, classificationMetrics),
     [aiClassificationUsage, classificationMetrics],
   );
-  const selectedDayContext = describeRelativeDay(selectedDay);
+  const selectedDayContext = describeRelativeDay(selectedDay, startOfDayMinutes);
   const dashboardTitle =
     selectedDayContext === "Today"
       ? `Good ${getDayPart()}.`
@@ -1553,14 +1628,14 @@ export default function App() {
   const peakSlot = dayField.reduce((cur, slot) => (slot.totalSeconds > cur.totalSeconds ? slot : cur), dayField[0]);
   const peakTrackedSeconds = peakSlot?.totalSeconds ?? 0;
   const peakWindowLabel = peakTrackedSeconds > 0 ? formatQuarterHourLabel(peakSlot.minuteOfDay) : "\u2014";
-  const todayDay = todayIsoDate();
+  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const isTodaySelected = selectedDay === todayDay;
   const isCurrentDashboardPeriod = dashPeriod === "Week"
     ? dashboardRange.startDay <= todayDay && todayDay <= dashboardRange.endDay
     : isTodaySelected;
   const nextDashboardDay = shiftDashboardPeriodDay(selectedDay, dashPeriod, 1);
   const canShiftDashboardForward = dashPeriod === "Week"
-    ? getDashboardPeriodRange(nextDashboardDay, dashPeriod).startDay <= todayDay
+    ? getDashboardPeriodRange(nextDashboardDay, dashPeriod, startOfDayMinutes, startOfWeek).startDay <= todayDay
     : nextDashboardDay <= todayDay;
   const canSelectNextDay = shiftIsoDate(selectedDay, 1) <= todayDay;
   const nextInsightDay = shiftDashboardPeriodDay(selectedDay, "Week", 1);
@@ -1595,8 +1670,8 @@ export default function App() {
     [insightClassificationOptions, insightSegments],
   );
   const insightSiteSummary = insightTopSites.slice(0, 5);
-  const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions), [selectedDayClassificationOptions, segments, selectedDay]);
-  const flowBlocks = useMemo(() => buildFlowBlocks(segments, selectedDay, flowIntervalMinutes, selectedDayClassificationOptions), [flowIntervalMinutes, selectedDayClassificationOptions, segments, selectedDay]);
+  const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
+  const flowBlocks = useMemo(() => buildFlowBlocks(segments, selectedDay, flowIntervalMinutes, selectedDayClassificationOptions, startOfDayMinutes), [flowIntervalMinutes, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
   const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
   const classificationCategoryBreakdowns = useMemo(
     () => buildClassificationCategoryBreakdowns(segments, selectedDayClassificationOptions, dayTotalSeconds),
@@ -1651,12 +1726,12 @@ export default function App() {
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
-  const previousWeekFocusSeconds = useMemo(() => buildRollingFocusSeconds(historySegments, shiftIsoDate(dashboardRange.startDay, -7), shiftIsoDate(dashboardRange.startDay, -1), historyClassificationOptions), [dashboardRange.startDay, historyClassificationOptions, historySegments]);
+  const previousWeekFocusSeconds = useMemo(() => buildRollingFocusSeconds(historySegments, shiftIsoDate(dashboardRange.startDay, -7), shiftIsoDate(dashboardRange.startDay, -1), historyClassificationOptions, startOfDayMinutes), [dashboardRange.startDay, historyClassificationOptions, historySegments, startOfDayMinutes]);
   const weekFocusDeltaPercent = previousWeekFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousWeekFocusSeconds) / previousWeekFocusSeconds) * 100) : null;
-  const weekRows = useMemo(() => buildWeekDayRows(dashboardSegments, dashboardRange.startDay, dashboardRange.endDay, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardRange.endDay, dashboardRange.startDay, dashboardSegments]);
+  const weekRows = useMemo(() => buildWeekDayRows(dashboardSegments, dashboardRange.startDay, dashboardRange.endDay, dashboardClassificationOptions, startOfDayMinutes), [dashboardClassificationOptions, dashboardRange.endDay, dashboardRange.startDay, dashboardSegments, startOfDayMinutes]);
   const focusDriftChart = useMemo(
-    () => buildFocusDriftChart(segments, selectedDay, selectedDayClassificationOptions, currentMinuteOfDay),
-    [currentMinuteOfDay, selectedDayClassificationOptions, segments, selectedDay],
+    () => buildFocusDriftChart(segments, selectedDay, selectedDayClassificationOptions, currentMinuteOfDay, startOfDayMinutes),
+    [currentMinuteOfDay, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes],
   );
   const focusDriftLiveStyle = focusDriftChart.currentX !== null
     ? { "--focus-drift-now-x": `${focusDriftChart.currentX}%` } as FocusDriftLiveStyle
@@ -1692,16 +1767,16 @@ export default function App() {
 
     setFocusDriftHover({ point: nearestPoint, kind, x: event.clientX, y: event.clientY });
   }
-  const leaderboardWindowEndDay = todayIsoDate();
+  const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
   const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
   const localRollingFocusSeconds = useMemo(
-    () => buildRollingFocusSeconds(leaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions),
-    [leaderboardClassificationOptions, leaderboardSegments, leaderboardWindowEndDay, leaderboardWindowStartDay],
+    () => buildRollingFocusSeconds(leaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions, startOfDayMinutes),
+    [leaderboardClassificationOptions, leaderboardSegments, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes],
   );
   const leaderboardProfileDisplayName = useMemo(() => profile?.display_name || fallbackDisplayName(user?.email), [profile?.display_name, user?.email]);
   const leaderboardUsesPreviewProfile = shouldUsePreviewData();
   const leaderboardProfileBio = profile?.bio || profileDraft.bio || (leaderboardUsesPreviewProfile ? "Building quiet tools for deeper work." : "");
-  const leaderboardProfileWebsiteUrl = profile?.website_url || profileDraft.websiteUrl || (leaderboardUsesPreviewProfile ? "drifty.so/egt" : "");
+  const leaderboardProfileWebsiteUrl = profile?.website_url || profileDraft.websiteUrl || (leaderboardUsesPreviewProfile ? "drifty.so/drifty" : "");
   const leaderboardProfileGithubUrl = profile?.github_url || profileDraft.githubUrl || (leaderboardUsesPreviewProfile ? "github.com/edgethink00" : "");
   const leaderboardProfileLinkedinUrl = profile?.linkedin_url || profileDraft.linkedinUrl || (leaderboardUsesPreviewProfile ? "linkedin.com/in/drifty" : "");
   const leaderboardTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
@@ -1726,10 +1801,7 @@ export default function App() {
       const [globalResult, ownResult, leaderboardTimeline] = await Promise.all([
         fetchGlobalLeaderboard(activeLeaderboardPeriod, 100),
         user ? fetchOwnLeaderboardEntry(activeLeaderboardPeriod) : Promise.resolve({ success: true, error: null, data: null }),
-        trackerClient.getTimeline({
-          start: `${leaderboardWindowStartDay}T00:00:00`,
-          end: `${leaderboardWindowEndDay}T23:59:59`,
-        }),
+        trackerClient.getTimeline(getLogicalDayRange(leaderboardWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes)),
       ]);
 
       if (leaderboardRefreshRequestRef.current !== requestId) return;
@@ -2235,16 +2307,13 @@ export default function App() {
       });
 
       const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
-      const allPeriodSegments = await trackerClient.getTimeline({
-        start: `${allPeriodWindowStartDay}T00:00:00`,
-        end: `${leaderboardWindowEndDay}T23:59:59`,
-      });
+      const allPeriodSegments = await trackerClient.getTimeline(getLogicalDayRange(allPeriodWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes));
       const publishResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => {
         const windowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, period);
         const focusSeconds = buildRollingFocusSeconds(allPeriodSegments, windowStartDay, leaderboardWindowEndDay, {
           fallbackCandidates: allPeriodSegments,
           includeAiClassifications: showAiClassificationImpact,
-        });
+        }, startOfDayMinutes);
         return publishOwnFocusTotal({
           profileDisplayName: nextProfile.display_name,
           period,
@@ -2427,6 +2496,74 @@ export default function App() {
   }
 
   function handleCmdNav(tabId: TabId) { navigateToTab(tabId); setCmdOpen(false); }
+
+  const startOfDayValue = minutesToHourlyStartOfDayValue(startOfDayMinutes);
+  const handleStartOfDayChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setStartOfDayMinutes(hourlyStartOfDayValueToMinutes(event.target.value));
+  }, []);
+  const handleStartOfWeekChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setStartOfWeek(isStartOfWeek(event.target.value) ? event.target.value : DEFAULT_START_OF_WEEK);
+  }, []);
+  const handleCategoryColorChange = useCallback((category: ActivityCategory, value: string) => {
+    if (!isHexColor(value)) return;
+    setCategoryColorOverrides((current) => ({ ...current, [category]: value }));
+  }, []);
+  const handleAppThemeColorChange = useCallback((key: AppThemeColorKey, value: string) => {
+    if (!isHexColor(value)) return;
+    setAppThemeColorOverrides((current) => ({ ...current, [key]: value }));
+  }, []);
+  const hasCategoryColorOverrides = CATEGORY_COLOR_OPTIONS.some((option) => Boolean(categoryColorOverrides[option.key]));
+  const hasAccentColorOverride = APP_THEME_ACCENT_COLOR_OPTIONS.some((option) => Boolean(appThemeColorOverrides[option.key]));
+  const hasProductivityColorOverrides = APP_THEME_PRODUCTIVITY_COLOR_OPTIONS.some((option) => Boolean(appThemeColorOverrides[option.key]));
+  const handleResetCategoryColors = useCallback(() => {
+    setCategoryColorOverrides({});
+  }, []);
+  const handleResetAccentColor = useCallback(() => {
+    setAppThemeColorOverrides((current) => {
+      const next = { ...current };
+      delete next.accent;
+      return next;
+    });
+  }, []);
+  const handleResetProductivityColors = useCallback(() => {
+    setAppThemeColorOverrides((current) => {
+      const next = { ...current };
+      for (const option of APP_THEME_PRODUCTIVITY_COLOR_OPTIONS) delete next[option.key];
+      return next;
+    });
+  }, []);
+  const handleDownloadDebugLogs = useCallback(() => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      selectedDay,
+      settings: {
+        startOfDayMinutes,
+        startOfWeek,
+        theme,
+        categoryColorOverrides,
+        appThemeColorOverrides,
+      },
+      tracker: {
+        running: status?.running ?? null,
+        lastEventAt: status?.lastEventAt ?? null,
+        databasePath: status?.databasePath ?? null,
+        accessibilityGranted,
+      },
+      counts: {
+        todaySegments: segments.length,
+        historySegments: historySegments.length,
+        leaderboardSegments: leaderboardSegments.length,
+      },
+      error,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `drifty-debug-log-${payload.exportedAt.replace(/[:.]/g, "-")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, error, historySegments.length, leaderboardSegments.length, segments.length, selectedDay, startOfDayMinutes, startOfWeek, status?.databasePath, status?.lastEventAt, status?.running, theme]);
 
   if (authStatus === "loading") {
     return <AuthLoadingGate />;
@@ -2715,12 +2852,14 @@ export default function App() {
                 classificationOptions={dashboardClassificationOptions}
                 focusDeltaPercent={shouldUsePreviewData() ? 21 : weekFocusDeltaPercent}
                 isPreviewSurface={shouldUsePreviewData()}
+                startOfDayMinutes={startOfDayMinutes}
               />
             ) : dashPeriod === "Month" ? (
               <HistoryCalendarPanel
                 segments={historySegments}
                 selectedDay={selectedDay}
                 classificationOptions={historyClassificationOptions}
+                startOfDayMinutes={startOfDayMinutes}
                 onSelectDay={selectDay}
               />
             ) : (
@@ -2734,6 +2873,7 @@ export default function App() {
                         appIcons={appIcons}
                         currentMinuteOfDay={currentMinuteOfDay}
                         intervalMinutes={flowIntervalMinutes}
+                        startOfDayMinutes={startOfDayMinutes}
                         onIntervalChange={setFlowIntervalMinutes}
                       />
                     </div>
@@ -2809,8 +2949,8 @@ export default function App() {
                         <strong className="panel-header__title">{classificationCategoryBreakdowns.length} tracked</strong>
                       </div>
                       <div className="panel-header__right">
-                        <strong className="panel-header__value">{formatDuration(dayTotalSeconds)}</strong>
                         <span className="panel-header__meta">Total</span>
+                        <strong className="panel-header__value">{formatDuration(dayTotalSeconds)}</strong>
                       </div>
                     </header>
                     <div className="classification-panel-view__panel-body">
@@ -2857,8 +2997,8 @@ export default function App() {
                         </strong>
                       </div>
                       <div className="panel-header__right">
-                        <strong className="panel-header__value">{classificationSourceSummaries.length}</strong>
                         <span className="panel-header__meta">{classificationSourceSummaries.length === 1 ? "source" : "sources"}</span>
+                        <strong className="panel-header__value">{classificationSourceSummaries.length}</strong>
                       </div>
                     </header>
                     <div className="classification-panel-view__panel-body">
@@ -2916,10 +3056,10 @@ export default function App() {
                             </strong>
                           </div>
                           <div className="panel-header__right classification-panel-view__detail-meta">
-                            <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
                             <span className="panel-header__meta">
                               {selectedClassificationSourceSummary.sessionCount} {selectedClassificationSourceSummary.sessionCount === 1 ? "session" : "sessions"}
                             </span>
+                            <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
                           </div>
                         </header>
                         <div className="classification-panel-view__panel-body">
@@ -3068,9 +3208,12 @@ export default function App() {
               appIcons={appIcons}
               productivityTotals={{
                 focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
+                neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
                 drift: activeInsightProductivityTotals.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0,
               }}
             />
+
+            <ProductivityPersonaCard report={productivityPersonaReport} hasData={insightSegments.length > 0} />
 
             <AttentionRhythmCard
               appIcons={appIcons}
@@ -3083,8 +3226,6 @@ export default function App() {
               <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
               <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
             </div>
-
-            <ProductivityPersonaCard report={productivityPersonaReport} hasData={insightSegments.length > 0} />
           </div>
         ) : null}
 
@@ -3142,8 +3283,9 @@ export default function App() {
           <div className="page">
             <div className="pg-head"><div><div className="eyebrow">Account</div><h1>Settings</h1></div></div>
             <div className="settings-layout">
-              <nav className="settings-nav">
+              <nav className="settings-nav" aria-label="Settings sections">
                   {([
+                    { id: "general" as const, label: "General" },
                     { id: "aiSetup" as const, label: "AI setup" },
                     { id: "notifications" as const, label: "Notifications" },
                     { id: "privacy" as const, label: "Privacy" },
@@ -3153,6 +3295,23 @@ export default function App() {
                 ))}
               </nav>
               <div>
+                {settingsSection === "general" && (
+                  <div className="settings-section settings-section--general">
+                    <div className="settings-block"><h3>General</h3>
+                      <div className="settings-row"><label><div className="lbl">Start of day</div><div className="desc">Treat days as starting on this hour. Default is 4:00 AM.</div></label><div className="ctrl"><select className="settings-input settings-select" aria-label="Start of day" value={startOfDayValue} onChange={handleStartOfDayChange}>{START_OF_DAY_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select></div></div>
+                      <div className="settings-row"><label><div className="lbl">Start of week</div><div className="desc">Choose the first day shown for weekly views.</div></label><div className="ctrl"><select className="settings-input settings-select" aria-label="Start of week" value={startOfWeek} onChange={handleStartOfWeekChange}>{START_OF_WEEK_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select></div></div>
+                      <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
+                    </div>
+                    <div className="settings-block"><h3>Colors</h3>
+                      <div className="settings-row settings-row--fallback" role="group" aria-label="Category colors"><div><div className="lbl">Category colors</div><div className="desc">Customize the colors used for classification categories.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{CATEGORY_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} category color`} value={categoryColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleCategoryColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetCategoryColors} disabled={!hasCategoryColorOverrides}>Set default</button></div></div>
+                      <div className="settings-row settings-row--fallback" role="group" aria-label="Accent color"><div><div className="lbl">Accent</div><div className="desc">Adjust the primary app accent used for emphasis and selected states.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{APP_THEME_ACCENT_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} theme color`} value={appThemeColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleAppThemeColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetAccentColor} disabled={!hasAccentColorOverride}>Set default</button></div></div>
+                      <div className="settings-row settings-row--fallback" role="group" aria-label="Productivity colors"><div><div className="lbl">Productivity colors</div><div className="desc">Tune the Focus, Drift, and Neutral tones used in productivity views.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{APP_THEME_PRODUCTIVITY_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} theme color`} value={appThemeColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleAppThemeColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetProductivityColors} disabled={!hasProductivityColorOverrides}>Set default</button></div></div>
+                    </div>
+                    <div className="settings-block"><h3>Debugging</h3>
+                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleDownloadDebugLogs}>Download debug logs</button></div></div>
+                    </div>
+                  </div>
+                )}
                 {settingsSection === "aiSetup" && (
                   <div className="settings-section">
                     <div className="settings-block cloud-overview">
@@ -3764,7 +3923,7 @@ function WeeklyCategoryRow({
 }: {
   weekly: WeeklyBreakdownDay[];
   categoryTotals: Array<{ category: ActivityCategory; totalSeconds: number }>;
-  productivityTotals: { focus: number; drift: number };
+  productivityTotals: Record<ProductivityLabel, number>;
   segments: ActivitySegment[];
   classificationOptions: ClassificationOptions;
   appIcons: AppIconMap;
@@ -3781,7 +3940,7 @@ function WeeklyCategoryRow({
 
   const hoverPayloads = useMemo(() => {
     const totalSeconds = mode === "productivity"
-      ? productivityTotals.focus + productivityTotals.drift
+      ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.reduce((sum, productivity) => sum + productivityTotals[productivity], 0)
       : categoryTotals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
     const entries = new Map<string, CompactClassificationHoverPayload>();
 
@@ -3790,10 +3949,13 @@ function WeeklyCategoryRow({
     }
 
     if (mode === "productivity") {
-      const productivityEntries = [
-        { key: "focus", label: "Focus", seconds: productivityTotals.focus, color: "var(--accent)", dotClassName: "productivity-dot--focus" },
-        { key: "drift", label: "Drift", seconds: productivityTotals.drift, color: "var(--warn)", dotClassName: "productivity-dot--drift" },
-      ];
+      const productivityEntries = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
+        key: productivity,
+        label: productivityLabel(productivity),
+        seconds: productivityTotals[productivity],
+        color: PRODUCTIVITY_COLORS[productivity],
+        dotClassName: `productivity-dot--${productivity}`,
+      }));
 
       for (const entry of productivityEntries) {
         if (entry.seconds <= 0) continue;
@@ -3823,7 +3985,7 @@ function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [categoryTotals, classificationOptions, mode, productivityTotals.drift, productivityTotals.focus, segments]);
+  }, [categoryTotals, classificationOptions, mode, productivityTotals, segments]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -4122,35 +4284,86 @@ function InsightSourceGroup({
 function ProductivityPersonaCard({ report, hasData }: { report: ReturnType<typeof buildProductivityPersona>; hasData: boolean }) {
   const content = PERSONA_CONTENT[report.personaId] ?? PERSONA_CONTENT.balanced_builder;
   const activeDays = report.metrics.activeDays;
+  const tagPills = content.tags.split(" · ");
+  const radarCenter = { x: 150, y: 116 };
+  const radarRadius = 86;
+  const radarAxes = report.axes.map((axis) => ({
+    ...axis,
+    displayLabel: PERSONA_AXIS_LABELS[axis.key] ?? axis.label,
+    value: Math.min(1, Math.max(0, axis.value)),
+  }));
+  const pointFor = (index: number, value: number, radius = radarRadius) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarAxes.length;
+    return {
+      x: radarCenter.x + Math.cos(angle) * radius * value,
+      y: radarCenter.y + Math.sin(angle) * radius * value,
+    };
+  };
+  const polygonPoints = (value: number) => radarAxes.map((_, index) => {
+    const point = pointFor(index, value);
+    return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }).join(" ");
+  const radarShape = radarAxes.map((axis, index) => {
+    const point = pointFor(index, axis.value);
+    return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }).join(" ");
+  const radarLabel = `${report.personaName} persona radar: ${radarAxes.map((axis) => `${axis.displayLabel} ${formatSharePercent(axis.value * 100)}`).join(", ")}`;
+  const cardClassName = [
+    "editorial-panel editorial-panel--soft insight-section productivity-persona-card",
+    hasData ? "persona-profile-card" : null,
+  ].filter(Boolean).join(" ");
+
   return (
-    <section className="editorial-panel editorial-panel--soft insight-section productivity-persona-card" aria-label="Local productivity persona report">
-      <div className="productivity-persona-card__head">
-        <div>
-          <span className="label-mono insight-section__label">Productivity persona</span>
-          <h2>{hasData ? report.personaName : "Waiting for local patterns"}</h2>
-        </div>
-        {hasData ? <span className="chip green">Based on {activeDays} active {activeDays === 1 ? "day" : "days"}</span> : null}
-      </div>
+    <section className={cardClassName} aria-label="Local productivity persona report">
       {hasData ? (
         <>
-          <div className="productivity-persona-card__intro">
-            <p className="productivity-persona-card__tags">{content.tags}</p>
-            <p className="productivity-persona-card__copy">{content.copy[0]}</p>
-            <p className="productivity-persona-card__copy">{content.copy[1]}</p>
-          </div>
-          <div className="productivity-persona-card__traits-head">
-            <span className="label-mono productivity-persona-card__traits-label">Key traits</span>
-          </div>
-          <div className="productivity-persona-card__axes" aria-label="Persona signals">
-            {report.axes.map((axis) => (
-              <div className="productivity-persona-axis" key={axis.key}>
-                <div className="productivity-persona-axis__label"><span>{PERSONA_AXIS_LABELS[axis.key] ?? axis.label}</span><strong>{formatSharePercent(axis.value * 100)}</strong></div>
-                <div className="productivity-persona-axis__track" aria-hidden="true"><span style={{ "--persona-axis-value": `${Math.round(axis.value * 100)}%` } as CSSProperties} /></div>
+          <div className="persona-profile-card__identity">
+            <div className="persona-profile-card__intro">
+              <span className="label-mono insight-section__label">Productivity persona</span>
+              <h2 className="persona-profile-card__title">{report.personaName}</h2>
+              <p className="persona-profile-card__subtitle productivity-persona-card__copy">{content.copy[0]}</p>
+              <p className="productivity-persona-card__copy">{content.copy[1]}</p>
+              <div className="persona-profile-card__tags" aria-label="Persona traits">
+                {tagPills.map((tag) => <span className="persona-profile-card__tag" key={tag}>{tag}</span>)}
               </div>
-            ))}
+              <span className="chip green productivity-persona-card__badge">Based on {activeDays} active {activeDays === 1 ? "day" : "days"}</span>
+            </div>
+          </div>
+          <div className="persona-radar-card">
+            <div className="persona-radar-card__chart">
+              <svg className="persona-radar" viewBox="0 0 300 232" role="img" aria-label={radarLabel}>
+                {[1, 0.8, 0.6, 0.4, 0.2].map((level) => <polygon className="persona-radar__grid" points={polygonPoints(level)} key={level} />)}
+                {radarAxes.map((axis, index) => {
+                  const point = pointFor(index, 1);
+                  return <line className="persona-radar__axis" x1={radarCenter.x} y1={radarCenter.y} x2={point.x.toFixed(1)} y2={point.y.toFixed(1)} key={axis.key} />;
+                })}
+                <polygon className="persona-radar__shape" points={radarShape} />
+                {radarAxes.map((axis, index) => {
+                  const point = pointFor(index, axis.value);
+                  return <circle className="persona-radar__point" cx={point.x.toFixed(1)} cy={point.y.toFixed(1)} r="2.35" key={axis.key} />;
+                })}
+                {radarAxes.map((axis, index) => {
+                  const point = pointFor(index, 1, radarRadius + 22);
+                  return <text className="persona-radar__label" x={point.x.toFixed(1)} y={point.y.toFixed(1)} textAnchor="middle" dominantBaseline="middle" key={axis.key}>{axis.displayLabel}</text>;
+                })}
+              </svg>
+            </div>
+            <div className="persona-radar-card__axis-list" aria-hidden="true">
+              {radarAxes.map((axis) => <span key={axis.key}>{axis.displayLabel}<strong>{formatSharePercent(axis.value * 100)}</strong></span>)}
+            </div>
           </div>
         </>
-      ) : <EmptyState title="No persona yet" detail="The local report appears after tracker history exists in this insight window." />}
+      ) : (
+        <>
+          <div className="productivity-persona-card__head">
+            <div>
+              <span className="label-mono insight-section__label">Productivity persona</span>
+              <h2>Waiting for local patterns</h2>
+            </div>
+          </div>
+          <EmptyState title="No persona yet" detail="The local report appears after tracker history exists in this insight window." />
+        </>
+      )}
     </section>
   );
 }
@@ -4264,7 +4477,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="empty-state">
       <span className="eyebrow">{title}</span>
-      <strong>데이터가 충분히 없습니다</strong>
+      <strong>Not enough data yet</strong>
       <p>{detail}</p>
     </div>
   );
@@ -4590,6 +4803,7 @@ function WeekDashboard({
   classificationOptions,
   focusDeltaPercent,
   isPreviewSurface = false,
+  startOfDayMinutes,
 }: {
   rows: WeekDayRow[];
   segments: ActivitySegment[];
@@ -4602,6 +4816,7 @@ function WeekDashboard({
   classificationOptions: ClassificationOptions;
   focusDeltaPercent: number | null;
   isPreviewSurface?: boolean;
+  startOfDayMinutes: number;
 }) {
   const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
   const calendarScrollerRef = useRef<HTMLDivElement>(null);
@@ -4621,26 +4836,26 @@ function WeekDashboard({
   const topCategory = activeCategories[0] ?? null;
   const peakSeconds = Math.max(rankedRows[0]?.totalSeconds ?? 0, 1);
   const summaryPeakSeconds = Math.max(...rows.map((row) => row.focusSeconds), 1);
-  const todayDay = todayIsoDate();
+  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
   const calendarHourHeight = 56;
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
   const calendarEvents = useMemo(
-    () => buildWeekCalendarEvents(segments, startDay, endDay, calendarStartHour, calendarEndHour, classificationOptions),
-    [calendarEndHour, calendarStartHour, classificationOptions, endDay, segments, startDay],
+    () => buildWeekCalendarEvents(segments, startDay, endDay, calendarStartHour, calendarEndHour, classificationOptions, startOfDayMinutes),
+    [calendarEndHour, calendarStartHour, classificationOptions, endDay, segments, startDay, startOfDayMinutes],
   );
   const minCalendarMinute = calendarStartHour * 60;
   const maxCalendarMinute = calendarEndHour * 60;
   const isCurrentCalendarWeek = startDay <= todayDay && todayDay <= endDay;
   const currentCalendarMinute = isCurrentCalendarWeek
-    ? Math.min(maxCalendarMinute, Math.max(minCalendarMinute, new Date().getHours() * 60 + new Date().getMinutes()))
+    ? Math.min(maxCalendarMinute, Math.max(minCalendarMinute, logicalMinuteOfDay(new Date().getHours() * 60 + new Date().getMinutes(), startOfDayMinutes)))
     : null;
   const currentCalendarOffset = currentCalendarMinute === null
     ? null
     : ((currentCalendarMinute - minCalendarMinute) / 60) * calendarHourHeight;
-  const currentCalendarLabel = currentCalendarMinute === null ? null : formatCalendarMinuteLabel(todayDay, currentCalendarMinute);
+  const currentCalendarLabel = currentCalendarMinute === null ? null : formatCalendarMinuteLabel(todayDay, currentCalendarMinute, startOfDayMinutes);
   const currentCalendarLineEnd = String(calendarRows.findIndex((row) => row.day === todayDay) + 3);
   const currentCalendarMarkerStyle = currentCalendarOffset === null
     ? null
@@ -4684,40 +4899,39 @@ function WeekDashboard({
 
   return (
     <section className="week-v2" aria-label="Your week overview">
-      <div className="week-v2-summary week-v2-summary--compact" aria-label="Week summary">
-        <div className="week-v2-summary__main">
-          <span className="label-mono">Week focus</span>
-          <strong>{isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}</strong>
-        </div>
-        <div className="week-v2-summary__bars" aria-hidden="true">
-          {calendarRows.map((row) => {
-            const ratio = row.focusSeconds > 0 ? row.focusSeconds / summaryPeakSeconds : 0;
-            const barHeight = row.focusSeconds > 0 ? Math.max(4, Math.round(ratio * 30)) : 2;
-            const isPeak = bestDay?.day === row.day && row.focusSeconds > 0;
-            const isToday = todayDay === row.day;
-            const dayLetter = row.dayName.charAt(0);
-            return (
-              <span
-                className={`week-v2-summary__bar${isPeak ? " is-peak" : ""}${isToday ? " is-today" : ""}${row.focusSeconds === 0 ? " is-empty" : ""}`}
-                key={row.day}
-                title={`${row.dayName} ${row.dayNumber} · ${row.focusSeconds > 0 ? formatCompactDurationFromSeconds(row.focusSeconds) : "No focus"}`}
-              >
-                <span className="week-v2-summary__bar-fill" style={{ height: `${barHeight}px` }} />
-                <small>{dayLetter}</small>
-              </span>
-            );
-          })}
-        </div>
-        <div className="week-v2-summary__meta">
-          <span>{focusDeltaPercent !== null ? `${focusDeltaPercent >= 0 ? "▲" : "▼"} ${Math.abs(focusDeltaPercent)}% vs last week` : "No prior week"}</span>
-          <span>Best {isPreviewSurface ? "Wed 13" : bestDay ? `${bestDay.dayName} ${bestDay.dayNumber}` : "—"}</span>
-          <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
-          <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
-        </div>
-      </div>
-
       <div className="week-v2-grid week-v2-grid--calendar">
         <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label="Week calendar schedule">
+          <div className="week-v2-summary week-v2-summary--compact week-v2-summary--integrated" aria-label="Week summary">
+            <div className="week-v2-summary__main">
+              <span className="label-mono">Week focus</span>
+              <strong>{isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}</strong>
+            </div>
+            <div className="week-v2-summary__bars" aria-hidden="true">
+              {calendarRows.map((row) => {
+                const ratio = row.focusSeconds > 0 ? row.focusSeconds / summaryPeakSeconds : 0;
+                const barHeight = row.focusSeconds > 0 ? Math.max(4, Math.round(ratio * 30)) : 2;
+                const isPeak = bestDay?.day === row.day && row.focusSeconds > 0;
+                const isToday = todayDay === row.day;
+                const dayLetter = row.dayName.charAt(0);
+                return (
+                  <span
+                    className={`week-v2-summary__bar${isPeak ? " is-peak" : ""}${isToday ? " is-today" : ""}${row.focusSeconds === 0 ? " is-empty" : ""}`}
+                    key={row.day}
+                    title={`${row.dayName} ${row.dayNumber} · ${row.focusSeconds > 0 ? formatCompactDurationFromSeconds(row.focusSeconds) : "No focus"}`}
+                  >
+                    <span className="week-v2-summary__bar-fill" style={{ height: `${barHeight}px` }} />
+                    <small>{dayLetter}</small>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="week-v2-summary__meta">
+              <span>{focusDeltaPercent !== null ? `${focusDeltaPercent >= 0 ? "▲" : "▼"} ${Math.abs(focusDeltaPercent)}% vs last week` : "No prior week"}</span>
+              <span>Best {isPreviewSurface ? "Wed 13" : bestDay ? `${bestDay.dayName} ${bestDay.dayNumber}` : "—"}</span>
+              <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
+              <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
+            </div>
+          </div>
           {activeCategories.length > 0 ? (
             <div className="week-v2-calendar__legend" aria-label="Week category legend">
               {activeCategories.map((entry) => (
@@ -4745,13 +4959,13 @@ function WeekDashboard({
             <div ref={calendarBodyRef} className="week-v2-calendar__body" style={{ height: `${(calendarEndHour - calendarStartHour) * calendarHourHeight}px` }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
-                  <span key={hour} style={{ top: `${(hour - calendarStartHour) * calendarHourHeight}px` }}>{formatHourLabel(hour)}</span>
+                  <span key={hour} style={{ top: `${(hour - calendarStartHour) * calendarHourHeight}px` }}>{formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes))}</span>
                 ))}
                 <span
                   className="week-v2-calendar__time-rail-endpoint"
                   style={{ top: `${(calendarEndHour - calendarStartHour) * calendarHourHeight}px` }}
                 >
-                  {formatHourLabel(calendarEndHour % 24)}
+                  {formatHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes))}
                 </span>
               </div>
               {currentCalendarMarkerStyle && currentCalendarLabel ? (
@@ -4891,14 +5105,16 @@ function HistoryCalendarPanel({
   segments,
   selectedDay,
   classificationOptions,
+  startOfDayMinutes,
   onSelectDay,
 }: {
   segments: ActivitySegment[];
   selectedDay: string;
   classificationOptions: ClassificationOptions;
+  startOfDayMinutes: number;
   onSelectDay: (day: string) => void;
 }) {
-  const overview = buildMonthV2Overview(segments, selectedDay, classificationOptions);
+  const overview = buildMonthV2Overview(segments, selectedDay, classificationOptions, startOfDayMinutes);
 
   return (
     <section className="month-v2" aria-label="Month focus overview">
@@ -5848,12 +6064,13 @@ function buildWeeklyChartView(
   categorySeries: DonutCategorySlice[],
 ): WeeklyChartView {
   const series = mode === "productivity"
-    ? [{ key: "focus", color: "var(--accent)" }, { key: "drift", color: "var(--warn)" }]
+    ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({ key: productivity, color: PRODUCTIVITY_COLORS[productivity] }))
     : categorySeries.map((slice) => ({ key: slice.category, color: CATEGORY_COLORS[slice.category] }));
 
   const valueFor = (day: WeeklyBreakdownDay, key: string): number => {
     if (mode === "productivity") {
       if (key === "focus") return day.focusSeconds;
+      if (key === "neutral") return day.neutralSeconds;
       if (key === "drift") return day.driftSeconds;
       return 0;
     }
@@ -5864,7 +6081,7 @@ function buildWeeklyChartView(
 
   // Shared y-axis across both modes so toggling keeps a consistent scale.
   const categoryKeys = categorySeries.map((slice) => slice.category);
-  const productivityHours = weekly.map((day) => (day.focusSeconds + day.driftSeconds) / 3600);
+  const productivityHours = weekly.map((day) => (day.focusSeconds + day.neutralSeconds + day.driftSeconds) / 3600);
   const categoryHours = weekly.map((day) => categoryKeys.reduce((sum, key) => sum + (day.categorySeconds[key] ?? 0), 0) / 3600);
   const maxHours = Math.max(0, ...productivityHours, ...categoryHours);
   const axisMax = maxHours > 0 ? maxHours / 0.93 : 1;
@@ -5893,7 +6110,7 @@ function buildWeeklyChartView(
               const value = valueFor(day, ser.key);
               return value > 0 ? { key: ser.key, heightPct: (value / total) * 100, color: ser.color, seconds: value } : null;
             })
-            .filter((segment): segment is { key: string; heightPct: number; color: string; seconds: number } => segment !== null),
+            .filter((segment): segment is { key: ProductivityLabel | ActivityCategory; heightPct: number; color: string; seconds: number } => segment !== null),
     };
   });
 
@@ -5912,13 +6129,15 @@ const DONUT_CIRCUMFERENCE = 2 * Math.PI * 40;
 function buildDonutView(
   mode: WeeklyChartMode,
   categorySeries: DonutCategorySlice[],
-  productivityTotals: { focus: number; drift: number },
+  productivityTotals: Record<ProductivityLabel, number>,
 ): DonutView {
   const items = mode === "productivity"
-    ? [
-        { key: "focus", name: "Focus", color: "var(--accent)", seconds: productivityTotals.focus },
-        { key: "drift", name: "Drift", color: "var(--warn)", seconds: productivityTotals.drift },
-      ].filter((item) => item.seconds > 0)
+    ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
+        key: productivity,
+        name: productivityLabel(productivity),
+        color: PRODUCTIVITY_COLORS[productivity],
+        seconds: productivityTotals[productivity],
+      })).filter((item) => item.seconds > 0)
     : categorySeries.map((slice) => ({
         key: slice.category,
         name: categoryLabel(slice.category),
@@ -6134,12 +6353,12 @@ function buildEmptyHistoryDay(day: string, selectedDay: string): HistoryCell {
   return { id: `history-${day}`, isoDay: day, label: formatDayLabel(day), minutes: 0, focusScore: 0, level: 0, isSelected: day === selectedDay };
 }
 
-function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null): FocusDriftChart {
-  return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay);
+function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
+  return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay, startOfDayMinutes);
 }
 
-function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null): FocusDriftChart {
-  const dayStartMs = new Date(`${day}T00:00:00`).getTime();
+function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
+  const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
   const buckets = Array.from({ length: FOCUS_DRIFT_BUCKET_COUNT }, (_, index) => ({
     focusSeconds: 0,
     driftSeconds: 0,
@@ -6151,7 +6370,7 @@ function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, 
   }));
   const boundedCurrentMinute = currentMinuteOfDay === null || currentMinuteOfDay === undefined
     ? null
-    : Math.min(Math.max(Math.floor(currentMinuteOfDay), 0), FOCUS_DRIFT_MINUTES_PER_DAY - 1);
+    : Math.min(Math.max(Math.floor(logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes)), 0), FOCUS_DRIFT_MINUTES_PER_DAY - 1);
   const currentBucketStartMinute = boundedCurrentMinute === null
     ? null
     : Math.floor(boundedCurrentMinute / FOCUS_DRIFT_BUCKET_MINUTES) * FOCUS_DRIFT_BUCKET_MINUTES;
@@ -6645,8 +6864,8 @@ function formatQuarterHourLabel(minuteOfDay: number): string {
   return uiTimeFormatter.format(date);
 }
 
-function describeRelativeDay(day: string): string {
-  const today = todayIsoDate();
+function describeRelativeDay(day: string, startOfDayMinutes = 0): string {
+  const today = logicalTodayIsoDate(startOfDayMinutes);
   if (day === today) return "Today";
   if (day === shiftIsoDate(today, -1)) return "Yesterday";
   if (day === shiftIsoDate(today, 1)) return "Tomorrow";
@@ -6654,7 +6873,7 @@ function describeRelativeDay(day: string): string {
 }
 
 
-function buildWeekDayRows(segments: ActivitySegment[], startDay: string, endDay: string, classificationOptions?: ClassificationOptions): WeekDayRow[] {
+function buildWeekDayRows(segments: ActivitySegment[], startDay: string, endDay: string, classificationOptions?: ClassificationOptions, startOfDayMinutes = 0): WeekDayRow[] {
   const days = buildIsoDayList(startDay, endDay);
 
   const rows = new Map<string, { totalSeconds: number; focusSeconds: number; categories: Map<ActivityCategory, number> }>();
@@ -6664,7 +6883,7 @@ function buildWeekDayRows(segments: ActivitySegment[], startDay: string, endDay:
 
   for (const segment of segments) {
     const classification = classifyActivityDetailed(segment, classificationOptions);
-    for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay)) {
+    for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
       const row = rows.get(overlap.day);
       if (!row) continue;
       row.totalSeconds += overlap.durationSeconds;
@@ -6710,14 +6929,14 @@ function buildIsoDayList(startDay: string, endDay: string): string[] {
   return days;
 }
 
-function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: string, endDay: string): SegmentDayOverlap[] {
+function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: string, endDay: string, startOfDayMinutes = 0): SegmentDayOverlap[] {
   const segmentStartMs = new Date(segment.startedAt).getTime();
   const segmentEndMs = new Date(segment.endedAt).getTime();
   if (!Number.isFinite(segmentStartMs) || !Number.isFinite(segmentEndMs) || segmentEndMs <= segmentStartMs) return [];
 
   return buildIsoDayList(startDay, endDay).flatMap((day) => {
-    const dayStartMs = new Date(`${day}T00:00:00`).getTime();
-    const dayEndMs = new Date(`${shiftIsoDate(day, 1)}T00:00:00`).getTime();
+    const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
+    const dayEndMs = logicalDayEndExclusiveMs(day, startOfDayMinutes);
     const overlapStartMs = Math.max(segmentStartMs, dayStartMs);
     const overlapEndMs = Math.min(segmentEndMs, dayEndMs);
     if (overlapEndMs <= overlapStartMs) return [];
@@ -6731,7 +6950,7 @@ function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: string,
 }
 
 
-function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, endDay: string, startHour: number, endHour: number, classificationOptions?: ClassificationOptions): Map<string, WeekCalendarEvent[]> {
+function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, endDay: string, startHour: number, endHour: number, classificationOptions?: ClassificationOptions, startOfDayMinutes = 0): Map<string, WeekCalendarEvent[]> {
   const days = buildIsoDayList(startDay, endDay);
 
   const eventsByDay = new Map<string, WeekCalendarEvent[]>(days.map((day) => [day, []]));
@@ -6916,11 +7135,11 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
   for (const segment of segments) {
     const classification = classifyActivityDetailed(segment, classificationOptions);
     const identity = weekCalendarSegmentIdentity(segment);
-    for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay)) {
+    for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
       const buckets = bucketsByDay.get(overlap.day);
       if (!buckets) continue;
 
-      const dayStartMs = new Date(`${overlap.day}T00:00:00`).getTime();
+      const dayStartMs = logicalDayStartMs(overlap.day, startOfDayMinutes);
       const startMinute = Math.max(minMinute, Math.floor((overlap.startedAt.getTime() - dayStartMs) / 60000));
       const endMinute = Math.min(maxMinute, Math.ceil((overlap.endedAt.getTime() - dayStartMs) / 60000));
       if (endMinute <= minMinute || startMinute >= maxMinute) continue;
@@ -6999,8 +7218,8 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
       const meaningfulMixedProductivity = topProductivity ? isMeaningfulRemainder(totalSeconds, topProductivity[1]) : false;
       const meaningfulMixedApp = topApp ? isMeaningfulRemainder(totalSeconds, topApp[1]) : false;
       const isMixed = meaningfulMixedCategory || meaningfulMixedProductivity || meaningfulMixedApp;
-      const startLabel = formatCalendarMinuteLabel(day, startMinute);
-      const endLabel = formatCalendarMinuteLabel(day, endMinute);
+      const startLabel = formatCalendarMinuteLabel(day, startMinute, startOfDayMinutes);
+      const endLabel = formatCalendarMinuteLabel(day, endMinute, startOfDayMinutes);
       const categoryName = categoryLabel(dominantCategory);
       const topAppName = topApp?.[0] ?? categoryName;
       const sessionCount = segmentIds.size;
@@ -7064,10 +7283,8 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
   return eventsByDay;
 }
 
-function formatCalendarMinuteLabel(day: string, minuteOfDay: number): string {
-  const date = new Date(`${day}T00:00:00`);
-  date.setHours(Math.floor(minuteOfDay / 60), minuteOfDay % 60, 0, 0);
-  return formatTimeLabel(date);
+function formatCalendarMinuteLabel(day: string, minuteOfDay: number, startOfDayMinutes = 0): string {
+  return formatTimeLabel(new Date(logicalDayStartMs(day, startOfDayMinutes) + minuteOfDay * 60 * 1000));
 }
 
 function assignWeekCalendarEventLanes(events: WeekCalendarEvent[]): void {
@@ -7096,9 +7313,12 @@ function assignWeekCalendarEventLanes(events: WeekCalendarEvent[]): void {
   flushCluster();
 }
 
-function getCalendarWeekStartDay(selectedDay: string): string {
-  const selectedWeekday = new Date(`${selectedDay}T12:00:00`).getDay() || 7;
-  return shiftIsoDate(selectedDay, 1 - selectedWeekday);
+function getCalendarWeekStartDay(selectedDay: string, startOfWeek: StartOfWeek = DEFAULT_START_OF_WEEK): string {
+  const selectedWeekday = new Date(`${selectedDay}T12:00:00`).getDay();
+  const weekStarts: Record<StartOfWeek, number> = { sunday: 0, monday: 1, saturday: 6 };
+  const startWeekday = weekStarts[startOfWeek];
+  const offset = (selectedWeekday - startWeekday + 7) % 7;
+  return shiftIsoDate(selectedDay, -offset);
 }
 
 function formatHourLabel(hour: number): string {
@@ -7107,7 +7327,7 @@ function formatHourLabel(hour: number): string {
   return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
 }
 
-function buildMonthV2Overview(segments: ActivitySegment[], selectedDay: string, classificationOptions?: ClassificationOptions): MonthOverview {
+function buildMonthV2Overview(segments: ActivitySegment[], selectedDay: string, classificationOptions?: ClassificationOptions, startOfDayMinutes = 0): MonthOverview {
   const monthKey = selectedDay.slice(0, 7);
   const [yearValue, monthValue] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(yearValue, monthValue, 0).getDate();
@@ -7121,7 +7341,7 @@ function buildMonthV2Overview(segments: ActivitySegment[], selectedDay: string, 
 
   for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
     const isoDay = `${monthKey}-${String(dayNumber).padStart(2, "0")}`;
-    const daySegments = segments.filter((segment) => isoDateFromTimestamp(segment.startedAt) === isoDay);
+    const daySegments = segments.filter((segment) => logicalDayIsoDateForDate(new Date(segment.startedAt), startOfDayMinutes) === isoDay);
     const totalSeconds = daySegments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
     const focusSeconds = daySegments.reduce((sum, segment) => sum + (classifyActivity(segment, classificationOptions).productivity === "focus" ? segment.durationSeconds : 0), 0);
     const driftSeconds = daySegments.reduce((sum, segment) => sum + (classifyActivity(segment, classificationOptions).productivity === "drift" ? segment.durationSeconds : 0), 0);
@@ -7157,7 +7377,10 @@ function buildMonthV2Overview(segments: ActivitySegment[], selectedDay: string, 
     }
   }
 
-  const monthSegments = segments.filter((segment) => segment.startedAt.slice(0, 7) === monthKey && segment.startedAt.slice(0, 10) <= today);
+  const monthSegments = segments.filter((segment) => {
+    const logicalDay = logicalDayIsoDateForDate(new Date(segment.startedAt), startOfDayMinutes);
+    return logicalDay.slice(0, 7) === monthKey && logicalDay <= today;
+  });
   const weekdayBuckets = Array.from({ length: 7 }, () => ({ total: 0, count: 0 }));
   for (const cell of focusCells) {
     const weekday = new Date(`${cell.isoDay}T12:00:00`).getDay();
@@ -7190,23 +7413,21 @@ function buildMonthV2Overview(segments: ActivitySegment[], selectedDay: string, 
 }
 
 
-function getDashboardPeriodRange(selectedDay: string, period: DashboardPeriod) {
+function getDashboardPeriodRange(selectedDay: string, period: DashboardPeriod, startOfDayMinutes = 0, startOfWeek: StartOfWeek = DEFAULT_START_OF_WEEK) {
   if (period === "Today") {
     return {
       startDay: selectedDay,
       endDay: selectedDay,
-      start: `${selectedDay}T00:00:00`,
-      end: `${selectedDay}T23:59:59`,
+      ...getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes),
     };
   }
 
-  const startDay = period === "Week" ? getCalendarWeekStartDay(selectedDay) : shiftIsoDate(selectedDay, -29);
+  const startDay = period === "Week" ? getCalendarWeekStartDay(selectedDay, startOfWeek) : shiftIsoDate(selectedDay, -29);
   const endDay = period === "Week" ? shiftIsoDate(startDay, 6) : selectedDay;
   return {
     startDay,
     endDay,
-    start: `${startDay}T00:00:00`,
-    end: `${endDay}T23:59:59`,
+    ...getLogicalDayRange(startDay, endDay, startOfDayMinutes),
   };
 }
 
@@ -7243,14 +7464,46 @@ function shiftIsoMonth(day: string, direction: -1 | 1): string {
   return `${targetYear}-${String(normalizedMonthIndex + 1).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
 }
 
-function getInsightPeriodRange(selectedDay: string) {
+function getLogicalDayRange(startDay: string, endDay: string, startOfDayMinutes = 0): { start: string; end: string } {
+  return {
+    start: formatLocalDateTime(logicalDayStartMs(startDay, startOfDayMinutes)),
+    end: formatLocalDateTime(logicalDayEndExclusiveMs(endDay, startOfDayMinutes) - 1),
+  };
+}
+
+function formatLocalDateTime(ms: number): string {
+  const date = new Date(ms);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const second = String(date.getSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+}
+
+function logicalTodayIsoDate(startOfDayMinutes = 0): string {
+  return logicalDayIsoDateForDate(new Date(), startOfDayMinutes);
+}
+
+function clockHourForLogicalHour(logicalHour: number, startOfDayMinutes = 0): number {
+  return Math.floor((logicalHour * 60 + startOfDayMinutes) / 60) % 24;
+}
+
+function formatStartOfDayOptionLabel(minutes: number): string {
+  const hour = Math.floor(minutes / 60) % 24;
+  const period = hour < 12 ? "AM" : "PM";
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:00 ${period}`;
+}
+
+function getInsightPeriodRange(selectedDay: string, startOfDayMinutes = 0) {
   const days = 90;
   const startDay = shiftIsoDate(selectedDay, -(days - 1));
   return {
     startDay,
     endDay: selectedDay,
-    start: `${startDay}T00:00:00`,
-    end: `${selectedDay}T23:59:59`,
+    ...getLogicalDayRange(startDay, selectedDay, startOfDayMinutes),
   };
 }
 
@@ -7279,6 +7532,70 @@ function getAccountDisplayName(email: string | null): string {
   if (!email) return "Account";
   const name = email.split("@")[0]?.trim();
   return name || "Account";
+}
+
+
+function isHexColor(value: string): boolean {
+  return HEX_COLOR_PATTERN.test(value);
+}
+
+function snapStartOfDayMinutes(minutes: number): number {
+  return Math.min(23 * 60, Math.max(0, Math.round(minutes / 60) * 60));
+}
+
+function minutesToHourlyStartOfDayValue(minutes: number): string {
+  const hours = snapStartOfDayMinutes(minutes) / 60;
+  return `${String(hours).padStart(2, "0")}:00`;
+}
+
+function hourlyStartOfDayValueToMinutes(value: string): number {
+  return START_OF_DAY_OPTIONS.find((option) => option.value === value)?.minutes ?? DEFAULT_START_OF_DAY_MINUTES;
+}
+
+function resolveInitialStartOfDayMinutes(): number {
+  if (typeof window === "undefined") return DEFAULT_START_OF_DAY_MINUTES;
+  const savedValue = window.localStorage.getItem(START_OF_DAY_STORAGE_KEY);
+  if (!savedValue) return DEFAULT_START_OF_DAY_MINUTES;
+  const parsedValue = Number(savedValue);
+  if (!Number.isFinite(parsedValue)) return DEFAULT_START_OF_DAY_MINUTES;
+  return snapStartOfDayMinutes(parsedValue);
+}
+
+function isStartOfWeek(value: string | null): value is StartOfWeek {
+  return START_OF_WEEK_OPTIONS.some((option) => option.value === value);
+}
+
+function resolveInitialStartOfWeek(): StartOfWeek {
+  if (typeof window === "undefined") return DEFAULT_START_OF_WEEK;
+  const savedValue = window.localStorage.getItem(START_OF_WEEK_STORAGE_KEY);
+  return isStartOfWeek(savedValue) ? savedValue : DEFAULT_START_OF_WEEK;
+}
+
+function readColorOverrideMap<T extends string>(storageKey: string, allowedKeys: readonly T[]): Partial<Record<T, string>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const savedValue = window.localStorage.getItem(storageKey);
+    if (!savedValue) return {};
+    const parsedValue: unknown = JSON.parse(savedValue);
+    if (!parsedValue || typeof parsedValue !== "object") return {};
+    const record = parsedValue as Record<string, unknown>;
+    const next: Partial<Record<T, string>> = {};
+    for (const key of allowedKeys) {
+      const value = record[key];
+      if (typeof value === "string" && isHexColor(value)) next[key] = value;
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function resolveInitialCategoryColorOverrides(): CategoryColorOverrides {
+  return readColorOverrideMap(CATEGORY_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS.map((option) => option.key));
+}
+
+function resolveInitialAppThemeColorOverrides(): AppThemeColorOverrides {
+  return readColorOverrideMap(APP_THEME_COLOR_STORAGE_KEY, APP_THEME_COLOR_OPTIONS.map((option) => option.key));
 }
 
 function resolveInitialTheme(): ThemeMode {
@@ -7436,9 +7753,9 @@ function createLocalId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function buildQuarterHourDayField(segments: ActivitySegment[], day: string): DayFieldSlot[] {
+function buildQuarterHourDayField(segments: ActivitySegment[], day: string, startOfDayMinutes = 0): DayFieldSlot[] {
   const slotDur = 15 * 60;
-  const dayStartMs = new Date(`${day}T00:00:00`).getTime();
+  const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
   const slots = Array.from({ length: 96 }, (_, index) => {
     const slotStartMs = dayStartMs + index * slotDur * 1000;
     const slotEndMs = slotStartMs + slotDur * 1000;
@@ -7447,7 +7764,7 @@ function buildQuarterHourDayField(segments: ActivitySegment[], day: string): Day
       const overlapMs = Math.min(new Date(seg.endedAt).getTime(), slotEndMs) - Math.max(new Date(seg.startedAt).getTime(), slotStartMs);
       if (overlapMs > 0) totalSeconds += Math.round(overlapMs / 1000);
     }
-    const minuteOfDay = index * 15;
+    const minuteOfDay = (startOfDayMinutes + index * 15) % (24 * 60);
     return { index, minuteOfDay, hour: Math.floor(minuteOfDay / 60), quarter: Math.floor((minuteOfDay % 60) / 15), totalSeconds, ratio: 0 };
   });
   const peak = Math.max(...slots.map((s) => s.totalSeconds), 1);

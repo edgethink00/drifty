@@ -4258,6 +4258,36 @@ input, textarea { color: inherit; }
 
 .settings-input:focus { border-color: var(--accent); }
 
+.settings-color-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  width: 100%;
+}
+
+.settings-color-field {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text-soft);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  gap: 8px;
+  justify-content: space-between;
+  padding: 7px 8px;
+}
+
+.settings-color-field input {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  height: 24px;
+  padding: 0;
+  width: 32px;
+}
+
 .settings-input--compact {
   text-align: center;
   width: 64px;
@@ -5713,15 +5743,18 @@ input, textarea { color: inherit; }
 
 .flow-compact-split-chart__panel--circle {
   align-content: stretch;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .flow-compact-productivity-circle {
   display: grid;
   grid-template-columns: minmax(5.35rem, 0.9fr) minmax(0, 1fr);
   align-items: center;
+  align-self: center;
   gap: 0.62rem;
   min-width: 0;
   min-height: 0;
+  transform: translateY(calc(var(--space-1) * -1.5));
 }
 
 .flow-compact-productivity-circle__dial-shell {
@@ -5830,8 +5863,8 @@ input, textarea { color: inherit; }
 
 .flow-compact-split-chart__swatch {
   flex: 0 0 auto;
-  width: 0.42rem;
-  height: 0.42rem;
+  width: 0.59rem;
+  height: 0.59rem;
   border-radius: 999px;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 82%, transparent);
 }
@@ -6666,6 +6699,18 @@ button.flow-cell:focus {
 .insight-section__label {
   display: block;
   margin-bottom: var(--space-3);
+}
+
+.insights-page .insight-section__label,
+.insights-page .od-cat-title,
+.insights-page .drift-time-trend__sources-label {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  font-weight: 650;
+  letter-spacing: .14em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
 }
 
 .insight-grid--support,
@@ -8066,6 +8111,15 @@ button.flow-cell:focus {
 .week-v2-summary--compact .week-v2-summary__meta span {
   padding: 3px var(--space-2);
   background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+}
+
+.week-v2-summary--integrated {
+  padding: 0 0 var(--space-2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .week-v2-summary__bars {
@@ -9509,6 +9563,169 @@ button.flow-cell:focus {
   color: var(--text);
 }
 
+.content--settings .settings-section--general {
+  --settings-control-height: 2.25rem;
+  --settings-control-radius: var(--radius-sm);
+  --settings-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
+  --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
+  --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --settings-swatch-size: 1.25rem;
+}
+
+.content--settings .settings-section--general .settings-input,
+.content--settings .settings-section--general .settings-select,
+.content--settings .settings-section--general .settings-btn {
+  min-width: 10rem;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  background: var(--settings-control-bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  line-height: 1;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .settings-section--general .settings-select {
+  cursor: pointer;
+}
+
+.content--settings .settings-section--general .settings-input:hover,
+.content--settings .settings-section--general .settings-select:hover,
+.content--settings .settings-section--general .settings-btn:hover {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: var(--settings-control-bg-hover);
+  color: var(--text);
+  transform: none;
+}
+
+.content--settings .settings-section--general .settings-input:focus-visible,
+.content--settings .settings-section--general .settings-select:focus-visible,
+.content--settings .settings-section--general .settings-btn:focus-visible,
+.content--settings .settings-section--general .settings-mode-option:focus-visible,
+.content--settings .settings-section--general .settings-color-field:has(input:focus-visible) {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
+}
+
+.content--settings .settings-section--general .settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.content--settings .settings-section--general .settings-mode-switch {
+  min-height: var(--settings-control-height);
+  padding: var(--space-1);
+  border: 1px solid var(--settings-control-border);
+  border-radius: calc(var(--settings-control-radius) + var(--space-1));
+  background: var(--settings-control-bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.content--settings .settings-section--general .settings-mode-option {
+  align-items: center;
+  min-height: calc(var(--settings-control-height) - var(--space-1));
+  justify-content: center;
+  padding: 0 var(--space-3);
+  border-radius: var(--settings-control-radius);
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .settings-section--general .settings-mode-option:hover {
+  background: var(--settings-control-bg-hover);
+  color: var(--text);
+}
+
+.content--settings .settings-section--general .settings-mode-option.is-active {
+  background: color-mix(in srgb, var(--accent-soft) 64%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.content--settings .settings-section--general .settings-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.content--settings .settings-section--general .settings-row__actions .settings-btn {
+  flex: 0 0 auto;
+}
+
+.content--settings .settings-section--general .settings-color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.75rem), 10.5rem));
+  justify-content: end;
+  gap: var(--space-2);
+  flex: 0 1 34rem;
+  min-width: 0;
+}
+
+.content--settings .settings-section--general .settings-color-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--settings-control-height);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  overflow: visible;
+  border: 1px solid var(--settings-control-border);
+  border-radius: var(--settings-control-radius);
+  background: var(--settings-control-bg);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  line-height: 1.2;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content--settings .settings-section--general .settings-color-field:hover {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: var(--settings-control-bg-hover);
+}
+
+.content--settings .settings-section--general .settings-color-field span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.content--settings .settings-section--general .settings-color-field input[type="color"] {
+  flex: 0 0 var(--settings-swatch-size);
+  width: var(--settings-swatch-size);
+  height: var(--settings-swatch-size);
+  min-width: var(--settings-swatch-size);
+  padding: 2px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
+  border-radius: calc(var(--settings-control-radius) - 2px);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  cursor: pointer;
+}
+
+.content--settings .settings-section--general .settings-color-field input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.content--settings .settings-section--general .settings-color-field input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--settings-control-radius) - 4px);
+}
+
 .settings-row--classification-metrics .classification-metrics-grid {
   max-width: 560px;
 }
@@ -10108,11 +10325,8 @@ button.flow-cell:focus {
 
 .productivity-persona-card {
   display: grid;
-  gap: var(--space-4);
-  border-color: color-mix(in srgb, var(--accent) 18%, var(--line));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 34%, transparent), transparent 42%),
-    var(--surface);
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 .productivity-persona-card__head {
@@ -10132,69 +10346,175 @@ button.flow-cell:focus {
 }
 
 .productivity-persona-card__copy {
-  max-width: 48rem;
+  max-width: 65ch;
   margin: 0;
-  color: var(--text-soft);
+  color: var(--text-muted);
   font-size: 0.78rem;
   line-height: 1.55;
 }
 
-.productivity-persona-card__metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--line);
-}
-
-.productivity-persona-card__metric {
-  border: 0;
-  background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft));
-}
-
-.productivity-persona-card__axes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.persona-profile-card {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
   gap: var(--space-3);
+  padding: var(--space-2);
+  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 3%, transparent), transparent 62%),
+    var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-.productivity-persona-axis {
+.persona-profile-card__identity,
+.persona-radar-card {
+  min-width: 0;
+  min-height: 14.5rem;
+  border: 1px solid color-mix(in srgb, var(--line) 42%, transparent);
+  border-radius: var(--radius-md);
+}
+
+.persona-profile-card__identity {
+  position: relative;
   display: grid;
+  align-content: start;
+  padding: var(--space-5) var(--space-4) var(--space-4);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.persona-profile-card__intro {
+  min-width: 0;
+  display: grid;
+  align-content: start;
   gap: var(--space-2);
 }
 
-.productivity-persona-axis__label {
-  display: flex;
+.persona-profile-card .insight-section__label {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  width: fit-content;
+  margin-bottom: 0;
+  color: color-mix(in srgb, var(--text-muted) 86%, var(--accent));
+}
+
+.persona-profile-card__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: clamp(1.82rem, 2.5vw, 2.25rem);
+  font-weight: 660;
+  letter-spacing: -0.038em;
+  line-height: 1;
+}
+
+.persona-profile-card__subtitle {
+  margin-top: var(--space-1);
+}
+
+.persona-profile-card__tags {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.persona-profile-card__tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface-strong));
+  color: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.productivity-persona-card__badge {
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+
+.persona-radar-card {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--canvas) 32%, var(--surface));
+}
+
+.persona-radar-card__chart {
+  display: grid;
+  place-items: center;
+  min-height: 13rem;
+}
+
+.persona-radar {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  height: 13.6rem;
+  overflow: visible;
+}
+
+.persona-radar__grid {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-soft) 19%, transparent);
+  stroke-width: 0.78;
+}
+
+.persona-radar__axis {
+  stroke: color-mix(in srgb, var(--text-soft) 14%, transparent);
+  stroke-width: 0.74;
+}
+
+.persona-radar__shape {
+  fill: color-mix(in srgb, var(--accent) 24%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 88%, var(--text));
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.persona-radar__point {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--accent) 84%, var(--text));
+  stroke-width: 1.25;
+}
+
+.persona-radar__label {
+  fill: color-mix(in srgb, var(--text-muted) 94%, var(--text));
+  font-family: var(--font-display);
+  font-size: var(--type-overline-size);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.persona-radar-card__axis-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.persona-radar-card__axis-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: var(--type-overline-size);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.productivity-persona-axis__label strong {
+.persona-radar-card__axis-list strong {
   color: var(--text-muted);
   font-weight: 650;
-}
-
-.productivity-persona-axis__track {
-  height: 0.38rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-2) 82%, var(--surface));
-}
-
-.productivity-persona-axis__track span {
-  display: block;
-  width: var(--persona-axis-value);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
 }
 
 @media (max-width: 920px) {
@@ -10203,16 +10523,13 @@ button.flow-cell:focus {
     flex-direction: column;
   }
 
-  .productivity-persona-card__metrics,
-  .productivity-persona-card__axes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .productivity-persona-card__metrics,
-  .productivity-persona-card__axes {
+  .persona-profile-card {
     grid-template-columns: 1fr;
+  }
+
+  .persona-profile-card__identity,
+  .persona-radar-card {
+    min-height: auto;
   }
 }
 
@@ -10343,6 +10660,15 @@ button.flow-cell:focus {
   border-radius: var(--radius-md);
 }
 
+.week-v2-summary--integrated {
+  padding: 0 1px 8px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .week-v2-summary__bars {
   gap: 6px;
   height: 38px;
@@ -10422,7 +10748,7 @@ button.flow-cell:focus {
   height: 100%;
   min-height: 0;
   margin-bottom: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .page--week-dashboard .week-v2-summary--compact {
@@ -10439,15 +10765,15 @@ button.flow-cell:focus {
 .page--week-dashboard .week-v2-calendar {
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .page--week-dashboard .week-v2-calendar__legend {
-  grid-row: 1;
+  grid-row: 2;
 }
 
 .page--week-dashboard .week-v2-calendar__scroller {
-  grid-row: 2;
+  grid-row: 3;
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
@@ -10982,8 +11308,15 @@ button.flow-cell:focus {
   grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.5fr);
   align-items: center;
   gap: var(--space-4);
-  padding: 0;
-  border-radius: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.leaderboard-hero::before {
+  content: none;
 }
 
 .leaderboard-hero__identity {
@@ -11191,7 +11524,7 @@ button.flow-cell:focus {
   display: grid;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
@@ -11627,7 +11960,7 @@ button.flow-cell:focus {
     margin-left: 0;
   }
 
-  /* 접힘 시: standalone 아이콘 표시 */
+  /* Show the standalone icon while collapsed. */
   .sidebar--collapsed .brand__logo {
     width: 28px;
     height: 28px;
@@ -12564,29 +12897,4 @@ button.flow-cell:focus {
   border-radius: inherit;
   background: var(--trend-tone, var(--warn));
   transition: width 0.45s ease;
-}
-
-/* Persona card additions */
-.productivity-persona-card__intro {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.productivity-persona-card__tags {
-  margin: 0;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.productivity-persona-card__traits-head {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.productivity-persona-card__traits-label {
-  color: var(--text-soft);
 }

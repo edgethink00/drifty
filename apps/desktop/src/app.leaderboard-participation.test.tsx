@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { shiftIsoDate, todayIsoDate } from "@dtime/domain";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
 const {
@@ -67,7 +67,7 @@ vi.mock("./features/profile/profileService", () => ({
   fetchOwnProfile,
   saveOwnProfile,
   fetchPublicProfile,
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "egt",
+  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "drifty",
 }));
 
 vi.mock("./lib/api/trackerClient", () => ({
@@ -116,7 +116,13 @@ function formatDayLabel(day: string) {
 }
 
 describe("App leaderboard participation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 2, 13, 15, 0, 0));
     vi.clearAllMocks();
     window.localStorage.clear();
     markOnboardingCompleted("local");
@@ -259,7 +265,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).toHaveBeenCalledTimes(1);
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "egt",
+        display_name: "drifty",
         bio: "",
         avatar_url: "",
         website_url: "",
@@ -385,7 +391,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).not.toHaveBeenCalled();
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "egt",
+        display_name: "drifty",
         bio: "",
         avatar_url: "",
         website_url: "",
@@ -406,7 +412,7 @@ describe("App leaderboard participation", () => {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
     getTimeline.mockImplementation(async (query: { day?: string; start?: string; end?: string }) => {
-      if (query.day === previousDay) {
+      if (query.day === previousDay || (query.start === `${previousDay}T04:00:00` && query.end === `${today}T03:59:59`)) {
         return [
           {
             id: "previous-day",
@@ -422,8 +428,8 @@ describe("App leaderboard participation", () => {
       }
 
       if (
-        (query.start === `${windowStartDay}T00:00:00` || query.start === `${monthStartDay}T00:00:00`) &&
-        query.end === `${today}T23:59:59`
+        (query.start === `${windowStartDay}T04:00:00` || query.start === `${monthStartDay}T04:00:00`) &&
+        query.end === `${shiftIsoDate(today, 1)}T03:59:59`
       ) {
         return [
           {

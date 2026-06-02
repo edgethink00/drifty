@@ -12,6 +12,7 @@ import type {
 } from "./activity";
 
 const UI_LOCALE = "en-US";
+const MINUTES_PER_DAY = 24 * 60;
 const timelineTimeFormatter = new Intl.DateTimeFormat(UI_LOCALE, {
   hour: "numeric",
   minute: "2-digit",
@@ -253,9 +254,9 @@ export function buildAppUsageSummaries(
 
     while (cursor < end) {
       const current = new Date(cursor);
-      const dayKey = todayIsoDateFor(current);
+      const dayKey = logicalDayIsoDateForDate(current);
       existing.activeDays.add(dayKey);
-      cursor = Math.min(end, localDayEndExclusive(dayKey));
+      cursor = Math.min(end, logicalDayEndExclusiveMs(dayKey));
     }
 
     totals.set(groupKey, existing);
@@ -433,9 +434,10 @@ type FlowBlockCandidate = {
   strongestOverlapSeconds: number;
 };
 
-export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions): FlowBlock[] {
+export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
   const intervalMs = intervalMinutes * 60 * 1000;
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
 
   for (const segment of segments) {
     const start = new Date(segment.startedAt);
@@ -449,7 +451,7 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
       blockStart.setMinutes(bucketMinute, 0, 0);
       const blockEnd = new Date(blockStart.getTime() + intervalMs);
 
-      if (todayIsoDateFor(blockStart) !== day) {
+      if (logicalDayIsoDateForDate(blockStart, boundaryMinutes) !== day) {
         cursor = blockEnd;
         continue;
       }
@@ -562,11 +564,12 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
     }
   }
 
-  return Array.from(blocks.values()).sort((left, right) => left.minuteOfDay - right.minuteOfDay);
+  return Array.from(blocks.values()).sort((left, right) => logicalMinuteOfDay(left.minuteOfDay, boundaryMinutes) - logicalMinuteOfDay(right.minuteOfDay, boundaryMinutes));
 }
 
-export function buildDailyTotals(segments: ActivitySegment[], startDay: string, endDay: string): DailyTotal[] {
+export function buildDailyTotals(segments: ActivitySegment[], startDay: string, endDay: string, startOfDayMinutes = 0): DailyTotal[] {
   const totals = new Map<string, number>();
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
 
   for (const segment of segments) {
     let cursor = new Date(segment.startedAt).getTime();
@@ -574,13 +577,9 @@ export function buildDailyTotals(segments: ActivitySegment[], startDay: string, 
 
     while (cursor < end) {
       const current = new Date(cursor);
-      const dayStart = new Date(current.getFullYear(), current.getMonth(), current.getDate(), 0, 0, 0, 0);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
-
-      const overlapEnd = Math.min(end, dayEnd.getTime());
+      const dayKey = logicalDayIsoDateForDate(current, boundaryMinutes);
+      const overlapEnd = Math.min(end, logicalDayEndExclusiveMs(dayKey, boundaryMinutes));
       const overlapSeconds = Math.max(0, Math.round((overlapEnd - cursor) / 1000));
-      const dayKey = todayIsoDateFor(current);
 
       totals.set(dayKey, (totals.get(dayKey) ?? 0) + overlapSeconds);
       cursor = overlapEnd;
@@ -598,9 +597,10 @@ export function buildDailyTotals(segments: ActivitySegment[], startDay: string, 
   return days;
 }
 
-export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: string, endDay: string, options?: ClassificationOptions): number {
-  const windowStart = localDayStart(startDay);
-  const windowEnd = localDayEndExclusive(endDay);
+export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: string, endDay: string, options?: ClassificationOptions, startOfDayMinutes = 0): number {
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const windowStart = logicalDayStartMs(startDay, boundaryMinutes);
+  const windowEnd = logicalDayEndExclusiveMs(endDay, boundaryMinutes);
 
   if (windowEnd <= windowStart) return 0;
 
@@ -694,9 +694,10 @@ export function buildProductivityDurations(segments: ActivitySegment[], options?
   }));
 }
 
-export function buildDayRibbonSegments(segments: ActivitySegment[], day: string, options?: ClassificationOptions): DayRibbonSegment[] {
-  const dayStart = new Date(`${day}T00:00:00`).getTime();
-  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+export function buildDayRibbonSegments(segments: ActivitySegment[], day: string, options?: ClassificationOptions, startOfDayMinutes = 0): DayRibbonSegment[] {
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const dayStart = logicalDayStartMs(day, boundaryMinutes);
+  const dayEnd = logicalDayEndExclusiveMs(day, boundaryMinutes);
   const clipped: Array<{
     category: ActivityCategory;
     productivity: ProductivityLabel;
@@ -874,9 +875,9 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
     const end = new Date(segment.endedAt).getTime();
     while (cursor < end) {
       const current = new Date(cursor);
-      const dayKey = todayIsoDateFor(current);
+      const dayKey = logicalDayIsoDateForDate(current);
       activeDays.add(dayKey);
-      const dayStart = localDayStart(dayKey);
+      const dayStart = logicalDayStartMs(dayKey);
       const nightStart = dayStart + 22 * 60 * 60 * 1000;
       const nightEnd = dayStart + 29 * 60 * 60 * 1000;
       const overlapStart = Math.max(cursor, nightStart);
@@ -884,7 +885,7 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
       if (overlapEnd > overlapStart) {
         nightSeconds += Math.round((overlapEnd - overlapStart) / 1000);
       }
-      cursor = Math.min(end, localDayEndExclusive(dayKey));
+      cursor = Math.min(end, logicalDayEndExclusiveMs(dayKey));
     }
 
     if (classification.productivity === "focus") {
@@ -1357,18 +1358,33 @@ function normalizeYouTubeOfficialCategory(category: string): string {
   return category.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function localDayStart(day: string): number {
-  const [year, month, date] = day.split("-").map(Number);
-  return new Date(year, month - 1, date, 0, 0, 0, 0).getTime();
+export function normalizeStartOfDayMinutes(minutes = 0): number {
+  if (!Number.isFinite(minutes)) return 0;
+  return Math.min(MINUTES_PER_DAY - 1, Math.max(0, Math.round(minutes)));
 }
 
-function localDayEndExclusive(day: string): number {
-  const end = new Date(localDayStart(day));
+export function logicalDayStartMs(day: string, startOfDayMinutes = 0): number {
+  const [year, month, date] = day.split("-").map(Number);
+  const start = new Date(year, month - 1, date, 0, normalizeStartOfDayMinutes(startOfDayMinutes), 0, 0);
+  return start.getTime();
+}
+
+export function logicalDayEndExclusiveMs(day: string, startOfDayMinutes = 0): number {
+  const end = new Date(logicalDayStartMs(day, startOfDayMinutes));
   end.setDate(end.getDate() + 1);
   return end.getTime();
 }
 
-function todayIsoDateFor(date: Date): string {
+export function logicalDayIsoDateForDate(date: Date, startOfDayMinutes = 0): string {
+  const logicalDate = new Date(date.getTime() - normalizeStartOfDayMinutes(startOfDayMinutes) * 60 * 1000);
+  return isoDateForLocalDate(logicalDate);
+}
+
+export function logicalMinuteOfDay(minuteOfDay: number, startOfDayMinutes = 0): number {
+  return ((minuteOfDay - normalizeStartOfDayMinutes(startOfDayMinutes)) % MINUTES_PER_DAY + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+}
+
+function isoDateForLocalDate(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");

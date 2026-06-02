@@ -92,7 +92,7 @@ describe("WatcherPeek", () => {
       vi.advanceTimersByTime(2_200);
     });
 
-    expect(screen.getByText(/화이팅\. Don’t break this\./i)).toBeTruthy();
+    expect(screen.getByText(/Keep going\. Don’t break this\./i)).toBeTruthy();
     expect(watcher.getAttribute("data-phase")).toBe("speaking");
     expect(watcher.querySelector("button")).toBeNull();
 

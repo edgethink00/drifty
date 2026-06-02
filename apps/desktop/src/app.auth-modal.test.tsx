@@ -86,7 +86,7 @@ vi.mock("./features/profile/profileService", () => ({
   fetchOwnProfile,
   saveOwnProfile,
   fetchPublicProfile,
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "egt",
+  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "drifty",
 }));
 
 vi.mock("./features/feedback/feedbackService", () => ({

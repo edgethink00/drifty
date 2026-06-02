@@ -13,6 +13,12 @@ const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 
+function timelineQueryIncludesDay(query: ClassificationQuery, day: string): boolean {
+  if (query.day === day) return true;
+  if (!query.start || !query.end) return false;
+  return query.start <= `${day}T23:59:59` && query.end >= `${day}T00:00:00`;
+}
+
 function cssRule(selector: string): string {
   const start = styles.indexOf(`${selector} {`);
   expect(start).toBeGreaterThanOrEqual(0);
@@ -159,7 +165,7 @@ vi.mock("./features/leaderboard/leaderboardService", () => ({
 }));
 
 vi.mock("./features/profile/profileService", () => ({
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0] ?? "egt",
+  fallbackDisplayName: (email?: string | null) => email?.split("@")[0] ?? "drifty",
   fetchOwnProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
   fetchPublicProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
   saveOwnProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
@@ -356,7 +362,11 @@ describe("App AI classification controls", () => {
       databasePath: "/tmp/dtime.sqlite3",
       trackerMode: "tracking",
     });
-    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(query.day && query.day !== todayIsoDate() ? [createSegmentForDay(query.day)] : []));
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => {
+      const today = todayIsoDate();
+      const queryDay = query.day ?? query.start?.slice(0, 10) ?? null;
+      return Promise.resolve(queryDay && queryDay !== today ? [createSegmentForDay(queryDay)] : []);
+    });
     trackerClient.getCurrentSnapshot.mockResolvedValue(null);
     trackerClient.getHourlySummary.mockResolvedValue([]);
     trackerClient.getTopSites.mockResolvedValue([]);
@@ -389,7 +399,7 @@ describe("App AI classification controls", () => {
     const selectedDay = todayIsoDate();
     const longWindowTitle = "Quarterly classification QA reproduction title - ".repeat(10) + "final window title segment";
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
-      query.day === selectedDay
+      timelineQueryIncludesDay(query, selectedDay)
         ? [{
             ...createSegmentForDay(selectedDay),
             id: "long-activity-title",
@@ -409,10 +419,35 @@ describe("App AI classification controls", () => {
     expect(title.closest(".classification-panel-view__activity-row")).toBeTruthy();
   });
 
+  it("places classification panel header labels above their values", async () => {
+    const selectedDay = todayIsoDate();
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
+      timelineQueryIncludesDay(query, selectedDay) ? [createSegmentForDay(selectedDay)] : [],
+    ));
+    render(<App />);
+
+    const primaryNavigation = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(primaryNavigation).getByRole("button", { name: /^classification$/i }));
+
+    const panel = await screen.findByLabelText("Classification panel view") as HTMLElement;
+    const headers = panel.querySelectorAll(".classification-panel-view__panel-header");
+    const rightStacks = Array.from(headers).slice(0, 2).map((header) => header.querySelector(".panel-header__right"));
+
+    expect(rightStacks).toHaveLength(2);
+    for (const stack of rightStacks) {
+      expect(Array.from(stack?.children ?? []).map((child) => child.className)).toEqual([
+        "panel-header__meta",
+        "panel-header__value",
+      ]);
+    }
+    expect(rightStacks[0]?.textContent).toBe("Total30m");
+    expect(rightStacks[1]?.textContent).toBe("source1");
+  });
+
   it("uses the selected category tone for classification selections and activity detail bars", async () => {
     const selectedDay = todayIsoDate();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
-      query.day === selectedDay
+      timelineQueryIncludesDay(query, selectedDay)
         ? [
             createSegmentForDay(selectedDay),
             {
