@@ -54,7 +54,6 @@ import {
   hasCompletedUserOnboarding,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
-import { CompanionPanel } from "./features/companion/CompanionPanel";
 import {
   WatcherPeek,
   type WatcherPeekEvent,
@@ -399,7 +398,7 @@ type MonthCellStyle = CSSProperties & {
   "--activity-ink"?: string;
 };
 
-type SettingsSection = "aiSetup" | "notifications" | "privacy" | "integrations" | "data" | "dev";
+type SettingsSection = "aiSetup" | "notifications" | "privacy" | "data" | "dev";
 type LocalAiProvider = "openrouter_byok" | "self_hosted";
 type LocalAiSetupState = {
   provider: LocalAiProvider;
@@ -2941,7 +2940,6 @@ export default function App() {
                     { id: "aiSetup" as const, label: "AI setup" },
                     { id: "notifications" as const, label: "Notifications" },
                     { id: "privacy" as const, label: "Privacy" },
-                  { id: "integrations" as const, label: "Integrations" },
                   { id: "data" as const, label: "Data & Export" },
                 ]).map((n) => (
                   <button key={n.id} className={`settings-nav-item${settingsSection === n.id ? " on" : ""}`} onClick={() => setSettingsSection(n.id)}>{n.label}</button>
@@ -3011,12 +3009,6 @@ export default function App() {
                       <div className="settings-row"><div><div className="lbl">Optional cloud features are explicit</div><div className="desc">If you configure Supabase and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total. Raw tracking history is not published there.</div></div><div className="ctrl"><span className="chip">Opt-in only</span></div></div>
                     </div>
                   </div>
-                )}
-                {settingsSection === "integrations" && (
-                  <div className="settings-section"><div className="settings-block"><h3>Integrations</h3>
-                    <div className="settings-row"><div><div className="lbl">iOS companion</div><div className="desc">Pair Drifty iOS and import opt-in focus summaries. Raw app, site, window, and Screen Time history stay off cloud sync.</div></div><div className="ctrl"><span className="chip green">Local-first</span></div></div>
-                    <CompanionPanel />
-                  </div></div>
                 )}
                 {settingsSection === "data" && (
                   <div className="settings-section">
