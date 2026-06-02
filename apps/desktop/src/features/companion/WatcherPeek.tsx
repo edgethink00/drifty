@@ -202,7 +202,7 @@ function getWatcherCopy(event: WatcherPeekEvent): WatcherCopy {
   if (scenario === "focus_deep") {
     return {
       eyebrow: "Deep focus",
-      title: "화이팅. Don’t break this.",
+      title: "Keep going. Don’t break this.",
       body: `${event.durationLabel} in ${place}. This is the kind of run I should not interrupt.`,
     };
   }
@@ -242,7 +242,7 @@ function getWatcherCopy(event: WatcherPeekEvent): WatcherCopy {
   if (event.productivity === "focus") {
     return {
       eyebrow: "Quiet watch",
-      title: "화이팅. Stay with it.",
+      title: "Keep going. Stay with it.",
       body: `${event.durationLabel} focused around ${place}. I saw enough. I’ll disappear now.`,
     };
   }
