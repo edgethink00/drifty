@@ -69,8 +69,12 @@ describe("FlowChartView", () => {
   });
 
   it("tightens only the flow chart shell spacing while preserving cell scale", () => {
-    expect(styles).toMatch(/\.flow-breakdown-layout__chart\s*{[\s\S]*padding:\s*7px 16px 9px;/);
+    expect(styles).toMatch(/\.flow-breakdown-layout__chart\s*{[\s\S]*padding:\s*7px 8px 9px;/);
     expect(styles).toMatch(/\.flow-chart-card\s*{[\s\S]*gap:\s*8px;/);
+    expect(styles).toMatch(/\.flow-chart-card\s*{[\s\S]*--flow-axis-gutter:\s*1\.55rem;/);
+    expect(styles).toMatch(/\.flow-chart-hours,\s*\.flow-chart-row\s*\{[\s\S]*grid-template-columns:\s*var\(--flow-axis-gutter\) repeat\(24,\s*minmax\(1\.55rem,\s*1fr\)\);/);
+    expect(styles).toMatch(/\.flow-chart-row--now::before\s*\{[\s\S]*left:\s*calc\(var\(--flow-axis-gutter\) \+ 0\.15rem\);/);
+    expect(styles).toMatch(/\.flow-chart-row--now::after\s*\{[\s\S]*left:\s*calc\(var\(--flow-axis-gutter\) \+ \(\(100% - var\(--flow-axis-gutter\)\) \/ 24\) \* \(var\(--flow-current-hour\) \+ 1\)\);/);
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*gap:\s*5px;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*padding:\s*0\.44rem 0\.64rem;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.68rem;/);

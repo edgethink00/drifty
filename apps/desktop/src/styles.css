@@ -5684,7 +5684,7 @@ input, textarea { color: inherit; }
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
-  padding: 7px 16px 9px;
+  padding: 7px 8px 9px;
 }
 
 .flow-breakdown-layout__chart .flow-chart-card {
@@ -5975,6 +5975,7 @@ input, textarea { color: inherit; }
   margin-top: var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px solid var(--line);
+  --flow-axis-gutter: 1.55rem;
   --flow-tone-focus: var(--productivity-focus);
   --flow-tone-neutral: var(--productivity-neutral);
   --flow-tone-drift: var(--productivity-drift);
@@ -6069,7 +6070,7 @@ input, textarea { color: inherit; }
 .flow-chart-hours,
 .flow-chart-row {
   display: grid;
-  grid-template-columns: 2rem repeat(24, minmax(1.55rem, 1fr));
+  grid-template-columns: var(--flow-axis-gutter) repeat(24, minmax(1.55rem, 1fr));
   gap: 0;
   min-width: 48rem;
 }
@@ -6134,9 +6135,9 @@ input, textarea { color: inherit; }
   content: "";
   position: absolute;
   top: 100%;
-  left: 2.15rem;
+  left: calc(var(--flow-axis-gutter) + 0.15rem);
   z-index: 2;
-  width: calc(((100% - 2rem) / 24) * (var(--flow-current-hour) + 1) - 0.15rem);
+  width: calc(((100% - var(--flow-axis-gutter)) / 24) * (var(--flow-current-hour) + 1) - 0.15rem);
   height: 2px;
   background: var(--text);
   transform: translateY(-50%);
@@ -6149,7 +6150,7 @@ input, textarea { color: inherit; }
   content: "";
   position: absolute;
   top: 100%;
-  left: calc(2rem + ((100% - 2rem) / 24) * (var(--flow-current-hour) + 1));
+  left: calc(var(--flow-axis-gutter) + ((100% - var(--flow-axis-gutter)) / 24) * (var(--flow-current-hour) + 1));
   z-index: 3;
   width: 0;
   height: 0;
