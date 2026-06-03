@@ -165,6 +165,18 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_unclassified_segments", payload)
     }
 
+    pub fn get_reusable_ai_classifications(
+        &self,
+        app: &AppHandle,
+        input_fingerprints: Vec<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_reusable_ai_classifications",
+            json!({ "inputFingerprints": input_fingerprints }),
+        )
+    }
+
     pub fn save_classifications(
         &self,
         app: &AppHandle,

@@ -84,6 +84,29 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.get_timeline({"start": "2026-04-01T00:00:00", "end": "2026-04-07T23:59:59"})
         mock_db.timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
 
+    def test_get_reusable_ai_classifications_returns_json_serializable_mapping(self) -> None:
+        mock_db = MagicMock()
+        mock_db.get_reusable_ai_classifications.return_value = {
+            "fp-one": {
+                "segmentId": "1",
+                "inputFingerprint": "fp-one",
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "llm",
+                "confidence": 0.9,
+                "reason": "Prior result",
+                "aiResult": True,
+                "stale": False,
+            }
+        }
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_reusable_ai_classifications({"inputFingerprints": ["fp-one", 3, "fp-two"]})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["fp-one"]["segmentId"], "1")
+        mock_db.get_reusable_ai_classifications.assert_called_once_with(["fp-one", "fp-two"])
+
     def test_handle_idle_sample_trims_and_skips_when_threshold_reached(self) -> None:
         mock_db = MagicMock()
         now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)

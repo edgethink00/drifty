@@ -248,19 +248,38 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     };
   }
 
+  const reusableResult = await saveReusableAiClassifications(unknownPayload);
+  if (reusableResult.misses.length === 0) {
+    const metrics = await trackerClient.getClassificationMetrics(query);
+    const savedRecords = deterministicSaveResult.saved + reusableResult.saved;
+    return {
+      status: "saved",
+      selectedSegments: payload.length,
+      savedRecords,
+      message: `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+      metrics,
+    };
+  }
+
   if (options.localProvider) {
-    return await runLocalAiClassification(query, payload.length, deterministicSaveResult.saved, unknownPayload, options.localProvider);
+    return await runLocalAiClassification(query, payload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
-  if (cloudAvailability) return cloudAvailability;
+  if (cloudAvailability) {
+    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
+    return partialSummary ?? cloudAvailability;
+  }
   const cloudClient = supabase;
-  if (!cloudClient) return { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
+  if (!cloudClient) {
+    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, "Supabase is not configured.");
+    return partialSummary ?? { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
+  }
 
   const { data, error } = await cloudClient.functions.invoke("classify-activity", {
     body: {
       ...cloudApiClientMetadata,
-      items: unknownPayload.map((item) => ({
+      items: reusableResult.misses.map((item) => ({
         id: item.segmentId,
         inputFingerprint: item.inputFingerprint,
         appName: item.appName,
@@ -277,26 +296,26 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     throw new Error(await edgeFunctionErrorMessage(error));
   }
 
-  const aiRecords = toClassificationRecords(data, unknownPayload);
+  const aiRecords = toClassificationRecords(data, reusableResult.misses);
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
       status: "error",
       selectedSegments: payload.length,
-      savedRecords: deterministicSaveResult.saved,
-      message: `AI classification returned no usable classifications for ${unknownPayload.length} unknown ${unknownPayload.length === 1 ? "segment" : "segments"}.`,
+      savedRecords: deterministicSaveResult.saved + reusableResult.saved,
+      message: `AI classification returned no usable classifications for ${reusableResult.misses.length} unknown ${reusableResult.misses.length === 1 ? "segment" : "segments"}.`,
       metrics,
     };
   }
 
   const aiSaveResult = await trackerClient.saveClassifications(aiRecords);
   const metrics = await trackerClient.getClassificationMetrics(query);
-  const savedRecords = deterministicSaveResult.saved + aiSaveResult.saved;
+  const savedRecords = deterministicSaveResult.saved + reusableResult.saved + aiSaveResult.saved;
   return {
     status: "saved",
     selectedSegments: payload.length,
     savedRecords,
-    message: `Saved ${aiSaveResult.saved} AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+    message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
 }
@@ -312,32 +331,66 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     ? await trackerClient.saveClassifications(deterministicRecords)
     : { saved: 0 };
 
-  if (unknownPayload.length < threshold) {
+  const reusableResult = await saveReusableAiClassifications(unknownPayload);
+
+  if (reusableResult.misses.length < threshold) {
     const metrics = await trackerClient.getClassificationMetrics(query);
+    if (reusableResult.saved > 0) {
+      const savedRecords = deterministicSaveResult.saved + reusableResult.saved;
+      const remainingCandidates = reusableResult.misses.length;
+      return {
+        status: "saved",
+        selectedSegments: deterministicSaveResult.saved + reusableResult.saved,
+        savedRecords,
+        message: remainingCandidates > 0
+          ? `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}. Only ${remainingCandidates} unknown AI classification ${remainingCandidates === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
+          : `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+        metrics,
+      };
+    }
+
     return {
       status: deterministicSaveResult.saved > 0 ? "saved" : "empty",
       selectedSegments: deterministicRecords.length,
       savedRecords: deterministicSaveResult.saved,
       message: deterministicSaveResult.saved > 0
-        ? `Saved ${deterministicSaveResult.saved} rule ${deterministicSaveResult.saved === 1 ? "classification" : "classifications"}. Only ${unknownPayload.length} unknown AI classification ${unknownPayload.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
-        : `Only ${unknownPayload.length} unknown AI classification ${unknownPayload.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`,
+        ? `Saved ${deterministicSaveResult.saved} rule ${deterministicSaveResult.saved === 1 ? "classification" : "classifications"}. Only ${reusableResult.misses.length} unknown AI classification ${reusableResult.misses.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
+        : `Only ${reusableResult.misses.length} unknown AI classification ${reusableResult.misses.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`,
+      metrics,
+    };
+  }
+
+  if (reusableResult.misses.length === 0) {
+    const metrics = await trackerClient.getClassificationMetrics(query);
+    const savedRecords = deterministicSaveResult.saved + reusableResult.saved;
+    return {
+      status: "saved",
+      selectedSegments: unknownPayload.length,
+      savedRecords,
+      message: `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
       metrics,
     };
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, deterministicSaveResult.saved, unknownPayload, options.localProvider);
+    return await runLocalAiClassification(query, unknownPayload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
-  if (cloudAvailability) return cloudAvailability;
+  if (cloudAvailability) {
+    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
+    return partialSummary ?? cloudAvailability;
+  }
   const cloudClient = supabase;
-  if (!cloudClient) return { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
+  if (!cloudClient) {
+    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, "Supabase is not configured.");
+    return partialSummary ?? { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
+  }
 
   const { data, error } = await cloudClient.functions.invoke("classify-activity", {
     body: {
       ...cloudApiClientMetadata,
-      items: unknownPayload.map((item) => ({
+      items: reusableResult.misses.map((item) => ({
         id: item.segmentId,
         inputFingerprint: item.inputFingerprint,
         appName: item.appName,
@@ -354,26 +407,26 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     throw new Error(await edgeFunctionErrorMessage(error));
   }
 
-  const aiRecords = toClassificationRecords(data, unknownPayload);
+  const aiRecords = toClassificationRecords(data, reusableResult.misses);
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
       status: "error",
       selectedSegments: unknownPayload.length,
-      savedRecords: deterministicSaveResult.saved,
-      message: `AI classification returned no usable classifications for ${unknownPayload.length} unknown ${unknownPayload.length === 1 ? "segment" : "segments"}.`,
+      savedRecords: deterministicSaveResult.saved + reusableResult.saved,
+      message: `AI classification returned no usable classifications for ${reusableResult.misses.length} unknown ${reusableResult.misses.length === 1 ? "segment" : "segments"}.`,
       metrics,
     };
   }
 
   const aiSaveResult = await trackerClient.saveClassifications(aiRecords);
   const metrics = await trackerClient.getClassificationMetrics(query);
-  const savedRecords = deterministicSaveResult.saved + aiSaveResult.saved;
+  const savedRecords = deterministicSaveResult.saved + reusableResult.saved + aiSaveResult.saved;
   return {
     status: "saved",
     selectedSegments: unknownPayload.length,
     savedRecords,
-    message: `Saved ${aiSaveResult.saved} AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+    message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
 }
@@ -579,6 +632,70 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
       classifiedAt,
     }];
   });
+}
+
+async function saveReusableAiClassifications(unknownPayload: MinimizedActivityPayload[]): Promise<{ saved: number; misses: MinimizedActivityPayload[] }> {
+  if (unknownPayload.length === 0) return { saved: 0, misses: [] };
+
+  const uniqueFingerprints = Array.from(new Set(unknownPayload.map((item) => item.inputFingerprint)));
+  const reusableByFingerprint = await trackerClient.getReusableAiClassifications(uniqueFingerprints);
+  const reusableRecords = toReusableClassificationRecords(unknownPayload, reusableByFingerprint);
+  const reusableFingerprintSet = new Set(reusableRecords.map((record) => record.inputFingerprint));
+  const misses = unknownPayload.filter((item) => !reusableFingerprintSet.has(item.inputFingerprint));
+  if (reusableRecords.length === 0) return { saved: 0, misses };
+
+  const saveResult = await trackerClient.saveClassifications(reusableRecords);
+  return { saved: saveResult.saved, misses };
+}
+
+function toReusableClassificationRecords(
+  unknownPayload: MinimizedActivityPayload[],
+  reusableByFingerprint: Record<string, ActivityClassificationRecord>,
+): ActivityClassificationRecord[] {
+  const classifiedAt = new Date().toISOString();
+  return unknownPayload.flatMap((item): ActivityClassificationRecord[] => {
+    const reusable = reusableByFingerprint[item.inputFingerprint];
+    if (!reusable || !isActivityCategory(reusable.category) || !isProductivityLabel(reusable.productivity)) return [];
+
+    return [{
+      segmentId: item.segmentId,
+      inputFingerprint: item.inputFingerprint,
+      category: reusable.category,
+      productivity: reusable.productivity,
+      source: "llm",
+      confidence: numberValue(reusable.confidence),
+      reason: reusable.reason ?? null,
+      model: reusable.model ?? null,
+      promptVersion: reusable.promptVersion ?? null,
+      taxonomyVersion: reusable.taxonomyVersion ?? "v1",
+      requestId: null,
+      latencyMs: null,
+      aiResult: true,
+      stale: false,
+      classifiedAt,
+    }];
+  });
+}
+
+async function savedPartialAiSummary(
+  query: ClassificationQuery,
+  deterministicSavedRecords: number,
+  reusedSavedRecords: number,
+  remainingUnknownSegments: number,
+  blockerMessage: string,
+): Promise<AiClassificationSummary | null> {
+  const savedRecords = deterministicSavedRecords + reusedSavedRecords;
+  if (savedRecords === 0) return null;
+
+  const metrics = await trackerClient.getClassificationMetrics(query);
+  const remainingLabel = remainingUnknownSegments === 1 ? "segment" : "segments";
+  return {
+    status: "saved",
+    selectedSegments: savedRecords,
+    savedRecords,
+    message: `Saved ${reusedSavedRecords} reused AI and ${deterministicSavedRecords} rule ${savedRecords === 1 ? "classification" : "classifications"}. ${blockerMessage} Run AI classification for the remaining ${remainingUnknownSegments} unknown ${remainingLabel} after fixing provider access.`,
+    metrics,
+  };
 }
 
 async function runLocalAiClassification(
