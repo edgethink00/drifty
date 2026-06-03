@@ -606,6 +606,37 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("sends YouTube search pages to AI instead of saving a deterministic entertainment rule", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "youtube.com",
+      siteTitle: "YouTube Search",
+      siteUrl: "https://www.youtube.com/results?search_query=typescript",
+    });
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([segment]);
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        source: "llm",
+        aiResult: true,
+      })]);
+      expect(saveClassifications.mock.calls[0]?.[0]).not.toEqual([expect.objectContaining({
+        segmentId: "segment-1",
+        source: "rule",
+        aiResult: false,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("saves deterministic rule rows before AI cache reuse and does not overwrite them", async () => {
     const deterministicSegment = createUnknownSegment(99, {
       appName: "Visual Studio Code",

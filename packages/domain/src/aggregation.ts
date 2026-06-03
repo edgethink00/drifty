@@ -1329,6 +1329,10 @@ function classifyYouTubeActivity(segment: ActivitySegment): ActivityClassificati
   const categoryClassification = classifyYouTubeOfficialCategory(officialCategory);
   if (categoryClassification) return categoryClassification;
 
+  if (isYouTubeNavigationPage(segment)) {
+    return { category: "unknown", productivity: "neutral" };
+  }
+
   return { category: "entertainment", productivity: "drift" };
 }
 
@@ -1340,6 +1344,21 @@ function playlistIdFromUrl(siteUrl?: string | null): string | null {
   if (!siteUrl) return null;
   try {
     return new URL(siteUrl).searchParams.get("list");
+  } catch {
+    return null;
+  }
+}
+
+function isYouTubeNavigationPage(segment: ActivitySegment): boolean {
+  if (segment.youtubeVideoId) return false;
+  const path = youtubePathFromUrl(segment.siteUrl);
+  return path !== null && (path === "/" || path === "/results" || path === "/feed" || path.startsWith("/feed/"));
+}
+
+function youtubePathFromUrl(siteUrl?: string | null): string | null {
+  if (!siteUrl) return null;
+  try {
+    return new URL(siteUrl).pathname || "/";
   } catch {
     return null;
   }

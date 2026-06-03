@@ -674,6 +674,24 @@ describe('domain helpers', () => {
     expect(classification).toEqual({ category: 'entertainment', productivity: 'drift' });
   });
 
+  it('keeps YouTube navigation pages unknown so AI can classify intent', () => {
+    const navigationUrls = [
+      'https://www.youtube.com/results?search_query=typescript',
+      'https://www.youtube.com/',
+      'https://www.youtube.com/feed/subscriptions',
+    ];
+
+    for (const siteUrl of navigationUrls) {
+      expect(classifyActivity({
+        ...segments[0],
+        appName: 'Safari',
+        siteDomain: 'youtube.com',
+        siteTitle: 'YouTube',
+        siteUrl,
+      })).toEqual({ category: 'unknown', productivity: 'neutral' });
+    }
+  });
+
   it('does not use YouTube title heuristics for classification', () => {
     const classification = classifyActivity({
       ...segments[0],
