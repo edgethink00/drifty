@@ -680,7 +680,7 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
 
 function buildClassificationPrompt(payload: MinimizedActivityPayload[]): string {
   return [
-    "Classify each activity into Drifty category, productivity label, confidence, and short reason.",
+    "Classify each activity into activity category, productivity label, confidence, and short reason.",
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles or domains in the reason.",
