@@ -10632,6 +10632,10 @@ button.flow-cell:focus {
   padding: 10px var(--space-3) 12px;
 }
 
+.dashboard-insight-stack .insight-chart-panel.editorial-panel {
+  margin-top: 0;
+}
+
 .insight-chart-panel.editorial-panel .insight-panel-head {
   margin-bottom: 0.25rem;
 }
