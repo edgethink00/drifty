@@ -46,6 +46,12 @@ pub struct ClassificationSaveQuery {
     pub classifications: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReusableAiClassificationsQuery {
+    pub input_fingerprints: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppIconsQuery {
@@ -189,6 +195,22 @@ pub async fn tracker_get_unclassified_segments(
     async_runtime::spawn_blocking(move || {
         controller
             .get_unclassified_segments(&app, query.day, query.start, query.end, query.limit)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_reusable_ai_classifications(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ReusableAiClassificationsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_reusable_ai_classifications(&app, query.input_fingerprints)
             .map_err(|error| error.to_string())
     })
     .await

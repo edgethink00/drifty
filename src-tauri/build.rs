@@ -21,6 +21,7 @@ fn main() {
             "tracker_get_top_sites",
             "tracker_get_app_icons",
             "tracker_get_unclassified_segments",
+            "tracker_get_reusable_ai_classifications",
             "tracker_save_classifications",
             "tracker_refresh_non_ai_classifications",
             "tracker_get_classification_metrics",
