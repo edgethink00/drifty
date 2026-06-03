@@ -402,6 +402,132 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(self.database.classification_metrics()["aiClassifiedSegments"], 1)
         self.assertEqual(sum(1 for item in refreshed if item.get("classification")), 1)
 
+    def test_reusable_ai_classification_lookup_returns_exact_fingerprint_hit(self) -> None:
+        segment_id = self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00",
+            "fp-reusable",
+            category="learning",
+            productivity="focus",
+            reason="Prior AI result",
+        )
+
+        reusable = self.database.get_reusable_ai_classifications(["fp-reusable", "fp-missing"])
+
+        self.assertEqual(set(reusable.keys()), {"fp-reusable"})
+        self.assertEqual(reusable["fp-reusable"]["segmentId"], str(segment_id))
+        self.assertEqual(reusable["fp-reusable"]["inputFingerprint"], "fp-reusable")
+        self.assertEqual(reusable["fp-reusable"]["category"], "learning")
+        self.assertEqual(reusable["fp-reusable"]["productivity"], "focus")
+        self.assertEqual(reusable["fp-reusable"]["source"], "llm")
+        self.assertTrue(reusable["fp-reusable"]["aiResult"])
+        self.assertFalse(reusable["fp-reusable"]["stale"])
+
+    def test_reusable_ai_classification_lookup_ignores_non_ai_results(self) -> None:
+        self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00",
+            "fp-rule",
+            source="rule",
+            ai_result=False,
+        )
+
+        reusable = self.database.get_reusable_ai_classifications(["fp-rule"])
+
+        self.assertEqual(reusable, {})
+
+    def test_reusable_ai_classification_lookup_ignores_stale_results(self) -> None:
+        self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00",
+            "fp-stale",
+            stale=True,
+        )
+
+        reusable = self.database.get_reusable_ai_classifications(["fp-stale"])
+
+        self.assertEqual(reusable, {})
+
+    def test_reusable_ai_classification_lookup_returns_empty_for_miss(self) -> None:
+        reusable = self.database.get_reusable_ai_classifications(["fp-unknown"])
+
+        self.assertEqual(reusable, {})
+
+    def test_reusable_ai_classification_lookup_uses_newest_classified_at_then_segment_id(self) -> None:
+        self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00",
+            "fp-duplicate",
+            category="workspace",
+            classified_at="2026-04-06T10:00:00+00:00",
+        )
+        newest_segment_id = self._insert_classified_segment(
+            "2026-04-06T10:00:00+00:00",
+            "fp-duplicate",
+            category="learning",
+            classified_at="2026-04-06T11:00:00+00:00",
+        )
+        self._insert_classified_segment(
+            "2026-04-06T11:00:00+00:00",
+            "fp-tie",
+            category="workspace",
+            classified_at="2026-04-06T12:00:00+00:00",
+        )
+        tie_winner_id = self._insert_classified_segment(
+            "2026-04-06T12:00:00+00:00",
+            "fp-tie",
+            category="utility",
+            classified_at="2026-04-06T12:00:00+00:00",
+        )
+
+        reusable = self.database.get_reusable_ai_classifications(["fp-duplicate", "fp-tie"])
+
+        self.assertEqual(reusable["fp-duplicate"]["segmentId"], str(newest_segment_id))
+        self.assertEqual(reusable["fp-duplicate"]["category"], "learning")
+        self.assertEqual(reusable["fp-tie"]["segmentId"], str(tie_winner_id))
+        self.assertEqual(reusable["fp-tie"]["category"], "utility")
+
+    def _insert_classified_segment(
+        self,
+        started_at: str,
+        input_fingerprint: str,
+        *,
+        category: str = "workspace",
+        productivity: str = "focus",
+        source: str = "llm",
+        confidence: float = 0.9,
+        reason: str = "Prior result",
+        model: str = "gemini-3.1-flash-lite",
+        prompt_version: str = "v1",
+        taxonomy_version: str = "v1",
+        classified_at: str = "2026-04-06T09:30:00+00:00",
+        ai_result: bool = True,
+        stale: bool = False,
+    ) -> int:
+        self.database.insert_segment(
+            {
+                "started_at": started_at,
+                "ended_at": started_at,
+                "duration_seconds": 300,
+                "app_name": "MysteryApp",
+            }
+        )
+        segment_id = int(self.database.fetch_timeline(started_at[:10])[-1]["id"])
+        self.database.save_classifications([
+            {
+                "segmentId": segment_id,
+                "category": category,
+                "productivity": productivity,
+                "source": source,
+                "confidence": confidence,
+                "reason": reason,
+                "model": model,
+                "promptVersion": prompt_version,
+                "taxonomyVersion": taxonomy_version,
+                "inputFingerprint": input_fingerprint,
+                "aiResult": ai_result,
+                "stale": stale,
+                "classifiedAt": classified_at,
+            }
+        ])
+        return segment_id
+
 
 
 if __name__ == "__main__":
