@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-reusable-ai-classifications"
+description = "Enables the tracker_get_reusable_ai_classifications command without any pre-configured scope."
+commands.allow = ["tracker_get_reusable_ai_classifications"]
+
+[[permission]]
+identifier = "deny-tracker-get-reusable-ai-classifications"
+description = "Denies the tracker_get_reusable_ai_classifications command without any pre-configured scope."
+commands.deny = ["tracker_get_reusable_ai_classifications"]
