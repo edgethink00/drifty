@@ -152,6 +152,11 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke<ActivitySegment[]>("tracker_get_unclassified_segments", { query });
     return result ?? [];
   },
+  async getReusableAiClassifications(inputFingerprints: string[]) {
+    if (shouldUsePreviewData()) return {};
+    const result = await safeInvoke<Record<string, ActivityClassificationRecord>>("tracker_get_reusable_ai_classifications", { query: { inputFingerprints } });
+    return result ?? {};
+  },
   async saveClassifications(classifications: ActivityClassificationRecord[]) {
     const result = await safeInvoke<{ saved: number }>("tracker_save_classifications", { query: { classifications } });
     return result ?? { saved: 0 };
