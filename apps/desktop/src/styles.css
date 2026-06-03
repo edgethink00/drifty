@@ -12199,10 +12199,12 @@ button.flow-cell:focus {
 /* Row 1: weekly chart card + category donut bound in one panel */
 .insights-row--weekly-categories {
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 5.5fr) minmax(19rem, 4.5fr);
+  gap: 0.9rem;
   align-items: stretch;
-  background: color-mix(in srgb, var(--canvas) 90%, var(--text) 7%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, transparent), color-mix(in srgb, var(--surface-strong) 46%, var(--surface))),
+    var(--surface);
   border: 1px solid var(--line);
   border-radius: 22px;
   padding: 0.95rem;
@@ -12218,11 +12220,11 @@ button.flow-cell:focus {
 }
 
 .insights-row--weekly-categories > .weekly-productivity-trend-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 1.05rem 1.25rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0.25rem 0.2rem 0.1rem;
+  box-shadow: none;
   box-sizing: border-box;
 }
 
@@ -12242,10 +12244,10 @@ button.flow-cell:focus {
 /* Weekly breakdown card */
 .weekly-productivity-trend-card {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.52rem;
   min-width: 0;
   padding-bottom: 1.1rem;
-  background: var(--surface);
+  background: transparent;
 }
 
 .weekly-productivity-trend-card__head {
@@ -12254,6 +12256,7 @@ button.flow-cell:focus {
   justify-content: space-between;
   gap: 0.8rem;
   flex-wrap: wrap;
+  padding: 0 0.15rem;
 }
 
 .weekly-productivity-trend-card__head > div:not(.wt-toggle) {
@@ -12304,7 +12307,7 @@ button.flow-cell:focus {
   flex-wrap: nowrap;
   align-items: center;
   width: auto;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
   border-radius: 7px;
   padding: 3px;
   gap: 2px;
@@ -12342,19 +12345,28 @@ button.flow-cell:focus {
 /* Plot */
 .wt-plot {
   position: relative;
-  height: 13rem;
+  height: 12.9rem;
   margin-top: 0.15rem;
-  padding-right: 2.4rem;
+  padding: 0.82rem 3rem 0.16rem 1rem;
+  box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 58%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
+    color-mix(in srgb, var(--bg-2) 82%, var(--surface));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 74%, transparent),
+    0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .wt-grid {
   position: absolute;
-  top: 0;
-  bottom: 1.4rem;
-  left: 0;
-  right: 2.4rem;
+  top: 0.82rem;
+  bottom: 1.56rem;
+  left: 1rem;
+  right: 3rem;
   pointer-events: none;
   z-index: 0;
 }
@@ -12375,7 +12387,7 @@ button.flow-cell:focus {
 
 .wt-gridlabel {
   position: absolute;
-  right: -2.4rem;
+  right: -2.28rem;
   top: -0.55em;
   width: 2.1rem;
   text-align: right;
@@ -12449,18 +12461,39 @@ button.flow-cell:focus {
 
 /* Category donut */
 .od-cat-rebuilt {
-  display: flex;
-  flex-direction: column;
-  padding: 0.15rem 0.35rem 0.15rem 0.55rem;
+  display: grid;
+  align-items: stretch;
+  padding: 0.12rem 0.16rem 0.12rem 0.42rem;
   box-sizing: border-box;
+}
+
+.weekly-summary-rail__stack {
+  display: grid;
+  grid-template-rows: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 0.46rem;
+  min-height: 0;
+  height: 100%;
+}
+
+.weekly-summary-rail__summary {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+}
+
+.weekly-summary-rail__summary--productivity {
+  padding-top: 0.12rem;
 }
 
 .od-cat-body {
   display: grid;
-  grid-template-columns: 112px 1fr;
-  gap: 0.85rem;
+  grid-template-columns: minmax(5.8rem, 0.72fr) minmax(0, 1fr);
+  gap: 0.68rem;
   align-items: center;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .od-cat-left {
@@ -12472,9 +12505,10 @@ button.flow-cell:focus {
 
 .od-cat-donut-wrap {
   position: relative;
-  width: 112px;
-  height: 112px;
+  width: clamp(5.75rem, 7.2vw, 6.6rem);
+  height: clamp(5.75rem, 7.2vw, 6.6rem);
   flex: 0 0 auto;
+  margin-left: 0.2rem;
 }
 
 .od-cat-donut-wrap svg {
@@ -12495,14 +12529,14 @@ button.flow-cell:focus {
 }
 
 .od-cat-center-pct {
-  font-size: 1.32rem;
+  font-size: clamp(1rem, 1.3vw, 1.22rem);
   font-weight: 700;
   line-height: 1;
   color: var(--text);
 }
 
 .od-cat-center-label {
-  font-size: 0.6rem;
+  font-size: 0.56rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
   letter-spacing: 0.03em;
@@ -12513,7 +12547,7 @@ button.flow-cell:focus {
 .od-cat-right {
   display: flex;
   flex-direction: column;
-  gap: 0.62rem;
+  gap: 0.3rem;
   justify-content: center;
   min-width: 0;
 }
@@ -12521,18 +12555,18 @@ button.flow-cell:focus {
 .od-cat-row {
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.16rem;
 }
 
 .od-cat-row-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.42rem;
 }
 
 .od-cat-row-name {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--text);
   min-width: 0;
@@ -12543,22 +12577,22 @@ button.flow-cell:focus {
 
 .od-cat-row-meta {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.34rem;
   align-items: center;
   flex: 0 0 auto;
 }
 
 .od-cat-row-pct,
 .od-cat-row-time {
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-family: var(--font-mono);
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 72%, var(--text-soft));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .od-cat-bar-track {
-  height: 8px;
+  height: 6px;
   background: color-mix(in srgb, var(--text) 9%, transparent);
   border-radius: 999px;
   overflow: hidden;
