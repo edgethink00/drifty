@@ -3936,7 +3936,8 @@ function WeeklyCategoryRow({
   );
   const hasData = weekly.some((day) => day.isActive);
   const chart = useMemo(() => buildWeeklyChartView(weekly, mode, categorySeries), [categorySeries, mode, weekly]);
-  const donut = useMemo(() => buildDonutView(mode, categorySeries, productivityTotals), [categorySeries, mode, productivityTotals]);
+  const productivityDonut = useMemo(() => buildDonutView("productivity", categorySeries, productivityTotals), [categorySeries, productivityTotals]);
+  const categoryDonut = useMemo(() => buildDonutView("category", categorySeries, productivityTotals), [categorySeries, productivityTotals]);
 
   const hoverPayloads = useMemo(() => {
     const totalSeconds = mode === "productivity"
@@ -4067,65 +4068,104 @@ function WeeklyCategoryRow({
           </div>
         ) : <EmptyState title="No weekly trend yet" detail="Weekly focus and drift totals appear after activity is recorded." />}
       </section>
-      <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt is-linked" aria-label="Insight category breakdown" data-cat-mode={mode}>
-        {donut.rows.length > 0 ? (
-          <div className="od-cat-body">
-            <div className="od-cat-left">
-              <div className="od-cat-donut-wrap">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="50" cy="50" r="40" fill="none" style={{ stroke: "rgba(0,0,0,0.07)" }} strokeWidth="17" />
-                  {donut.slices.map((slice) => (
-                    <circle
-                      key={slice.key}
-                      className="od-cat-donut-slice"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      style={{ stroke: slice.color }}
-                      strokeWidth="17"
-                      strokeLinecap="butt"
-                      strokeDasharray={`${slice.dash.toFixed(2)} ${DONUT_CIRCUMFERENCE.toFixed(2)}`}
-                      strokeDashoffset={slice.offset.toFixed(2)}
-                      transform="rotate(-90 50 50)"
-                      onMouseEnter={(event: MouseEvent<SVGCircleElement>) => showAggregateHover(slice.key, event.clientX, event.clientY)}
-                      onMouseMove={(event: MouseEvent<SVGCircleElement>) => moveSegmentHover(event.clientX, event.clientY)}
-                      onMouseLeave={() => setHoveredSegment(null)}
-                    />
-                  ))}
-                </svg>
-                <div className="od-cat-center">
-                  <span className="od-cat-center-pct">{donut.centerPct}</span>
-                  <span className="od-cat-center-label">{donut.centerLabel}</span>
-                </div>
-              </div>
-            </div>
-            <div className="od-cat-right">
-              {donut.rows.map((row) => (
-                <div
-                  className="od-cat-row"
-                  key={row.key}
-                  onMouseEnter={(event: MouseEvent<HTMLDivElement>) => showAggregateHover(row.key, event.clientX, event.clientY)}
-                  onMouseMove={(event: MouseEvent<HTMLDivElement>) => moveSegmentHover(event.clientX, event.clientY)}
-                  onMouseLeave={() => setHoveredSegment(null)}
-                >
-                  <div className="od-cat-row-head">
-                    <span className="od-cat-row-name">{row.name}</span>
-                    <div className="od-cat-row-meta">
-                      <span className="od-cat-row-pct">{row.pct.toFixed(1)}%</span>
-                      <span className="od-cat-row-time">{row.time}</span>
-                    </div>
-                  </div>
-                  <div className="od-cat-bar-track">
-                    <div className="od-cat-bar-fill" style={{ width: `${row.fillPct.toFixed(1)}%`, background: row.color }} />
-                  </div>
-                </div>
-              ))}
-            </div>
+      <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail is-linked" aria-label="Insight weekly summaries">
+        {productivityDonut.rows.length > 0 || categoryDonut.rows.length > 0 ? (
+          <div className="weekly-summary-rail__stack">
+            <WeeklyDonutSummary
+              ariaLabel="Insight productivity breakdown"
+              className="weekly-summary-rail__summary--productivity"
+              view={productivityDonut}
+              onShowHover={showAggregateHover}
+              onMoveHover={moveSegmentHover}
+              onHideHover={() => setHoveredSegment(null)}
+            />
+            <WeeklyDonutSummary
+              ariaLabel="Insight category breakdown"
+              className="weekly-summary-rail__summary--category"
+              view={categoryDonut}
+              onShowHover={showAggregateHover}
+              onMoveHover={moveSegmentHover}
+              onHideHover={() => setHoveredSegment(null)}
+            />
           </div>
-        ) : <EmptyState title="No category split yet" detail="Category totals appear once activity is recorded." />}
+        ) : <EmptyState title="No weekly split yet" detail="Weekly focus and category totals appear once activity is recorded." />}
       </section>
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
+    </div>
+  );
+}
+
+function WeeklyDonutSummary({
+  ariaLabel,
+  className,
+  view,
+  onShowHover,
+  onMoveHover,
+  onHideHover,
+}: {
+  ariaLabel: string;
+  className: string;
+  view: DonutView;
+  onShowHover: (key: string, x: number, y: number) => void;
+  onMoveHover: (x: number, y: number) => void;
+  onHideHover: () => void;
+}) {
+  return (
+    <div className={`weekly-summary-rail__summary ${className}`} role="group" aria-label={ariaLabel}>
+      <div className="od-cat-body">
+        <div className="od-cat-left">
+          <div className="od-cat-donut-wrap">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="40" fill="none" style={{ stroke: "rgba(0,0,0,0.07)" }} strokeWidth="17" />
+              {view.slices.map((slice) => (
+                <circle
+                  key={slice.key}
+                  className="od-cat-donut-slice"
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="none"
+                  style={{ stroke: slice.color }}
+                  strokeWidth="17"
+                  strokeLinecap="butt"
+                  strokeDasharray={`${slice.dash.toFixed(2)} ${DONUT_CIRCUMFERENCE.toFixed(2)}`}
+                  strokeDashoffset={slice.offset.toFixed(2)}
+                  transform="rotate(-90 50 50)"
+                  onMouseEnter={(event: MouseEvent<SVGCircleElement>) => onShowHover(slice.key, event.clientX, event.clientY)}
+                  onMouseMove={(event: MouseEvent<SVGCircleElement>) => onMoveHover(event.clientX, event.clientY)}
+                  onMouseLeave={onHideHover}
+                />
+              ))}
+            </svg>
+            <div className="od-cat-center">
+              <span className="od-cat-center-pct">{view.centerPct}</span>
+              <span className="od-cat-center-label">{view.centerLabel}</span>
+            </div>
+          </div>
+        </div>
+        <div className="od-cat-right">
+          {view.rows.map((row) => (
+            <div
+              className="od-cat-row"
+              key={row.key}
+              onMouseEnter={(event: MouseEvent<HTMLDivElement>) => onShowHover(row.key, event.clientX, event.clientY)}
+              onMouseMove={(event: MouseEvent<HTMLDivElement>) => onMoveHover(event.clientX, event.clientY)}
+              onMouseLeave={onHideHover}
+            >
+              <div className="od-cat-row-head">
+                <span className="od-cat-row-name">{row.name}</span>
+                <div className="od-cat-row-meta">
+                  <span className="od-cat-row-pct">{row.pct.toFixed(1)}%</span>
+                  <span className="od-cat-row-time">{row.time}</span>
+                </div>
+              </div>
+              <div className="od-cat-bar-track">
+                <div className="od-cat-bar-fill" style={{ width: `${row.fillPct.toFixed(1)}%`, background: row.color }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -6165,7 +6205,7 @@ function buildDonutView(
     slices,
     centerPct: top ? `${Math.round(top.pct)}%` : "0%",
     centerLabel: top ? top.name : "—",
-    rows: withPct.slice(0, 6).map((item) => ({
+    rows: withPct.slice(0, mode === "category" ? 5 : 6).map((item) => ({
       key: item.key,
       name: item.name,
       pct: item.pct,

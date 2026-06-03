@@ -12,8 +12,8 @@ use commands::{
     setup_watcher_window, system_open_settings_pane, tracker_get_app_icons,
     tracker_get_classification_metrics, tracker_get_current_snapshot,
     tracker_get_hourly_summary, tracker_get_raw_events, tracker_get_status, tracker_get_timeline,
-    tracker_get_top_sites, tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
-    tracker_save_classifications, tracker_start, tracker_stop,
+    tracker_get_top_sites, tracker_get_unclassified_segments, tracker_get_reusable_ai_classifications,
+    tracker_refresh_non_ai_classifications, tracker_save_classifications, tracker_start, tracker_stop,
     watcher_peek_dismiss, watcher_peek_hide, watcher_peek_respond, watcher_peek_set_interactive,
     watcher_peek_show,
 };
@@ -23,6 +23,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::TrackerController;
 
+const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_ID: &str = "drifty-menu";
 const MENU_APP_INFO: &str = "menu-app-info";
 const MENU_UPDATE_STATUS: &str = "menu-update-status";
@@ -175,6 +176,22 @@ fn is_billing_success_deep_link(url: &str) -> bool {
     url == "drifty://billing/success" || url.starts_with("drifty://billing/success?")
 }
 
+fn should_hide_instead_of_close(label: &str) -> bool {
+    label == MAIN_WINDOW_LABEL
+}
+
+fn should_reveal_main_window_on_reopen(has_visible_windows: bool) -> bool {
+    !has_visible_windows
+}
+
+fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -182,10 +199,28 @@ pub fn run() {
         .manage(TrayProductivityState::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
-                .on_event(|app, event| {
-                    if let tauri::RunEvent::Opened { urls } = event {
+                .on_event(|app, event| match event {
+                    tauri::RunEvent::Opened { urls } => {
                         let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
                     }
+                    tauri::RunEvent::WindowEvent {
+                        label,
+                        event: tauri::WindowEvent::CloseRequested { api, .. },
+                        ..
+                    } if should_hide_instead_of_close(label) => {
+                        api.prevent_close();
+                        if let Some(window) = app.get_webview_window(label) {
+                            let _ = window.hide();
+                        }
+                    }
+                    #[cfg(target_os = "macos")]
+                    tauri::RunEvent::Reopen {
+                        has_visible_windows,
+                        ..
+                    } if should_reveal_main_window_on_reopen(*has_visible_windows) => {
+                        reveal_main_window(app);
+                    }
+                    _ => {}
                 })
                 .build(),
         );
@@ -197,11 +232,7 @@ pub fn run() {
             return;
         }
 
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.unminimize();
-            let _ = window.set_focus();
-        }
+        reveal_main_window(app);
     }));
 
     let builder = builder
@@ -232,6 +263,7 @@ pub fn run() {
             tracker_get_top_sites,
             tracker_get_app_icons,
             tracker_get_unclassified_segments,
+            tracker_get_reusable_ai_classifications,
             tracker_save_classifications,
             tracker_refresh_non_ai_classifications,
             tracker_get_classification_metrics,
@@ -263,11 +295,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id() {
             id if id == MENU_OPEN => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
+                reveal_main_window(app);
             }
             id if id == MENU_TRACKING_TOGGLE => {
                 let controller = app.state::<TrackerController>();
@@ -284,18 +312,14 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 update_tray_icon(app);
             }
             id if id == MENU_TOGGLE_THEME => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
+                reveal_main_window(app);
+                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                     let _ = window.emit("tray-toggle-theme", ());
                 }
             }
             id if id == MENU_SETTINGS => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
+                reveal_main_window(app);
+                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                     let _ = window.emit("tray-open-settings", ());
                 }
             }
@@ -471,6 +495,19 @@ mod tests {
     #[test]
     fn update_status_label_reports_no_updater() {
         assert_eq!(update_status_label(), "Updates: No updater configured");
+    }
+
+    #[test]
+    fn main_window_close_policy_only_handles_main_label() {
+        assert!(should_hide_instead_of_close("main"));
+        assert!(!should_hide_instead_of_close("watcher-peek"));
+        assert!(!should_hide_instead_of_close("settings"));
+    }
+
+    #[test]
+    fn macos_reopen_policy_reveals_only_without_visible_windows() {
+        assert!(should_reveal_main_window_on_reopen(false));
+        assert!(!should_reveal_main_window_on_reopen(true));
     }
 
     #[test]

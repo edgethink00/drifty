@@ -24,6 +24,7 @@
     "allow-tracker-get-top-sites",
     "allow-tracker-get-app-icons",
     "allow-tracker-get-unclassified-segments",
+    "allow-tracker-get-reusable-ai-classifications",
     "allow-tracker-save-classifications",
     "allow-tracker-refresh-non-ai-classifications",
     "allow-tracker-get-classification-metrics",

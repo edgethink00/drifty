@@ -278,6 +278,14 @@ def save_classifications(payload: dict):
     return response(True, {"saved": saved})
 
 
+def get_reusable_ai_classifications(payload: dict):
+    input_fingerprints = payload.get("inputFingerprints", payload.get("input_fingerprints", []))
+    if not isinstance(input_fingerprints, list):
+        return response(False, error="inputFingerprints must be a list")
+    fingerprints = [item for item in input_fingerprints if isinstance(item, str)]
+    return response(True, database().get_reusable_ai_classifications(fingerprints))
+
+
 def refresh_non_ai_classifications(payload: dict):
     start, end = day_bounds(payload)
     deleted = database().refresh_non_ai_classifications(start, end)
@@ -394,6 +402,7 @@ COMMANDS = {
     "get_raw_events": get_raw_events,
     "get_top_sites": get_top_sites,
     "get_unclassified_segments": get_unclassified_segments,
+    "get_reusable_ai_classifications": get_reusable_ai_classifications,
     "save_classifications": save_classifications,
     "refresh_non_ai_classifications": refresh_non_ai_classifications,
     "get_classification_metrics": get_classification_metrics,

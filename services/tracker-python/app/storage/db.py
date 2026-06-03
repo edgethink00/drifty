@@ -94,6 +94,9 @@ class TrackerDatabase:
                   ai_result INTEGER NOT NULL DEFAULT 0,
                   stale INTEGER NOT NULL DEFAULT 0
                 );
+
+                CREATE INDEX IF NOT EXISTS idx_activity_classifications_reusable_ai
+                ON activity_classifications(input_fingerprint, ai_result, stale, classified_at DESC, segment_id DESC);
                 """
             )
             self._ensure_columns(conn)
@@ -578,6 +581,64 @@ class TrackerDatabase:
                 )
                 saved += 1
         return saved
+
+    def get_reusable_ai_classifications(self, input_fingerprints: list[str]) -> dict[str, dict[str, Any]]:
+        fingerprints = list(dict.fromkeys(fingerprint for fingerprint in input_fingerprints if fingerprint))
+        if not fingerprints:
+            return {}
+
+        placeholders = ",".join("?" for _ in fingerprints)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    segment_id,
+                    input_fingerprint,
+                    category,
+                    productivity,
+                    source,
+                    confidence,
+                    reason,
+                    model,
+                    prompt_version,
+                    taxonomy_version,
+                    request_id,
+                    latency_ms,
+                    classified_at,
+                    ai_result,
+                    stale
+                FROM activity_classifications
+                WHERE input_fingerprint IN ({placeholders})
+                  AND ai_result = 1
+                  AND stale = 0
+                ORDER BY input_fingerprint ASC, classified_at DESC, segment_id DESC
+                """,
+                tuple(fingerprints),
+            ).fetchall()
+
+        reusable: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            fingerprint = row["input_fingerprint"]
+            if fingerprint in reusable:
+                continue
+            reusable[fingerprint] = {
+                "segmentId": str(row["segment_id"]),
+                "inputFingerprint": fingerprint,
+                "category": row["category"],
+                "productivity": row["productivity"],
+                "source": row["source"] or "llm",
+                "confidence": row["confidence"],
+                "reason": row["reason"],
+                "model": row["model"],
+                "promptVersion": row["prompt_version"],
+                "taxonomyVersion": row["taxonomy_version"],
+                "requestId": row["request_id"],
+                "latencyMs": row["latency_ms"],
+                "classifiedAt": row["classified_at"],
+                "aiResult": bool(row["ai_result"]),
+                "stale": bool(row["stale"]),
+            }
+        return reusable
 
     def refresh_non_ai_classifications(self, start: str | None = None, end: str | None = None) -> int:
         query = "DELETE FROM activity_classifications WHERE ai_result != 1"

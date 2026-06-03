@@ -1,4 +1,4 @@
-import type { ActivitySegment, ClassificationMetrics } from "@dtime/domain";
+import type { ActivityClassificationRecord, ActivitySegment, ClassificationMetrics } from "@dtime/domain";
 import { describe, expect, it, vi } from "vitest";
 import { CLOUD_API_CLIENT_VERSION, CLOUD_API_CONTRACT_VERSION } from "../../lib/cloudContract";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, estimateAiClassificationCostUsd, projectAiClassificationCost, type AiClassificationUsageSummary } from "./aiClassificationService";
@@ -144,7 +144,7 @@ describe("runAiClassification cloud contract", () => {
     };
   }
 
-  async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown } = {}) {
+  async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown; reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord> } = {}) {
     vi.resetModules();
 
     const invoke = vi.fn().mockResolvedValue({
@@ -163,6 +163,10 @@ describe("runAiClassification cloud contract", () => {
     const getUnclassifiedSegments = vi.fn().mockResolvedValue(segments);
     const saveClassifications = vi.fn((records: unknown[]) => Promise.resolve({ saved: records.length }));
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
+    const getReusableAiClassifications = vi.fn((fingerprints: string[]) => Promise.resolve(options.reusable?.(fingerprints) ?? {}));
+    const getSession = vi.fn().mockResolvedValue({
+      data: { session: "session" in options ? options.session : { access_token: "token" } },
+    });
     const nativeInvoke = vi.fn().mockResolvedValue({
       status: 200,
       body: JSON.stringify({
@@ -186,7 +190,7 @@ describe("runAiClassification cloud contract", () => {
 
     vi.doMock("../../lib/supabase/client", () => ({
       supabase: {
-        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: options.session ?? { access_token: "token" } } }) },
+        auth: { getSession },
         functions: { invoke },
       },
     }));
@@ -194,13 +198,35 @@ describe("runAiClassification cloud contract", () => {
     vi.doMock("../../lib/api/trackerClient", () => ({
       trackerClient: {
         getUnclassifiedSegments,
+        getReusableAiClassifications,
         saveClassifications,
         getClassificationMetrics,
       },
     }));
 
     const service = await import("./aiClassificationService");
-    return { ...service, invoke, nativeInvoke, getUnclassifiedSegments, saveClassifications, getClassificationMetrics };
+    return { ...service, invoke, nativeInvoke, getSession, getUnclassifiedSegments, getReusableAiClassifications, saveClassifications, getClassificationMetrics };
+  }
+
+  function createReusableRecord(inputFingerprint: string, overrides: Partial<ActivityClassificationRecord> = {}): ActivityClassificationRecord {
+    return {
+      segmentId: "cached-source-segment",
+      inputFingerprint,
+      category: "learning",
+      productivity: "focus",
+      source: "llm",
+      confidence: 0.93,
+      reason: "Copied from a previous local AI result",
+      model: "gemini-3.1-flash-lite",
+      promptVersion: "v1",
+      taxonomyVersion: "v1",
+      requestId: "previous-request",
+      latencyMs: 111,
+      aiResult: true,
+      stale: false,
+      classifiedAt: "2026-05-20T12:00:00.000Z",
+      ...overrides,
+    };
   }
 
   function cleanupServiceMocks() {
@@ -254,6 +280,7 @@ describe("runAiClassification cloud contract", () => {
     vi.doMock("../../lib/api/trackerClient", () => ({
       trackerClient: {
         getUnclassifiedSegments: vi.fn().mockResolvedValue([segment]),
+        getReusableAiClassifications: vi.fn().mockResolvedValue({}),
         saveClassifications,
         getClassificationMetrics,
       },
@@ -309,6 +336,50 @@ describe("runAiClassification cloud contract", () => {
       expect(getUnclassifiedSegments).toHaveBeenCalledWith({ day: "2026-05-22", limit: 20 });
       const body = invoke.mock.calls[0]?.[1]?.body as { items: unknown[] };
       expect(body.items).toHaveLength(5);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("reuses below-threshold cached fingerprints without waiting for a provider batch", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassificationForUnknownThreshold, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment], {
+        reusable: (fingerprints) => ({ [fingerprints[0]]: createReusableRecord(fingerprints[0], { category: "learning" }) }),
+      });
+      const result = await runAiClassificationForUnknownThreshold({ day: "2026-05-22", limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD);
+
+      expect(result.status).toBe("saved");
+      expect(result.selectedSegments).toBe(1);
+      expect(result.savedRecords).toBe(1);
+      expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "learning", aiResult: true })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("waits instead of calling a provider when reuse leaves too few threshold misses", async () => {
+    const segments = Array.from({ length: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, (_, index) => createUnknownSegment(index));
+
+    try {
+      const { runAiClassificationForUnknownThreshold, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments(segments, {
+        reusable: (fingerprints) => Object.fromEntries(
+          fingerprints.slice(0, 4).map((fingerprint) => [fingerprint, createReusableRecord(fingerprint, { category: "learning" })]),
+        ),
+      });
+      const result = await runAiClassificationForUnknownThreshold({ day: "2026-05-22", limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD);
+
+      expect(result.status).toBe("saved");
+      expect(result.selectedSegments).toBe(4);
+      expect(result.savedRecords).toBe(4);
+      expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(4);
+      expect(result.message).toContain("Only 1 unknown AI classification candidate found; waiting for 5");
     } finally {
       cleanupServiceMocks();
     }
@@ -418,6 +489,142 @@ describe("runAiClassification cloud contract", () => {
         model: "openrouter/auto",
         latencyMs: 321,
       })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("reuses cached fingerprint classifications before Supabase and saves a copied AI record for the current segment", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, invoke, getSession, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment], {
+        session: null,
+        reusable: (fingerprints) => ({ [fingerprints[0]]: createReusableRecord(fingerprints[0]) }),
+      });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(invoke).not.toHaveBeenCalled();
+      expect(getSession).not.toHaveBeenCalled();
+      expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
+      expect(getReusableAiClassifications.mock.calls[0]?.[0]).toHaveLength(1);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        source: "llm",
+        aiResult: true,
+        category: "learning",
+      })]);
+      const savedRecord = saveClassifications.mock.calls[0]?.[0]?.[0] as ActivityClassificationRecord;
+      expect(savedRecord.inputFingerprint).toBe(getReusableAiClassifications.mock.calls[0]?.[0]?.[0]);
+      expect(savedRecord.segmentId).not.toBe("cached-source-segment");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("saves cached hits and sends only fingerprint misses to Supabase", async () => {
+    const segments = [createUnknownSegment(1), createUnknownSegment(2)];
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments(segments, {
+        reusable: (fingerprints) => ({ [fingerprints[0]]: createReusableRecord(fingerprints[0], { category: "utility" }) }),
+      });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(getReusableAiClassifications.mock.calls[0]?.[0]).toHaveLength(2);
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<{ id: string; inputFingerprint: string }> };
+      expect(body.items).toHaveLength(1);
+      expect(body.items[0].id).toBe("segment-2");
+      expect(saveClassifications).toHaveBeenCalledTimes(2);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", category: "utility", aiResult: true })]);
+      expect(saveClassifications.mock.calls[1]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-2", category: "workspace", aiResult: true })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("reports saved reused records when remaining misses cannot use Supabase", async () => {
+    const segments = [createUnknownSegment(1), createUnknownSegment(2)];
+
+    try {
+      const { runAiClassification, invoke, getSession, saveClassifications } = await importServiceWithSegments(segments, {
+        session: null,
+        reusable: (fingerprints) => ({ [fingerprints[0]]: createReusableRecord(fingerprints[0], { category: "utility" }) }),
+      });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(result.selectedSegments).toBe(1);
+      expect(result.savedRecords).toBe(1);
+      expect(result.message).toContain("Saved 1 reused AI");
+      expect(result.message).toContain("Run AI classification for the remaining 1 unknown segment");
+      expect(getSession).toHaveBeenCalledTimes(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", category: "utility", aiResult: true })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("avoids native local provider invocation when every unknown fingerprint is cached", async () => {
+    const segments = [createUnknownSegment(1), createUnknownSegment(2)];
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments(segments, {
+        session: null,
+        reusable: (fingerprints) => Object.fromEntries(fingerprints.map((fingerprint) => [fingerprint, createReusableRecord(fingerprint)])),
+      });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "openrouter/auto" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(2);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("preserves current provider behavior on fingerprint miss", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment]);
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("saves deterministic rule rows before AI cache reuse and does not overwrite them", async () => {
+    const deterministicSegment = createUnknownSegment(99, {
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Project implementation",
+    });
+    const unknownSegment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([deterministicSegment, unknownSegment], {
+        reusable: (fingerprints) => ({ [fingerprints[0]]: createReusableRecord(fingerprints[0], { category: "learning" }) }),
+      });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(2);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-99", aiResult: false, source: "rule" })]);
+      expect(saveClassifications.mock.calls[1]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", aiResult: true, source: "llm" })]);
     } finally {
       cleanupServiceMocks();
     }
