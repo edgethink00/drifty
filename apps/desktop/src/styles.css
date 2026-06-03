@@ -9274,6 +9274,7 @@ button.flow-cell:focus {
 .dashboard-insight-stack .insight-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
   align-content: stretch;
   gap: 2px;
   height: 100%;
@@ -10616,7 +10617,7 @@ button.flow-cell:focus {
 
 .focus-drift__svg {
   width: 100%;
-  height: clamp(3.35rem, 6.4vw, 4.72rem);
+  height: clamp(4.19rem, 8vw, 5.9rem);
 }
 
 .focus-drift__axis {
