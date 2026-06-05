@@ -49,7 +49,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -2053,6 +2053,11 @@ export default function App() {
   }, [hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
 
   useEffect(() => {
+    if (isDevOnboardingBypassEnabled()) {
+      setOnboardingOpen(false);
+      return;
+    }
+
     if (authStatus === "loading") {
       setOnboardingOpen(false);
       return;
@@ -3301,6 +3306,9 @@ export default function App() {
                       <div className="settings-row"><label><div className="lbl">Start of day</div><div className="desc">Treat days as starting on this hour. Default is 4:00 AM.</div></label><div className="ctrl"><select className="settings-input settings-select" aria-label="Start of day" value={startOfDayValue} onChange={handleStartOfDayChange}>{START_OF_DAY_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select></div></div>
                       <div className="settings-row"><label><div className="lbl">Start of week</div><div className="desc">Choose the first day shown for weekly views.</div></label><div className="ctrl"><select className="settings-input settings-select" aria-label="Start of week" value={startOfWeek} onChange={handleStartOfWeekChange}>{START_OF_WEEK_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select></div></div>
                       <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
+                    </div>
+                    <div className="settings-block"><h3>Permissions</h3>
+                      <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Allow Drifty to read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleRequestAccessibility()}>Accessibility</button></div></div>
                     </div>
                     <div className="settings-block"><h3>Colors</h3>
                       <div className="settings-row settings-row--fallback" role="group" aria-label="Category colors"><div><div className="lbl">Category colors</div><div className="desc">Customize the colors used for classification categories.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{CATEGORY_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} category color`} value={categoryColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleCategoryColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetCategoryColors} disabled={!hasCategoryColorOverrides}>Set default</button></div></div>

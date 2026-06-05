@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { AuthProvider } from "./features/auth/AuthContext";
+import { initializePostHog } from "./lib/analytics/posthog";
 import "./styles.css";
 
 declare global {
@@ -16,6 +17,7 @@ window.__DTIME_SET_BOOT_STATUS__ = (message: string) => {
   if (shell) shell.dataset.bootStatus = message;
 };
 window.__DTIME_SET_BOOT_STATUS__?.("main.tsx loaded");
+initializePostHog();
 
 class BootstrapErrorBoundary extends React.Component<
   React.PropsWithChildren,
