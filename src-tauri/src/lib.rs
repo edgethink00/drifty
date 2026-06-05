@@ -10,13 +10,15 @@ use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_openai_chat,
     drift_alarm_action, drift_alarm_current, drift_alarm_dismiss, drift_alarm_hide,
     drift_alarm_show, setup_drift_alarm_window, setup_watcher_window, system_open_settings_pane,
-    tracker_get_app_icons, tracker_get_classification_metrics, tracker_get_current_snapshot,
-    tracker_get_hourly_summary, tracker_get_raw_events, tracker_get_reusable_ai_classifications,
-    tracker_get_status, tracker_get_timeline, tracker_get_top_sites,
-    tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
-    tracker_save_classifications, tracker_start, tracker_stop, watcher_peek_dismiss,
-    watcher_peek_end_of_day_review_action, watcher_peek_hide, watcher_peek_respond,
-    watcher_peek_set_interactive, watcher_peek_show,
+    tracker_apply_classification_rules, tracker_delete_classification_rule, tracker_get_app_icons,
+    tracker_get_classification_metrics, tracker_get_classification_rules,
+    tracker_get_current_snapshot, tracker_get_hourly_summary, tracker_get_raw_events,
+    tracker_get_reusable_ai_classifications, tracker_get_status, tracker_get_timeline,
+    tracker_get_top_sites, tracker_get_unclassified_segments,
+    tracker_refresh_non_ai_classifications, tracker_save_classification_rule,
+    tracker_save_classifications, tracker_search_classification_rule_candidates, tracker_start,
+    tracker_stop, watcher_peek_dismiss, watcher_peek_end_of_day_review_action,
+    watcher_peek_hide, watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
     DriftAlarmState,
 };
 use tauri::image::Image;
@@ -268,6 +270,11 @@ pub fn run() {
             tracker_get_app_icons,
             tracker_get_unclassified_segments,
             tracker_get_reusable_ai_classifications,
+            tracker_get_classification_rules,
+            tracker_save_classification_rule,
+            tracker_delete_classification_rule,
+            tracker_search_classification_rule_candidates,
+            tracker_apply_classification_rules,
             tracker_save_classifications,
             tracker_refresh_non_ai_classifications,
             tracker_get_classification_metrics,
@@ -352,7 +359,13 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let version = app.package_info().version.to_string();
-    let app_info = MenuItem::with_id(app, MENU_APP_INFO, app_version_label(&version), false, None::<&str>)?;
+    let app_info = MenuItem::with_id(
+        app,
+        MENU_APP_INFO,
+        app_version_label(&version),
+        false,
+        None::<&str>,
+    )?;
     let update_status = MenuItem::with_id(
         app,
         MENU_UPDATE_STATUS,
@@ -406,7 +419,9 @@ fn tracking_action_label(running: Option<bool>) -> &'static str {
 }
 
 fn update_tray_icon(app: &AppHandle) {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
     let mix = latest_tray_productivity_mix(app).or_else(|| {
         let controller = app.try_state::<TrackerController>()?;
         let (focus, drift, neutral) = controller.get_daily_stats(app);
@@ -471,28 +486,42 @@ mod tests {
 
     #[test]
     fn auth_deep_link_filter_accepts_drifty_callbacks() {
-        assert!(is_auth_callback_deep_link("drifty://auth/callback?code=startup-code"));
-        assert!(is_auth_callback_deep_link("drifty://auth/callback#access_token=access&refresh_token=refresh"));
-        assert!(!is_auth_callback_deep_link("drifty://auth/not-callback?code=ignored"));
+        assert!(is_auth_callback_deep_link(
+            "drifty://auth/callback?code=startup-code"
+        ));
+        assert!(is_auth_callback_deep_link(
+            "drifty://auth/callback#access_token=access&refresh_token=refresh"
+        ));
+        assert!(!is_auth_callback_deep_link(
+            "drifty://auth/not-callback?code=ignored"
+        ));
     }
 
     #[test]
     fn auth_deep_link_filter_temporarily_accepts_legacy_dtime_callbacks() {
-        assert!(is_auth_callback_deep_link("dtime://auth/callback?code=legacy-code"));
-        assert!(is_auth_callback_deep_link("dtime://auth/callback#access_token=access&refresh_token=refresh"));
+        assert!(is_auth_callback_deep_link(
+            "dtime://auth/callback?code=legacy-code"
+        ));
+        assert!(is_auth_callback_deep_link(
+            "dtime://auth/callback#access_token=access&refresh_token=refresh"
+        ));
     }
 
     #[test]
     fn billing_deep_link_filter_accepts_only_drifty_success_links() {
         assert!(is_billing_success_deep_link("drifty://billing/success"));
-        assert!(is_billing_success_deep_link("drifty://billing/success?checkout_id=checkout-1"));
+        assert!(is_billing_success_deep_link(
+            "drifty://billing/success?checkout_id=checkout-1"
+        ));
         assert!(!is_billing_success_deep_link("dtime://billing/success"));
         assert!(!is_billing_success_deep_link("drifty://billing/cancel"));
     }
 
     #[test]
     fn auth_session_legacy_path_uses_previous_bundle_id_sibling() {
-        let primary = PathBuf::from("/Users/example/Library/Application Support/so.drifty.mac/auth-session.json");
+        let primary = PathBuf::from(
+            "/Users/example/Library/Application Support/so.drifty.mac/auth-session.json",
+        );
 
         assert_eq!(
             legacy_auth_session_path(&primary),

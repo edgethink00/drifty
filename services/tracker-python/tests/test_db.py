@@ -398,9 +398,229 @@ class TrackerDatabaseTests(unittest.TestCase):
         deleted = self.database.refresh_non_ai_classifications()
         refreshed = self.database.fetch_timeline("2026-04-06")
 
-        self.assertEqual(deleted, 1)
+        self.assertEqual(deleted, 0)
         self.assertEqual(self.database.classification_metrics()["aiClassifiedSegments"], 1)
-        self.assertEqual(sum(1 for item in refreshed if item.get("classification")), 1)
+        self.assertEqual(sum(1 for item in refreshed if item.get("classification")), 2)
+        self.assertEqual(refreshed[1]["classification"]["source"], "rule")
+
+    def test_classification_rule_crud_normalizes_site_target(self) -> None:
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "https://www.Example.com/docs",
+                "category": "learning",
+                "productivity": "focus",
+                "confidence": 0.8,
+            }
+        )
+
+        rules = self.database.get_classification_rules()
+        deleted = self.database.delete_classification_rule(rule["id"])
+
+        self.assertEqual(rule["targetValue"], "example.com")
+        self.assertEqual(rules[0]["targetKind"], "site")
+        self.assertEqual(rules[0]["category"], "learning")
+        self.assertEqual(deleted, 1)
+        self.assertEqual(self.database.get_classification_rules(), [])
+
+    def test_search_classification_rule_candidates_returns_sites_and_apps(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:03:20+00:00",
+                "duration_seconds": 200,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Example Docs",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:10:00+00:00",
+                "ended_at": "2026-04-06T09:15:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Example Docs",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:10:00+00:00",
+                "duration_seconds": 600,
+                "app_name": "Safari Technology Preview",
+                "bundle_id": "com.apple.SafariTechnologyPreview",
+                "site_domain": "blog.example.com",
+                "site_title": "Example Blog",
+            }
+        )
+
+        site_candidates = self.database.search_classification_rule_candidates("example")
+        app_candidates = self.database.search_classification_rule_candidates("safari")
+
+        self.assertEqual(site_candidates[0]["targetValue"], "blog.example.com")
+        self.assertEqual(site_candidates[0]["targetKind"], "site")
+        self.assertEqual(site_candidates[0]["segmentCount"], 1)
+        self.assertEqual(site_candidates[0]["totalSeconds"], 600)
+        self.assertEqual(site_candidates[1]["targetValue"], "docs.example.com")
+        self.assertEqual(site_candidates[1]["segmentCount"], 2)
+        self.assertEqual(site_candidates[1]["totalSeconds"], 500)
+
+        self.assertEqual(app_candidates[0]["bundleId"], "com.apple.SafariTechnologyPreview")
+        self.assertEqual(app_candidates[0]["totalSeconds"], 600)
+        self.assertEqual(app_candidates[1]["bundleId"], "com.apple.Safari")
+        self.assertEqual(app_candidates[1]["totalSeconds"], 500)
+
+    def test_apply_classification_rules_matches_site_subdomains_and_app_names(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Linear",
+                "bundle_id": None,
+            }
+        )
+        site_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "example.com",
+                "category": "learning",
+                "productivity": "focus",
+            }
+        )
+        self.database.save_classification_rule(
+            {
+                "targetKind": "app",
+                "targetValue": "Linear",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(result["matchedCount"], 2)
+        self.assertEqual(result["appliedCount"], 2)
+        self.assertEqual(events[0]["classification"]["source"], "rule")
+        self.assertEqual(events[0]["classification"]["category"], "learning")
+        self.assertEqual(events[0]["classification"]["classificationRuleId"], site_rule["id"])
+        self.assertEqual(events[1]["classification"]["category"], "workspace")
+
+    def test_delete_classification_rule_removes_materialized_rule_classifications(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Linear",
+            }
+        )
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "app",
+                "targetValue": "Linear",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+        self.database.apply_classification_rules()
+        self.assertEqual(self.database.fetch_timeline("2026-04-06")[0]["classification"]["classificationRuleId"], rule["id"])
+
+        deleted = self.database.delete_classification_rule(rule["id"])
+        refreshed = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(deleted, 1)
+        self.assertNotIn("classification", refreshed[0])
+
+    def test_disabling_classification_rule_removes_materialized_rule_classifications(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+            }
+        )
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "example.com",
+                "category": "learning",
+                "productivity": "focus",
+            }
+        )
+        self.database.apply_classification_rules()
+        self.assertEqual(self.database.fetch_timeline("2026-04-06")[0]["classification"]["classificationRuleId"], rule["id"])
+
+        disabled = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "example.com",
+                "category": "learning",
+                "productivity": "focus",
+                "enabled": False,
+            }
+        )
+        refreshed = self.database.fetch_timeline("2026-04-06")
+
+        self.assertFalse(disabled["enabled"])
+        self.assertEqual(disabled["id"], rule["id"])
+        self.assertNotIn("classification", refreshed[0])
+
+    def test_save_classifications_clears_rule_id_for_non_rule_rows(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Linear",
+            }
+        )
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "app",
+                "targetValue": "Linear",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+        self.database.apply_classification_rules()
+        segment = self.database.fetch_timeline("2026-04-06")[0]
+        self.assertEqual(segment["classification"]["classificationRuleId"], rule["id"])
+
+        self.database.save_classifications(
+            [
+                {
+                    "segmentId": segment["id"],
+                    "category": "communication",
+                    "productivity": "neutral",
+                    "source": "manual",
+                    "confidence": 0.7,
+                    "inputFingerprint": "manual-fp",
+                }
+            ]
+        )
+
+        updated = self.database.fetch_timeline("2026-04-06")[0]
+        self.assertEqual(updated["classification"]["source"], "manual")
+        self.assertIsNone(updated["classification"]["classificationRuleId"])
 
     def test_reusable_ai_classification_lookup_returns_exact_fingerprint_hit(self) -> None:
         segment_id = self._insert_classified_segment(

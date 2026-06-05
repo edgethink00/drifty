@@ -48,6 +48,24 @@ pub struct ClassificationSaveQuery {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ClassificationRuleSaveQuery {
+    pub input: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationRuleDeleteQuery {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationRuleCandidateQuery {
+    pub query: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReusableAiClassificationsQuery {
     pub input_fingerprints: Vec<String>,
 }
@@ -64,9 +82,13 @@ pub async fn tracker_get_status(
     controller: State<'_, TrackerController>,
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
-    async_runtime::spawn_blocking(move || controller.get_status(&app).map_err(|error| error.to_string()))
-        .await
-        .map_err(|error| error.to_string())?
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_status(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -103,8 +125,8 @@ pub async fn tracker_get_timeline(
             .get_timeline(&app, query.day, query.start, query.end)
             .map_err(|error| error.to_string())
     })
-        .await
-        .map_err(|error| error.to_string())?
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -118,8 +140,8 @@ pub async fn tracker_get_current_snapshot(
             .get_current_snapshot(&app)
             .map_err(|error| error.to_string())
     })
-        .await
-        .map_err(|error| error.to_string())?
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -134,8 +156,8 @@ pub async fn tracker_get_hourly_summary(
             .get_hourly_summary(&app, query.day, query.start, query.end)
             .map_err(|error| error.to_string())
     })
-        .await
-        .map_err(|error| error.to_string())?
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -147,7 +169,14 @@ pub async fn tracker_get_raw_events(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .get_raw_events(&app, query.day, query.start, query.end, query.app_name, query.limit)
+            .get_raw_events(
+                &app,
+                query.day,
+                query.start,
+                query.end,
+                query.app_name,
+                query.limit,
+            )
             .map_err(|error| error.to_string())
     })
     .await
@@ -211,6 +240,91 @@ pub async fn tracker_get_reusable_ai_classifications(
     async_runtime::spawn_blocking(move || {
         controller
             .get_reusable_ai_classifications(&app, query.input_fingerprints)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_classification_rules(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_classification_rules(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_classification_rule(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ClassificationRuleSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_classification_rule(&app, query.input)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_classification_rule(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ClassificationRuleDeleteQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_classification_rule(&app, query.id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_search_classification_rule_candidates(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ClassificationRuleCandidateQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .search_classification_rule_candidates(&app, query.query)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_apply_classification_rules(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: Option<ClassificationQuery>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        let query = query.unwrap_or(ClassificationQuery {
+            day: None,
+            start: None,
+            end: None,
+            limit: None,
+        });
+        controller
+            .apply_classification_rules(&app, query.day, query.start, query.end, query.limit)
             .map_err(|error| error.to_string())
     })
     .await
