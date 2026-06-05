@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { CSSProperties, ChangeEvent, FocusEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@dtime/domain";
 import {
   buildAppUsageSummaries,
@@ -431,6 +433,7 @@ type MonthCellStyle = CSSProperties & {
 };
 
 type SettingsSection = "general" | "classification" | "aiSetup" | "notifications" | "privacy" | "data" | "dev";
+type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 type LocalAiProvider = "openrouter_byok" | "self_hosted";
 type LocalAiSetupState = {
   provider: LocalAiProvider;
@@ -920,6 +923,8 @@ function buildClassificationActivityRows(segs: ActivitySegment[]): Classificatio
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
+  const updaterCheckingRef = useRef(false);
+  const updaterInstallingRef = useRef(false);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const activeTab = activeSnapshot.tabId;
@@ -951,6 +956,11 @@ export default function App() {
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
+  const [updaterChecking, setUpdaterChecking] = useState(false);
+  const [updaterInstalling, setUpdaterInstalling] = useState(false);
+  const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
+  const [updaterError, setUpdaterError] = useState<string | null>(null);
   const [startOfDayMinutes, setStartOfDayMinutes] = useState(resolveInitialStartOfDayMinutes);
   const [startOfWeek, setStartOfWeek] = useState<StartOfWeek>(resolveInitialStartOfWeek);
   const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
@@ -1011,6 +1021,50 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+
+  const handleCheckForUpdates = useCallback(async () => {
+    if (updaterCheckingRef.current || updaterInstallingRef.current) return;
+
+    updaterCheckingRef.current = true;
+    setUpdaterChecking(true);
+    setUpdaterMessage(null);
+    setUpdaterError(null);
+
+    try {
+      const nextUpdate = await check();
+      setAvailableUpdate(nextUpdate);
+      if (!nextUpdate) setUpdaterMessage("Drifty is up to date.");
+    } catch (nextError) {
+      setAvailableUpdate(null);
+      setUpdaterError(`Update check failed: ${toErrorMessage(nextError)}`);
+    } finally {
+      updaterCheckingRef.current = false;
+      setUpdaterChecking(false);
+    }
+  }, []);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (!availableUpdate || updaterInstallingRef.current) return;
+
+    updaterInstallingRef.current = true;
+    setUpdaterInstalling(true);
+    setUpdaterError(null);
+
+    try {
+      await availableUpdate.downloadAndInstall();
+      await relaunch();
+    } catch (nextError) {
+      setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
+    } finally {
+      updaterInstallingRef.current = false;
+      setUpdaterInstalling(false);
+    }
+  }, [availableUpdate]);
+
+  const handleTrayCheckForUpdates = useCallback(() => {
+    openSettingsTab();
+    void handleCheckForUpdates();
+  }, [handleCheckForUpdates, openSettingsTab]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     shouldFocusEndOfDayReviewSettingsRef.current = true;
@@ -1757,6 +1811,26 @@ export default function App() {
       unlisten?.();
     };
   }, [openSettingsTab]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen("tray-check-for-updates", handleTrayCheckForUpdates).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [handleTrayCheckForUpdates]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -3725,6 +3799,9 @@ export default function App() {
                       <div className="settings-row"><label><div className="lbl">Start of week</div><div className="desc">Choose the first day shown for weekly views.</div></label><div className="ctrl"><select className="settings-input settings-select" aria-label="Start of week" value={startOfWeek} onChange={handleStartOfWeekChange}>{START_OF_WEEK_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select></div></div>
                       <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
                     </div>
+                    <div className="settings-block"><h3>Updates</h3>
+                      <div className="settings-row"><div><div className="lbl">Manual update check</div><div className="desc">Drifty checks GitHub Releases for signed update metadata before showing an available download.</div>{updaterMessage ? <p className="capture-recency" role="status">{updaterMessage}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleCheckForUpdates()} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? "Checking..." : "Check for Updates"}</button></div></div>
+                    </div>
                     <div className="settings-block"><h3>Permissions</h3>
                       <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Grant Accessibility permission so Drifty can read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleRequestAccessibility()}>Grant Accessibility access</button></div></div>
                     </div>
@@ -4036,6 +4113,26 @@ export default function App() {
           onChange={(updater) => setProfileDraft((draft) => ({ ...draft, ...updater, isPublic: true }))}
           onSave={() => void handleSaveProfileFromModal()}
         />
+      ) : null}
+
+      {availableUpdate ? (
+        <div className="auth-modal__overlay" onClick={() => setAvailableUpdate(null)}>
+          <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
+            <div className="profile-modal__header">
+              <div>
+                <span className="label-mono">Signed update</span>
+                <h2 id="available-update-title">Drifty {availableUpdate.version} is available</h2>
+              </div>
+            </div>
+            {availableUpdate.date ? <p className="capture-recency">Published {new Date(availableUpdate.date).toLocaleString()}</p> : null}
+            <p className="profile-modal__bio">{availableUpdate.body?.trim() || "No release notes were provided."}</p>
+            {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
+            <div className="profile-editor-modal__actions">
+              <button type="button" className="ghost-button" onClick={() => setAvailableUpdate(null)} disabled={updaterInstalling}>Not now</button>
+              <button type="button" className="settings-btn" onClick={() => void handleInstallUpdate()} disabled={updaterChecking || updaterInstalling}>{updaterInstalling ? "Installing..." : "Install and restart"}</button>
+            </div>
+          </section>
+        </div>
       ) : null}
 
     </div>

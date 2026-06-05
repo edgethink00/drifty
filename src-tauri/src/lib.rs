@@ -36,7 +36,7 @@ const MENU_TRACKING_TOGGLE: &str = "menu-tracking-toggle";
 const MENU_TOGGLE_THEME: &str = "menu-toggle-theme";
 const MENU_SETTINGS: &str = "menu-settings";
 const MENU_QUIT: &str = "menu-quit";
-const UPDATE_STATUS_LABEL: &str = "Updates: No updater configured";
+const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 const AUTH_SESSION_FILE_NAME: &str = "auth-session.json";
 const LEGACY_AUTH_APP_DATA_DIR_NAME: &str = "com.example.dtime";
 
@@ -244,6 +244,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TrackerController::default());
 
     builder
@@ -340,6 +342,12 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = window.emit("tray-open-settings", ());
                 }
             }
+            id if id == MENU_UPDATE_STATUS => {
+                reveal_main_window(app);
+                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    let _ = window.emit("tray-check-for-updates", ());
+                }
+            }
             id if id == MENU_QUIT => {
                 app.exit(0);
             }
@@ -370,7 +378,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         app,
         MENU_UPDATE_STATUS,
         update_status_label(),
-        false,
+        true,
         None::<&str>,
     )?;
 
@@ -532,8 +540,8 @@ mod tests {
     }
 
     #[test]
-    fn update_status_label_reports_no_updater() {
-        assert_eq!(update_status_label(), "Updates: No updater configured");
+    fn update_status_label_prompts_manual_update_checks() {
+        assert_eq!(update_status_label(), "Check for Updates...");
     }
 
     #[test]
