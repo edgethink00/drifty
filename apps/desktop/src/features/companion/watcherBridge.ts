@@ -5,7 +5,7 @@ import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
 type UnlistenFn = () => void;
 
 type WatcherResponseEvent = {
-  response: WatcherPeekResponse;
+  response: unknown;
 };
 
 export function isTauriRuntime() {
@@ -57,6 +57,6 @@ export async function listenToNativeWatcherDismissed(onDismissed: () => void): P
   return listen("watcher-peek-dismissed", onDismissed);
 }
 
-function isWatcherPeekResponse(value: string): value is WatcherPeekResponse {
+function isWatcherPeekResponse(value: unknown): value is WatcherPeekResponse {
   return value === "return" || value === "snooze" || value === "dismiss";
 }

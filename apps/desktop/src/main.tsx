@@ -1,9 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { AuthProvider } from "./features/auth/AuthContext";
-import { initializePostHog } from "./lib/analytics/posthog";
 import "./styles.css";
+
+type BootstrapSurface = "app" | "watcher" | "drift-alarm";
 
 declare global {
   interface Window {
@@ -17,7 +17,8 @@ window.__DTIME_SET_BOOT_STATUS__ = (message: string) => {
   if (shell) shell.dataset.bootStatus = message;
 };
 window.__DTIME_SET_BOOT_STATUS__?.("main.tsx loaded");
-initializePostHog();
+const initialSurface = resolveLocationSurface(window.location);
+if (initialSurface !== "app") document.documentElement.dataset.surface = initialSurface;
 
 class BootstrapErrorBoundary extends React.Component<
   React.PropsWithChildren,
@@ -45,7 +46,6 @@ class BootstrapErrorBoundary extends React.Component<
 
 function BootstrapLoader() {
   const [LoadedApp, setLoadedApp] = React.useState<React.ComponentType | null>(null);
-  const [isWatcherSurface, setIsWatcherSurface] = React.useState(window.location.pathname === "/watcher");
 
   React.useEffect(() => {
     window.__DTIME_SET_BOOT_STATUS__?.("Bootstrap shell mounted");
@@ -53,10 +53,9 @@ function BootstrapLoader() {
     const start = async () => {
       try {
         await waitForFirstFrameOrFallback();
-        const nextIsWatcherSurface = await resolveIsWatcherSurface();
-        setIsWatcherSurface(nextIsWatcherSurface);
+        const nextSurface = await resolveBootstrapSurface();
 
-        if (nextIsWatcherSurface) {
+        if (nextSurface === "watcher") {
           window.__DTIME_SET_BOOT_STATUS__?.("Importing watcher module…");
           const mod = await import("./features/companion/WatcherWindowApp");
           window.__DTIME_SET_BOOT_STATUS__?.("Watcher module imported");
@@ -64,10 +63,30 @@ function BootstrapLoader() {
           return;
         }
 
+        if (nextSurface === "drift-alarm") {
+          window.__DTIME_SET_BOOT_STATUS__?.("Importing drift alarm module…");
+          const mod = await import("./features/companion/DriftAlarmWindowApp");
+          window.__DTIME_SET_BOOT_STATUS__?.("Drift alarm module imported");
+          setLoadedApp(() => mod.DriftAlarmWindowApp);
+          return;
+        }
+
         window.__DTIME_SET_BOOT_STATUS__?.("Importing App module…");
-        const mod = await import("./App");
+        const [{ AuthProvider }, { initializePostHog }, mod] = await Promise.all([
+          import("./features/auth/AuthContext"),
+          import("./lib/analytics/posthog"),
+          import("./App"),
+        ]);
+        initializePostHog();
         window.__DTIME_SET_BOOT_STATUS__?.("App module imported");
-        setLoadedApp(() => mod.default);
+        const App = mod.default;
+        setLoadedApp(() => function AppWithAuthProvider() {
+          return (
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          );
+        });
       } catch (error) {
         const root = document.getElementById("root");
         if (!root) return;
@@ -89,24 +108,30 @@ function BootstrapLoader() {
   }, [LoadedApp]);
 
   if (!LoadedApp) return null;
-  if (isWatcherSurface) return <LoadedApp />;
-
-  return (
-    <AuthProvider>
-      <LoadedApp />
-    </AuthProvider>
-  );
+  return <LoadedApp />;
 }
 
-async function resolveIsWatcherSurface(): Promise<boolean> {
-  if (window.location.pathname === "/watcher") return true;
-  if (!("__TAURI_INTERNALS__" in window)) return false;
+function resolveLocationSurface(location: Pick<Location, "pathname" | "search">): BootstrapSurface {
+  const requestedSurface = new URLSearchParams(location.search).get("driftySurface");
+  if (requestedSurface === "watcher" || requestedSurface === "drift-alarm") return requestedSurface;
+  if (location.pathname === "/watcher") return "watcher";
+  if (location.pathname === "/drift-alarm") return "drift-alarm";
+  return "app";
+}
+
+async function resolveBootstrapSurface(): Promise<BootstrapSurface> {
+  const locationSurface = resolveLocationSurface(window.location);
+  if (locationSurface !== "app") return locationSurface;
+  if (!("__TAURI_INTERNALS__" in window)) return "app";
 
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    return getCurrentWindow().label === "watcher-peek";
+    const label = getCurrentWindow().label;
+    if (label === "watcher-peek") return "watcher";
+    if (label === "drift-alarm") return "drift-alarm";
+    return "app";
   } catch {
-    return false;
+    return "app";
   }
 }
 

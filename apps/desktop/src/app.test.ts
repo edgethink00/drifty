@@ -6,6 +6,7 @@ import {
   buildDailyTotals,
   buildHourlyBuckets,
   buildProductivityPersona,
+  computePreservedFocusStrikeSeconds,
   classifyActivity,
   classifyActivityDetailed,
   groupSegmentsByApp,
@@ -189,6 +190,122 @@ describe('domain helpers', () => {
 
     expect(previousLogicalDayBlocks.map((block) => block.minuteOfDay)).toEqual([3 * 60 + 50, 3 * 60 + 55]);
     expect(nextLogicalDayBlocks.map((block) => block.minuteOfDay)).toEqual([4 * 60]);
+  });
+
+  it('preserves a continuous focus strike immediately before drift', () => {
+    const focusStart = segment({
+      id: 'focus-start',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const focusFollowup = segment({
+      id: 'focus-followup',
+      start: localIso(9, 22),
+      end: localIso(9, 42),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const drift = segment({
+      id: 'drift',
+      start: localIso(9, 45),
+      end: localIso(9, 50),
+      appName: 'YouTube',
+      classification: { category: 'entertainment', productivity: 'drift', source: 'manual', confidence: 1, reason: 'Test drift' },
+    });
+
+    expect(computePreservedFocusStrikeSeconds([focusStart, focusFollowup, drift], drift)).toBe(40 * 60);
+  });
+
+  it('breaks the preserved focus strike after a gap over five minutes', () => {
+    const focus = segment({
+      id: 'focus-before-gap',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const drift = segment({
+      id: 'drift-after-gap',
+      start: localIso(9, 26),
+      end: localIso(9, 30),
+      appName: 'YouTube',
+      classification: { category: 'entertainment', productivity: 'drift', source: 'manual', confidence: 1, reason: 'Test drift' },
+    });
+
+    expect(computePreservedFocusStrikeSeconds([focus, drift], drift)).toBeNull();
+  });
+
+  it('keeps the preserved focus strike across an exact five minute gap', () => {
+    const focus = segment({
+      id: 'focus-exact-gap',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const drift = segment({
+      id: 'drift-exact-gap',
+      start: localIso(9, 25),
+      end: localIso(9, 30),
+      appName: 'YouTube',
+      classification: { category: 'entertainment', productivity: 'drift', source: 'manual', confidence: 1, reason: 'Test drift' },
+    });
+
+    expect(computePreservedFocusStrikeSeconds([focus, drift], drift)).toBe(20 * 60);
+  });
+
+  it('breaks the preserved focus strike when non-focus appears before drift', () => {
+    const focus = segment({
+      id: 'focus-before-neutral',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const neutral = segment({
+      id: 'neutral-before-drift',
+      start: localIso(9, 21),
+      end: localIso(9, 22),
+      appName: 'Finder',
+      classification: { category: 'utility', productivity: 'neutral', source: 'manual', confidence: 1, reason: 'Test neutral' },
+    });
+    const drift = segment({
+      id: 'drift-after-neutral',
+      start: localIso(9, 23),
+      end: localIso(9, 30),
+      appName: 'YouTube',
+      classification: { category: 'entertainment', productivity: 'drift', source: 'manual', confidence: 1, reason: 'Test drift' },
+    });
+
+    expect(computePreservedFocusStrikeSeconds([focus, neutral, drift], drift)).toBeNull();
+  });
+
+  it('ignores preserved focus strikes for non-current drift segments', () => {
+    const focus = segment({
+      id: 'focus-before-old-drift',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const oldDrift = segment({
+      id: 'old-drift',
+      start: localIso(9, 22),
+      end: localIso(9, 25),
+      appName: 'YouTube',
+      classification: { category: 'entertainment', productivity: 'drift', source: 'manual', confidence: 1, reason: 'Test drift' },
+    });
+    const currentFocus = segment({
+      id: 'later-focus',
+      start: localIso(9, 26),
+      end: localIso(9, 30),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+
+    expect(computePreservedFocusStrikeSeconds([focus, oldDrift, currentFocus], oldDrift)).toBeNull();
   });
 
   it('builds ranked app usage summaries', () => {
