@@ -107,7 +107,11 @@ impl TrackerController {
         start: Option<String>,
         end: Option<String>,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "get_hourly_summary", build_period_payload(day, start, end))
+        self.invoke::<Value>(
+            app,
+            "get_hourly_summary",
+            build_period_payload(day, start, end),
+        )
     }
 
     pub fn get_raw_events(
@@ -124,11 +128,7 @@ impl TrackerController {
             payload_object.insert("appName".into(), json!(app_name));
             payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
         }
-        self.invoke::<Value>(
-            app,
-            "get_raw_events",
-            payload,
-        )
+        self.invoke::<Value>(app, "get_raw_events", payload)
     }
 
     pub fn get_top_sites(
@@ -143,11 +143,7 @@ impl TrackerController {
         if let Some(payload_object) = payload.as_object_mut() {
             payload_object.insert("limit".into(), json!(limit.unwrap_or(10)));
         }
-        self.invoke::<Value>(
-            app,
-            "get_top_sites",
-            payload,
-        )
+        self.invoke::<Value>(app, "get_top_sites", payload)
     }
 
     pub fn get_unclassified_segments(
@@ -177,6 +173,53 @@ impl TrackerController {
         )
     }
 
+    pub fn get_classification_rules(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_classification_rules", json!({}))
+    }
+
+    pub fn save_classification_rule(
+        &self,
+        app: &AppHandle,
+        input: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "save_classification_rule", json!({ "input": input }))
+    }
+
+    pub fn delete_classification_rule(
+        &self,
+        app: &AppHandle,
+        id: String,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "delete_classification_rule", json!({ "id": id }))
+    }
+
+    pub fn search_classification_rule_candidates(
+        &self,
+        app: &AppHandle,
+        query: String,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "search_classification_rule_candidates",
+            json!({ "query": query }),
+        )
+    }
+
+    pub fn apply_classification_rules(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        let mut payload = build_period_payload(day, start, end);
+        if let Some(payload_object) = payload.as_object_mut() {
+            payload_object.insert("limit".into(), json!(limit));
+        }
+        self.invoke::<Value>(app, "apply_classification_rules", payload)
+    }
+
     pub fn save_classifications(
         &self,
         app: &AppHandle,
@@ -196,7 +239,11 @@ impl TrackerController {
         start: Option<String>,
         end: Option<String>,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "refresh_non_ai_classifications", build_period_payload(day, start, end))
+        self.invoke::<Value>(
+            app,
+            "refresh_non_ai_classifications",
+            build_period_payload(day, start, end),
+        )
     }
 
     pub fn get_classification_metrics(
@@ -213,7 +260,6 @@ impl TrackerController {
         }
         self.invoke::<Value>(app, "get_classification_metrics", payload)
     }
-
 
     pub fn get_daily_stats(&self, app: &AppHandle) -> (f64, f64, f64) {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -238,7 +284,10 @@ impl TrackerController {
                 .unwrap_or(0.0);
             let productivity = seg
                 .get("productivity")
-                .or_else(|| seg.get("classification").and_then(|c| c.get("productivity")))
+                .or_else(|| {
+                    seg.get("classification")
+                        .and_then(|c| c.get("productivity"))
+                })
                 .and_then(|v| v.as_str())
                 .unwrap_or("neutral");
             match productivity {
@@ -348,7 +397,9 @@ fn core_foundation_boolean_to_bool(value: u8) -> bool {
 
 #[cfg(target_os = "macos")]
 fn current_process_accessibility_trusted() -> Option<bool> {
-    Some(core_foundation_boolean_to_bool(unsafe { AXIsProcessTrusted() }))
+    Some(core_foundation_boolean_to_bool(unsafe {
+        AXIsProcessTrusted()
+    }))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -612,9 +663,27 @@ mod tests {
         let resource_dir = PathBuf::from("/Applications/Drifty.app/Contents/Resources");
         let candidates = tracker_script_resource_candidates(&resource_dir);
 
-        assert!(candidates.contains(&resource_dir.join("tracker-python").join("app").join("main.py")));
-        assert!(candidates.contains(&resource_dir.join("services").join("tracker-python").join("app").join("main.py")));
-        assert!(candidates.contains(&resource_dir.join("_up_").join("services").join("tracker-python").join("app").join("main.py")));
+        assert!(candidates.contains(
+            &resource_dir
+                .join("tracker-python")
+                .join("app")
+                .join("main.py")
+        ));
+        assert!(candidates.contains(
+            &resource_dir
+                .join("services")
+                .join("tracker-python")
+                .join("app")
+                .join("main.py")
+        ));
+        assert!(candidates.contains(
+            &resource_dir
+                .join("_up_")
+                .join("services")
+                .join("tracker-python")
+                .join("app")
+                .join("main.py")
+        ));
     }
 
     #[test]

@@ -12,6 +12,11 @@ export type TrackerCommand =
   | "tracker_get_app_icons"
   | "tracker_get_unclassified_segments"
   | "tracker_get_reusable_ai_classifications"
+  | "tracker_get_classification_rules"
+  | "tracker_save_classification_rule"
+  | "tracker_delete_classification_rule"
+  | "tracker_search_classification_rule_candidates"
+  | "tracker_apply_classification_rules"
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
@@ -40,6 +45,53 @@ export type TopSitesQuery = (DayQuery | DateRangeQuery) & {
 export interface AppIdentity {
   appName: string;
   bundleId?: string | null;
+}
+
+export type ClassificationRuleTargetKind = "app" | "site";
+
+export interface ClassificationRule {
+  id: string;
+  targetKind: ClassificationRuleTargetKind;
+  targetValue: string;
+  category: ActivityCategory;
+  productivity: ProductivityLabel;
+  enabled: boolean;
+  confidence?: number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ClassificationRuleInput {
+  targetKind: ClassificationRuleTargetKind;
+  targetValue: string;
+  category: ActivityCategory;
+  productivity: ProductivityLabel;
+  enabled?: boolean;
+  confidence?: number | null;
+}
+
+export interface ClassificationRuleCandidate {
+  id: string;
+  targetKind: ClassificationRuleTargetKind;
+  targetValue: string;
+  displayName: string;
+  appName?: string | null;
+  bundleId?: string | null;
+  siteDomain?: string | null;
+  siteTitle?: string | null;
+  browserName?: string | null;
+  category?: ActivityCategory | null;
+  productivity?: ProductivityLabel | null;
+  segmentCount: number;
+  totalSeconds: number;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
+}
+
+export interface ClassificationRuleApplyResult {
+  matchedCount: number;
+  appliedCount: number;
+  skippedCount: number;
 }
 
 export interface ActivityClassificationRecord {
@@ -92,6 +144,11 @@ export interface TrackerApi {
   getAppIcons(apps: AppIdentity[]): Promise<AppIconMap>;
   getUnclassifiedSegments(query: ClassificationQuery): Promise<ActivitySegment[]>;
   getReusableAiClassifications(inputFingerprints: string[]): Promise<Record<string, ActivityClassificationRecord>>;
+  getClassificationRules(): Promise<ClassificationRule[]>;
+  saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
+  deleteClassificationRule(id: string): Promise<{ deleted: number }>;
+  searchClassificationRuleCandidates(query: string): Promise<ClassificationRuleCandidate[]>;
+  applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;

@@ -107,6 +107,31 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["fp-one"]["segmentId"], "1")
         mock_db.get_reusable_ai_classifications.assert_called_once_with(["fp-one", "fp-two"])
 
+    def test_classification_rule_handlers_forward_to_database(self) -> None:
+        mock_db = MagicMock()
+        mock_db.get_classification_rules.return_value = []
+        mock_db.save_classification_rule.return_value = {"id": "rule-1"}
+        mock_db.delete_classification_rule.return_value = 1
+        mock_db.search_classification_rule_candidates.return_value = [{"id": "app:Linear"}]
+        mock_db.apply_classification_rules.return_value = {"matchedCount": 1, "appliedCount": 1, "skippedCount": 0}
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            rules = tracker_main.get_classification_rules({})
+            saved = tracker_main.save_classification_rule({"input": {"targetKind": "app", "targetValue": "Linear"}})
+            deleted = tracker_main.delete_classification_rule({"id": "rule-1"})
+            candidates = tracker_main.search_classification_rule_candidates({"query": "lin"})
+            applied = tracker_main.apply_classification_rules({"start": "2026-04-06T00:00:00", "end": "2026-04-07T00:00:00"})
+
+        self.assertTrue(rules["ok"])
+        self.assertEqual(saved["data"]["id"], "rule-1")
+        self.assertEqual(deleted["data"]["deleted"], 1)
+        self.assertEqual(candidates["data"][0]["id"], "app:Linear")
+        self.assertEqual(applied["data"]["appliedCount"], 1)
+        mock_db.save_classification_rule.assert_called_once_with({"targetKind": "app", "targetValue": "Linear"})
+        mock_db.delete_classification_rule.assert_called_once_with("rule-1")
+        mock_db.search_classification_rule_candidates.assert_called_once_with("lin")
+        mock_db.apply_classification_rules.assert_called_once_with("2026-04-06T00:00:00", "2026-04-07T00:00:00")
+
     def test_handle_idle_sample_trims_and_skips_when_threshold_reached(self) -> None:
         mock_db = MagicMock()
         now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)

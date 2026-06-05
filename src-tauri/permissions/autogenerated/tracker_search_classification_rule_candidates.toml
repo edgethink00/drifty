@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-search-classification-rule-candidates"
+description = "Enables the tracker_search_classification_rule_candidates command without any pre-configured scope."
+commands.allow = ["tracker_search_classification_rule_candidates"]
+
+[[permission]]
+identifier = "deny-tracker-search-classification-rule-candidates"
+description = "Denies the tracker_search_classification_rule_candidates command without any pre-configured scope."
+commands.deny = ["tracker_search_classification_rule_candidates"]

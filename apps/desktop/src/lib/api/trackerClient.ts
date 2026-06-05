@@ -6,6 +6,10 @@ import type {
   AppIdentity,
   ClassificationMetrics,
   ClassificationQuery,
+  ClassificationRule,
+  ClassificationRuleApplyResult,
+  ClassificationRuleCandidate,
+  ClassificationRuleInput,
   CurrentActivitySnapshot,
   ProductivityShareMix,
   RawEventsQuery,
@@ -156,6 +160,34 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return {};
     const result = await safeInvoke<Record<string, ActivityClassificationRecord>>("tracker_get_reusable_ai_classifications", { query: { inputFingerprints } });
     return result ?? {};
+  },
+  async getClassificationRules() {
+    const result = await safeInvoke<ClassificationRule[]>("tracker_get_classification_rules");
+    return result ?? [];
+  },
+  async saveClassificationRule(input: ClassificationRuleInput) {
+    const result = await safeInvoke<ClassificationRule>("tracker_save_classification_rule", { query: { input } });
+    return result ?? {
+      id: "",
+      targetKind: input.targetKind,
+      targetValue: input.targetValue,
+      category: input.category,
+      productivity: input.productivity,
+      enabled: input.enabled ?? true,
+      confidence: input.confidence ?? null,
+    };
+  },
+  async deleteClassificationRule(id: string) {
+    const result = await safeInvoke<{ deleted: number }>("tracker_delete_classification_rule", { query: { id } });
+    return result ?? { deleted: 0 };
+  },
+  async searchClassificationRuleCandidates(query: string) {
+    const result = await safeInvoke<ClassificationRuleCandidate[]>("tracker_search_classification_rule_candidates", { query: { query } });
+    return result ?? [];
+  },
+  async applyClassificationRules(query?: ClassificationQuery) {
+    const result = await safeInvoke<ClassificationRuleApplyResult>("tracker_apply_classification_rules", { query });
+    return result ?? { matchedCount: 0, appliedCount: 0, skippedCount: 0 };
   },
   async saveClassifications(classifications: ActivityClassificationRecord[]) {
     const result = await safeInvoke<{ saved: number }>("tracker_save_classifications", { query: { classifications } });

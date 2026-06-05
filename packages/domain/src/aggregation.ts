@@ -100,7 +100,7 @@ export interface CategoryHourMatrix {
 }
 
 export type ClassificationSurface = "browser" | "app";
-export type ClassificationSource = "youtube" | "domain-db" | "app-db" | "context" | "fallback" | "llm" | "manual" | "stored" | "unknown";
+export type ClassificationSource = "youtube" | "domain-db" | "app-db" | "context" | "fallback" | "llm" | "manual" | "rule" | "stored" | "unknown";
 
 export interface ActivityClassificationDetail extends ActivityClassification {
   surface: ClassificationSurface;
@@ -631,7 +631,7 @@ export function classifyActivity(segment: ActivitySegment, options?: Classificat
 export function classifyActivityDetailed(segment: ActivitySegment, options?: ClassificationOptions): ActivityClassificationDetail {
   const stored = segment.classification;
   if (stored && (stored.aiResult !== true || options?.includeAiClassifications !== false)) {
-    const source: ClassificationSource = stored.source === "llm" || stored.source === "manual" ? stored.source : "stored";
+    const source: ClassificationSource = stored.source === "llm" || stored.source === "manual" || stored.source === "rule" ? stored.source : "stored";
     return detail(
       { category: stored.category, productivity: stored.productivity },
       isBrowserActivity(segment) ? "browser" : "app",

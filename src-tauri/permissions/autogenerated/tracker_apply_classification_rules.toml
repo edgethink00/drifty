@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-apply-classification-rules"
+description = "Enables the tracker_apply_classification_rules command without any pre-configured scope."
+commands.allow = ["tracker_apply_classification_rules"]
+
+[[permission]]
+identifier = "deny-tracker-apply-classification-rules"
+description = "Denies the tracker_apply_classification_rules command without any pre-configured scope."
+commands.deny = ["tracker_apply_classification_rules"]

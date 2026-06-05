@@ -9761,6 +9761,220 @@ button.flow-cell:focus {
   gap: var(--space-2);
 }
 
+.settings-section--classification {
+  --classification-rule-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  --classification-rule-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
+}
+
+.classification-rule-form__grid {
+  align-items: end;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: minmax(14rem, 1.4fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+  width: 100%;
+}
+
+.classification-rule-form__grid--app {
+  grid-template-columns: minmax(14rem, 1.35fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+}
+
+.classification-rule-field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.classification-rule-field span,
+.classification-rule-hint,
+.classification-rule-copy,
+.classification-rule-selected,
+.classification-rule-candidates__heading {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-desc-size);
+}
+
+.classification-rule-field .settings-input {
+  width: 100%;
+}
+
+.classification-rule-selected {
+  margin: 0;
+}
+
+.classification-rule-candidates {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.classification-rule-candidates__heading {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.classification-rule-candidate {
+  align-items: center;
+  border: 1px solid var(--classification-rule-control-border);
+  border-radius: var(--radius-md);
+  background: var(--classification-rule-control-bg);
+  color: var(--text);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.classification-rule-candidate:hover,
+.classification-rule-candidate.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
+  transform: none;
+}
+
+.classification-rule-candidate__identity,
+.classification-rule-candidate__usage,
+.classification-rule-candidate__text {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.classification-rule-candidate__identity {
+  gap: var(--space-2);
+}
+
+.classification-rule-candidate__text,
+.classification-rule-candidate__usage {
+  align-items: flex-start;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.classification-rule-candidate__usage {
+  flex: 0 0 auto;
+  justify-items: end;
+  text-align: right;
+}
+
+.classification-rule-candidate strong,
+.classification-rule-card strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.classification-rule-candidate small,
+.classification-rule-candidate em,
+.classification-rule-card p {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-desc-size);
+  font-style: normal;
+}
+
+.classification-rule-list-head {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.classification-rule-list-head h3 {
+  border-bottom: 0;
+  margin-bottom: var(--space-1);
+  padding-bottom: 0;
+}
+
+.classification-rule-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.classification-rule-card {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 58%, transparent);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-3);
+}
+
+.classification-rule-card__main,
+.classification-rule-card__actions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.classification-rule-card__icon {
+  display: grid;
+  flex: 0 0 auto;
+  line-height: 0;
+  place-items: center;
+}
+
+.classification-rule-card__icon .site-favicon,
+.classification-rule-card__icon .app-glyph--sm,
+.classification-rule-card__icon .app-icon--sm {
+  border-radius: var(--radius-sm);
+}
+
+.classification-rule-card__main > div {
+  min-width: 0;
+}
+
+.classification-rule-card p {
+  margin: var(--space-1) 0 0;
+}
+
+.classification-rule-empty {
+  margin-top: var(--space-3);
+}
+
+@media (max-width: 1100px) {
+  .classification-rule-form__grid,
+  .classification-rule-form__grid--app,
+  .classification-rule-list-head,
+  .classification-rule-card {
+    grid-template-columns: 1fr;
+  }
+
+  .classification-rule-form__grid,
+  .classification-rule-form__grid--app {
+    align-items: stretch;
+  }
+
+  .classification-rule-list-head,
+  .classification-rule-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .classification-rule-candidate {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .classification-rule-candidate__usage {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .classification-rule-card__actions {
+    justify-content: space-between;
+  }
+}
+
 /* ── Companion watcher ambient orb ── */
 .watcher-window-surface {
   height: 100vh;
