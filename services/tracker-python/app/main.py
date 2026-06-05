@@ -286,6 +286,38 @@ def get_reusable_ai_classifications(payload: dict):
     return response(True, database().get_reusable_ai_classifications(fingerprints))
 
 
+def get_classification_rules(payload: dict):
+    return response(True, database().get_classification_rules())
+
+
+def save_classification_rule(payload: dict):
+    rule_input = payload.get("input", payload)
+    if not isinstance(rule_input, dict):
+        return response(False, error="input must be an object")
+    rule = database().save_classification_rule(rule_input)
+    return response(True, rule)
+
+
+def delete_classification_rule(payload: dict):
+    rule_id = payload.get("id")
+    if not isinstance(rule_id, str) or not rule_id:
+        return response(False, error="id is required")
+    deleted = database().delete_classification_rule(rule_id)
+    return response(True, {"deleted": deleted})
+
+
+def search_classification_rule_candidates(payload: dict):
+    query = payload.get("query", "")
+    if not isinstance(query, str):
+        return response(False, error="query must be a string")
+    return response(True, database().search_classification_rule_candidates(query))
+
+
+def apply_classification_rules(payload: dict):
+    start, end = day_bounds(payload or {})
+    return response(True, database().apply_classification_rules(start, end))
+
+
 def refresh_non_ai_classifications(payload: dict):
     start, end = day_bounds(payload)
     deleted = database().refresh_non_ai_classifications(start, end)
@@ -403,6 +435,11 @@ COMMANDS = {
     "get_top_sites": get_top_sites,
     "get_unclassified_segments": get_unclassified_segments,
     "get_reusable_ai_classifications": get_reusable_ai_classifications,
+    "get_classification_rules": get_classification_rules,
+    "save_classification_rule": save_classification_rule,
+    "delete_classification_rule": delete_classification_rule,
+    "search_classification_rule_candidates": search_classification_rule_candidates,
+    "apply_classification_rules": apply_classification_rules,
     "save_classifications": save_classifications,
     "refresh_non_ai_classifications": refresh_non_ai_classifications,
     "get_classification_metrics": get_classification_metrics,

@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
+
+
+VALID_RULE_TARGET_KINDS = {"app", "site"}
+DEFAULT_RULE_CONFIDENCE = 1.0
 
 
 class TrackerDatabase:
@@ -92,11 +98,31 @@ class TrackerDatabase:
                   classified_at TEXT NOT NULL,
                   refreshed_at TEXT,
                   ai_result INTEGER NOT NULL DEFAULT 0,
-                  stale INTEGER NOT NULL DEFAULT 0
+                  stale INTEGER NOT NULL DEFAULT 0,
+                  classification_rule_id TEXT REFERENCES classification_rules(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS classification_rules (
+                  id TEXT PRIMARY KEY,
+                  target_kind TEXT NOT NULL,
+                  target_value TEXT NOT NULL,
+                  normalized_target_value TEXT NOT NULL,
+                  category TEXT NOT NULL,
+                  productivity TEXT NOT NULL,
+                  enabled INTEGER NOT NULL DEFAULT 1,
+                  confidence REAL,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_activity_classifications_reusable_ai
                 ON activity_classifications(input_fingerprint, ai_result, stale, classified_at DESC, segment_id DESC);
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_classification_rules_target
+                ON classification_rules(target_kind, normalized_target_value);
+
+                CREATE INDEX IF NOT EXISTS idx_classification_rules_enabled
+                ON classification_rules(enabled, target_kind, normalized_target_value);
                 """
             )
             self._ensure_columns(conn)
@@ -141,6 +167,7 @@ class TrackerDatabase:
             "refreshed_at": "TEXT",
             "ai_result": "INTEGER NOT NULL DEFAULT 0",
             "stale": "INTEGER NOT NULL DEFAULT 0",
+            "classification_rule_id": "TEXT REFERENCES classification_rules(id) ON DELETE SET NULL",
         }
         for column, column_type in classification_optional_columns.items():
             if column not in classification_existing:
@@ -505,6 +532,294 @@ class TrackerDatabase:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [self._serialize_row(dict(row)) for row in rows]
 
+    def get_classification_rules(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, target_kind, target_value, category, productivity, enabled, confidence, created_at, updated_at
+                FROM classification_rules
+                ORDER BY target_kind ASC, target_value ASC
+                """
+            ).fetchall()
+        return [self._serialize_rule(row) for row in rows]
+
+    def save_classification_rule(self, rule_input: dict[str, Any]) -> dict[str, Any]:
+        target_kind = str(rule_input.get("targetKind", rule_input.get("target_kind", ""))).strip()
+        if target_kind not in VALID_RULE_TARGET_KINDS:
+            raise ValueError("targetKind must be 'site' or 'app'")
+
+        raw_target_value = str(rule_input.get("targetValue", rule_input.get("target_value", ""))).strip()
+        normalized_target_value = self._normalize_rule_target(target_kind, raw_target_value)
+        if not normalized_target_value:
+            raise ValueError("targetValue is required")
+
+        target_value = normalized_target_value if target_kind == "site" else raw_target_value
+        category = str(rule_input["category"])
+        productivity = str(rule_input["productivity"])
+        enabled = 1 if rule_input.get("enabled", True) else 0
+        confidence = rule_input.get("confidence")
+        if confidence is not None:
+            confidence = float(confidence)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        rule_id = str(rule_input.get("id") or uuid.uuid4())
+
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO classification_rules (
+                    id,
+                    target_kind,
+                    target_value,
+                    normalized_target_value,
+                    category,
+                    productivity,
+                    enabled,
+                    confidence,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(target_kind, normalized_target_value) DO UPDATE SET
+                    target_value = excluded.target_value,
+                    category = excluded.category,
+                    productivity = excluded.productivity,
+                    enabled = excluded.enabled,
+                    confidence = excluded.confidence,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    rule_id,
+                    target_kind,
+                    target_value,
+                    normalized_target_value,
+                    category,
+                    productivity,
+                    enabled,
+                    confidence,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            row = conn.execute(
+                """
+                SELECT id, target_kind, target_value, category, productivity, enabled, confidence, created_at, updated_at
+                FROM classification_rules
+                WHERE target_kind = ? AND normalized_target_value = ?
+                """,
+                (target_kind, normalized_target_value),
+            ).fetchone()
+            if row and not enabled:
+                conn.execute(
+                    "DELETE FROM activity_classifications WHERE source = 'rule' AND classification_rule_id = ?",
+                    (row["id"],),
+                )
+        return self._serialize_rule(row)
+
+    def delete_classification_rule(self, rule_id: str) -> int:
+        with self.connect() as conn:
+            conn.execute(
+                "DELETE FROM activity_classifications WHERE source = 'rule' AND classification_rule_id = ?",
+                (rule_id,),
+            )
+            cursor = conn.execute("DELETE FROM classification_rules WHERE id = ?", (rule_id,))
+            return cursor.rowcount
+
+    def search_classification_rule_candidates(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        needle = query.strip().lower()
+        candidates: list[dict[str, Any]] = []
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    normalized_site,
+                    site_title,
+                    browser_name,
+                    category,
+                    productivity,
+                    segment_count,
+                    total_seconds,
+                    first_seen_at,
+                    last_seen_at
+                FROM (
+                    SELECT
+                        lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, ''))) AS raw_site,
+                        site_title,
+                        browser_name,
+                        activity_classifications.category AS category,
+                        activity_classifications.productivity AS productivity,
+                        COUNT(*) AS segment_count,
+                        SUM(duration_seconds) AS total_seconds,
+                        MIN(started_at) AS first_seen_at,
+                        MAX(ended_at) AS last_seen_at,
+                        COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) AS normalized_site
+                    FROM activity_segments
+                    LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
+                    WHERE COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) IS NOT NULL
+                    GROUP BY lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')))
+                )
+                ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
+                """
+            ).fetchall()
+            for row in rows:
+                domain = self._normalize_site_target(row["normalized_site"])
+                if not domain or (needle and needle not in domain.lower() and needle not in str(row["site_title"] or "").lower()):
+                    continue
+                candidates.append(
+                    {
+                        "id": f"site:{domain}",
+                        "targetKind": "site",
+                        "targetValue": domain,
+                        "displayName": domain,
+                        "appName": None,
+                        "bundleId": None,
+                        "siteDomain": domain,
+                        "siteTitle": row["site_title"],
+                        "browserName": row["browser_name"],
+                        "category": row["category"],
+                        "productivity": row["productivity"],
+                        "segmentCount": int(row["segment_count"] or 0),
+                        "totalSeconds": int(row["total_seconds"] or 0),
+                        "firstSeenAt": row["first_seen_at"],
+                        "lastSeenAt": row["last_seen_at"],
+                    }
+                )
+
+            rows = conn.execute(
+                """
+                SELECT
+                    app_name,
+                    bundle_id,
+                    activity_classifications.category AS category,
+                    activity_classifications.productivity AS productivity,
+                    COUNT(*) AS segment_count,
+                    SUM(duration_seconds) AS total_seconds,
+                    MIN(started_at) AS first_seen_at,
+                    MAX(ended_at) AS last_seen_at
+                FROM activity_segments
+                LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
+                GROUP BY app_name, bundle_id
+                ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
+                """
+            ).fetchall()
+            for row in rows:
+                app_name = row["app_name"] or ""
+                bundle_id = row["bundle_id"]
+                searchable = f"{app_name} {bundle_id or ''}".lower()
+                if needle and needle not in searchable:
+                    continue
+                target_value = bundle_id if bundle_id else app_name
+                if not target_value:
+                    continue
+                candidates.append(
+                    {
+                        "id": f"app:{target_value}",
+                        "targetKind": "app",
+                        "targetValue": target_value,
+                        "displayName": app_name,
+                        "appName": app_name,
+                        "bundleId": bundle_id,
+                        "siteDomain": None,
+                        "siteTitle": None,
+                        "browserName": None,
+                        "category": row["category"],
+                        "productivity": row["productivity"],
+                        "segmentCount": int(row["segment_count"] or 0),
+                        "totalSeconds": int(row["total_seconds"] or 0),
+                        "firstSeenAt": row["first_seen_at"],
+                        "lastSeenAt": row["last_seen_at"],
+                    }
+                )
+        return candidates[:limit]
+
+    def apply_classification_rules(self, start: str | None = None, end: str | None = None) -> dict[str, int]:
+        with self.connect() as conn:
+            rules = conn.execute(
+                """
+                SELECT id, target_kind, target_value, normalized_target_value, category, productivity, confidence
+                FROM classification_rules
+                WHERE enabled = 1
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).fetchall()
+            if not rules:
+                return {"matchedCount": 0, "appliedCount": 0, "skippedCount": 0}
+
+            query = "SELECT * FROM activity_segments WHERE 1=1"
+            params: list[Any] = []
+            if start:
+                query += " AND ended_at >= ?"
+                params.append(start)
+            if end:
+                query += " AND started_at <= ?"
+                params.append(end)
+            rows = conn.execute(query, tuple(params)).fetchall()
+
+            matched_count = 0
+            applied_count = 0
+            skipped_count = 0
+            timestamp = datetime.now(timezone.utc).isoformat()
+            for segment in rows:
+                rule = self._matching_rule(segment, rules)
+                if not rule:
+                    continue
+                matched_count += 1
+                segment_id = int(segment["id"])
+                cursor = conn.execute(
+                    """
+                    INSERT INTO activity_classifications (
+                        segment_id,
+                        input_fingerprint,
+                        category,
+                        productivity,
+                        source,
+                        confidence,
+                        reason,
+                        model,
+                        prompt_version,
+                        taxonomy_version,
+                        request_id,
+                        latency_ms,
+                        classified_at,
+                        refreshed_at,
+                        ai_result,
+                        stale,
+                        classification_rule_id
+                    ) VALUES (?, ?, ?, ?, 'rule', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, 0, 0, ?)
+                    ON CONFLICT(segment_id) DO UPDATE SET
+                        input_fingerprint = excluded.input_fingerprint,
+                        category = excluded.category,
+                        productivity = excluded.productivity,
+                        source = excluded.source,
+                        confidence = excluded.confidence,
+                        reason = excluded.reason,
+                        model = excluded.model,
+                        prompt_version = excluded.prompt_version,
+                        taxonomy_version = excluded.taxonomy_version,
+                        request_id = excluded.request_id,
+                        latency_ms = excluded.latency_ms,
+                        classified_at = excluded.classified_at,
+                        refreshed_at = excluded.refreshed_at,
+                        ai_result = excluded.ai_result,
+                        stale = excluded.stale,
+                        classification_rule_id = excluded.classification_rule_id
+                    """,
+                    (
+                        segment_id,
+                        f"rule:{rule['id']}:{segment_id}",
+                        rule["category"],
+                        rule["productivity"],
+                        float(rule["confidence"] if rule["confidence"] is not None else DEFAULT_RULE_CONFIDENCE),
+                        self._rule_reason(rule),
+                        timestamp,
+                        timestamp,
+                        rule["id"],
+                    ),
+                )
+                if cursor.rowcount > 0:
+                    applied_count += 1
+                else:
+                    skipped_count += 1
+        return {"matchedCount": matched_count, "appliedCount": applied_count, "skippedCount": skipped_count}
+
     def save_classifications(self, classifications: list[dict[str, Any]]) -> int:
         saved = 0
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -522,6 +837,7 @@ class TrackerDatabase:
                 classified_at = item.get("classifiedAt") or item.get("classified_at") or timestamp
                 ai_result = 1 if item.get("aiResult", item.get("ai_result", source == "llm")) else 0
                 stale = 1 if item.get("stale") else 0
+                classification_rule_id = item.get("classificationRuleId", item.get("classification_rule_id")) if source == "rule" else None
 
                 conn.execute(
                     """
@@ -541,8 +857,9 @@ class TrackerDatabase:
                         classified_at,
                         refreshed_at,
                         ai_result,
-                        stale
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        stale,
+                        classification_rule_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(segment_id) DO UPDATE SET
                         input_fingerprint = excluded.input_fingerprint,
                         category = excluded.category,
@@ -558,7 +875,8 @@ class TrackerDatabase:
                         classified_at = excluded.classified_at,
                         refreshed_at = excluded.refreshed_at,
                         ai_result = excluded.ai_result,
-                        stale = excluded.stale
+                        stale = excluded.stale,
+                        classification_rule_id = excluded.classification_rule_id
                     """,
                     (
                         segment_id,
@@ -577,6 +895,7 @@ class TrackerDatabase:
                         timestamp,
                         ai_result,
                         stale,
+                        classification_rule_id,
                     ),
                 )
                 saved += 1
@@ -641,7 +960,7 @@ class TrackerDatabase:
         return reusable
 
     def refresh_non_ai_classifications(self, start: str | None = None, end: str | None = None) -> int:
-        query = "DELETE FROM activity_classifications WHERE ai_result != 1"
+        query = "DELETE FROM activity_classifications WHERE ai_result != 1 AND source != 'rule'"
         params: list[Any] = []
         filters: list[str] = []
         if start:
@@ -654,7 +973,9 @@ class TrackerDatabase:
             query += f" AND segment_id IN (SELECT id FROM activity_segments WHERE {' AND '.join(filters)})"
         with self.connect() as conn:
             cursor = conn.execute(query, tuple(params))
-            return cursor.rowcount
+            deleted = cursor.rowcount
+        self.apply_classification_rules(start, end)
+        return deleted
 
     def classification_metrics(self, start: str | None = None, end: str | None = None) -> dict[str, int]:
         query = """
@@ -716,7 +1037,8 @@ class TrackerDatabase:
                 activity_classifications.input_fingerprint AS classification_input_fingerprint,
                 activity_classifications.classified_at AS classification_classified_at,
                 activity_classifications.ai_result AS classification_ai_result,
-                activity_classifications.stale AS classification_stale
+                activity_classifications.stale AS classification_stale,
+                activity_classifications.classification_rule_id AS classification_rule_id
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
@@ -772,7 +1094,8 @@ class TrackerDatabase:
                 activity_classifications.input_fingerprint AS classification_input_fingerprint,
                 activity_classifications.classified_at AS classification_classified_at,
                 activity_classifications.ai_result AS classification_ai_result,
-                activity_classifications.stale AS classification_stale
+                activity_classifications.stale AS classification_stale,
+                activity_classifications.classification_rule_id AS classification_rule_id
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
@@ -811,6 +1134,69 @@ class TrackerDatabase:
         return list(buckets.values())
 
     @staticmethod
+    def _serialize_rule(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "targetKind": row["target_kind"],
+            "targetValue": row["target_value"],
+            "category": row["category"],
+            "productivity": row["productivity"],
+            "enabled": bool(row["enabled"]),
+            "confidence": row["confidence"],
+            "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"],
+        }
+
+    @staticmethod
+    def _normalize_rule_target(target_kind: str, value: str | None) -> str:
+        if target_kind == "site":
+            return TrackerDatabase._normalize_site_target(value)
+        return TrackerDatabase._normalize_app_target(value)
+
+    @staticmethod
+    def _normalize_site_target(value: str | None) -> str:
+        if not value:
+            return ""
+        text = value.strip().lower()
+        if not text:
+            return ""
+        parsed = urlparse(text if "://" in text else f"//{text}")
+        host = parsed.hostname or text.split("/", 1)[0].split(":", 1)[0]
+        while host.startswith("www."):
+            host = host[4:]
+        return host.strip(".")
+
+    @staticmethod
+    def _normalize_app_target(value: str | None) -> str:
+        return " ".join((value or "").strip().lower().split())
+
+    @staticmethod
+    def _looks_like_bundle_id(value: str | None) -> bool:
+        text = (value or "").strip()
+        return "." in text and " " not in text
+
+    def _matching_rule(self, segment: sqlite3.Row, rules: list[sqlite3.Row]) -> sqlite3.Row | None:
+        for rule in rules:
+            if rule["target_kind"] == "site":
+                host = self._normalize_site_target(segment["site_domain"] or segment["site_url"])
+                target = rule["normalized_target_value"]
+                if host and (host == target or host.endswith(f".{target}")):
+                    return rule
+                continue
+
+            bundle_id = segment["bundle_id"]
+            target = rule["target_value"]
+            if (self._looks_like_bundle_id(target) or bundle_id) and bundle_id == target:
+                return rule
+            if self._normalize_app_target(segment["app_name"]) == rule["normalized_target_value"]:
+                return rule
+        return None
+
+    @staticmethod
+    def _rule_reason(rule: sqlite3.Row) -> str:
+        return f"Matched local {rule['target_kind']} rule: {rule['target_value']}"
+
+    @staticmethod
     def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
         classification = None
         if row.get("classification_category"):
@@ -827,6 +1213,7 @@ class TrackerDatabase:
                 "classifiedAt": row.get("classification_classified_at"),
                 "aiResult": bool(row.get("classification_ai_result")),
                 "stale": bool(row.get("classification_stale")),
+                "classificationRuleId": row.get("classification_rule_id"),
             }
 
         serialized = {
