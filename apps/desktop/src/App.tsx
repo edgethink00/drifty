@@ -64,11 +64,19 @@ import {
   type WatcherPeekResponse,
 } from "./features/companion/WatcherPeek";
 import {
+  EndOfDayReview,
+  buildEndOfDayReviewSummary,
+  type EndOfDayReviewEvent,
+} from "./features/companion/EndOfDayReview";
+import {
   hideNativeWatcherPeek,
   isTauriRuntime,
+  listenToNativeEndOfDayReviewAction,
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
+  showNativeEndOfDayReview,
   showNativeWatcherPeek,
+  type EndOfDayReviewAction,
 } from "./features/companion/watcherBridge";
 import {
   fallbackDisplayName,
@@ -458,6 +466,7 @@ const WATCHER_MODE_STORAGE_KEY = "drifty.companion.watcherMode";
 const WATCHER_PERIODIC_MIN_STORAGE_KEY = "drifty.companion.periodicMinMinutes";
 const WATCHER_PERIODIC_MAX_STORAGE_KEY = "drifty.companion.periodicMaxMinutes";
 const WATCHER_RESPONSE_STORAGE_KEY = "drifty.companion.watcherResponses";
+const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
 const LEGACY_WATCHER_PEEK_STORAGE_KEY = "dtime.companion.watcherPeek";
 const LEGACY_WATCHER_MODE_STORAGE_KEY = "dtime.companion.watcherMode";
 const LEGACY_WATCHER_PERIODIC_MIN_STORAGE_KEY = "dtime.companion.periodicMinMinutes";
@@ -517,6 +526,7 @@ const DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES = { min: 10, max: 30 };
 const WATCHER_PERIODIC_MIN_LIMIT_MINUTES = 10;
 const WATCHER_PERIODIC_MAX_LIMIT_MINUTES = 240;
 const WATCHER_INITIAL_PEEK_DELAY_MS = 5_000;
+const END_OF_DAY_REVIEW_TRIGGER_MINUTE = 18 * 60;
 const WATCHER_DRIFT_ONLY_CHECK_DELAY_MS = 10_000;
 const WATCHER_DRIFT_REMINDER_THRESHOLDS_SECONDS = [10, 5 * 60, 30 * 60, 60 * 60, 2 * 60 * 60] as const;
 const WATCHER_STALE_EVENT_RECOVERY_MS = 30_000;
@@ -888,6 +898,7 @@ function buildClassificationActivityRows(segs: ActivitySegment[]): Classificatio
 
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
+  const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const activeTab = activeSnapshot.tabId;
@@ -904,6 +915,7 @@ export default function App() {
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
+  const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
   const [leaderboardSegments, setLeaderboardSegments] = useState<ActivitySegment[]>([]);
   const [hourly, setHourly] = useState<HourBucket[]>([]);
@@ -930,6 +942,7 @@ export default function App() {
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
   const [watcherPeriodicMaxMinutes, setWatcherPeriodicMaxMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("max"));
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
+  const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
@@ -958,6 +971,30 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+
+  const openEndOfDayReviewSettings = useCallback(() => {
+    shouldFocusEndOfDayReviewSettingsRef.current = true;
+    setSettingsSection("notifications");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
+
+  const openEndOfDayReviewDashboard = useCallback(() => {
+    setEndOfDayReviewEvent(null);
+    selectDay(logicalTodayIsoDate(startOfDayMinutes));
+    navigateToTab("dashboard", "Today");
+  }, [navigateToTab, startOfDayMinutes]);
+
+  const handleEndOfDayReviewAction = useCallback((action: EndOfDayReviewAction) => {
+    setEndOfDayReviewEvent(null);
+
+    if (action === "openNotificationSettings") {
+      openEndOfDayReviewSettings();
+      return;
+    }
+
+    openEndOfDayReviewDashboard();
+  }, [openEndOfDayReviewDashboard, openEndOfDayReviewSettings]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [developerAuthRequiredPreview, setDeveloperAuthRequiredPreview] = useState(false);
@@ -1041,6 +1078,8 @@ export default function App() {
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
   const watcherRequestInFlightRef = useRef(false);
   const watcherRecoveryTimeoutRef = useRef(0);
+  const endOfDayReviewQueryPreviewShownRef = useRef(false);
+  const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
@@ -1132,6 +1171,29 @@ export default function App() {
     });
   }, [armWatcherRecoveryTimer, clearWatcherEvent, showAiClassificationImpact]);
 
+  const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<boolean> => {
+    if (!isTauriRuntime()) {
+      setEndOfDayReviewEvent(event);
+      return true;
+    }
+
+    try {
+      return await showNativeEndOfDayReview(event);
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleEndOfDayReviewPreview = useCallback(() => {
+    const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
+    showEndOfDayReview(buildEndOfDayReviewSummary({
+      day: selectedDay,
+      generatedAt: new Date().toISOString(),
+      segments: previewSegments,
+      isMock: true,
+    }));
+  }, [segments, selectedDay, showEndOfDayReview]);
+
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
     if (!currentEvent) return;
@@ -1206,6 +1268,7 @@ export default function App() {
 
       setCurrentSnapshot(nextCurrentSnapshot);
       setSegments(timeline);
+      setSegmentsLoadedDay(day);
       setHistorySegments(historyTimeline);
       setHourly(buildHourlySummary(timeline));
       setInsightHourly(historyHourlySummary);
@@ -1398,6 +1461,16 @@ export default function App() {
   useEffect(() => () => clearWatcherRecoveryTimer(), [clearWatcherRecoveryTimer]);
 
   useEffect(() => {
+    if (activeTab !== "settings" || settingsSection !== "notifications") return;
+    if (!shouldFocusEndOfDayReviewSettingsRef.current) return;
+
+    shouldFocusEndOfDayReviewSettingsRef.current = false;
+    const row = endOfDayReviewSettingsRowRef.current;
+    if (typeof row?.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
+    row?.focus();
+  }, [activeTab, settingsSection]);
+
+  useEffect(() => {
     if (!isTauriRuntime()) return undefined;
 
     let disposed = false;
@@ -1441,6 +1514,15 @@ export default function App() {
     let disposed = false;
     const unlisteners: Array<() => void> = [];
 
+    void listenToNativeEndOfDayReviewAction(handleEndOfDayReviewAction).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
     void listenToNativeWatcherResponse(handleWatcherResponse).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -1463,7 +1545,7 @@ export default function App() {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [dismissWatcherPeek, handleWatcherResponse]);
+  }, [dismissWatcherPeek, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   useEffect(() => {
     if (!driftAlertsEnabled) return;
@@ -1645,6 +1727,38 @@ export default function App() {
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
+  const shouldShowEndOfDayReviewPreview = import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
+
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    if (endOfDayReviewQueryPreviewShownRef.current) return;
+    if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
+
+    endOfDayReviewQueryPreviewShownRef.current = true;
+    showEndOfDayReview(buildEndOfDayReviewSummary({
+      day: todayDay,
+      generatedAt: new Date().toISOString(),
+      segments: buildMockEndOfDayReviewSegments(todayDay),
+      isMock: true,
+    }));
+  }, [hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
+
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    if (selectedDay !== todayDay) return;
+    if (segmentsLoadedDay !== todayDay) return;
+    if (!status?.running) return;
+    if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
+    if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
+
+    void showEndOfDayReview(buildEndOfDayReviewSummary({
+      day: todayDay,
+      generatedAt: new Date().toISOString(),
+      segments,
+    })).then((shown) => {
+      if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
+    });
+  }, [currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
   const activeInsightCategoryTotals = useMemo(
@@ -3362,9 +3476,10 @@ export default function App() {
                 {settingsSection === "notifications" && (
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Send a macOS notification when a newly captured drift block runs for 5 minutes or longer.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
+                    <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Show a local summary after 6:00 PM when the tracker is running, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
                     {WATCHER_PEEK_PROTOTYPE_ENABLED && (
                     <>
-                    <div className="settings-row"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
+                    <div className="settings-row" role="group" aria-label="Peek watcher prototype"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Watcher mode</div><div className="desc">Choose regular check-ins or a quieter mode that only speaks when drift continues.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Watcher mode"><button type="button" className={`settings-mode-option${watcherMode === "periodic" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "periodic"} onClick={() => setWatcherMode("periodic")}><span>Periodic</span><small>Every few minutes</small></button><button type="button" className={`settings-mode-option${watcherMode === "drift_only" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "drift_only"} onClick={() => setWatcherMode("drift_only")}><span>Drift only</span><small>Quiet during focus</small></button></div></div></div>
                     {watcherMode === "periodic" ? (
                       <div className="settings-row"><div><div className="lbl">Periodic cadence</div><div className="desc">Show the watcher at a random interval inside this range. Default is 10-30 minutes.</div></div><div className="ctrl settings-row__actions"><input className="settings-input settings-input--compact" type="number" min={WATCHER_PERIODIC_MIN_LIMIT_MINUTES} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMinMinutes} onChange={handleWatcherPeriodicMinChange} aria-label="Minimum watcher interval minutes" /><span className="settings-inline-unit">to</span><input className="settings-input settings-input--compact" type="number" min={watcherPeriodicMinMinutes} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMaxMinutes} onChange={handleWatcherPeriodicMaxChange} aria-label="Maximum watcher interval minutes" /><span className="settings-inline-unit">min</span></div></div>
@@ -3402,6 +3517,15 @@ export default function App() {
       </MainContentShell>
 
       {!isTauriRuntime() ? <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} /> : null}
+      {!isTauriRuntime() && endOfDayReviewEvent ? (
+        <EndOfDayReview
+          event={endOfDayReviewEvent}
+          onOpenDashboard={() => handleEndOfDayReviewAction("openDashboard")}
+          onViewDetails={() => handleEndOfDayReviewAction("viewDetails")}
+          onOpenNotificationSettings={() => handleEndOfDayReviewAction("openNotificationSettings")}
+          onClose={() => setEndOfDayReviewEvent(null)}
+        />
+      ) : null}
 
       {/* Command Bar */}
       {cmdOpen && (
@@ -7564,6 +7688,56 @@ function filterSegmentsForRange(segments: ActivitySegment[], start: string, end:
     const segmentEnd = new Date(segment.endedAt).getTime();
     return segmentEnd >= startMs && segmentStart <= endMs;
   });
+}
+
+function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] {
+  const start = new Date(`${day}T09:00:00`);
+  const focusEnd = new Date(start.getTime() + 95 * 60 * 1000);
+  const driftStart = new Date(`${day}T14:15:00`);
+  const driftEnd = new Date(driftStart.getTime() + 35 * 60 * 1000);
+
+  return [
+    {
+      id: "end-of-day-review-preview-focus",
+      startedAt: start.toISOString(),
+      endedAt: focusEnd.toISOString(),
+      durationSeconds: 95 * 60,
+      appName: "Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Planning tomorrow",
+      platform: "macos",
+      source: "nsworkspace",
+      classification: {
+        category: "workspace",
+        productivity: "focus",
+        source: "manual",
+        confidence: 1,
+        reason: "Deterministic end-of-day review preview",
+      },
+    },
+    {
+      id: "end-of-day-review-preview-drift",
+      startedAt: driftStart.toISOString(),
+      endedAt: driftEnd.toISOString(),
+      durationSeconds: 35 * 60,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Design rabbit hole",
+      siteUrl: "https://youtube.com/watch?v=preview",
+      windowTitle: "Design rabbit hole",
+      platform: "macos",
+      source: "nsworkspace",
+      classification: {
+        category: "entertainment",
+        productivity: "drift",
+        source: "manual",
+        confidence: 1,
+        reason: "Deterministic end-of-day review preview",
+      },
+    },
+  ];
 }
 
 function formatDashboardPeriodLabel(period: DashboardPeriod, startDay: string, endDay: string): string {

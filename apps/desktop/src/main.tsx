@@ -45,7 +45,7 @@ class BootstrapErrorBoundary extends React.Component<
 
 function BootstrapLoader() {
   const [LoadedApp, setLoadedApp] = React.useState<React.ComponentType | null>(null);
-  const [isWatcherSurface, setIsWatcherSurface] = React.useState(window.location.pathname === "/watcher");
+  const [isWatcherSurface, setIsWatcherSurface] = React.useState(isExplicitWatcherSurface());
 
   React.useEffect(() => {
     window.__DTIME_SET_BOOT_STATUS__?.("Bootstrap shell mounted");
@@ -98,8 +98,12 @@ function BootstrapLoader() {
   );
 }
 
+function isExplicitWatcherSurface(): boolean {
+  return window.location.pathname === "/watcher" || new URLSearchParams(window.location.search).get("driftySurface") === "watcher";
+}
+
 async function resolveIsWatcherSurface(): Promise<boolean> {
-  if (window.location.pathname === "/watcher") return true;
+  if (isExplicitWatcherSurface()) return true;
   if (!("__TAURI_INTERNALS__" in window)) return false;
 
   try {

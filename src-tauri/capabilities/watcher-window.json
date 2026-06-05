@@ -9,6 +9,7 @@
     "core:event:allow-listen",
     "allow-watcher-peek-dismiss",
     "allow-watcher-peek-set-interactive",
-    "allow-watcher-peek-respond"
+    "allow-watcher-peek-respond",
+    "allow-watcher-peek-end-of-day-review-action"
   ]
 }

@@ -10151,6 +10151,338 @@ button.flow-cell:focus {
   width: min(26rem, calc(100vw - var(--space-5)));
 }
 
+
+/* ── Companion end-of-day review ── */
+.end-of-day-review {
+  --review-tone: var(--accent);
+  --review-panel: color-mix(in srgb, var(--surface) 90%, transparent);
+  --review-panel-edge: color-mix(in srgb, var(--review-tone) 32%, var(--line-strong));
+  backdrop-filter: blur(var(--space-3)) saturate(1.12);
+  background: var(--review-panel);
+  border: 1px solid var(--review-panel-edge);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 var(--space-3) var(--space-6) color-mix(in srgb, var(--text) 13%, transparent),
+    0 0 0 1px color-mix(in srgb, white 12%, transparent) inset,
+    0 var(--space-5) var(--space-7) color-mix(in srgb, var(--review-tone) 14%, transparent);
+  color: var(--text);
+  display: grid;
+  gap: 0;
+  max-width: calc(100vw - var(--space-6));
+  padding: var(--space-3);
+  pointer-events: auto;
+  position: fixed;
+  right: var(--space-4);
+  top: calc(var(--window-chrome-height) + var(--space-3));
+  width: min(26.25rem, calc(100vw - var(--space-6)));
+  z-index: 49;
+}
+
+.end-of-day-review__compact {
+  align-items: center;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 6.65rem minmax(0, 1fr);
+  min-height: 7.6rem;
+}
+
+.end-of-day-review[data-mock="true"] {
+  --review-tone: var(--blue);
+}
+
+.end-of-day-review__close {
+  align-items: center;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  display: inline-flex;
+  height: 1px;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.end-of-day-review__graph {
+  display: block;
+  flex: 0 0 auto;
+  height: 6.35rem;
+  overflow: visible;
+  width: 6.35rem;
+}
+
+.end-of-day-review__graph-track,
+.end-of-day-review__graph-segment {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: .5rem;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.end-of-day-review__graph-track {
+  stroke: color-mix(in srgb, var(--surface-strong) 78%, var(--line-strong));
+}
+
+.end-of-day-review__graph-segment {
+  transition: stroke-dasharray var(--transition-base), stroke-dashoffset var(--transition-base);
+}
+
+.end-of-day-review__graph-segment--focus {
+  stroke: var(--productivity-focus);
+}
+
+.end-of-day-review__graph-segment--drift {
+  stroke: var(--productivity-drift);
+}
+
+.end-of-day-review__graph-segment--other {
+  stroke: var(--productivity-neutral);
+}
+
+.end-of-day-review__graph-label {
+  fill: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.end-of-day-review__graph-value {
+  fill: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-label-size);
+  font-weight: 760;
+}
+
+.end-of-day-review__breakdown {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.end-of-day-review__breakdown-item {
+  align-items: end;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  gap: .3rem var(--space-2);
+  grid-template-columns: minmax(0, 1fr) max-content;
+  min-width: 0;
+  padding: 0;
+  transition: none;
+}
+
+.end-of-day-review__breakdown-item:hover,
+.end-of-day-review__breakdown-item:focus-within {
+  background: transparent;
+  border-color: transparent;
+}
+
+.end-of-day-review__breakdown-label,
+.end-of-day-review__breakdown-measure {
+  align-items: center;
+  min-width: 0;
+}
+
+.end-of-day-review__breakdown-label {
+  color: var(--text);
+  display: inline-flex;
+  font-size: var(--type-caption-size);
+  font-weight: 650;
+  gap: var(--space-2);
+  line-height: 1;
+}
+
+.end-of-day-review__breakdown-measure {
+  color: var(--text-soft);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  gap: var(--space-2);
+  justify-content: end;
+  line-height: 1;
+  margin: 0;
+  text-align: right;
+}
+
+.end-of-day-review__breakdown-measure strong {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-weight: 650;
+  line-height: 1;
+}
+
+.end-of-day-review__breakdown-dot {
+  background: var(--productivity-neutral);
+  border-radius: 999px;
+  height: var(--space-2);
+  width: var(--space-2);
+}
+
+.end-of-day-review__breakdown-item--focus .end-of-day-review__breakdown-dot,
+.end-of-day-review__breakdown-item--focus .end-of-day-review__breakdown-bar span {
+  background: var(--productivity-focus);
+}
+
+.end-of-day-review__breakdown-item--drift .end-of-day-review__breakdown-dot,
+.end-of-day-review__breakdown-item--drift .end-of-day-review__breakdown-bar span {
+  background: var(--productivity-drift);
+}
+
+.end-of-day-review__breakdown-dot--focus {
+  background: var(--productivity-focus);
+}
+
+.end-of-day-review__breakdown-dot--drift {
+  background: var(--productivity-drift);
+}
+
+.end-of-day-review__breakdown-dot--other {
+  background: var(--productivity-neutral);
+}
+
+.end-of-day-review__breakdown-item--other .end-of-day-review__breakdown-bar span {
+  background: var(--productivity-neutral);
+}
+
+.end-of-day-review__breakdown-bar {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 999px;
+  grid-column: 1 / -1;
+  display: block;
+  height: .28rem;
+  overflow: hidden;
+}
+
+.end-of-day-review__breakdown-bar span {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  width: var(--review-share);
+}
+
+.end-of-day-review__hover-card {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--review-tone) 24%, var(--line));
+  border-radius: var(--radius-md);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--text) 18%, transparent);
+  display: grid;
+  gap: var(--space-2);
+  left: 0;
+  min-width: 13.75rem;
+  padding: var(--space-3);
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  z-index: 30;
+}
+
+.end-of-day-review__hover-head,
+.end-of-day-review__hover-metric,
+.end-of-day-review__hover-source {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.end-of-day-review__hover-head strong,
+.end-of-day-review__hover-source strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 700;
+}
+
+.end-of-day-review__hover-metric strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-label-size);
+}
+
+.end-of-day-review__hover-metric span,
+.end-of-day-review__hover-source span,
+.end-of-day-review__hover-source em {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-style: normal;
+}
+
+.end-of-day-review__hover-source {
+  align-items: start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.end-of-day-review__hover-source strong,
+.end-of-day-review__hover-source em {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.end-of-day-review__hover-source em {
+  grid-column: 2;
+}
+
+.end-of-day-review__empty {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.end-of-day-review__empty strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+}
+
+.end-of-day-review__empty p {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+}
+
+.end-of-day-review__actions {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (max-width: 760px) {
+  .end-of-day-review {
+    left: var(--space-3);
+    max-width: none;
+    right: var(--space-3);
+    top: calc(var(--window-chrome-height) + var(--space-2));
+    width: auto;
+  }
+}
+
+html[data-surface="watcher"] .end-of-day-review,
+.watcher-window-surface .end-of-day-review {
+  left: auto;
+  max-width: calc(100vw - var(--space-5));
+  position: absolute;
+  right: var(--space-3);
+  top: var(--space-3);
+  width: min(26.25rem, calc(100vw - var(--space-5)));
+}
+
 /* Visual parity pass: mock-visible shell and non-settings surfaces */
 .content > .theme-toggle { display: none; }
 
