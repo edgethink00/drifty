@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev:web": "npm --prefix apps/desktop run dev",
+    "dev:web:skip-onboarding": "SKIP_ONBOARDING=1 npm run dev:web",
     "dev:web:auth-required": "VITE_DRIFTY_AUTH_MODE=required npm --prefix apps/desktop run dev",
     "build:web": "npm --prefix apps/desktop run build",
     "typecheck": "npm --prefix apps/desktop run typecheck",

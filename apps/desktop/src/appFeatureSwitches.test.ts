@@ -25,4 +25,12 @@ describe("app feature switches", () => {
     expect(switches.IS_PRODUCTION_BUILD).toBe(false);
     expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(true);
   });
+
+  it("keeps the onboarding bypass dev-only even when the raw skip flag is present", async () => {
+    const switches = await import("./appFeatureSwitches");
+
+    expect(switches.resolveDevOnboardingBypass("dev", true)).toBe(true);
+    expect(switches.resolveDevOnboardingBypass("dev", false)).toBe(false);
+    expect(switches.resolveDevOnboardingBypass("production", true)).toBe(false);
+  });
 });

@@ -49,7 +49,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -2053,6 +2053,11 @@ export default function App() {
   }, [hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
 
   useEffect(() => {
+    if (isDevOnboardingBypassEnabled()) {
+      setOnboardingOpen(false);
+      return;
+    }
+
     if (authStatus === "loading") {
       setOnboardingOpen(false);
       return;
