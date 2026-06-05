@@ -7,15 +7,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use commands::{
-    accessibility_get_status, accessibility_request_access,
-    ai_classification_openai_chat,
-    setup_watcher_window, system_open_settings_pane, tracker_get_app_icons,
-    tracker_get_classification_metrics, tracker_get_current_snapshot,
-    tracker_get_hourly_summary, tracker_get_raw_events, tracker_get_status, tracker_get_timeline,
-    tracker_get_top_sites, tracker_get_unclassified_segments, tracker_get_reusable_ai_classifications,
-    tracker_refresh_non_ai_classifications, tracker_save_classifications, tracker_start, tracker_stop,
-    watcher_peek_dismiss, watcher_peek_end_of_day_review_action, watcher_peek_hide,
-    watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
+    accessibility_get_status, accessibility_request_access, ai_classification_openai_chat,
+    drift_alarm_action, drift_alarm_current, drift_alarm_dismiss, drift_alarm_hide,
+    drift_alarm_show, setup_drift_alarm_window, setup_watcher_window, system_open_settings_pane,
+    tracker_get_app_icons, tracker_get_classification_metrics, tracker_get_current_snapshot,
+    tracker_get_hourly_summary, tracker_get_raw_events, tracker_get_reusable_ai_classifications,
+    tracker_get_status, tracker_get_timeline, tracker_get_top_sites,
+    tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
+    tracker_save_classifications, tracker_start, tracker_stop, watcher_peek_dismiss,
+    watcher_peek_end_of_day_review_action, watcher_peek_hide, watcher_peek_respond,
+    watcher_peek_set_interactive, watcher_peek_show,
+    DriftAlarmState,
 };
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItem};
@@ -197,6 +199,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(PendingAuthDeepLinks::default())
         .manage(TrayProductivityState::default())
+        .manage(DriftAlarmState::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
                 .on_event(|app, event| match event {
@@ -244,6 +247,7 @@ pub fn run() {
     builder
         .setup(|app| {
             setup_watcher_window(app)?;
+            setup_drift_alarm_window(app)?;
             setup_tray(app.handle())?;
             let controller = app.state::<TrackerController>();
             let _ = controller.start(app.handle());
@@ -279,6 +283,11 @@ pub fn run() {
             watcher_peek_set_interactive,
             watcher_peek_respond,
             watcher_peek_end_of_day_review_action,
+            drift_alarm_current,
+            drift_alarm_show,
+            drift_alarm_hide,
+            drift_alarm_dismiss,
+            drift_alarm_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Drifty");

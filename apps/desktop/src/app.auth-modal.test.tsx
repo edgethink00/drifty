@@ -227,7 +227,7 @@ describe("App auth modal", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("dialog", { name: /choose how you want to start/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
   });

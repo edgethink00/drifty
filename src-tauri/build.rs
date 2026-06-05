@@ -37,6 +37,11 @@ fn main() {
             "watcher_peek_set_interactive",
             "watcher_peek_respond",
             "watcher_peek_end_of_day_review_action",
+            "drift_alarm_current",
+            "drift_alarm_show",
+            "drift_alarm_hide",
+            "drift_alarm_dismiss",
+            "drift_alarm_action",
         ]),
     ))
     .expect("failed to build tauri app manifest");

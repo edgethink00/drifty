@@ -168,12 +168,54 @@ body {
 
 html[data-surface="watcher"],
 html[data-surface="watcher"] body,
-html[data-surface="watcher"] #root {
+html[data-surface="watcher"] #root,
+html[data-surface="drift-alarm"],
+html[data-surface="drift-alarm"] body,
+html[data-surface="drift-alarm"] #root {
   background: transparent;
 }
 
-html[data-surface="watcher"] body {
+html[data-surface="watcher"] body,
+html[data-surface="drift-alarm"] body {
   color: var(--text);
+}
+
+html[data-surface="drift-alarm"] .bootstrap-error {
+  --drift-alarm-debug-edge: var(--space-4);
+  --drift-alarm-debug-width: 22rem;
+  --drift-alarm-debug-max-height: 8.75rem;
+  background: color-mix(in srgb, var(--warn) 82%, black);
+  border: 1px solid color-mix(in srgb, var(--danger-line) 72%, var(--warn));
+  border-radius: var(--radius-sm);
+  bottom: var(--drift-alarm-debug-edge);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), 0 0 0 1px color-mix(in srgb, var(--warn) 40%, black) inset;
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  left: var(--drift-alarm-debug-edge);
+  line-height: 1.4;
+  max-height: min(var(--drift-alarm-debug-max-height), calc(100vh - (var(--drift-alarm-debug-edge) * 2)));
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: var(--block-gap) var(--space-3);
+  position: fixed;
+  right: auto;
+  transform: none;
+  white-space: pre-wrap;
+  width: min(var(--drift-alarm-debug-width), calc(100vw - (var(--drift-alarm-debug-edge) * 2)));
+  z-index: 2147483647;
+}
+
+html[data-surface="drift-alarm"] .bootstrap-error h1 {
+  font-size: var(--type-setting-label-size);
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: var(--space-1);
+}
+
+html[data-surface="drift-alarm"] .bootstrap-error pre {
+  font: inherit;
+  white-space: inherit;
 }
 
 button, input, textarea { font: inherit; }
@@ -9763,6 +9805,7 @@ button.flow-cell:focus {
 
 /* ── Companion watcher ambient orb ── */
 .watcher-window-surface {
+  background: transparent;
   height: 100vh;
   overflow: hidden;
   position: relative;
@@ -9801,6 +9844,57 @@ button.flow-cell:focus {
 
 .watcher-peek[data-mood="drift"] {
   --watcher-tone: var(--warn);
+}
+
+.watcher-peek--drift-alarm {
+  --watcher-orb-size: 6.9rem;
+  --watcher-stage-width: min(25rem, calc(100vw - var(--space-5)));
+  --watcher-tone: var(--warn);
+  --watcher-tone-soft: color-mix(in srgb, var(--watcher-tone) 24%, transparent);
+  --watcher-tone-mid: color-mix(in srgb, var(--watcher-tone) 68%, var(--gold));
+  --watcher-tone-bright: color-mix(in srgb, var(--watcher-tone) 46%, var(--gold-soft));
+  --watcher-bubble: color-mix(in srgb, var(--surface) 92%, transparent);
+  --watcher-bubble-edge: color-mix(in srgb, var(--watcher-tone) 54%, var(--line-strong));
+  --watcher-bubble-shadow: color-mix(in srgb, var(--watcher-tone) 24%, transparent);
+  background: transparent;
+  bottom: auto;
+  left: auto;
+  right: max(var(--space-4), env(safe-area-inset-right));
+  top: max(var(--space-4), env(safe-area-inset-top));
+  transform: none;
+}
+
+.watcher-peek--drift-alarm .watcher-peek__stage {
+  grid-template-rows: auto;
+  position: relative;
+  transform: translateY(0);
+  transform-origin: 100% 0;
+}
+
+.watcher-peek--drift-alarm .watcher-peek__orb {
+  grid-row: 1;
+  opacity: .76;
+  position: absolute;
+  right: calc(var(--space-3) * -1);
+  top: calc(var(--space-5) * -1);
+  transform: scale(.72);
+}
+
+.watcher-peek--drift-alarm .watcher-peek__card {
+  max-height: calc(100vh - var(--space-6));
+  max-width: 23rem;
+  overflow-y: auto;
+  padding: var(--space-3);
+  z-index: 3;
+}
+
+.watcher-peek--drift-alarm .watcher-peek__card h2 {
+  font-size: 1.14rem;
+}
+
+.watcher-peek--drift-alarm .watcher-peek__action--primary {
+  background: color-mix(in srgb, var(--watcher-tone) 30%, var(--surface));
+  border-color: color-mix(in srgb, var(--watcher-tone) 66%, var(--line-strong));
 }
 
 .watcher-peek__stage {
@@ -10038,6 +10132,121 @@ button.flow-cell:focus {
   gap: var(--space-2);
 }
 
+.watcher-peek__decision-grid {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.watcher-peek__choice-group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.watcher-peek__choice-group h3 {
+  color: var(--text-soft);
+  font-size: var(--type-control-size);
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watcher-peek__target-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.watcher-peek__target-button {
+  align-items: center;
+  background: color-mix(in srgb, var(--watcher-tone) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--watcher-tone) 46%, var(--line-strong));
+  border-radius: var(--radius-md);
+  color: var(--text);
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 2.75rem;
+  padding: var(--space-2);
+  text-align: left;
+  transition: transform 120ms var(--watcher-stage-ease), box-shadow 120ms var(--watcher-stage-ease), background var(--transition-fast);
+}
+
+.watcher-peek__target-button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--watcher-tone) 24%, var(--surface));
+  box-shadow: 0 var(--space-1) var(--space-3) color-mix(in srgb, var(--watcher-tone) 22%, transparent);
+  transform: translateY(calc(var(--space-1) * -1));
+}
+
+.watcher-peek__target-button:not(:disabled):active {
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+.watcher-peek__target-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 72%, var(--watcher-tone-soft));
+  border: 1px solid color-mix(in srgb, var(--watcher-tone) 22%, var(--line));
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  overflow: hidden;
+  width: 2rem;
+}
+
+.watcher-peek__target-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.watcher-peek__target-copy strong,
+.watcher-peek__target-copy small,
+.watcher-peek__target-empty span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watcher-peek__target-copy strong {
+  font-size: .78rem;
+  font-weight: 680;
+}
+
+.watcher-peek__target-copy small,
+.watcher-peek__target-empty span {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+}
+
+.watcher-peek__target-empty {
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--watcher-tone) 20%, var(--line));
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--space-2);
+}
+
+.watcher-peek__break-options {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.watcher-peek__break-option {
+  justify-content: center;
+  padding: 0 var(--space-2);
+}
+
+.watcher-peek__actions--secondary {
+  margin-top: var(--space-3);
+}
+
 .watcher-peek__action {
   background: color-mix(in srgb, var(--surface) 78%, var(--watcher-tone-soft));
   border: 1px solid color-mix(in srgb, var(--watcher-tone) 28%, var(--line-strong));
@@ -10068,6 +10277,13 @@ button.flow-cell:focus {
 .watcher-peek__action:not(:disabled):active {
   box-shadow: none;
   transform: translateY(1px);
+}
+
+.watcher-peek__action:focus-visible,
+.watcher-peek__target-button:focus-visible {
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--watcher-tone) 28%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--watcher-tone) 72%, var(--surface));
+  outline-offset: 2px;
 }
 
 .watcher-peek[data-presence="interrupting"] .watcher-peek__action--primary {
@@ -10143,6 +10359,14 @@ button.flow-cell:focus {
   .watcher-peek__card {
     max-width: calc(100vw - var(--space-6));
   }
+
+  .watcher-peek--drift-alarm {
+    bottom: auto;
+    left: auto;
+    right: var(--space-2);
+    top: var(--space-2);
+    transform: none;
+  }
 }
 
 .watcher-window-surface .watcher-peek {
@@ -10150,7 +10374,6 @@ button.flow-cell:focus {
   left: 50%;
   width: min(26rem, calc(100vw - var(--space-5)));
 }
-
 
 /* ── Companion end-of-day review ── */
 .end-of-day-review {
@@ -10481,6 +10704,14 @@ html[data-surface="watcher"] .end-of-day-review,
   right: var(--space-3);
   top: var(--space-3);
   width: min(26.25rem, calc(100vw - var(--space-5)));
+}
+
+.watcher-window-surface--drift-alarm .watcher-peek--drift-alarm {
+  bottom: auto;
+  left: auto;
+  right: var(--space-4);
+  top: var(--space-4);
+  width: min(25rem, calc(100vw - var(--space-5)));
 }
 
 /* Visual parity pass: mock-visible shell and non-settings surfaces */

@@ -19,6 +19,7 @@ export type WatcherPeekEvent = {
   minutesSinceLastWatcher: number | null;
   focusSecondsToday: number;
   currentHourFocusSeconds: number;
+  preservedFocusStrikeSeconds?: number | null;
 };
 
 export type WatcherPeekResponse = "return" | "snooze" | "dismiss";

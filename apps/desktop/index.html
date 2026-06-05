@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/src/assets/drifty-icon.png" />
     <title>Drifty</title>
+    <script>
+      (() => {
+        let surface = null;
+        try {
+          surface = new URLSearchParams(window.location.search).get("driftySurface");
+          if (surface === "watcher" || surface === "drift-alarm") document.documentElement.dataset.surface = surface;
+        } catch (_error) {}
+      })();
+    </script>
     <style>
       html, body {
         margin: 0;
@@ -12,6 +21,17 @@
         background: #091221;
         color: #f8fafc;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      html[data-surface="watcher"],
+      html[data-surface="watcher"] body,
+      html[data-surface="drift-alarm"],
+      html[data-surface="drift-alarm"] body {
+        background: transparent;
+      }
+      html[data-surface="drift-alarm"] {
+        --drifty-boot-debug-edge: 1rem;
+        --drifty-boot-debug-width: 22rem;
+        --drifty-boot-debug-max-height: 8.75rem;
       }
       #boot-shell {
         position: fixed;
@@ -37,33 +57,54 @@
         left: 50%;
         bottom: 24px;
         transform: translateX(-50%);
-        max-width: 480px;
+        z-index: 2147483647;
+        width: min(720px, calc(100vw - 32px));
+        max-height: min(70vh, 520px);
+        overflow: auto;
         white-space: pre-wrap;
-        border-radius: 12px;
-        padding: 12px 14px;
-        background: rgba(239, 68, 68, 0.14);
-        border: 1px solid rgba(239, 68, 68, 0.35);
-        color: #fecaca;
-        font-size: 13px;
+        overflow-wrap: anywhere;
+        border-radius: 10px;
+        padding: 14px 16px;
+        background: rgba(127, 29, 29, 0.94);
+        border: 1px solid rgba(254, 202, 202, 0.82);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(69, 10, 10, 0.72) inset;
+        color: #fff7ed;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.45;
         display: none;
+      }
+      html[data-surface="drift-alarm"] .boot-error {
+        left: var(--drifty-boot-debug-edge);
+        right: auto;
+        bottom: var(--drifty-boot-debug-edge);
+        transform: none;
+        box-sizing: border-box;
+        width: min(var(--drifty-boot-debug-width), calc(100vw - (var(--drifty-boot-debug-edge) * 2)));
+        max-height: min(var(--drifty-boot-debug-max-height), calc(100vh - (var(--drifty-boot-debug-edge) * 2)));
+        overflow: auto;
+        padding: 0.625rem 0.75rem;
+        font-size: 0.6875rem;
+        line-height: 1.4;
+        z-index: 2147483647;
       }
     </style>
     <script>
       window.__DTIME_BOOT_ERROR__ = null;
-      window.addEventListener("error", function (event) {
-        var el = document.getElementById("boot-error");
+      window.addEventListener("error", (event) => {
+        const el = document.getElementById("boot-error");
         if (!el) return;
         el.style.display = "block";
         el.textContent = String(event.message || event.error || "Unknown startup error");
       });
-      window.addEventListener("unhandledrejection", function (event) {
-        var el = document.getElementById("boot-error");
+      window.addEventListener("unhandledrejection", (event) => {
+        const el = document.getElementById("boot-error");
         if (!el) return;
         el.style.display = "block";
-        el.textContent = String((event.reason && event.reason.message) || event.reason || "Unknown promise rejection");
+        el.textContent = String(event.reason?.message || event.reason || "Unknown promise rejection");
       });
-      window.setTimeout(function () {
-        var status = document.getElementById("boot-status");
+      window.setTimeout(() => {
+        const status = document.getElementById("boot-status");
         if (!status || window.__DTIME_BOOTSTRAPPED__) return;
         status.textContent = "drifty still loading\u2026";
       }, 2500);

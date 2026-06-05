@@ -6,7 +6,7 @@ import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
 type UnlistenFn = () => void;
 
 type WatcherResponseEvent = {
-  response: WatcherPeekResponse;
+  response: unknown;
 };
 
 type EndOfDayReviewActionEvent = {
@@ -83,7 +83,7 @@ export async function listenToNativeEndOfDayReviewAction(onAction: (action: EndO
   });
 }
 
-function isWatcherPeekResponse(value: string): value is WatcherPeekResponse {
+function isWatcherPeekResponse(value: unknown): value is WatcherPeekResponse {
   return value === "return" || value === "snooze" || value === "dismiss";
 }
 

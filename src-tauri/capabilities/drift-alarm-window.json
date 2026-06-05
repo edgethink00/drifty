@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "drift-alarm-window",
+  "description": "Least-privilege capability for the drift alarm overlay window.",
+  "windows": ["drift-alarm"],
+  "platforms": ["macOS"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    "allow-drift-alarm-current",
+    "allow-drift-alarm-dismiss",
+    "allow-drift-alarm-action"
+  ]
+}

@@ -648,6 +648,48 @@ export function categorizeActivity(segment: ActivitySegment, options?: Classific
   return classifyActivity(segment, options).productivity;
 }
 
+const PRESERVED_FOCUS_STRIKE_MAX_GAP_SECONDS = 5 * 60;
+
+export function computePreservedFocusStrikeSeconds(
+  segments: ActivitySegment[],
+  currentDriftSegment: ActivitySegment,
+  options?: ClassificationOptions,
+): number | null {
+  if (categorizeActivity(currentDriftSegment, options) !== "drift") return null;
+
+  const sourceSegments = segments.some((segment) => segment.id === currentDriftSegment.id)
+    ? segments
+    : [...segments, currentDriftSegment];
+  const orderedSegments = [...sourceSegments].sort((left, right) => {
+    const leftStart = new Date(left.startedAt).getTime();
+    const rightStart = new Date(right.startedAt).getTime();
+    if (leftStart !== rightStart) return leftStart - rightStart;
+    return new Date(left.endedAt).getTime() - new Date(right.endedAt).getTime();
+  });
+  const currentIndex = orderedSegments.findIndex((segment) => segment.id === currentDriftSegment.id);
+  if (currentIndex !== orderedSegments.length - 1) return null;
+  let boundaryStartMs = new Date(currentDriftSegment.startedAt).getTime();
+  if (!Number.isFinite(boundaryStartMs)) return null;
+  let preservedSeconds = 0;
+
+  for (let index = currentIndex >= 0 ? currentIndex - 1 : orderedSegments.length - 1; index >= 0; index -= 1) {
+    const segment = orderedSegments[index];
+    const segmentEndMs = new Date(segment.endedAt).getTime();
+    const segmentStartMs = new Date(segment.startedAt).getTime();
+    if (!Number.isFinite(segmentEndMs) || !Number.isFinite(segmentStartMs)) return preservedSeconds > 0 ? preservedSeconds : null;
+    if (segmentEndMs > boundaryStartMs) continue;
+
+    const gapSeconds = Math.max(0, Math.round((boundaryStartMs - segmentEndMs) / 1000));
+    if (gapSeconds > PRESERVED_FOCUS_STRIKE_MAX_GAP_SECONDS) break;
+    if (categorizeActivity(segment, options) !== "focus") break;
+
+    preservedSeconds += segment.durationSeconds;
+    boundaryStartMs = segmentStartMs;
+  }
+
+  return preservedSeconds > 0 ? preservedSeconds : null;
+}
+
 export function buildCategoryDurations(segments: ActivitySegment[], options?: ClassificationOptions): CategoryDuration[] {
   const totals = CATEGORY_ORDER.map((category) => ({
     category,

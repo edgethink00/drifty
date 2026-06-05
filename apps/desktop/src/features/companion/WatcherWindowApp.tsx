@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { EndOfDayReview, type EndOfDayReviewEvent } from "./EndOfDayReview";
-import { WatcherPeek, type WatcherPeekResponse } from "./WatcherPeek";
+import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import {
   dismissNativeWatcherPeek,
   listenToNativeWatcherShow,
-  respondNativeWatcherPeek,
   setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction,
   type WatcherWindowEvent,
@@ -54,12 +53,7 @@ export function WatcherWindowApp() {
     void dismissNativeWatcherPeek();
   }, []);
 
-  const handleRespond = useCallback((response: WatcherPeekResponse) => {
-    setEvent(null);
-    void respondNativeWatcherPeek(response);
-  }, []);
-
-  const handlePhaseChange = useCallback(() => {
+  const handlePhaseChange = useCallback((_phase: WatcherPhase, _currentEvent: WatcherPeekEvent | null) => {
     void setNativeWatcherInteractive(false);
   }, []);
 
@@ -92,7 +86,7 @@ export function WatcherWindowApp() {
           onClose={handleDismiss}
         />
       ) : (
-        <WatcherPeek event={event} onDismiss={handleDismiss} onRespond={handleRespond} onPhaseChange={handlePhaseChange} />
+        <WatcherPeek event={event} onDismiss={handleDismiss} onPhaseChange={handlePhaseChange} />
       )}
     </main>
   );
