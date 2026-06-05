@@ -36,6 +36,7 @@ fn main() {
             "watcher_peek_dismiss",
             "watcher_peek_set_interactive",
             "watcher_peek_respond",
+            "watcher_peek_end_of_day_review_action",
             "drift_alarm_current",
             "drift_alarm_show",
             "drift_alarm_hide",

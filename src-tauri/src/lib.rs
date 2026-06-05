@@ -15,7 +15,8 @@ use commands::{
     tracker_get_status, tracker_get_timeline, tracker_get_top_sites,
     tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
     tracker_save_classifications, tracker_start, tracker_stop, watcher_peek_dismiss,
-    watcher_peek_hide, watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
+    watcher_peek_end_of_day_review_action, watcher_peek_hide, watcher_peek_respond,
+    watcher_peek_set_interactive, watcher_peek_show,
     DriftAlarmState,
 };
 use tauri::image::Image;
@@ -281,6 +282,7 @@ pub fn run() {
             watcher_peek_dismiss,
             watcher_peek_set_interactive,
             watcher_peek_respond,
+            watcher_peek_end_of_day_review_action,
             drift_alarm_current,
             drift_alarm_show,
             drift_alarm_hide,
