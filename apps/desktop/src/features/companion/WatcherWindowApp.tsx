@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { WatcherPeek, type WatcherPeekEvent, type WatcherPeekResponse } from "./WatcherPeek";
+import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import {
   dismissNativeWatcherPeek,
   listenToNativeWatcherShow,
-  respondNativeWatcherPeek,
   setNativeWatcherInteractive,
 } from "./watcherBridge";
 
@@ -51,18 +50,13 @@ export function WatcherWindowApp() {
     void dismissNativeWatcherPeek();
   }, []);
 
-  const handleRespond = useCallback((response: WatcherPeekResponse) => {
-    setEvent(null);
-    void respondNativeWatcherPeek(response);
-  }, []);
-
-  const handlePhaseChange = useCallback(() => {
+  const handlePhaseChange = useCallback((_phase: WatcherPhase, _currentEvent: WatcherPeekEvent | null) => {
     void setNativeWatcherInteractive(false);
   }, []);
 
   return (
     <main className="watcher-window-surface" aria-label="Drifty watcher window">
-      <WatcherPeek event={event} onDismiss={handleDismiss} onRespond={handleRespond} onPhaseChange={handlePhaseChange} />
+      <WatcherPeek event={event} onDismiss={handleDismiss} onPhaseChange={handlePhaseChange} />
     </main>
   );
 }

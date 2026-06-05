@@ -10,6 +10,7 @@ import {
   categorizeActivity,
   buildCategoryDurations,
   buildProductivityDurations,
+  computePreservedFocusStrikeSeconds,
   classifyActivity,
   classifyActivityDetailed,
   buildDailyTotals,
@@ -49,7 +50,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -64,12 +65,25 @@ import {
   type WatcherPeekResponse,
 } from "./features/companion/WatcherPeek";
 import {
+  DriftAlarm,
+  buildDriftAlarmEvent,
+  type DriftAlarmAction,
+  type DriftAlarmEvent,
+  type DriftAlarmFocusTarget,
+} from "./features/companion/DriftAlarm";
+import {
   hideNativeWatcherPeek,
   isTauriRuntime,
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
   showNativeWatcherPeek,
 } from "./features/companion/watcherBridge";
+import {
+  hideNativeDriftAlarm,
+  listenToNativeDriftAlarmAction,
+  listenToNativeDriftAlarmDismissed,
+  showNativeDriftAlarm,
+} from "./features/companion/driftAlarmBridge";
 import {
   fallbackDisplayName,
   fetchOwnProfile,
@@ -513,6 +527,11 @@ const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   selfHostedModel: "",
 };
 const DRIFT_ALERT_MIN_SECONDS = 5 * 60;
+const DRIFT_ALARM_PREVIEW_OPTIONS = [
+  { id: "youtube-5m", label: "YouTube 5m", contextLabel: "youtube.com", driftDurationSeconds: 5 * 60, preservedFocusStrikeSeconds: 30 * 60 },
+  { id: "x-12m", label: "X 12m", contextLabel: "x.com", driftDurationSeconds: 12 * 60, preservedFocusStrikeSeconds: 60 * 60 },
+  { id: "no-context-1h", label: "No context 1h", contextLabel: "", driftDurationSeconds: 60 * 60, preservedFocusStrikeSeconds: 2 * 60 * 60 },
+] as const;
 const DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES = { min: 10, max: 30 };
 const WATCHER_PERIODIC_MIN_LIMIT_MINUTES = 10;
 const WATCHER_PERIODIC_MAX_LIMIT_MINUTES = 240;
@@ -930,6 +949,7 @@ export default function App() {
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
   const [watcherPeriodicMaxMinutes, setWatcherPeriodicMaxMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("max"));
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
+  const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
@@ -1000,6 +1020,10 @@ export default function App() {
     }),
     [segments, showAiClassificationImpact],
   );
+  const recentDriftAlarmFocusTargets = useMemo(
+    () => buildRecentFocusTargets(segments, selectedDayClassificationOptions, appIcons),
+    [appIcons, segments, selectedDayClassificationOptions],
+  );
   const localAiClassificationOptions = useMemo(() => {
     if (localAiSetup.provider === "openrouter_byok") {
       const apiKey = localAiSetup.openRouterApiKey.trim();
@@ -1041,6 +1065,10 @@ export default function App() {
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
   const watcherRequestInFlightRef = useRef(false);
   const watcherRecoveryTimeoutRef = useRef(0);
+  const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const driftAlarmRequestInFlightRef = useRef(false);
+  const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
@@ -1132,6 +1160,49 @@ export default function App() {
     });
   }, [armWatcherRecoveryTimer, clearWatcherEvent, showAiClassificationImpact]);
 
+  const clearDriftAlarmEvent = useCallback(() => {
+    driftAlarmEventRef.current = null;
+    pendingDriftAlarmEventRef.current = null;
+    setDriftAlarmEvent(null);
+  }, []);
+
+  const showDriftAlarm = useCallback((event: DriftAlarmEvent) => {
+    if (driftAlarmEventRef.current?.id === event.id) return;
+    if (driftAlarmRequestInFlightRef.current) {
+      pendingDriftAlarmEventRef.current = event;
+      return;
+    }
+
+    driftAlarmEventRef.current = event;
+
+    if (!isTauriRuntime()) {
+      setDriftAlarmEvent(event);
+      return;
+    }
+
+    driftAlarmRequestInFlightRef.current = true;
+    void showNativeDriftAlarm(event).catch(() => {
+      if (driftAlarmEventRef.current?.id === event.id) clearDriftAlarmEvent();
+    }).finally(() => {
+      driftAlarmRequestInFlightRef.current = false;
+      const pendingEvent = pendingDriftAlarmEventRef.current;
+      pendingDriftAlarmEventRef.current = null;
+      if (pendingEvent) showDriftAlarm(pendingEvent);
+    });
+  }, [clearDriftAlarmEvent]);
+
+  const previewDriftAlarm = useCallback((option: typeof DRIFT_ALARM_PREVIEW_OPTIONS[number]) => {
+    driftAlarmPreviewCounterRef.current += 1;
+    showDriftAlarm(buildDriftAlarmEvent({
+      id: `drift-alarm-preview-${option.id}-${Date.now()}-${driftAlarmPreviewCounterRef.current}`,
+      contextLabel: option.contextLabel,
+      driftDurationSeconds: option.driftDurationSeconds,
+      preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
+      generatedAt: new Date().toISOString(),
+      focusTargets: recentDriftAlarmFocusTargets,
+    }));
+  }, [recentDriftAlarmFocusTargets, showDriftAlarm]);
+
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
     if (!currentEvent) return;
@@ -1141,6 +1212,30 @@ export default function App() {
     persistWatcherResponse(currentEvent, response);
     setWatcherEvent(null);
   }, [clearWatcherRecoveryTimer]);
+
+  const dismissDriftAlarm = useCallback(() => {
+    clearDriftAlarmEvent();
+    void hideNativeDriftAlarm();
+  }, [clearDriftAlarmEvent]);
+
+  const handleDriftAlarmAction = useCallback((action: DriftAlarmAction) => {
+    dismissDriftAlarm();
+
+    switch (action.type) {
+      case "settings":
+        setSettingsSection("notifications");
+        navigateToTab("settings");
+        return;
+      case "manual_correction":
+        navigateToTab("classify");
+        return;
+      case "return_to_focus":
+        navigateToTab("dashboard");
+        return;
+      case "start_break":
+        return;
+    }
+  }, [dismissDriftAlarm, navigateToTab]);
 
   const dismissWatcherPeek = useCallback(() => {
     clearWatcherEvent();
@@ -1459,11 +1554,29 @@ export default function App() {
       unlisteners.push(unlisten);
     });
 
+    void listenToNativeDriftAlarmAction(handleDriftAlarmAction).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
+    void listenToNativeDriftAlarmDismissed(clearDriftAlarmEvent).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
     return () => {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [dismissWatcherPeek, handleWatcherResponse]);
+  }, [clearDriftAlarmEvent, dismissWatcherPeek, handleDriftAlarmAction, handleWatcherResponse]);
 
   useEffect(() => {
     if (!driftAlertsEnabled) return;
@@ -1477,15 +1590,32 @@ export default function App() {
     if (!latestDrift) return;
 
     const alertKey = `${latestDrift.id}:${latestDrift.endedAt}`;
+    const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds(segments, latestDrift, selectedDayClassificationOptions);
+    const showPreservedFocusDriftAlarm = () => {
+      if (preservedFocusStrikeSeconds === null || preservedFocusStrikeSeconds <= 0) return;
+
+      const { category } = classifyActivity(latestDrift, selectedDayClassificationOptions);
+      showDriftAlarm(buildDriftAlarmEvent({
+        id: alertKey,
+        contextLabel: getWatcherContextLabel(latestDrift, category),
+        driftDurationSeconds: latestDrift.durationSeconds,
+        preservedFocusStrikeSeconds,
+        generatedAt: new Date().toISOString(),
+        focusTargets: recentDriftAlarmFocusTargets,
+      }));
+    };
+
     if (lastDriftAlertSegmentRef.current === null) {
       lastDriftAlertSegmentRef.current = alertKey;
+      showPreservedFocusDriftAlarm();
       return;
     }
     if (lastDriftAlertSegmentRef.current === alertKey) return;
 
     lastDriftAlertSegmentRef.current = alertKey;
+    showPreservedFocusDriftAlarm();
     void sendDriftNotification(latestDrift);
-  }, [driftAlertsEnabled, selectedDay, selectedDayClassificationOptions, segments, status?.running]);
+  }, [driftAlertsEnabled, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -3308,7 +3438,7 @@ export default function App() {
                       <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
                     </div>
                     <div className="settings-block"><h3>Permissions</h3>
-                      <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Allow Drifty to read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleRequestAccessibility()}>Accessibility</button></div></div>
+                      <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Grant Accessibility permission so Drifty can read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleRequestAccessibility()}>Grant Accessibility access</button></div></div>
                     </div>
                     <div className="settings-block"><h3>Colors</h3>
                       <div className="settings-row settings-row--fallback" role="group" aria-label="Category colors"><div><div className="lbl">Category colors</div><div className="desc">Customize the colors used for classification categories.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{CATEGORY_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} category color`} value={categoryColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleCategoryColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetCategoryColors} disabled={!hasCategoryColorOverrides}>Set default</button></div></div>
@@ -3362,6 +3492,9 @@ export default function App() {
                 {settingsSection === "notifications" && (
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Send a macOS notification when a newly captured drift block runs for 5 minutes or longer.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
+                    {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
+                      <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
+                    ) : null}
                     {WATCHER_PEEK_PROTOTYPE_ENABLED && (
                     <>
                     <div className="settings-row"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
@@ -3401,7 +3534,12 @@ export default function App() {
         ) : null}
       </MainContentShell>
 
-      {!isTauriRuntime() ? <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} /> : null}
+      {!isTauriRuntime() ? (
+        <>
+          <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} />
+          <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} />
+        </>
+      ) : null}
 
       {/* Command Bar */}
       {cmdOpen && (
@@ -6599,6 +6737,7 @@ function getDefaultWatcherSnapshot(): WatcherSnapshot {
     minutesSinceLastWatcher: getMinutesSinceLastWatcher(),
     focusSecondsToday: 0,
     currentHourFocusSeconds: 0,
+    preservedFocusStrikeSeconds: null,
   };
 }
 
@@ -6639,6 +6778,7 @@ function buildWatcherSnapshot(segments: ActivitySegment[], classificationOptions
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
+    preservedFocusStrikeSeconds: computePreservedFocusStrikeSeconds(segments, segment, classificationOptions),
   };
 }
 
@@ -6663,6 +6803,7 @@ function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segme
   const uncapturedFocusSeconds = productivity === "focus" ? timing.uncapturedSeconds : 0;
   const focusSecondsToday = sumProductivitySeconds(segments, "focus", classificationOptions) + uncapturedFocusSeconds;
   const currentHourFocusSeconds = sumCurrentHourFocusSeconds(segments, classificationOptions) + uncapturedFocusSeconds;
+  const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds([...segments, segment], segment, classificationOptions);
 
   return {
     productivity,
@@ -6677,13 +6818,17 @@ function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segme
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
+    preservedFocusStrikeSeconds,
   };
 }
 
 function currentSnapshotToSegment(current: CurrentActivitySnapshot, durationSeconds: number): ActivitySegment {
+  const endedAt = new Date(current.observedAt).getTime();
+  const startedAt = Number.isFinite(endedAt) ? new Date(endedAt - durationSeconds * 1000).toISOString() : current.observedAt;
+
   return {
     id: `current:${current.observedAt}`,
-    startedAt: current.observedAt,
+    startedAt,
     endedAt: current.observedAt,
     durationSeconds,
     appName: current.appName,
@@ -6808,7 +6953,11 @@ function sumCurrentHourFocusSeconds(segments: ActivitySegment[], classificationO
 }
 
 function isWatcherPeekResponse(value: unknown): value is WatcherPeekResponse {
-  return value === "return" || value === "snooze" || value === "dismiss";
+  return (
+    value === "return"
+    || value === "snooze"
+    || value === "dismiss"
+  );
 }
 
 function isProductivityLabel(value: unknown): value is ProductivityLabel {
@@ -6825,6 +6974,58 @@ function getWatcherContextLabel(segment: ActivitySegment, category: ActivityCate
   if (category === "communication") return "your messages";
   if (category === "utility") return "a utility app";
   return "this session";
+}
+
+function buildRecentFocusTargets(segments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {
+  const targets: DriftAlarmFocusTarget[] = [];
+  const seen = new Set<string>();
+  const sortedFocusSegments = segments
+    .filter((segment) => classifyActivity(segment, classificationOptions).productivity === "focus")
+    .sort((left, right) => new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime());
+
+  for (const segment of sortedFocusSegments) {
+    const appName = segment.appName.trim() || "Unknown app";
+    const bundleId = segment.bundleId?.trim() || null;
+    const siteDomain = segment.siteDomain?.trim() || null;
+    const siteTitle = segment.siteTitle?.trim() || null;
+    const identityKey = siteDomain || bundleId || appName;
+    const dedupeKey = identityKey.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+
+    seen.add(dedupeKey);
+    const iconKey = bundleId ?? appName;
+    const iconSrc = appIcons[iconKey] ?? appIcons[appName] ?? null;
+    const label = siteDomain ?? siteTitle ?? appName;
+    const detail = formatFocusTargetDetail({ appName, siteDomain, siteTitle });
+    targets.push({
+      targetId: siteDomain ? `site:${siteDomain}` : `app:${bundleId ?? appName}`,
+      label,
+      detail,
+      appName,
+      bundleId,
+      siteDomain,
+      siteTitle,
+      iconSrc,
+    });
+
+    if (targets.length === 3) break;
+  }
+
+  return targets;
+}
+
+function formatFocusTargetDetail({
+  appName,
+  siteDomain,
+  siteTitle,
+}: {
+  appName: string;
+  siteDomain: string | null;
+  siteTitle: string | null;
+}): string {
+  if (siteDomain && siteTitle && siteTitle !== siteDomain) return `${siteTitle} · ${appName}`;
+  if (siteDomain) return `Focus tab · ${appName}`;
+  return "Recent focus app";
 }
 
 function getWatcherScheduleDelayMs(mode: WatcherMode, minMinutes: number, maxMinutes: number): number {

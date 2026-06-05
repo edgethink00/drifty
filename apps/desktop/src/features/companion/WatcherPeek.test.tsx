@@ -19,6 +19,7 @@ function buildEvent(overrides: Partial<WatcherPeekEvent>): WatcherPeekEvent {
     minutesSinceLastWatcher: null,
     focusSecondsToday: 0,
     currentHourFocusSeconds: 0,
+    preservedFocusStrikeSeconds: null,
     ...overrides,
   };
 }
@@ -125,6 +126,7 @@ describe("WatcherPeek", () => {
 
     expect(watcher.getAttribute("data-phase")).toBe("speaking");
     expect(screen.getByText(/You asked for 5/i)).toBeTruthy();
+    expect(watcher.querySelector("button")).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(15_000);
@@ -132,6 +134,34 @@ describe("WatcherPeek", () => {
 
     expect(watcher.getAttribute("data-phase")).toBe("speaking");
     expect(onDismiss).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+  it("keeps preserved-strike drift passive because drift alarm owns actions", () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    const onRespond = vi.fn();
+
+    render(
+      <WatcherPeek
+        event={buildEvent({
+          ...driftEvent,
+          id: 4,
+          contextLabel: "Videos",
+          durationLabel: "2m",
+          preservedFocusStrikeSeconds: 32 * 60,
+        })}
+        onDismiss={onDismiss}
+        onRespond={onRespond}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_300);
+    });
+
+    const watcher = screen.getByLabelText("Drifty watcher check-in");
+    expect(watcher.querySelector("button")).toBeNull();
+    expect(onRespond).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 

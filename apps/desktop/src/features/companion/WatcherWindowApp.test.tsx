@@ -57,8 +57,20 @@ const focusEvent = buildEvent({
   focusSessionKind: "deep",
 });
 
+const passiveDriftEvent = buildEvent({
+  id: 3,
+  productivity: "drift",
+  category: "entertainment",
+  contextLabel: "Videos",
+  durationLabel: "12m",
+  durationSeconds: 12 * 60,
+  driftPattern: "first",
+});
+
 describe("WatcherWindowApp", () => {
   afterEach(() => {
+    vi.clearAllMocks();
+    bridge.showHandler = null;
     window.localStorage.clear();
     delete document.documentElement.dataset.surface;
     delete document.documentElement.dataset.theme;
@@ -103,6 +115,32 @@ describe("WatcherWindowApp", () => {
     vi.useRealTimers();
   });
 
+  it("keeps passive drift reminders non-interactive", async () => {
+    vi.useFakeTimers();
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherPeekEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+
+    render(<WatcherWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.showHandler?.(passiveDriftEvent);
+    });
+
+    const watcher = screen.getByLabelText("Drifty watcher check-in");
+
+    act(() => {
+      vi.advanceTimersByTime(2_300);
+    });
+
+    expect(watcher.getAttribute("data-phase")).toBe("speaking");
+    expect(watcher.querySelector("button")).toBeNull();
+    expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(false);
+    vi.useRealTimers();
+  });
+
   it("keeps focused encouragement non-interactive", async () => {
     vi.useFakeTimers();
     bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherPeekEvent) => void) => {
@@ -128,4 +166,5 @@ describe("WatcherWindowApp", () => {
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(false);
     vi.useRealTimers();
   });
+
 });

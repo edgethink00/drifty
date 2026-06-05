@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-drift-alarm-show"
+description = "Enables the drift_alarm_show command without any pre-configured scope."
+commands.allow = ["drift_alarm_show"]
+
+[[permission]]
+identifier = "deny-drift-alarm-show"
+description = "Denies the drift_alarm_show command without any pre-configured scope."
+commands.deny = ["drift_alarm_show"]

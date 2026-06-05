@@ -12,6 +12,7 @@ export const RELEASE_CHANNEL: ReleaseChannel = resolveReleaseChannel();
 export const IS_PRODUCTION_BUILD = RELEASE_CHANNEL === "production";
 
 export const WATCHER_PEEK_PROTOTYPE_ENABLED = !IS_PRODUCTION_BUILD;
+export const DRIFT_ALARM_PANEL_PREVIEWS_ENABLED = !IS_PRODUCTION_BUILD;
 
 const RAW_DEV_SKIP_ONBOARDING = typeof __DRIFTY_DEV_SKIP_ONBOARDING__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING__ : false;
 

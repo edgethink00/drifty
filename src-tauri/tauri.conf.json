@@ -33,7 +33,8 @@
       "csp": null,
       "capabilities": [
         "main-window",
-        "watcher-window"
+        "watcher-window",
+        "drift-alarm-window"
       ]
     }
   },
