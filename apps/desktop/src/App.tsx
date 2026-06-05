@@ -12,6 +12,7 @@ import {
   buildCategoryDurations,
   buildProductivityDurations,
   PRODUCTIVITY_ORDER,
+  computePreservedFocusStrikeSeconds,
   classifyActivity,
   classifyActivityDetailed,
   buildDailyTotals,
@@ -51,7 +52,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -66,12 +67,33 @@ import {
   type WatcherPeekResponse,
 } from "./features/companion/WatcherPeek";
 import {
+  EndOfDayReview,
+  buildEndOfDayReviewSummary,
+  type EndOfDayReviewEvent,
+} from "./features/companion/EndOfDayReview";
+import {
+  DriftAlarm,
+  buildDriftAlarmEvent,
+  type DriftAlarmAction,
+  type DriftAlarmEvent,
+  type DriftAlarmFocusTarget,
+} from "./features/companion/DriftAlarm";
+import {
   hideNativeWatcherPeek,
   isTauriRuntime,
+  listenToNativeEndOfDayReviewAction,
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
+  showNativeEndOfDayReview,
   showNativeWatcherPeek,
+  type EndOfDayReviewAction,
 } from "./features/companion/watcherBridge";
+import {
+  hideNativeDriftAlarm,
+  listenToNativeDriftAlarmAction,
+  listenToNativeDriftAlarmDismissed,
+  showNativeDriftAlarm,
+} from "./features/companion/driftAlarmBridge";
 import {
   fallbackDisplayName,
   fetchOwnProfile,
@@ -460,6 +482,7 @@ const WATCHER_MODE_STORAGE_KEY = "drifty.companion.watcherMode";
 const WATCHER_PERIODIC_MIN_STORAGE_KEY = "drifty.companion.periodicMinMinutes";
 const WATCHER_PERIODIC_MAX_STORAGE_KEY = "drifty.companion.periodicMaxMinutes";
 const WATCHER_RESPONSE_STORAGE_KEY = "drifty.companion.watcherResponses";
+const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
 const LEGACY_WATCHER_PEEK_STORAGE_KEY = "dtime.companion.watcherPeek";
 const LEGACY_WATCHER_MODE_STORAGE_KEY = "dtime.companion.watcherMode";
 const LEGACY_WATCHER_PERIODIC_MIN_STORAGE_KEY = "dtime.companion.periodicMinMinutes";
@@ -515,10 +538,16 @@ const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   selfHostedModel: "",
 };
 const DRIFT_ALERT_MIN_SECONDS = 5 * 60;
+const DRIFT_ALARM_PREVIEW_OPTIONS = [
+  { id: "youtube-5m", label: "YouTube 5m", contextLabel: "youtube.com", driftDurationSeconds: 5 * 60, preservedFocusStrikeSeconds: 30 * 60 },
+  { id: "x-12m", label: "X 12m", contextLabel: "x.com", driftDurationSeconds: 12 * 60, preservedFocusStrikeSeconds: 60 * 60 },
+  { id: "no-context-1h", label: "No context 1h", contextLabel: "", driftDurationSeconds: 60 * 60, preservedFocusStrikeSeconds: 2 * 60 * 60 },
+] as const;
 const DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES = { min: 10, max: 30 };
 const WATCHER_PERIODIC_MIN_LIMIT_MINUTES = 10;
 const WATCHER_PERIODIC_MAX_LIMIT_MINUTES = 240;
 const WATCHER_INITIAL_PEEK_DELAY_MS = 5_000;
+const END_OF_DAY_REVIEW_TRIGGER_MINUTE = 18 * 60;
 const WATCHER_DRIFT_ONLY_CHECK_DELAY_MS = 10_000;
 const WATCHER_DRIFT_REMINDER_THRESHOLDS_SECONDS = [10, 5 * 60, 30 * 60, 60 * 60, 2 * 60 * 60] as const;
 const WATCHER_STALE_EVENT_RECOVERY_MS = 30_000;
@@ -890,6 +919,7 @@ function buildClassificationActivityRows(segs: ActivitySegment[]): Classificatio
 
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
+  const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const activeTab = activeSnapshot.tabId;
@@ -906,6 +936,7 @@ export default function App() {
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
+  const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
   const [leaderboardSegments, setLeaderboardSegments] = useState<ActivitySegment[]>([]);
   const [hourly, setHourly] = useState<HourBucket[]>([]);
@@ -950,6 +981,8 @@ export default function App() {
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
   const [watcherPeriodicMaxMinutes, setWatcherPeriodicMaxMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("max"));
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
+  const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
+  const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
@@ -978,6 +1011,30 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+
+  const openEndOfDayReviewSettings = useCallback(() => {
+    shouldFocusEndOfDayReviewSettingsRef.current = true;
+    setSettingsSection("notifications");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
+
+  const openEndOfDayReviewDashboard = useCallback(() => {
+    setEndOfDayReviewEvent(null);
+    selectDay(logicalTodayIsoDate(startOfDayMinutes));
+    navigateToTab("dashboard", "Today");
+  }, [navigateToTab, startOfDayMinutes]);
+
+  const handleEndOfDayReviewAction = useCallback((action: EndOfDayReviewAction) => {
+    setEndOfDayReviewEvent(null);
+
+    if (action === "openNotificationSettings") {
+      openEndOfDayReviewSettings();
+      return;
+    }
+
+    openEndOfDayReviewDashboard();
+  }, [openEndOfDayReviewDashboard, openEndOfDayReviewSettings]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [developerAuthRequiredPreview, setDeveloperAuthRequiredPreview] = useState(false);
@@ -1020,6 +1077,10 @@ export default function App() {
     }),
     [segments, showAiClassificationImpact],
   );
+  const recentDriftAlarmFocusTargets = useMemo(
+    () => buildRecentFocusTargets(segments, selectedDayClassificationOptions, appIcons),
+    [appIcons, segments, selectedDayClassificationOptions],
+  );
   const localAiClassificationOptions = useMemo(() => {
     if (localAiSetup.provider === "openrouter_byok") {
       const apiKey = localAiSetup.openRouterApiKey.trim();
@@ -1061,6 +1122,12 @@ export default function App() {
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
   const watcherRequestInFlightRef = useRef(false);
   const watcherRecoveryTimeoutRef = useRef(0);
+  const endOfDayReviewQueryPreviewShownRef = useRef(false);
+  const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
+  const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const driftAlarmRequestInFlightRef = useRef(false);
+  const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
@@ -1270,6 +1337,72 @@ export default function App() {
     });
   }, [armWatcherRecoveryTimer, clearWatcherEvent, showAiClassificationImpact]);
 
+  const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<boolean> => {
+    if (!isTauriRuntime()) {
+      setEndOfDayReviewEvent(event);
+      return true;
+    }
+
+    try {
+      return await showNativeEndOfDayReview(event);
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleEndOfDayReviewPreview = useCallback(() => {
+    const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
+    showEndOfDayReview(buildEndOfDayReviewSummary({
+      day: selectedDay,
+      generatedAt: new Date().toISOString(),
+      segments: previewSegments,
+      isMock: true,
+    }));
+  }, [segments, selectedDay, showEndOfDayReview]);
+
+  const clearDriftAlarmEvent = useCallback(() => {
+    driftAlarmEventRef.current = null;
+    pendingDriftAlarmEventRef.current = null;
+    setDriftAlarmEvent(null);
+  }, []);
+
+  const showDriftAlarm = useCallback((event: DriftAlarmEvent) => {
+    if (driftAlarmEventRef.current?.id === event.id) return;
+    if (driftAlarmRequestInFlightRef.current) {
+      pendingDriftAlarmEventRef.current = event;
+      return;
+    }
+
+    driftAlarmEventRef.current = event;
+
+    if (!isTauriRuntime()) {
+      setDriftAlarmEvent(event);
+      return;
+    }
+
+    driftAlarmRequestInFlightRef.current = true;
+    void showNativeDriftAlarm(event).catch(() => {
+      if (driftAlarmEventRef.current?.id === event.id) clearDriftAlarmEvent();
+    }).finally(() => {
+      driftAlarmRequestInFlightRef.current = false;
+      const pendingEvent = pendingDriftAlarmEventRef.current;
+      pendingDriftAlarmEventRef.current = null;
+      if (pendingEvent) showDriftAlarm(pendingEvent);
+    });
+  }, [clearDriftAlarmEvent]);
+
+  const previewDriftAlarm = useCallback((option: typeof DRIFT_ALARM_PREVIEW_OPTIONS[number]) => {
+    driftAlarmPreviewCounterRef.current += 1;
+    showDriftAlarm(buildDriftAlarmEvent({
+      id: `drift-alarm-preview-${option.id}-${Date.now()}-${driftAlarmPreviewCounterRef.current}`,
+      contextLabel: option.contextLabel,
+      driftDurationSeconds: option.driftDurationSeconds,
+      preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
+      generatedAt: new Date().toISOString(),
+      focusTargets: recentDriftAlarmFocusTargets,
+    }));
+  }, [recentDriftAlarmFocusTargets, showDriftAlarm]);
+
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
     if (!currentEvent) return;
@@ -1279,6 +1412,30 @@ export default function App() {
     persistWatcherResponse(currentEvent, response);
     setWatcherEvent(null);
   }, [clearWatcherRecoveryTimer]);
+
+  const dismissDriftAlarm = useCallback(() => {
+    clearDriftAlarmEvent();
+    void hideNativeDriftAlarm();
+  }, [clearDriftAlarmEvent]);
+
+  const handleDriftAlarmAction = useCallback((action: DriftAlarmAction) => {
+    dismissDriftAlarm();
+
+    switch (action.type) {
+      case "settings":
+        setSettingsSection("notifications");
+        navigateToTab("settings");
+        return;
+      case "manual_correction":
+        navigateToTab("classify");
+        return;
+      case "return_to_focus":
+        navigateToTab("dashboard");
+        return;
+      case "start_break":
+        return;
+    }
+  }, [dismissDriftAlarm, navigateToTab]);
 
   const dismissWatcherPeek = useCallback(() => {
     clearWatcherEvent();
@@ -1344,6 +1501,7 @@ export default function App() {
 
       setCurrentSnapshot(nextCurrentSnapshot);
       setSegments(timeline);
+      setSegmentsLoadedDay(day);
       setHistorySegments(historyTimeline);
       setHourly(buildHourlySummary(timeline));
       setInsightHourly(historyHourlySummary);
@@ -1571,6 +1729,16 @@ export default function App() {
   useEffect(() => () => clearWatcherRecoveryTimer(), [clearWatcherRecoveryTimer]);
 
   useEffect(() => {
+    if (activeTab !== "settings" || settingsSection !== "notifications") return;
+    if (!shouldFocusEndOfDayReviewSettingsRef.current) return;
+
+    shouldFocusEndOfDayReviewSettingsRef.current = false;
+    const row = endOfDayReviewSettingsRowRef.current;
+    if (typeof row?.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
+    row?.focus();
+  }, [activeTab, settingsSection]);
+
+  useEffect(() => {
     if (!isTauriRuntime()) return undefined;
 
     let disposed = false;
@@ -1614,6 +1782,15 @@ export default function App() {
     let disposed = false;
     const unlisteners: Array<() => void> = [];
 
+    void listenToNativeEndOfDayReviewAction(handleEndOfDayReviewAction).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
     void listenToNativeWatcherResponse(handleWatcherResponse).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -1632,11 +1809,29 @@ export default function App() {
       unlisteners.push(unlisten);
     });
 
+    void listenToNativeDriftAlarmAction(handleDriftAlarmAction).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
+    void listenToNativeDriftAlarmDismissed(clearDriftAlarmEvent).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
     return () => {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [dismissWatcherPeek, handleWatcherResponse]);
+  }, [clearDriftAlarmEvent, dismissWatcherPeek, handleDriftAlarmAction, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   useEffect(() => {
     if (!driftAlertsEnabled) return;
@@ -1650,15 +1845,32 @@ export default function App() {
     if (!latestDrift) return;
 
     const alertKey = `${latestDrift.id}:${latestDrift.endedAt}`;
+    const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds(segments, latestDrift, selectedDayClassificationOptions);
+    const showPreservedFocusDriftAlarm = () => {
+      if (preservedFocusStrikeSeconds === null || preservedFocusStrikeSeconds <= 0) return;
+
+      const { category } = classifyActivity(latestDrift, selectedDayClassificationOptions);
+      showDriftAlarm(buildDriftAlarmEvent({
+        id: alertKey,
+        contextLabel: getWatcherContextLabel(latestDrift, category),
+        driftDurationSeconds: latestDrift.durationSeconds,
+        preservedFocusStrikeSeconds,
+        generatedAt: new Date().toISOString(),
+        focusTargets: recentDriftAlarmFocusTargets,
+      }));
+    };
+
     if (lastDriftAlertSegmentRef.current === null) {
       lastDriftAlertSegmentRef.current = alertKey;
+      showPreservedFocusDriftAlarm();
       return;
     }
     if (lastDriftAlertSegmentRef.current === alertKey) return;
 
     lastDriftAlertSegmentRef.current = alertKey;
+    showPreservedFocusDriftAlarm();
     void sendDriftNotification(latestDrift);
-  }, [driftAlertsEnabled, selectedDay, selectedDayClassificationOptions, segments, status?.running]);
+  }, [driftAlertsEnabled, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -1818,6 +2030,38 @@ export default function App() {
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
+  const shouldShowEndOfDayReviewPreview = import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
+
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    if (endOfDayReviewQueryPreviewShownRef.current) return;
+    if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
+
+    endOfDayReviewQueryPreviewShownRef.current = true;
+    showEndOfDayReview(buildEndOfDayReviewSummary({
+      day: todayDay,
+      generatedAt: new Date().toISOString(),
+      segments: buildMockEndOfDayReviewSegments(todayDay),
+      isMock: true,
+    }));
+  }, [hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
+
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    if (selectedDay !== todayDay) return;
+    if (segmentsLoadedDay !== todayDay) return;
+    if (!status?.running) return;
+    if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
+    if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
+
+    void showEndOfDayReview(buildEndOfDayReviewSummary({
+      day: todayDay,
+      generatedAt: new Date().toISOString(),
+      segments,
+    })).then((shown) => {
+      if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
+    });
+  }, [currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
   const activeInsightCategoryTotals = useMemo(
@@ -3663,9 +3907,13 @@ export default function App() {
                 {settingsSection === "notifications" && (
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Send a macOS notification when a newly captured drift block runs for 5 minutes or longer.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
+                    <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Show a local summary after 6:00 PM when the tracker is running, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
+                    {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
+                      <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
+                    ) : null}
                     {WATCHER_PEEK_PROTOTYPE_ENABLED && (
                     <>
-                    <div className="settings-row"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
+                    <div className="settings-row" role="group" aria-label="Peek watcher prototype"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Watcher mode</div><div className="desc">Choose regular check-ins or a quieter mode that only speaks when drift continues.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Watcher mode"><button type="button" className={`settings-mode-option${watcherMode === "periodic" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "periodic"} onClick={() => setWatcherMode("periodic")}><span>Periodic</span><small>Every few minutes</small></button><button type="button" className={`settings-mode-option${watcherMode === "drift_only" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "drift_only"} onClick={() => setWatcherMode("drift_only")}><span>Drift only</span><small>Quiet during focus</small></button></div></div></div>
                     {watcherMode === "periodic" ? (
                       <div className="settings-row"><div><div className="lbl">Periodic cadence</div><div className="desc">Show the watcher at a random interval inside this range. Default is 10-30 minutes.</div></div><div className="ctrl settings-row__actions"><input className="settings-input settings-input--compact" type="number" min={WATCHER_PERIODIC_MIN_LIMIT_MINUTES} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMinMinutes} onChange={handleWatcherPeriodicMinChange} aria-label="Minimum watcher interval minutes" /><span className="settings-inline-unit">to</span><input className="settings-input settings-input--compact" type="number" min={watcherPeriodicMinMinutes} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMaxMinutes} onChange={handleWatcherPeriodicMaxChange} aria-label="Maximum watcher interval minutes" /><span className="settings-inline-unit">min</span></div></div>
@@ -3702,7 +3950,21 @@ export default function App() {
         ) : null}
       </MainContentShell>
 
-      {!isTauriRuntime() ? <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} /> : null}
+      {!isTauriRuntime() ? (
+        <>
+          <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} />
+          {endOfDayReviewEvent ? (
+            <EndOfDayReview
+              event={endOfDayReviewEvent}
+              onOpenDashboard={() => handleEndOfDayReviewAction("openDashboard")}
+              onViewDetails={() => handleEndOfDayReviewAction("viewDetails")}
+              onOpenNotificationSettings={() => handleEndOfDayReviewAction("openNotificationSettings")}
+              onClose={() => setEndOfDayReviewEvent(null)}
+            />
+          ) : null}
+          <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} />
+        </>
+      ) : null}
 
       {/* Command Bar */}
       {cmdOpen && (
@@ -6947,6 +7209,7 @@ function getDefaultWatcherSnapshot(): WatcherSnapshot {
     minutesSinceLastWatcher: getMinutesSinceLastWatcher(),
     focusSecondsToday: 0,
     currentHourFocusSeconds: 0,
+    preservedFocusStrikeSeconds: null,
   };
 }
 
@@ -6987,6 +7250,7 @@ function buildWatcherSnapshot(segments: ActivitySegment[], classificationOptions
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
+    preservedFocusStrikeSeconds: computePreservedFocusStrikeSeconds(segments, segment, classificationOptions),
   };
 }
 
@@ -7011,6 +7275,7 @@ function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segme
   const uncapturedFocusSeconds = productivity === "focus" ? timing.uncapturedSeconds : 0;
   const focusSecondsToday = sumProductivitySeconds(segments, "focus", classificationOptions) + uncapturedFocusSeconds;
   const currentHourFocusSeconds = sumCurrentHourFocusSeconds(segments, classificationOptions) + uncapturedFocusSeconds;
+  const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds([...segments, segment], segment, classificationOptions);
 
   return {
     productivity,
@@ -7025,13 +7290,17 @@ function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segme
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
+    preservedFocusStrikeSeconds,
   };
 }
 
 function currentSnapshotToSegment(current: CurrentActivitySnapshot, durationSeconds: number): ActivitySegment {
+  const endedAt = new Date(current.observedAt).getTime();
+  const startedAt = Number.isFinite(endedAt) ? new Date(endedAt - durationSeconds * 1000).toISOString() : current.observedAt;
+
   return {
     id: `current:${current.observedAt}`,
-    startedAt: current.observedAt,
+    startedAt,
     endedAt: current.observedAt,
     durationSeconds,
     appName: current.appName,
@@ -7156,7 +7425,11 @@ function sumCurrentHourFocusSeconds(segments: ActivitySegment[], classificationO
 }
 
 function isWatcherPeekResponse(value: unknown): value is WatcherPeekResponse {
-  return value === "return" || value === "snooze" || value === "dismiss";
+  return (
+    value === "return"
+    || value === "snooze"
+    || value === "dismiss"
+  );
 }
 
 function isProductivityLabel(value: unknown): value is ProductivityLabel {
@@ -7173,6 +7446,58 @@ function getWatcherContextLabel(segment: ActivitySegment, category: ActivityCate
   if (category === "communication") return "your messages";
   if (category === "utility") return "a utility app";
   return "this session";
+}
+
+function buildRecentFocusTargets(segments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {
+  const targets: DriftAlarmFocusTarget[] = [];
+  const seen = new Set<string>();
+  const sortedFocusSegments = segments
+    .filter((segment) => classifyActivity(segment, classificationOptions).productivity === "focus")
+    .sort((left, right) => new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime());
+
+  for (const segment of sortedFocusSegments) {
+    const appName = segment.appName.trim() || "Unknown app";
+    const bundleId = segment.bundleId?.trim() || null;
+    const siteDomain = segment.siteDomain?.trim() || null;
+    const siteTitle = segment.siteTitle?.trim() || null;
+    const identityKey = siteDomain || bundleId || appName;
+    const dedupeKey = identityKey.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+
+    seen.add(dedupeKey);
+    const iconKey = bundleId ?? appName;
+    const iconSrc = appIcons[iconKey] ?? appIcons[appName] ?? null;
+    const label = siteDomain ?? siteTitle ?? appName;
+    const detail = formatFocusTargetDetail({ appName, siteDomain, siteTitle });
+    targets.push({
+      targetId: siteDomain ? `site:${siteDomain}` : `app:${bundleId ?? appName}`,
+      label,
+      detail,
+      appName,
+      bundleId,
+      siteDomain,
+      siteTitle,
+      iconSrc,
+    });
+
+    if (targets.length === 3) break;
+  }
+
+  return targets;
+}
+
+function formatFocusTargetDetail({
+  appName,
+  siteDomain,
+  siteTitle,
+}: {
+  appName: string;
+  siteDomain: string | null;
+  siteTitle: string | null;
+}): string {
+  if (siteDomain && siteTitle && siteTitle !== siteDomain) return `${siteTitle} · ${appName}`;
+  if (siteDomain) return `Focus tab · ${appName}`;
+  return "Recent focus app";
 }
 
 function getWatcherScheduleDelayMs(mode: WatcherMode, minMinutes: number, maxMinutes: number): number {
@@ -7912,6 +8237,56 @@ function filterSegmentsForRange(segments: ActivitySegment[], start: string, end:
     const segmentEnd = new Date(segment.endedAt).getTime();
     return segmentEnd >= startMs && segmentStart <= endMs;
   });
+}
+
+function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] {
+  const start = new Date(`${day}T09:00:00`);
+  const focusEnd = new Date(start.getTime() + 95 * 60 * 1000);
+  const driftStart = new Date(`${day}T14:15:00`);
+  const driftEnd = new Date(driftStart.getTime() + 35 * 60 * 1000);
+
+  return [
+    {
+      id: "end-of-day-review-preview-focus",
+      startedAt: start.toISOString(),
+      endedAt: focusEnd.toISOString(),
+      durationSeconds: 95 * 60,
+      appName: "Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Planning tomorrow",
+      platform: "macos",
+      source: "nsworkspace",
+      classification: {
+        category: "workspace",
+        productivity: "focus",
+        source: "manual",
+        confidence: 1,
+        reason: "Deterministic end-of-day review preview",
+      },
+    },
+    {
+      id: "end-of-day-review-preview-drift",
+      startedAt: driftStart.toISOString(),
+      endedAt: driftEnd.toISOString(),
+      durationSeconds: 35 * 60,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Design rabbit hole",
+      siteUrl: "https://youtube.com/watch?v=preview",
+      windowTitle: "Design rabbit hole",
+      platform: "macos",
+      source: "nsworkspace",
+      classification: {
+        category: "entertainment",
+        productivity: "drift",
+        source: "manual",
+        confidence: 1,
+        reason: "Deterministic end-of-day review preview",
+      },
+    },
+  ];
 }
 
 function formatDashboardPeriodLabel(period: DashboardPeriod, startDay: string, endDay: string): string {

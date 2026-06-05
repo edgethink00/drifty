@@ -1,12 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
 
 type UnlistenFn = () => void;
 
 type WatcherResponseEvent = {
-  response: WatcherPeekResponse;
+  response: unknown;
 };
+
+type EndOfDayReviewActionEvent = {
+  action: unknown;
+};
+
+export type WatcherWindowEvent = WatcherPeekEvent | EndOfDayReviewEvent;
+export type EndOfDayReviewAction = "openDashboard" | "viewDetails" | "openNotificationSettings";
 
 export function isTauriRuntime() {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return false;
@@ -15,6 +23,12 @@ export function isTauriRuntime() {
 }
 
 export async function showNativeWatcherPeek(event: WatcherPeekEvent): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  await invoke("watcher_peek_show", { payload: event });
+  return true;
+}
+
+export async function showNativeEndOfDayReview(event: EndOfDayReviewEvent): Promise<boolean> {
   if (!isTauriRuntime()) return false;
   await invoke("watcher_peek_show", { payload: event });
   return true;
@@ -40,9 +54,14 @@ export async function respondNativeWatcherPeek(response: WatcherPeekResponse): P
   await invoke("watcher_peek_respond", { response });
 }
 
-export async function listenToNativeWatcherShow(onShow: (event: WatcherPeekEvent) => void): Promise<UnlistenFn | null> {
+export async function triggerNativeEndOfDayReviewAction(action: EndOfDayReviewAction): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("watcher_peek_end_of_day_review_action", { action });
+}
+
+export async function listenToNativeWatcherShow(onShow: (event: WatcherWindowEvent) => void): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen<WatcherPeekEvent>("watcher-peek-show", ({ payload }) => onShow(payload));
+  return listen<WatcherWindowEvent>("watcher-peek-show", ({ payload }) => onShow(payload));
 }
 
 export async function listenToNativeWatcherResponse(onResponse: (response: WatcherPeekResponse) => void): Promise<UnlistenFn | null> {
@@ -57,6 +76,17 @@ export async function listenToNativeWatcherDismissed(onDismissed: () => void): P
   return listen("watcher-peek-dismissed", onDismissed);
 }
 
-function isWatcherPeekResponse(value: string): value is WatcherPeekResponse {
+export async function listenToNativeEndOfDayReviewAction(onAction: (action: EndOfDayReviewAction) => void): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<EndOfDayReviewActionEvent>("end-of-day-review-action", ({ payload }) => {
+    if (isEndOfDayReviewAction(payload.action)) onAction(payload.action);
+  });
+}
+
+function isWatcherPeekResponse(value: unknown): value is WatcherPeekResponse {
   return value === "return" || value === "snooze" || value === "dismiss";
+}
+
+function isEndOfDayReviewAction(value: unknown): value is EndOfDayReviewAction {
+  return value === "openDashboard" || value === "viewDetails" || value === "openNotificationSettings";
 }
