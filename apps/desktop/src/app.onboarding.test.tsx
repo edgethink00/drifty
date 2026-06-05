@@ -22,6 +22,7 @@ const {
   trackerGetHourlySummary,
   openSystemSettingsPane,
   billingMocks,
+  appFeatureSwitches,
 } = vi.hoisted(() => ({
   authState: {
     user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string } | null,
@@ -58,6 +59,9 @@ const {
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
+  },
+  appFeatureSwitches: {
+    devOnboardingBypassEnabled: false,
   },
 }));
 
@@ -118,6 +122,12 @@ vi.mock("./features/billing/billingService", () => ({
   createIndividualCheckout: billingMocks.createIndividualCheckout,
 }));
 
+vi.mock("./appFeatureSwitches", () => ({
+  DEV_ONBOARDING_BYPASS_ENABLED: false,
+  isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
+  WATCHER_PEEK_PROTOTYPE_ENABLED: true,
+}));
+
 import App from "./App";
 
 function createDeferred<T>() {
@@ -154,6 +164,13 @@ async function clickEnabledNext() {
     expect(nextButton.disabled).toBe(false);
   });
   fireEvent.click(nextButton);
+}
+
+async function settleAppStartupEffects() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 async function chooseWorkProfile(role: string, field: string) {
@@ -217,6 +234,7 @@ describe("App onboarding", () => {
     fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null, data: null });
     optOutLeaderboard.mockResolvedValue({ success: true, error: null });
+    appFeatureSwitches.devOnboardingBypassEnabled = false;
   });
 
   it("opens onboarding on the welcome step for an authenticated user without local completion", async () => {
@@ -239,6 +257,32 @@ describe("App onboarding", () => {
     expect(screen.getByRole("button", { name: /start drifty cloud trial/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /use my own ai setup/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /continue local-only without ai/i })).toBeTruthy();
+  });
+
+  it("bypasses onboarding for an authenticated dev startup without storing completion", async () => {
+    appFeatureSwitches.devOnboardingBypassEnabled = true;
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    await waitFor(() => expect(fetchOwnProfile).toHaveBeenCalledTimes(1));
+    await settleAppStartupEffects();
+    expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeNull();
+  });
+
+  it("bypasses onboarding for a local unauthenticated dev startup without storing completion", async () => {
+    appFeatureSwitches.devOnboardingBypassEnabled = true;
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.isEnabled = false;
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    await settleAppStartupEffects();
+    expect(screen.queryByRole("dialog", { name: /choose how you want to start/i })).toBeNull();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("local"))).toBeNull();
   });
 
   it("opens trial-first onboarding in required auth mode without a signed-in user", async () => {
