@@ -105,6 +105,8 @@ export function EndOfDayReview({
   const hasTrackedTime = event.totalSeconds > 0;
   const breakdown = buildReviewBreakdown(event);
   const compactBreakdown = buildCompactBreakdown(breakdown);
+  const topSourceDurationLabel = event.topSource ? formatReviewDuration(event.topSource.durationSeconds) : null;
+  const insight = hasTrackedTime ? buildEndOfDayInsight(event) : null;
   const [breakdownHover, setBreakdownHover] = useState<ReviewBreakdownHover | null>(null);
 
   function showBreakdownHover(item: ReviewBreakdownItem, mouseEvent: MouseEvent<HTMLElement>) {
@@ -116,9 +118,43 @@ export function EndOfDayReview({
       <button type="button" className="end-of-day-review__close" aria-label="Close end-of-day review" onClick={onClose}>x</button>
 
       {hasTrackedTime ? (
-        <div className="end-of-day-review__compact">
-          <ReviewDonut breakdown={compactBreakdown} leadingItem={compactBreakdown[0]} />
-          <ReviewBreakdown breakdown={compactBreakdown} onShowHover={showBreakdownHover} onHideHover={() => setBreakdownHover(null)} />
+        <div className="end-of-day-review__tracked">
+          <header className="end-of-day-review__header">
+            <p className="end-of-day-review__eyebrow">Evening review</p>
+            <h2>Your day, locally summarized</h2>
+          </header>
+
+          <div className="end-of-day-review__summary" aria-label="Focus and drift summary">
+            <span>{event.trackedLabel}</span>
+            <span>{event.focusLabel}</span>
+            <span>{event.driftLabel}</span>
+          </div>
+
+          <div className="end-of-day-review__body">
+            <div className="end-of-day-review__compact">
+              <ReviewDonut breakdown={compactBreakdown} leadingItem={compactBreakdown[0]} />
+              <ReviewBreakdown breakdown={compactBreakdown} onShowHover={showBreakdownHover} onHideHover={() => setBreakdownHover(null)} />
+            </div>
+
+            <div className="end-of-day-review__source" aria-label="Top source">
+              <span>Top source</span>
+              {event.topSource ? (
+                <>
+                  <strong>{event.topSource.appName}</strong>
+                  {event.topSource.sourceLabel !== event.topSource.appName ? <em>{event.topSource.sourceLabel}</em> : null}
+                  {topSourceDurationLabel ? <small>{topSourceDurationLabel}</small> : null}
+                </>
+              ) : (
+                <strong>No source yet</strong>
+              )}
+            </div>
+          </div>
+
+          {insight ? (
+            <p className="end-of-day-review__insight" aria-label="End-of-day insight">
+              {insight}
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="end-of-day-review__empty">
@@ -316,6 +352,14 @@ function buildCompactBreakdown(breakdown: ReviewBreakdownItem[]): ReviewBreakdow
 function safePercent(seconds: number, totalSeconds: number): number {
   if (totalSeconds <= 0) return 0;
   return Math.round((seconds / totalSeconds) * 1000) / 10;
+}
+
+function buildEndOfDayInsight(event: EndOfDayReviewEvent): string {
+  const focusLabel = `${formatReviewDuration(event.focusSeconds)} focus`;
+  const driftLabel = `${formatReviewDuration(event.driftSeconds)} drift`;
+  const topSourceCopy = event.topSource ? ` ${event.topSource.appName} was the top source.` : "";
+
+  return `${focusLabel} against ${driftLabel}.${topSourceCopy}`;
 }
 
 function formatReviewPercent(percent: number): string {

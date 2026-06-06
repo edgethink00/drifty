@@ -220,6 +220,45 @@ html[data-surface="drift-alarm"] .bootstrap-error pre {
   white-space: inherit;
 }
 
+html[data-surface="watcher"] .bootstrap-error {
+  --watcher-debug-edge: var(--space-3);
+  --watcher-debug-width: 20rem;
+  --watcher-debug-max-height: 7.5rem;
+  background: color-mix(in srgb, var(--warn) 82%, black);
+  border: 1px solid color-mix(in srgb, var(--danger-line) 72%, var(--warn));
+  border-radius: var(--radius-sm);
+  bottom: var(--watcher-debug-edge);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), 0 0 0 1px color-mix(in srgb, var(--warn) 40%, black) inset;
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  left: var(--watcher-debug-edge);
+  line-height: 1.4;
+  max-height: min(var(--watcher-debug-max-height), calc(100vh - (var(--watcher-debug-edge) * 2)));
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: var(--block-gap) var(--space-3);
+  position: fixed;
+  right: auto;
+  top: auto;
+  transform: none;
+  white-space: pre-wrap;
+  width: min(var(--watcher-debug-width), calc(100vw - (var(--watcher-debug-edge) * 2)));
+  z-index: 2147483647;
+}
+
+html[data-surface="watcher"] .bootstrap-error h1 {
+  font-size: var(--type-setting-label-size);
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: var(--space-1);
+}
+
+html[data-surface="watcher"] .bootstrap-error pre {
+  font: inherit;
+  white-space: inherit;
+}
+
 button, input, textarea { font: inherit; }
 button {
   appearance: none;
@@ -10682,35 +10721,100 @@ button.flow-cell:focus {
 /* ── Companion end-of-day review ── */
 .end-of-day-review {
   --review-tone: var(--accent);
-  --review-panel: color-mix(in srgb, var(--surface) 90%, transparent);
-  --review-panel-edge: color-mix(in srgb, var(--review-tone) 32%, var(--line-strong));
-  backdrop-filter: blur(var(--space-3)) saturate(1.12);
+  --review-panel: color-mix(in srgb, var(--surface) 94%, transparent);
+  --review-panel-edge: color-mix(in srgb, var(--review-tone) 22%, var(--line-strong));
+  backdrop-filter: blur(var(--space-3)) saturate(1.04);
   background: var(--review-panel);
   border: 1px solid var(--review-panel-edge);
   border-radius: var(--radius-lg);
   box-shadow:
-    0 var(--space-3) var(--space-6) color-mix(in srgb, var(--text) 13%, transparent),
-    0 0 0 1px color-mix(in srgb, white 12%, transparent) inset,
-    0 var(--space-5) var(--space-7) color-mix(in srgb, var(--review-tone) 14%, transparent);
+    0 var(--space-3) var(--space-6) color-mix(in srgb, var(--text) 11%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--surface-strong) 46%, transparent) inset;
   color: var(--text);
   display: grid;
-  gap: 0;
+  gap: var(--space-3);
   max-width: calc(100vw - var(--space-6));
   padding: var(--space-3);
   pointer-events: auto;
   position: fixed;
   right: var(--space-4);
   top: calc(var(--window-chrome-height) + var(--space-3));
-  width: min(26.25rem, calc(100vw - var(--space-6)));
+  width: min(33.5rem, calc(100vw - var(--space-6)));
   z-index: 49;
+}
+
+.end-of-day-review__tracked {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.end-of-day-review__header {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding-inline-end: var(--space-5);
+}
+
+.end-of-day-review__eyebrow {
+  color: color-mix(in srgb, var(--review-tone) 72%, var(--text));
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  font-weight: 700;
+  letter-spacing: .15em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.end-of-day-review__header h2 {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-section-title-size);
+  font-weight: 720;
+  letter-spacing: -.025em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.end-of-day-review__summary {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.end-of-day-review__summary span {
+  background: color-mix(in srgb, var(--review-tone) 7%, var(--surface-strong));
+  border: 1px solid color-mix(in srgb, var(--review-tone) 16%, var(--line));
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 650;
+  line-height: 1.15;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--space-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.end-of-day-review__body {
+  align-items: stretch;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) minmax(8.75rem, 10rem);
+  min-width: 0;
 }
 
 .end-of-day-review__compact {
   align-items: center;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: 6.65rem minmax(0, 1fr);
-  min-height: 7.6rem;
+  grid-template-columns: 5.9rem minmax(0, 1fr);
+  min-height: 7.1rem;
+  min-width: 0;
 }
 
 .end-of-day-review[data-mock="true"] {
@@ -10719,25 +10823,36 @@ button.flow-cell:focus {
 
 .end-of-day-review__close {
   align-items: center;
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
   display: inline-flex;
-  height: 1px;
+  font-size: var(--type-control-size);
+  height: var(--space-5);
   justify-content: center;
   overflow: hidden;
   padding: 0;
   position: absolute;
-  white-space: nowrap;
-  width: 1px;
+  right: var(--space-3);
+  top: var(--space-3);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  width: var(--space-5);
+}
+
+.end-of-day-review__close:hover,
+.end-of-day-review__close:focus-visible {
+  background: color-mix(in srgb, var(--review-tone) 10%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--review-tone) 26%, var(--line-strong));
+  color: var(--text);
 }
 
 .end-of-day-review__graph {
   display: block;
   flex: 0 0 auto;
-  height: 6.35rem;
+  height: 5.8rem;
   overflow: visible;
-  width: 6.35rem;
+  width: 5.8rem;
 }
 
 .end-of-day-review__graph-track,
@@ -10828,6 +10943,12 @@ button.flow-cell:focus {
   line-height: 1;
 }
 
+.end-of-day-review__breakdown-label span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .end-of-day-review__breakdown-measure {
   color: var(--text-soft);
   display: inline-flex;
@@ -10895,6 +11016,66 @@ button.flow-cell:focus {
   display: block;
   height: 100%;
   width: var(--review-share);
+}
+
+.end-of-day-review__source {
+  align-content: start;
+  background: color-mix(in srgb, var(--review-tone) 6%, var(--surface-strong));
+  border: 1px solid color-mix(in srgb, var(--review-tone) 16%, var(--line));
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.end-of-day-review__source span,
+.end-of-day-review__source small,
+.end-of-day-review__source em {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-style: normal;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.end-of-day-review__source span {
+  color: color-mix(in srgb, var(--review-tone) 68%, var(--text));
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.end-of-day-review__source strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 720;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.end-of-day-review__source small {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.end-of-day-review__insight {
+  background: color-mix(in srgb, var(--productivity-focus-soft) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--productivity-focus) 18%, var(--line));
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: var(--space-2) var(--space-3);
 }
 
 .end-of-day-review__hover-card {
@@ -10981,13 +11162,42 @@ button.flow-cell:focus {
 }
 
 .end-of-day-review__actions {
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.end-of-day-review__action {
+  background: color-mix(in srgb, var(--surface-strong) 86%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-muted);
+  min-height: var(--space-6);
+  min-width: 0;
   overflow: hidden;
-  position: absolute;
+  padding: var(--space-2) var(--space-3);
+  text-overflow: ellipsis;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
   white-space: nowrap;
-  width: 1px;
+}
+
+.end-of-day-review__action--primary {
+  background: color-mix(in srgb, var(--review-tone) 14%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--review-tone) 28%, var(--line-strong));
+  color: var(--text);
+  font-weight: 700;
+}
+
+.end-of-day-review__action:hover,
+.end-of-day-review__action:focus-visible {
+  background: color-mix(in srgb, var(--review-tone) 10%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--review-tone) 30%, var(--line-strong));
+  color: var(--text);
+}
+
+.end-of-day-review__action:active {
+  transform: translateY(1px);
 }
 
 @media (max-width: 760px) {
@@ -11003,11 +11213,22 @@ button.flow-cell:focus {
 html[data-surface="watcher"] .end-of-day-review,
 .watcher-window-surface .end-of-day-review {
   left: auto;
-  max-width: calc(100vw - var(--space-5));
+  max-width: calc(100vw - var(--space-6));
   position: absolute;
   right: var(--space-3);
   top: var(--space-3);
-  width: min(26.25rem, calc(100vw - var(--space-5)));
+  width: min(33.5rem, calc(100vw - var(--space-6)));
+}
+
+@media (max-width: 520px) {
+  .end-of-day-review__summary,
+  .end-of-day-review__body {
+    grid-template-columns: 1fr;
+  }
+
+  .end-of-day-review__compact {
+    grid-template-columns: 5.6rem minmax(0, 1fr);
+  }
 }
 
 .watcher-window-surface--drift-alarm .watcher-peek--drift-alarm {

@@ -40,7 +40,7 @@ export function WatcherWindowApp() {
         return;
       }
       unlisten = nextUnlisten;
-    });
+    }).catch(ignoreWatcherBridgeRejection);
 
     return () => {
       disposed = true;
@@ -50,29 +50,29 @@ export function WatcherWindowApp() {
 
   const handleDismiss = useCallback(() => {
     setEvent(null);
-    void dismissNativeWatcherPeek();
+    ignoreWatcherBridgePromise(dismissNativeWatcherPeek());
   }, []);
 
   const handlePhaseChange = useCallback((_phase: WatcherPhase, _currentEvent: WatcherPeekEvent | null) => {
-    void setNativeWatcherInteractive(false);
+    ignoreWatcherBridgePromise(setNativeWatcherInteractive(false));
   }, []);
 
   const handleOpenDashboard = useCallback(() => {
-    void triggerNativeEndOfDayReviewAction("openDashboard");
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard"));
   }, []);
 
   const handleViewDetails = useCallback(() => {
-    void triggerNativeEndOfDayReviewAction("viewDetails");
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("viewDetails"));
   }, []);
 
   const handleOpenNotificationSettings = useCallback(() => {
-    void triggerNativeEndOfDayReviewAction("openNotificationSettings");
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openNotificationSettings"));
   }, []);
 
   const isReviewEvent = isEndOfDayReviewEvent(event);
 
   useEffect(() => {
-    if (isReviewEvent) void setNativeWatcherInteractive(true);
+    if (isReviewEvent) ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
   }, [isReviewEvent]);
 
   return (
@@ -94,4 +94,12 @@ export function WatcherWindowApp() {
 
 function isEndOfDayReviewEvent(event: WatcherWindowEvent | null): event is EndOfDayReviewEvent {
   return event !== null && "kind" in event && event.kind === "endOfDayReview";
+}
+
+function ignoreWatcherBridgePromise(promise: Promise<unknown>) {
+  void promise.catch(ignoreWatcherBridgeRejection);
+}
+
+function ignoreWatcherBridgeRejection() {
+  return undefined;
 }

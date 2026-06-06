@@ -8716,6 +8716,9 @@ async function sendDriftNotification(segment: ActivitySegment) {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
 
   try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    if (getCurrentWindow().label !== "main") return;
+
     const { isPermissionGranted, requestPermission, sendNotification } = await import("@tauri-apps/plugin-notification");
     let hasPermission = await isPermissionGranted();
     if (!hasPermission) {

@@ -97,12 +97,23 @@ describe("EndOfDayReview", () => {
 
     const review = screen.getByLabelText("Drifty end-of-day review");
     expect(review.querySelector(".end-of-day-review__compact")).toBeTruthy();
-    expect(within(review).queryByText("2h 45m tracked")).toBeNull();
-    expect(within(review).queryByLabelText("Focus and drift summary")).toBeNull();
-    expect(review.textContent).not.toContain("2h focus");
-    expect(review.textContent).not.toContain("45m drift");
-    expect(review.textContent).not.toContain("Top source");
-    expect(review.textContent).not.toContain("Top app");
+    expect.soft(within(review).queryByText("Evening review")).not.toBeNull();
+    expect.soft(within(review).queryByText("2h 45m tracked")).not.toBeNull();
+
+    const focusDriftSummary = within(review).queryByLabelText("Focus and drift summary");
+    expect.soft(focusDriftSummary).not.toBeNull();
+    expect.soft(within(review).queryByText("2h focus")).not.toBeNull();
+    expect.soft(within(review).queryByText("45m drift")).not.toBeNull();
+
+    const topSource = within(review).queryByLabelText("Top source");
+    expect.soft(topSource).not.toBeNull();
+    expect.soft(within(review).queryByText("Top source")).not.toBeNull();
+    expect.soft(within(review).queryByText("Code")).not.toBeNull();
+
+    const insight = within(review).queryByLabelText("End-of-day insight");
+    expect.soft(insight).not.toBeNull();
+    expect.soft(insight?.textContent ?? "").toMatch(/focus/i);
+    expect.soft(insight?.textContent ?? "").toMatch(/drift/i);
 
     const breakdown = within(review).getByLabelText("End-of-day derived breakdown");
     const focusRow = within(breakdown).getByLabelText("Focus breakdown detail");
@@ -177,7 +188,7 @@ describe("EndOfDayReview", () => {
 
     render(<EndOfDayReview event={event} />);
 
-    expect(screen.queryByLabelText("Focus and drift summary")).toBeNull();
+    expect.soft(screen.queryByLabelText("Focus and drift summary")).not.toBeNull();
     const breakdown = screen.getByLabelText("End-of-day derived breakdown");
     const rows = within(breakdown).getAllByLabelText(/breakdown detail/);
     expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
@@ -320,7 +331,7 @@ describe("EndOfDayReview", () => {
     expect(review.textContent).not.toMatch(/NaN%/);
   });
 
-  it("keeps long app and source labels present inside a bounded row", () => {
+  it("surfaces long app and source labels in the top source summary", () => {
     const longAppName = "A Very Long Research Browser With Workspace Context That Should Stay Readable";
     const longSourceLabel = "deeply-nested-research-board-with-client-context-and-extra-long-slug.example.com";
     const event = buildReviewEvent([
@@ -341,7 +352,9 @@ describe("EndOfDayReview", () => {
     const focusBreakdownRow = screen.getByLabelText("Focus breakdown detail");
     expect(within(focusBreakdownRow).getByText("1h 15m")).toBeTruthy();
     expect(within(focusBreakdownRow).getByText("100%")).toBeTruthy();
-    expect(screen.queryByText(longAppName)).toBeNull();
-    expect(screen.queryByText(longSourceLabel)).toBeNull();
+    const topSource = screen.queryByLabelText("Top source");
+    expect.soft(topSource).not.toBeNull();
+    expect.soft(screen.queryByText(longAppName)).not.toBeNull();
+    expect.soft(screen.queryByText(longSourceLabel)).not.toBeNull();
   });
 });
