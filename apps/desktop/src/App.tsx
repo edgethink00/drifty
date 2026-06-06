@@ -3073,6 +3073,22 @@ export default function App() {
     return <AuthRequiredGate onSignIn={signInWithWebsite} />;
   }
 
+  const dashboardDateNavigator = (
+    <DateNavigator
+      ariaLabel={`${dashPeriod} date selector`}
+      context={dashboardDateContext}
+      label={dashboardDateLabel}
+      todayLabel={getDashboardCurrentPeriodLabel(dashPeriod)}
+      isTodayDisabled={isCurrentDashboardPeriod}
+      isNextDisabled={!canShiftDashboardForward}
+      onPrevious={() => shiftDashboardPeriod(-1)}
+      onNext={() => shiftDashboardPeriod(1)}
+      onToday={() => selectDay(todayIsoDate())}
+      previousLabel={`Show previous ${dashPeriod.toLowerCase()}`}
+      nextLabel={`Show next ${dashPeriod.toLowerCase()}`}
+    />
+  );
+
   const focusDriftSection = (
     <>
       <section className="editorial-panel editorial-panel--soft insight-chart-panel">
@@ -3313,27 +3329,17 @@ export default function App() {
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <div className={`page${dashPeriod === "Week" ? " page--week-dashboard" : ""}`}>
-            <div className="pg-head" style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
-                <div>
-                  <div className="eyebrow">{dashboardPeriodLabel}</div>
-                  <h1>{dashboardTitle}</h1>
+            {dashPeriod === "Week" ? null : (
+              <div className="pg-head" style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
+                  <div>
+                    <div className="eyebrow">{dashboardPeriodLabel}</div>
+                    <h1>{dashboardTitle}</h1>
+                  </div>
+                  {dashboardDateNavigator}
                 </div>
-                <DateNavigator
-                  ariaLabel={`${dashPeriod} date selector`}
-                  context={dashboardDateContext}
-                  label={dashboardDateLabel}
-                  todayLabel={getDashboardCurrentPeriodLabel(dashPeriod)}
-                  isTodayDisabled={isCurrentDashboardPeriod}
-                  isNextDisabled={!canShiftDashboardForward}
-                  onPrevious={() => shiftDashboardPeriod(-1)}
-                  onNext={() => shiftDashboardPeriod(1)}
-                  onToday={() => selectDay(todayIsoDate())}
-                  previousLabel={`Show previous ${dashPeriod.toLowerCase()}`}
-                  nextLabel={`Show next ${dashPeriod.toLowerCase()}`}
-                />
               </div>
-            </div>
+            )}
 
             {dashPeriod === "Week" ? (
               <WeekDashboard
@@ -3349,6 +3355,7 @@ export default function App() {
                 focusDeltaPercent={shouldUsePreviewData() ? 21 : weekFocusDeltaPercent}
                 isPreviewSurface={shouldUsePreviewData()}
                 startOfDayMinutes={startOfDayMinutes}
+                dateNavigator={dashboardDateNavigator}
               />
             ) : dashPeriod === "Month" ? (
               <HistoryCalendarPanel
@@ -5512,6 +5519,7 @@ function WeekDashboard({
   focusDeltaPercent,
   isPreviewSurface = false,
   startOfDayMinutes,
+  dateNavigator,
 }: {
   rows: WeekDayRow[];
   segments: ActivitySegment[];
@@ -5525,6 +5533,7 @@ function WeekDashboard({
   focusDeltaPercent: number | null;
   isPreviewSurface?: boolean;
   startOfDayMinutes: number;
+  dateNavigator: ReactNode;
 }) {
   const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
   const calendarScrollerRef = useRef<HTMLDivElement>(null);
@@ -5638,6 +5647,9 @@ function WeekDashboard({
               <span>Best {isPreviewSurface ? "Wed 13" : bestDay ? `${bestDay.dayName} ${bestDay.dayNumber}` : "—"}</span>
               <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
               <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
+            </div>
+            <div className="week-v2-summary__actions">
+              {dateNavigator}
             </div>
           </div>
           {activeCategories.length > 0 ? (
