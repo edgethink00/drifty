@@ -4874,14 +4874,11 @@ function WeeklyDonutSummary({
               onMouseLeave={onHideHover}
             >
               <div className="od-cat-row-head">
+                <span className="od-cat-row-dot" style={{ background: row.color }} aria-hidden="true" />
                 <span className="od-cat-row-name">{row.name}</span>
                 <div className="od-cat-row-meta">
-                  <span className="od-cat-row-pct">{row.pct.toFixed(1)}%</span>
                   <span className="od-cat-row-time">{row.time}</span>
                 </div>
-              </div>
-              <div className="od-cat-bar-track">
-                <div className="od-cat-bar-fill" style={{ width: `${row.fillPct.toFixed(1)}%`, background: row.color }} />
               </div>
             </div>
           ))}

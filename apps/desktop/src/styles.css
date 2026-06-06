@@ -13068,7 +13068,7 @@ html[data-surface="watcher"] .end-of-day-review,
 /* Row 1: weekly chart card + category donut bound in one panel */
 .insights-row--weekly-categories {
   display: grid;
-  grid-template-columns: minmax(0, 5.5fr) minmax(19rem, 4.5fr);
+  grid-template-columns: minmax(0, 4.5fr) minmax(26rem, 5.5fr);
   gap: 0.9rem;
   align-items: stretch;
   background:
@@ -13338,8 +13338,8 @@ html[data-surface="watcher"] .end-of-day-review,
 
 .weekly-summary-rail__stack {
   display: grid;
-  grid-template-rows: minmax(0, 0.92fr) minmax(0, 1.08fr);
-  gap: 0.46rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem;
   min-height: 0;
   height: 100%;
 }
@@ -13348,21 +13348,21 @@ html[data-surface="watcher"] .end-of-day-review,
   display: grid;
   min-width: 0;
   min-height: 0;
-  align-items: center;
-}
-
-.weekly-summary-rail__summary--productivity {
-  padding-top: 0.12rem;
+  align-items: stretch;
 }
 
 .od-cat-body {
   display: grid;
-  grid-template-columns: minmax(5.8rem, 0.72fr) minmax(0, 1fr);
-  gap: 0.68rem;
+  grid-template-columns: auto minmax(8.5rem, 1fr);
+  gap: 0.5rem;
+  align-content: center;
   align-items: center;
+  justify-content: center;
+  justify-items: start;
   flex: 1;
   min-width: 0;
   min-height: 0;
+  height: 100%;
 }
 
 .od-cat-left {
@@ -13377,7 +13377,6 @@ html[data-surface="watcher"] .end-of-day-review,
   width: clamp(5.75rem, 7.2vw, 6.6rem);
   height: clamp(5.75rem, 7.2vw, 6.6rem);
   flex: 0 0 auto;
-  margin-left: 0.2rem;
 }
 
 .od-cat-donut-wrap svg {
@@ -13414,28 +13413,41 @@ html[data-surface="watcher"] .end-of-day-review,
 }
 
 .od-cat-right {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, max-content) auto;
+  column-gap: 0.18rem;
+  row-gap: 0.32rem;
+  align-content: center;
+  justify-content: start;
+  align-items: flex-start;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
 }
 
 .od-cat-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.16rem;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
 }
 
 .od-cat-row-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.42rem;
+  display: contents;
+  max-width: 100%;
+}
+
+.od-cat-row-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
 }
 
 .od-cat-row-name {
-  font-size: 0.78rem;
+  font-size: 0.94rem;
   font-weight: 500;
   color: var(--text);
   min-width: 0;
@@ -13446,31 +13458,34 @@ html[data-surface="watcher"] .end-of-day-review,
 
 .od-cat-row-meta {
   display: flex;
-  gap: 0.34rem;
   align-items: center;
   flex: 0 0 auto;
 }
 
-.od-cat-row-pct,
 .od-cat-row-time {
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   font-family: var(--font-mono);
   color: color-mix(in srgb, var(--text) 72%, var(--text-soft));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.od-cat-bar-track {
-  height: 6px;
-  background: color-mix(in srgb, var(--text) 9%, transparent);
-  border-radius: 999px;
-  overflow: hidden;
+@media (max-width: 620px) {
+  .weekly-summary-rail__stack {
+    grid-template-columns: 1fr;
+  }
 }
 
-.od-cat-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  min-width: 4px;
+@media (max-width: 460px) {
+  .od-cat-body {
+    grid-template-columns: 1fr;
+    gap: 0.64rem;
+    justify-items: center;
+  }
+
+  .od-cat-right {
+    width: min(100%, 13.5rem);
+  }
 }
 
 /* Weekly attention rhythm heatmap */
