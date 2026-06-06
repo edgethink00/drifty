@@ -7,11 +7,20 @@
     <title>Drifty</title>
     <script>
       (() => {
-        let surface = null;
-        try {
-          surface = new URLSearchParams(window.location.search).get("driftySurface");
-          if (surface === "watcher" || surface === "drift-alarm") document.documentElement.dataset.surface = surface;
-        } catch (_error) {}
+        window.__DTIME_RESOLVE_BOOT_SURFACE__ = () => {
+          const datasetSurface = document.documentElement.dataset.surface;
+          if (datasetSurface === "watcher" || datasetSurface === "drift-alarm") return datasetSurface;
+
+          try {
+            const querySurface = new URLSearchParams(window.location.search).get("driftySurface");
+            if (querySurface === "watcher" || querySurface === "drift-alarm") return querySurface;
+          } catch (_error) {}
+
+          return "app";
+        };
+
+        const surface = window.__DTIME_RESOLVE_BOOT_SURFACE__();
+        if (surface === "watcher" || surface === "drift-alarm") document.documentElement.dataset.surface = surface;
       })();
     </script>
     <style>
@@ -27,6 +36,11 @@
       html[data-surface="drift-alarm"],
       html[data-surface="drift-alarm"] body {
         background: transparent;
+      }
+      html[data-surface="watcher"] {
+        --drifty-boot-debug-edge: 0.75rem;
+        --drifty-boot-debug-width: 20rem;
+        --drifty-boot-debug-max-height: 7.5rem;
       }
       html[data-surface="drift-alarm"] {
         --drifty-boot-debug-edge: 1rem;
@@ -74,9 +88,11 @@
         line-height: 1.45;
         display: none;
       }
+      html[data-surface="watcher"] .boot-error,
       html[data-surface="drift-alarm"] .boot-error {
         left: var(--drifty-boot-debug-edge);
         right: auto;
+        top: auto;
         bottom: var(--drifty-boot-debug-edge);
         transform: none;
         box-sizing: border-box;
@@ -98,6 +114,13 @@
         el.textContent = String(event.message || event.error || "Unknown startup error");
       });
       window.addEventListener("unhandledrejection", (event) => {
+        const surface = window.__DTIME_RESOLVE_BOOT_SURFACE__?.() ?? "app";
+        if (window.__DTIME_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
+          event.preventDefault();
+          document.getElementById("boot-error")?.remove();
+          return;
+        }
+
         const el = document.getElementById("boot-error");
         if (!el) return;
         el.style.display = "block";

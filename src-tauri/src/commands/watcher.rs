@@ -9,8 +9,8 @@ pub const WATCHER_PEEK_WINDOW_LABEL: &str = "watcher-peek";
 
 const WATCHER_PEEK_WIDTH: f64 = 560.0;
 const WATCHER_PEEK_HEIGHT: f64 = 340.0;
-const END_OF_DAY_REVIEW_WIDTH: f64 = 460.0;
-const END_OF_DAY_REVIEW_HEIGHT: f64 = 160.0;
+const END_OF_DAY_REVIEW_WIDTH: f64 = 560.0;
+const END_OF_DAY_REVIEW_HEIGHT: f64 = 360.0;
 const WATCHER_PEEK_WORK_AREA_MARGIN: f64 = 32.0;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -297,18 +297,17 @@ mod tests {
     fn positions_end_of_day_review_top_right_in_work_area() {
         let position = calculate_end_of_day_review_window_position(0.0, 25.0, 1440.0, 775.0);
 
-        assert_eq!(position.x, 948.0);
+        assert_eq!(position.x, 848.0);
         assert_eq!(position.y, 57.0);
     }
 
     #[test]
-    fn sizes_end_of_day_review_as_compact_horizontal_overlay() {
+    fn sizes_end_of_day_review_as_redesigned_review_panel() {
         let payload = serde_json::json!({"kind": "endOfDayReview"});
         let (width, height) = watcher_window_dimensions_for_payload(&payload);
 
-        assert_eq!(width, 460.0);
-        assert_eq!(height, 160.0);
-        assert!(height < WATCHER_PEEK_HEIGHT);
+        assert_eq!(width, 560.0);
+        assert_eq!(height, 360.0);
     }
 
     #[test]
@@ -324,7 +323,7 @@ mod tests {
     fn keeps_end_of_day_review_inside_shifted_work_area_when_space_allows() {
         let position = calculate_end_of_day_review_window_position(80.0, 24.0, 1360.0, 900.0);
 
-        assert_eq!(position.x, 948.0);
+        assert_eq!(position.x, 848.0);
         assert_eq!(position.y, 56.0);
     }
 

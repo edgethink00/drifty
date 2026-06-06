@@ -90,9 +90,7 @@ function BootstrapLoader() {
       } catch (error) {
         const root = document.getElementById("root");
         if (!root) return;
-        root.innerHTML = `<div class="bootstrap-error"><h1>Drifty startup error</h1><pre>${String(
-          error instanceof Error ? error.message : error,
-        )}</pre></div>`;
+        root.replaceChildren(createBootstrapErrorElement("Drifty startup error", toSafeErrorMessage(error)));
       }
     };
 
@@ -104,6 +102,7 @@ function BootstrapLoader() {
       window.__DTIME_SET_BOOT_STATUS__?.("App component ready");
       window.__DTIME_BOOTSTRAPPED__ = true;
       document.getElementById("boot-shell")?.remove();
+      document.getElementById("boot-error")?.remove();
     }
   }, [LoadedApp]);
 
@@ -135,13 +134,60 @@ async function resolveBootstrapSurface(): Promise<BootstrapSurface> {
   }
 }
 
+function resolveCurrentSurface(): BootstrapSurface {
+  const documentSurface = document.documentElement.dataset.surface;
+  if (documentSurface === "watcher" || documentSurface === "drift-alarm") return documentSurface;
+  return resolveLocationSurface(window.location);
+}
+
+function createBootstrapErrorElement(title: string, message: string) {
+  const element = document.createElement("div");
+  element.className = "bootstrap-error";
+  setBootstrapErrorContent(element, title, message);
+  return element;
+}
+
+function setBootstrapErrorContent(element: HTMLElement, title: string, message: string) {
+  const heading = document.createElement("h1");
+  heading.textContent = title;
+
+  const detail = document.createElement("pre");
+  detail.textContent = message;
+
+  element.replaceChildren(heading, detail);
+}
+
+function toSafeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+function upsertLateBootstrapDiagnostic(message: string) {
+  const existingDiagnostic = document.querySelector<HTMLElement>('body > .bootstrap-error[data-bootstrap-diagnostic="late-rejection"]');
+  const diagnostic = existingDiagnostic ?? createBootstrapErrorElement("Drifty background error", message);
+  diagnostic.dataset.bootstrapDiagnostic = "late-rejection";
+  setBootstrapErrorContent(diagnostic, "Drifty background error", message);
+  if (!existingDiagnostic) document.body.append(diagnostic);
+}
+
 window.addEventListener("unhandledrejection", (event) => {
   const root = document.getElementById("root");
   if (!root) return;
-  const reason = event.reason as { message?: string } | string | undefined;
-  root.innerHTML = `<div class="bootstrap-error"><h1>Drifty startup error</h1><pre>${String(
-    typeof reason === "string" ? reason : reason?.message ?? event.reason,
-  )}</pre></div>`;
+  const message = toSafeErrorMessage(event.reason);
+  const surface = resolveCurrentSurface();
+
+  if (window.__DTIME_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
+    event.preventDefault();
+    upsertLateBootstrapDiagnostic(message);
+    return;
+  }
+
+  root.replaceChildren(createBootstrapErrorElement("Drifty startup error", message));
 });
 
 function waitForFirstFrameOrFallback(): Promise<void> {

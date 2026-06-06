@@ -9,6 +9,7 @@ import type {
 } from "@dtime/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { trackerClient } from "../../lib/api/trackerClient";
+import { readUserOnboardingState, type UserOnboardingState } from "../onboarding/onboardingState";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
 
@@ -19,7 +20,11 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
+const MAX_WORK_PROFILE_TEXT_LENGTH = 100;
+const AI_CLASSIFICATION_PROMPT_VERSION = "v2-work-profile";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
+const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0.25, output: 1.5 },
   "deepseek/deepseek-v4-flash:free": { input: 0, output: 0 },
@@ -78,7 +83,7 @@ type EdgeClassificationResponse = {
 };
 
 type LocalAiProviderConfig =
-  | { provider: "openrouter_byok"; apiKey: string; model: string }
+  | { provider: "openrouter_byok"; apiKey: string; model: string; fallbackModels?: string[] }
   | { provider: "self_hosted"; baseUrl: string; model: string };
 
 type AiClassificationRunOptions = {
@@ -217,7 +222,8 @@ export function diffAiClassificationUsageSummary(
 export async function runAiClassification(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = Math.min(query.limit ?? batchSize, EDGE_MAX_BATCH_SIZE);
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
-  const payload = await Promise.all(segments.map(toMinimizedPayload));
+  const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile)));
 
   if (payload.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
@@ -262,7 +268,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, payload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider);
+    return await runLocalAiClassification(query, payload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -279,6 +285,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
   const { data, error } = await cloudClient.functions.invoke("classify-activity", {
     body: {
       ...cloudApiClientMetadata,
+      ...(workProfile ? { workProfile } : {}),
       items: reusableResult.misses.map((item) => ({
         id: item.segmentId,
         inputFingerprint: item.inputFingerprint,
@@ -323,7 +330,8 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
 export async function runAiClassificationForUnknownThreshold(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = EDGE_MAX_BATCH_SIZE;
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
-  const payload = await Promise.all(segments.map(toMinimizedPayload));
+  const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile)));
   const deterministicRecords = toDeterministicClassificationRecords(segments, payload);
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
   const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId)).slice(0, threshold);
@@ -373,7 +381,7 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider);
+    return await runLocalAiClassification(query, unknownPayload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -390,6 +398,7 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   const { data, error } = await cloudClient.functions.invoke("classify-activity", {
     body: {
       ...cloudApiClientMetadata,
+      ...(workProfile ? { workProfile } : {}),
       items: reusableResult.misses.map((item) => ({
         id: item.segmentId,
         inputFingerprint: item.inputFingerprint,
@@ -540,8 +549,10 @@ export async function getAiClassificationUsageSummary(day: string): Promise<AiCl
   };
 }
 
-async function toMinimizedPayload(segment: ActivitySegment): Promise<MinimizedActivityPayload> {
+async function toMinimizedPayload(segment: ActivitySegment, workProfile: string | null): Promise<MinimizedActivityPayload> {
   const input = {
+    fingerprintVersion: AI_CLASSIFICATION_PROMPT_VERSION,
+    workProfile,
     appName: cleanText(segment.appName) ?? "Unknown",
     bundleId: cleanText(segment.bundleId),
     browserName: cleanText(segment.browserName),
@@ -625,7 +636,7 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
       confidence: typeof classification.confidence === "number" ? classification.confidence : 0.5,
       reason: typeof classification.reason === "string" ? classification.reason : null,
       model: typeof classification.model === "string" ? classification.model : model,
-      promptVersion: "v1",
+      promptVersion: AI_CLASSIFICATION_PROMPT_VERSION,
       taxonomyVersion: "v1",
       aiResult: true,
       latencyMs: responseLatencyMs(data),
@@ -704,8 +715,9 @@ async function runLocalAiClassification(
   deterministicSavedRecords: number,
   unknownPayload: MinimizedActivityPayload[],
   provider: LocalAiProviderConfig,
+  workProfile: string | null,
 ): Promise<AiClassificationSummary> {
-  const providerRequest = toLocalProviderRequest(provider, unknownPayload);
+  const providerRequest = toLocalProviderRequest(provider, unknownPayload, workProfile);
   if (!providerRequest) {
     return {
       status: "disabled",
@@ -746,22 +758,24 @@ async function runLocalAiClassification(
   };
 }
 
-function toLocalProviderRequest(provider: LocalAiProviderConfig, payload: MinimizedActivityPayload[]): { model: string; request: Record<string, unknown> } | null {
+function toLocalProviderRequest(provider: LocalAiProviderConfig, payload: MinimizedActivityPayload[], workProfile: string | null): { model: string; request: Record<string, unknown> } | null {
   if (provider.provider === "openrouter_byok") {
     const apiKey = provider.apiKey.trim();
-    const model = provider.model.trim() || "openrouter/auto";
+    const models = normalizeOpenRouterModels(provider.model, provider.fallbackModels);
+    const model = models[0];
     if (!apiKey || !model) return null;
+    const modelRequestShape = models.length === 1 ? { model } : { models };
     return {
       model,
       request: {
         baseUrl: OPENROUTER_BASE_URL,
         apiKey,
-        model,
+        ...modelRequestShape,
         headers: {
           "HTTP-Referer": "https://drifty.so",
           "X-OpenRouter-Title": "Drifty",
         },
-        messages: [{ role: "user", content: buildClassificationPrompt(payload) }],
+        messages: [{ role: "user", content: buildClassificationPrompt(payload, workProfile) }],
       },
     };
   }
@@ -774,9 +788,26 @@ function toLocalProviderRequest(provider: LocalAiProviderConfig, payload: Minimi
     request: {
       baseUrl,
       model,
-      messages: [{ role: "user", content: buildClassificationPrompt(payload) }],
+      messages: [{ role: "user", content: buildClassificationPrompt(payload, workProfile) }],
     },
   };
+}
+
+function normalizeOpenRouterModels(primaryModel: string, fallbackModels: string[] | undefined): string[] {
+  const models = [normalizeOpenRouterPrimaryModel(primaryModel), ...(fallbackModels ?? [])];
+  const seen = new Set<string>();
+  return models.flatMap((model) => {
+    const trimmed = model.trim();
+    if (!trimmed || FORBIDDEN_OPENROUTER_MODEL_IDS.has(trimmed) || seen.has(trimmed)) return [];
+    seen.add(trimmed);
+    return [trimmed];
+  });
+}
+
+function normalizeOpenRouterPrimaryModel(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed || FORBIDDEN_OPENROUTER_MODEL_IDS.has(trimmed)) return DEFAULT_OPENROUTER_MODEL;
+  return trimmed;
 }
 
 function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model: string): EdgeClassificationResponse {
@@ -795,12 +826,19 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
   };
 }
 
-function buildClassificationPrompt(payload: MinimizedActivityPayload[]): string {
+function buildClassificationPrompt(payload: MinimizedActivityPayload[], workProfile: string | null): string {
   return [
     "Classify each activity into activity category, productivity label, confidence, and short reason.",
+    ...(workProfile
+      ? [
+          `User work profile: ${workProfile}.`,
+          "Use the user's work profile as context when deciding whether an activity is work-related.",
+        ]
+      : []),
+    "Use the observed app, site, window title, page title, and duration as the primary evidence.",
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
-    "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles or domains in the reason.",
+    "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
     JSON.stringify(payload.map((item) => ({
       id: item.segmentId,
       appName: item.appName,
@@ -811,6 +849,52 @@ function buildClassificationPrompt(payload: MinimizedActivityPayload[]): string 
       durationSeconds: item.durationSeconds,
     }))),
   ].join("\n");
+}
+
+async function readClassificationWorkProfile(useLocalFallback: boolean): Promise<string | null> {
+  const signedInUserId = await readSignedInUserId();
+  const onboardingUserId = signedInUserId ?? (useLocalFallback ? "local" : null);
+  if (!onboardingUserId) return null;
+  return normalizeOnboardingWorkProfile(readUserOnboardingState(onboardingUserId));
+}
+
+async function readSignedInUserId(): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const session = isRecord(data) ? data.session : null;
+    const user = isRecord(session) ? session.user : null;
+    return isRecord(user) && typeof user.id === "string" && user.id ? user.id : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeOnboardingWorkProfile(state: UserOnboardingState | null): string | null {
+  if (!state) return null;
+  const workType = normalizeWorkProfilePart(state.workType, state.workTypeOther);
+  const workDomain = normalizeWorkProfilePart(state.workDomain, state.workDomainOther);
+  if (!workType && !workDomain) return null;
+  if (workType && workDomain) return `${workType} in ${workDomain}`;
+  return workType ?? workDomain;
+}
+
+function normalizeWorkProfilePart(value: string | null, otherValue: string): string | null {
+  const normalizedValue = sanitizeWorkProfileText(value);
+  if (normalizedValue === "Other") {
+    const normalizedOther = sanitizeWorkProfileText(otherValue);
+    return normalizedOther ? `Other: ${normalizedOther}` : null;
+  }
+  return normalizedValue;
+}
+
+function sanitizeWorkProfileText(value: string | null | undefined): string | null {
+  const normalized = value
+    ?.replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  return normalized.slice(0, MAX_WORK_PROFILE_TEXT_LENGTH).trim() || null;
 }
 
 function stripJsonCodeFence(text: string): string {
@@ -897,7 +981,7 @@ async function fingerprint(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `dtime-v1-${hex}`;
+  return `dtime-v2-${hex}`;
 }
 
 function emptyUsageSummary(): AiClassificationUsageSummary {
