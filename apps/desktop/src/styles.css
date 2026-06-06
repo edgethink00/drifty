@@ -5562,7 +5562,7 @@ input, textarea { color: inherit; }
   grid-template-columns: 33px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  padding: 7px 8px;
+  padding: 9.6px 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface-strong);
