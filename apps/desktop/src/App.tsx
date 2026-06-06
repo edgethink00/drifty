@@ -4575,6 +4575,8 @@ function AttentionRhythmCard({
   );
 }
 
+const INSIGHT_SOURCE_VISIBLE_COUNT = 3;
+
 function InsightSourceGroup({
   variant,
   lists,
@@ -4584,58 +4586,69 @@ function InsightSourceGroup({
   lists: InsightSourceLists;
   appIcons: AppIconMap;
 }) {
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const tone = variant === "drift" ? "var(--warn)" : "var(--accent)";
   const label = variant === "drift" ? "Drift patterns" : "Focus patterns";
   const topicsLabel = variant === "drift" ? "Drift after focus" : "Focus before drift";
   const transitionsLabel = variant === "drift" ? "Top drift after focus transitions" : "Top focus before drift transitions";
   const appsLabel = variant === "drift" ? "Drift apps" : "Focus apps";
   const toneStyle = { "--trend-tone": tone } as CSSProperties;
-  const maxTopic = Math.max(1, ...lists.topics.map((item) => item.seconds));
-  const maxApp = Math.max(1, ...lists.apps.map((item) => item.seconds));
+  const hasHiddenSources = lists.apps.length > INSIGHT_SOURCE_VISIBLE_COUNT || lists.topics.length > INSIGHT_SOURCE_VISIBLE_COUNT;
+
+  const renderSourceList = (
+    kind: keyof InsightSourceLists,
+    sourceLabel: string,
+    emptyTitle: string,
+    emptyDetail: string,
+    includeRank: boolean,
+  ) => {
+    const items = lists[kind];
+    const visibleItems = sourcesExpanded ? items : items.slice(0, INSIGHT_SOURCE_VISIBLE_COUNT);
+    const maxValue = Math.max(1, ...items.map((item) => insightSourceValue(item)));
+
+    return (
+      <div className="drift-time-trend__sources">
+        <span className="label-mono drift-time-trend__sources-label">{sourceLabel}</span>
+        <div className="drift-time-trend__sources-items" style={toneStyle}>
+          {visibleItems.map((item, index) => (
+            <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
+              <span className={`drift-time-trend__sources-rank${includeRank ? "" : " drift-time-trend__sources-rank--empty"}`} aria-hidden={!includeRank}>{includeRank ? index + 1 : null}</span>
+              <span className="drift-time-trend__sources-icon" aria-hidden="true">
+                {item.isSite && item.siteDomain
+                  ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
+                  : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
+              </span>
+              <span className="drift-time-trend__sources-name">{item.label}</span>
+              <strong className="drift-time-trend__sources-value">{formatInsightSourceValue(item)}</strong>
+              <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((insightSourceValue(item) / maxValue) * 100, 3)}%` }} /></div>
+            </div>
+          ))}
+          {items.length === 0 ? <EmptyState title={emptyTitle} detail={emptyDetail} /> : null}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${variant}`} aria-label={`${variant === "drift" ? "Drift" : "Focus"} patterns`}>
       <div className="productivity-insight-group__head"><span className="label-mono insight-section__label">{label}</span></div>
       <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section" aria-label={transitionsLabel} style={toneStyle}>
         <div className="trend-topics-card__columns">
-          <div className="drift-time-trend__sources">
-            <span className="label-mono drift-time-trend__sources-label">{topicsLabel}</span>
-            <div className="drift-time-trend__sources-items" style={toneStyle}>
-              {lists.topics.map((item, index) => (
-                <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
-                  <span className="drift-time-trend__sources-name drift-time-trend__sources-name--app drift-time-trend__sources-name--topic">
-                    <span className="drift-time-trend__sources-rank">{index + 1}</span>
-                    {item.isSite && item.siteDomain
-                      ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
-                      : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
-                    <span>{item.label}</span>
-                  </span>
-                  <strong className="drift-time-trend__sources-value">{formatDuration(item.seconds)}</strong>
-                  <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((item.seconds / maxTopic) * 100, 3)}%` }} /></div>
-                </div>
-              ))}
-              {lists.topics.length === 0 ? <EmptyState title={`No ${variant} transitions yet`} detail="Transitions appear after focus is followed by drift." /> : null}
-            </div>
-          </div>
-          <div className="drift-time-trend__sources">
-            <span className="label-mono drift-time-trend__sources-label">{appsLabel}</span>
-            <div className="drift-time-trend__sources-items" style={toneStyle}>
-              {lists.apps.map((item) => (
-                <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
-                  <span className="drift-time-trend__sources-name drift-time-trend__sources-name--app">
-                    {item.isSite && item.siteDomain
-                      ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
-                      : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
-                    <span>{item.appName}</span>
-                  </span>
-                  <strong className="drift-time-trend__sources-value">{formatDuration(item.seconds)}</strong>
-                  <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((item.seconds / maxApp) * 100, 3)}%` }} /></div>
-                </div>
-              ))}
-              {lists.apps.length === 0 ? <EmptyState title={`No ${variant} apps yet`} detail="Apps appear after classified activity is recorded." /> : null}
-            </div>
-          </div>
+          {renderSourceList("apps", appsLabel, `No ${variant} apps yet`, "Apps appear after classified activity is recorded.", false)}
+          {renderSourceList("topics", topicsLabel, `No ${variant} transitions yet`, "Transitions appear after focus is followed by drift.", true)}
         </div>
+        {hasHiddenSources && !sourcesExpanded ? (
+          <div className="drift-time-trend__sources-more-row">
+            <button
+              type="button"
+              className="drift-time-trend__sources-more"
+              aria-expanded="false"
+              onClick={() => setSourcesExpanded(true)}
+            >
+              Show more
+            </button>
+          </div>
+        ) : null}
       </section>
     </section>
   );
@@ -6348,10 +6361,14 @@ function buildAttentionRhythm(segments: ActivitySegment[], options?: Classificat
   return cells;
 }
 
+type InsightSourceValueKind = "duration" | "count";
+
 interface InsightSourceItem {
   id: string;
   label: string;
   seconds: number;
+  count: number;
+  valueKind: InsightSourceValueKind;
   appName: string;
   bundleId: string | null;
   siteDomain: string | null;
@@ -6363,8 +6380,6 @@ interface InsightSourceLists {
   apps: InsightSourceItem[];
 }
 
-// Transition lists show the adjacent focus -> drift handoff; app lists keep the
-// productivity-filtered application summaries used by the existing layout.
 function buildInsightSourceLists(
   segments: ActivitySegment[],
   productivity: ProductivityLabel,
@@ -6375,6 +6390,8 @@ function buildInsightSourceLists(
     id: `${summary.usageKind}:${summary.siteDomain ?? summary.appName}`,
     label: summary.usageKind === "site" ? (summary.siteDomain ?? summary.appName) : summary.appName,
     seconds: summary.totalSeconds,
+    count: summary.sessionCount,
+    valueKind: "duration",
     appName: summary.usageKind === "site" ? (summary.siteDomain ?? summary.appName) : summary.appName,
     bundleId: summary.bundleId,
     siteDomain: summary.siteDomain,
@@ -6382,7 +6399,7 @@ function buildInsightSourceLists(
   });
   return {
     topics: buildFocusDriftTransitionItems(segments, productivity, options),
-    apps: buildAppUsageSummaries(filtered, { groupBy: productivity === "drift" ? "activity" : "app", limit: 3 }).map(toItem),
+    apps: buildAppUsageSummaries(filtered, { groupBy: "activity" }).map(toItem),
   };
 }
 
@@ -6406,18 +6423,32 @@ function buildFocusDriftTransitionItems(
       id: identity.id,
       label: identity.label,
       seconds: 0,
+      count: 0,
+      valueKind: "count",
       appName: identity.label,
       bundleId: identity.bundleId,
       siteDomain: identity.siteDomain,
       isSite: identity.siteDomain !== null,
     };
     current.seconds += segment.durationSeconds;
+    current.count += 1;
     accumulator.set(identity.id, current);
   }
 
   return Array.from(accumulator.values())
-    .sort((left, right) => right.seconds - left.seconds)
-    .slice(0, 3);
+    .sort((left, right) => {
+      const countDelta = right.count - left.count;
+      if (countDelta !== 0) return countDelta;
+      return right.seconds - left.seconds;
+    });
+}
+
+function insightSourceValue(item: InsightSourceItem): number {
+  return item.valueKind === "count" ? item.count : item.seconds;
+}
+
+function formatInsightSourceValue(item: InsightSourceItem): string {
+  return item.valueKind === "count" ? `${item.count}x` : formatDuration(item.seconds);
 }
 
 type WeeklyChartMode = "productivity" | "category";
