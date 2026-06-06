@@ -20,6 +20,8 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
+const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0.25, output: 1.5 },
   "deepseek/deepseek-v4-flash:free": { input: 0, output: 0 },
@@ -78,7 +80,7 @@ type EdgeClassificationResponse = {
 };
 
 type LocalAiProviderConfig =
-  | { provider: "openrouter_byok"; apiKey: string; model: string }
+  | { provider: "openrouter_byok"; apiKey: string; model: string; fallbackModels?: string[] }
   | { provider: "self_hosted"; baseUrl: string; model: string };
 
 type AiClassificationRunOptions = {
@@ -749,14 +751,16 @@ async function runLocalAiClassification(
 function toLocalProviderRequest(provider: LocalAiProviderConfig, payload: MinimizedActivityPayload[]): { model: string; request: Record<string, unknown> } | null {
   if (provider.provider === "openrouter_byok") {
     const apiKey = provider.apiKey.trim();
-    const model = provider.model.trim() || "openrouter/auto";
+    const models = normalizeOpenRouterModels(provider.model, provider.fallbackModels);
+    const model = models[0];
     if (!apiKey || !model) return null;
+    const modelRequestShape = models.length === 1 ? { model } : { models };
     return {
       model,
       request: {
         baseUrl: OPENROUTER_BASE_URL,
         apiKey,
-        model,
+        ...modelRequestShape,
         headers: {
           "HTTP-Referer": "https://drifty.so",
           "X-OpenRouter-Title": "Drifty",
@@ -777,6 +781,23 @@ function toLocalProviderRequest(provider: LocalAiProviderConfig, payload: Minimi
       messages: [{ role: "user", content: buildClassificationPrompt(payload) }],
     },
   };
+}
+
+function normalizeOpenRouterModels(primaryModel: string, fallbackModels: string[] | undefined): string[] {
+  const models = [normalizeOpenRouterPrimaryModel(primaryModel), ...(fallbackModels ?? [])];
+  const seen = new Set<string>();
+  return models.flatMap((model) => {
+    const trimmed = model.trim();
+    if (!trimmed || FORBIDDEN_OPENROUTER_MODEL_IDS.has(trimmed) || seen.has(trimmed)) return [];
+    seen.add(trimmed);
+    return [trimmed];
+  });
+}
+
+function normalizeOpenRouterPrimaryModel(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed || FORBIDDEN_OPENROUTER_MODEL_IDS.has(trimmed)) return DEFAULT_OPENROUTER_MODEL;
+  return trimmed;
 }
 
 function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model: string): EdgeClassificationResponse {

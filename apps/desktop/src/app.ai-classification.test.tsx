@@ -561,6 +561,39 @@ describe("App AI classification controls", () => {
     ));
   });
 
+  it("passes OpenRouter fallback models through local AI classification options after dropping Auto", async () => {
+    const today = todayIsoDate();
+    setRendererFocus(false);
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "openrouter_byok",
+      openRouterModel: "openai/gpt-4o-mini",
+      openRouterFallbackModels: [" openrouter/auto ", "openai/gpt-4o-mini", "qwen/qwen3.6-flash", "deepseek/deepseek-v4-flash:free"],
+    }));
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
+    render(<App />);
+
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    aiClassificationMocks.runAiClassificationForUnknownThreshold.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /settings/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^AI setup$/ }));
+    fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test" } });
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
+      { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
+      AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      {
+        localProvider: {
+          provider: "openrouter_byok",
+          apiKey: "sk-or-v1-test",
+          model: "openai/gpt-4o-mini",
+          fallbackModels: ["qwen/qwen3.6-flash", "deepseek/deepseek-v4-flash:free"],
+        },
+      },
+    ));
+  });
+
   it("auto-runs one 5-item batch after 20 focused idle minutes", async () => {
     const dateNow = vi.spyOn(Date, "now")
       .mockReturnValueOnce(0)

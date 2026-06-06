@@ -467,7 +467,7 @@ describe("runAiClassification cloud contract", () => {
     try {
       const { runAiClassification, invoke, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
       const result = await runAiClassification({ day: "2026-05-22" }, 20, {
-        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "openrouter/auto" },
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
       });
 
       expect(result.status).toBe("saved");
@@ -476,19 +476,118 @@ describe("runAiClassification cloud contract", () => {
         request: expect.objectContaining({
           baseUrl: "https://openrouter.ai/api/v1",
           apiKey: "sk-or-v1-test",
-          model: "openrouter/auto",
+          model: "qwen/qwen3.6-flash",
           headers: expect.objectContaining({
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
           }),
         }),
       });
+      const request = nativeInvoke.mock.calls[0]?.[1]?.request as Record<string, unknown>;
+      expect(request.models).toBeUndefined();
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
         segmentId: "segment-1",
         aiResult: true,
-        model: "openrouter/auto",
+        model: "qwen/qwen3.6-flash",
         latencyMs: 321,
       })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("sends OpenRouter fallback models as an ordered models array", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "openrouter_byok",
+          apiKey: "sk-or-v1-test",
+          model: "openai/gpt-4o-mini",
+          fallbackModels: ["anthropic/claude-3.5-haiku", "google/gemini-flash-1.5"],
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledWith("ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          baseUrl: "https://openrouter.ai/api/v1",
+          apiKey: "sk-or-v1-test",
+          models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-flash-1.5"],
+          headers: expect.objectContaining({
+            "HTTP-Referer": "https://drifty.so",
+            "X-OpenRouter-Title": "Drifty",
+          }),
+        }),
+      });
+      const request = nativeInvoke.mock.calls[0]?.[1]?.request as Record<string, unknown>;
+      expect(request.model).toBeUndefined();
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        aiResult: true,
+        model: "openai/gpt-4o-mini",
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("defaults blank OpenRouter primary model and removes blank, Auto, or duplicate fallbacks", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "openrouter_byok",
+          apiKey: "sk-or-v1-test",
+          model: "   ",
+          fallbackModels: ["", " openrouter/auto ", "  deepseek/deepseek-v4-flash  ", "anthropic/claude-3.5-haiku", "anthropic/claude-3.5-haiku", "  "],
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledWith("ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          models: ["deepseek/deepseek-v4-flash", "anthropic/claude-3.5-haiku"],
+        }),
+      });
+      const request = nativeInvoke.mock.calls[0]?.[1]?.request as Record<string, unknown>;
+      expect(request.model).toBeUndefined();
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        aiResult: true,
+        model: "deepseek/deepseek-v4-flash",
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("preserves self-hosted requests as single model", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke } = await importServiceWithSegments([segment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "self_hosted",
+          baseUrl: "http://localhost:11434/v1",
+          model: "llama3.2",
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledWith("ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          baseUrl: "http://localhost:11434/v1",
+          model: "llama3.2",
+        }),
+      });
+      const request = nativeInvoke.mock.calls[0]?.[1]?.request as Record<string, unknown>;
+      expect(request.models).toBeUndefined();
     } finally {
       cleanupServiceMocks();
     }
@@ -578,7 +677,7 @@ describe("runAiClassification cloud contract", () => {
         reusable: (fingerprints) => Object.fromEntries(fingerprints.map((fingerprint) => [fingerprint, createReusableRecord(fingerprint)])),
       });
       const result = await runAiClassification({ day: "2026-05-22" }, 20, {
-        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "openrouter/auto" },
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
       });
 
       expect(result.status).toBe("saved");

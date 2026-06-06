@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ChangeEvent, FocusEvent, MouseEvent, ReactNode, RefObject } from "react";
+import type { CSSProperties, ChangeEvent, FocusEvent, FormEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -440,6 +440,7 @@ type LocalAiSetupState = {
   provider: LocalAiProvider;
   openRouterApiKey: string;
   openRouterModel: string;
+  openRouterFallbackModels: string[];
   selfHostedBaseUrl: string;
   selfHostedModel: string;
 };
@@ -537,10 +538,27 @@ const DEFAULT_THEME: ThemeMode = "light";
 const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   provider: "openrouter_byok",
   openRouterApiKey: "",
-  openRouterModel: "openrouter/auto",
+  openRouterModel: "deepseek/deepseek-v4-flash",
+  openRouterFallbackModels: [],
   selfHostedBaseUrl: "http://localhost:11434/v1",
   selfHostedModel: "",
 };
+const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
+const OPENROUTER_RECOMMENDED_MODELS = [
+  { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", detail: "Default, fast paid route", badge: "Default" },
+  { id: "qwen/qwen3.6-flash", label: "Qwen 3.6 Flash", detail: "Fast Qwen 3.6 route" },
+  { id: "qwen/qwen3.6-plus", label: "Qwen 3.6 Plus", detail: "Balanced Qwen 3.6 route" },
+  { id: "qwen/qwen3.6-max-preview", label: "Qwen 3.6 Max Preview", detail: "Highest-capacity Qwen 3.6 preview" },
+  { id: "qwen/qwen3.6-35b-a3b", label: "Qwen 3.6 35B A3B", detail: "Efficient Qwen 3.6 MoE route" },
+  { id: "qwen/qwen3.6-27b", label: "Qwen 3.6 27B", detail: "Compact Qwen 3.6 route" },
+  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash Free", detail: "Free route when available" },
+] as const;
+const SELF_HOSTED_RECOMMENDED_MODELS = [
+  { id: "llama3.1:8b", label: "Llama 3.1 8B", detail: "Common Ollama local model" },
+  { id: "llama3.2", label: "Llama 3.2", detail: "Compact local model" },
+  { id: "qwen3:8b", label: "Qwen 3 8B", detail: "Qwen local model" },
+  { id: "qwen2.5-coder:7b", label: "Qwen 2.5 Coder 7B", detail: "Local coding-oriented model" },
+] as const;
 const DRIFT_ALERT_MIN_SECONDS = 5 * 60;
 const DRIFT_ALARM_PREVIEW_OPTIONS = [
   { id: "youtube-5m", label: "YouTube 5m", contextLabel: "youtube.com", driftDurationSeconds: 5 * 60, preservedFocusStrikeSeconds: 30 * 60 },
@@ -990,6 +1008,10 @@ export default function App() {
   const [appRuleProductivity, setAppRuleProductivity] = useState<ProductivityLabel>("focus");
   const [classificationRuleCandidates, setClassificationRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
   const [classificationRuleCandidatesLoading, setClassificationRuleCandidatesLoading] = useState(false);
+  const [openRouterModelPickerOpen, setOpenRouterModelPickerOpen] = useState(false);
+  const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
+  const [selfHostedModelPickerOpen, setSelfHostedModelPickerOpen] = useState(false);
+  const [selfHostedCustomModel, setSelfHostedCustomModel] = useState("");
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
   const [watcherPeriodicMaxMinutes, setWatcherPeriodicMaxMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("max"));
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
@@ -1137,11 +1159,94 @@ export default function App() {
     () => buildRecentFocusTargets(segments, selectedDayClassificationOptions, appIcons),
     [appIcons, segments, selectedDayClassificationOptions],
   );
+  const openRouterPrimaryModel = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
+  const openRouterFallbackModels = useMemo(
+    () => normalizeOpenRouterFallbackModels(openRouterPrimaryModel, localAiSetup.openRouterFallbackModels),
+    [localAiSetup.openRouterFallbackModels, openRouterPrimaryModel],
+  );
+  const openRouterSelectedModels = useMemo(
+    () => uniqueOpenRouterModels([openRouterPrimaryModel, ...openRouterFallbackModels]),
+    [openRouterFallbackModels, openRouterPrimaryModel],
+  );
+  const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !isRecommendedOpenRouterModel(model));
+  const openRouterModelOptions = [
+    ...OPENROUTER_RECOMMENDED_MODELS,
+    ...openRouterCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
+  ];
+  const openRouterSelectionSummary = openRouterFallbackModels.length > 0
+    ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`
+    : openRouterPrimaryModel;
+  const selfHostedSelectedModel = localAiSetup.selfHostedModel.trim();
+  const selfHostedCustomSelectedModels = selfHostedSelectedModel && !isRecommendedSelfHostedModel(selfHostedSelectedModel) ? [selfHostedSelectedModel] : [];
+  const selfHostedModelOptions = [
+    ...SELF_HOSTED_RECOMMENDED_MODELS,
+    ...selfHostedCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
+  ];
+  const selfHostedModelSummary = selfHostedSelectedModel || "No model selected";
+  const handleOpenRouterModelToggle = useCallback((model: string, selected: boolean) => {
+    const modelId = model.trim();
+    if (!modelId) return;
+
+    setLocalAiSetup((current) => {
+      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
+      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
+      if (selected) {
+        if (modelId === primaryModel || fallbackModels.includes(modelId)) return current;
+        return { ...current, openRouterFallbackModels: [...fallbackModels, modelId] };
+      }
+
+      if (modelId === primaryModel) {
+        const [nextPrimaryModel, ...nextFallbackModels] = fallbackModels;
+        if (!nextPrimaryModel) return current;
+        return { ...current, openRouterModel: nextPrimaryModel, openRouterFallbackModels: nextFallbackModels };
+      }
+
+      return { ...current, openRouterFallbackModels: fallbackModels.filter((fallbackModel) => fallbackModel !== modelId) };
+    });
+  }, []);
+  const handleOpenRouterPrimaryModelChange = useCallback((model: string) => {
+    const modelId = model.trim();
+    if (!modelId) return;
+
+    setLocalAiSetup((current) => {
+      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
+      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
+      const selectedModels = uniqueOpenRouterModels([primaryModel, ...fallbackModels, modelId]);
+      return { ...current, openRouterModel: modelId, openRouterFallbackModels: selectedModels.filter((selectedModel) => selectedModel !== modelId) };
+    });
+  }, []);
+  const handleAddOpenRouterCustomModel = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const modelId = openRouterCustomModel.trim();
+    if (!modelId || isForbiddenOpenRouterModel(modelId)) return;
+
+    setLocalAiSetup((current) => {
+      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
+      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
+      if (modelId === primaryModel || fallbackModels.includes(modelId)) return current;
+      return { ...current, openRouterFallbackModels: [...fallbackModels, modelId] };
+    });
+    setOpenRouterCustomModel("");
+  }, [openRouterCustomModel]);
+  const handleSelfHostedModelChange = useCallback((model: string) => {
+    const modelId = model.trim();
+    if (!modelId) return;
+    setLocalAiSetup((current) => ({ ...current, selfHostedModel: modelId }));
+  }, []);
+  const handleAddSelfHostedCustomModel = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const modelId = selfHostedCustomModel.trim();
+    if (!modelId) return;
+    setLocalAiSetup((current) => ({ ...current, selfHostedModel: modelId }));
+    setSelfHostedCustomModel("");
+  }, [selfHostedCustomModel]);
   const localAiClassificationOptions = useMemo(() => {
     if (localAiSetup.provider === "openrouter_byok") {
       const apiKey = localAiSetup.openRouterApiKey.trim();
       if (!apiKey) return null;
-      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model: localAiSetup.openRouterModel.trim() || DEFAULT_LOCAL_AI_SETUP.openRouterModel } };
+      const model = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
+      const fallbackModels = normalizeOpenRouterFallbackModels(model, localAiSetup.openRouterFallbackModels);
+      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model, fallbackModels } };
     }
 
     const baseUrl = localAiSetup.selfHostedBaseUrl.trim();
@@ -4005,32 +4110,20 @@ export default function App() {
                         </div>
                         <span className="chip green">Local-first</span>
                       </div>
-                      <div className="settings-row settings-row--fallback"><div><div className="lbl">Local AI provider</div><div className="desc">Configure one local-first route. Drifty currently supports OpenRouter BYOK and self-hosted endpoints only.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Local AI provider"><button type="button" className={`settings-mode-option${localAiSetup.provider === "openrouter_byok" ? " is-active" : ""}`} role="radio" aria-checked={localAiSetup.provider === "openrouter_byok"} onClick={() => setLocalAiSetup((current) => ({ ...current, provider: "openrouter_byok" }))}><span>OpenRouter BYOK</span><small>Use your own key</small></button><button type="button" className={`settings-mode-option${localAiSetup.provider === "self_hosted" ? " is-active" : ""}`} role="radio" aria-checked={localAiSetup.provider === "self_hosted"} onClick={() => setLocalAiSetup((current) => ({ ...current, provider: "self_hosted" }))}><span>Self-hosted</span><small>OpenAI-compatible endpoint</small></button></div></div></div>
+                      <div className="settings-row settings-row--fallback"><div><div className="lbl">AI provider</div><div className="desc">Choose a local route or connect Drifty Cloud for optional account-backed AI.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="group" aria-label="AI provider options"><button type="button" className={`settings-mode-option${localAiSetup.provider === "openrouter_byok" ? " is-active" : ""}`} role="radio" aria-checked={localAiSetup.provider === "openrouter_byok"} onClick={() => setLocalAiSetup((current) => ({ ...current, provider: "openrouter_byok" }))}><span>OpenRouter BYOK</span><small>Use your own key</small></button><button type="button" className={`settings-mode-option${localAiSetup.provider === "self_hosted" ? " is-active" : ""}`} role="radio" aria-checked={localAiSetup.provider === "self_hosted"} onClick={() => setLocalAiSetup((current) => ({ ...current, provider: "self_hosted" }))}><span>Self-hosted</span><small>OpenAI-compatible endpoint</small></button><button type="button" className="settings-mode-option" title={cloudDetailLabel} onClick={handleConfigureDriftyCloud}><span>Drifty Cloud</span><small>{cloudStatusLabel} · {aiServerStatusLabel}</small></button></div></div></div>
                       {localAiSetup.provider === "openrouter_byok" ? (
                         <>
                           <div className="settings-row"><label><div className="lbl">OpenRouter API key</div><div className="desc">Kept only for this app session; paste it again after restart.</div></label><div className="ctrl"><input className="settings-input" type="password" autoComplete="off" aria-label="OpenRouter API key" value={localAiSetup.openRouterApiKey} onChange={(event) => setLocalAiSetup((current) => ({ ...current, openRouterApiKey: event.target.value }))} placeholder="sk-or-v1-..." /></div></div>
-                          <div className="settings-row"><label><div className="lbl">OpenRouter model</div><div className="desc">Leave the default to let OpenRouter route automatically.</div></label><div className="ctrl"><input className="settings-input" aria-label="OpenRouter model" value={localAiSetup.openRouterModel} onChange={(event) => setLocalAiSetup((current) => ({ ...current, openRouterModel: event.target.value }))} placeholder="openrouter/auto" /></div></div>
+                          <div className="settings-row settings-row--model-picker"><div><div className="lbl">OpenRouter models</div><div className="desc">Choose a primary model and optional fallbacks. Drifty stores model IDs only.</div></div><div className="ctrl model-picker-summary"><div className="model-picker-summary__chips"><span className="chip green">Primary: {openRouterPrimaryModel}</span>{openRouterFallbackModels.length > 0 ? <span className="chip gray">{openRouterFallbackModels.length} fallback{openRouterFallbackModels.length === 1 ? "" : "s"}</span> : null}</div><button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={() => setOpenRouterModelPickerOpen(true)}>Choose models</button></div></div>
                         </>
                       ) : (
                         <>
                           <div className="settings-row"><label><div className="lbl">Self-hosted base URL</div><div className="desc">Use an OpenAI-compatible local or private endpoint.</div></label><div className="ctrl"><input className="settings-input" aria-label="Self-hosted base URL" value={localAiSetup.selfHostedBaseUrl} onChange={(event) => setLocalAiSetup((current) => ({ ...current, selfHostedBaseUrl: event.target.value }))} placeholder="http://localhost:11434/v1" /></div></div>
-                          <div className="settings-row"><label><div className="lbl">Self-hosted model</div><div className="desc">Model name exposed by your endpoint.</div></label><div className="ctrl"><input className="settings-input" aria-label="Self-hosted model" value={localAiSetup.selfHostedModel} onChange={(event) => setLocalAiSetup((current) => ({ ...current, selfHostedModel: event.target.value }))} placeholder="llama3.1:8b" /></div></div>
+                          <div className="settings-row settings-row--model-picker"><div><div className="lbl">Self-hosted model</div><div className="desc">Choose a known local model or enter the model ID exposed by your endpoint.</div></div><div className="ctrl model-picker-summary"><div className="model-picker-summary__chips"><span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span></div><button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={() => setSelfHostedModelPickerOpen(true)}>Choose model</button></div></div>
                         </>
                       )}
-                      <div className="settings-row"><div><div className="lbl">Local AI setup status</div><div className="desc">Saved locally. Classification execution still uses existing rule-based local classification until provider routing is wired.</div></div><div className="ctrl"><span className="chip">Saved locally</span></div></div>
-                    </div>
-                    <div className="settings-block cloud-overview">
-                      <div className="cloud-overview__header">
-                        <div>
-                          <h3>Drifty Cloud</h3>
-                          <p>Cloud is optional and sits under AI setup for account-backed classification, sync, profile, and leaderboard features.</p>
-                        </div>
-                        <span className="chip gray">{cloudStatusLabel}</span>
-                      </div>
-                      <div className="settings-row"><div><div className="lbl">Drifty Cloud</div><div className="desc">{cloudDetailLabel}</div></div><div className="ctrl ctrl--value">{cloudStatusLabel}</div></div>
-                      <div className="settings-row"><div><div className="lbl">AI classification server</div><div className="desc">Cloud AI is optional. Rule-based local classification remains available without signing in.</div></div><div className="ctrl ctrl--value">{aiServerStatusLabel}</div></div>
-                      <div className="settings-row"><div><div className="lbl">Local tracking</div><div className="desc">Timeline, tracker health, and rule-based classification stay local-first.</div></div><div className="ctrl"><span className="chip green">Local-first</span></div></div>
-                      <button type="button" className="settings-btn settings-btn--primary" onClick={handleConfigureDriftyCloud}>{hasRequiredAccountAuth ? "Configure Drifty Cloud" : "Connect Drifty Cloud"}</button>
+                      <div className="settings-row"><div><div className="lbl">Cloud account</div><div className="desc">{cloudDetailLabel}</div></div><div className="ctrl ctrl--value">{cloudStatusLabel}</div></div>
+                      <div className="settings-row"><div><div className="lbl">Local AI setup status</div><div className="desc">Saved locally. Configured providers can run optional AI classification; rule-based local classification remains available.</div></div><div className="ctrl"><span className="chip">Saved locally</span></div></div>
                     </div>
                   </div>
                 )}
@@ -4119,6 +4212,83 @@ export default function App() {
       {authModalOpen ? <AuthModal onClose={() => setAuthModalOpen(false)} /> : null}
 
       {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
+
+      {openRouterModelPickerOpen ? (
+        <div className="auth-modal__overlay" onClick={() => setOpenRouterModelPickerOpen(false)}>
+          <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
+            <div className="auth-modal__header">
+              <h2 id="openrouter-model-picker-title">OpenRouter models</h2>
+              <p>Drifty sends models in priority order. Your API key stays session-only.</p>
+            </div>
+            <div className="model-picker-modal__summary" aria-label="Selected OpenRouter model summary">
+              <span className="chip green">Primary: {openRouterPrimaryModel}</span>
+              <span className="chip gray">{openRouterSelectionSummary}</span>
+            </div>
+            <div className="model-picker-list" role="group" aria-label="OpenRouter model choices">
+              {openRouterModelOptions.map((option) => {
+                const isSelected = openRouterSelectedModels.includes(option.id);
+                const isPrimary = option.id === openRouterPrimaryModel;
+                return (
+                  <div key={option.id} className="model-picker-choice" data-selected={isSelected ? "true" : "false"}>
+                    <label className="model-picker-choice__select">
+                      <input type="checkbox" aria-label={`Select ${option.id}`} checked={isSelected} onChange={(event) => handleOpenRouterModelToggle(option.id, event.target.checked)} />
+                      <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
+                    </label>
+                    {"badge" in option && option.badge ? <span className="chip green">{option.badge}</span> : null}
+                    <label className="model-picker-choice__primary">
+                      <input type="radio" name="openrouter-primary-model" aria-label={`Use ${option.id} as primary`} checked={isPrimary} disabled={!isSelected} onChange={() => handleOpenRouterPrimaryModelChange(option.id)} />
+                      <span>Primary</span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+            <form className="model-picker-custom" onSubmit={handleAddOpenRouterCustomModel}>
+              <label htmlFor="openrouter-custom-model">Other model</label>
+              <div>
+                <input id="openrouter-custom-model" className="settings-input" aria-label="Other OpenRouter model" value={openRouterCustomModel} onChange={(event) => setOpenRouterCustomModel(event.target.value)} placeholder="provider/model-name" />
+                <button type="submit" className="settings-btn">Add model</button>
+              </div>
+            </form>
+            <button type="button" className="settings-btn auth-modal__close" onClick={() => setOpenRouterModelPickerOpen(false)}>Close</button>
+          </section>
+        </div>
+      ) : null}
+
+      {selfHostedModelPickerOpen ? (
+        <div className="auth-modal__overlay" onClick={() => setSelfHostedModelPickerOpen(false)}>
+          <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="self-hosted-model-picker-title" onClick={(event) => event.stopPropagation()}>
+            <div className="auth-modal__header">
+              <h2 id="self-hosted-model-picker-title">Self-hosted model</h2>
+              <p>Pick a common local model or enter the exact model ID returned by your endpoint.</p>
+            </div>
+            <div className="model-picker-modal__summary" aria-label="Selected self-hosted model summary">
+              <span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span>
+            </div>
+            <div className="model-picker-list" role="radiogroup" aria-label="Self-hosted model choices">
+              {selfHostedModelOptions.map((option) => {
+                const isSelected = option.id === selfHostedSelectedModel;
+                return (
+                  <div key={option.id} className="model-picker-choice model-picker-choice--single" data-selected={isSelected ? "true" : "false"}>
+                    <label className="model-picker-choice__select">
+                      <input type="radio" name="self-hosted-model" aria-label={`Use ${option.id}`} checked={isSelected} onChange={() => handleSelfHostedModelChange(option.id)} />
+                      <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+            <form className="model-picker-custom" onSubmit={handleAddSelfHostedCustomModel}>
+              <label htmlFor="self-hosted-custom-model">Other model</label>
+              <div>
+                <input id="self-hosted-custom-model" className="settings-input" aria-label="Other self-hosted model" value={selfHostedCustomModel} onChange={(event) => setSelfHostedCustomModel(event.target.value)} placeholder="model-name" />
+                <button type="submit" className="settings-btn">Use model</button>
+              </div>
+            </form>
+            <button type="button" className="settings-btn auth-modal__close" onClick={() => setSelfHostedModelPickerOpen(false)}>Close</button>
+          </section>
+        </div>
+      ) : null}
 
       {onboardingOpen ? (
         <OnboardingModal
@@ -8667,12 +8837,47 @@ function resolveInitialAiClassificationVisibility(): boolean {
   return readMigratedLocalStorageValue(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, LEGACY_AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
 }
 
+function isForbiddenOpenRouterModel(model: string): boolean {
+  return FORBIDDEN_OPENROUTER_MODEL_IDS.has(model.trim());
+}
+
+function uniqueOpenRouterModels(models: string[]): string[] {
+  const seen = new Set<string>();
+  return models.flatMap((model) => {
+    const trimmedModel = model.trim();
+    if (!trimmedModel || isForbiddenOpenRouterModel(trimmedModel) || seen.has(trimmedModel)) return [];
+    seen.add(trimmedModel);
+    return [trimmedModel];
+  });
+}
+
+function normalizeOpenRouterPrimaryModel(model: string): string {
+  const trimmedModel = model.trim();
+  if (!trimmedModel || isForbiddenOpenRouterModel(trimmedModel)) return DEFAULT_LOCAL_AI_SETUP.openRouterModel;
+  return trimmedModel;
+}
+
+function normalizeOpenRouterFallbackModels(primaryModel: string, fallbackModels: string[]): string[] {
+  const trimmedPrimaryModel = normalizeOpenRouterPrimaryModel(primaryModel);
+  return uniqueOpenRouterModels(fallbackModels).filter((model) => model !== trimmedPrimaryModel);
+}
+
+function isRecommendedOpenRouterModel(model: string): boolean {
+  return OPENROUTER_RECOMMENDED_MODELS.some((option) => option.id === model);
+}
+
+function isRecommendedSelfHostedModel(model: string): boolean {
+  return SELF_HOSTED_RECOMMENDED_MODELS.some((option) => option.id === model);
+}
+
 function toPersistedLocalAiSetup(setup: LocalAiSetupState): PersistedLocalAiSetupState {
+  const openRouterModel = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
   return {
     provider: setup.provider,
-    openRouterModel: setup.openRouterModel,
+    openRouterModel,
+    openRouterFallbackModels: normalizeOpenRouterFallbackModels(openRouterModel, setup.openRouterFallbackModels),
     selfHostedBaseUrl: setup.selfHostedBaseUrl,
-    selfHostedModel: setup.selfHostedModel,
+    selfHostedModel: setup.selfHostedModel.trim(),
   };
 }
 
@@ -8688,9 +8893,13 @@ function resolveInitialLocalAiSetup(): LocalAiSetupState {
     return {
       provider,
       openRouterApiKey: "",
-      openRouterModel: typeof record.openRouterModel === "string" && record.openRouterModel.trim() ? record.openRouterModel : DEFAULT_LOCAL_AI_SETUP.openRouterModel,
+      openRouterModel: normalizeOpenRouterPrimaryModel(typeof record.openRouterModel === "string" ? record.openRouterModel : ""),
+      openRouterFallbackModels: Array.isArray(record.openRouterFallbackModels) ? normalizeOpenRouterFallbackModels(
+        typeof record.openRouterModel === "string" ? record.openRouterModel : "",
+        record.openRouterFallbackModels.filter((model): model is string => typeof model === "string"),
+      ) : [],
       selfHostedBaseUrl: typeof record.selfHostedBaseUrl === "string" && record.selfHostedBaseUrl.trim() ? record.selfHostedBaseUrl : DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl,
-      selfHostedModel: typeof record.selfHostedModel === "string" ? record.selfHostedModel : "",
+      selfHostedModel: typeof record.selfHostedModel === "string" ? record.selfHostedModel.trim() : "",
     };
   } catch {
     return DEFAULT_LOCAL_AI_SETUP;
