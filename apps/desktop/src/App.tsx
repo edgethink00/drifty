@@ -3360,10 +3360,10 @@ export default function App() {
         {activeTab === "dashboard" ? (
           <div className={`page${dashPeriod === "Week" ? " page--week-dashboard" : ""}`}>
             {dashPeriod === "Week" ? null : (
-              <div className="pg-head" style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
+              <div className={`pg-head dashboard-page-head${dashPeriod === "Today" ? " dashboard-page-head--today" : ""}`}>
+                <div className="dashboard-page-head__row">
                   <div>
-                    <div className="eyebrow">{dashboardPeriodLabel}</div>
+                    {dashPeriod === "Today" ? null : <div className="eyebrow">{dashboardPeriodLabel}</div>}
                     <h1>{dashboardTitle}</h1>
                   </div>
                   {dashboardDateNavigator}
