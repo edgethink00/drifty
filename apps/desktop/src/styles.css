@@ -5687,6 +5687,44 @@ input, textarea { color: inherit; }
   margin: 0;
 }
 
+.dashboard-page-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dashboard-page-head__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.dashboard-page-head--today {
+  margin-bottom: var(--space-2);
+}
+
+.dashboard-page-head--today .dashboard-page-head__row {
+  align-items: center;
+}
+
+.dashboard-page-head--today .day-nav__current {
+  min-width: 6.75rem;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+.dashboard-page-head--today .day-nav__current .eyebrow,
+.dashboard-page-head--today .day-nav__current strong {
+  line-height: 1;
+}
+
+.dashboard-page-head--today .day-nav__current .eyebrow {
+  margin-bottom: 0;
+  color: var(--text-soft);
+  text-transform: none;
+}
+
 .content--dashboard:has(.page--week-dashboard) {
   overflow-y: hidden;
 }
