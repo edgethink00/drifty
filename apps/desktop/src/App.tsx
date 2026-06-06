@@ -116,6 +116,7 @@ type AppThemeColorKey = "accent" | "productivityFocus" | "productivityDrift" | "
 type AppThemeColorOverrides = Partial<Record<AppThemeColorKey, string>>;
 type TabId = "dashboard" | "classify" | "drift" | "leaderboard" | "settings";
 type DashboardPeriod = "Today" | "Week" | "Month";
+type ClassificationRange = "Day" | "Week";
 type NavigationSnapshot = {
   tabId: TabId;
   dashPeriod: DashboardPeriod;
@@ -952,6 +953,7 @@ export default function App() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
+  const [classificationRange, setClassificationRange] = useState<ClassificationRange>("Day");
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<string | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
@@ -2059,6 +2061,25 @@ export default function App() {
     [aiClassificationUsage, classificationMetrics],
   );
   const selectedDayContext = describeRelativeDay(selectedDay, startOfDayMinutes);
+  const classificationWeekRange = useMemo(() => getDashboardPeriodRange(selectedDay, "Week", startOfDayMinutes, startOfWeek), [selectedDay, startOfDayMinutes, startOfWeek]);
+  const classificationSegments = useMemo(() => (
+    classificationRange === "Week"
+      ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
+      : segments
+  ), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments]);
+  const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
+  const classificationOptions = useMemo<ClassificationOptions>(
+    () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact }),
+    [classificationSegments, showAiClassificationImpact],
+  );
+  const classificationProductivityTotals = useMemo(
+    () => buildProductivityDurations(classificationSegments, classificationOptions),
+    [classificationOptions, classificationSegments],
+  );
+  const classificationQualityPercent = useMemo(
+    () => buildProductivityQualityPercent(classificationProductivityTotals),
+    [classificationProductivityTotals],
+  );
   const dashboardTitle =
     selectedDayContext === "Today"
       ? `Good ${getDayPart()}.`
@@ -2089,6 +2110,15 @@ export default function App() {
   const peakWindowLabel = peakTrackedSeconds > 0 ? formatQuarterHourLabel(peakSlot.minuteOfDay) : "\u2014";
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const isTodaySelected = selectedDay === todayDay;
+  const isCurrentClassificationRange = classificationRange === "Week"
+    ? classificationWeekRange.startDay <= todayDay && todayDay <= classificationWeekRange.endDay
+    : isTodaySelected;
+  const rawNextClassificationDay = shiftIsoDate(selectedDay, classificationRange === "Week" ? 7 : 1);
+  const canShiftClassificationForward = classificationRange === "Week"
+    ? getDashboardPeriodRange(rawNextClassificationDay, "Week", startOfDayMinutes, startOfWeek).startDay <= todayDay
+    : rawNextClassificationDay <= todayDay;
+  const classificationDateContext = classificationRange === "Week" ? "Selected week" : selectedDayContext;
+  const classificationDateLabel = classificationRange === "Week" ? formatDateRangeLabel(classificationWeekRange.startDay, classificationWeekRange.endDay) : selectedDayLabel;
   const isCurrentDashboardPeriod = dashPeriod === "Week"
     ? dashboardRange.startDay <= todayDay && todayDay <= dashboardRange.endDay
     : isTodaySelected;
@@ -2096,7 +2126,6 @@ export default function App() {
   const canShiftDashboardForward = dashPeriod === "Week"
     ? getDashboardPeriodRange(nextDashboardDay, dashPeriod, startOfDayMinutes, startOfWeek).startDay <= todayDay
     : nextDashboardDay <= todayDay;
-  const canSelectNextDay = shiftIsoDate(selectedDay, 1) <= todayDay;
   const nextInsightDay = shiftDashboardPeriodDay(selectedDay, "Week", 1);
   const canShiftInsightForward = nextInsightDay <= todayDay;
   const dashboardDateContext = dashPeriod === "Week" ? "Selected week" : selectedDayContext;
@@ -2165,8 +2194,8 @@ export default function App() {
   const flowBlocks = useMemo(() => buildFlowBlocks(segments, selectedDay, flowIntervalMinutes, selectedDayClassificationOptions, startOfDayMinutes), [flowIntervalMinutes, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
   const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
   const classificationCategoryBreakdowns = useMemo(
-    () => buildClassificationCategoryBreakdowns(segments, selectedDayClassificationOptions, dayTotalSeconds),
-    [dayTotalSeconds, segments, selectedDayClassificationOptions],
+    () => buildClassificationCategoryBreakdowns(classificationSegments, classificationOptions, classificationTotalSeconds),
+    [classificationOptions, classificationSegments, classificationTotalSeconds],
   );
   const effectiveClassifyCategoryId = useMemo(() => {
     if (classificationCategoryBreakdowns.some((b) => b.category === classifySelectedCategoryId)) return classifySelectedCategoryId;
@@ -2184,13 +2213,14 @@ export default function App() {
   };
   const selectedClassificationSegments = useMemo(
     () => selectedClassificationBreakdown
-      ? segments.filter((s) => classifyActivity(s, selectedDayClassificationOptions).category === selectedClassificationBreakdown.category)
+      ? classificationSegments.filter((s) => classifyActivity(s, classificationOptions).category === selectedClassificationBreakdown.category)
       : [],
-    [selectedClassificationBreakdown, selectedDayClassificationOptions, segments],
+    [classificationOptions, classificationSegments, selectedClassificationBreakdown],
   );
+  const classificationSourceSegments = selectedClassificationSegments;
   const classificationSourceSummaries = useMemo(
-    () => buildClassificationSourceSummaries(selectedClassificationSegments),
-    [selectedClassificationSegments],
+    () => buildClassificationSourceSummaries(classificationSourceSegments),
+    [classificationSourceSegments],
   );
   const effectiveClassifySourceId = useMemo(() => {
     if (classificationSourceSummaries.some((s) => classifySourceKey(s) === classifySelectedSourceId)) return classifySelectedSourceId;
@@ -2203,17 +2233,17 @@ export default function App() {
   const classificationActivityRows = useMemo(() => {
     if (!selectedClassificationSourceSummary) return [];
     return buildClassificationActivityRows(
-      selectedClassificationSegments.filter((s) => classifySegmentSourceKey(s) === effectiveClassifySourceId),
+      classificationSourceSegments.filter((s) => classifySegmentSourceKey(s) === effectiveClassifySourceId),
     );
-  }, [selectedClassificationSourceSummary, selectedClassificationSegments, effectiveClassifySourceId]);
+  }, [selectedClassificationSourceSummary, classificationSourceSegments, effectiveClassifySourceId]);
   const classificationActivityPeakSeconds = useMemo(
     () => Math.max(...classificationActivityRows.map((r) => r.totalSeconds), 0),
     [classificationActivityRows],
   );
   useEffect(() => {
     setExpandedClassificationActivityRows(new Set());
-  }, [selectedDay, effectiveClassifyCategoryId, effectiveClassifySourceId]);
-  const classificationTopApp = useMemo(() => buildAppUsageSummaries(segments, { limit: 1, groupBy: "app" })[0] ?? null, [segments]);
+  }, [classificationRange, selectedDay, effectiveClassifyCategoryId, effectiveClassifySourceId]);
+  const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
@@ -3420,26 +3450,42 @@ export default function App() {
                 <div className="eyebrow">Classification</div>
                 <h1>Activity breakdown</h1>
               </div>
-              <DateNavigator
-                ariaLabel="Classification day selector"
-                context={selectedDayContext}
-                label={selectedDayLabel}
-                todayLabel="Today"
-                isTodayDisabled={isTodaySelected}
-                isNextDisabled={!canSelectNextDay}
-                onPrevious={() => selectDay((p) => shiftIsoDate(p, -1))}
-                onNext={() => { if (canSelectNextDay) selectDay((p) => shiftIsoDate(p, 1)); }}
-                onToday={() => selectDay(todayIsoDate())}
-                previousLabel="Show previous day"
-                nextLabel="Show next day"
-              />
+              <div className="classification-range-controls">
+                <div className="settings-mode-switch" role="radiogroup" aria-label="Classification range">
+                  {(["Day", "Week"] as const).map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      className={`settings-mode-option${classificationRange === range ? " is-active" : ""}`}
+                      role="radio"
+                      aria-checked={classificationRange === range}
+                      onClick={() => setClassificationRange(range)}
+                    >
+                      <span>{range}</span>
+                    </button>
+                  ))}
+                </div>
+                <DateNavigator
+                  ariaLabel={`Classification ${classificationRange.toLowerCase()} selector`}
+                  context={classificationDateContext}
+                  label={classificationDateLabel}
+                  todayLabel="Today"
+                  isTodayDisabled={isCurrentClassificationRange}
+                  isNextDisabled={!canShiftClassificationForward}
+                  onPrevious={() => selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, -1, todayDay, startOfDayMinutes, startOfWeek))}
+                  onNext={() => { if (canShiftClassificationForward) selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, 1, todayDay, startOfDayMinutes, startOfWeek)); }}
+                  onToday={() => selectDay(getSafeClassificationNavigationDay(selectedDay, classificationRange, 0, todayDay, startOfDayMinutes, startOfWeek))}
+                  previousLabel={classificationRange === "Week" ? "Show previous classification week" : "Show previous day"}
+                  nextLabel={classificationRange === "Week" ? "Show next classification week" : "Show next day"}
+                />
+              </div>
             </div>
 
             <div className="clf-summary">
-              <div className="clf-stat"><span className="eyebrow">Total</span><strong>{formatDuration(dayTotalSeconds)}</strong></div>
-              <div className="clf-stat"><span className="eyebrow">Sessions</span><strong>{segments.length}</strong></div>
+              <div className="clf-stat"><span className="eyebrow">Total</span><strong>{formatDuration(classificationTotalSeconds)}</strong></div>
+              <div className="clf-stat"><span className="eyebrow">Sessions</span><strong>{classificationSegments.length}</strong></div>
               <div className="clf-stat clf-stat--with-icon"><span className="eyebrow">Top app</span><div className="clf-stat__row"><AppGlyph appName={classificationTopApp?.appName ?? classificationTopAppLabel} iconSrc={classificationTopApp ? appIcons[classificationTopApp.bundleId ?? classificationTopApp.appName] ?? null : null} size="sm" /><strong>{classificationTopAppLabel}</strong></div></div>
-              <div className="clf-stat"><span className="eyebrow">Quality</span><strong>{focusDriftChart.focusConsistency}%</strong></div>
+              <div className="clf-stat"><span className="eyebrow">Quality</span><strong>{classificationQualityPercent}%</strong></div>
             </div>
 
             {classificationCategoryBreakdowns.length > 0 ? (
@@ -3453,7 +3499,7 @@ export default function App() {
                       </div>
                       <div className="panel-header__right">
                         <span className="panel-header__meta">Total</span>
-                        <strong className="panel-header__value">{formatDuration(dayTotalSeconds)}</strong>
+                        <strong className="panel-header__value">{formatDuration(classificationTotalSeconds)}</strong>
                       </div>
                     </header>
                     <div className="classification-panel-view__panel-body">
@@ -3613,7 +3659,7 @@ export default function App() {
                                   )}
                                   {isExpanded ? (() => {
                                     const surfaceDetails = captureRowSurfaceDetails(row.segments);
-                                    const summary = classificationRowSummary(row.segments, selectedDayClassificationOptions);
+                                    const summary = classificationRowSummary(row.segments, classificationOptions);
                                     return (
                                       <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={`Capture details for ${row.label}`}>
                                         <div className="classification-panel-view__activity-overview">
@@ -3673,7 +3719,7 @@ export default function App() {
                 <div className="classification-panel-view__empty classification-panel-view__empty--full">
                   <span className="label-mono">Classification</span>
                   <strong>No category data yet</strong>
-                  <p>Category, source, and activity details will appear here once tracking captures activity for the selected day.</p>
+                  <p>Category, source, and activity details will appear here once tracking captures activity for the selected range.</p>
                 </div>
               </section>
             )}
@@ -4934,6 +4980,8 @@ function AttentionRhythmCard({
   );
 }
 
+const INSIGHT_SOURCE_VISIBLE_COUNT = 3;
+
 function InsightSourceGroup({
   variant,
   lists,
@@ -4943,54 +4991,69 @@ function InsightSourceGroup({
   lists: InsightSourceLists;
   appIcons: AppIconMap;
 }) {
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const tone = variant === "drift" ? "var(--warn)" : "var(--accent)";
   const label = variant === "drift" ? "Drift patterns" : "Focus patterns";
-  const topicsLabel = variant === "drift" ? "Drift topics" : "Focus topics";
+  const topicsLabel = variant === "drift" ? "Drift after focus" : "Focus before drift";
+  const transitionsLabel = variant === "drift" ? "Top drift after focus transitions" : "Top focus before drift transitions";
   const appsLabel = variant === "drift" ? "Drift apps" : "Focus apps";
   const toneStyle = { "--trend-tone": tone } as CSSProperties;
-  const maxTopic = Math.max(1, ...lists.topics.map((item) => item.seconds));
-  const maxApp = Math.max(1, ...lists.apps.map((item) => item.seconds));
+  const hasHiddenSources = lists.apps.length > INSIGHT_SOURCE_VISIBLE_COUNT || lists.topics.length > INSIGHT_SOURCE_VISIBLE_COUNT;
+
+  const renderSourceList = (
+    kind: keyof InsightSourceLists,
+    sourceLabel: string,
+    emptyTitle: string,
+    emptyDetail: string,
+    includeRank: boolean,
+  ) => {
+    const items = lists[kind];
+    const visibleItems = sourcesExpanded ? items : items.slice(0, INSIGHT_SOURCE_VISIBLE_COUNT);
+    const maxValue = Math.max(1, ...items.map((item) => insightSourceValue(item)));
+
+    return (
+      <div className="drift-time-trend__sources">
+        <span className="label-mono drift-time-trend__sources-label">{sourceLabel}</span>
+        <div className="drift-time-trend__sources-items" style={toneStyle}>
+          {visibleItems.map((item, index) => (
+            <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
+              <span className={`drift-time-trend__sources-rank${includeRank ? "" : " drift-time-trend__sources-rank--empty"}`} aria-hidden={!includeRank}>{includeRank ? index + 1 : null}</span>
+              <span className="drift-time-trend__sources-icon" aria-hidden="true">
+                {item.isSite && item.siteDomain
+                  ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
+                  : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
+              </span>
+              <span className="drift-time-trend__sources-name">{item.label}</span>
+              <strong className="drift-time-trend__sources-value">{formatInsightSourceValue(item)}</strong>
+              <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((insightSourceValue(item) / maxValue) * 100, 3)}%` }} /></div>
+            </div>
+          ))}
+          {items.length === 0 ? <EmptyState title={emptyTitle} detail={emptyDetail} /> : null}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${variant}`} aria-label={`${variant === "drift" ? "Drift" : "Focus"} patterns`}>
       <div className="productivity-insight-group__head"><span className="label-mono insight-section__label">{label}</span></div>
-      <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section" aria-label={`Top ${variant} topics`} style={toneStyle}>
+      <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section" aria-label={transitionsLabel} style={toneStyle}>
         <div className="trend-topics-card__columns">
-          <div className="drift-time-trend__sources">
-            <span className="label-mono drift-time-trend__sources-label">{topicsLabel}</span>
-            <div className="drift-time-trend__sources-items" style={toneStyle}>
-              {lists.topics.map((item, index) => (
-                <div className="drift-time-trend__sources-item drift-time-trend__sources-item--topic" key={item.id}>
-                  <span className="drift-time-trend__sources-name drift-time-trend__sources-name--app drift-time-trend__sources-name--topic">
-                    <span className="drift-time-trend__sources-rank">{index + 1}</span>
-                    <span>{item.label}</span>
-                  </span>
-                  <strong className="drift-time-trend__sources-value">{formatDuration(item.seconds)}</strong>
-                  <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((item.seconds / maxTopic) * 100, 3)}%` }} /></div>
-                </div>
-              ))}
-              {lists.topics.length === 0 ? <EmptyState title={`No ${variant} topics yet`} detail="Topics appear after classified activity is recorded." /> : null}
-            </div>
-          </div>
-          <div className="drift-time-trend__sources">
-            <span className="label-mono drift-time-trend__sources-label">{appsLabel}</span>
-            <div className="drift-time-trend__sources-items" style={toneStyle}>
-              {lists.apps.map((item) => (
-                <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
-                  <span className="drift-time-trend__sources-name drift-time-trend__sources-name--app">
-                    {item.isSite && item.siteDomain
-                      ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
-                      : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
-                    <span>{item.appName}</span>
-                  </span>
-                  <strong className="drift-time-trend__sources-value">{formatDuration(item.seconds)}</strong>
-                  <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((item.seconds / maxApp) * 100, 3)}%` }} /></div>
-                </div>
-              ))}
-              {lists.apps.length === 0 ? <EmptyState title={`No ${variant} apps yet`} detail="Apps appear after classified activity is recorded." /> : null}
-            </div>
-          </div>
+          {renderSourceList("apps", appsLabel, `No ${variant} apps yet`, "Apps appear after classified activity is recorded.", false)}
+          {renderSourceList("topics", topicsLabel, `No ${variant} transitions yet`, "Transitions appear after focus is followed by drift.", true)}
         </div>
+        {hasHiddenSources && !sourcesExpanded ? (
+          <div className="drift-time-trend__sources-more-row">
+            <button
+              type="button"
+              className="drift-time-trend__sources-more"
+              aria-expanded="false"
+              onClick={() => setSourcesExpanded(true)}
+            >
+              Show more
+            </button>
+          </div>
+        ) : null}
       </section>
     </section>
   );
@@ -6755,10 +6818,14 @@ function buildAttentionRhythm(segments: ActivitySegment[], options?: Classificat
   return cells;
 }
 
+type InsightSourceValueKind = "duration" | "count";
+
 interface InsightSourceItem {
   id: string;
   label: string;
   seconds: number;
+  count: number;
+  valueKind: InsightSourceValueKind;
   appName: string;
   bundleId: string | null;
   siteDomain: string | null;
@@ -6770,8 +6837,6 @@ interface InsightSourceLists {
   apps: InsightSourceItem[];
 }
 
-// Drift/focus "topics" (what you were doing — site/page activity) and "apps"
-// (which application), derived from the productivity-filtered segments.
 function buildInsightSourceLists(
   segments: ActivitySegment[],
   productivity: ProductivityLabel,
@@ -6780,17 +6845,67 @@ function buildInsightSourceLists(
   const filtered = segments.filter((segment) => classifyActivity(segment, options).productivity === productivity);
   const toItem = (summary: ReturnType<typeof buildAppUsageSummaries>[number]): InsightSourceItem => ({
     id: `${summary.usageKind}:${summary.siteDomain ?? summary.appName}`,
-    label: summary.appName,
+    label: summary.usageKind === "site" ? (summary.siteDomain ?? summary.appName) : summary.appName,
     seconds: summary.totalSeconds,
-    appName: summary.appName,
+    count: summary.sessionCount,
+    valueKind: "duration",
+    appName: summary.usageKind === "site" ? (summary.siteDomain ?? summary.appName) : summary.appName,
     bundleId: summary.bundleId,
     siteDomain: summary.siteDomain,
     isSite: summary.usageKind === "site",
   });
   return {
-    topics: buildAppUsageSummaries(filtered, { groupBy: "activity", limit: 3 }).map(toItem),
-    apps: buildAppUsageSummaries(filtered, { groupBy: "app", limit: 3 }).map(toItem),
+    topics: buildFocusDriftTransitionItems(segments, productivity, options),
+    apps: buildAppUsageSummaries(filtered, { groupBy: "activity" }).map(toItem),
   };
+}
+
+function buildFocusDriftTransitionItems(
+  segments: ActivitySegment[],
+  productivity: ProductivityLabel,
+  options?: ClassificationOptions,
+): InsightSourceItem[] {
+  const accumulator = new Map<string, InsightSourceItem>();
+  const sortedSegments = segments.slice().sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime());
+
+  for (let index = 0; index < sortedSegments.length - 1; index += 1) {
+    const focusSegment = sortedSegments[index];
+    const driftSegment = sortedSegments[index + 1];
+    if (classifyActivity(focusSegment, options).productivity !== "focus") continue;
+    if (classifyActivity(driftSegment, options).productivity !== "drift") continue;
+
+    const segment = productivity === "drift" ? driftSegment : focusSegment;
+    const identity = getInsightSurfaceIdentity(segment);
+    const current = accumulator.get(identity.id) ?? {
+      id: identity.id,
+      label: identity.label,
+      seconds: 0,
+      count: 0,
+      valueKind: "count",
+      appName: identity.label,
+      bundleId: identity.bundleId,
+      siteDomain: identity.siteDomain,
+      isSite: identity.siteDomain !== null,
+    };
+    current.seconds += segment.durationSeconds;
+    current.count += 1;
+    accumulator.set(identity.id, current);
+  }
+
+  return Array.from(accumulator.values())
+    .sort((left, right) => {
+      const countDelta = right.count - left.count;
+      if (countDelta !== 0) return countDelta;
+      return right.seconds - left.seconds;
+    });
+}
+
+function insightSourceValue(item: InsightSourceItem): number {
+  return item.valueKind === "count" ? item.count : item.seconds;
+}
+
+function formatInsightSourceValue(item: InsightSourceItem): string {
+  return item.valueKind === "count" ? `${item.count}x` : formatDuration(item.seconds);
 }
 
 type WeeklyChartMode = "productivity" | "category";
@@ -7122,6 +7237,12 @@ function buildEmptyHistoryDay(day: string, selectedDay: string): HistoryCell {
 
 function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
   return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay, startOfDayMinutes);
+}
+
+function buildProductivityQualityPercent(productivityTotals: ProductivityDuration[]): number {
+  const totalSeconds = productivityTotals.reduce((total, entry) => total + entry.totalSeconds, 0);
+  const focusSeconds = productivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
+  return totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
 }
 
 function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
@@ -8282,6 +8403,24 @@ function shiftDashboardPeriodDay(day: string, period: DashboardPeriod, direction
   if (period === "Week") return shiftIsoDate(day, direction * 7);
   if (period === "Month") return shiftIsoMonth(day, direction);
   return shiftIsoDate(day, direction);
+}
+
+function getSafeClassificationNavigationDay(
+  day: string,
+  range: ClassificationRange,
+  direction: -1 | 0 | 1,
+  todayDay: string,
+  startOfDayMinutes = 0,
+  startOfWeek: StartOfWeek = DEFAULT_START_OF_WEEK,
+): string {
+  if (direction === 0) return todayDay;
+
+  const targetDay = shiftIsoDate(day, range === "Week" ? direction * 7 : direction);
+  if (direction < 0) return targetDay;
+  if (range === "Day") return targetDay <= todayDay ? targetDay : todayDay;
+
+  const targetWeekRange = getDashboardPeriodRange(targetDay, "Week", startOfDayMinutes, startOfWeek);
+  return targetWeekRange.startDay <= todayDay && todayDay <= targetWeekRange.endDay ? todayDay : targetDay;
 }
 
 function shiftIsoMonth(day: string, direction: -1 | 1): string {
