@@ -8126,7 +8126,7 @@ button.flow-cell:focus {
 
 /* Week v2 calendar surface */
 .week-v2-summary--compact {
-  grid-template-columns: minmax(8rem, auto) auto minmax(0, 1fr);
+  grid-template-columns: minmax(8rem, auto) auto minmax(0, 1fr) max-content;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   background:
@@ -8154,6 +8154,16 @@ button.flow-cell:focus {
 .week-v2-summary--compact .week-v2-summary__meta span {
   padding: 3px var(--space-2);
   background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+}
+
+.week-v2-summary__actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.week-v2-summary__actions .day-nav {
+  justify-content: flex-end;
 }
 
 .week-v2-summary--integrated {
@@ -11437,7 +11447,7 @@ html[data-surface="watcher"] .end-of-day-review,
 }
 
 .week-v2-summary--compact {
-  grid-template-columns: minmax(128px, auto) auto minmax(0, 1fr);
+  grid-template-columns: minmax(128px, auto) auto minmax(0, 1fr) max-content;
   gap: var(--space-3);
   padding: 7px var(--space-3);
   border-radius: var(--radius-md);
