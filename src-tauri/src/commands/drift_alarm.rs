@@ -7,9 +7,8 @@ use tauri::{
 
 pub const DRIFT_ALARM_WINDOW_LABEL: &str = "drift-alarm";
 
-const DRIFT_ALARM_WIDTH: f64 = 800.0;
-const DRIFT_ALARM_HEIGHT: f64 = 440.0;
-const DRIFT_ALARM_WORK_AREA_MARGIN: f64 = 36.0;
+const DRIFT_ALARM_WIDTH: f64 = 760.0;
+const DRIFT_ALARM_HEIGHT: f64 = 620.0;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,11 +209,11 @@ fn calculate_drift_alarm_window_position(
     work_area_x: f64,
     work_area_y: f64,
     work_area_width: f64,
-    _work_area_height: f64,
+    work_area_height: f64,
 ) -> LogicalPosition<f64> {
     LogicalPosition::new(
-        work_area_x + work_area_width - DRIFT_ALARM_WIDTH - DRIFT_ALARM_WORK_AREA_MARGIN,
-        work_area_y + DRIFT_ALARM_WORK_AREA_MARGIN,
+        work_area_x + ((work_area_width - DRIFT_ALARM_WIDTH).max(0.0) / 2.0).round(),
+        work_area_y + ((work_area_height - DRIFT_ALARM_HEIGHT).max(0.0) / 2.0).round(),
     )
 }
 
@@ -250,15 +249,15 @@ mod tests {
     fn positions_alarm_near_work_area_top_right() {
         let position = calculate_drift_alarm_window_position(0.0, 25.0, 1440.0, 775.0);
 
-        assert_eq!(position.x, 604.0);
-        assert_eq!(position.y, 61.0);
+        assert_eq!(position.x, 340.0);
+        assert_eq!(position.y, 103.0);
     }
 
     #[test]
     fn keeps_alarm_inside_shifted_work_area() {
         let position = calculate_drift_alarm_window_position(80.0, 0.0, 1360.0, 900.0);
 
-        assert_eq!(position.x, 604.0);
-        assert_eq!(position.y, 36.0);
+        assert_eq!(position.x, 380.0);
+        assert_eq!(position.y, 140.0);
     }
 }
