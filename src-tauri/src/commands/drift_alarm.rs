@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
+    window::{Effect, EffectState, EffectsBuilder},
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, State, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder,
 };
@@ -74,6 +75,12 @@ pub fn setup_drift_alarm_window(app: &tauri::App) -> tauri::Result<()> {
     .always_on_top(true)
     .visible_on_all_workspaces(true)
     .transparent(true)
+    .effects(
+        EffectsBuilder::new()
+            .effect(Effect::UnderWindowBackground)
+            .state(EffectState::Active)
+            .build(),
+    )
     .visible(false)
     .build()?;
 
