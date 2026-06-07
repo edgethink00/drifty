@@ -11396,11 +11396,11 @@ button.flow-cell:focus {
   box-shadow: 0 var(--space-3) var(--space-6) color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  padding: var(--space-3);
+  padding: 10px;
   pointer-events: auto;
   position: fixed;
   right: var(--space-2);
@@ -11422,7 +11422,7 @@ button.flow-cell:focus {
 
 .end-of-day-review__tracked {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -11490,11 +11490,11 @@ button.flow-cell:focus {
   background: var(--review-block);
   border-radius: 12px;
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   grid-template-columns: 5.9rem minmax(0, 1fr);
-  min-height: 7.1rem;
+  min-height: 6.4rem;
   min-width: 0;
-  padding: var(--space-3);
+  padding: var(--space-2);
 }
 
 .end-of-day-review[data-mock="true"] {
@@ -11916,14 +11916,14 @@ html[data-surface="watcher"] .end-of-day-review,
 .end-of-day-review {
   border: 0;
   box-shadow: 0 var(--space-3) var(--space-6) color-mix(in srgb, var(--text) 10%, transparent);
-  max-height: calc(100vh - var(--space-6));
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   width: min(24rem, calc(100vw - var(--space-6)));
 }
 
 html[data-surface="watcher"] .end-of-day-review,
 .watcher-window-surface .end-of-day-review {
-  max-height: calc(100vh - var(--space-6));
+  max-height: none;
   width: min(24rem, calc(100vw - var(--space-6)));
 }
 
@@ -11939,7 +11939,7 @@ html[data-surface="watcher"] .end-of-day-review,
   align-items: center;
   display: flex;
   gap: var(--space-2);
-  min-height: 2.4rem;
+  min-height: 2rem;
   min-width: 0;
 }
 
@@ -11964,12 +11964,12 @@ html[data-surface="watcher"] .end-of-day-review,
   font-size: .84rem;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: .92;
+  line-height: 1.2;
   margin: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
-  transform: translateY(-.22rem);
+  transform: none;
   white-space: nowrap;
 }
 
@@ -12013,10 +12013,10 @@ html[data-surface="watcher"] .end-of-day-review,
   border: 0;
   border-radius: var(--radius-sm);
   display: grid;
-  gap: 7px;
+  gap: 5px;
   grid-template-rows: auto auto 5px auto;
   min-width: 0;
-  padding: 10px 11px;
+  padding: 8px 9px;
 }
 
 .eodr-metric__delta--good {
@@ -12091,18 +12091,18 @@ html[data-surface="watcher"] .end-of-day-review,
   border-radius: 50%;
   box-shadow: var(--shadow);
   display: grid;
-  height: 5.8rem;
+  height: 5.4rem;
   place-items: center;
   position: relative;
-  width: 5.8rem;
+  width: 5.4rem;
 }
 
 .eodr-dial {
   display: block;
-  height: 5.8rem;
+  height: 5.4rem;
   overflow: visible;
   transform: rotate(-90deg);
-  width: 5.8rem;
+  width: 5.4rem;
 }
 
 .eodr-dial__track,
@@ -12146,7 +12146,7 @@ html[data-surface="watcher"] .end-of-day-review,
 
 .end-of-day-review__table-stack {
   display: grid;
-  gap: var(--space-2);
+  gap: 6px;
 }
 
 .end-of-day-review__category,
@@ -12155,9 +12155,9 @@ html[data-surface="watcher"] .end-of-day-review,
   border: 0;
   border-radius: 12px;
   display: grid;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
-  padding: 9px 10px 10px;
+  padding: 7px 8px 8px;
 }
 
 .eodr-category-head {
@@ -12236,13 +12236,20 @@ html[data-theme="dark"] .eodr-category-stack-bar i {
   border: 0;
   border-radius: 9px;
   grid-template-columns: auto minmax(0, 1fr) max-content;
-  min-height: 2.15rem;
-  padding: 4px 7px;
+  min-height: 1.85rem;
+  padding: 3px 6px;
 }
 
 .eodr-source-row .src-tile {
-  height: 1.35rem;
-  width: 1.35rem;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.eodr-source-row .src-tile .app-glyph--sm,
+.eodr-source-row .src-tile .app-icon--sm {
+  border-radius: inherit;
+  height: 100%;
+  width: 100%;
 }
 
 .eodr-category-dot {

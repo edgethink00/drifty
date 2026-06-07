@@ -16,6 +16,7 @@ function buildSegment({
   productivity,
   siteDomain = null,
   siteTitle = null,
+  bundleId = `com.example.${id}`,
 }: {
   id: string;
   appName: string;
@@ -25,6 +26,7 @@ function buildSegment({
   productivity: ProductivityLabel;
   siteDomain?: string | null;
   siteTitle?: string | null;
+  bundleId?: string;
 }): ActivitySegment {
   const startedAt = new Date(Date.UTC(2026, 3, 6, startHour, 0, 0, 0));
   const endedAt = new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
@@ -35,7 +37,7 @@ function buildSegment({
     endedAt: endedAt.toISOString(),
     durationSeconds: durationMinutes * 60,
     appName,
-    bundleId: `com.example.${id}`,
+    bundleId,
     windowTitle: siteTitle ?? `${appName} window`,
     siteDomain,
     siteTitle,
@@ -274,6 +276,48 @@ describe("EndOfDayReview", () => {
     expect(container.querySelector(".src-tile--code")).toBeTruthy();
     expect(container.querySelector(".glyph--design")).toBeTruthy();
     expect(container.querySelector(".src-tile--yt")).toBeTruthy();
+  });
+
+  it("renders native source icons when source summaries include icon data", () => {
+    const xcodeIcon = "data:image/png;base64,xcode-icon";
+    const event = buildEndOfDayReviewSummary({
+      day: reviewDay,
+      generatedAt,
+      appIcons: { "com.apple.dt.Xcode": xcodeIcon },
+      segments: [
+        buildSegment({
+          id: "xcode-focus-morning",
+          appName: "Xcode",
+          bundleId: "com.apple.dt.Xcode",
+          startHour: 9,
+          durationMinutes: 120,
+          category: "workspace",
+          productivity: "focus",
+        }),
+        buildSegment({
+          id: "slack-neutral-noon",
+          appName: "Slack",
+          startHour: 12,
+          durationMinutes: 30,
+          category: "communication",
+          productivity: "neutral",
+        }),
+      ],
+    });
+
+    expect(event.sourceSummaries?.[0]).toEqual(expect.objectContaining({
+      appName: "Xcode",
+      bundleId: "com.apple.dt.Xcode",
+      iconSrc: xcodeIcon,
+    }));
+
+    const { container } = render(<EndOfDayReview event={event} />);
+    const xcodeRow = within(screen.getByLabelText("Most used apps")).getByText("Xcode").closest(".eodr-source-row");
+
+    expect(xcodeRow).toBeTruthy();
+    expect(xcodeRow?.querySelector(".app-icon")?.getAttribute("src")).toBe(xcodeIcon);
+    expect(xcodeRow?.querySelector(".app-glyph")).toBeNull();
+    expect(container.querySelector(".src-tile--app-icon")).toBeTruthy();
   });
 
   it("calls action callbacks from the review buttons", () => {
