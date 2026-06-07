@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DriftAlarmWindowApp } from "./DriftAlarmWindowApp";
 import type { DriftAlarmEvent } from "./DriftAlarm";
@@ -69,15 +69,25 @@ describe("DriftAlarmWindowApp", () => {
     bridge.currentPayload = event();
     window.localStorage.setItem("drifty.theme", "light");
 
-    render(<DriftAlarmWindowApp />);
+    const { container } = render(<DriftAlarmWindowApp />);
     await act(async () => undefined);
 
     expect(document.documentElement.dataset.surface).toBe("drift-alarm");
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(bridge.callOrder).toEqual(["listen:start", "listen:resolved", "current"]);
-    expect(screen.getByLabelText("Drifty drift alarm")).toBeTruthy();
-    expect(screen.getByRole("main", { name: "Drifty drift alarm window" }).classList.contains("watcher-window-surface--drift-alarm")).toBe(true);
-    expect(screen.getByText(/your 32-minute focus flame is still alive/i)).toBeTruthy();
+    const alarm = screen.getByRole("alertdialog", { name: "Drift detected" });
+    expect(alarm.getAttribute("aria-modal")).toBe("true");
+    expect(alarm.getAttribute("aria-labelledby")).toBe("drift-alarm-title");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: /visual studio code/i })));
+    const main = screen.getByRole("main", { name: "Drifty drift alarm window" });
+    expect(main.classList.contains("drift-alarm-window-surface")).toBe(true);
+    expect(container.querySelector(".drift-alarm-backdrop")).toBeTruthy();
+    expect(container.querySelector(".drift-alarm-overlay")).toBeTruthy();
+    expect(container.querySelector(".da")).toBeTruthy();
+    expect(container.querySelector(".watcher-peek--top-right")).toBeNull();
+    expect(screen.getByText(/drift detected/i)).toBeTruthy();
+    expect(screen.getByText(/latest focus/i)).toBeTruthy();
+    expect(screen.getAllByText(/visual studio code/i).length).toBeGreaterThan(0);
   });
 
   it("sends clicked actions without echoing native action events", async () => {
@@ -89,5 +99,30 @@ describe("DriftAlarmWindowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: /visual studio code/i }));
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledWith({ type: "return_to_focus", targetId: "app:com.microsoft.VSCode" });
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismisses the native alarm webview surface on Escape", async () => {
+    bridge.currentPayload = event();
+
+    render(<DriftAlarmWindowApp />);
+    await act(async () => undefined);
+
+    const alarm = screen.getByRole("alertdialog", { name: "Drift detected" });
+    fireEvent.keyDown(alarm, { key: "Escape" });
+
+    expect(bridge.dismissNativeDriftAlarm).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "Drift detected" })).toBeNull());
+  });
+
+  it("dismisses the native alarm webview surface from the chrome X button", async () => {
+    bridge.currentPayload = event();
+
+    render(<DriftAlarmWindowApp />);
+    await act(async () => undefined);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss drift alarm" }));
+
+    expect(bridge.dismissNativeDriftAlarm).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "Drift detected" })).toBeNull());
   });
 });

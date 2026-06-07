@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment } from "@dtime/domain";
+import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 
 type ReviewBreakdownKey = "focus" | "drift" | "other";
 
@@ -11,6 +12,16 @@ export type EndOfDayReviewTopSource = {
 
 export type EndOfDayReviewBreakdownSource = EndOfDayReviewTopSource & {
   key: ReviewBreakdownKey;
+};
+
+export type EndOfDayReviewCategorySummary = {
+  label: string;
+  durationSeconds: number;
+  percent: number;
+};
+
+export type EndOfDayReviewSourceSummary = EndOfDayReviewTopSource & {
+  percent: number;
 };
 
 export type EndOfDayReviewEvent = {
@@ -26,6 +37,8 @@ export type EndOfDayReviewEvent = {
   driftSeconds: number;
   topSource: EndOfDayReviewTopSource | null;
   breakdownSources?: EndOfDayReviewBreakdownSource[];
+  categorySummaries?: EndOfDayReviewCategorySummary[];
+  sourceSummaries?: EndOfDayReviewSourceSummary[];
   isMock?: boolean;
 };
 
@@ -56,9 +69,26 @@ type ReviewShareStyle = CSSProperties & {
   "--review-share": string;
 };
 
-const REVIEW_GRAPH_RADIUS = 34;
+type ReviewMeterStyle = CSSProperties & {
+  "--meter-value": string;
+  "--meter-color": string;
+};
+
+type ReviewCategoryStyle = CSSProperties & {
+  "--category-color": string;
+  "--category-share"?: string;
+};
+
+const REVIEW_GRAPH_RADIUS = 40;
 const REVIEW_GRAPH_CIRCUMFERENCE = 2 * Math.PI * REVIEW_GRAPH_RADIUS;
 const BREAKDOWN_ORDER: Record<ReviewBreakdownKey, number> = { focus: 0, drift: 1, other: 2 };
+const REVIEW_CATEGORY_COLORS = [
+  "var(--productivity-focus)",
+  "#64645f",
+  "#918f87",
+  "#a9554f",
+  "#bd6257",
+] as const;
 
 export function buildEndOfDayReviewSummary({
   day,
@@ -89,6 +119,8 @@ export function buildEndOfDayReviewSummary({
     driftSeconds,
     topSource: buildTopSource(segments),
     breakdownSources: buildBreakdownSources(segments),
+    categorySummaries: buildCategorySummaries(segments, totalSeconds),
+    sourceSummaries: buildSourceSummaries(segments, totalSeconds),
     isMock: isMock || undefined,
   };
 }
@@ -97,7 +129,6 @@ export function EndOfDayReview({
   event,
   isMock = false,
   onOpenDashboard,
-  onViewDetails,
   onOpenNotificationSettings,
   onClose,
 }: EndOfDayReviewProps) {
@@ -105,8 +136,6 @@ export function EndOfDayReview({
   const hasTrackedTime = event.totalSeconds > 0;
   const breakdown = buildReviewBreakdown(event);
   const compactBreakdown = buildCompactBreakdown(breakdown);
-  const topSourceDurationLabel = event.topSource ? formatReviewDuration(event.topSource.durationSeconds) : null;
-  const insight = hasTrackedTime ? buildEndOfDayInsight(event) : null;
   const [breakdownHover, setBreakdownHover] = useState<ReviewBreakdownHover | null>(null);
 
   function showBreakdownHover(item: ReviewBreakdownItem, mouseEvent: MouseEvent<HTMLElement>) {
@@ -115,46 +144,36 @@ export function EndOfDayReview({
 
   return (
     <aside className="end-of-day-review" aria-label="Drifty end-of-day review" aria-live="polite" data-mock={showMockCopy ? "true" : undefined}>
-      <button type="button" className="end-of-day-review__close" aria-label="Close end-of-day review" onClick={onClose}>x</button>
+      <div className="eodr-chrome">
+        <div className="eodr-brand">
+          <img className="window-logo" src={driftyWordmarkUrl} alt="Drifty" />
+          <h2>Summary - Today</h2>
+        </div>
+        <div className="eodr-actions">
+          <button type="button" className="icon-btn" aria-label="Review settings" onClick={onOpenNotificationSettings}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z" /></svg>
+          </button>
+          <button type="button" className="icon-btn" aria-label="Close end-of-day review" onClick={onClose}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /></svg>
+          </button>
+        </div>
+      </div>
 
       {hasTrackedTime ? (
         <div className="end-of-day-review__tracked">
-          <header className="end-of-day-review__header">
-            <p className="end-of-day-review__eyebrow">Evening review</p>
-            <h2>Your day, locally summarized</h2>
-          </header>
-
-          <div className="end-of-day-review__summary" aria-label="Focus and drift summary">
-            <span>{event.trackedLabel}</span>
-            <span>{event.focusLabel}</span>
-            <span>{event.driftLabel}</span>
-          </div>
+          <ReviewMetrics event={event} />
 
           <div className="end-of-day-review__body">
             <div className="end-of-day-review__compact">
               <ReviewDonut breakdown={compactBreakdown} leadingItem={compactBreakdown[0]} />
               <ReviewBreakdown breakdown={compactBreakdown} onShowHover={showBreakdownHover} onHideHover={() => setBreakdownHover(null)} />
             </div>
-
-            <div className="end-of-day-review__source" aria-label="Top source">
-              <span>Top source</span>
-              {event.topSource ? (
-                <>
-                  <strong>{event.topSource.appName}</strong>
-                  {event.topSource.sourceLabel !== event.topSource.appName ? <em>{event.topSource.sourceLabel}</em> : null}
-                  {topSourceDurationLabel ? <small>{topSourceDurationLabel}</small> : null}
-                </>
-              ) : (
-                <strong>No source yet</strong>
-              )}
-            </div>
           </div>
 
-          {insight ? (
-            <p className="end-of-day-review__insight" aria-label="End-of-day insight">
-              {insight}
-            </p>
-          ) : null}
+          <div className="end-of-day-review__table-stack" aria-label="End-of-day review tables">
+            <ReviewCategoryTable categories={event.categorySummaries ?? []} totalSeconds={event.totalSeconds} />
+            <ReviewSourceList sources={event.sourceSummaries ?? []} totalSeconds={event.totalSeconds} />
+          </div>
         </div>
       ) : (
         <div className="end-of-day-review__empty">
@@ -169,15 +188,37 @@ export function EndOfDayReview({
         <button type="button" className="end-of-day-review__action end-of-day-review__action--primary" onClick={onOpenDashboard}>
           Open dashboard
         </button>
-        <button type="button" className="end-of-day-review__action" onClick={onViewDetails}>
-          View details
-        </button>
-        <button type="button" className="end-of-day-review__action" onClick={onOpenNotificationSettings}>
-          Review settings
-        </button>
       </div>
       {breakdownHover ? <ReviewBreakdownHoverCard hover={breakdownHover} /> : null}
     </aside>
+  );
+}
+
+function ReviewMetrics({ event }: { event: EndOfDayReviewEvent }) {
+  const metrics = [
+    { label: "Tracked", value: formatReviewDuration(event.totalSeconds), percent: 100, color: "var(--review-tone)", delta: "Local total" },
+    { label: "Focus", value: formatReviewDuration(event.focusSeconds), percent: safePercent(event.focusSeconds, event.totalSeconds), color: "var(--productivity-focus)", delta: event.focusLabel },
+    { label: "Drift", value: formatReviewDuration(event.driftSeconds), percent: safePercent(event.driftSeconds, event.totalSeconds), color: "var(--productivity-drift)", delta: event.driftLabel },
+  ];
+
+  return (
+    <div className="end-of-day-review__summary" aria-label="Focus and drift summary">
+      {metrics.map((metric) => {
+        const style: ReviewMeterStyle = {
+          "--meter-value": `${metric.percent}%`,
+          "--meter-color": metric.color,
+        };
+
+        return (
+          <div className="eodr-metric" style={style} key={metric.label}>
+            <span className="eodr-metric__label">{metric.label}</span>
+            <strong className="eodr-metric__value">{metric.value}</strong>
+            <span className="eodr-meter" aria-hidden="true"><span /></span>
+            <span className="eodr-metric__delta">{metric.delta}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -185,36 +226,35 @@ function ReviewDonut({ breakdown, leadingItem }: { breakdown: ReviewBreakdownIte
   let offset = 0;
 
   return (
-    <svg
-      className="end-of-day-review__graph"
-      viewBox="0 0 96 96"
-      role="img"
-      aria-label="End-of-day focus and drift breakdown"
-      focusable="false"
-    >
-      <circle className="end-of-day-review__graph-track" cx="48" cy="48" r={REVIEW_GRAPH_RADIUS} />
-      {breakdown.map((item) => {
-        const length = (item.percent / 100) * REVIEW_GRAPH_CIRCUMFERENCE;
-        const dashOffset = -offset;
-        offset += length;
+    <div className="eodr-dial-shell">
+      <svg
+        className="eodr-dial"
+        viewBox="0 0 100 100"
+        role="img"
+        aria-label="End-of-day focus and drift breakdown"
+        focusable="false"
+      >
+        <circle className="eodr-dial__track" cx="50" cy="50" r={REVIEW_GRAPH_RADIUS} />
+        {breakdown.map((item) => {
+          const length = (item.percent / 100) * REVIEW_GRAPH_CIRCUMFERENCE;
+          const dashOffset = -offset;
+          offset += length;
 
-        return (
-          <circle
-            key={item.key}
-            className={`end-of-day-review__graph-segment end-of-day-review__graph-segment--${item.key}`}
-            cx="48"
-            cy="48"
-            r={REVIEW_GRAPH_RADIUS}
-            strokeDasharray={`${length} ${REVIEW_GRAPH_CIRCUMFERENCE - length}`}
-            strokeDashoffset={dashOffset}
-          />
-        );
-      })}
-      <text className="end-of-day-review__graph-label" x="48" y="45" textAnchor="middle">{leadingItem?.label ?? "Neutral"}</text>
-      <text className="end-of-day-review__graph-value" x="48" y="59" textAnchor="middle">
-        {formatReviewPercent(leadingItem?.percent ?? 0)}
-      </text>
-    </svg>
+          return (
+            <circle
+              key={item.key}
+              className={`eodr-dial__segment eodr-dial__segment--${item.key}`}
+              cx="50"
+              cy="50"
+              r={REVIEW_GRAPH_RADIUS}
+              strokeDasharray={`${length} ${REVIEW_GRAPH_CIRCUMFERENCE - length}`}
+              strokeDashoffset={dashOffset}
+            />
+          );
+        })}
+      </svg>
+      <div className="eodr-dial__center" aria-hidden="true"><strong>{formatReviewPercent(leadingItem?.percent ?? 0)}</strong></div>
+    </div>
   );
 }
 
@@ -297,8 +337,131 @@ function ReviewBreakdownHoverCard({ hover }: { hover: ReviewBreakdownHover }) {
   );
 }
 
+function ReviewCategoryTable({ categories, totalSeconds }: { categories: EndOfDayReviewCategorySummary[]; totalSeconds: number }) {
+  return (
+    <div className="end-of-day-review__category" aria-label="Category breakdown">
+      <div className="eodr-category-head">
+        <span className="eodr-category-title">Categories</span>
+        <strong className="eodr-category-total">{formatReviewDuration(totalSeconds)}</strong>
+      </div>
+      <div className="eodr-category-stack-bar" aria-label="Category share">
+        {categories.map((category, index) => {
+          const style: ReviewCategoryStyle = {
+            "--category-share": `${category.percent}%`,
+            "--category-color": REVIEW_CATEGORY_COLORS[index % REVIEW_CATEGORY_COLORS.length],
+          };
+          return <i key={category.label} style={style} />;
+        })}
+      </div>
+      <div className="eodr-category-list">
+        {categories.map((category, index) => {
+          const style: ReviewCategoryStyle = {
+            "--category-color": REVIEW_CATEGORY_COLORS[index % REVIEW_CATEGORY_COLORS.length],
+          };
+          return (
+            <div className="eodr-category-row" style={style} key={category.label}>
+              <b className="eodr-category-dot" aria-hidden="true" />
+              <strong>{category.label}</strong>
+              <span>{formatReviewDuration(category.durationSeconds)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ReviewSourceList({ sources, totalSeconds }: { sources: EndOfDayReviewSourceSummary[]; totalSeconds: number }) {
+  return (
+    <div className="end-of-day-review__sources" aria-label="Most used apps">
+      <span>Most used apps</span>
+      <div className="eodr-source-list">
+        {sources.map((source) => (
+          <div className="eodr-source-row" key={`${source.appName}:${source.sourceLabel}`}>
+            <ReviewSourceIcon source={source} />
+            <div className="eodr-source-meta">
+              <strong>{source.appName}</strong>
+              {source.sourceLabel !== source.appName ? <em>{source.sourceLabel}</em> : null}
+            </div>
+            <span className="eodr-source-stat">{formatReviewDuration(source.durationSeconds)} · {formatReviewPercent(safePercent(source.durationSeconds, totalSeconds))}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewSourceIcon({ source }: { source: EndOfDayReviewSourceSummary }) {
+  const sourceName = `${source.appName} ${source.sourceLabel}`.toLowerCase();
+
+  if (sourceName.includes("vs code") || sourceName.includes("visual studio code") || source.appName.toLowerCase() === "code") {
+    return (
+      <span className="src-tile src-tile--code" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8.5 8 4.5 12l4 4M15.5 8l4 4-4 4" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (sourceName.includes("figma")) {
+    return (
+      <span className="src-tile" aria-hidden="true">
+        <span className="glyph glyph--design">Fi</span>
+      </span>
+    );
+  }
+
+  if (sourceName.includes("youtube") || sourceName.includes("youtube.com")) {
+    return (
+      <span className="src-tile src-tile--yt" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 7.3v9.4l7.5-4.7z" /></svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className="src-tile" aria-hidden="true">
+      <span className="glyph glyph--task">{source.appName.slice(0, 2)}</span>
+    </span>
+  );
+}
+
 function buildTopSource(segments: ActivitySegment[]): EndOfDayReviewTopSource | null {
   return buildTopSourceFromSegments(segments);
+}
+
+function buildCategorySummaries(segments: ActivitySegment[], totalSeconds: number): EndOfDayReviewCategorySummary[] {
+  const totals = new Map<string, number>();
+
+  for (const segment of segments) {
+    const category = segment.classification?.category ?? "unknown";
+    totals.set(category, (totals.get(category) ?? 0) + segment.durationSeconds);
+  }
+
+  return Array.from(totals.entries())
+    .map(([category, durationSeconds]) => ({
+      label: formatCategoryLabel(category),
+      durationSeconds,
+      percent: safePercent(durationSeconds, totalSeconds),
+    }))
+    .sort((left, right) => right.durationSeconds - left.durationSeconds || left.label.localeCompare(right.label))
+    .slice(0, 5);
+}
+
+function buildSourceSummaries(segments: ActivitySegment[], totalSeconds: number): EndOfDayReviewSourceSummary[] {
+  return buildAppUsageSummaries(segments, { limit: 3, groupBy: "app" }).map((summary) => {
+    const appSegments = segments.filter((segment) => segment.appName === summary.appName);
+    const topSource = buildAppUsageSummaries(appSegments, { limit: 1 })[0];
+    const sourceLabel = topSource ? sourceLabelForSummary(topSource) : summary.appName;
+
+    return {
+      appName: summary.appName,
+      sourceLabel,
+      durationSeconds: summary.totalSeconds,
+      percent: safePercent(summary.totalSeconds, totalSeconds),
+    };
+  });
 }
 
 function buildBreakdownSources(segments: ActivitySegment[]): EndOfDayReviewBreakdownSource[] {
@@ -354,16 +517,16 @@ function safePercent(seconds: number, totalSeconds: number): number {
   return Math.round((seconds / totalSeconds) * 1000) / 10;
 }
 
-function buildEndOfDayInsight(event: EndOfDayReviewEvent): string {
-  const focusLabel = `${formatReviewDuration(event.focusSeconds)} focus`;
-  const driftLabel = `${formatReviewDuration(event.driftSeconds)} drift`;
-  const topSourceCopy = event.topSource ? ` ${event.topSource.appName} was the top source.` : "";
-
-  return `${focusLabel} against ${driftLabel}.${topSourceCopy}`;
-}
-
 function formatReviewPercent(percent: number): string {
   return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(1)}%`;
+}
+
+function formatCategoryLabel(category: string): string {
+  return category
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Unknown";
 }
 
 function sourceLabelForSummary(summary: ReturnType<typeof buildAppUsageSummaries>[number]): string {

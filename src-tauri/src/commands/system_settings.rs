@@ -47,6 +47,41 @@ pub async fn system_open_settings_pane(pane: SystemSettingsPane) -> Result<(), S
         .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub async fn focus_target_open_app(bundle_id: String) -> Result<(), String> {
+    async_runtime::spawn_blocking(move || open_focus_target_app(&bundle_id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn normalize_focus_target_bundle_id(bundle_id: &str) -> Result<String, String> {
+    let trimmed = bundle_id.trim();
+    if trimmed.is_empty() {
+        return Err("Focus target bundle id is required".to_string());
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn focus_target_open_args(bundle_id: &str) -> Result<Vec<String>, String> {
+    Ok(vec!["-b".to_string(), normalize_focus_target_bundle_id(bundle_id)?])
+}
+
+#[cfg(target_os = "macos")]
+fn open_focus_target_app(bundle_id: &str) -> Result<(), String> {
+    let args = focus_target_open_args(bundle_id)?;
+    match Command::new("open").args(args).status() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("Focus target app returned status {status}")),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_focus_target_app(_bundle_id: &str) -> Result<(), String> {
+    Err("Focus target app activation is only available on macOS".to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn open_system_settings_urls(urls: &[&str]) -> Result<(), String> {
     request_accessibility_prompt_if_needed(urls);
@@ -109,5 +144,18 @@ mod tests {
             .urls()
             .iter()
             .any(|url| is_accessibility_settings_url(url)));
+    }
+
+    #[test]
+    fn focus_target_app_command_rejects_blank_bundle_ids() {
+        assert!(normalize_focus_target_bundle_id("   ").is_err());
+    }
+
+    #[test]
+    fn focus_target_app_command_builds_open_bundle_args() {
+        assert_eq!(
+            focus_target_open_args("com.microsoft.VSCode").unwrap(),
+            vec!["-b".to_string(), "com.microsoft.VSCode".to_string()]
+        );
     }
 }
