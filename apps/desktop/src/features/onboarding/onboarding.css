@@ -230,6 +230,24 @@
   overflow: visible;
 }
 
+.onboarding-card .onboarding-middle--job,
+.onboarding-card .onboarding-middle--work_profile {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  justify-content: flex-start;
+}
+
+.onboarding-card .onboarding-middle--job .onboarding-body,
+.onboarding-card .onboarding-middle--job .onboarding-viewport,
+.onboarding-card .onboarding-middle--work_profile .onboarding-body,
+.onboarding-card .onboarding-middle--work_profile .onboarding-viewport {
+  max-height: none;
+  overflow: visible;
+  contain: none;
+}
+
 .onboarding-card .onboarding-title {
   font-family: var(--onb-font-display);
   font-size: clamp(24px, 2.7vw, 30px);
@@ -524,7 +542,7 @@
   color: var(--onb-text-soft);
 }
 
-.onboarding-card .onb-dropdown__menu {
+.onboarding-screen .onb-dropdown__menu {
   position: absolute;
   top: 100%;
   left: 0;
@@ -543,7 +561,17 @@
   padding: 4px;
 }
 
-.onboarding-card .onb-dropdown__option {
+.onboarding-screen .onb-dropdown__menu[data-placement="top"] {
+  border-top: 1px solid var(--onb-accent);
+  border-bottom: none;
+  border-top-left-radius: var(--onb-radius-sm);
+  border-top-right-radius: var(--onb-radius-sm);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: 0 -16px 36px rgba(38, 38, 32, 0.14), 0 -2px 8px rgba(38, 38, 32, 0.06);
+}
+
+.onboarding-screen .onb-dropdown__option {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -560,26 +588,26 @@
   transition: background var(--onb-transition-fast);
 }
 
-.onboarding-card .onb-dropdown__option:hover {
+.onboarding-screen .onb-dropdown__option:hover {
   background: var(--onb-bg-2);
 }
 
-.onboarding-card .onb-dropdown__option--selected {
+.onboarding-screen .onb-dropdown__option--selected {
   color: var(--onb-accent-strong);
   font-weight: 600;
   background: var(--onb-accent-soft);
 }
 
-.onboarding-card .onb-dropdown__option--selected:hover {
+.onboarding-screen .onb-dropdown__option--selected:hover {
   background: var(--onb-accent-soft);
 }
 
-.onboarding-card .onb-dropdown__option svg {
+.onboarding-screen .onb-dropdown__option svg {
   flex-shrink: 0;
   color: var(--onb-accent);
 }
 
-.onboarding-card .onb-dropdown__no-results {
+.onboarding-screen .onb-dropdown__no-results {
   padding: var(--onb-space-3);
   font-size: 13px;
   color: var(--onb-text-soft);

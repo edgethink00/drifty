@@ -46,6 +46,7 @@ const {
       message: "Tracker not available in this environment",
     }),
     getTimeline: vi.fn().mockResolvedValue([]),
+    getCurrentSnapshot: vi.fn().mockResolvedValue(null),
     getHourlySummary: vi.fn().mockResolvedValue([]),
     getTopSites: vi.fn().mockResolvedValue([]),
     getAppIcons: vi.fn().mockResolvedValue({}),

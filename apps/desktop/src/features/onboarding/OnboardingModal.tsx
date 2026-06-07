@@ -655,7 +655,7 @@ export function OnboardingModal({
               </div>
             </div>
 
-            <div className="onboarding-middle">
+            <div className={`onboarding-middle onboarding-middle--${step}`}>
               <h1
                 className={`onboarding-title${titleIsVisible ? "" : " onb-visually-hidden"}`}
                 id="onboarding-title"
