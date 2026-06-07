@@ -83,8 +83,7 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "drifty",
-          "dtime"
+          "drifty"
         ]
       }
     },

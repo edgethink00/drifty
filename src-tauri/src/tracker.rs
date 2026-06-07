@@ -412,9 +412,6 @@ fn resolve_python_bin() -> String {
         return path;
     }
 
-    if let Ok(path) = std::env::var("DTIME_PYTHON_BIN") {
-        return path;
-    }
 
     let system_python = PathBuf::from("/usr/bin/python3");
     if system_python.exists() {
@@ -429,9 +426,6 @@ fn resolve_tracker_script(app: &AppHandle) -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(path) = std::env::var("DTIME_TRACKER_SCRIPT") {
-        return PathBuf::from(path);
-    }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut candidates = Vec::new();

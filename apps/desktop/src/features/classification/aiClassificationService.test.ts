@@ -1,4 +1,4 @@
-import type { ActivityClassificationRecord, ActivitySegment, ClassificationMetrics } from "@dtime/domain";
+import type { ActivityClassificationRecord, ActivitySegment, ClassificationMetrics } from "@drifty/domain";
 import { describe, expect, it, vi } from "vitest";
 import { CLOUD_API_CLIENT_VERSION, CLOUD_API_CONTRACT_VERSION } from "../../lib/cloudContract";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, estimateAiClassificationCostUsd, projectAiClassificationCost, type AiClassificationUsageSummary } from "./aiClassificationService";
@@ -556,8 +556,8 @@ describe("runAiClassification cloud contract", () => {
       });
       const secondFingerprint = secondImport.getReusableAiClassifications.mock.calls[0]?.[0]?.[0];
 
-      expect(firstFingerprint).toMatch(/^dtime-v2-/);
-      expect(secondFingerprint).toMatch(/^dtime-v2-/);
+      expect(firstFingerprint).toMatch(/^drifty-v2-/);
+      expect(secondFingerprint).toMatch(/^drifty-v2-/);
       expect(firstFingerprint).not.toBe(secondFingerprint);
     } finally {
       cleanupServiceMocks();

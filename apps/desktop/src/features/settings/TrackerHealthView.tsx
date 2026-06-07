@@ -1,4 +1,4 @@
-import type { TrackerStatus } from "@dtime/domain";
+import type { TrackerStatus } from "@drifty/domain";
 
 export function TrackerHealthView({
   status,

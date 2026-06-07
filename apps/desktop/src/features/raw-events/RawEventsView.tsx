@@ -1,4 +1,4 @@
-import type { ActivitySegment } from "@dtime/domain";
+import type { ActivitySegment } from "@drifty/domain";
 
 export function RawEventsView({ events }: { events: ActivitySegment[] }) {
   return (

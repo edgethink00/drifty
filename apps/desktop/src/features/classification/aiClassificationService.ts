@@ -1,4 +1,4 @@
-import { classifyActivityDetailed } from "@dtime/domain";
+import { classifyActivityDetailed } from "@drifty/domain";
 import type {
   ActivityCategory,
   ActivityClassificationRecord,
@@ -6,7 +6,7 @@ import type {
   ClassificationMetrics,
   ClassificationQuery,
   ProductivityLabel,
-} from "@dtime/domain";
+} from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { readUserOnboardingState, type UserOnboardingState } from "../onboarding/onboardingState";
@@ -981,7 +981,7 @@ async function fingerprint(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `dtime-v2-${hex}`;
+  return `drifty-v2-${hex}`;
 }
 
 function emptyUsageSummary(): AiClassificationUsageSummary {

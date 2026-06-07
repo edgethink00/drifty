@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import type { ActivityCategory, ProductivityLabel } from "@dtime/domain";
+import type { ActivityCategory, ProductivityLabel } from "@drifty/domain";
 
 export type WatcherFocusSessionKind = "just_started" | "settled" | "deep" | "recovered";
 export type WatcherDriftPattern = "first" | "repeated" | "after_snooze" | "long";

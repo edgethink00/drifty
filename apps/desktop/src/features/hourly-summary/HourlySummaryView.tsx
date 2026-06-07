@@ -1,5 +1,5 @@
-import type { HourBucket } from "@dtime/domain";
-import { SummaryBars } from "@dtime/charts";
+import type { HourBucket } from "@drifty/domain";
+import { SummaryBars } from "@drifty/charts";
 
 export function HourlySummaryView({ buckets }: { buckets: HourBucket[] }) {
   const activeBuckets = buckets.filter((bucket) => bucket.totalSeconds > 0);

@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
-import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment, type AppIconMap } from "@dtime/domain";
+import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment, type AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 

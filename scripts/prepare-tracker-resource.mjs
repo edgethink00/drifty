@@ -8,7 +8,7 @@ const defaultDestination = resolve(repoRoot, "src-tauri/target/release-resources
 
 const excludedNames = new Set(["__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"]);
 const excludedExtensions = new Set([".pyc", ".pyo"]);
-const excludedExactFiles = new Set(["dtime_tracker.sqlite3"]);
+const excludedExactFiles = new Set(["drifty_tracker.sqlite3"]);
 
 export function shouldStageTrackerResource(path) {
   const name = path.split(/[\\/]/).pop() ?? path;

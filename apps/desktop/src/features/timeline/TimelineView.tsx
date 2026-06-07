@@ -1,4 +1,4 @@
-import type { formatTimelineItems } from "@dtime/domain";
+import type { formatTimelineItems } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 

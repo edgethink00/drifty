@@ -1,5 +1,5 @@
 {
-  "name": "@dtime/desktop",
+  "name": "@drifty/desktop",
   "version": "0.1.1",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@dtime/charts": "0.1.1",
-    "@dtime/domain": "0.1.1",
+    "@drifty/charts": "0.1.1",
+    "@drifty/domain": "0.1.1",
     "@supabase/supabase-js": "^2.105.0",
     "@tauri-apps/api": "^2.0.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
