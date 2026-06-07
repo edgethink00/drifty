@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type { TrackerStatus } from "@dtime/domain";
+import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { Dropdown } from "./components/Dropdown";
 import { TypewriterSequence } from "./components/TypewriterSequence";

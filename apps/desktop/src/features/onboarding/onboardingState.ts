@@ -39,13 +39,6 @@ export function getUserOnboardingStorageKey(userId: string): string {
   return `drifty:onboarding:v${ONBOARDING_STORAGE_VERSION}:${userId}`;
 }
 
-function getLegacyStorageKeys(userId: string): string[] {
-  return [
-    `drifty:onboarding:v1:${userId}`,
-    `dtime:onboarding:v1:${userId}`,
-  ];
-}
-
 function parseUserOnboardingState(rawValue: string | null): UserOnboardingState | null {
   if (!rawValue) return null;
   try {
@@ -98,24 +91,21 @@ export function readUserOnboardingState(userId: string): UserOnboardingState | n
   }
   if (state) return state;
 
-  for (const legacyKey of getLegacyStorageKeys(userId)) {
-    let migrated: UserOnboardingState | null = null;
-    try {
-      migrated = parseUserOnboardingState(window.localStorage.getItem(legacyKey));
-    } catch {
-      return null;
-    }
-    if (migrated) {
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(migrated));
-      } catch {
-        // best effort migration; fall through and return the parsed value
-      }
-      return migrated;
-    }
+  const previousDriftyKey = `drifty:onboarding:v1:${userId}`;
+  let migrated: UserOnboardingState | null = null;
+  try {
+    migrated = parseUserOnboardingState(window.localStorage.getItem(previousDriftyKey));
+  } catch {
+    return null;
   }
+  if (!migrated) return null;
 
-  return null;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(migrated));
+  } catch {
+    // best effort migration; fall through and return the parsed value
+  }
+  return migrated;
 }
 
 export { ONBOARDING_STORAGE_VERSION };

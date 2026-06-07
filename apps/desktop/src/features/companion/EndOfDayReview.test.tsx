@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@dtime/domain";
+import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EndOfDayReview, buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./EndOfDayReview";
 

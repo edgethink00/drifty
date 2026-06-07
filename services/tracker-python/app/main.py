@@ -23,10 +23,10 @@ from app.tracker.macos_workspace import current_snapshot
 from app.tracker.power_state import PowerStateSample, current_power_state
 from app.tracker.youtube_metadata import fetch_youtube_metadata
 
-DB_PATH = APP_DIR / "dtime_tracker.sqlite3"
-SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", os.environ.get("DTIME_SAMPLE_SECONDS", "5")))
-IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", os.environ.get("DTIME_IDLE_THRESHOLD_SECONDS", "180")))
-YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", os.environ.get("DTIME_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2")))
+DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
+SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
+IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "180"))
+YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 

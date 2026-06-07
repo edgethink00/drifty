@@ -7,16 +7,16 @@ type BootstrapSurface = "app" | "watcher" | "drift-alarm";
 
 declare global {
   interface Window {
-    __DTIME_BOOTSTRAPPED__?: boolean;
-    __DTIME_SET_BOOT_STATUS__?: (message: string) => void;
+    __DRIFTY_BOOTSTRAPPED__?: boolean;
+    __DRIFTY_SET_BOOT_STATUS__?: (message: string) => void;
   }
 }
 
-window.__DTIME_SET_BOOT_STATUS__ = (message: string) => {
+window.__DRIFTY_SET_BOOT_STATUS__ = (message: string) => {
   const shell = document.getElementById("boot-shell");
   if (shell) shell.dataset.bootStatus = message;
 };
-window.__DTIME_SET_BOOT_STATUS__?.("main.tsx loaded");
+window.__DRIFTY_SET_BOOT_STATUS__?.("main.tsx loaded");
 const initialSurface = resolveLocationSurface(window.location);
 if (initialSurface !== "app") document.documentElement.dataset.surface = initialSurface;
 
@@ -48,7 +48,7 @@ function BootstrapLoader() {
   const [LoadedApp, setLoadedApp] = React.useState<React.ComponentType | null>(null);
 
   React.useEffect(() => {
-    window.__DTIME_SET_BOOT_STATUS__?.("Bootstrap shell mounted");
+    window.__DRIFTY_SET_BOOT_STATUS__?.("Bootstrap shell mounted");
 
     const start = async () => {
       try {
@@ -56,29 +56,29 @@ function BootstrapLoader() {
         const nextSurface = await resolveBootstrapSurface();
 
         if (nextSurface === "watcher") {
-          window.__DTIME_SET_BOOT_STATUS__?.("Importing watcher module…");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing watcher module…");
           const mod = await import("./features/companion/WatcherWindowApp");
-          window.__DTIME_SET_BOOT_STATUS__?.("Watcher module imported");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Watcher module imported");
           setLoadedApp(() => mod.WatcherWindowApp);
           return;
         }
 
         if (nextSurface === "drift-alarm") {
-          window.__DTIME_SET_BOOT_STATUS__?.("Importing drift alarm module…");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing drift alarm module…");
           const mod = await import("./features/companion/DriftAlarmWindowApp");
-          window.__DTIME_SET_BOOT_STATUS__?.("Drift alarm module imported");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Drift alarm module imported");
           setLoadedApp(() => mod.DriftAlarmWindowApp);
           return;
         }
 
-        window.__DTIME_SET_BOOT_STATUS__?.("Importing App module…");
+        window.__DRIFTY_SET_BOOT_STATUS__?.("Importing App module…");
         const [{ AuthProvider }, { initializePostHog }, mod] = await Promise.all([
           import("./features/auth/AuthContext"),
           import("./lib/analytics/posthog"),
           import("./App"),
         ]);
         initializePostHog();
-        window.__DTIME_SET_BOOT_STATUS__?.("App module imported");
+        window.__DRIFTY_SET_BOOT_STATUS__?.("App module imported");
         const App = mod.default;
         setLoadedApp(() => function AppWithAuthProvider() {
           return (
@@ -99,8 +99,8 @@ function BootstrapLoader() {
 
   React.useEffect(() => {
     if (LoadedApp) {
-      window.__DTIME_SET_BOOT_STATUS__?.("App component ready");
-      window.__DTIME_BOOTSTRAPPED__ = true;
+      window.__DRIFTY_SET_BOOT_STATUS__?.("App component ready");
+      window.__DRIFTY_BOOTSTRAPPED__ = true;
       document.getElementById("boot-shell")?.remove();
       document.getElementById("boot-error")?.remove();
     }
@@ -181,7 +181,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = toSafeErrorMessage(event.reason);
   const surface = resolveCurrentSurface();
 
-  if (window.__DTIME_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
+  if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
     event.preventDefault();
     upsertLateBootstrapDiagnostic(message);
     return;
@@ -211,7 +211,7 @@ function waitForFirstFrameOrFallback(): Promise<void> {
 
 const root = document.getElementById("root");
 if (root) {
-  window.__DTIME_SET_BOOT_STATUS__?.("React root found");
+  window.__DRIFTY_SET_BOOT_STATUS__?.("React root found");
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
       <BootstrapErrorBoundary>
@@ -219,5 +219,5 @@ if (root) {
       </BootstrapErrorBoundary>
     </React.StrictMode>,
   );
-  window.__DTIME_SET_BOOT_STATUS__?.("React render scheduled");
+  window.__DRIFTY_SET_BOOT_STATUS__?.("React render scheduled");
 }

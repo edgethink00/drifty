@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
-import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment } from "@dtime/domain";
+import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment } from "@drifty/domain";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 
 type ReviewBreakdownKey = "focus" | "drift" | "other";

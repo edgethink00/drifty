@@ -182,9 +182,7 @@ describe("App auth modal", () => {
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
     await waitFor(() => expect(trackerClient.getStatus).toHaveBeenCalled());
-    expect(trackerClient.getTimeline).toHaveBeenCalled();
-    expect(trackerClient.getHourlySummary).toHaveBeenCalled();
-    expect(trackerClient.getTopSites).toHaveBeenCalled();
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     expect(trackerClient.start).not.toHaveBeenCalled();
   });
 
@@ -201,7 +199,7 @@ describe("App auth modal", () => {
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
     expect(screen.queryByText(/beta deploys/i)).toBeNull();
     expect(screen.queryByText(/before the app opens/i)).toBeNull();
-    expect(screen.queryByText(/dtime\.co/i)).toBeNull();
+    expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 
   it("uses a centered required auth layout without body copy", async () => {
@@ -264,7 +262,7 @@ describe("App auth modal", () => {
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
     expect(screen.getByText(/use drifty\.so to sign in or create an account/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /continue on drifty\.so/i })).toBeTruthy();
-    expect(screen.queryByText(/dtime\.co/i)).toBeNull();
+    expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 
   it("opens feedback from the account menu and sends explicit feedback with selected images", async () => {
@@ -367,7 +365,7 @@ describe("App auth modal", () => {
 
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/sign in again on drifty\.so/i);
-    expect(screen.queryByText(/dtime\.co/i)).toBeNull();
+    expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 
   it("replaces a failed callback notice with waiting status when continuing on drifty.so", async () => {

@@ -216,8 +216,8 @@ describe("AuthContext", () => {
     const session = createSession();
     exchangeCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
     tauriMocks.getCurrent.mockResolvedValueOnce([
-      "dtime://auth/callback?code=startup-code",
-      "dtime://settings?code=ignored",
+      "drifty://auth/callback?code=startup-code",
+      "drifty://settings?code=ignored",
       "not a valid url",
     ]);
     let authApi: ReturnType<typeof useAuth> | null = null;
@@ -260,25 +260,6 @@ describe("AuthContext", () => {
     expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
   });
 
-  it("temporarily keeps legacy dtime Tauri deep-link callbacks working", async () => {
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
-    const session = createSession();
-    exchangeCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
-    tauriMocks.getCurrent.mockResolvedValueOnce([
-      "dtime://auth/callback?code=legacy-code",
-    ]);
-
-    render(
-      <AuthProvider>
-        <CaptureAuth onReady={() => undefined} />
-      </AuthProvider>
-    );
-
-    await waitFor(() => {
-      expect(exchangeCodeForSession).toHaveBeenCalledWith("legacy-code");
-    });
-    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
-  });
 
   it("exchanges each Tauri onOpenUrl auth code once", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
@@ -295,9 +276,9 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback?code=live-code",
-        "dtime://auth/callback?code=live-code",
-        "dtime://auth/not-callback?code=ignored",
+        "drifty://auth/callback?code=live-code",
+        "drifty://auth/callback?code=live-code",
+        "drifty://auth/not-callback?code=ignored",
       ]);
     });
 
@@ -337,7 +318,7 @@ describe("AuthContext", () => {
     getSession.mockResolvedValue({ data: { session } });
     setSession.mockResolvedValue({ data: { session }, error: null });
     invoke.mockResolvedValueOnce([
-      "dtime://auth/callback?access_token=pending-access&refresh_token=pending-refresh",
+      "drifty://auth/callback?access_token=pending-access&refresh_token=pending-refresh",
     ]);
 
     render(
@@ -445,8 +426,8 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback#access_token=access-token&refresh_token=refresh-token",
-        "dtime://auth/not-callback#access_token=ignored&refresh_token=ignored",
+        "drifty://auth/callback#access_token=access-token&refresh_token=refresh-token",
+        "drifty://auth/not-callback#access_token=ignored&refresh_token=ignored",
       ]);
     });
 
@@ -481,8 +462,8 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback?access_token=access-token&refresh_token=refresh-token",
-        "dtime://auth/callback?access_token=access-token&refresh_token=refresh-token",
+        "drifty://auth/callback?access_token=access-token&refresh_token=refresh-token",
+        "drifty://auth/callback?access_token=access-token&refresh_token=refresh-token",
       ]);
     });
 
@@ -557,7 +538,7 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback#access_token=stale-access&refresh_token=stale-refresh",
+        "drifty://auth/callback#access_token=stale-access&refresh_token=stale-refresh",
       ]);
     });
 
@@ -620,7 +601,7 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback#access_token=stale-access&refresh_token=stale-refresh",
+        "drifty://auth/callback#access_token=stale-access&refresh_token=stale-refresh",
       ]);
     });
 
@@ -747,7 +728,7 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback?state=missing-code",
+        "drifty://auth/callback?state=missing-code",
       ]);
     });
 
@@ -782,7 +763,7 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "dtime://auth/callback?state=missing-code",
+        "drifty://auth/callback?state=missing-code",
       ]);
     });
 

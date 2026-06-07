@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { TrackerStatus } from "@dtime/domain";
+import type { TrackerStatus } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
@@ -476,7 +476,6 @@ describe("App onboarding", () => {
     expect(getUserOnboardingStorageKey("user-1")).toBe("drifty:onboarding:v2:user-1");
     expect(window.localStorage.getItem("drifty:onboarding:v2:user-1")).toBeTruthy();
     expect(window.localStorage.getItem("drifty:onboarding:v1:user-1")).toBeNull();
-    expect(window.localStorage.getItem("dtime:onboarding:v1:user-1")).toBeNull();
   });
 
   it("uses a v1 drifty onboarding record as a migration fallback", async () => {
@@ -498,24 +497,6 @@ describe("App onboarding", () => {
     expect(window.localStorage.getItem("drifty:onboarding:v2:user-1")).toBeTruthy();
   });
 
-  it("uses the legacy dtime onboarding record as a migration fallback", async () => {
-    window.localStorage.setItem(
-      "dtime:onboarding:v1:user-1",
-      JSON.stringify({
-        version: 1,
-        completed: true,
-        displayName: "Alex",
-        purpose: "exploring",
-        completedAt: "2026-05-08T00:00:00.000Z",
-      }),
-    );
-
-    render(<App />);
-
-    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
-    expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
-    expect(window.localStorage.getItem("drifty:onboarding:v2:user-1")).toBeTruthy();
-  });
 
   it("keeps onboarding open when local completion cannot be saved", async () => {
     const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation((key) => {
@@ -542,7 +523,7 @@ describe("App onboarding", () => {
 
   it("does not crash when local completion cannot be read", async () => {
     const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation((key) => {
-      if (String(key).startsWith("drifty:onboarding:") || String(key).startsWith("dtime:onboarding:")) {
+      if (String(key).startsWith("drifty:onboarding:")) {
         throw new DOMException("Storage unavailable", "SecurityError");
       }
       return null;

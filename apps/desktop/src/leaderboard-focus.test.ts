@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRollingFocusSeconds, type ActivitySegment } from "@dtime/domain";
+import { buildRollingFocusSeconds, type ActivitySegment } from "@drifty/domain";
 
 function makeSegment(
   id: string,

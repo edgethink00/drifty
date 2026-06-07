@@ -42,7 +42,7 @@ class TrackerMainTests(unittest.TestCase):
             state_dir = tracker_main.state_dir()
             state_dir.mkdir(parents=True)
             tracker_main.pid_path().write_text("12345")
-            stale_command = "/Applications/dtime.app/Contents/Resources/_up_/services/tracker-python/app/main.py daemon"
+            stale_command = "/Applications/Drifty.app/Contents/Resources/_up_/services/tracker-python/app/main.py daemon"
             with patch.object(tracker_main, "is_running", return_value=True), patch.object(
                 tracker_main, "_process_command", return_value=stale_command
             ), patch("app.main.os.kill") as kill, patch("app.main.time.sleep"), patch(

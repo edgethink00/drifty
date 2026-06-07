@@ -3,7 +3,7 @@ mod donut_icon;
 mod tracker;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use commands::{
@@ -39,7 +39,6 @@ const MENU_SETTINGS: &str = "menu-settings";
 const MENU_QUIT: &str = "menu-quit";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 const AUTH_SESSION_FILE_NAME: &str = "auth-session.json";
-const LEGACY_AUTH_APP_DATA_DIR_NAME: &str = "com.example.dtime";
 
 #[derive(Default)]
 struct PendingAuthDeepLinks(Mutex<Vec<String>>);
@@ -90,40 +89,13 @@ fn auth_session_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(AUTH_SESSION_FILE_NAME))
 }
 
-fn legacy_auth_session_path(primary_session_path: &Path) -> Option<PathBuf> {
-    let app_data_dir = primary_session_path.parent()?;
-    let app_support_dir = app_data_dir.parent()?;
-    Some(
-        app_support_dir
-            .join(LEGACY_AUTH_APP_DATA_DIR_NAME)
-            .join(AUTH_SESSION_FILE_NAME),
-    )
-}
-
-fn auth_session_read_paths(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
-    let primary = auth_session_path(app)?;
-    let mut paths = vec![primary.clone()];
-
-    if let Some(legacy) = legacy_auth_session_path(&primary) {
-        if legacy != primary {
-            paths.push(legacy);
-        }
-    }
-
-    Ok(paths)
-}
-
 #[tauri::command]
 fn auth_load_saved_session(app: AppHandle) -> Result<Option<String>, String> {
-    for path in auth_session_read_paths(&app)? {
-        match fs::read_to_string(path) {
-            Ok(value) => return Ok(Some(value)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.to_string()),
-        }
+    match fs::read_to_string(auth_session_path(&app)?) {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
     }
-
-    Ok(None)
 }
 
 #[tauri::command]
@@ -137,15 +109,11 @@ fn auth_save_session(app: AppHandle, value: String) -> Result<(), String> {
 
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
-    for path in auth_session_read_paths(&app)? {
-        match fs::remove_file(path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.to_string()),
-        }
+    match fs::remove_file(auth_session_path(&app)?) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
     }
-
-    Ok(())
 }
 
 fn remember_auth_deep_links<R: Runtime>(
@@ -174,7 +142,7 @@ fn remember_auth_deep_links<R: Runtime>(
 }
 
 fn is_auth_callback_deep_link(url: &str) -> bool {
-    url.starts_with("drifty://auth/callback") || url.starts_with("dtime://auth/callback")
+    url.starts_with("drifty://auth/callback")
 }
 
 fn is_billing_success_deep_link(url: &str) -> bool {
@@ -507,15 +475,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn auth_deep_link_filter_temporarily_accepts_legacy_dtime_callbacks() {
-        assert!(is_auth_callback_deep_link(
-            "dtime://auth/callback?code=legacy-code"
-        ));
-        assert!(is_auth_callback_deep_link(
-            "dtime://auth/callback#access_token=access&refresh_token=refresh"
-        ));
-    }
 
     #[test]
     fn billing_deep_link_filter_accepts_only_drifty_success_links() {
@@ -523,23 +482,10 @@ mod tests {
         assert!(is_billing_success_deep_link(
             "drifty://billing/success?checkout_id=checkout-1"
         ));
-        assert!(!is_billing_success_deep_link("dtime://billing/success"));
+        assert!(!is_billing_success_deep_link("other://billing/success"));
         assert!(!is_billing_success_deep_link("drifty://billing/cancel"));
     }
 
-    #[test]
-    fn auth_session_legacy_path_uses_previous_bundle_id_sibling() {
-        let primary = PathBuf::from(
-            "/Users/example/Library/Application Support/so.drifty.mac/auth-session.json",
-        );
-
-        assert_eq!(
-            legacy_auth_session_path(&primary),
-            Some(PathBuf::from(
-                "/Users/example/Library/Application Support/com.example.dtime/auth-session.json"
-            ))
-        );
-    }
 
     #[test]
     fn update_status_label_prompts_manual_update_checks() {

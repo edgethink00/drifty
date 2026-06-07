@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ActivitySegment, ClassificationMetrics, ClassificationQuery } from "@dtime/domain";
-import { shiftIsoDate, todayIsoDate } from "@dtime/domain";
+import type { ActivitySegment, ClassificationMetrics, ClassificationQuery } from "@drifty/domain";
+import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
@@ -359,7 +359,7 @@ describe("App AI classification controls", () => {
       running: false,
       accessibilityGranted: true,
       lastEventAt: null,
-      databasePath: "/tmp/dtime.sqlite3",
+      databasePath: "/tmp/drifty.sqlite3",
       trackerMode: "tracking",
     });
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => {
@@ -373,8 +373,8 @@ describe("App AI classification controls", () => {
     trackerClient.getAppIcons.mockResolvedValue({});
     trackerClient.getUnclassifiedSegments.mockResolvedValue([]);
     trackerClient.getClassificationMetrics.mockResolvedValue(selectedDayMetrics);
-    trackerClient.start.mockResolvedValue({ running: true, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/dtime.sqlite3", trackerMode: "tracking" });
-    trackerClient.stop.mockResolvedValue({ running: false, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/dtime.sqlite3", trackerMode: "tracking" });
+    trackerClient.start.mockResolvedValue({ running: true, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
+    trackerClient.stop.mockResolvedValue({ running: false, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.updateTrayProductivityIcon.mockResolvedValue(undefined);
     aiClassificationMocks.getAiClassificationUsageSummary.mockImplementation((day: string) => Promise.resolve(
       day === todayIsoDate()
@@ -596,6 +596,7 @@ describe("App AI classification controls", () => {
 
   it("auto-runs one 5-item batch after 20 focused idle minutes", async () => {
     const dateNow = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(0)
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0)
       .mockImplementation(() => AI_CLASSIFICATION_FOCUSED_IDLE_MS + 1);
