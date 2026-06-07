@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment, ClassificationMetrics, ClassificationQuery } from "@dtime/domain";
 import { shiftIsoDate, todayIsoDate } from "@dtime/domain";
 import type { ReactNode } from "react";
@@ -595,24 +595,23 @@ describe("App AI classification controls", () => {
   });
 
   it("auto-runs one 5-item batch after 20 focused idle minutes", async () => {
-    const dateNow = vi.spyOn(Date, "now")
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
-      .mockImplementation(() => AI_CLASSIFICATION_FOCUSED_IDLE_MS + 1);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-07T09:00:00.000"));
     const today = todayIsoDate();
     setRendererFocus(true);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, today));
 
-    try {
-      render(<App />);
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
 
-      await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
-        { day: today, limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD },
-        AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD,
-      ));
-    } finally {
-      dateNow.mockRestore();
-    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AI_CLASSIFICATION_FOCUSED_IDLE_MS + 30_000);
+    });
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
+      { day: today, limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD },
+      AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD,
+    ));
   });
 
 

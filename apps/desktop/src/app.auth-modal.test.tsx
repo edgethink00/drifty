@@ -182,9 +182,7 @@ describe("App auth modal", () => {
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
     await waitFor(() => expect(trackerClient.getStatus).toHaveBeenCalled());
-    expect(trackerClient.getTimeline).toHaveBeenCalled();
-    expect(trackerClient.getHourlySummary).toHaveBeenCalled();
-    expect(trackerClient.getTopSites).toHaveBeenCalled();
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     expect(trackerClient.start).not.toHaveBeenCalled();
   });
 

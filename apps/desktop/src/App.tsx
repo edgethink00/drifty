@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@dtime/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@dtime/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -478,6 +478,13 @@ type ClassificationActivityRow = {
   endedLabel: string;
   segments: ActivitySegment[];
   hasDetails: boolean;
+};
+
+type EndOfDayReviewSummaryInput = {
+  day: string;
+  generatedAt: string;
+  segments: ActivitySegment[];
+  isMock?: boolean;
 };
 
 const THEME_STORAGE_KEY = "drifty.theme";
@@ -975,6 +982,7 @@ export default function App() {
   const [insightHourly, setInsightHourly] = useState<HourBucket[]>([]);
   const [insightTopSites, setInsightTopSites] = useState<SiteDuration[]>([]);
   const [appIcons, setAppIcons] = useState<AppIconMap>({});
+  const appIconsRef = useRef<AppIconMap>({});
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1028,6 +1036,10 @@ export default function App() {
   const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
   const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
+
+  useEffect(() => {
+    appIconsRef.current = appIcons;
+  }, [appIcons]);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
     setNavigationHistory((current) => {
@@ -1524,15 +1536,32 @@ export default function App() {
     }
   }, []);
 
+  const buildEndOfDayReviewEvent = useCallback(async (input: EndOfDayReviewSummaryInput): Promise<EndOfDayReviewEvent> => {
+    const currentAppIcons = appIconsRef.current;
+    const baseEvent = buildEndOfDayReviewSummary({ ...input, appIcons: currentAppIcons });
+    const missingIconRequests = input.isMock ? [] : collectMissingEndOfDayReviewIconRequests(baseEvent);
+    if (!isTauriRuntime() || missingIconRequests.length === 0) return baseEvent;
+
+    try {
+      const resolvedIcons = await trackerClient.getAppIcons(missingIconRequests);
+      return buildEndOfDayReviewSummary({
+        ...input,
+        appIcons: mergeResolvedAppIcons(currentAppIcons, missingIconRequests, resolvedIcons),
+      });
+    } catch {
+      return baseEvent;
+    }
+  }, []);
+
   const handleEndOfDayReviewPreview = useCallback(() => {
     const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
-    showEndOfDayReview(buildEndOfDayReviewSummary({
+    void buildEndOfDayReviewEvent({
       day: selectedDay,
       generatedAt: new Date().toISOString(),
       segments: previewSegments,
       isMock: true,
-    }));
-  }, [segments, selectedDay, showEndOfDayReview]);
+    }).then(showEndOfDayReview);
+  }, [buildEndOfDayReviewEvent, segments, selectedDay, showEndOfDayReview]);
 
   const clearDriftAlarmEvent = useCallback(() => {
     driftAlarmEventRef.current = null;
@@ -2327,13 +2356,13 @@ export default function App() {
     if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
 
     endOfDayReviewQueryPreviewShownRef.current = true;
-    showEndOfDayReview(buildEndOfDayReviewSummary({
+    void buildEndOfDayReviewEvent({
       day: todayDay,
       generatedAt: new Date().toISOString(),
       segments: buildMockEndOfDayReviewSegments(todayDay),
       isMock: true,
-    }));
-  }, [hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
+    }).then(showEndOfDayReview);
+  }, [buildEndOfDayReviewEvent, hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
   useEffect(() => {
     if (!hasLoadedOnce) return;
@@ -2343,14 +2372,14 @@ export default function App() {
     if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
     if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
 
-    void showEndOfDayReview(buildEndOfDayReviewSummary({
+    void buildEndOfDayReviewEvent({
       day: todayDay,
       generatedAt: new Date().toISOString(),
       segments,
-    })).then((shown) => {
+    }).then(showEndOfDayReview).then((shown) => {
       if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
     });
-  }, [currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
   const activeInsightCategoryTotals = useMemo(
@@ -8891,6 +8920,28 @@ function filterSegmentsForRange(segments: ActivitySegment[], start: string, end:
     const segmentEnd = new Date(segment.endedAt).getTime();
     return segmentEnd >= startMs && segmentStart <= endMs;
   });
+}
+
+function collectMissingEndOfDayReviewIconRequests(event: EndOfDayReviewEvent): AppIdentity[] {
+  return (event.sourceSummaries ?? []).flatMap((source) => {
+    if (source.iconSrc) return [];
+    return [{ appName: source.appName, bundleId: source.bundleId ?? null }];
+  });
+}
+
+function mergeResolvedAppIcons(currentIcons: AppIconMap, identities: AppIdentity[], resolvedIcons: AppIconMap): AppIconMap {
+  const nextIcons = { ...currentIcons };
+
+  for (const identity of identities) {
+    const identityKey = identity.bundleId || identity.appName;
+    const iconSrc = resolvedIcons[identityKey] ?? resolvedIcons[identity.appName] ?? null;
+    if (!iconSrc) continue;
+
+    nextIcons[identityKey] = iconSrc;
+    nextIcons[identity.appName] = iconSrc;
+  }
+
+  return nextIcons;
 }
 
 function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] {
