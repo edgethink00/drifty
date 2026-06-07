@@ -60,7 +60,7 @@
       "dmg": {
         "background": "dmg/background.png",
         "windowSize": {
-          "width": 640,
+          "width": 660,
           "height": 400
         },
         "windowPosition": {
@@ -68,12 +68,12 @@
           "y": 120
         },
         "appPosition": {
-          "x": 190,
-          "y": 200
+          "x": 180,
+          "y": 170
         },
         "applicationFolderPosition": {
-          "x": 450,
-          "y": 200
+          "x": 480,
+          "y": 170
         }
       }
     },
