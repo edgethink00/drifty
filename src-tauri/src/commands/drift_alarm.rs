@@ -2,13 +2,11 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, Manager, Monitor, State, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, State, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder,
 };
 
 pub const DRIFT_ALARM_WINDOW_LABEL: &str = "drift-alarm";
-
-const DRIFT_ALARM_WIDTH: f64 = 760.0;
-const DRIFT_ALARM_HEIGHT: f64 = 620.0;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,9 +63,6 @@ pub fn setup_drift_alarm_window(app: &tauri::App) -> tauri::Result<()> {
         WebviewUrl::App("index.html?driftySurface=drift-alarm".into()),
     )
     .title("")
-    .inner_size(DRIFT_ALARM_WIDTH, DRIFT_ALARM_HEIGHT)
-    .min_inner_size(DRIFT_ALARM_WIDTH, DRIFT_ALARM_HEIGHT)
-    .max_inner_size(DRIFT_ALARM_WIDTH, DRIFT_ALARM_HEIGHT)
     .decorations(false)
     .shadow(false)
     .resizable(false)
@@ -199,9 +194,30 @@ fn position_drift_alarm_window(app: &AppHandle) -> Result<(), String> {
     let size = work_area.size.to_logical::<f64>(scale_factor);
     let alarm_position =
         calculate_drift_alarm_window_position(position.x, position.y, size.width, size.height);
+    resize_drift_alarm_window(&window, size.width, size.height)?;
 
     window
         .set_position(alarm_position)
+        .map_err(|error| error.to_string())
+}
+
+fn resize_drift_alarm_window(window: &WebviewWindow, width: f64, height: f64) -> Result<(), String> {
+    let target_size = LogicalSize::new(width, height);
+
+    window
+        .set_min_size(None::<LogicalSize<f64>>)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_max_size(None::<LogicalSize<f64>>)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_size(target_size)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_min_size(Some(target_size))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_max_size(Some(target_size))
         .map_err(|error| error.to_string())
 }
 
@@ -211,10 +227,8 @@ fn calculate_drift_alarm_window_position(
     work_area_width: f64,
     work_area_height: f64,
 ) -> LogicalPosition<f64> {
-    LogicalPosition::new(
-        work_area_x + ((work_area_width - DRIFT_ALARM_WIDTH).max(0.0) / 2.0).round(),
-        work_area_y + ((work_area_height - DRIFT_ALARM_HEIGHT).max(0.0) / 2.0).round(),
-    )
+    let _ = (work_area_width, work_area_height);
+    LogicalPosition::new(work_area_x, work_area_y)
 }
 
 fn resolve_drift_alarm_monitor(app: &AppHandle) -> Option<Monitor> {
@@ -246,18 +260,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn positions_alarm_near_work_area_top_right() {
+    fn positions_alarm_overlay_at_work_area_origin() {
         let position = calculate_drift_alarm_window_position(0.0, 25.0, 1440.0, 775.0);
 
-        assert_eq!(position.x, 340.0);
-        assert_eq!(position.y, 103.0);
+        assert_eq!(position.x, 0.0);
+        assert_eq!(position.y, 25.0);
     }
 
     #[test]
-    fn keeps_alarm_inside_shifted_work_area() {
+    fn positions_alarm_overlay_at_shifted_work_area_origin() {
         let position = calculate_drift_alarm_window_position(80.0, 0.0, 1360.0, 900.0);
 
-        assert_eq!(position.x, 380.0);
-        assert_eq!(position.y, 140.0);
+        assert_eq!(position.x, 80.0);
+        assert_eq!(position.y, 0.0);
     }
 }

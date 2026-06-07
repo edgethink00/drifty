@@ -41,6 +41,7 @@
     "allow-auth-load-saved-session",
     "allow-auth-save-session",
     "allow-auth-clear-saved-session",
+    "allow-focus-target-open-app",
     "allow-system-open-settings-pane",
     "allow-watcher-peek-show",
     "allow-watcher-peek-hide",

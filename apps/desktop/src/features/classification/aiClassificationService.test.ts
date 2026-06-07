@@ -130,6 +130,19 @@ describe("diffAiClassificationUsageSummary", () => {
 });
 
 describe("runAiClassification cloud contract", () => {
+  function ensureTestWindow() {
+    if (typeof window !== "undefined") return;
+    const values = new Map<string, string>();
+    const localStorage = {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => { values.set(key, value); }),
+      removeItem: vi.fn((key: string) => { values.delete(key); }),
+      clear: vi.fn(() => { values.clear(); }),
+    };
+    vi.stubGlobal("window", { localStorage });
+    vi.stubGlobal("localStorage", localStorage);
+  }
+
   function createUnknownSegment(index: number, overrides: Partial<ActivitySegment> = {}): ActivitySegment {
     return {
       id: `segment-${index}`,
@@ -146,6 +159,7 @@ describe("runAiClassification cloud contract", () => {
 
   async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown; reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord> } = {}) {
     vi.resetModules();
+    ensureTestWindow();
 
     const invoke = vi.fn().mockResolvedValue({
       data: {
@@ -229,7 +243,29 @@ describe("runAiClassification cloud contract", () => {
     };
   }
 
+  function writeOnboardingState(userId: string, overrides: Record<string, unknown> = {}) {
+    ensureTestWindow();
+    window.localStorage.setItem(`drifty:onboarding:v2:${userId}`, JSON.stringify({
+      version: 2,
+      completed: true,
+      displayName: "Test User",
+      workType: null,
+      workTypeOther: "",
+      workDomain: null,
+      workDomainOther: "",
+      jobType: null,
+      jobTypeOther: "",
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: null,
+      completedAt: "2026-05-20T12:00:00.000Z",
+      ...overrides,
+    }));
+  }
+
   function cleanupServiceMocks() {
+    ensureTestWindow();
+    window.localStorage.clear();
     vi.doUnmock("../../lib/supabase/client");
     vi.doUnmock("@tauri-apps/api/core");
     vi.doUnmock("../../lib/api/trackerClient");
@@ -240,6 +276,23 @@ describe("runAiClassification cloud contract", () => {
     expect(AI_CLASSIFICATION_BACKGROUND_THRESHOLD).toBe(20);
     expect(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD).toBe(5);
     expect(AI_CLASSIFICATION_FOCUSED_IDLE_MS).toBe(20 * 60 * 1000);
+  });
+
+  it("sends optional onboarding work profile context to classify-activity", async () => {
+    const segment = createUnknownSegment(1);
+    writeOnboardingState("user-1", { workType: "Software Development", workDomain: "AI" });
+
+    try {
+      const { runAiClassification, invoke } = await importServiceWithSegments([segment], {
+        session: { access_token: "token", user: { id: "user-1" } },
+      });
+      await runAiClassification({ day: "2026-05-22" });
+
+      const body = invoke.mock.calls[0]?.[1]?.body as Record<string, unknown>;
+      expect(body.workProfile).toBe("Software Development in AI");
+    } finally {
+      cleanupServiceMocks();
+    }
   });
 
   it("sends client and contract metadata to classify-activity", async () => {
@@ -461,6 +514,56 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("includes sanitized Other work profile values in the local prompt", async () => {
+    const segment = createUnknownSegment(1);
+    writeOnboardingState("local", {
+      workType: "Other",
+      workTypeOther: "  AI   product\nstrategy\u0000 ",
+      workDomain: "Other",
+      workDomainOther: " developer   tools ",
+    });
+
+    try {
+      const { runAiClassification, nativeInvoke } = await importServiceWithSegments([segment], { session: null });
+      await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
+      });
+
+      const request = nativeInvoke.mock.calls[0]?.[1]?.request as { messages: Array<{ content: string }> };
+      expect(request.messages[0].content).toContain("User work profile: Other: AI product strategy in Other: developer tools.");
+      expect(request.messages[0].content).toContain("Do not include raw titles, domains, or work profile details in the reason.");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("changes AI input fingerprints when the onboarding work profile changes", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      writeOnboardingState("local", { workType: "Software Development", workDomain: "AI" });
+      const firstImport = await importServiceWithSegments([segment], { session: null });
+      await firstImport.runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
+      });
+      const firstFingerprint = firstImport.getReusableAiClassifications.mock.calls[0]?.[0]?.[0];
+      cleanupServiceMocks();
+
+      writeOnboardingState("local", { workType: "Writing", workDomain: "Media" });
+      const secondImport = await importServiceWithSegments([segment], { session: null });
+      await secondImport.runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
+      });
+      const secondFingerprint = secondImport.getReusableAiClassifications.mock.calls[0]?.[0]?.[0];
+
+      expect(firstFingerprint).toMatch(/^dtime-v2-/);
+      expect(secondFingerprint).toMatch(/^dtime-v2-/);
+      expect(firstFingerprint).not.toBe(secondFingerprint);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("runs OpenRouter BYOK classification locally without a Supabase session", async () => {
     const segment = createUnknownSegment(1);
 
@@ -605,7 +708,7 @@ describe("runAiClassification cloud contract", () => {
 
       expect(result.status).toBe("saved");
       expect(invoke).not.toHaveBeenCalled();
-      expect(getSession).not.toHaveBeenCalled();
+      expect(getSession).toHaveBeenCalledTimes(1);
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(getReusableAiClassifications.mock.calls[0]?.[0]).toHaveLength(1);
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
@@ -659,7 +762,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.savedRecords).toBe(1);
       expect(result.message).toContain("Saved 1 reused AI");
       expect(result.message).toContain("Run AI classification for the remaining 1 unknown segment");
-      expect(getSession).toHaveBeenCalledTimes(1);
+      expect(getSession).toHaveBeenCalledTimes(2);
       expect(invoke).not.toHaveBeenCalled();
       expect(saveClassifications).toHaveBeenCalledTimes(1);
       expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", category: "utility", aiResult: true })]);
@@ -699,7 +802,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v2-work-profile" })]);
     } finally {
       cleanupServiceMocks();
     }

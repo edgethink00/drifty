@@ -93,27 +93,24 @@ describe("EndOfDayReview", () => {
       }),
     ]);
 
-    render(<EndOfDayReview event={event} />);
+    const { container } = render(<EndOfDayReview event={event} />);
 
     const review = screen.getByLabelText("Drifty end-of-day review");
-    expect(review.querySelector(".end-of-day-review__compact")).toBeTruthy();
-    expect.soft(within(review).queryByText("Evening review")).not.toBeNull();
-    expect.soft(within(review).queryByText("2h 45m tracked")).not.toBeNull();
+    const chrome = container.querySelector(".eodr-chrome");
+    expect(chrome).toBeTruthy();
+    expect(within(chrome as HTMLElement).getByAltText("Drifty").classList.contains("window-logo")).toBe(true);
+    expect.soft(within(review).queryByText("Summary - Today")).not.toBeNull();
+    expect.soft(within(review).queryByText("Evening review")).toBeNull();
+    expect.soft(within(review).getAllByText("2h 45m").length).toBeGreaterThan(0);
 
     const focusDriftSummary = within(review).queryByLabelText("Focus and drift summary");
     expect.soft(focusDriftSummary).not.toBeNull();
+    expect.soft(container.querySelectorAll(".eodr-metric")).toHaveLength(3);
+    expect.soft(container.querySelectorAll(".eodr-meter")).toHaveLength(3);
     expect.soft(within(review).queryByText("2h focus")).not.toBeNull();
     expect.soft(within(review).queryByText("45m drift")).not.toBeNull();
-
-    const topSource = within(review).queryByLabelText("Top source");
-    expect.soft(topSource).not.toBeNull();
-    expect.soft(within(review).queryByText("Top source")).not.toBeNull();
-    expect.soft(within(review).queryByText("Code")).not.toBeNull();
-
-    const insight = within(review).queryByLabelText("End-of-day insight");
-    expect.soft(insight).not.toBeNull();
-    expect.soft(insight?.textContent ?? "").toMatch(/focus/i);
-    expect.soft(insight?.textContent ?? "").toMatch(/drift/i);
+    expect.soft(chrome ? within(chrome as HTMLElement).queryByRole("button", { name: "Review settings" }) : null).not.toBeNull();
+    expect.soft(chrome ? within(chrome as HTMLElement).queryByRole("button", { name: "Close end-of-day review" }) : null).not.toBeNull();
 
     const breakdown = within(review).getByLabelText("End-of-day derived breakdown");
     const focusRow = within(breakdown).getByLabelText("Focus breakdown detail");
@@ -153,9 +150,16 @@ describe("EndOfDayReview", () => {
       }),
     ]);
 
-    render(<EndOfDayReview event={event} />);
+    const { container } = render(<EndOfDayReview event={event} />);
 
     expect(screen.getByRole("img", { name: "End-of-day focus and drift breakdown" })).toBeTruthy();
+    expect(container.querySelector(".eodr-dial-shell")).toBeTruthy();
+    expect(container.querySelector(".eodr-dial")).toBeTruthy();
+    expect(container.querySelector(".eodr-dial__track")?.getAttribute("r")).toBe("40");
+    expect(container.querySelector(".eodr-dial__segment--focus")?.getAttribute("r")).toBe("40");
+    expect(container.querySelector(".eodr-dial__segment--focus")).toBeTruthy();
+    expect(container.querySelector(".eodr-dial__segment--drift")).toBeTruthy();
+    expect(container.querySelector(".eodr-dial__segment--other")).toBeTruthy();
   });
 
   it("renders a richer derived focus, drift, and neutral breakdown", () => {
@@ -215,6 +219,63 @@ describe("EndOfDayReview", () => {
     expect(within(neutralRow).getByRole("meter", { name: "Neutral progress" }).getAttribute("aria-valuenow")).toBe("25");
   });
 
+  it("renders the extracted category and most-used app tables from local segments", () => {
+    const event = buildReviewEvent([
+      buildSegment({
+        id: "code-focus-morning",
+        appName: "Code",
+        startHour: 9,
+        durationMinutes: 90,
+        category: "workspace",
+        productivity: "focus",
+      }),
+      buildSegment({
+        id: "video-drift-afternoon",
+        appName: "YouTube",
+        startHour: 15,
+        durationMinutes: 50,
+        category: "entertainment",
+        productivity: "drift",
+      }),
+      buildSegment({
+        id: "figma-focus-afternoon",
+        appName: "Figma",
+        startHour: 16,
+        durationMinutes: 60,
+        category: "workspace",
+        productivity: "focus",
+      }),
+      buildSegment({
+        id: "chat-neutral-evening",
+        appName: "Slack",
+        startHour: 18,
+        durationMinutes: 30,
+        category: "communication",
+        productivity: "neutral",
+      }),
+    ]);
+
+    const { container } = render(<EndOfDayReview event={event} />);
+
+    expect(container.querySelector(".end-of-day-review__table-stack")).toBeTruthy();
+    const categoryBreakdown = screen.getByLabelText("Category breakdown");
+    expect(within(categoryBreakdown).getByText("Categories")).toBeTruthy();
+    expect(within(categoryBreakdown).getByText("Workspace")).toBeTruthy();
+    expect(within(categoryBreakdown).getByText("Entertainment")).toBeTruthy();
+    expect(within(categoryBreakdown).getByText("Communication")).toBeTruthy();
+
+    const mostUsedApps = screen.getByLabelText("Most used apps");
+    expect(within(mostUsedApps).getByText("Most used apps")).toBeTruthy();
+    expect(within(mostUsedApps).getByText("Code")).toBeTruthy();
+    expect(within(mostUsedApps).getByText("Figma")).toBeTruthy();
+    expect(within(mostUsedApps).getByText("YouTube")).toBeTruthy();
+    expect(within(mostUsedApps).queryByText("Slack")).toBeNull();
+    expect(within(mostUsedApps).getByText("1h 30m · 39.1%")).toBeTruthy();
+    expect(container.querySelector(".src-tile--code")).toBeTruthy();
+    expect(container.querySelector(".glyph--design")).toBeTruthy();
+    expect(container.querySelector(".src-tile--yt")).toBeTruthy();
+  });
+
   it("calls action callbacks from the review buttons", () => {
     const event = buildReviewEvent([
       buildSegment({
@@ -240,11 +301,11 @@ describe("EndOfDayReview", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Open dashboard" }));
-    fireEvent.click(screen.getByRole("button", { name: "View details" }));
     fireEvent.click(screen.getByRole("button", { name: "Review settings" }));
 
     expect(onOpenDashboard).toHaveBeenCalledTimes(1);
-    expect(onViewDetails).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "View details" })).toBeNull();
+    expect(onViewDetails).not.toHaveBeenCalled();
     expect(onOpenNotificationSettings).toHaveBeenCalledTimes(1);
   });
 
@@ -325,8 +386,8 @@ describe("EndOfDayReview", () => {
 
     const review = screen.getByLabelText("Drifty end-of-day review");
     expect(within(review).getByRole("button", { name: "Open dashboard" })).toBeTruthy();
-    expect(within(review).getByRole("button", { name: "View details" })).toBeTruthy();
     expect(within(review).getByRole("button", { name: "Review settings" })).toBeTruthy();
+    expect(within(review).queryByRole("button", { name: "View details" })).toBeNull();
     expect(review.textContent).not.toMatch(/\b0%\b/);
     expect(review.textContent).not.toMatch(/NaN%/);
   });
@@ -352,8 +413,8 @@ describe("EndOfDayReview", () => {
     const focusBreakdownRow = screen.getByLabelText("Focus breakdown detail");
     expect(within(focusBreakdownRow).getByText("1h 15m")).toBeTruthy();
     expect(within(focusBreakdownRow).getByText("100%")).toBeTruthy();
-    const topSource = screen.queryByLabelText("Top source");
-    expect.soft(topSource).not.toBeNull();
+    const mostUsedApps = screen.queryByLabelText("Most used apps");
+    expect.soft(mostUsedApps).not.toBeNull();
     expect.soft(screen.queryByText(longAppName)).not.toBeNull();
     expect.soft(screen.queryByText(longSourceLabel)).not.toBeNull();
   });

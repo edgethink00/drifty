@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DriftAlarm, type DriftAlarmAction, type DriftAlarmEvent } from "./DriftAlarm";
 import {
+  dismissNativeDriftAlarm,
   getNativeDriftAlarmCurrent,
   listenToNativeDriftAlarmShow,
   triggerNativeDriftAlarmAction,
@@ -56,9 +57,17 @@ export function DriftAlarmWindowApp() {
     void triggerNativeDriftAlarmAction(action);
   }, []);
 
+  const handleCancel = useCallback(() => {
+    setEvent(null);
+    void dismissNativeDriftAlarm();
+  }, []);
+
   return (
-    <main className="watcher-window-surface watcher-window-surface--drift-alarm" aria-label="Drifty drift alarm window">
-      <DriftAlarm event={event} onAction={handleAction} />
+    <main className="drift-alarm-window-surface" aria-label="Drifty drift alarm window">
+      <div className="drift-alarm-backdrop" aria-hidden="true" />
+      <div className="drift-alarm-overlay">
+        <DriftAlarm event={event} onAction={handleAction} onCancel={handleCancel} />
+      </div>
     </main>
   );
 }

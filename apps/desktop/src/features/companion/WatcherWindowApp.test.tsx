@@ -205,11 +205,12 @@ describe("WatcherWindowApp", () => {
     const review = screen.getByLabelText("Drifty end-of-day review");
     expect(review).toBeTruthy();
     expect(screen.queryByLabelText("Drifty watcher check-in")).toBeNull();
-    expect(within(review).getByText("Evening review")).toBeTruthy();
-    expect(within(review).getByText("2h 15m tracked")).toBeTruthy();
+    expect(within(review).getByText("Summary - Today")).toBeTruthy();
+    expect(within(review).queryByText("Evening review")).toBeNull();
+    expect(within(review).getAllByText("2h 15m").length).toBeGreaterThan(0);
     expect(within(review).getByLabelText("Focus and drift summary")).toBeTruthy();
-    expect(within(review).getByLabelText("Top source")).toBeTruthy();
-    expect(within(review).getByLabelText("End-of-day insight")).toBeTruthy();
+    expect(within(review).getByLabelText("End-of-day review tables")).toBeTruthy();
+    expect(within(review).getByLabelText("Most used apps")).toBeTruthy();
     expect(screen.getByLabelText("Focus breakdown detail")).toBeTruthy();
     expect(screen.getByLabelText("Neutral breakdown detail")).toBeTruthy();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
@@ -231,6 +232,10 @@ describe("WatcherWindowApp", () => {
     await act(async () => undefined);
 
     expect(screen.getByLabelText("Drifty end-of-day review")).toBeTruthy();
+    expect(screen.getByText("Summary - Today")).toBeTruthy();
+    expect(screen.getByLabelText("End-of-day review tables")).toBeTruthy();
+    expect(screen.getByLabelText("Category breakdown")).toBeTruthy();
+    expect(screen.getByLabelText("Most used apps")).toBeTruthy();
     expect(screen.queryByLabelText("Drifty watcher check-in")).toBeNull();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
   });
@@ -249,12 +254,11 @@ describe("WatcherWindowApp", () => {
     });
 
     screen.getByRole("button", { name: /open dashboard/i }).click();
-    screen.getByRole("button", { name: /view details/i }).click();
     screen.getByRole("button", { name: /review settings/i }).click();
 
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenNthCalledWith(1, "openDashboard");
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenNthCalledWith(2, "viewDetails");
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenNthCalledWith(3, "openNotificationSettings");
+    expect(screen.queryByRole("button", { name: /view details/i })).toBeNull();
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenNthCalledWith(2, "openNotificationSettings");
   });
 
   it("keeps end-of-day review visible when native review actions reject", async () => {
