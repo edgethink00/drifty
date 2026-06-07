@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@dtime/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -33,7 +33,7 @@ import {
   shiftIsoDate,
   todayIsoDate,
   totalDurationSeconds,
-} from "@dtime/domain";
+} from "@drifty/domain";
 import logoUrl from "./assets/drifty-icon.png";
 import { AppGlyph } from "./components/AppGlyph";
 import { SiteFavicon } from "./components/SiteFavicon";
@@ -481,9 +481,7 @@ type ClassificationActivityRow = {
 };
 
 const THEME_STORAGE_KEY = "drifty.theme";
-const LEGACY_THEME_STORAGE_KEY = "dtime.theme";
 const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
-const LEGACY_DRIFT_ALERTS_STORAGE_KEY = "dtime.notifications.driftAlerts";
 const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
 const WATCHER_PEEK_STORAGE_KEY = "drifty.companion.watcherPeek";
 const WATCHER_MODE_STORAGE_KEY = "drifty.companion.watcherMode";
@@ -491,15 +489,8 @@ const WATCHER_PERIODIC_MIN_STORAGE_KEY = "drifty.companion.periodicMinMinutes";
 const WATCHER_PERIODIC_MAX_STORAGE_KEY = "drifty.companion.periodicMaxMinutes";
 const WATCHER_RESPONSE_STORAGE_KEY = "drifty.companion.watcherResponses";
 const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
-const LEGACY_WATCHER_PEEK_STORAGE_KEY = "dtime.companion.watcherPeek";
-const LEGACY_WATCHER_MODE_STORAGE_KEY = "dtime.companion.watcherMode";
-const LEGACY_WATCHER_PERIODIC_MIN_STORAGE_KEY = "dtime.companion.periodicMinMinutes";
-const LEGACY_WATCHER_PERIODIC_MAX_STORAGE_KEY = "dtime.companion.periodicMaxMinutes";
-const LEGACY_WATCHER_RESPONSE_STORAGE_KEY = "dtime.companion.watcherResponses";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
-const LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY = "dtime.sidebar.collapsed";
 const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
-const LEGACY_AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "dtime.dev.showAiClassificationImpact";
 const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
 const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
 const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
@@ -1761,8 +1752,8 @@ export default function App() {
   }
 
   useEffect(() => {
-    window.__DTIME_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
-    window.__DTIME_BOOTSTRAPPED__ = true;
+    window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
+    window.__DRIFTY_BOOTSTRAPPED__ = true;
     document.getElementById("boot-shell")?.remove();
   }, []);
 
@@ -2283,7 +2274,7 @@ export default function App() {
   const isBootstrappingTracker = loading && status === null;
   const trackerModeLabel = status?.trackerMode ?? "unknown";
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
-  const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/dtime-demo.sqlite3";
+  const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle due to inactivity" : isDemoMode ? "Preview active" : "Tracking live") : (isDemoMode ? "Preview paused" : "Tracking paused");
   const trackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Resume tracking";
@@ -7855,7 +7846,7 @@ function getRecentWatcherResponse(): StoredWatcherResponse | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const rawValue = readMigratedLocalStorageValue(WATCHER_RESPONSE_STORAGE_KEY, LEGACY_WATCHER_RESPONSE_STORAGE_KEY);
+    const rawValue = window.localStorage.getItem(WATCHER_RESPONSE_STORAGE_KEY);
     const responses: unknown = rawValue ? JSON.parse(rawValue) : [];
     if (!Array.isArray(responses)) return null;
     const latest = responses[responses.length - 1] as Partial<StoredWatcherResponse> | undefined;
@@ -8179,7 +8170,7 @@ function persistWatcherResponse(event: WatcherPeekEvent, response: WatcherPeekRe
   if (typeof window === "undefined") return;
 
   try {
-    const rawValue = readMigratedLocalStorageValue(WATCHER_RESPONSE_STORAGE_KEY, LEGACY_WATCHER_RESPONSE_STORAGE_KEY);
+    const rawValue = window.localStorage.getItem(WATCHER_RESPONSE_STORAGE_KEY);
     const existingResponses: unknown = rawValue ? JSON.parse(rawValue) : [];
     const responses = Array.isArray(existingResponses) ? existingResponses.slice(-19) : [];
     responses.push({
@@ -9119,7 +9110,7 @@ function resolveInitialAppThemeColorOverrides(): AppThemeColorOverrides {
 
 function resolveInitialTheme(): ThemeMode {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  const saved = readMigratedLocalStorageValue(THEME_STORAGE_KEY, LEGACY_THEME_STORAGE_KEY);
+  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (saved === "light" || saved === "dark") { applyThemeToDocument(saved); return saved; }
   applyThemeToDocument(DEFAULT_THEME);
   return DEFAULT_THEME;
@@ -9127,21 +9118,12 @@ function resolveInitialTheme(): ThemeMode {
 
 function resolveInitialSidebarCollapsed(): boolean {
   if (typeof window === "undefined") return false;
-  const savedValue = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
-  if (savedValue !== null) return savedValue === "1";
-
-  const legacyValue = window.localStorage.getItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY);
-  if (legacyValue !== null) {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, legacyValue);
-    return legacyValue === "1";
-  }
-
-  return false;
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
 }
 
 function resolveInitialDriftAlertsEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return readMigratedLocalStorageValue(DRIFT_ALERTS_STORAGE_KEY, LEGACY_DRIFT_ALERTS_STORAGE_KEY) === "1";
+  return window.localStorage.getItem(DRIFT_ALERTS_STORAGE_KEY) === "1";
 }
 
 function resolveInitialDriftAlertDelaySeconds(): DriftAlertDelaySeconds {
@@ -9161,30 +9143,22 @@ async function openFocusTargetSite(siteDomain: string): Promise<void> {
   await openUrl(`https://${domain}`);
 }
 
-function readMigratedLocalStorageValue(storageKey: string, legacyStorageKey: string): string | null {
-  const savedValue = window.localStorage.getItem(storageKey);
-  if (savedValue !== null) return savedValue;
-
-  const legacyValue = window.localStorage.getItem(legacyStorageKey);
-  if (legacyValue !== null) window.localStorage.setItem(storageKey, legacyValue);
-  return legacyValue;
-}
 
 function resolveInitialWatcherPeekEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  const savedValue = readMigratedLocalStorageValue(WATCHER_PEEK_STORAGE_KEY, LEGACY_WATCHER_PEEK_STORAGE_KEY);
+  const savedValue = window.localStorage.getItem(WATCHER_PEEK_STORAGE_KEY);
   if (savedValue === null) return false;
   return savedValue === "1";
 }
 
 function resolveInitialWatcherMode(): WatcherMode {
   if (typeof window === "undefined") return "periodic";
-  return readMigratedLocalStorageValue(WATCHER_MODE_STORAGE_KEY, LEGACY_WATCHER_MODE_STORAGE_KEY) === "drift_only" ? "drift_only" : "periodic";
+  return window.localStorage.getItem(WATCHER_MODE_STORAGE_KEY) === "drift_only" ? "drift_only" : "periodic";
 }
 
 function resolveInitialAiClassificationVisibility(): boolean {
   if (typeof window === "undefined") return true;
-  return readMigratedLocalStorageValue(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, LEGACY_AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
+  return window.localStorage.getItem(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
 }
 
 function isForbiddenOpenRouterModel(model: string): boolean {
@@ -9260,8 +9234,7 @@ function resolveInitialLocalAiSetup(): LocalAiSetupState {
 function resolveInitialWatcherPeriodicMinutes(boundary: "min" | "max"): number {
   if (typeof window === "undefined") return DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES[boundary];
   const key = boundary === "min" ? WATCHER_PERIODIC_MIN_STORAGE_KEY : WATCHER_PERIODIC_MAX_STORAGE_KEY;
-  const legacyKey = boundary === "min" ? LEGACY_WATCHER_PERIODIC_MIN_STORAGE_KEY : LEGACY_WATCHER_PERIODIC_MAX_STORAGE_KEY;
-  return normalizeWatcherPeriodicMinutes(readMigratedLocalStorageValue(key, legacyKey), DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES[boundary]);
+  return normalizeWatcherPeriodicMinutes(window.localStorage.getItem(key), DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES[boundary]);
 }
 
 function normalizeWatcherPeriodicMinutes(value: string | null, fallback: number): number {

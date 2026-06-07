@@ -1,7 +1,7 @@
-import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelineQuery, TrackerStatus } from "@dtime/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelineQuery, TrackerStatus } from "@drifty/domain";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
-import { buildHourlySummary, topSites as buildTopSites } from "@dtime/domain";
+import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
 
 function isoDay(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -179,12 +179,11 @@ export function previewAppIcons(apps: AppIdentity[]): AppIconMap {
 export function shouldUsePreviewData() {
   if (typeof window === "undefined") return false;
   if ("__TAURI_INTERNALS__" in window) return false;
-  if (import.meta.env.VITE_DRIFTY_PREVIEW === "1" || import.meta.env.VITE_DTIME_PREVIEW === "1") return true;
+  if (import.meta.env.VITE_DRIFTY_PREVIEW === "1") return true;
   const searchParams = new URLSearchParams(window.location.search);
-  if (searchParams.get("driftyPreview") === "1" || searchParams.get("dtimePreview") === "1") return true;
+  if (searchParams.get("driftyPreview") === "1") return true;
   try {
-    const previewValue = window.localStorage.getItem("drifty.preview") ?? window.localStorage.getItem("dtime.preview");
-    if (window.localStorage.getItem("drifty.preview") === null && previewValue !== null) window.localStorage.setItem("drifty.preview", previewValue);
+    const previewValue = window.localStorage.getItem("drifty.preview");
     if (previewValue === "1") return true;
   } catch {
     return false;

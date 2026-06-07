@@ -17,7 +17,7 @@ import type {
   TimelineQuery,
   TrackerApi,
   TrackerStatus,
-} from "@dtime/domain";
+} from "@drifty/domain";
 import { previewAppIcons, previewHourlySummary, previewStatus, previewTimeline, previewTopSites, shouldUsePreviewData } from "./previewData";
 
 function isTauriRuntime() {
@@ -141,7 +141,7 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke<ActivitySegment[]>("tracker_get_raw_events", { query });
     return result ?? [];
   },
-  async getTopSites(query: import("@dtime/domain").TopSitesQuery) {
+  async getTopSites(query: import("@drifty/domain").TopSitesQuery) {
     if (shouldUsePreviewData()) return previewTopSites(query);
     const result = await safeInvoke<SiteDuration[]>("tracker_get_top_sites", { query });
     return result ?? [];

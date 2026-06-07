@@ -6,7 +6,7 @@ authors = ["EdgeThink"]
 edition = "2021"
 
 [lib]
-name = "dtime_lib"
+name = "drifty_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

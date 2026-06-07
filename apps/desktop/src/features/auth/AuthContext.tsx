@@ -11,7 +11,7 @@ import {
   hasBlockingAuthConfigurationError,
   isSupabaseEnabled,
   supabase,
-  type DtimeAuthMode,
+  type DriftyAuthMode,
 } from "../../lib/supabase/client";
 import { identifyPostHogUser } from "../../lib/analytics/posthog";
 import {
@@ -39,7 +39,7 @@ export interface AuthState {
   status: AuthStatus;
   callbackStatus: OAuthCallbackStatus | null;
   isEnabled: boolean;
-  authMode: DtimeAuthMode;
+  authMode: DriftyAuthMode;
   isAuthRequired: boolean;
   allowsAnonymousAuth: boolean;
   hasRequiredAccountAuth: boolean;
@@ -111,7 +111,7 @@ function getOAuthCallbackResultFromUrl(value: string, source: "web" | "tauri"): 
   try {
     const url = new URL(value);
     const isWebCallback = source === "web" && ["/auth/callback", "/auth/callback/"].includes(url.pathname);
-    const isTauriCallback = source === "tauri" && ["drifty:", "dtime:"].includes(url.protocol) && url.hostname === "auth" && ["/callback", "/callback/"].includes(url.pathname);
+    const isTauriCallback = source === "tauri" && url.protocol === "drifty:" && url.hostname === "auth" && ["/callback", "/callback/"].includes(url.pathname);
 
     if (!isWebCallback && !isTauriCallback) {
       return null;

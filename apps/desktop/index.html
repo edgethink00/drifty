@@ -7,7 +7,7 @@
     <title>Drifty</title>
     <script>
       (() => {
-        window.__DTIME_RESOLVE_BOOT_SURFACE__ = () => {
+        window.__DRIFTY_RESOLVE_BOOT_SURFACE__ = () => {
           const datasetSurface = document.documentElement.dataset.surface;
           if (datasetSurface === "watcher" || datasetSurface === "drift-alarm") return datasetSurface;
 
@@ -19,7 +19,7 @@
           return "app";
         };
 
-        const surface = window.__DTIME_RESOLVE_BOOT_SURFACE__();
+        const surface = window.__DRIFTY_RESOLVE_BOOT_SURFACE__();
         if (surface === "watcher" || surface === "drift-alarm") document.documentElement.dataset.surface = surface;
       })();
     </script>
@@ -106,7 +106,7 @@
       }
     </style>
     <script>
-      window.__DTIME_BOOT_ERROR__ = null;
+      window.__DRIFTY_BOOT_ERROR__ = null;
       window.addEventListener("error", (event) => {
         const el = document.getElementById("boot-error");
         if (!el) return;
@@ -114,8 +114,8 @@
         el.textContent = String(event.message || event.error || "Unknown startup error");
       });
       window.addEventListener("unhandledrejection", (event) => {
-        const surface = window.__DTIME_RESOLVE_BOOT_SURFACE__?.() ?? "app";
-        if (window.__DTIME_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
+        const surface = window.__DRIFTY_RESOLVE_BOOT_SURFACE__?.() ?? "app";
+        if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
           event.preventDefault();
           document.getElementById("boot-error")?.remove();
           return;
@@ -128,7 +128,7 @@
       });
       window.setTimeout(() => {
         const status = document.getElementById("boot-status");
-        if (!status || window.__DTIME_BOOTSTRAPPED__) return;
+        if (!status || window.__DRIFTY_BOOTSTRAPPED__) return;
         status.textContent = "drifty still loading\u2026";
       }, 2500);
     </script>

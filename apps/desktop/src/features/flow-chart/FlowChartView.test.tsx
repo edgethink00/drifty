@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { FlowBlock, FlowIntervalMinutes } from "@dtime/domain";
+import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 
 const styles = readFileSync("src/styles.css", "utf8");

@@ -20,7 +20,7 @@ describe("parseCompanionSummaryCode", () => {
   });
 
   it("keeps legacy dTime iOS summary codes compatible", () => {
-    const summary = parseCompanionSummaryCode(`DTIME-IOS-V1|${SUMMARY_BODY}`);
+    const summary = parseCompanionSummaryCode(`DRIFTY-IOS-V1|${SUMMARY_BODY}`);
 
     expect(summary?.pairingCode).toBe("ABCD-2345");
   });

@@ -10,15 +10,13 @@ import {
 } from "./watcherBridge";
 
 const WATCHER_THEME_STORAGE_KEY = "drifty.theme";
-const LEGACY_WATCHER_THEME_STORAGE_KEY = "dtime.theme";
 const WATCHER_DEFAULT_THEME = "light";
 
 export function WatcherWindowApp() {
   const [event, setEvent] = useState<WatcherWindowEvent | null>(null);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem(WATCHER_THEME_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_WATCHER_THEME_STORAGE_KEY);
-    if (window.localStorage.getItem(WATCHER_THEME_STORAGE_KEY) === null && savedTheme !== null) window.localStorage.setItem(WATCHER_THEME_STORAGE_KEY, savedTheme);
+    const savedTheme = window.localStorage.getItem(WATCHER_THEME_STORAGE_KEY);
     const theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : WATCHER_DEFAULT_THEME;
     document.documentElement.dataset.surface = "watcher";
     document.documentElement.dataset.theme = theme;
