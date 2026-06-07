@@ -1561,7 +1561,8 @@ export default function App() {
   }, []);
 
   const showDriftAlarm = useCallback((event: DriftAlarmEvent) => {
-    if (driftAlarmEventRef.current?.id === event.id) return;
+    const currentEvent = driftAlarmEventRef.current;
+    if (currentEvent?.id === event.id && !hasDriftAlarmFocusTargetIconUpgrade(currentEvent, event)) return;
     if (driftAlarmRequestInFlightRef.current) {
       pendingDriftAlarmEventRef.current = event;
       return;
@@ -2131,15 +2132,18 @@ export default function App() {
     }
 
     const { alertKey, category, segment } = latestDrift;
-    const showCurrentDriftAlarm = () => {
-      showDriftAlarm(buildDriftAlarmEvent({
+    const buildCurrentDriftAlarmEvent = () => (
+      buildDriftAlarmEvent({
         id: alertKey,
         contextLabel: getWatcherContextLabel(segment, category),
         driftDurationSeconds: segment.durationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
-      }));
+      })
+    );
+    const showCurrentDriftAlarm = () => {
+      showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
 
     if (lastDriftAlertSegmentRef.current === null) {
@@ -2147,7 +2151,12 @@ export default function App() {
       showCurrentDriftAlarm();
       return;
     }
-    if (lastDriftAlertSegmentRef.current === alertKey) return;
+    if (lastDriftAlertSegmentRef.current === alertKey) {
+      if (driftAlarmEventRef.current?.id === alertKey) {
+        showCurrentDriftAlarm();
+      }
+      return;
+    }
 
     lastDriftAlertSegmentRef.current = alertKey;
     showCurrentDriftAlarm();
@@ -7980,6 +7989,15 @@ function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIcon
 
 function getFocusTargetIdentity(target: DriftAlarmFocusTarget): string {
   return (target.siteDomain ?? target.bundleId ?? target.appName).toLowerCase();
+}
+
+function hasDriftAlarmFocusTargetIconUpgrade(currentEvent: DriftAlarmEvent, nextEvent: DriftAlarmEvent): boolean {
+  const currentTargetsById = new Map(currentEvent.focusTargets.map((target) => [target.targetId, target]));
+  return nextEvent.focusTargets.some((nextTarget) => {
+    if (!nextTarget.iconSrc) return false;
+    const currentTarget = currentTargetsById.get(nextTarget.targetId);
+    return currentTarget?.iconSrc !== nextTarget.iconSrc;
+  });
 }
 
 type DriftAlarmCandidate = {

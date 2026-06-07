@@ -52,6 +52,7 @@ export function DriftAlarmWindowApp() {
   }, []);
 
   const handleAction = useCallback((action: DriftAlarmAction) => {
+    setEvent(null);
     void triggerNativeDriftAlarmAction(action);
   }, []);
 

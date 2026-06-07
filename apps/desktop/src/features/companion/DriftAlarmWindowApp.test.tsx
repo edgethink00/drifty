@@ -99,6 +99,7 @@ describe("DriftAlarmWindowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: /visual studio code/i }));
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledWith({ type: "return_to_focus", targetId: "app:com.microsoft.VSCode" });
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "Drift detected" })).toBeNull());
   });
 
   it("dismisses the native alarm webview surface on Escape", async () => {
