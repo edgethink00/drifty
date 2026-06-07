@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { CSSProperties, ChangeEvent, FocusEvent, FormEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@dtime/domain";
@@ -455,6 +456,7 @@ type DriftReminderState = {
   identity: string;
   thresholdSeconds: number;
 };
+type DriftAlertDelaySeconds = 0 | 60 | 300;
 
 type ClassificationSourceSummary = {
   usageKind: "app" | "site";
@@ -482,6 +484,7 @@ const THEME_STORAGE_KEY = "drifty.theme";
 const LEGACY_THEME_STORAGE_KEY = "dtime.theme";
 const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
 const LEGACY_DRIFT_ALERTS_STORAGE_KEY = "dtime.notifications.driftAlerts";
+const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
 const WATCHER_PEEK_STORAGE_KEY = "drifty.companion.watcherPeek";
 const WATCHER_MODE_STORAGE_KEY = "drifty.companion.watcherMode";
 const WATCHER_PERIODIC_MIN_STORAGE_KEY = "drifty.companion.periodicMinMinutes";
@@ -559,12 +562,17 @@ const SELF_HOSTED_RECOMMENDED_MODELS = [
   { id: "qwen3:8b", label: "Qwen 3 8B", detail: "Qwen local model" },
   { id: "qwen2.5-coder:7b", label: "Qwen 2.5 Coder 7B", detail: "Local coding-oriented model" },
 ] as const;
-const DRIFT_ALERT_MIN_SECONDS = 5 * 60;
+const DRIFT_ALERT_DELAY_OPTIONS = [
+  { value: 0, label: "Instant", detail: "As soon as drift is detected" },
+  { value: 60, label: "1m", detail: "After 1 minute of drift" },
+  { value: 300, label: "5m", detail: "After 5 minutes of drift" },
+] as const satisfies ReadonlyArray<{ value: DriftAlertDelaySeconds; label: string; detail: string }>;
 const DRIFT_ALARM_PREVIEW_OPTIONS = [
   { id: "youtube-5m", label: "YouTube 5m", contextLabel: "youtube.com", driftDurationSeconds: 5 * 60, preservedFocusStrikeSeconds: 30 * 60 },
   { id: "x-12m", label: "X 12m", contextLabel: "x.com", driftDurationSeconds: 12 * 60, preservedFocusStrikeSeconds: 60 * 60 },
   { id: "no-context-1h", label: "No context 1h", contextLabel: "", driftDurationSeconds: 60 * 60, preservedFocusStrikeSeconds: 2 * 60 * 60 },
 ] as const;
+const WATCHER_PEEK_SETTINGS_VISIBLE = false;
 const DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES = { min: 10, max: 30 };
 const WATCHER_PERIODIC_MIN_LIMIT_MINUTES = 10;
 const WATCHER_PERIODIC_MAX_LIMIT_MINUTES = 240;
@@ -986,6 +994,8 @@ export default function App() {
   const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
+  const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
+  const [driftAlarmSnoozeUntilMs, setDriftAlarmSnoozeUntilMs] = useState<number | null>(null);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
@@ -1156,8 +1166,8 @@ export default function App() {
     [segments, showAiClassificationImpact],
   );
   const recentDriftAlarmFocusTargets = useMemo(
-    () => buildRecentFocusTargets(segments, selectedDayClassificationOptions, appIcons),
-    [appIcons, segments, selectedDayClassificationOptions],
+    () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
+    [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
   const openRouterPrimaryModel = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
   const openRouterFallbackModels = useMemo(
@@ -1274,10 +1284,12 @@ export default function App() {
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const isSidebarVisuallyCollapsed = sidebarCollapsed;
   const refreshRequestRef = useRef(0);
+  const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const leaderboardRefreshRequestRef = useRef(0);
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  const driftAlarmSnoozeUntilRef = useRef<number | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
@@ -1286,6 +1298,7 @@ export default function App() {
   const endOfDayReviewQueryPreviewShownRef = useRef(false);
   const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmRequestInFlightRef = useRef(false);
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmPreviewCounterRef = useRef(0);
@@ -1535,6 +1548,7 @@ export default function App() {
     }
 
     driftAlarmEventRef.current = event;
+    lastDriftAlarmEventRef.current = event;
 
     if (!isTauriRuntime()) {
       setDriftAlarmEvent(event);
@@ -1580,6 +1594,7 @@ export default function App() {
   }, [clearDriftAlarmEvent]);
 
   const handleDriftAlarmAction = useCallback((action: DriftAlarmAction) => {
+    const currentAlarmEvent = driftAlarmEventRef.current ?? lastDriftAlarmEventRef.current;
     dismissDriftAlarm();
 
     switch (action.type) {
@@ -1590,11 +1605,25 @@ export default function App() {
       case "manual_correction":
         navigateToTab("classify");
         return;
-      case "return_to_focus":
+      case "return_to_focus": {
+        const target = currentAlarmEvent?.focusTargets.find((focusTarget) => focusTarget.targetId === action.targetId) ?? null;
+        if (target?.siteDomain) {
+          void openFocusTargetSite(target.siteDomain).catch((error) => console.warn("Failed to open focus target site", error));
+          return;
+        }
+        if (target?.bundleId) {
+          void invoke("focus_target_open_app", { bundleId: target.bundleId }).catch((error) => console.warn("Failed to open focus target app", error));
+          return;
+        }
         navigateToTab("dashboard");
         return;
-      case "start_break":
+      }
+      case "start_break": {
+        const snoozeUntilMs = Date.now() + action.minutes * 60_000;
+        driftAlarmSnoozeUntilRef.current = snoozeUntilMs;
+        setDriftAlarmSnoozeUntilMs(snoozeUntilMs);
         return;
+      }
     }
   }, [dismissDriftAlarm, navigateToTab]);
 
@@ -1614,16 +1643,20 @@ export default function App() {
     setWatcherPeriodicMaxMinutes(Math.max(nextValue, watcherPeriodicMinMinutes));
   }, [watcherPeriodicMinMinutes]);
 
-  async function refresh(day = selectedDay) {
+  async function refresh(day = selectedDay, options: { requireCurrentSnapshot?: boolean } = {}): Promise<boolean> {
+    const isRequiredCurrentSnapshotRefresh = options.requireCurrentSnapshot === true;
+    if (!isRequiredCurrentSnapshotRefresh && requiredCurrentSnapshotRefreshInFlightRef.current) return false;
+
     if (shouldBlockLocalTrackerAccess) {
       refreshRequestRef.current += 1;
       setLoading(false);
       setError(null);
-      return;
+      return false;
     }
 
     const requestId = refreshRequestRef.current + 1;
     refreshRequestRef.current = requestId;
+    if (isRequiredCurrentSnapshotRefresh) requiredCurrentSnapshotRefreshInFlightRef.current = true;
     setLoading(true);
     setError(null);
 
@@ -1646,18 +1679,22 @@ export default function App() {
         return nextStatus;
       });
 
+      const currentSnapshotRequest = isRequiredCurrentSnapshotRefresh
+        ? trackerClient.getCurrentSnapshot()
+        : trackerClient.getCurrentSnapshot().catch(() => null);
+
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
         trackerClient.getHourlySummary(historySummaryRange),
         trackerClient.getTopSites({ ...historySummaryRange, limit: 8 }),
-        trackerClient.getCurrentSnapshot().catch(() => null),
+        currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
         statusRequest,
       ]);
 
-      if (refreshRequestRef.current !== requestId) return;
+      if (refreshRequestRef.current !== requestId) return false;
       const { historyTimeline } = archiveTimelines;
 
       setCurrentSnapshot(nextCurrentSnapshot);
@@ -1707,10 +1744,15 @@ export default function App() {
           setAppIcons({});
         }
       })();
+      return true;
     } catch (nextError) {
-      if (refreshRequestRef.current !== requestId) return;
+      if (refreshRequestRef.current !== requestId) return false;
       setError(toErrorMessage(nextError));
+      return false;
     } finally {
+      if (isRequiredCurrentSnapshotRefresh) {
+        requiredCurrentSnapshotRefreshInFlightRef.current = false;
+      }
       if (refreshRequestRef.current === requestId) {
         setLoading(false);
         setHasLoadedOnce(true);
@@ -1821,6 +1863,33 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, driftAlertsEnabled ? "1" : "0");
   }, [driftAlertsEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(DRIFT_ALERT_DELAY_STORAGE_KEY, String(driftAlertDelaySeconds));
+  }, [driftAlertDelaySeconds]);
+
+  useEffect(() => {
+    driftAlarmSnoozeUntilRef.current = driftAlarmSnoozeUntilMs;
+    if (driftAlarmSnoozeUntilMs === null) return undefined;
+
+    const delayMs = Math.max(0, driftAlarmSnoozeUntilMs - Date.now());
+    const timeoutId = window.setTimeout(() => {
+      void refresh(selectedDay, { requireCurrentSnapshot: true }).then((refreshed) => {
+        if (!refreshed) {
+          const retryUntilMs = Date.now() + 30_000;
+          driftAlarmSnoozeUntilRef.current = retryUntilMs;
+          setDriftAlarmSnoozeUntilMs(retryUntilMs);
+          return;
+        }
+
+        driftAlarmSnoozeUntilRef.current = null;
+        setDriftAlarmSnoozeUntilMs(null);
+        lastDriftAlertSegmentRef.current = null;
+      });
+    }, delayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [driftAlarmSnoozeUntilMs, selectedDay]);
 
   useEffect(() => {
     window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
@@ -2019,23 +2088,35 @@ export default function App() {
     if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return;
     if (!status?.running) return;
 
-    const driftSegments = segments
-      .filter((segment) => categorizeActivity(segment, selectedDayClassificationOptions) === "drift" && segment.durationSeconds >= DRIFT_ALERT_MIN_SECONDS)
-      .sort((left, right) => new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime());
-    const latestDrift = driftSegments[0];
-    if (!latestDrift) return;
+    const driftCandidates = buildDriftAlarmCandidates({
+      segments,
+      currentSnapshot,
+      classificationOptions: selectedDayClassificationOptions,
+      minimumDurationSeconds: driftAlertDelaySeconds,
+    });
+    const latestDrift = driftCandidates[0] ?? null;
+    if (!latestDrift) {
+      lastDriftAlertSegmentRef.current = null;
+      if (driftAlarmSnoozeUntilRef.current !== null) {
+        driftAlarmSnoozeUntilRef.current = null;
+        setDriftAlarmSnoozeUntilMs(null);
+      }
+      return;
+    }
 
-    const alertKey = `${latestDrift.id}:${latestDrift.endedAt}`;
-    const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds(segments, latestDrift, selectedDayClassificationOptions);
-    const showPreservedFocusDriftAlarm = () => {
-      if (preservedFocusStrikeSeconds === null || preservedFocusStrikeSeconds <= 0) return;
+    const snoozeUntilMs = driftAlarmSnoozeUntilRef.current;
+    if (snoozeUntilMs !== null) {
+      if (Date.now() < snoozeUntilMs) return;
+      return;
+    }
 
-      const { category } = classifyActivity(latestDrift, selectedDayClassificationOptions);
+    const { alertKey, category, segment } = latestDrift;
+    const showCurrentDriftAlarm = () => {
       showDriftAlarm(buildDriftAlarmEvent({
         id: alertKey,
-        contextLabel: getWatcherContextLabel(latestDrift, category),
-        driftDurationSeconds: latestDrift.durationSeconds,
-        preservedFocusStrikeSeconds,
+        contextLabel: getWatcherContextLabel(segment, category),
+        driftDurationSeconds: segment.durationSeconds,
+        preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
       }));
@@ -2043,15 +2124,15 @@ export default function App() {
 
     if (lastDriftAlertSegmentRef.current === null) {
       lastDriftAlertSegmentRef.current = alertKey;
-      showPreservedFocusDriftAlarm();
+      showCurrentDriftAlarm();
       return;
     }
     if (lastDriftAlertSegmentRef.current === alertKey) return;
 
     lastDriftAlertSegmentRef.current = alertKey;
-    showPreservedFocusDriftAlarm();
-    void sendDriftNotification(latestDrift);
-  }, [driftAlertsEnabled, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, status?.running]);
+    showCurrentDriftAlarm();
+    void sendDriftNotification(segment);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnoozeUntilMs, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -4129,12 +4210,13 @@ export default function App() {
                 )}
                 {settingsSection === "notifications" && (
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
-                    <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Send a macOS notification when a newly captured drift block runs for 5 minutes or longer.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
+                    <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
+                    <div className="settings-row"><div><div className="lbl">Drift alert timing</div><div className="desc">Choose how long drift must continue before the alarm appears.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span><small>{option.detail}</small></button>))}</div></div></div>
                     <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Show a local summary after 6:00 PM when the tracker is running, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
                     {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
                       <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
                     ) : null}
-                    {WATCHER_PEEK_PROTOTYPE_ENABLED && (
+                    {WATCHER_PEEK_SETTINGS_VISIBLE && WATCHER_PEEK_PROTOTYPE_ENABLED && (
                     <>
                     <div className="settings-row" role="group" aria-label="Peek watcher prototype"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Watcher mode</div><div className="desc">Choose regular check-ins or a quieter mode that only speaks when drift continues.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Watcher mode"><button type="button" className={`settings-mode-option${watcherMode === "periodic" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "periodic"} onClick={() => setWatcherMode("periodic")}><span>Periodic</span><small>Every few minutes</small></button><button type="button" className={`settings-mode-option${watcherMode === "drift_only" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "drift_only"} onClick={() => setWatcherMode("drift_only")}><span>Drift only</span><small>Quiet during focus</small></button></div></div></div>
@@ -4185,7 +4267,14 @@ export default function App() {
               onClose={() => setEndOfDayReviewEvent(null)}
             />
           ) : null}
-          <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} />
+          {driftAlarmEvent ? (
+            <div className="drift-alarm-browser-surface" aria-label="Drifty drift alarm browser overlay">
+              <div className="drift-alarm-browser-backdrop" aria-hidden="true" />
+              <div className="drift-alarm-browser-overlay">
+                <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} onCancel={dismissDriftAlarm} />
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
 
@@ -4297,7 +4386,7 @@ export default function App() {
           initialDisplayName={profileDraft.displayName}
           trackerStatus={status}
           accessibilityGranted={accessibilityGranted}
-          onRefreshTracker={refresh}
+          onRefreshTracker={() => refresh().then(() => undefined)}
           onStartTracking={handleStartTrackingFromOnboarding}
           onCheckAccessibility={handleCheckAccessibility}
           onRequestAccessibility={handleRequestAccessibility}
@@ -7845,39 +7934,186 @@ function getWatcherContextLabel(segment: ActivitySegment, category: ActivityCate
   return "this session";
 }
 
-function buildRecentFocusTargets(segments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {
+function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIconMap): DriftAlarmFocusTarget {
+  const appName = segment.appName.trim() || "Unknown app";
+  const bundleId = segment.bundleId?.trim() || null;
+  const siteDomain = segment.siteDomain?.trim() || null;
+  const siteTitle = segment.siteTitle?.trim() || null;
+  const windowTitle = segment.windowTitle?.trim() || null;
+  const iconKey = bundleId ?? appName;
+  const iconSrc = appIcons[iconKey] ?? appIcons[appName] ?? null;
+  const label = siteDomain ?? siteTitle ?? appName;
+  const detail = formatFocusTargetDetail({ appName, siteDomain, siteTitle, windowTitle });
+
+  return {
+    targetId: siteDomain ? `site:${siteDomain}` : `app:${bundleId ?? appName}`,
+    label,
+    detail,
+    appName,
+    bundleId,
+    siteDomain,
+    siteTitle,
+    iconSrc,
+  };
+}
+
+function getFocusTargetIdentity(target: DriftAlarmFocusTarget): string {
+  return (target.siteDomain ?? target.bundleId ?? target.appName).toLowerCase();
+}
+
+type DriftAlarmCandidate = {
+  alertKey: string;
+  category: ActivityCategory;
+  segment: ActivitySegment;
+};
+
+function buildDriftAlarmCandidates({
+  segments,
+  currentSnapshot,
+  classificationOptions,
+  minimumDurationSeconds,
+}: {
+  segments: ActivitySegment[];
+  currentSnapshot: CurrentActivitySnapshot | null;
+  classificationOptions: ClassificationOptions;
+  minimumDurationSeconds: number;
+}): DriftAlarmCandidate[] {
+  if (currentSnapshot) {
+    if (!isCurrentSnapshotFreshEnoughForDriftAlarm(currentSnapshot, segments)) return [];
+
+    const durationSeconds = getCurrentSnapshotAlarmDurationSeconds(currentSnapshot, segments);
+    const currentSegment = currentSnapshotToSegment(currentSnapshot, durationSeconds);
+    const currentClassificationOptions = {
+      ...classificationOptions,
+      fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
+    } satisfies ClassificationOptions;
+    const currentClassification = classifyActivity(currentSegment, currentClassificationOptions);
+
+    if (currentClassification.productivity === "drift" && currentSegment.durationSeconds >= minimumDurationSeconds) {
+      return [{
+        alertKey: `current:${currentSnapshotIdentity(currentSnapshot)}`,
+        category: currentClassification.category,
+        segment: currentSegment,
+      }];
+    }
+
+    return [];
+  }
+
+  const latestSegment = getLatestWatcherSegment(segments);
+  if (!latestSegment) return [];
+
+  const latestClassification = classifyActivity(latestSegment, classificationOptions);
+  if (latestClassification.productivity !== "drift" || latestSegment.durationSeconds < minimumDurationSeconds) return [];
+
+  return [{
+    alertKey: `${latestSegment.id}:${latestSegment.endedAt}`,
+    category: latestClassification.category,
+    segment: latestSegment,
+  }];
+}
+
+function isCurrentSnapshotFreshEnoughForDriftAlarm(current: CurrentActivitySnapshot, segments: ActivitySegment[]): boolean {
+  const latestSegment = getLatestWatcherSegment(segments);
+  if (!latestSegment) return true;
+  if (activitySegmentIdentity(latestSegment) === currentSnapshotIdentity(current)) return true;
+
+  const observedAt = new Date(current.observedAt).getTime();
+  const latestEndedAt = new Date(latestSegment.endedAt).getTime();
+  if (!Number.isFinite(observedAt) || !Number.isFinite(latestEndedAt)) return false;
+
+  return observedAt >= latestEndedAt;
+}
+
+function getCurrentSnapshotAlarmDurationSeconds(current: CurrentActivitySnapshot, segments: ActivitySegment[]): number {
+  const latestSegment = getLatestWatcherSegment(segments);
+  if (!latestSegment) return 0;
+  if (activitySegmentIdentity(latestSegment) !== currentSnapshotIdentity(current)) return 0;
+
+  const observedAt = new Date(current.observedAt).getTime();
+  const endedAt = new Date(latestSegment.endedAt).getTime();
+  const elapsedSeconds = Number.isFinite(observedAt) && Number.isFinite(endedAt) ? Math.max(0, Math.round((observedAt - endedAt) / 1000)) : 0;
+  return latestSegment.durationSeconds + elapsedSeconds;
+}
+
+function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {
   const targets: DriftAlarmFocusTarget[] = [];
   const seen = new Set<string>();
   const sortedFocusSegments = segments
     .filter((segment) => classifyActivity(segment, classificationOptions).productivity === "focus")
     .sort((left, right) => new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime());
 
-  for (const segment of sortedFocusSegments) {
-    const appName = segment.appName.trim() || "Unknown app";
-    const bundleId = segment.bundleId?.trim() || null;
-    const siteDomain = segment.siteDomain?.trim() || null;
-    const siteTitle = segment.siteTitle?.trim() || null;
-    const identityKey = siteDomain || bundleId || appName;
-    const dedupeKey = identityKey.toLowerCase();
-    if (seen.has(dedupeKey)) continue;
+  const addTarget = (target: DriftAlarmFocusTarget): boolean => {
+    const dedupeKey = getFocusTargetIdentity(target);
+    if (seen.has(dedupeKey)) return false;
 
     seen.add(dedupeKey);
-    const iconKey = bundleId ?? appName;
-    const iconSrc = appIcons[iconKey] ?? appIcons[appName] ?? null;
-    const label = siteDomain ?? siteTitle ?? appName;
-    const detail = formatFocusTargetDetail({ appName, siteDomain, siteTitle });
-    targets.push({
-      targetId: siteDomain ? `site:${siteDomain}` : `app:${bundleId ?? appName}`,
-      label,
-      detail,
+    targets.push(target);
+    return true;
+  };
+
+  const latestRecentFocusTarget = sortedFocusSegments[0] ? buildFocusTargetFromSegment(sortedFocusSegments[0], appIcons) : null;
+  if (latestRecentFocusTarget) addTarget(latestRecentFocusTarget);
+
+  const weeklyFocusStartMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weeklyClassificationOptions: ClassificationOptions = {
+    ...classificationOptions,
+    fallbackCandidates: historySegments,
+  };
+  const weeklyAppTargets = Array.from(historySegments.reduce((accumulator, segment) => {
+    const endedAtMs = new Date(segment.endedAt).getTime();
+    if (endedAtMs < weeklyFocusStartMs) return accumulator;
+    if (classifyActivity(segment, weeklyClassificationOptions).productivity !== "focus") return accumulator;
+
+    const appName = segment.appName.trim() || "Unknown app";
+    const bundleId = segment.bundleId?.trim() || null;
+    const identityKey = (bundleId ?? appName).toLowerCase();
+    const current = accumulator.get(identityKey) ?? {
       appName,
       bundleId,
-      siteDomain,
-      siteTitle,
-      iconSrc,
+      windowTitle: segment.windowTitle?.trim() || null,
+      totalSeconds: 0,
+      latestEndedAtMs: endedAtMs,
+    };
+
+    current.totalSeconds += segment.durationSeconds;
+    if (endedAtMs > current.latestEndedAtMs) {
+      current.appName = appName;
+      current.bundleId = bundleId;
+      current.windowTitle = segment.windowTitle?.trim() || null;
+      current.latestEndedAtMs = endedAtMs;
+    }
+
+    accumulator.set(identityKey, current);
+    return accumulator;
+  }, new Map<string, { appName: string; bundleId: string | null; windowTitle: string | null; totalSeconds: number; latestEndedAtMs: number }>()).values())
+    .sort((left, right) => {
+      const durationDelta = right.totalSeconds - left.totalSeconds;
+      if (durationDelta !== 0) return durationDelta;
+      return right.latestEndedAtMs - left.latestEndedAtMs;
+    })
+    .map((target) => {
+      const iconKey = target.bundleId ?? target.appName;
+      return {
+        targetId: `app:${target.bundleId ?? target.appName}`,
+        label: target.appName,
+        detail: formatFocusTargetDetail({ appName: target.appName, siteDomain: null, siteTitle: null, windowTitle: target.windowTitle }),
+        appName: target.appName,
+        bundleId: target.bundleId,
+        siteDomain: null,
+        siteTitle: null,
+        iconSrc: appIcons[iconKey] ?? appIcons[target.appName] ?? null,
+      } satisfies DriftAlarmFocusTarget;
     });
 
-    if (targets.length === 3) break;
+  let weeklyTargetsAdded = 0;
+  for (const target of weeklyAppTargets) {
+    if (addTarget(target)) weeklyTargetsAdded += 1;
+    if (weeklyTargetsAdded === 2) break;
+  }
+
+  for (const segment of sortedFocusSegments.slice(1)) {
+    if (addTarget(buildFocusTargetFromSegment(segment, appIcons))) break;
   }
 
   return targets;
@@ -7887,13 +8123,16 @@ function formatFocusTargetDetail({
   appName,
   siteDomain,
   siteTitle,
+  windowTitle,
 }: {
   appName: string;
   siteDomain: string | null;
   siteTitle: string | null;
+  windowTitle: string | null;
 }): string {
   if (siteDomain && siteTitle && siteTitle !== siteDomain) return `${siteTitle} · ${appName}`;
   if (siteDomain) return `Focus tab · ${appName}`;
+  if (windowTitle && windowTitle !== appName) return windowTitle;
   return "Recent focus app";
 }
 
@@ -8655,52 +8894,145 @@ function filterSegmentsForRange(segments: ActivitySegment[], start: string, end:
 }
 
 function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] {
-  const start = new Date(`${day}T09:00:00`);
-  const focusEnd = new Date(start.getTime() + 95 * 60 * 1000);
-  const driftStart = new Date(`${day}T14:15:00`);
-  const driftEnd = new Date(driftStart.getTime() + 35 * 60 * 1000);
-
-  return [
-    {
-      id: "end-of-day-review-preview-focus",
-      startedAt: start.toISOString(),
-      endedAt: focusEnd.toISOString(),
-      durationSeconds: 95 * 60,
-      appName: "Code",
-      bundleId: "com.microsoft.VSCode",
-      windowTitle: "Planning tomorrow",
+  const previewSegment = ({
+    id,
+    startHour,
+    startMinute = 0,
+    durationMinutes,
+    appName,
+    bundleId,
+    windowTitle,
+    category,
+    productivity,
+    browserName,
+    siteDomain,
+    siteTitle,
+    siteUrl,
+  }: {
+    id: string;
+    startHour: number;
+    startMinute?: number;
+    durationMinutes: number;
+    appName: string;
+    bundleId: string;
+    windowTitle: string;
+    category: ActivityCategory;
+    productivity: ProductivityLabel;
+    browserName?: string;
+    siteDomain?: string;
+    siteTitle?: string;
+    siteUrl?: string;
+  }): ActivitySegment => {
+    const startedAt = new Date(`${day}T${String(startHour).padStart(2, "0")}:${String(startMinute).padStart(2, "0")}:00`);
+    const endedAt = new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
+    return {
+      id,
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      durationSeconds: durationMinutes * 60,
+      appName,
+      bundleId,
+      browserName,
+      siteDomain,
+      siteTitle,
+      siteUrl,
+      windowTitle,
       platform: "macos",
       source: "nsworkspace",
       classification: {
-        category: "workspace",
-        productivity: "focus",
+        category,
+        productivity,
         source: "manual",
         confidence: 1,
         reason: "Deterministic end-of-day review preview",
       },
-    },
-    {
-      id: "end-of-day-review-preview-drift",
-      startedAt: driftStart.toISOString(),
-      endedAt: driftEnd.toISOString(),
-      durationSeconds: 35 * 60,
-      appName: "Google Chrome",
+    };
+  };
+
+  return [
+    previewSegment({
+      id: "end-of-day-review-preview-vscode-focus",
+      startHour: 9,
+      durationMinutes: 138,
+      appName: "VS Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "companion/DriftAlarm.tsx",
+      category: "workspace",
+      productivity: "focus",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-code-focus",
+      startHour: 11,
+      startMinute: 30,
+      durationMinutes: 28,
+      appName: "Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "EndOfDayReview.tsx",
+      category: "workspace",
+      productivity: "focus",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-figma-focus",
+      startHour: 13,
+      startMinute: 15,
+      durationMinutes: 42,
+      appName: "Figma",
+      bundleId: "com.figma.Desktop",
+      windowTitle: "Notification specs - frame 12",
+      category: "workspace",
+      productivity: "focus",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-youtube-drift",
+      startHour: 14,
+      startMinute: 20,
+      durationMinutes: 38,
+      appName: "YouTube",
       bundleId: "com.google.Chrome",
       browserName: "Google Chrome",
       siteDomain: "youtube.com",
       siteTitle: "Design rabbit hole",
       siteUrl: "https://youtube.com/watch?v=preview",
       windowTitle: "Design rabbit hole",
-      platform: "macos",
-      source: "nsworkspace",
-      classification: {
-        category: "entertainment",
-        productivity: "drift",
-        source: "manual",
-        confidence: 1,
-        reason: "Deterministic end-of-day review preview",
-      },
-    },
+      category: "entertainment",
+      productivity: "drift",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-slack-neutral",
+      startHour: 15,
+      startMinute: 30,
+      durationMinutes: 33,
+      appName: "Slack",
+      bundleId: "com.tinyspeck.slackmacgap",
+      windowTitle: "Product design sync",
+      category: "communication",
+      productivity: "neutral",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-unknown-neutral",
+      startHour: 17,
+      durationMinutes: 28,
+      appName: "Unknown",
+      bundleId: "com.drifty.preview.unknown",
+      windowTitle: "Unclassified local activity",
+      category: "unknown",
+      productivity: "neutral",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-social-drift",
+      startHour: 18,
+      startMinute: 20,
+      durationMinutes: 20,
+      appName: "X",
+      bundleId: "com.apple.Safari",
+      browserName: "Safari",
+      siteDomain: "x.com",
+      siteTitle: "Timeline",
+      siteUrl: "https://x.com/home",
+      windowTitle: "Timeline",
+      category: "social_media",
+      productivity: "drift",
+    }),
   ];
 }
 
@@ -8809,6 +9141,23 @@ function resolveInitialSidebarCollapsed(): boolean {
 function resolveInitialDriftAlertsEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return readMigratedLocalStorageValue(DRIFT_ALERTS_STORAGE_KEY, LEGACY_DRIFT_ALERTS_STORAGE_KEY) === "1";
+}
+
+function resolveInitialDriftAlertDelaySeconds(): DriftAlertDelaySeconds {
+  if (typeof window === "undefined") return 0;
+  return normalizeDriftAlertDelaySeconds(window.localStorage.getItem(DRIFT_ALERT_DELAY_STORAGE_KEY));
+}
+
+function normalizeDriftAlertDelaySeconds(value: string | number | null): DriftAlertDelaySeconds {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  return DRIFT_ALERT_DELAY_OPTIONS.some((option) => option.value === numericValue) ? numericValue as DriftAlertDelaySeconds : 0;
+}
+
+async function openFocusTargetSite(siteDomain: string): Promise<void> {
+  const domain = siteDomain.trim();
+  if (!domain) return;
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(`https://${domain}`);
 }
 
 function readMigratedLocalStorageValue(storageKey: string, legacyStorageKey: string): string | null {

@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
+import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 
 export type DriftAlarmAction =
   | { type: "return_to_focus"; targetId: string }
@@ -40,19 +42,18 @@ type DriftAlarmEventInput = {
   focusTargets?: DriftAlarmFocusTarget[];
 };
 
-type DriftAlarmActionView = {
-  label: string;
-  action: DriftAlarmAction;
-  tone?: "primary" | "quiet";
-};
-
 const DRIFT_ALARM_BREAK_OPTIONS = [5, 15, 30, 60] as const;
-const DRIFT_ALARM_FOCUS_TARGET_LIMIT = 3;
-
-const DRIFT_ALARM_SECONDARY_ACTIONS: DriftAlarmActionView[] = [
-  { label: "Correct timeline", action: { type: "manual_correction" } },
-  { label: "Alarm settings", action: { type: "settings" }, tone: "quiet" },
-];
+const DRIFT_ALARM_FOCUS_TARGET_LIMIT = 4;
+const DRIFT_ALARM_TITLE_ID = "drift-alarm-title";
+const DRIFT_ALARM_DESCRIPTION_ID = "drift-alarm-description";
+const DRIFT_ALARM_FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
 
 export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEvent {
   return {
@@ -67,126 +68,282 @@ export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEve
 export function DriftAlarm({
   event,
   onAction,
+  onCancel,
 }: {
   event: DriftAlarmEvent | null;
   onAction: (action: DriftAlarmAction) => void;
+  onCancel?: () => void;
 }) {
+  const alarmRef = useRef<HTMLElement | null>(null);
+  const eventId = event?.id ?? null;
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!eventId) return undefined;
+
+    const alarm = alarmRef.current;
+    if (!alarm) return undefined;
+
+    const previousFocus = document.activeElement instanceof HTMLElement && !alarm.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+    const initialFocusTarget = alarm.querySelector<HTMLElement>("[data-drift-alarm-initial-focus]")
+      ?? getDriftAlarmFocusableElements(alarm)[0]
+      ?? alarm;
+    const focusTimer = window.setTimeout(() => {
+      if (document.contains(alarm)) initialFocusTarget.focus({ preventScroll: true });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      if (previousFocus && document.contains(previousFocus)) previousFocus.focus({ preventScroll: true });
+    };
+  }, [eventId]);
+
+  useEffect(() => {
+    setSelectedActionId(null);
+    setIsDismissed(false);
+  }, [eventId]);
+
   if (!event) return null;
 
   const heatSource = event.contextLabel || "This drift";
   const focusTargets = event.focusTargets.slice(0, DRIFT_ALARM_FOCUS_TARGET_LIMIT);
+  const latestFocusTargetLabel = focusTargets[0]?.label ?? null;
+
+  const selectAction = (actionId: string, action: DriftAlarmAction) => {
+    setSelectedActionId(actionId);
+    setIsDismissed(false);
+    onAction(action);
+  };
+
+  const dismissAlarm = () => {
+    setSelectedActionId(null);
+    setIsDismissed(true);
+    onCancel?.();
+  };
+
+  const handleAlarmKeyDown = (keyboardEvent: KeyboardEvent<HTMLElement>) => {
+    if (keyboardEvent.key === "Escape") {
+      if (onCancel) {
+        keyboardEvent.preventDefault();
+        dismissAlarm();
+      }
+      return;
+    }
+
+    if (keyboardEvent.key !== "Tab") return;
+
+    const alarm = alarmRef.current;
+    if (!alarm) return;
+
+    const focusableElements = getDriftAlarmFocusableElements(alarm);
+    if (focusableElements.length === 0) {
+      keyboardEvent.preventDefault();
+      alarm.focus({ preventScroll: true });
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    const activeIndex = activeElement instanceof HTMLElement ? focusableElements.indexOf(activeElement) : -1;
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+
+    if (keyboardEvent.shiftKey) {
+      if (activeIndex <= 0) {
+        keyboardEvent.preventDefault();
+        lastFocusable.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    if (activeIndex === -1 || activeIndex === focusableElements.length - 1) {
+      keyboardEvent.preventDefault();
+      firstFocusable.focus({ preventScroll: true });
+    }
+  };
 
   return (
     <aside
-      className="watcher-peek watcher-peek--drift-alarm watcher-peek--top-right"
-      data-mood="drift"
-      data-phase="speaking"
-      data-presence="interrupting"
-      aria-label="Drifty drift alarm"
+      className={`da${isDismissed ? " is-dismissed" : ""}`}
+      ref={alarmRef}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={DRIFT_ALARM_TITLE_ID}
+      aria-describedby={DRIFT_ALARM_DESCRIPTION_ID}
       aria-live="assertive"
+      tabIndex={-1}
+      onKeyDown={handleAlarmKeyDown}
     >
-      <div className="watcher-peek__stage">
-        <div className="watcher-peek__orb" aria-hidden="true">
-          <span className="watcher-peek__orb-shadow" />
-          <span className="watcher-peek__orb-halo" />
-          <span className="watcher-peek__orb-ring watcher-peek__orb-ring--outer" />
-          <span className="watcher-peek__orb-ring watcher-peek__orb-ring--inner" />
-          <span className="watcher-peek__orb-core">
-            <span className="watcher-peek__orb-glow" />
-            <span className="watcher-peek__orb-glint watcher-peek__orb-glint--one" />
-            <span className="watcher-peek__orb-glint watcher-peek__orb-glint--two" />
-          </span>
-          <span className="watcher-peek__signal watcher-peek__signal--one" />
-          <span className="watcher-peek__signal watcher-peek__signal--two" />
-          <span className="watcher-peek__signal watcher-peek__signal--three" />
-          <span className="watcher-peek__signal watcher-peek__signal--four" />
+      <div className="da__topbar">
+        <img className="window-logo" src={driftyWordmarkUrl} alt="Drifty" />
+        <div className="da__chrome">
+          <button className="icon-btn" type="button" aria-label="Alarm settings" onClick={() => selectAction("settings", { type: "settings" })}>
+            <SettingsIcon />
+          </button>
+          <button className="icon-btn" type="button" aria-label="Dismiss drift alarm" onClick={dismissAlarm}>
+            <DismissIcon />
+          </button>
         </div>
-        <section className="watcher-peek__card">
-          <span className="watcher-peek__eyebrow">Ember check</span>
-          <h2>Your {event.preservedFocusStrikeLabel} focus flame is still alive.</h2>
-          <p>
-            {heatSource} has been pulling heat for {event.driftDurationLabel}. Choose your next move before the streak cools.
+      </div>
+
+      <div className="da__hero">
+        <div className="da__hero-copy">
+          <h2 id={DRIFT_ALARM_TITLE_ID}>Drift detected</h2>
+          <p className="da__drift" id={DRIFT_ALARM_DESCRIPTION_ID}>
+            <span className="src-tile src-tile--drift" aria-hidden="true">
+              <DriftSourceGlyph />
+            </span>
+            <span>{heatSource} · <strong>{event.driftDurationLabel} drift</strong></span>
           </p>
-          <div className="watcher-peek__decision-grid">
-            <section className="watcher-peek__choice-group" aria-labelledby="drift-alarm-focus-targets">
-              <h3 id="drift-alarm-focus-targets">Return to a warm focus trail</h3>
-              <div className="watcher-peek__target-list">
-                {focusTargets.length > 0 ? focusTargets.map((target) => (
-                  <button
-                    className="watcher-peek__target-button watcher-peek__action--primary"
-                    key={target.targetId}
-                    type="button"
-                    onClick={() => onAction({ type: "return_to_focus", targetId: target.targetId })}
-                  >
-                    <DriftAlarmFocusTargetIcon target={target} />
-                    <span className="watcher-peek__target-copy">
-                      <strong>{target.label}</strong>
-                      <small>{target.detail}</small>
-                    </span>
-                  </button>
-                )) : (
-                  <div className="watcher-peek__target-empty">
-                    <span>No recent focus destination yet.</span>
-                    <button
-                      className="watcher-peek__action watcher-peek__action--primary"
-                      type="button"
-                      onClick={() => onAction({ type: "return_to_focus", targetId: "dashboard" })}
-                    >
-                      Back to dashboard
-                    </button>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="watcher-peek__choice-group" aria-labelledby="drift-alarm-break-options">
-              <h3 id="drift-alarm-break-options">Bank the ember break</h3>
-              <div className="watcher-peek__break-options">
-                {event.breakOptions.map((minutes) => (
-                  <button
-                    className="watcher-peek__action watcher-peek__break-option"
-                    key={minutes}
-                    type="button"
-                    onClick={() => onAction({ type: "start_break", minutes })}
-                  >
-                    {formatBreakOption(minutes)}
-                  </button>
-                ))}
-              </div>
-            </section>
+          <div className="da__context" aria-label="Drift context">
+            <div className="da__context-pills">
+              <span className="da__context-pill">Now <strong>{heatSource}</strong></span>
+              {latestFocusTargetLabel ? (
+                <span className="da__context-pill">Latest focus <strong>{latestFocusTargetLabel}</strong></span>
+              ) : null}
+            </div>
           </div>
+        </div>
+      </div>
 
-          <div className="watcher-peek__actions watcher-peek__actions--secondary" aria-label="Secondary drift alarm actions">
-            {DRIFT_ALARM_SECONDARY_ACTIONS.map((item) => (
+      <div className="da__choices">
+        <section className="da__choice" aria-labelledby="drift-alarm-focus-targets">
+          <h3 className="overline da__choice-label" id="drift-alarm-focus-targets">Return to focus</h3>
+          <div className="da__target-list">
+            {focusTargets.length > 0 ? focusTargets.map((target, index) => (
               <button
-                className={`watcher-peek__action${item.tone ? ` watcher-peek__action--${item.tone}` : ""}`}
-                key={item.action.type}
+                className={`da__target${index === 0 ? " da__target--primary" : ""}${selectedActionId === `target:${target.targetId}` ? " is-selected" : ""}`}
+                key={target.targetId}
                 type="button"
-                onClick={() => onAction(item.action)}
+                onClick={() => selectAction(`target:${target.targetId}`, { type: "return_to_focus", targetId: target.targetId })}
+                data-drift-alarm-initial-focus={index === 0 ? "true" : undefined}
               >
-                {item.label}
+                <DriftAlarmFocusTargetIcon target={target} />
+                <span className="da__target-copy">
+                  <strong>{target.label}</strong>
+                  <small>{target.detail}</small>
+                </span>
+                <span className="da__target-go" aria-hidden="true">
+                  <ArrowRightIcon />
+                </span>
+              </button>
+            )) : (
+              <div className="da__target-empty">
+                <span>No recent focus destination yet.</span>
+                <button
+                  className={`da__target da__target--primary${selectedActionId === "target:dashboard" ? " is-selected" : ""}`}
+                  type="button"
+                  onClick={() => selectAction("target:dashboard", { type: "return_to_focus", targetId: "dashboard" })}
+                  data-drift-alarm-initial-focus="true"
+                >
+                  <span className="da__target-icon" aria-hidden="true"><span className="da__target-glyph">Dr</span></span>
+                  <span className="da__target-copy"><strong>Back to dashboard</strong><small aria-hidden="true">Choose a focus destination</small></span>
+                  <span className="da__target-go" aria-hidden="true"><ArrowRightIcon /></span>
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="da__choice da__choice--break" aria-labelledby="drift-alarm-break-options">
+          <h3 className="overline da__choice-label" id="drift-alarm-break-options">Take a break</h3>
+          <div className="da__breaks">
+            {event.breakOptions.map((minutes, index) => (
+              <button
+                className={`da__break${selectedActionId === `break:${minutes}` ? " is-selected" : ""}`}
+                key={minutes}
+                type="button"
+                onClick={() => selectAction(`break:${minutes}`, { type: "start_break", minutes })}
+              >
+                {index === 0 ? <BreakIcon /> : null}
+                <span>{formatBreakOption(minutes)}</span>
               </button>
             ))}
           </div>
         </section>
       </div>
+
+      <button className={`da__correct${selectedActionId === "manual_correction" ? " is-selected" : ""}`} type="button" onClick={() => selectAction("manual_correction", { type: "manual_correction" })}>
+        <FlagIcon />
+        Not a drift
+      </button>
     </aside>
   );
+}
+
+
+function getDriftAlarmFocusableElements(alarm: HTMLElement): HTMLElement[] {
+  return Array.from(alarm.querySelectorAll<HTMLElement>(DRIFT_ALARM_FOCUSABLE_SELECTOR))
+    .filter((element) => element.tabIndex >= 0 && element.getAttribute("aria-hidden") !== "true");
 }
 
 function DriftAlarmFocusTargetIcon({ target }: { target: DriftAlarmFocusTarget }) {
   if (target.siteDomain) {
     return (
-      <span className="watcher-peek__target-icon">
+      <span className="da__target-icon">
         <SiteFavicon domain={target.siteDomain} size={22} fallbackIconSrc={target.iconSrc} />
       </span>
     );
   }
 
   return (
-    <span className="watcher-peek__target-icon">
+    <span className="da__target-icon">
       <AppGlyph appName={target.appName || target.label} iconSrc={target.iconSrc} size="sm" />
     </span>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z" />
+    </svg>
+  );
+}
+
+function DismissIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
+    </svg>
+  );
+}
+
+function DriftSourceGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M9 7.3v9.4l7.5-4.7z" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h13M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function BreakIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 8h10v6a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V8z" />
+      <path d="M16 10h1.4a2.1 2.1 0 0 1 0 4.2H16" />
+      <path d="M8 3.5v2M12 3.5v2M16 3.5v2" />
+      <path d="M5 21h13" />
+    </svg>
+  );
+}
+
+function FlagIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 21V4M6 4h11l-2 3.4L17 11H6" />
+    </svg>
   );
 }
 
