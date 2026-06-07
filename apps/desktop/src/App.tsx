@@ -5925,7 +5925,8 @@ function WeekDashboard({
     const bodyRect = body.getBoundingClientRect();
     const timelineOffset = ((autoScrollTargetMinute - minCalendarMinute) / 60) * calendarHourHeight;
     const bodyTop = bodyRect.top - scrollerRect.top + scroller.scrollTop;
-    const viewportAnchor = Math.max(96, scroller.clientHeight * 0.35);
+    const weekTimelineViewportAnchorRatio = 0.58;
+    const viewportAnchor = Math.max(96, scroller.clientHeight * weekTimelineViewportAnchorRatio);
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const nextScrollTop = Math.min(maxScrollTop, Math.max(0, bodyTop + timelineOffset - viewportAnchor));
 
