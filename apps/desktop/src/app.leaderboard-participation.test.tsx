@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
-import { shiftIsoDate, todayIsoDate } from "@dtime/domain";
+import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";

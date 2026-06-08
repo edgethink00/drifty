@@ -1,11 +1,14 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
-import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment } from "@dtime/domain";
+import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment, type AppIconMap } from "@drifty/domain";
+import { AppGlyph } from "../../components/AppGlyph";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 
 type ReviewBreakdownKey = "focus" | "drift" | "other";
 
 export type EndOfDayReviewTopSource = {
   appName: string;
+  bundleId?: string | null;
+  iconSrc?: string | null;
   sourceLabel: string;
   durationSeconds: number;
 };
@@ -94,11 +97,13 @@ export function buildEndOfDayReviewSummary({
   day,
   generatedAt,
   segments,
+  appIcons = {},
   isMock = false,
 }: {
   day: string;
   generatedAt: string;
   segments: ActivitySegment[];
+  appIcons?: AppIconMap;
   isMock?: boolean;
 }): EndOfDayReviewEvent {
   const totalSeconds = segments.reduce((total, segment) => total + segment.durationSeconds, 0);
@@ -117,10 +122,10 @@ export function buildEndOfDayReviewSummary({
     totalSeconds,
     focusSeconds,
     driftSeconds,
-    topSource: buildTopSource(segments),
-    breakdownSources: buildBreakdownSources(segments),
+    topSource: buildTopSource(segments, appIcons),
+    breakdownSources: buildBreakdownSources(segments, appIcons),
     categorySummaries: buildCategorySummaries(segments, totalSeconds),
-    sourceSummaries: buildSourceSummaries(segments, totalSeconds),
+    sourceSummaries: buildSourceSummaries(segments, totalSeconds, appIcons),
     isMock: isMock || undefined,
   };
 }
@@ -392,6 +397,14 @@ function ReviewSourceList({ sources, totalSeconds }: { sources: EndOfDayReviewSo
 }
 
 function ReviewSourceIcon({ source }: { source: EndOfDayReviewSourceSummary }) {
+  if (source.iconSrc) {
+    return (
+      <span className="src-tile src-tile--app-icon" aria-hidden="true">
+        <AppGlyph appName={source.appName} iconSrc={source.iconSrc} size="sm" />
+      </span>
+    );
+  }
+
   const sourceName = `${source.appName} ${source.sourceLabel}`.toLowerCase();
 
   if (sourceName.includes("vs code") || sourceName.includes("visual studio code") || source.appName.toLowerCase() === "code") {
@@ -422,13 +435,13 @@ function ReviewSourceIcon({ source }: { source: EndOfDayReviewSourceSummary }) {
 
   return (
     <span className="src-tile" aria-hidden="true">
-      <span className="glyph glyph--task">{source.appName.slice(0, 2)}</span>
+      <AppGlyph appName={source.appName} size="sm" />
     </span>
   );
 }
 
-function buildTopSource(segments: ActivitySegment[]): EndOfDayReviewTopSource | null {
-  return buildTopSourceFromSegments(segments);
+function buildTopSource(segments: ActivitySegment[], appIcons: AppIconMap): EndOfDayReviewTopSource | null {
+  return buildTopSourceFromSegments(segments, appIcons);
 }
 
 function buildCategorySummaries(segments: ActivitySegment[], totalSeconds: number): EndOfDayReviewCategorySummary[] {
@@ -449,14 +462,17 @@ function buildCategorySummaries(segments: ActivitySegment[], totalSeconds: numbe
     .slice(0, 5);
 }
 
-function buildSourceSummaries(segments: ActivitySegment[], totalSeconds: number): EndOfDayReviewSourceSummary[] {
+function buildSourceSummaries(segments: ActivitySegment[], totalSeconds: number, appIcons: AppIconMap): EndOfDayReviewSourceSummary[] {
   return buildAppUsageSummaries(segments, { limit: 3, groupBy: "app" }).map((summary) => {
     const appSegments = segments.filter((segment) => segment.appName === summary.appName);
     const topSource = buildAppUsageSummaries(appSegments, { limit: 1 })[0];
     const sourceLabel = topSource ? sourceLabelForSummary(topSource) : summary.appName;
+    const bundleId = summary.bundleId ?? null;
 
     return {
       appName: summary.appName,
+      bundleId,
+      iconSrc: resolveAppIconSrc(summary.appName, bundleId, appIcons),
       sourceLabel,
       durationSeconds: summary.totalSeconds,
       percent: safePercent(summary.totalSeconds, totalSeconds),
@@ -464,26 +480,34 @@ function buildSourceSummaries(segments: ActivitySegment[], totalSeconds: number)
   });
 }
 
-function buildBreakdownSources(segments: ActivitySegment[]): EndOfDayReviewBreakdownSource[] {
+function buildBreakdownSources(segments: ActivitySegment[], appIcons: AppIconMap): EndOfDayReviewBreakdownSource[] {
   return (["focus", "drift", "other"] as ReviewBreakdownKey[]).flatMap((key) => {
-    const source = buildTopSourceFromSegments(segments.filter((segment) => matchesBreakdownKey(segment, key)));
+    const source = buildTopSourceFromSegments(segments.filter((segment) => matchesBreakdownKey(segment, key)), appIcons);
     return source ? [{ ...source, key }] : [];
   });
 }
 
-function buildTopSourceFromSegments(segments: ActivitySegment[]): EndOfDayReviewTopSource | null {
+function buildTopSourceFromSegments(segments: ActivitySegment[], appIcons: AppIconMap): EndOfDayReviewTopSource | null {
   const topApp = buildAppUsageSummaries(segments, { limit: 1, groupBy: "app" })[0];
   if (!topApp) return null;
 
   const appSegments = segments.filter((segment) => segment.appName === topApp.appName);
   const topSource = buildAppUsageSummaries(appSegments, { limit: 1 })[0];
   const sourceLabel = topSource ? sourceLabelForSummary(topSource) : topApp.appName;
+  const bundleId = topApp.bundleId ?? null;
 
   return {
     appName: topApp.appName,
+    bundleId,
+    iconSrc: resolveAppIconSrc(topApp.appName, bundleId, appIcons),
     sourceLabel,
     durationSeconds: topApp.totalSeconds,
   };
+}
+
+function resolveAppIconSrc(appName: string, bundleId: string | null, appIcons: AppIconMap): string | null {
+  if (bundleId && appIcons[bundleId]) return appIcons[bundleId];
+  return appIcons[appName] ?? null;
 }
 
 function matchesBreakdownKey(segment: ActivitySegment, key: ReviewBreakdownKey): boolean {

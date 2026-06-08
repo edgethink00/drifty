@@ -4,8 +4,8 @@
     "types": ["vite/client", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "@dtime/domain": ["../../packages/domain/src/index.ts"],
-      "@dtime/charts": ["../../packages/charts/src/index.tsx"]
+      "@drifty/domain": ["../../packages/domain/src/index.ts"],
+      "@drifty/charts": ["../../packages/charts/src/index.tsx"]
     }
   },
   "include": ["src", "vite.config.ts"]

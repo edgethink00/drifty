@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
+    window::{Effect, EffectState, EffectsBuilder},
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, State, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder,
 };
@@ -12,6 +13,7 @@ pub const DRIFT_ALARM_WINDOW_LABEL: &str = "drift-alarm";
 #[serde(rename_all = "camelCase")]
 pub struct DriftAlarmPayload {
     pub id: String,
+    pub mode: DriftAlarmMode,
     pub context_label: String,
     pub drift_duration_label: String,
     pub drift_duration_seconds: i64,
@@ -20,6 +22,23 @@ pub struct DriftAlarmPayload {
     pub generated_at: String,
     pub break_options: Vec<i64>,
     pub focus_targets: Vec<DriftAlarmFocusTarget>,
+    pub break_return: Option<DriftAlarmBreakReturnDetails>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftAlarmMode {
+    Drift,
+    BreakReturn,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriftAlarmBreakReturnDetails {
+    pub break_duration_minutes: i64,
+    pub break_duration_label: String,
+    pub paused_from_label: String,
+    pub next_focus_label: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -74,6 +93,12 @@ pub fn setup_drift_alarm_window(app: &tauri::App) -> tauri::Result<()> {
     .always_on_top(true)
     .visible_on_all_workspaces(true)
     .transparent(true)
+    .effects(
+        EffectsBuilder::new()
+            .effect(Effect::UnderWindowBackground)
+            .state(EffectState::Active)
+            .build(),
+    )
     .visible(false)
     .build()?;
 

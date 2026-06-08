@@ -20,7 +20,14 @@ export type DriftAlarmFocusTarget = {
   iconSrc: string | null;
 };
 
-export type DriftAlarmEvent = {
+export type DriftAlarmBreakReturnDetails = {
+  breakDurationMinutes: number;
+  breakDurationLabel: string;
+  pausedFromLabel: string;
+  nextFocusLabel: string;
+};
+
+type DriftAlarmEventBase = {
   id: string;
   contextLabel: string;
   driftDurationLabel: string;
@@ -32,6 +39,11 @@ export type DriftAlarmEvent = {
   focusTargets: DriftAlarmFocusTarget[];
 };
 
+export type DriftAlarmEvent = DriftAlarmEventBase & (
+  | { mode: "drift"; breakReturn: null }
+  | { mode: "break_return"; breakReturn: DriftAlarmBreakReturnDetails }
+);
+
 type DriftAlarmEventInput = {
   id: string;
   contextLabel: string;
@@ -40,6 +52,12 @@ type DriftAlarmEventInput = {
   generatedAt: string;
   breakOptions?: number[];
   focusTargets?: DriftAlarmFocusTarget[];
+};
+
+type BreakReturnAlarmEventInput = DriftAlarmEventInput & {
+  breakDurationMinutes: number;
+  pausedFromLabel: string;
+  nextFocusLabel: string;
 };
 
 const DRIFT_ALARM_BREAK_OPTIONS = [5, 15, 30, 60] as const;
@@ -58,10 +76,32 @@ const DRIFT_ALARM_FOCUSABLE_SELECTOR = [
 export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEvent {
   return {
     ...input,
+    mode: "drift",
+    breakReturn: null,
     driftDurationLabel: formatDuration(input.driftDurationSeconds),
     preservedFocusStrikeLabel: formatFocusStrike(input.preservedFocusStrikeSeconds),
     breakOptions: normalizeBreakOptions(input.breakOptions),
     focusTargets: normalizeFocusTargets(input.focusTargets),
+  };
+}
+
+export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): DriftAlarmEvent {
+  const { breakDurationMinutes, pausedFromLabel, nextFocusLabel, ...eventInput } = input;
+  const breakOptions = normalizeBreakOptions(input.breakOptions);
+  const focusTargets = normalizeFocusTargets(input.focusTargets);
+  return {
+    ...eventInput,
+    mode: "break_return",
+    breakReturn: {
+      breakDurationMinutes,
+      breakDurationLabel: formatBreakOption(breakDurationMinutes),
+      pausedFromLabel: pausedFromLabel.trim() || "This drift",
+      nextFocusLabel: nextFocusLabel.trim() || focusTargets[0]?.label || "your focus",
+    },
+    driftDurationLabel: formatDuration(input.driftDurationSeconds),
+    preservedFocusStrikeLabel: formatFocusStrike(input.preservedFocusStrikeSeconds),
+    breakOptions,
+    focusTargets,
   };
 }
 
@@ -108,9 +148,13 @@ export function DriftAlarm({
 
   if (!event) return null;
 
+  const isBreakReturn = event.mode === "break_return";
   const heatSource = event.contextLabel || "This drift";
   const focusTargets = event.focusTargets.slice(0, DRIFT_ALARM_FOCUS_TARGET_LIMIT);
   const latestFocusTargetLabel = focusTargets[0]?.label ?? null;
+  const breakReturn = event.breakReturn;
+  const titleId = isBreakReturn ? "break-return-alarm-title" : DRIFT_ALARM_TITLE_ID;
+  const descriptionId = isBreakReturn ? "break-return-alarm-description" : DRIFT_ALARM_DESCRIPTION_ID;
 
   const selectAction = (actionId: string, action: DriftAlarmAction) => {
     setSelectedActionId(actionId);
@@ -166,13 +210,13 @@ export function DriftAlarm({
 
   return (
     <aside
-      className={`da${isDismissed ? " is-dismissed" : ""}`}
+      className={`da${isBreakReturn ? " da--return" : ""}${isDismissed ? " is-dismissed" : ""}`}
       ref={alarmRef}
       role="alertdialog"
       aria-modal="true"
-      aria-labelledby={DRIFT_ALARM_TITLE_ID}
-      aria-describedby={DRIFT_ALARM_DESCRIPTION_ID}
-      aria-live="assertive"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      aria-live={isBreakReturn ? "polite" : "assertive"}
       tabIndex={-1}
       onKeyDown={handleAlarmKeyDown}
     >
@@ -182,7 +226,7 @@ export function DriftAlarm({
           <button className="icon-btn" type="button" aria-label="Alarm settings" onClick={() => selectAction("settings", { type: "settings" })}>
             <SettingsIcon />
           </button>
-          <button className="icon-btn" type="button" aria-label="Dismiss drift alarm" onClick={dismissAlarm}>
+          <button className="icon-btn" type="button" aria-label={isBreakReturn ? "Dismiss break return alarm" : "Dismiss drift alarm"} onClick={dismissAlarm}>
             <DismissIcon />
           </button>
         </div>
@@ -190,19 +234,36 @@ export function DriftAlarm({
 
       <div className="da__hero">
         <div className="da__hero-copy">
-          <h2 id={DRIFT_ALARM_TITLE_ID}>Drift detected</h2>
-          <p className="da__drift" id={DRIFT_ALARM_DESCRIPTION_ID}>
-            <span className="src-tile src-tile--drift" aria-hidden="true">
-              <DriftSourceGlyph />
+          {isBreakReturn && breakReturn ? (
+            <h2 className="da__hero-title" id={titleId}><span className="da__time-prefix">{breakReturn.breakDurationLabel}</span><span>Break finished</span></h2>
+          ) : (
+            <h2 id={titleId}>Drift detected</h2>
+          )}
+          <p className="da__drift" id={descriptionId}>
+            <span className={`src-tile${isBreakReturn ? "" : " src-tile--drift"}`} aria-hidden="true">
+              {isBreakReturn && breakReturn ? <span className="da__target-glyph">{breakReturn.breakDurationMinutes}</span> : <DriftSourceGlyph />}
             </span>
-            <span>{heatSource} · <strong>{event.driftDurationLabel} drift</strong></span>
+            {isBreakReturn && breakReturn ? (
+              <span>Break · <strong>{breakReturn.breakDurationLabel} complete</strong></span>
+            ) : (
+              <span>{heatSource} · <strong>{event.driftDurationLabel} drift</strong></span>
+            )}
           </p>
-          <div className="da__context" aria-label="Drift context">
+          <div className="da__context" aria-label={isBreakReturn ? "Break return context" : "Drift context"}>
             <div className="da__context-pills">
-              <span className="da__context-pill">Now <strong>{heatSource}</strong></span>
-              {latestFocusTargetLabel ? (
-                <span className="da__context-pill">Latest focus <strong>{latestFocusTargetLabel}</strong></span>
-              ) : null}
+              {isBreakReturn && breakReturn ? (
+                <>
+                  <span className="da__context-pill">Paused from <strong>{breakReturn.pausedFromLabel}</strong></span>
+                  <span className="da__context-pill">Next focus <strong>{breakReturn.nextFocusLabel}</strong></span>
+                </>
+              ) : (
+                <>
+                  <span className="da__context-pill">Now <strong>{heatSource}</strong></span>
+                  {latestFocusTargetLabel ? (
+                    <span className="da__context-pill">Latest focus <strong>{latestFocusTargetLabel}</strong></span>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -248,7 +309,7 @@ export function DriftAlarm({
         </section>
 
         <section className="da__choice da__choice--break" aria-labelledby="drift-alarm-break-options">
-          <h3 className="overline da__choice-label" id="drift-alarm-break-options">Take a break</h3>
+          <h3 className="overline da__choice-label" id="drift-alarm-break-options">{isBreakReturn ? "Extend break" : "Take a break"}</h3>
           <div className="da__breaks">
             {event.breakOptions.map((minutes, index) => (
               <button

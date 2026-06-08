@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
-import { FLOW_INTERVAL_OPTIONS, logicalMinuteOfDay, secondsToLabel, type ActivityCategory, type ClassificationSource, type FlowBlock, type FlowIntervalMinutes, type ProductivityLabel } from "@dtime/domain";
+import { FLOW_INTERVAL_OPTIONS, logicalMinuteOfDay, secondsToLabel, type ActivityCategory, type ClassificationSource, type FlowBlock, type FlowIntervalMinutes, type ProductivityLabel } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 

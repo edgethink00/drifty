@@ -8,15 +8,13 @@ import {
 } from "./driftAlarmBridge";
 
 const DRIFT_ALARM_THEME_STORAGE_KEY = "drifty.theme";
-const LEGACY_DRIFT_ALARM_THEME_STORAGE_KEY = "dtime.theme";
 const DRIFT_ALARM_DEFAULT_THEME = "light";
 
 export function DriftAlarmWindowApp() {
   const [event, setEvent] = useState<DriftAlarmEvent | null>(null);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem(DRIFT_ALARM_THEME_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_DRIFT_ALARM_THEME_STORAGE_KEY);
-    if (window.localStorage.getItem(DRIFT_ALARM_THEME_STORAGE_KEY) === null && savedTheme !== null) window.localStorage.setItem(DRIFT_ALARM_THEME_STORAGE_KEY, savedTheme);
+    const savedTheme = window.localStorage.getItem(DRIFT_ALARM_THEME_STORAGE_KEY);
     const theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : DRIFT_ALARM_DEFAULT_THEME;
     document.documentElement.dataset.surface = "drift-alarm";
     document.documentElement.dataset.theme = theme;
@@ -54,6 +52,7 @@ export function DriftAlarmWindowApp() {
   }, []);
 
   const handleAction = useCallback((action: DriftAlarmAction) => {
+    setEvent(null);
     void triggerNativeDriftAlarmAction(action);
   }, []);
 

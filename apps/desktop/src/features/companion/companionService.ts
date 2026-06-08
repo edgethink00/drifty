@@ -35,11 +35,10 @@ type CompanionRow = {
 };
 
 const COMPANION_SUMMARY_CODE_PREFIX = "DRIFTY-IOS-V1";
-const LEGACY_COMPANION_SUMMARY_CODE_PREFIX = "DTIME-IOS-V1";
 
 export function parseCompanionSummaryCode(value: string): CompanionSummaryCode | null {
   const parts = value.trim().split("|");
-  if (parts.length !== 8 || ![COMPANION_SUMMARY_CODE_PREFIX, LEGACY_COMPANION_SUMMARY_CODE_PREFIX].includes(parts[0])) return null;
+  if (parts.length !== 8 || parts[0] !== COMPANION_SUMMARY_CODE_PREFIX) return null;
 
   const focusMinutesToday = Number(parts[4]);
   const sessionsCompletedToday = Number(parts[5]);

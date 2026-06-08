@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@dtime/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -33,7 +33,7 @@ import {
   shiftIsoDate,
   todayIsoDate,
   totalDurationSeconds,
-} from "@dtime/domain";
+} from "@drifty/domain";
 import logoUrl from "./assets/drifty-icon.png";
 import { AppGlyph } from "./components/AppGlyph";
 import { SiteFavicon } from "./components/SiteFavicon";
@@ -76,6 +76,7 @@ import {
 } from "./features/companion/EndOfDayReview";
 import {
   DriftAlarm,
+  buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
   type DriftAlarmAction,
   type DriftAlarmEvent,
@@ -127,6 +128,13 @@ type NavigationSnapshot = {
 type NavigationHistoryState = {
   entries: NavigationSnapshot[];
   index: number;
+};
+
+type DriftAlarmBreakSnooze = {
+  untilMs: number;
+  minutes: number;
+  pausedFromLabel: string;
+  focusTargets: DriftAlarmFocusTarget[];
 };
 
 const commandBarTabs = [
@@ -481,10 +489,15 @@ type ClassificationActivityRow = {
   hasDetails: boolean;
 };
 
+type EndOfDayReviewSummaryInput = {
+  day: string;
+  generatedAt: string;
+  segments: ActivitySegment[];
+  isMock?: boolean;
+};
+
 const THEME_STORAGE_KEY = "drifty.theme";
-const LEGACY_THEME_STORAGE_KEY = "dtime.theme";
 const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
-const LEGACY_DRIFT_ALERTS_STORAGE_KEY = "dtime.notifications.driftAlerts";
 const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
 const WATCHER_PEEK_STORAGE_KEY = "drifty.companion.watcherPeek";
 const WATCHER_MODE_STORAGE_KEY = "drifty.companion.watcherMode";
@@ -492,15 +505,8 @@ const WATCHER_PERIODIC_MIN_STORAGE_KEY = "drifty.companion.periodicMinMinutes";
 const WATCHER_PERIODIC_MAX_STORAGE_KEY = "drifty.companion.periodicMaxMinutes";
 const WATCHER_RESPONSE_STORAGE_KEY = "drifty.companion.watcherResponses";
 const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
-const LEGACY_WATCHER_PEEK_STORAGE_KEY = "dtime.companion.watcherPeek";
-const LEGACY_WATCHER_MODE_STORAGE_KEY = "dtime.companion.watcherMode";
-const LEGACY_WATCHER_PERIODIC_MIN_STORAGE_KEY = "dtime.companion.periodicMinMinutes";
-const LEGACY_WATCHER_PERIODIC_MAX_STORAGE_KEY = "dtime.companion.periodicMaxMinutes";
-const LEGACY_WATCHER_RESPONSE_STORAGE_KEY = "dtime.companion.watcherResponses";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
-const LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY = "dtime.sidebar.collapsed";
 const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
-const LEGACY_AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "dtime.dev.showAiClassificationImpact";
 const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
 const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
 const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
@@ -782,11 +788,54 @@ function classifySegmentSourceKey(segment: ActivitySegment): string {
   return `app:${segment.appName}`;
 }
 
+function isChromeLikeBrowserName(value: string | null | undefined): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  return /\b(chrome|chromium|chrome canary|brave|microsoft edge|vivaldi|opera)\b/.test(normalized);
+}
+
+function isChromeTitleBrowserChunk(value: string): boolean {
+  return /^(google chrome|chrome|chromium|chrome canary|brave browser|brave|microsoft edge|edge|vivaldi|opera)$/i.test(value.trim());
+}
+
+function isChromeVolatileTitleChunk(value: string): boolean {
+  const normalized = value.trim();
+  return normalized === "오디오 재생"
+    || normalized === "메모리 사용량 많음"
+    || /^\d+(?:\.\d+)?\s*(?:MB|GB)$/i.test(normalized);
+}
+
+function stableChromeWindowTitle(segment: ActivitySegment, title: string): string | null {
+  if (!isChromeLikeBrowserName(segment.appName) && !isChromeLikeBrowserName(segment.browserName)) return null;
+
+  const parts = title.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const youtubeIndex = parts.findIndex((part) => part === "YouTube");
+  const hasBrowserSuffix = parts.some(isChromeTitleBrowserChunk);
+  const hasVolatileSuffix = parts.some(isChromeVolatileTitleChunk);
+  if (youtubeIndex > 0 && (hasBrowserSuffix || hasVolatileSuffix)) {
+    return parts.slice(0, youtubeIndex).join(" - ");
+  }
+
+  let end = parts.length;
+  if (end >= 2 && isChromeTitleBrowserChunk(parts[end - 2])) end -= 1;
+  if (end > 0 && isChromeTitleBrowserChunk(parts[end - 1])) end -= 1;
+  while (end > 0 && isChromeVolatileTitleChunk(parts[end - 1])) end -= 1;
+  if (end > 0 && parts[end - 1] === "YouTube" && (hasBrowserSuffix || hasVolatileSuffix)) end -= 1;
+
+  if (end > 0 && end < parts.length) return parts.slice(0, end).join(" - ");
+  return null;
+}
+
 function classificationActivityLabel(segment: ActivitySegment): string {
-  return (segment.windowTitle || "").trim()
+  const windowTitle = (segment.windowTitle || "").trim();
+  const stableWindowTitle = windowTitle ? stableChromeWindowTitle(segment, windowTitle) : null;
+  const rawLabel = stableWindowTitle
+    || windowTitle
     || (segment.siteTitle || "").trim()
     || (segment.siteDomain || "").trim()
     || segment.appName;
+  return sanitizeCaptureText(rawLabel);
 }
 
 function segmentHasUsefulCaptureDetails(segment: ActivitySegment, rowLabel: string): boolean {
@@ -828,8 +877,12 @@ function truncateCaptureSummary(value: string): string {
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
 }
 
+function sanitizeCaptureText(value: string): string {
+  return value.replace(/https?:\/\/\S+/gi, "[link]").replace(/\bwww\.\S+/gi, "[link]").trim().replace(/\s+/g, " ");
+}
+
 function safeCaptureSummary(value: string): string {
-  return truncateCaptureSummary(value.replace(/https?:\/\/\S+/gi, "[link]").replace(/\bwww\.\S+/gi, "[link]"));
+  return truncateCaptureSummary(sanitizeCaptureText(value));
 }
 
 function captureSurfaceDetails(segment: ActivitySegment): string[] {
@@ -976,6 +1029,7 @@ export default function App() {
   const [insightHourly, setInsightHourly] = useState<HourBucket[]>([]);
   const [insightTopSites, setInsightTopSites] = useState<SiteDuration[]>([]);
   const [appIcons, setAppIcons] = useState<AppIconMap>({});
+  const appIconsRef = useRef<AppIconMap>({});
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -996,7 +1050,7 @@ export default function App() {
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
-  const [driftAlarmSnoozeUntilMs, setDriftAlarmSnoozeUntilMs] = useState<number | null>(null);
+  const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
@@ -1029,6 +1083,10 @@ export default function App() {
   const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
   const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
+
+  useEffect(() => {
+    appIconsRef.current = appIcons;
+  }, [appIcons]);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
     setNavigationHistory((current) => {
@@ -1296,7 +1354,7 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
-  const driftAlarmSnoozeUntilRef = useRef<number | null>(null);
+  const driftAlarmSnoozeRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
@@ -1308,6 +1366,7 @@ export default function App() {
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmRequestInFlightRef = useRef(false);
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
@@ -1531,15 +1590,32 @@ export default function App() {
     }
   }, []);
 
+  const buildEndOfDayReviewEvent = useCallback(async (input: EndOfDayReviewSummaryInput): Promise<EndOfDayReviewEvent> => {
+    const currentAppIcons = appIconsRef.current;
+    const baseEvent = buildEndOfDayReviewSummary({ ...input, appIcons: currentAppIcons });
+    const missingIconRequests = input.isMock ? [] : collectMissingEndOfDayReviewIconRequests(baseEvent);
+    if (!isTauriRuntime() || missingIconRequests.length === 0) return baseEvent;
+
+    try {
+      const resolvedIcons = await trackerClient.getAppIcons(missingIconRequests);
+      return buildEndOfDayReviewSummary({
+        ...input,
+        appIcons: mergeResolvedAppIcons(currentAppIcons, missingIconRequests, resolvedIcons),
+      });
+    } catch {
+      return baseEvent;
+    }
+  }, []);
+
   const handleEndOfDayReviewPreview = useCallback(() => {
     const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
-    showEndOfDayReview(buildEndOfDayReviewSummary({
+    void buildEndOfDayReviewEvent({
       day: selectedDay,
       generatedAt: new Date().toISOString(),
       segments: previewSegments,
       isMock: true,
-    }));
-  }, [segments, selectedDay, showEndOfDayReview]);
+    }).then(showEndOfDayReview);
+  }, [buildEndOfDayReviewEvent, segments, selectedDay, showEndOfDayReview]);
 
   const clearDriftAlarmEvent = useCallback(() => {
     driftAlarmEventRef.current = null;
@@ -1548,7 +1624,8 @@ export default function App() {
   }, []);
 
   const showDriftAlarm = useCallback((event: DriftAlarmEvent) => {
-    if (driftAlarmEventRef.current?.id === event.id) return;
+    const currentEvent = driftAlarmEventRef.current;
+    if (currentEvent?.id === event.id && !hasDriftAlarmFocusTargetIconUpgrade(currentEvent, event)) return;
     if (driftAlarmRequestInFlightRef.current) {
       pendingDriftAlarmEventRef.current = event;
       return;
@@ -1627,8 +1704,18 @@ export default function App() {
       }
       case "start_break": {
         const snoozeUntilMs = Date.now() + action.minutes * 60_000;
-        driftAlarmSnoozeUntilRef.current = snoozeUntilMs;
-        setDriftAlarmSnoozeUntilMs(snoozeUntilMs);
+        const pausedFromLabel = currentAlarmEvent?.mode === "break_return"
+          ? currentAlarmEvent.breakReturn.pausedFromLabel
+          : currentAlarmEvent?.contextLabel || "This drift";
+        const nextSnooze = {
+          untilMs: snoozeUntilMs,
+          minutes: action.minutes,
+          pausedFromLabel,
+          focusTargets: currentAlarmEvent?.focusTargets ?? [],
+        } satisfies DriftAlarmBreakSnooze;
+        pendingBreakReturnAlarmRef.current = null;
+        driftAlarmSnoozeRef.current = nextSnooze;
+        setDriftAlarmSnooze(nextSnooze);
         return;
       }
     }
@@ -1768,8 +1855,8 @@ export default function App() {
   }
 
   useEffect(() => {
-    window.__DTIME_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
-    window.__DTIME_BOOTSTRAPPED__ = true;
+    window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
+    window.__DRIFTY_BOOTSTRAPPED__ = true;
     document.getElementById("boot-shell")?.remove();
   }, []);
 
@@ -1876,27 +1963,28 @@ export default function App() {
   }, [driftAlertDelaySeconds]);
 
   useEffect(() => {
-    driftAlarmSnoozeUntilRef.current = driftAlarmSnoozeUntilMs;
-    if (driftAlarmSnoozeUntilMs === null) return undefined;
+    driftAlarmSnoozeRef.current = driftAlarmSnooze;
+    if (driftAlarmSnooze === null) return undefined;
 
-    const delayMs = Math.max(0, driftAlarmSnoozeUntilMs - Date.now());
+    const delayMs = Math.max(0, driftAlarmSnooze.untilMs - Date.now());
     const timeoutId = window.setTimeout(() => {
       void refresh(selectedDay, { requireCurrentSnapshot: true }).then((refreshed) => {
         if (!refreshed) {
-          const retryUntilMs = Date.now() + 30_000;
-          driftAlarmSnoozeUntilRef.current = retryUntilMs;
-          setDriftAlarmSnoozeUntilMs(retryUntilMs);
+          const retrySnooze = { ...driftAlarmSnooze, untilMs: Date.now() + 30_000 } satisfies DriftAlarmBreakSnooze;
+          driftAlarmSnoozeRef.current = retrySnooze;
+          setDriftAlarmSnooze(retrySnooze);
           return;
         }
 
-        driftAlarmSnoozeUntilRef.current = null;
-        setDriftAlarmSnoozeUntilMs(null);
+        pendingBreakReturnAlarmRef.current = driftAlarmSnooze;
+        driftAlarmSnoozeRef.current = null;
+        setDriftAlarmSnooze(null);
         lastDriftAlertSegmentRef.current = null;
       });
     }, delayMs);
 
     return () => window.clearTimeout(timeoutId);
-  }, [driftAlarmSnoozeUntilMs, selectedDay]);
+  }, [driftAlarmSnooze, selectedDay]);
 
   useEffect(() => {
     window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
@@ -2102,31 +2190,62 @@ export default function App() {
       minimumDurationSeconds: driftAlertDelaySeconds,
     });
     const latestDrift = driftCandidates[0] ?? null;
+    const activeSnooze = driftAlarmSnoozeRef.current;
+    if (activeSnooze !== null) {
+      if (Date.now() < activeSnooze.untilMs) return;
+      return;
+    }
+
+    const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
+    if (pendingBreakReturnAlarm) {
+      const focusTargets = pendingBreakReturnAlarm.focusTargets.length
+        ? pendingBreakReturnAlarm.focusTargets
+        : recentDriftAlarmFocusTargets;
+      const breakReturnContextLabel = latestDrift
+        ? getWatcherContextLabel(latestDrift.segment, latestDrift.category)
+        : pendingBreakReturnAlarm.pausedFromLabel;
+      const breakReturnIdContext = latestDrift?.alertKey ?? "no-drift";
+
+      showDriftAlarm(buildBreakReturnAlarmEvent({
+        id: `break-return:${breakReturnIdContext}:${pendingBreakReturnAlarm.untilMs}`,
+        contextLabel: breakReturnContextLabel,
+        driftDurationSeconds: latestDrift?.segment.durationSeconds ?? 0,
+        preservedFocusStrikeSeconds: 0,
+        generatedAt: new Date().toISOString(),
+        focusTargets,
+        breakDurationMinutes: pendingBreakReturnAlarm.minutes,
+        pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
+        nextFocusLabel: focusTargets[0]?.label ?? "your focus",
+      }));
+      pendingBreakReturnAlarmRef.current = null;
+      lastDriftAlertSegmentRef.current = latestDrift?.alertKey ?? null;
+      return;
+    }
+
     if (!latestDrift) {
       lastDriftAlertSegmentRef.current = null;
-      if (driftAlarmSnoozeUntilRef.current !== null) {
-        driftAlarmSnoozeUntilRef.current = null;
-        setDriftAlarmSnoozeUntilMs(null);
+      if (driftAlarmSnoozeRef.current !== null) {
+        driftAlarmSnoozeRef.current = null;
+        setDriftAlarmSnooze(null);
       }
       return;
     }
 
-    const snoozeUntilMs = driftAlarmSnoozeUntilRef.current;
-    if (snoozeUntilMs !== null) {
-      if (Date.now() < snoozeUntilMs) return;
-      return;
-    }
-
     const { alertKey, category, segment } = latestDrift;
-    const showCurrentDriftAlarm = () => {
-      showDriftAlarm(buildDriftAlarmEvent({
+    const buildCurrentDriftAlarmEvent = () => {
+      const contextLabel = getWatcherContextLabel(segment, category);
+
+      return buildDriftAlarmEvent({
         id: alertKey,
-        contextLabel: getWatcherContextLabel(segment, category),
+        contextLabel,
         driftDurationSeconds: segment.durationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
-      }));
+      });
+    };
+    const showCurrentDriftAlarm = () => {
+      showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
 
     if (lastDriftAlertSegmentRef.current === null) {
@@ -2134,12 +2253,17 @@ export default function App() {
       showCurrentDriftAlarm();
       return;
     }
-    if (lastDriftAlertSegmentRef.current === alertKey) return;
+    if (lastDriftAlertSegmentRef.current === alertKey) {
+      if (driftAlarmEventRef.current?.id === alertKey) {
+        showCurrentDriftAlarm();
+      }
+      return;
+    }
 
     lastDriftAlertSegmentRef.current = alertKey;
     showCurrentDriftAlarm();
     void sendDriftNotification(segment);
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnoozeUntilMs, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -2290,7 +2414,7 @@ export default function App() {
   const isBootstrappingTracker = loading && status === null;
   const trackerModeLabel = status?.trackerMode ?? "unknown";
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
-  const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/dtime-demo.sqlite3";
+  const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle due to inactivity" : isDemoMode ? "Preview active" : "Tracking live") : (isDemoMode ? "Preview paused" : "Tracking paused");
   const trackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Resume tracking";
@@ -2334,13 +2458,13 @@ export default function App() {
     if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
 
     endOfDayReviewQueryPreviewShownRef.current = true;
-    showEndOfDayReview(buildEndOfDayReviewSummary({
+    void buildEndOfDayReviewEvent({
       day: todayDay,
       generatedAt: new Date().toISOString(),
       segments: buildMockEndOfDayReviewSegments(todayDay),
       isMock: true,
-    }));
-  }, [hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
+    }).then(showEndOfDayReview);
+  }, [buildEndOfDayReviewEvent, hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
   useEffect(() => {
     if (!hasLoadedOnce) return;
@@ -2350,14 +2474,14 @@ export default function App() {
     if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
     if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
 
-    void showEndOfDayReview(buildEndOfDayReviewSummary({
+    void buildEndOfDayReviewEvent({
       day: todayDay,
       generatedAt: new Date().toISOString(),
       segments,
-    })).then((shown) => {
+    }).then(showEndOfDayReview).then((shown) => {
       if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
     });
-  }, [currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
   const activeInsightCategoryTotals = useMemo(
@@ -3909,9 +4033,13 @@ export default function App() {
                                             {row.segments.map((segment, index) => {
                                               const segmentRange = `${formatTimeLabel(segment.startedAt)} - ${formatTimeLabel(segment.endedAt)}`;
                                               const segmentDuration = formatCompactDurationFromSeconds(segment.durationSeconds);
+                                              const segmentTitle = classificationActivityLabel(segment);
                                               return (
-                                                <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentRange}, ${segmentDuration}`}>
-                                                  <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
+                                                <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentTitle}, ${segmentRange}, ${segmentDuration}`}>
+                                                  <div className="classification-panel-view__capture-slice-copy">
+                                                    <strong className="classification-panel-view__capture-slice-title" title={segmentTitle}>{segmentTitle}</strong>
+                                                    <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
+                                                  </div>
                                                   <strong className="classification-panel-view__capture-slice-duration">{segmentDuration}</strong>
                                                 </div>
                                               );
@@ -5989,7 +6117,8 @@ function WeekDashboard({
     const bodyRect = body.getBoundingClientRect();
     const timelineOffset = ((autoScrollTargetMinute - minCalendarMinute) / 60) * calendarHourHeight;
     const bodyTop = bodyRect.top - scrollerRect.top + scroller.scrollTop;
-    const viewportAnchor = Math.max(96, scroller.clientHeight * 0.35);
+    const weekTimelineViewportAnchorRatio = 0.58;
+    const viewportAnchor = Math.max(96, scroller.clientHeight * weekTimelineViewportAnchorRatio);
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const nextScrollTop = Math.min(maxScrollTop, Math.max(0, bodyTop + timelineOffset - viewportAnchor));
 
@@ -7918,7 +8047,7 @@ function getRecentWatcherResponse(): StoredWatcherResponse | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const rawValue = readMigratedLocalStorageValue(WATCHER_RESPONSE_STORAGE_KEY, LEGACY_WATCHER_RESPONSE_STORAGE_KEY);
+    const rawValue = window.localStorage.getItem(WATCHER_RESPONSE_STORAGE_KEY);
     const responses: unknown = rawValue ? JSON.parse(rawValue) : [];
     if (!Array.isArray(responses)) return null;
     const latest = responses[responses.length - 1] as Partial<StoredWatcherResponse> | undefined;
@@ -8023,6 +8152,15 @@ function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIcon
 
 function getFocusTargetIdentity(target: DriftAlarmFocusTarget): string {
   return (target.siteDomain ?? target.bundleId ?? target.appName).toLowerCase();
+}
+
+function hasDriftAlarmFocusTargetIconUpgrade(currentEvent: DriftAlarmEvent, nextEvent: DriftAlarmEvent): boolean {
+  const currentTargetsById = new Map(currentEvent.focusTargets.map((target) => [target.targetId, target]));
+  return nextEvent.focusTargets.some((nextTarget) => {
+    if (!nextTarget.iconSrc) return false;
+    const currentTarget = currentTargetsById.get(nextTarget.targetId);
+    return currentTarget?.iconSrc !== nextTarget.iconSrc;
+  });
 }
 
 type DriftAlarmCandidate = {
@@ -8242,7 +8380,7 @@ function persistWatcherResponse(event: WatcherPeekEvent, response: WatcherPeekRe
   if (typeof window === "undefined") return;
 
   try {
-    const rawValue = readMigratedLocalStorageValue(WATCHER_RESPONSE_STORAGE_KEY, LEGACY_WATCHER_RESPONSE_STORAGE_KEY);
+    const rawValue = window.localStorage.getItem(WATCHER_RESPONSE_STORAGE_KEY);
     const existingResponses: unknown = rawValue ? JSON.parse(rawValue) : [];
     const responses = Array.isArray(existingResponses) ? existingResponses.slice(-19) : [];
     responses.push({
@@ -8957,6 +9095,28 @@ function filterSegmentsForRange(segments: ActivitySegment[], start: string, end:
   });
 }
 
+function collectMissingEndOfDayReviewIconRequests(event: EndOfDayReviewEvent): AppIdentity[] {
+  return (event.sourceSummaries ?? []).flatMap((source) => {
+    if (source.iconSrc) return [];
+    return [{ appName: source.appName, bundleId: source.bundleId ?? null }];
+  });
+}
+
+function mergeResolvedAppIcons(currentIcons: AppIconMap, identities: AppIdentity[], resolvedIcons: AppIconMap): AppIconMap {
+  const nextIcons = { ...currentIcons };
+
+  for (const identity of identities) {
+    const identityKey = identity.bundleId || identity.appName;
+    const iconSrc = resolvedIcons[identityKey] ?? resolvedIcons[identity.appName] ?? null;
+    if (!iconSrc) continue;
+
+    nextIcons[identityKey] = iconSrc;
+    nextIcons[identity.appName] = iconSrc;
+  }
+
+  return nextIcons;
+}
+
 function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] {
   const previewSegment = ({
     id,
@@ -9182,7 +9342,7 @@ function resolveInitialAppThemeColorOverrides(): AppThemeColorOverrides {
 
 function resolveInitialTheme(): ThemeMode {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  const saved = readMigratedLocalStorageValue(THEME_STORAGE_KEY, LEGACY_THEME_STORAGE_KEY);
+  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (saved === "light" || saved === "dark") { applyThemeToDocument(saved); return saved; }
   applyThemeToDocument(DEFAULT_THEME);
   return DEFAULT_THEME;
@@ -9190,21 +9350,12 @@ function resolveInitialTheme(): ThemeMode {
 
 function resolveInitialSidebarCollapsed(): boolean {
   if (typeof window === "undefined") return false;
-  const savedValue = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
-  if (savedValue !== null) return savedValue === "1";
-
-  const legacyValue = window.localStorage.getItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY);
-  if (legacyValue !== null) {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, legacyValue);
-    return legacyValue === "1";
-  }
-
-  return false;
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
 }
 
 function resolveInitialDriftAlertsEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return readMigratedLocalStorageValue(DRIFT_ALERTS_STORAGE_KEY, LEGACY_DRIFT_ALERTS_STORAGE_KEY) === "1";
+  return window.localStorage.getItem(DRIFT_ALERTS_STORAGE_KEY) === "1";
 }
 
 function resolveInitialDriftAlertDelaySeconds(): DriftAlertDelaySeconds {
@@ -9224,30 +9375,22 @@ async function openFocusTargetSite(siteDomain: string): Promise<void> {
   await openUrl(`https://${domain}`);
 }
 
-function readMigratedLocalStorageValue(storageKey: string, legacyStorageKey: string): string | null {
-  const savedValue = window.localStorage.getItem(storageKey);
-  if (savedValue !== null) return savedValue;
-
-  const legacyValue = window.localStorage.getItem(legacyStorageKey);
-  if (legacyValue !== null) window.localStorage.setItem(storageKey, legacyValue);
-  return legacyValue;
-}
 
 function resolveInitialWatcherPeekEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  const savedValue = readMigratedLocalStorageValue(WATCHER_PEEK_STORAGE_KEY, LEGACY_WATCHER_PEEK_STORAGE_KEY);
+  const savedValue = window.localStorage.getItem(WATCHER_PEEK_STORAGE_KEY);
   if (savedValue === null) return false;
   return savedValue === "1";
 }
 
 function resolveInitialWatcherMode(): WatcherMode {
   if (typeof window === "undefined") return "periodic";
-  return readMigratedLocalStorageValue(WATCHER_MODE_STORAGE_KEY, LEGACY_WATCHER_MODE_STORAGE_KEY) === "drift_only" ? "drift_only" : "periodic";
+  return window.localStorage.getItem(WATCHER_MODE_STORAGE_KEY) === "drift_only" ? "drift_only" : "periodic";
 }
 
 function resolveInitialAiClassificationVisibility(): boolean {
   if (typeof window === "undefined") return true;
-  return readMigratedLocalStorageValue(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, LEGACY_AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
+  return window.localStorage.getItem(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
 }
 
 function isForbiddenOpenRouterModel(model: string): boolean {
@@ -9323,8 +9466,7 @@ function resolveInitialLocalAiSetup(): LocalAiSetupState {
 function resolveInitialWatcherPeriodicMinutes(boundary: "min" | "max"): number {
   if (typeof window === "undefined") return DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES[boundary];
   const key = boundary === "min" ? WATCHER_PERIODIC_MIN_STORAGE_KEY : WATCHER_PERIODIC_MAX_STORAGE_KEY;
-  const legacyKey = boundary === "min" ? LEGACY_WATCHER_PERIODIC_MIN_STORAGE_KEY : LEGACY_WATCHER_PERIODIC_MAX_STORAGE_KEY;
-  return normalizeWatcherPeriodicMinutes(readMigratedLocalStorageValue(key, legacyKey), DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES[boundary]);
+  return normalizeWatcherPeriodicMinutes(window.localStorage.getItem(key), DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES[boundary]);
 }
 
 function normalizeWatcherPeriodicMinutes(value: string | null, fallback: number): number {

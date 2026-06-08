@@ -13,7 +13,7 @@ import {
   topSites,
   type ActivitySegment,
   type ProductivityPersonaId,
-} from '@dtime/domain';
+} from '@drifty/domain';
 
 const segments: ActivitySegment[] = [
   {

@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type { TrackerStatus } from "@dtime/domain";
+import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { Dropdown } from "./components/Dropdown";
 import { TypewriterSequence } from "./components/TypewriterSequence";
@@ -655,7 +655,7 @@ export function OnboardingModal({
               </div>
             </div>
 
-            <div className="onboarding-middle">
+            <div className={`onboarding-middle onboarding-middle--${step}`}>
               <h1
                 className={`onboarding-title${titleIsVisible ? "" : " onb-visually-hidden"}`}
                 id="onboarding-title"

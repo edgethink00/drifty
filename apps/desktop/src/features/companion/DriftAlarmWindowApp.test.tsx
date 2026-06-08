@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DriftAlarmWindowApp } from "./DriftAlarmWindowApp";
-import type { DriftAlarmEvent } from "./DriftAlarm";
+import type { DriftAlarmBreakReturnDetails, DriftAlarmEvent } from "./DriftAlarm";
 
 const bridge = vi.hoisted(() => ({
   callOrder: [] as string[],
@@ -28,9 +28,18 @@ vi.mock("./driftAlarmBridge", () => ({
   triggerNativeDriftAlarmAction: bridge.triggerNativeDriftAlarmAction,
 }));
 
+const defaultBreakReturn = {
+  breakDurationMinutes: 15,
+  breakDurationLabel: "15m",
+  pausedFromLabel: "YouTube",
+  nextFocusLabel: "Visual Studio Code",
+} satisfies DriftAlarmBreakReturnDetails;
+
 function event(overrides: Partial<DriftAlarmEvent> = {}): DriftAlarmEvent {
-  return {
+  const baseEvent = {
     id: "alarm-1",
+    mode: "drift",
+    breakReturn: null,
     contextLabel: "youtube.com",
     driftDurationLabel: "2m",
     driftDurationSeconds: 2 * 60,
@@ -50,7 +59,22 @@ function event(overrides: Partial<DriftAlarmEvent> = {}): DriftAlarmEvent {
         iconSrc: null,
       },
     ],
+  } satisfies DriftAlarmEvent;
+
+  if (overrides.mode === "break_return") {
+    return {
+      ...baseEvent,
+      ...overrides,
+      mode: "break_return",
+      breakReturn: overrides.breakReturn ?? defaultBreakReturn,
+    };
+  }
+
+  return {
+    ...baseEvent,
     ...overrides,
+    mode: "drift",
+    breakReturn: null,
   };
 }
 
@@ -99,6 +123,37 @@ describe("DriftAlarmWindowApp", () => {
     fireEvent.click(screen.getByRole("button", { name: /visual studio code/i }));
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledWith({ type: "return_to_focus", targetId: "app:com.microsoft.VSCode" });
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "Drift detected" })).toBeNull());
+  });
+
+  it("renders a native break-return payload and forwards Extend break", async () => {
+    bridge.currentPayload = event({
+      id: "break-return-15",
+      mode: "break_return",
+      breakReturn: {
+        breakDurationMinutes: 15,
+        breakDurationLabel: "15m",
+        pausedFromLabel: "YouTube",
+        nextFocusLabel: "Visual Studio Code",
+      },
+      contextLabel: "YouTube",
+    });
+
+    const { container } = render(<DriftAlarmWindowApp />);
+    await act(async () => undefined);
+
+    const alarm = screen.getByRole("alertdialog", { name: "15m Break finished" });
+    expect(alarm.classList.contains("da--return")).toBe(true);
+    expect(container.querySelector(".drift-alarm-overlay .da--return")).toBe(alarm);
+    expect(screen.getByText(/Break ·/i)).toBeTruthy();
+    expect(screen.getByText("15m complete")).toBeTruthy();
+    expect(screen.getByText(/Paused from/i)).toBeTruthy();
+    expect(screen.getByText(/Next focus/i)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /extend break/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "15m" }));
+    expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 });
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "15m Break finished" })).toBeNull());
   });
 
   it("dismisses the native alarm webview surface on Escape", async () => {

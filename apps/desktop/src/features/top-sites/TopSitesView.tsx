@@ -1,4 +1,4 @@
-import type { SiteDuration } from "@dtime/domain";
+import type { SiteDuration } from "@drifty/domain";
 import { SiteFavicon } from "../../components/SiteFavicon";
 
 export function TopSitesView({

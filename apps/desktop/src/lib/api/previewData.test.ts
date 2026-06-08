@@ -14,18 +14,13 @@ describe("previewData", () => {
     expect(shouldUsePreviewData()).toBe(true);
   });
 
-  it("keeps the legacy dtime preview env flag as a fallback", () => {
-    vi.stubEnv("VITE_DTIME_PREVIEW", "1");
-    expect(shouldUsePreviewData()).toBe(true);
-  });
 
-  it("uses Drifty query and storage keys while migrating legacy storage", () => {
+  it("uses Drifty query and storage keys", () => {
     window.history.replaceState(null, "", "/?driftyPreview=1");
     expect(shouldUsePreviewData()).toBe(true);
 
     window.history.replaceState(null, "", "/");
-    window.localStorage.setItem("dtime.preview", "1");
+    window.localStorage.setItem("drifty.preview", "1");
     expect(shouldUsePreviewData()).toBe(true);
-    expect(window.localStorage.getItem("drifty.preview")).toBe("1");
   });
 });

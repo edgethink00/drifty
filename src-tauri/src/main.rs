@@ -1,4 +1,4 @@
 fn main() {
-    dtime_lib::run();
+    drifty_lib::run();
 }
 

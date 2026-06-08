@@ -13,11 +13,11 @@ export default defineConfig(({ command, mode }) => {
     resolve: {
       alias: [
         {
-          find: "@dtime/domain",
+          find: "@drifty/domain",
           replacement: new URL("../../packages/domain/src/index.ts", import.meta.url).pathname,
         },
         {
-          find: "@dtime/charts",
+          find: "@drifty/charts",
           replacement: new URL("../../packages/charts/src/index.tsx", import.meta.url).pathname,
         },
       ],

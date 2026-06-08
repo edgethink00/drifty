@@ -10,7 +10,7 @@ pub const WATCHER_PEEK_WINDOW_LABEL: &str = "watcher-peek";
 const WATCHER_PEEK_WIDTH: f64 = 560.0;
 const WATCHER_PEEK_HEIGHT: f64 = 340.0;
 const END_OF_DAY_REVIEW_WIDTH: f64 = 560.0;
-const END_OF_DAY_REVIEW_HEIGHT: f64 = 620.0;
+const END_OF_DAY_REVIEW_HEIGHT: f64 = 720.0;
 const WATCHER_PEEK_WORK_AREA_MARGIN: f64 = 32.0;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -307,7 +307,7 @@ mod tests {
         let (width, height) = watcher_window_dimensions_for_payload(&payload);
 
         assert_eq!(width, 560.0);
-        assert_eq!(height, 620.0);
+        assert_eq!(height, 720.0);
     }
 
     #[test]
