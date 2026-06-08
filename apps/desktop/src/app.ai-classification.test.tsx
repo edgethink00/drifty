@@ -208,6 +208,16 @@ function createUsageSummary(overrides: Partial<AiClassificationUsageSummary>): A
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 const selectedDayUsage = createUsageSummary({
   requests: 1,
   llmRequests: 1,
@@ -376,6 +386,8 @@ describe("App AI classification controls", () => {
     trackerClient.start.mockResolvedValue({ running: true, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.stop.mockResolvedValue({ running: false, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.updateTrayProductivityIcon.mockResolvedValue(undefined);
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
     aiClassificationMocks.getAiClassificationUsageSummary.mockImplementation((day: string) => Promise.resolve(
       day === todayIsoDate()
         ? executionUsageAfterAvailable ? executionUsageAfter : executionUsageBefore
@@ -544,6 +556,70 @@ describe("App AI classification controls", () => {
     expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
   });
 
+  it("does not auto-run cloud AI classification when Drifty Cloud entitlement is locked", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: {
+        plan: "individual",
+        status: "locked",
+        canUseApp: false,
+        trialEndsAt: "2026-05-20T00:00:00.000Z",
+        currentPeriodEnd: null,
+        lockedReason: "trial_expired",
+      },
+    });
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD));
+
+    render(<App />);
+
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
+
+    expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+    expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+  });
+
+  it("waits for a usable Drifty Cloud entitlement before auto-running cloud AI classification", async () => {
+    const today = todayIsoDate();
+    const entitlementRequest = createDeferred<{
+      success: true;
+      data: { plan: "individual"; status: "active"; canUseApp: true; trialEndsAt: null; currentPeriodEnd: null };
+    }>();
+    billingMocks.fetchBillingEntitlement.mockReturnValue(entitlementRequest.promise);
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
+
+    render(<App />);
+
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+
+    entitlementRequest.resolve({
+      success: true,
+      data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
+    });
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
+      { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
+      AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+    ));
+  });
+
+  it("does not auto-run cloud AI classification when billing entitlement cannot be loaded", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: false, error: "Unable to check billing status." });
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD));
+
+    render(<App />);
+
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+
+    expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+    expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+  });
+
   it("auto-runs signed-out AI classification when self-hosted AI is configured locally", async () => {
     const today = todayIsoDate();
     authState.user = null;
@@ -595,11 +671,14 @@ describe("App AI classification controls", () => {
   });
 
   it("auto-runs one 5-item batch after 20 focused idle minutes", async () => {
-    const dateNow = vi.spyOn(Date, "now")
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
-      .mockImplementation(() => AI_CLASSIFICATION_FOCUSED_IDLE_MS + 1);
+    let recordedInteraction = false;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => {
+      if (new Error().stack?.includes("recordRendererInteraction")) {
+        recordedInteraction = true;
+        return 0;
+      }
+      return recordedInteraction ? AI_CLASSIFICATION_FOCUSED_IDLE_MS + 1 : 0;
+    });
     const today = todayIsoDate();
     setRendererFocus(true);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, today));
