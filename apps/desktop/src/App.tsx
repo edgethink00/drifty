@@ -76,6 +76,7 @@ import {
 } from "./features/companion/EndOfDayReview";
 import {
   DriftAlarm,
+  buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
   type DriftAlarmAction,
   type DriftAlarmEvent,
@@ -126,6 +127,13 @@ type NavigationSnapshot = {
 type NavigationHistoryState = {
   entries: NavigationSnapshot[];
   index: number;
+};
+
+type DriftAlarmBreakSnooze = {
+  untilMs: number;
+  minutes: number;
+  pausedFromLabel: string;
+  focusTargets: DriftAlarmFocusTarget[];
 };
 
 const commandBarTabs = [
@@ -994,7 +1002,7 @@ export default function App() {
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
-  const [driftAlarmSnoozeUntilMs, setDriftAlarmSnoozeUntilMs] = useState<number | null>(null);
+  const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
@@ -1292,7 +1300,7 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
-  const driftAlarmSnoozeUntilRef = useRef<number | null>(null);
+  const driftAlarmSnoozeRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
@@ -1304,6 +1312,7 @@ export default function App() {
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmRequestInFlightRef = useRef(false);
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
@@ -1641,8 +1650,18 @@ export default function App() {
       }
       case "start_break": {
         const snoozeUntilMs = Date.now() + action.minutes * 60_000;
-        driftAlarmSnoozeUntilRef.current = snoozeUntilMs;
-        setDriftAlarmSnoozeUntilMs(snoozeUntilMs);
+        const pausedFromLabel = currentAlarmEvent?.mode === "break_return"
+          ? currentAlarmEvent.breakReturn.pausedFromLabel
+          : currentAlarmEvent?.contextLabel || "This drift";
+        const nextSnooze = {
+          untilMs: snoozeUntilMs,
+          minutes: action.minutes,
+          pausedFromLabel,
+          focusTargets: currentAlarmEvent?.focusTargets ?? [],
+        } satisfies DriftAlarmBreakSnooze;
+        pendingBreakReturnAlarmRef.current = null;
+        driftAlarmSnoozeRef.current = nextSnooze;
+        setDriftAlarmSnooze(nextSnooze);
         return;
       }
     }
@@ -1890,27 +1909,28 @@ export default function App() {
   }, [driftAlertDelaySeconds]);
 
   useEffect(() => {
-    driftAlarmSnoozeUntilRef.current = driftAlarmSnoozeUntilMs;
-    if (driftAlarmSnoozeUntilMs === null) return undefined;
+    driftAlarmSnoozeRef.current = driftAlarmSnooze;
+    if (driftAlarmSnooze === null) return undefined;
 
-    const delayMs = Math.max(0, driftAlarmSnoozeUntilMs - Date.now());
+    const delayMs = Math.max(0, driftAlarmSnooze.untilMs - Date.now());
     const timeoutId = window.setTimeout(() => {
       void refresh(selectedDay, { requireCurrentSnapshot: true }).then((refreshed) => {
         if (!refreshed) {
-          const retryUntilMs = Date.now() + 30_000;
-          driftAlarmSnoozeUntilRef.current = retryUntilMs;
-          setDriftAlarmSnoozeUntilMs(retryUntilMs);
+          const retrySnooze = { ...driftAlarmSnooze, untilMs: Date.now() + 30_000 } satisfies DriftAlarmBreakSnooze;
+          driftAlarmSnoozeRef.current = retrySnooze;
+          setDriftAlarmSnooze(retrySnooze);
           return;
         }
 
-        driftAlarmSnoozeUntilRef.current = null;
-        setDriftAlarmSnoozeUntilMs(null);
+        pendingBreakReturnAlarmRef.current = driftAlarmSnooze;
+        driftAlarmSnoozeRef.current = null;
+        setDriftAlarmSnooze(null);
         lastDriftAlertSegmentRef.current = null;
       });
     }, delayMs);
 
     return () => window.clearTimeout(timeoutId);
-  }, [driftAlarmSnoozeUntilMs, selectedDay]);
+  }, [driftAlarmSnooze, selectedDay]);
 
   useEffect(() => {
     window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
@@ -2116,32 +2136,60 @@ export default function App() {
       minimumDurationSeconds: driftAlertDelaySeconds,
     });
     const latestDrift = driftCandidates[0] ?? null;
+    const activeSnooze = driftAlarmSnoozeRef.current;
+    if (activeSnooze !== null) {
+      if (Date.now() < activeSnooze.untilMs) return;
+      return;
+    }
+
+    const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
+    if (pendingBreakReturnAlarm) {
+      const focusTargets = pendingBreakReturnAlarm.focusTargets.length
+        ? pendingBreakReturnAlarm.focusTargets
+        : recentDriftAlarmFocusTargets;
+      const breakReturnContextLabel = latestDrift
+        ? getWatcherContextLabel(latestDrift.segment, latestDrift.category)
+        : pendingBreakReturnAlarm.pausedFromLabel;
+      const breakReturnIdContext = latestDrift?.alertKey ?? "no-drift";
+
+      showDriftAlarm(buildBreakReturnAlarmEvent({
+        id: `break-return:${breakReturnIdContext}:${pendingBreakReturnAlarm.untilMs}`,
+        contextLabel: breakReturnContextLabel,
+        driftDurationSeconds: latestDrift?.segment.durationSeconds ?? 0,
+        preservedFocusStrikeSeconds: 0,
+        generatedAt: new Date().toISOString(),
+        focusTargets,
+        breakDurationMinutes: pendingBreakReturnAlarm.minutes,
+        pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
+        nextFocusLabel: focusTargets[0]?.label ?? "your focus",
+      }));
+      pendingBreakReturnAlarmRef.current = null;
+      lastDriftAlertSegmentRef.current = latestDrift?.alertKey ?? null;
+      return;
+    }
+
     if (!latestDrift) {
       lastDriftAlertSegmentRef.current = null;
-      if (driftAlarmSnoozeUntilRef.current !== null) {
-        driftAlarmSnoozeUntilRef.current = null;
-        setDriftAlarmSnoozeUntilMs(null);
+      if (driftAlarmSnoozeRef.current !== null) {
+        driftAlarmSnoozeRef.current = null;
+        setDriftAlarmSnooze(null);
       }
       return;
     }
 
-    const snoozeUntilMs = driftAlarmSnoozeUntilRef.current;
-    if (snoozeUntilMs !== null) {
-      if (Date.now() < snoozeUntilMs) return;
-      return;
-    }
-
     const { alertKey, category, segment } = latestDrift;
-    const buildCurrentDriftAlarmEvent = () => (
-      buildDriftAlarmEvent({
+    const buildCurrentDriftAlarmEvent = () => {
+      const contextLabel = getWatcherContextLabel(segment, category);
+
+      return buildDriftAlarmEvent({
         id: alertKey,
-        contextLabel: getWatcherContextLabel(segment, category),
+        contextLabel,
         driftDurationSeconds: segment.durationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
-      })
-    );
+      });
+    };
     const showCurrentDriftAlarm = () => {
       showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
@@ -2161,7 +2209,7 @@ export default function App() {
     lastDriftAlertSegmentRef.current = alertKey;
     showCurrentDriftAlarm();
     void sendDriftNotification(segment);
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnoozeUntilMs, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {

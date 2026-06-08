@@ -10418,6 +10418,10 @@ button.flow-cell:focus {
   width: min(26.8rem, calc(100vw - var(--space-5)));
 }
 
+.da--return {
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+}
+
 .da.is-dismissed {
   opacity: .46;
   transform: translateY(6px) scale(.99);
@@ -10524,6 +10528,10 @@ button.flow-cell:focus {
   padding: var(--space-5) var(--space-4);
 }
 
+.da--return .da__hero {
+  background: color-mix(in srgb, var(--warn) 6%, var(--surface-strong));
+}
+
 .da__hero-copy {
   display: grid;
   gap: var(--space-3);
@@ -10539,6 +10547,30 @@ button.flow-cell:focus {
   font-weight: 750;
   letter-spacing: -.03em;
   line-height: 1.04;
+}
+
+.da__hero-title {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.da__time-prefix {
+  align-items: center;
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  border-radius: 999px;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-family: var(--font-sans);
+  font-size: .72em;
+  font-weight: 750;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1;
+  min-height: 1.85rem;
+  padding: 0 var(--space-3);
 }
 
 .da__drift {
@@ -10627,6 +10659,10 @@ button.flow-cell:focus {
 
 .da__choice--break {
   margin-top: var(--space-2);
+}
+
+.da--return .da__choice--break {
+  margin-top: var(--space-3);
 }
 
 .da__choice-label {

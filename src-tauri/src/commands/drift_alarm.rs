@@ -13,6 +13,7 @@ pub const DRIFT_ALARM_WINDOW_LABEL: &str = "drift-alarm";
 #[serde(rename_all = "camelCase")]
 pub struct DriftAlarmPayload {
     pub id: String,
+    pub mode: DriftAlarmMode,
     pub context_label: String,
     pub drift_duration_label: String,
     pub drift_duration_seconds: i64,
@@ -21,6 +22,23 @@ pub struct DriftAlarmPayload {
     pub generated_at: String,
     pub break_options: Vec<i64>,
     pub focus_targets: Vec<DriftAlarmFocusTarget>,
+    pub break_return: Option<DriftAlarmBreakReturnDetails>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftAlarmMode {
+    Drift,
+    BreakReturn,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriftAlarmBreakReturnDetails {
+    pub break_duration_minutes: i64,
+    pub break_duration_label: String,
+    pub paused_from_label: String,
+    pub next_focus_label: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

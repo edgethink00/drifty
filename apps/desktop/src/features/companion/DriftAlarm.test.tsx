@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { DriftAlarm, buildDriftAlarmEvent, type DriftAlarmAction } from "./DriftAlarm";
+import { DriftAlarm, buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmAction } from "./DriftAlarm";
 
 describe("DriftAlarm", () => {
   it("renders drift context, focus targets, break choices, and action callbacks without focus strike copy", () => {
@@ -123,6 +123,55 @@ describe("DriftAlarm", () => {
     ]);
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(alarm.classList.contains("is-dismissed")).toBe(true);
+  });
+
+  it("renders break-return alarm copy and extends a break without changing target actions", () => {
+    const onAction = vi.fn<(action: DriftAlarmAction) => void>();
+    const event = buildBreakReturnAlarmEvent({
+      id: "break-return-15",
+      contextLabel: "YouTube",
+      driftDurationSeconds: 6 * 60,
+      preservedFocusStrikeSeconds: 32 * 60,
+      generatedAt: "2026-05-20T13:31:00.000Z",
+      breakDurationMinutes: 15,
+      pausedFromLabel: "YouTube",
+      nextFocusLabel: "VS Code",
+      focusTargets: [
+        {
+          targetId: "app:com.microsoft.VSCode",
+          label: "VS Code",
+          detail: "companion/DriftAlarm.tsx",
+          appName: "VS Code",
+          bundleId: "com.microsoft.VSCode",
+          siteDomain: null,
+          siteTitle: null,
+          iconSrc: null,
+        },
+      ],
+    });
+
+    const { container } = render(<DriftAlarm event={event} onAction={onAction} />);
+
+    const alarm = screen.getByRole("alertdialog", { name: "15m Break finished" });
+    expect(alarm.classList.contains("da--return")).toBe(true);
+    expect(alarm.getAttribute("aria-live")).toBe("polite");
+    expect(alarm.getAttribute("aria-labelledby")).toBe("break-return-alarm-title");
+    expect(alarm.getAttribute("aria-describedby")).toBe("break-return-alarm-description");
+    expect(container.querySelector(".da__hero-title")).toBeTruthy();
+    expect(container.querySelector(".da__time-prefix")?.textContent).toBe("15m");
+    expect(screen.getByText("Break finished")).toBeTruthy();
+    expect(screen.getByText(/Break ·/i)).toBeTruthy();
+    expect(screen.getByText("15m complete")).toBeTruthy();
+    expect(screen.getByText(/Paused from/i)).toBeTruthy();
+    expect(screen.getByText("YouTube")).toBeTruthy();
+    expect(screen.getByText(/Next focus/i)).toBeTruthy();
+    expect(screen.getAllByText("VS Code").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /extend break/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /take a break/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Dismiss break return alarm" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "15m" }));
+    expect(onAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 });
   });
 
   it("moves focus into the alarm, traps Tab, cancels on Escape, and restores opener focus", async () => {
