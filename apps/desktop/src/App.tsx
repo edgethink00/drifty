@@ -2198,18 +2198,22 @@ export default function App() {
 
     const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
     if (pendingBreakReturnAlarm) {
+      if (!latestDrift) {
+        pendingBreakReturnAlarmRef.current = null;
+        lastDriftAlertSegmentRef.current = null;
+        return;
+      }
+
       const focusTargets = pendingBreakReturnAlarm.focusTargets.length
         ? pendingBreakReturnAlarm.focusTargets
         : recentDriftAlarmFocusTargets;
-      const breakReturnContextLabel = latestDrift
-        ? getWatcherContextLabel(latestDrift.segment, latestDrift.category)
-        : pendingBreakReturnAlarm.pausedFromLabel;
-      const breakReturnIdContext = latestDrift?.alertKey ?? "no-drift";
+      const breakReturnContextLabel = getWatcherContextLabel(latestDrift.segment, latestDrift.category);
+      const breakReturnIdContext = latestDrift.alertKey;
 
       showDriftAlarm(buildBreakReturnAlarmEvent({
         id: `break-return:${breakReturnIdContext}:${pendingBreakReturnAlarm.untilMs}`,
         contextLabel: breakReturnContextLabel,
-        driftDurationSeconds: latestDrift?.segment.durationSeconds ?? 0,
+        driftDurationSeconds: latestDrift.segment.durationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets,
