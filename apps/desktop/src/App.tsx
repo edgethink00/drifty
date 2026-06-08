@@ -106,6 +106,7 @@ import {
   type UserProfile,
 } from "./features/profile/profileService";
 import {
+  createIndividualCheckout,
   fetchBillingEntitlement,
   type BillingEntitlement,
 } from "./features/billing/billingService";
@@ -1158,6 +1159,7 @@ export default function App() {
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
+  const [driftyCloudSetupOpen, setDriftyCloudSetupOpen] = useState(false);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: segments,
@@ -1250,6 +1252,10 @@ export default function App() {
     setLocalAiSetup((current) => ({ ...current, selfHostedModel: modelId }));
     setSelfHostedCustomModel("");
   }, [selfHostedCustomModel]);
+  const handleSelectLocalAiProvider = useCallback((provider: LocalAiSetupState["provider"]) => {
+    setDriftyCloudSetupOpen(false);
+    setLocalAiSetup((current) => ({ ...current, provider }));
+  }, []);
   const localAiClassificationOptions = useMemo(() => {
     if (localAiSetup.provider === "openrouter_byok") {
       const apiKey = localAiSetup.openRouterApiKey.trim();
@@ -1282,6 +1288,7 @@ export default function App() {
   const shouldCheckBillingEntitlement = isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+  const canUseCloudAiClassification = isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
   const isSidebarVisuallyCollapsed = sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
@@ -2596,7 +2603,7 @@ export default function App() {
   }, []);
 
   const runAutoAiClassificationBatch = useCallback(async () => {
-    if (!localAiClassificationOptions && (!isSupabaseConfigured || !isPolicySignedIn)) return;
+    if (!localAiClassificationOptions && !canUseCloudAiClassification) return;
     if (shouldBlockLocalTrackerAccess) return;
     if (!hasLoadedOnce) return;
     if (classificationActionLoading) return;
@@ -2632,7 +2639,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [classificationActionLoading, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -2672,14 +2679,43 @@ export default function App() {
     return null;
   }, [shouldCheckBillingEntitlement]);
 
-  const handleConfigureDriftyCloud = useCallback(() => {
-    if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
+  const handleShowDriftyCloudSetup = useCallback(() => {
+    setDriftyCloudSetupOpen(true);
+    if (isSupabaseConfigured && user && hasRequiredAccountAuth && billingEntitlement?.status !== "locked") {
+      void refreshBillingEntitlement();
+    }
+  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
+
+  const handleStartDriftyCloudSetup = useCallback(async () => {
+    if (!isSupabaseConfigured) {
       setAuthModalOpen(true);
       return;
     }
 
+    if (!user || !hasRequiredAccountAuth) {
+      await signInWithWebsite();
+      return;
+    }
+
+    if (billingEntitlement?.status === "locked") {
+      setBillingEntitlementError(null);
+      const checkoutResult = await createIndividualCheckout();
+      if (!checkoutResult.success) {
+        setBillingEntitlementError(checkoutResult.error);
+        return;
+      }
+
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(checkoutResult.data.url);
+      } catch (error) {
+        setBillingEntitlementError(toErrorMessage(error));
+      }
+      return;
+    }
+
     void refreshBillingEntitlement();
-  }, [hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, refreshBillingEntitlement, user]);
+  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, signInWithWebsite, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2870,7 +2906,7 @@ export default function App() {
   }
 
   async function handleRunAiClassificationNow() {
-    if (!user && !localAiClassificationOptions) {
+    if (!canUseCloudAiClassification && !localAiClassificationOptions) {
       setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
       return;
     }
@@ -2903,7 +2939,7 @@ export default function App() {
   }
 
   async function handleRunSelectedDayAiClassification() {
-    if (!user && !localAiClassificationOptions) {
+    if (!canUseCloudAiClassification && !localAiClassificationOptions) {
       setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
       return;
     }
@@ -3424,6 +3460,7 @@ export default function App() {
   const cloudStatusLabel = driftyCloudStatusLabel(billingEntitlement, billingEntitlementLoading, isSupabaseConfigured, hasRequiredAccountAuth);
   const cloudDetailLabel = driftyCloudDetailLabel(billingEntitlement, billingEntitlementError, isSupabaseConfigured, hasRequiredAccountAuth);
   const aiServerStatusLabel = aiServerStatusLabelForCloud(billingEntitlement, billingEntitlementLoading, isSupabaseConfigured, hasRequiredAccountAuth);
+  const cloudSetupActionLabel = driftyCloudSetupActionLabel(billingEntitlement, isSupabaseConfigured, hasRequiredAccountAuth);
 
   return (
     <div className={isSidebarVisuallyCollapsed ? "app-shell app-shell--sidebar-collapsed" : "app-shell"}>
@@ -4191,20 +4228,25 @@ export default function App() {
                         </div>
                         <span className="chip green">Local-first</span>
                       </div>
-                      <div className="settings-row settings-row--fallback"><div><div className="lbl">AI provider</div><div className="desc">Choose a local route or connect Drifty Cloud for optional account-backed AI.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="group" aria-label="AI provider options"><button type="button" className={`settings-mode-option${localAiSetup.provider === "openrouter_byok" ? " is-active" : ""}`} role="radio" aria-checked={localAiSetup.provider === "openrouter_byok"} onClick={() => setLocalAiSetup((current) => ({ ...current, provider: "openrouter_byok" }))}><span>OpenRouter BYOK</span><small>Use your own key</small></button><button type="button" className={`settings-mode-option${localAiSetup.provider === "self_hosted" ? " is-active" : ""}`} role="radio" aria-checked={localAiSetup.provider === "self_hosted"} onClick={() => setLocalAiSetup((current) => ({ ...current, provider: "self_hosted" }))}><span>Self-hosted</span><small>OpenAI-compatible endpoint</small></button><button type="button" className="settings-mode-option" title={cloudDetailLabel} onClick={handleConfigureDriftyCloud}><span>Drifty Cloud</span><small>{cloudStatusLabel} · {aiServerStatusLabel}</small></button></div></div></div>
-                      {localAiSetup.provider === "openrouter_byok" ? (
+                      <div className="settings-row"><div><div className="lbl">Drifty Cloud status</div><div className="desc">Account availability only. Choose an AI provider below; local tracking stays on this Mac. {cloudDetailLabel}</div></div><div className="ctrl settings-row__actions"><span className="ctrl--value">{cloudStatusLabel}</span><span className="chip">{aiServerStatusLabel}</span><button type="button" className="settings-btn" onClick={handleShowDriftyCloudSetup}>View Cloud setup</button></div></div>
+                      <div className="settings-row settings-row--fallback"><div><div className="lbl">AI provider</div><div className="desc">Choose the provider Drifty should use for optional AI classification. Cloud account availability is shown above.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="AI provider options"><button type="button" className={`settings-mode-option${!driftyCloudSetupOpen && localAiSetup.provider === "openrouter_byok" ? " is-active" : ""}`} role="radio" aria-checked={!driftyCloudSetupOpen && localAiSetup.provider === "openrouter_byok"} onClick={() => handleSelectLocalAiProvider("openrouter_byok")}><span>OpenRouter BYOK</span><small>Use your own key</small></button><button type="button" className={`settings-mode-option${!driftyCloudSetupOpen && localAiSetup.provider === "self_hosted" ? " is-active" : ""}`} role="radio" aria-checked={!driftyCloudSetupOpen && localAiSetup.provider === "self_hosted"} onClick={() => handleSelectLocalAiProvider("self_hosted")}><span>Self-hosted</span><small>OpenAI-compatible endpoint</small></button><button type="button" className={`settings-mode-option${driftyCloudSetupOpen ? " is-active" : ""}`} role="radio" aria-checked={driftyCloudSetupOpen} title={cloudDetailLabel} onClick={handleShowDriftyCloudSetup}><span>Drifty Cloud</span><small>{cloudStatusLabel} · {aiServerStatusLabel}</small></button></div></div></div>
+                      {driftyCloudSetupOpen ? (
+                        <div className="settings-row settings-row--fallback" role="group" aria-label="Drifty Cloud setup"><div><div className="lbl">Drifty Cloud setup</div><div className="desc">Drifty Cloud is optional account-backed AI. Local tracking remains on this Mac.</div></div><div className="ctrl settings-row__actions"><span className="ctrl--value">{cloudStatusLabel}</span><span className="chip">{aiServerStatusLabel}</span><button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleStartDriftyCloudSetup()}>{cloudSetupActionLabel}</button></div></div>
+                      ) : null}
+                      {!driftyCloudSetupOpen && localAiSetup.provider === "openrouter_byok" ? (
                         <>
                           <div className="settings-row"><label><div className="lbl">OpenRouter API key</div><div className="desc">Kept only for this app session; paste it again after restart.</div></label><div className="ctrl"><input className="settings-input" type="password" autoComplete="off" aria-label="OpenRouter API key" value={localAiSetup.openRouterApiKey} onChange={(event) => setLocalAiSetup((current) => ({ ...current, openRouterApiKey: event.target.value }))} placeholder="sk-or-v1-..." /></div></div>
                           <div className="settings-row settings-row--model-picker"><div><div className="lbl">OpenRouter models</div><div className="desc">Choose a primary model and optional fallbacks. Drifty stores model IDs only.</div></div><div className="ctrl model-picker-summary"><div className="model-picker-summary__chips"><span className="chip green">Primary: {openRouterPrimaryModel}</span>{openRouterFallbackModels.length > 0 ? <span className="chip gray">{openRouterFallbackModels.length} fallback{openRouterFallbackModels.length === 1 ? "" : "s"}</span> : null}</div><button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={() => setOpenRouterModelPickerOpen(true)}>Choose models</button></div></div>
                         </>
-                      ) : (
+                      ) : !driftyCloudSetupOpen ? (
                         <>
                           <div className="settings-row"><label><div className="lbl">Self-hosted base URL</div><div className="desc">Use an OpenAI-compatible local or private endpoint.</div></label><div className="ctrl"><input className="settings-input" aria-label="Self-hosted base URL" value={localAiSetup.selfHostedBaseUrl} onChange={(event) => setLocalAiSetup((current) => ({ ...current, selfHostedBaseUrl: event.target.value }))} placeholder="http://localhost:11434/v1" /></div></div>
                           <div className="settings-row settings-row--model-picker"><div><div className="lbl">Self-hosted model</div><div className="desc">Choose a known local model or enter the model ID exposed by your endpoint.</div></div><div className="ctrl model-picker-summary"><div className="model-picker-summary__chips"><span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span></div><button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={() => setSelfHostedModelPickerOpen(true)}>Choose model</button></div></div>
                         </>
-                      )}
-                      <div className="settings-row"><div><div className="lbl">Cloud account</div><div className="desc">{cloudDetailLabel}</div></div><div className="ctrl ctrl--value">{cloudStatusLabel}</div></div>
-                      <div className="settings-row"><div><div className="lbl">Local AI setup status</div><div className="desc">Saved locally. Configured providers can run optional AI classification; rule-based local classification remains available.</div></div><div className="ctrl"><span className="chip">Saved locally</span></div></div>
+                      ) : null}
+                      {!driftyCloudSetupOpen ? (
+                        <div className="settings-row"><div><div className="lbl">Local provider settings</div><div className="desc">Saved on this Mac for the selected local provider. Rule-based local classification remains available.</div></div><div className="ctrl"><span className="chip">Saved on this Mac</span></div></div>
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -5554,6 +5596,28 @@ function aiServerStatusLabelForCloud(
   if (loading) return "Checking";
   if (entitlement?.status === "locked") return "Needs attention";
   return "Available";
+}
+
+function driftyCloudActionLabel(
+  entitlement: BillingEntitlement | null,
+  isConfigured: boolean,
+  hasAccount: boolean,
+): string | null {
+  if (!isConfigured || !hasAccount || entitlement?.status !== "locked") return null;
+  if (entitlement.lockedReason === "payment_required") return "Resolve billing";
+  if (entitlement.lockedReason === "billing_missing") return "Set up billing";
+  return "Subscribe";
+}
+
+function driftyCloudSetupActionLabel(
+  entitlement: BillingEntitlement | null,
+  isConfigured: boolean,
+  hasAccount: boolean,
+): string {
+  if (!isConfigured) return "Configure Supabase";
+  if (!hasAccount) return "Continue on drifty.so";
+  if (entitlement?.status === "locked") return driftyCloudActionLabel(entitlement, isConfigured, hasAccount) ?? "Subscribe";
+  return "Refresh Drifty Cloud";
 }
 
 function aiConnectionStatusLabel(

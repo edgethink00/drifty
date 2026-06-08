@@ -48,6 +48,7 @@ const {
     getTimeline: vi.fn().mockResolvedValue([]),
     getHourlySummary: vi.fn().mockResolvedValue([]),
     getTopSites: vi.fn().mockResolvedValue([]),
+    getCurrentSnapshot: vi.fn().mockResolvedValue(null),
     getAppIcons: vi.fn().mockResolvedValue({}),
     start: vi.fn(),
     stop: vi.fn(),
