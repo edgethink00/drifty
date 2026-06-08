@@ -2383,20 +2383,36 @@ input, textarea { color: inherit; }
   background: color-mix(in srgb, var(--surface) 74%, transparent);
 }
 
+.classification-panel-view__capture-slice-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.classification-panel-view__capture-slice-title,
 .classification-panel-view__capture-slice-time,
 .classification-panel-view__capture-slice-duration {
-  font-size: 0.64rem;
   line-height: 1.3;
+}
+
+.classification-panel-view__capture-slice-title {
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 620;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .classification-panel-view__capture-slice-time {
   overflow: hidden;
   color: var(--text-muted);
+  font-size: 0.64rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .classification-panel-view__capture-slice-duration {
+  font-size: 0.64rem;
   color: var(--text);
   font-weight: 620;
   white-space: nowrap;

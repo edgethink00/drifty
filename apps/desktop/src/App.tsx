@@ -787,11 +787,54 @@ function classifySegmentSourceKey(segment: ActivitySegment): string {
   return `app:${segment.appName}`;
 }
 
+function isChromeLikeBrowserName(value: string | null | undefined): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  return /\b(chrome|chromium|chrome canary|brave|microsoft edge|vivaldi|opera)\b/.test(normalized);
+}
+
+function isChromeTitleBrowserChunk(value: string): boolean {
+  return /^(google chrome|chrome|chromium|chrome canary|brave browser|brave|microsoft edge|edge|vivaldi|opera)$/i.test(value.trim());
+}
+
+function isChromeVolatileTitleChunk(value: string): boolean {
+  const normalized = value.trim();
+  return normalized === "오디오 재생"
+    || normalized === "메모리 사용량 많음"
+    || /^\d+(?:\.\d+)?\s*(?:MB|GB)$/i.test(normalized);
+}
+
+function stableChromeWindowTitle(segment: ActivitySegment, title: string): string | null {
+  if (!isChromeLikeBrowserName(segment.appName) && !isChromeLikeBrowserName(segment.browserName)) return null;
+
+  const parts = title.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const youtubeIndex = parts.findIndex((part) => part === "YouTube");
+  const hasBrowserSuffix = parts.some(isChromeTitleBrowserChunk);
+  const hasVolatileSuffix = parts.some(isChromeVolatileTitleChunk);
+  if (youtubeIndex > 0 && (hasBrowserSuffix || hasVolatileSuffix)) {
+    return parts.slice(0, youtubeIndex).join(" - ");
+  }
+
+  let end = parts.length;
+  if (end >= 2 && isChromeTitleBrowserChunk(parts[end - 2])) end -= 1;
+  if (end > 0 && isChromeTitleBrowserChunk(parts[end - 1])) end -= 1;
+  while (end > 0 && isChromeVolatileTitleChunk(parts[end - 1])) end -= 1;
+  if (end > 0 && parts[end - 1] === "YouTube" && (hasBrowserSuffix || hasVolatileSuffix)) end -= 1;
+
+  if (end > 0 && end < parts.length) return parts.slice(0, end).join(" - ");
+  return null;
+}
+
 function classificationActivityLabel(segment: ActivitySegment): string {
-  return (segment.windowTitle || "").trim()
+  const windowTitle = (segment.windowTitle || "").trim();
+  const stableWindowTitle = windowTitle ? stableChromeWindowTitle(segment, windowTitle) : null;
+  const rawLabel = stableWindowTitle
+    || windowTitle
     || (segment.siteTitle || "").trim()
     || (segment.siteDomain || "").trim()
     || segment.appName;
+  return sanitizeCaptureText(rawLabel);
 }
 
 function segmentHasUsefulCaptureDetails(segment: ActivitySegment, rowLabel: string): boolean {
@@ -833,8 +876,12 @@ function truncateCaptureSummary(value: string): string {
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
 }
 
+function sanitizeCaptureText(value: string): string {
+  return value.replace(/https?:\/\/\S+/gi, "[link]").replace(/\bwww\.\S+/gi, "[link]").trim().replace(/\s+/g, " ");
+}
+
 function safeCaptureSummary(value: string): string {
-  return truncateCaptureSummary(value.replace(/https?:\/\/\S+/gi, "[link]").replace(/\bwww\.\S+/gi, "[link]"));
+  return truncateCaptureSummary(sanitizeCaptureText(value));
 }
 
 function captureSurfaceDetails(segment: ActivitySegment): string[] {
@@ -3949,9 +3996,13 @@ export default function App() {
                                             {row.segments.map((segment, index) => {
                                               const segmentRange = `${formatTimeLabel(segment.startedAt)} - ${formatTimeLabel(segment.endedAt)}`;
                                               const segmentDuration = formatCompactDurationFromSeconds(segment.durationSeconds);
+                                              const segmentTitle = classificationActivityLabel(segment);
                                               return (
-                                                <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentRange}, ${segmentDuration}`}>
-                                                  <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
+                                                <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentTitle}, ${segmentRange}, ${segmentDuration}`}>
+                                                  <div className="classification-panel-view__capture-slice-copy">
+                                                    <strong className="classification-panel-view__capture-slice-title" title={segmentTitle}>{segmentTitle}</strong>
+                                                    <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
+                                                  </div>
                                                   <strong className="classification-panel-view__capture-slice-duration">{segmentDuration}</strong>
                                                 </div>
                                               );
