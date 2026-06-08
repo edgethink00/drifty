@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { DriftAlarmAction, DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
+import type { DriftAlarmAction, DriftAlarmBreakReturnDetails, DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
 import { isTauriRuntime } from "./watcherBridge";
 
 type UnlistenFn = () => void;
@@ -69,7 +69,7 @@ function isDriftAlarmActionEvent(value: unknown): value is { action: DriftAlarmA
   return isDriftAlarmAction((value as Record<string, unknown>).action);
 }
 
-function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
+export function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   return (
@@ -82,6 +82,30 @@ function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
     && typeof candidate.generatedAt === "string"
     && isBreakOptions(candidate.breakOptions)
     && isFocusTargets(candidate.focusTargets)
+    && isDriftAlarmModePayload(candidate)
+  );
+}
+
+function isDriftAlarmModePayload(candidate: Record<string, unknown>): boolean {
+  if (candidate.mode === "drift") return candidate.breakReturn === null;
+  if (candidate.mode === "break_return") return isBreakReturnDetails(candidate.breakReturn);
+  return false;
+}
+
+function isBreakReturnDetails(value: unknown): value is DriftAlarmBreakReturnDetails {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.breakDurationMinutes === "number"
+    && Number.isInteger(candidate.breakDurationMinutes)
+    && candidate.breakDurationMinutes > 0
+    && candidate.breakDurationMinutes <= 60
+    && typeof candidate.breakDurationLabel === "string"
+    && candidate.breakDurationLabel.trim().length > 0
+    && typeof candidate.pausedFromLabel === "string"
+    && candidate.pausedFromLabel.trim().length > 0
+    && typeof candidate.nextFocusLabel === "string"
+    && candidate.nextFocusLabel.trim().length > 0
   );
 }
 
