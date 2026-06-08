@@ -88,7 +88,7 @@ pub fn setup_drift_alarm_window(app: &tauri::App) -> tauri::Result<()> {
     .maximizable(false)
     .minimizable(false)
     .focused(false)
-    .focusable(true)
+    .focusable(false)
     .skip_taskbar(true)
     .always_on_top(true)
     .visible_on_all_workspaces(true)
