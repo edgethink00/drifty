@@ -1,16 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-function stubWindowLocalStorage(entries: Record<string, string> = {}) {
-  const values = new Map(Object.entries(entries));
-  vi.stubGlobal("window", {
-    localStorage: {
-      getItem: vi.fn((key: string) => values.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => { values.set(key, value); }),
-    },
-  });
-  return values;
-}
-
 const createClient = vi.hoisted(() => vi.fn(() => ({ auth: {} })));
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -24,7 +13,7 @@ describe("Supabase client", () => {
     createClient.mockClear();
   });
 
-  it("uses manual implicit OAuth handling for desktop browser callbacks", async () => {
+  it("uses manual PKCE OAuth handling for desktop browser callbacks", async () => {
     vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
     vi.stubEnv("VITE_SUPABASE_ANON_KEY", "anon-key");
 
@@ -38,7 +27,7 @@ describe("Supabase client", () => {
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: false,
-          flowType: "implicit",
+          flowType: "pkce",
           storageKey: "drifty.desktop.auth",
         },
       },
