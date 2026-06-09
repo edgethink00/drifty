@@ -23,6 +23,7 @@ import {
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
+const DESKTOP_GOOGLE_AUTH_CALLBACK_URL = "drifty://auth/google-callback";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -45,6 +46,7 @@ export interface AuthState {
   hasRequiredAccountAuth: boolean;
   hasBlockingAuthConfigurationError: boolean;
   signInWithWebsite: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signInAnonymously: () => Promise<{ error: Error | null; user: User | null }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null; needsEmailConfirmation: boolean }>;
@@ -112,8 +114,9 @@ function getOAuthCallbackResultFromUrl(value: string, source: "web" | "tauri"): 
     const url = new URL(value);
     const isWebCallback = source === "web" && ["/auth/callback", "/auth/callback/"].includes(url.pathname);
     const isTauriCallback = source === "tauri" && url.protocol === "drifty:" && url.hostname === "auth" && ["/callback", "/callback/"].includes(url.pathname);
+    const isTauriGoogleCallback = source === "tauri" && url.protocol === "drifty:" && url.hostname === "auth" && ["/google-callback", "/google-callback/"].includes(url.pathname);
 
-    if (!isWebCallback && !isTauriCallback) {
+    if (!isWebCallback && !isTauriCallback && !isTauriGoogleCallback) {
       return null;
     }
 
@@ -129,6 +132,13 @@ function getOAuthCallbackResultFromUrl(value: string, source: "web" | "tauri"): 
     const code = getCallbackParam(url.searchParams, hashParams, "code");
     if (code) {
       return { kind: "code", code };
+    }
+
+    if (isTauriGoogleCallback) {
+      return {
+        kind: "error",
+        message: "Google OAuth callback did not include an authorization code.",
+      };
     }
 
     const accessToken = getCallbackParam(url.searchParams, hashParams, "access_token");
@@ -653,6 +663,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }
 
+  async function signInWithGoogle() {
+    if (!supabase) {
+      return { error: new Error("Supabase is not configured") };
+    }
+    const isDesktop = isTauriRuntime();
+
+    setCallbackStatus({
+      phase: "waiting",
+      message: isDesktop
+        ? "Opening Google sign-in in your browser. Choose your account, then return to Drifty."
+        : "Opening Google sign-in.",
+    });
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: DESKTOP_GOOGLE_AUTH_CALLBACK_URL,
+        skipBrowserRedirect: true,
+        queryParams: {
+          prompt: "select_account consent",
+          access_type: "offline",
+          include_granted_scopes: "false",
+        },
+      },
+    });
+
+    if (error) {
+      setCallbackStatus({
+        phase: "failed",
+        message: error.message,
+      });
+      return { error };
+    }
+
+    if (!data.url) {
+      const missingUrlError = new Error("Google sign-in did not return an OAuth URL.");
+      setCallbackStatus({
+        phase: "failed",
+        message: missingUrlError.message,
+      });
+      return { error: missingUrlError };
+    }
+
+    if (isDesktop) {
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(data.url);
+        setCallbackStatus({
+          phase: "waiting",
+          message: "Browser opened. Complete Google sign-in, then choose Open Drifty.",
+        });
+      } catch (error) {
+        const openError = error instanceof Error
+          ? error
+          : new Error("Unable to open Google sign-in");
+        setCallbackStatus({
+          phase: "failed",
+          message: openError.message,
+        });
+        return { error: openError };
+      }
+
+      return { error: null };
+    }
+
+    window.location.assign(data.url);
+    return { error: null };
+  }
+
   async function signOut() {
     if (!supabase) return;
     recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
@@ -676,6 +755,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hasRequiredAccountAuth: hasRequiredAccountAuth(user),
         hasBlockingAuthConfigurationError: hasBlockingAuthConfigurationError(),
         signInWithWebsite,
+        signInWithGoogle,
         signInAnonymously,
         signInWithEmail,
         signUpWithEmail,
