@@ -468,6 +468,8 @@ type DriftReminderState = {
 type DriftAlertDelaySeconds = 0 | 60 | 300;
 
 type ClassificationSourceSummary = {
+  id: string;
+  label: string;
   usageKind: "app" | "site";
   appName: string;
   siteDomain: string | null;
@@ -779,13 +781,42 @@ function MainContentShell({ activeTab, loading, hasLoadedOnce, error, contentRef
 }
 
 function classifySourceKey(item: ClassificationSourceSummary): string {
-  if (item.usageKind === "site" && item.siteDomain) return `site:${item.siteDomain}`;
-  return `app:${item.appName}`;
+  return item.id;
+}
+
+function normalizeClassificationSourceDomain(value: string | null | undefined): string | null {
+  const domain = value?.trim().toLowerCase() ?? "";
+  return domain.length > 0 ? domain : null;
+}
+
+function normalizeClassificationSourceTitle(value: string | null | undefined): string | null {
+  const title = value?.trim() ?? "";
+  return title.length > 0 ? title : null;
+}
+
+function classificationSourceIdentity(segment: ActivitySegment): Pick<ClassificationSourceSummary, "id" | "label" | "usageKind" | "appName" | "siteDomain" | "siteTitle"> {
+  const appName = segment.appName.trim() || "Unknown app";
+  const siteDomain = normalizeClassificationSourceDomain(segment.siteDomain);
+  const siteTitle = normalizeClassificationSourceTitle(segment.siteTitle);
+  const siteLabel = siteDomain ?? siteTitle;
+
+  if (siteLabel) {
+    const titleKeyScope = segment.bundleId?.trim() || appName;
+    return {
+      id: siteDomain ? `site:${siteDomain}` : `site-title:${siteTitle!.toLowerCase()}:${titleKeyScope}`,
+      label: siteLabel,
+      usageKind: "site",
+      appName,
+      siteDomain,
+      siteTitle,
+    };
+  }
+
+  return { id: `app:${appName}`, label: appName, usageKind: "app", appName, siteDomain: null, siteTitle: null };
 }
 
 function classifySegmentSourceKey(segment: ActivitySegment): string {
-  if (segment.siteDomain) return `site:${segment.siteDomain}`;
-  return `app:${segment.appName}`;
+  return classificationSourceIdentity(segment).id;
 }
 
 function isChromeLikeBrowserName(value: string | null | undefined): boolean {
@@ -945,13 +976,9 @@ export function classificationRowSummary(segments: ActivitySegment[], options?: 
 function buildClassificationSourceSummaries(segments: ActivitySegment[]): ClassificationSourceSummary[] {
   const sourceMap = new Map<string, ClassificationSourceSummary>();
   for (const segment of segments) {
-    const usageKind: "app" | "site" = segment.siteDomain ? "site" : "app";
-    const key = usageKind === "site" ? `site:${segment.siteDomain}` : `app:${segment.appName}`;
-    const existing = sourceMap.get(key) ?? {
-      usageKind,
-      appName: segment.appName,
-      siteDomain: segment.siteDomain ?? null,
-      siteTitle: segment.siteTitle ?? null,
+    const identity = classificationSourceIdentity(segment);
+    const existing = sourceMap.get(identity.id) ?? {
+      ...identity,
       totalSeconds: 0,
       sessionCount: 0,
       averageSessionSeconds: 0,
@@ -959,7 +986,8 @@ function buildClassificationSourceSummaries(segments: ActivitySegment[]): Classi
     };
     existing.totalSeconds += segment.durationSeconds;
     existing.sessionCount += 1;
-    sourceMap.set(key, existing);
+    if (existing.usageKind === "site" && !existing.siteTitle) existing.siteTitle = normalizeClassificationSourceTitle(segment.siteTitle);
+    sourceMap.set(identity.id, existing);
   }
   const total = segments.reduce((sum, s) => sum + s.durationSeconds, 0);
   return Array.from(sourceMap.values())
@@ -3919,10 +3947,10 @@ export default function App() {
                                 <div className="classification-panel-view__source-icon">
                                   {item.usageKind === "site" && item.siteDomain
                                     ? <SiteFavicon domain={item.siteDomain} size={24} fallbackIconSrc={appIcons[item.appName] ?? null} />
-                                    : <AppGlyph appName={item.appName} iconSrc={appIcons[item.appName] ?? null} size="sm" />}
+                                    : <AppGlyph appName={item.usageKind === "site" ? item.label : item.appName} iconSrc={appIcons[item.appName] ?? null} size="sm" />}
                                 </div>
                                 <div className="classification-panel-view__source-copy">
-                                  <strong>{item.usageKind === "site" ? (item.siteDomain ?? item.siteTitle ?? "Unknown site") : item.appName}</strong>
+                                  <strong>{item.label}</strong>
                                   <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
                                 </div>
                                 <div className="classification-panel-view__source-measure">
@@ -3950,9 +3978,7 @@ export default function App() {
                           <div className="panel-header__left">
                             <span className="label-mono">Activity details</span>
                             <strong className="panel-header__title">
-                              {selectedClassificationSourceSummary.usageKind === "site"
-                                ? (selectedClassificationSourceSummary.siteDomain ?? selectedClassificationSourceSummary.siteTitle ?? "Unknown site")
-                                : selectedClassificationSourceSummary.appName}
+                              {selectedClassificationSourceSummary.label}
                             </strong>
                           </div>
                           <div className="panel-header__right classification-panel-view__detail-meta">
