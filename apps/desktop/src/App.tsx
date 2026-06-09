@@ -3684,6 +3684,7 @@ export default function App() {
             isOpen={accountMenuOpen}
             isSidebarCollapsed={isSidebarVisuallyCollapsed}
             localAiSetup={localAiSetup}
+            userAvatarUrl={profile?.avatar_url || profileDraft.avatarUrl || authMetadataAvatarUrl}
             userEmail={user?.email ?? null}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             onUpgrade={() => {
@@ -4864,6 +4865,7 @@ function AccountMenu({
   isOpen,
   isSidebarCollapsed,
   localAiSetup,
+  userAvatarUrl,
   userEmail,
   onToggle,
   onUpgrade,
@@ -4877,6 +4879,7 @@ function AccountMenu({
   isOpen: boolean;
   isSidebarCollapsed: boolean;
   localAiSetup: LocalAiSetupState;
+  userAvatarUrl?: string | null;
   userEmail: string | null;
   onToggle: () => void;
   onUpgrade: () => void;
@@ -4890,6 +4893,7 @@ function AccountMenu({
   const isSignedIn = Boolean(userEmail);
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : "Account";
   const accountStatusLabel = aiConnectionStatusLabel(localAiSetup, billingEntitlement, billingEntitlementLoading, isSignedIn);
+  const trimmedUserAvatarUrl = userAvatarUrl?.trim();
 
   const updatePopoverPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -4975,7 +4979,7 @@ function AccountMenu({
     <div className="account-menu-shell">
       {popover}
       <button ref={triggerRef} type="button" className="account-trigger" onClick={onToggle} aria-expanded={isOpen} aria-haspopup="menu">
-        <span className="account-avatar">{displayName.charAt(0).toUpperCase()}</span>
+        <span className="account-avatar">{trimmedUserAvatarUrl ? <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" /> : displayName.charAt(0).toUpperCase()}</span>
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
           <span>{accountStatusLabel}</span>
