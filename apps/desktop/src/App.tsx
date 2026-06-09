@@ -1332,6 +1332,7 @@ export default function App() {
     user,
     status: authStatus,
     signInWithWebsite,
+    signInWithGoogle,
     signInAnonymously,
     signOut,
     isEnabled: isSupabaseConfigured,
@@ -4565,7 +4566,8 @@ export default function App() {
           onCheckAccessibility={handleCheckAccessibility}
           onRequestAccessibility={handleRequestAccessibility}
           onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
-          onStartCloudTrial={() => void signInWithWebsite()}
+          onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
+          onStartCloudTrialWithEmail={() => void signInWithWebsite()}
           onComplete={handleOnboardingComplete}
         />
       ) : null}
