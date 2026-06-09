@@ -118,6 +118,11 @@ type CategoryColorOverrides = Partial<Record<ActivityCategory, string>>;
 type AppThemeColorKey = "accent" | "productivityFocus" | "productivityDrift" | "productivityNeutral";
 type AppThemeColorOverrides = Partial<Record<AppThemeColorKey, string>>;
 type TabId = "dashboard" | "classify" | "drift" | "leaderboard" | "settings";
+
+type AuthMetadataUser = {
+  user_metadata?: Record<string, unknown>;
+} | null;
+
 type DashboardPeriod = "Today" | "Week" | "Month";
 type ClassificationRange = "Day" | "Week";
 type NavigationSnapshot = {
@@ -1340,6 +1345,7 @@ export default function App() {
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
   } = useAuth();
+  const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
   const isEffectiveAuthRequired = isAuthRequired || developerAuthRequiredPreview;
   const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !developerAuthRequiredPreview;
   const hasEffectiveBlockingAuthConfigurationError = hasBlockingAuthConfigurationError || (developerAuthRequiredPreview && !isSupabaseConfigured);
@@ -2881,7 +2887,7 @@ export default function App() {
     if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
       const displayName = fallbackDisplayName(user?.email);
       setProfile(null);
-      setProfileDraft({ displayName, bio: "", avatarUrl: "", websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
+      setProfileDraft({ displayName, bio: "", avatarUrl: authMetadataAvatarUrl, websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
       setProfileLoading(false);
       setProfileReadyUserId(user?.id ?? null);
       setProfileError(null);
@@ -2898,7 +2904,7 @@ export default function App() {
       if (!result.success) {
         const displayName = fallbackDisplayName(user.email);
         setProfile(null);
-        setProfileDraft({ displayName, bio: "", avatarUrl: "", websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
+        setProfileDraft({ displayName, bio: "", avatarUrl: authMetadataAvatarUrl, websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
         setProfileError(result.error ?? "Unable to load profile");
       } else {
         const nextProfile = result.data ?? null;
@@ -2906,7 +2912,7 @@ export default function App() {
         setProfileDraft({
           displayName: nextProfile?.display_name ?? fallbackDisplayName(user.email),
           bio: nextProfile?.bio ?? "",
-          avatarUrl: nextProfile?.avatar_url ?? "",
+          avatarUrl: nextProfile?.avatar_url || authMetadataAvatarUrl,
           websiteUrl: nextProfile?.website_url ?? "",
           githubUrl: nextProfile?.github_url ?? "",
           linkedinUrl: nextProfile?.linkedin_url ?? "",
@@ -2921,7 +2927,7 @@ export default function App() {
     });
 
     return () => { cancelled = true; };
-  }, [hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
+  }, [authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
 
   useEffect(() => {
     if (isDevOnboardingBypassEnabled()) {
@@ -9280,6 +9286,14 @@ function getAccountDisplayName(email: string | null): string {
   return name || "Account";
 }
 
+function getAuthMetadataAvatarUrl(user: AuthMetadataUser): string {
+  const metadata = user?.user_metadata;
+  const picture = typeof metadata?.picture === "string" ? metadata.picture.trim() : "";
+  if (picture) return picture;
+
+  const avatarUrl = typeof metadata?.avatar_url === "string" ? metadata.avatar_url.trim() : "";
+  return avatarUrl;
+}
 
 function isHexColor(value: string): boolean {
   return HEX_COLOR_PATTERN.test(value);

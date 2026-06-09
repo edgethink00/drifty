@@ -18,7 +18,7 @@ const {
   billingMocks,
 } = vi.hoisted(() => ({
   authState: {
-    user: { email: "alex@example.com" } as { id?: string; email: string | null; is_anonymous?: boolean } | null,
+    user: { email: "alex@example.com" } as { id?: string; email: string | null; is_anonymous?: boolean; user_metadata?: Record<string, unknown> } | null,
     session: null,
     status: "authenticated" as "authenticated" | "unauthenticated",
     callbackStatus: null,
@@ -304,6 +304,72 @@ describe("App leaderboard participation", () => {
       });
     });
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
+  });
+
+  it("prefills the leaderboard profile photo from Google metadata when the user has no saved avatar", async () => {
+    const googleAvatarUrl = "https://lh3.googleusercontent.com/a/avatar.png";
+    authState.user = {
+      id: "user-1",
+      email: "alex@example.com",
+      user_metadata: { picture: googleAvatarUrl },
+    };
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+
+    await waitFor(() => {
+      expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({
+        avatar_url: googleAvatarUrl,
+      }));
+    });
+  });
+
+  it("keeps an existing Drifty profile photo instead of replacing it with Google metadata", async () => {
+    const profileAvatarUrl = "data:image/png;base64,profile-photo";
+    authState.user = {
+      id: "user-1",
+      email: "alex@example.com",
+      user_metadata: { picture: "https://lh3.googleusercontent.com/a/avatar.png" },
+    };
+    fetchOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex",
+        bio: "",
+        avatar_url: profileAvatarUrl,
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+
+    await waitFor(() => {
+      expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({
+        avatar_url: profileAvatarUrl,
+      }));
+    });
   });
 
   it("does not call anonymous sign-in when anonymous leaderboard joins are disabled", async () => {
