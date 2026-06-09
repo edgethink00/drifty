@@ -456,6 +456,61 @@ describe("App AI classification controls", () => {
     expect(rightStacks[1]?.textContent).toBe("source1");
   });
 
+  it("keeps browser source rows site-wise when only a page title is captured", async () => {
+    const selectedDay = todayIsoDate();
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
+      timelineQueryIncludesDay(query, selectedDay)
+        ? [
+            {
+              ...createSegmentForDay(selectedDay),
+              id: "classification-title-only-browser",
+              startedAt: `${selectedDay}T10:00:00.000`,
+              endedAt: `${selectedDay}T10:45:00.000`,
+              durationSeconds: 2700,
+              appName: "Google Chrome",
+              bundleId: "com.google.Chrome",
+              browserName: "Google Chrome",
+              siteDomain: "   ",
+              siteTitle: "Course Canvas",
+              windowTitle: "Course Canvas - Google Chrome",
+              classification: {
+                category: "workspace",
+                productivity: "focus",
+                source: "manual",
+                confidence: 0.94,
+              },
+            },
+            {
+              ...createSegmentForDay(selectedDay),
+              id: "classification-native-code",
+              startedAt: `${selectedDay}T11:00:00.000`,
+              endedAt: `${selectedDay}T11:10:00.000`,
+              durationSeconds: 600,
+              appName: "Visual Studio Code",
+              bundleId: "com.microsoft.VSCode",
+              windowTitle: "Implementation notes",
+              classification: {
+                category: "workspace",
+                productivity: "focus",
+                source: "manual",
+                confidence: 0.98,
+              },
+            },
+          ]
+        : [],
+    ));
+    render(<App />);
+
+    const primaryNavigation = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(primaryNavigation).getByRole("button", { name: /^classification$/i }));
+
+    const panel = await screen.findByLabelText("Classification panel view") as HTMLElement;
+    const sourceRows = Array.from(panel.querySelectorAll<HTMLElement>(".classification-panel-view__source-row"));
+
+    expect(sourceRows.map((row) => row.querySelector("strong")?.textContent)).toEqual(["Course Canvas", "Visual Studio Code"]);
+    expect(sourceRows[0]?.textContent).not.toContain("Google Chrome");
+  });
+
   it("uses the selected category tone for classification selections and activity detail bars", async () => {
     const selectedDay = todayIsoDate();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
