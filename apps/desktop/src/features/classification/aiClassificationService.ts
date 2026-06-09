@@ -1,4 +1,4 @@
-import { classifyActivityDetailed } from "@drifty/domain";
+import { classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment } from "@drifty/domain";
 import type {
   ActivityCategory,
   ActivityClassificationRecord,
@@ -25,6 +25,9 @@ const AI_CLASSIFICATION_PROMPT_VERSION = "v2-work-profile";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
+const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
+const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
+
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0.25, output: 1.5 },
   "deepseek/deepseek-v4-flash:free": { input: 0, output: 0 },
@@ -241,15 +244,17 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     ? await trackerClient.saveClassifications(deterministicRecords)
     : { saved: 0 };
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
-  const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId));
+  const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload);
+  const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId));
+  const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved;
 
   if (unknownPayload.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
       status: "saved",
       selectedSegments: payload.length,
-      savedRecords: deterministicSaveResult.saved,
-      message: `Saved ${deterministicSaveResult.saved} rule ${deterministicSaveResult.saved === 1 ? "classification" : "classifications"}. No unknown segments needed AI.`,
+      savedRecords: preAiSavedRecords,
+      message: `Saved ${preAiSavedRecords} local ${preAiSavedRecords === 1 ? "classification" : "classifications"}. No unknown segments needed AI.`,
       metrics,
     };
   }
@@ -257,28 +262,28 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
   const reusableResult = await saveReusableAiClassifications(unknownPayload);
   if (reusableResult.misses.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
-    const savedRecords = deterministicSaveResult.saved + reusableResult.saved;
+    const savedRecords = preAiSavedRecords + reusableResult.saved;
     return {
       status: "saved",
       selectedSegments: payload.length,
       savedRecords,
-      message: `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+      message: `Saved ${reusableResult.saved} reused AI and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
       metrics,
     };
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, payload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
+    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
   if (cloudAvailability) {
-    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
+    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
     return partialSummary ?? cloudAvailability;
   }
   const cloudClient = supabase;
   if (!cloudClient) {
-    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, "Supabase is not configured.");
+    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, "Supabase is not configured.");
     return partialSummary ?? { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
   }
 
@@ -309,7 +314,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     return {
       status: "error",
       selectedSegments: payload.length,
-      savedRecords: deterministicSaveResult.saved + reusableResult.saved,
+      savedRecords: preAiSavedRecords + reusableResult.saved,
       message: `AI classification returned no usable classifications for ${reusableResult.misses.length} unknown ${reusableResult.misses.length === 1 ? "segment" : "segments"}.`,
       metrics,
     };
@@ -317,12 +322,12 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
 
   const aiSaveResult = await trackerClient.saveClassifications(aiRecords);
   const metrics = await trackerClient.getClassificationMetrics(query);
-  const savedRecords = deterministicSaveResult.saved + reusableResult.saved + aiSaveResult.saved;
+  const savedRecords = preAiSavedRecords + reusableResult.saved + aiSaveResult.saved;
   return {
     status: "saved",
     selectedSegments: payload.length,
     savedRecords,
-    message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+    message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
 }
@@ -334,35 +339,39 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile)));
   const deterministicRecords = toDeterministicClassificationRecords(segments, payload);
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
-  const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId)).slice(0, threshold);
   const deterministicSaveResult = deterministicRecords.length > 0
     ? await trackerClient.saveClassifications(deterministicRecords)
     : { saved: 0 };
+  const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload);
+  const unknownPayload = payload
+    .filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId))
+    .slice(0, threshold);
+  const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved;
 
   const reusableResult = await saveReusableAiClassifications(unknownPayload);
 
   if (reusableResult.misses.length < threshold) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     if (reusableResult.saved > 0) {
-      const savedRecords = deterministicSaveResult.saved + reusableResult.saved;
+      const savedRecords = preAiSavedRecords + reusableResult.saved;
       const remainingCandidates = reusableResult.misses.length;
       return {
         status: "saved",
-        selectedSegments: deterministicSaveResult.saved + reusableResult.saved,
+        selectedSegments: preAiSavedRecords + reusableResult.saved,
         savedRecords,
         message: remainingCandidates > 0
-          ? `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}. Only ${remainingCandidates} unknown AI classification ${remainingCandidates === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
-          : `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+          ? `Saved ${reusableResult.saved} reused AI and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}. Only ${remainingCandidates} unknown AI classification ${remainingCandidates === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
+          : `Saved ${reusableResult.saved} reused AI and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
         metrics,
       };
     }
 
     return {
-      status: deterministicSaveResult.saved > 0 ? "saved" : "empty",
-      selectedSegments: deterministicRecords.length,
-      savedRecords: deterministicSaveResult.saved,
-      message: deterministicSaveResult.saved > 0
-        ? `Saved ${deterministicSaveResult.saved} rule ${deterministicSaveResult.saved === 1 ? "classification" : "classifications"}. Only ${reusableResult.misses.length} unknown AI classification ${reusableResult.misses.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
+      status: preAiSavedRecords > 0 ? "saved" : "empty",
+      selectedSegments: deterministicRecords.length + inheritedResult.segmentIds.size,
+      savedRecords: preAiSavedRecords,
+      message: preAiSavedRecords > 0
+        ? `Saved ${preAiSavedRecords} local ${preAiSavedRecords === 1 ? "classification" : "classifications"}. Only ${reusableResult.misses.length} unknown AI classification ${reusableResult.misses.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`
         : `Only ${reusableResult.misses.length} unknown AI classification ${reusableResult.misses.length === 1 ? "candidate" : "candidates"} found; waiting for ${threshold}.`,
       metrics,
     };
@@ -370,28 +379,28 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
 
   if (reusableResult.misses.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
-    const savedRecords = deterministicSaveResult.saved + reusableResult.saved;
+    const savedRecords = preAiSavedRecords + reusableResult.saved;
     return {
       status: "saved",
       selectedSegments: unknownPayload.length,
       savedRecords,
-      message: `Saved ${reusableResult.saved} reused AI and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+      message: `Saved ${reusableResult.saved} reused AI and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
       metrics,
     };
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, deterministicSaveResult.saved + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
+    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
   if (cloudAvailability) {
-    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
+    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
     return partialSummary ?? cloudAvailability;
   }
   const cloudClient = supabase;
   if (!cloudClient) {
-    const partialSummary = await savedPartialAiSummary(query, deterministicSaveResult.saved, reusableResult.saved, reusableResult.misses.length, "Supabase is not configured.");
+    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, "Supabase is not configured.");
     return partialSummary ?? { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
   }
 
@@ -422,7 +431,7 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     return {
       status: "error",
       selectedSegments: unknownPayload.length,
-      savedRecords: deterministicSaveResult.saved + reusableResult.saved,
+      savedRecords: preAiSavedRecords + reusableResult.saved,
       message: `AI classification returned no usable classifications for ${reusableResult.misses.length} unknown ${reusableResult.misses.length === 1 ? "segment" : "segments"}.`,
       metrics,
     };
@@ -430,12 +439,12 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
 
   const aiSaveResult = await trackerClient.saveClassifications(aiRecords);
   const metrics = await trackerClient.getClassificationMetrics(query);
-  const savedRecords = deterministicSaveResult.saved + reusableResult.saved + aiSaveResult.saved;
+  const savedRecords = preAiSavedRecords + reusableResult.saved + aiSaveResult.saved;
   return {
     status: "saved",
     selectedSegments: unknownPayload.length,
     savedRecords,
-    message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${deterministicSaveResult.saved} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+    message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
 }
@@ -604,6 +613,117 @@ function toDeterministicClassificationRecords(segments: ActivitySegment[], paylo
   });
 }
 
+async function saveInheritedYouTubeBrowseClassifications(segments: ActivitySegment[], payload: MinimizedActivityPayload[]): Promise<{ saved: number; segmentIds: Set<string> }> {
+  const payloadById = new Map(payload.map((item) => [item.segmentId, item]));
+  const browseTargets = segments.filter((segment) => isYouTubeBrowsePage(segment));
+  if (browseTargets.length === 0) return { saved: 0, segmentIds: new Set<string>() };
+
+  const timelineRange = youtubeBrowseInheritanceTimelineRange(browseTargets);
+  if (!timelineRange) return { saved: 0, segmentIds: new Set<string>() };
+
+  const timeline = await trackerClient.getTimeline(timelineRange);
+  const inheritedRecords = browseTargets.map((segment) => toInheritedYouTubeBrowseClassificationRecord(segment, payloadById, timeline))
+    .filter((record): record is ActivityClassificationRecord => record !== null);
+  if (inheritedRecords.length === 0) return { saved: 0, segmentIds: new Set<string>() };
+
+  const saveResult = await trackerClient.saveClassifications(inheritedRecords);
+  return { saved: saveResult.saved, segmentIds: new Set(inheritedRecords.map((record) => record.segmentId)) };
+}
+
+function youtubeBrowseInheritanceTimelineRange(targets: ActivitySegment[]): { start: string; end: string } | null {
+  let earliestStart = Number.POSITIVE_INFINITY;
+  let latestEnd = Number.NEGATIVE_INFINITY;
+
+  for (const target of targets) {
+    const targetStart = new Date(target.startedAt).getTime();
+    const targetEnd = new Date(target.endedAt).getTime();
+    if (!Number.isFinite(targetStart) || !Number.isFinite(targetEnd)) continue;
+    earliestStart = Math.min(earliestStart, targetStart);
+    latestEnd = Math.max(latestEnd, targetEnd);
+  }
+
+  if (!Number.isFinite(earliestStart) || !Number.isFinite(latestEnd)) return null;
+  return {
+    start: new Date(earliestStart - YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS).toISOString(),
+    end: new Date(latestEnd + YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS).toISOString(),
+  };
+}
+
+function toInheritedYouTubeBrowseClassificationRecord(
+  target: ActivitySegment,
+  payloadById: Map<string, MinimizedActivityPayload>,
+  timeline: ActivitySegment[],
+): ActivityClassificationRecord | null {
+  const sourcePayload = payloadById.get(target.id);
+  if (!sourcePayload) return null;
+
+  const targetStart = new Date(target.startedAt).getTime();
+  const targetEnd = new Date(target.endedAt).getTime();
+  if (!Number.isFinite(targetStart) || !Number.isFinite(targetEnd)) return null;
+
+  const candidate = selectNearestClassifiedYouTubeVideo(target, timeline);
+  if (!candidate) return null;
+
+  return {
+    segmentId: target.id,
+    inputFingerprint: sourcePayload.inputFingerprint,
+    category: candidate.classification.category,
+    productivity: candidate.classification.productivity,
+    source: "system",
+    confidence: Math.min(YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE, finiteConfidence(candidate.classification.confidence)),
+    reason: "Inherited classification from nearby YouTube video activity.",
+    model: null,
+    promptVersion: null,
+    taxonomyVersion: "v1",
+    aiResult: false,
+    latencyMs: null,
+    classifiedAt: new Date().toISOString(),
+  };
+}
+
+type YouTubeInheritanceCandidate = {
+  segment: ActivitySegment;
+  classification: ReturnType<typeof classifyActivityDetailed>;
+  gapMs: number;
+};
+
+function selectNearestClassifiedYouTubeVideo(target: ActivitySegment, timeline: ActivitySegment[]): YouTubeInheritanceCandidate | null {
+  const candidates = timeline.flatMap((segment): YouTubeInheritanceCandidate[] => {
+    if (segment.id === target.id || !isYouTubeVideoSegment(segment)) return [];
+    const classification = classifyActivityDetailed(segment);
+    if (classification.category === "unknown") return [];
+
+    const gapMs = segmentTimeGapMs(target, segment);
+    if (gapMs === null || gapMs > YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS) return [];
+    return [{ segment, classification, gapMs }];
+  });
+
+  return candidates.sort(compareYouTubeInheritanceCandidates)[0] ?? null;
+}
+
+function compareYouTubeInheritanceCandidates(left: YouTubeInheritanceCandidate, right: YouTubeInheritanceCandidate): number {
+  if (left.gapMs !== right.gapMs) return left.gapMs - right.gapMs;
+  const confidenceDelta = finiteConfidence(right.classification.confidence) - finiteConfidence(left.classification.confidence);
+  if (confidenceDelta !== 0) return confidenceDelta;
+  if (left.segment.durationSeconds !== right.segment.durationSeconds) return right.segment.durationSeconds - left.segment.durationSeconds;
+  return new Date(left.segment.startedAt).getTime() - new Date(right.segment.startedAt).getTime();
+}
+
+function segmentTimeGapMs(target: ActivitySegment, candidate: ActivitySegment): number | null {
+  const targetStart = new Date(target.startedAt).getTime();
+  const targetEnd = new Date(target.endedAt).getTime();
+  const candidateStart = new Date(candidate.startedAt).getTime();
+  const candidateEnd = new Date(candidate.endedAt).getTime();
+  if (![targetStart, targetEnd, candidateStart, candidateEnd].every(Number.isFinite)) return null;
+  if (candidateEnd < targetStart) return targetStart - candidateEnd;
+  if (candidateStart > targetEnd) return candidateStart - targetEnd;
+  return 0;
+}
+
+function finiteConfidence(confidence: number): number {
+  return Number.isFinite(confidence) ? confidence : 0.5;
+}
+
 function toClassificationRecords(data: unknown, payload: MinimizedActivityPayload[]): ActivityClassificationRecord[] {
   const response = data as EdgeClassificationResponse | EdgeClassification[] | null;
   const classifications = Array.isArray(response)
@@ -690,12 +810,12 @@ function toReusableClassificationRecords(
 
 async function savedPartialAiSummary(
   query: ClassificationQuery,
-  deterministicSavedRecords: number,
+  localSavedRecords: number,
   reusedSavedRecords: number,
   remainingUnknownSegments: number,
   blockerMessage: string,
 ): Promise<AiClassificationSummary | null> {
-  const savedRecords = deterministicSavedRecords + reusedSavedRecords;
+  const savedRecords = localSavedRecords + reusedSavedRecords;
   if (savedRecords === 0) return null;
 
   const metrics = await trackerClient.getClassificationMetrics(query);
@@ -704,7 +824,7 @@ async function savedPartialAiSummary(
     status: "saved",
     selectedSegments: savedRecords,
     savedRecords,
-    message: `Saved ${reusedSavedRecords} reused AI and ${deterministicSavedRecords} rule ${savedRecords === 1 ? "classification" : "classifications"}. ${blockerMessage} Run AI classification for the remaining ${remainingUnknownSegments} unknown ${remainingLabel} after fixing provider access.`,
+    message: `Saved ${reusedSavedRecords} reused AI and ${localSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}. ${blockerMessage} Run AI classification for the remaining ${remainingUnknownSegments} unknown ${remainingLabel} after fixing provider access.`,
     metrics,
   };
 }
@@ -753,7 +873,7 @@ async function runLocalAiClassification(
     status: "saved",
     selectedSegments,
     savedRecords,
-    message: `Saved ${aiSaveResult.saved} AI and ${deterministicSavedRecords} rule ${savedRecords === 1 ? "classification" : "classifications"}.`,
+    message: `Saved ${aiSaveResult.saved} AI and ${deterministicSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
 }

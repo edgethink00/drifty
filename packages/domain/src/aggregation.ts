@@ -1349,8 +1349,8 @@ function unknownDetail(surface: ClassificationSurface, reason: string): Activity
   return detail({ category: "unknown", productivity: "neutral" }, surface, "unknown", 0, reason);
 }
 
-function classifyYouTubeActivity(segment: ActivitySegment): ActivityClassification | null {
-  const site = (segment.siteDomain ?? "").toLowerCase();
+export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClassification | null {
+  const site = normalizeYouTubeSite(segment.siteDomain);
   if (!isYouTubeSite(site)) return null;
 
   const playlistId = segment.youtubePlaylistId ?? playlistIdFromUrl(segment.siteUrl);
@@ -1368,18 +1368,23 @@ function classifyYouTubeActivity(segment: ActivitySegment): ActivityClassificati
     return { category: "music", productivity: "neutral" };
   }
 
-  const categoryClassification = classifyYouTubeOfficialCategory(officialCategory);
-  if (categoryClassification) return categoryClassification;
-
-  if (isYouTubeNavigationPage(segment)) {
+  if (isYouTubeBrowsePage(segment)) {
     return { category: "unknown", productivity: "neutral" };
   }
+
+  const categoryClassification = classifyYouTubeOfficialCategory(officialCategory);
+  if (categoryClassification) return categoryClassification;
 
   return { category: "entertainment", productivity: "drift" };
 }
 
-function isYouTubeSite(site: string): boolean {
-  return site === "youtube.com" || site === "m.youtube.com" || site === "music.youtube.com" || site === "youtu.be";
+export function isYouTubeSite(site: string): boolean {
+  const normalizedSite = normalizeYouTubeSite(site);
+  return normalizedSite === "youtube.com" || normalizedSite === "m.youtube.com" || normalizedSite === "music.youtube.com" || normalizedSite === "youtu.be";
+}
+
+function normalizeYouTubeSite(site?: string | null): string {
+  return normalizeDomain(site);
 }
 
 function playlistIdFromUrl(siteUrl?: string | null): string | null {
@@ -1391,10 +1396,27 @@ function playlistIdFromUrl(siteUrl?: string | null): string | null {
   }
 }
 
-function isYouTubeNavigationPage(segment: ActivitySegment): boolean {
-  if (segment.youtubeVideoId) return false;
+export function isYouTubeBrowsePage(segment: ActivitySegment): boolean {
+  const site = normalizeYouTubeSite(segment.siteDomain);
+  if (!isYouTubeSite(site) || site === "music.youtube.com" || segment.youtubeVideoId) return false;
+
   const path = youtubePathFromUrl(segment.siteUrl);
-  return path !== null && (path === "/" || path === "/results" || path === "/feed" || path.startsWith("/feed/"));
+  if (path === null) return false;
+  if (path === "/" || path === "/results" || path === "/feed" || path.startsWith("/feed/")) return true;
+  if (/^\/@[^/]+(?:\/.*)?$/.test(path)) return true;
+  return path.startsWith("/channel/") || path.startsWith("/c/") || path.startsWith("/user/");
+}
+
+export const isYouTubeNavigationPage = isYouTubeBrowsePage;
+
+export function isYouTubeVideoSegment(segment: ActivitySegment): boolean {
+  const site = normalizeYouTubeSite(segment.siteDomain);
+  if (!isYouTubeSite(site) || isYouTubeBrowsePage(segment)) return false;
+  if (segment.youtubeVideoId || segment.youtubeIsShorts) return true;
+
+  const path = youtubePathFromUrl(segment.siteUrl);
+  if (site === "youtu.be") return Boolean(path && path !== "/");
+  return Boolean(path && (path === "/watch" || path.startsWith("/shorts/")));
 }
 
 function youtubePathFromUrl(siteUrl?: string | null): string | null {

@@ -157,7 +157,7 @@ describe("runAiClassification cloud contract", () => {
     };
   }
 
-  async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown; reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord> } = {}) {
+  async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown; reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord>; timeline?: ActivitySegment[] } = {}) {
     vi.resetModules();
     ensureTestWindow();
 
@@ -175,6 +175,7 @@ describe("runAiClassification cloud contract", () => {
       error: null,
     });
     const getUnclassifiedSegments = vi.fn().mockResolvedValue(segments);
+    const getTimeline = vi.fn().mockResolvedValue(options.timeline ?? []);
     const saveClassifications = vi.fn((records: unknown[]) => Promise.resolve({ saved: records.length }));
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
     const getReusableAiClassifications = vi.fn((fingerprints: string[]) => Promise.resolve(options.reusable?.(fingerprints) ?? {}));
@@ -212,6 +213,7 @@ describe("runAiClassification cloud contract", () => {
     vi.doMock("../../lib/api/trackerClient", () => ({
       trackerClient: {
         getUnclassifiedSegments,
+        getTimeline,
         getReusableAiClassifications,
         saveClassifications,
         getClassificationMetrics,
@@ -219,7 +221,36 @@ describe("runAiClassification cloud contract", () => {
     }));
 
     const service = await import("./aiClassificationService");
-    return { ...service, invoke, nativeInvoke, getSession, getUnclassifiedSegments, getReusableAiClassifications, saveClassifications, getClassificationMetrics };
+    return { ...service, invoke, nativeInvoke, getSession, getUnclassifiedSegments, getTimeline, getReusableAiClassifications, saveClassifications, getClassificationMetrics };
+  }
+
+  function createYouTubeBrowseSegment(index: number, siteUrl: string): ActivitySegment {
+    return createUnknownSegment(index, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "youtube.com",
+      siteTitle: "YouTube",
+      siteUrl,
+    });
+  }
+
+  function createYouTubeVideoSegment(index: number, overrides: Partial<ActivitySegment> = {}): ActivitySegment {
+    return createUnknownSegment(index, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: `https://www.youtube.com/watch?v=video${index}`,
+      youtubeVideoId: `video${index}`,
+      classification: {
+        category: "learning",
+        productivity: "focus",
+        source: "manual",
+        confidence: 0.94,
+        reason: "Test video classification",
+      },
+      ...overrides,
+    });
   }
 
   function createReusableRecord(inputFingerprint: string, overrides: Partial<ActivityClassificationRecord> = {}): ActivityClassificationRecord {
@@ -459,6 +490,36 @@ describe("runAiClassification cloud contract", () => {
       expect(invoke).not.toHaveBeenCalled();
       expect(saveClassifications).toHaveBeenCalledTimes(1);
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-99", aiResult: false })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("counts inherited YouTube browse records before threshold reuse summaries", async () => {
+    const browse = createYouTubeBrowseSegment(90, "https://www.youtube.com/@drifty/videos");
+    const unknownSegments = Array.from({ length: 4 }, (_, index) => createUnknownSegment(index));
+    const neighbor = createYouTubeVideoSegment(91, {
+      startedAt: "2026-05-22T08:58:00.000Z",
+      endedAt: "2026-05-22T09:00:00.000Z",
+      durationSeconds: 120,
+    });
+
+    try {
+      const { runAiClassificationForUnknownThreshold, invoke, saveClassifications } = await importServiceWithSegments([browse, ...unknownSegments], {
+        timeline: [neighbor],
+        reusable: (fingerprints) => Object.fromEntries(
+          fingerprints.map((fingerprint) => [fingerprint, createReusableRecord(fingerprint, { category: "learning" })]),
+        ),
+      });
+      const result = await runAiClassificationForUnknownThreshold({ day: "2026-05-22", limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD);
+
+      expect(result.status).toBe("saved");
+      expect(result.selectedSegments).toBe(5);
+      expect(result.savedRecords).toBe(5);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(2);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-90", source: "system", aiResult: false })]);
+      expect(saveClassifications.mock.calls[1]?.[0]).toHaveLength(4);
     } finally {
       cleanupServiceMocks();
     }
@@ -808,32 +869,134 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("sends YouTube search pages to AI instead of saving a deterministic entertainment rule", async () => {
-    const segment = createUnknownSegment(1, {
-      appName: "Safari",
-      browserName: "Safari",
-      siteDomain: "youtube.com",
-      siteTitle: "YouTube Search",
-      siteUrl: "https://www.youtube.com/results?search_query=typescript",
+  it("inherits YouTube browse classification from a nearby video within 180 seconds", async () => {
+    const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/results?search_query=typescript");
+    const neighbor = createYouTubeVideoSegment(2, {
+      startedAt: "2026-05-22T09:07:30.000Z",
+      endedAt: "2026-05-22T09:12:30.000Z",
+      durationSeconds: 300,
+      classification: {
+        category: "entertainment",
+        productivity: "drift",
+        source: "manual",
+        confidence: 0.96,
+        reason: "Test video drift classification",
+      },
     });
 
     try {
-      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([segment]);
+      const { runAiClassification, invoke, nativeInvoke, getTimeline, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([browse], { timeline: [browse, neighbor] });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(result.savedRecords).toBe(1);
+      expect(getTimeline).toHaveBeenCalledWith({ start: "2026-05-22T08:57:00.000Z", end: "2026-05-22T09:08:00.000Z" });
+      expect(getReusableAiClassifications).not.toHaveBeenCalled();
+      expect(invoke).not.toHaveBeenCalled();
+      expect(nativeInvoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "entertainment",
+        productivity: "drift",
+        source: "system",
+        confidence: 0.85,
+        reason: "Inherited classification from nearby YouTube video activity.",
+        aiResult: false,
+        model: null,
+        promptVersion: null,
+        taxonomyVersion: "v1",
+        latencyMs: null,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not inherit YouTube browse classification from a video 181 seconds away", async () => {
+    const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/");
+    const neighbor = createYouTubeVideoSegment(2, {
+      startedAt: "2026-05-22T09:08:01.000Z",
+      endedAt: "2026-05-22T09:13:01.000Z",
+      durationSeconds: 300,
+    });
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([browse], { timeline: [neighbor] });
       const result = await runAiClassification({ day: "2026-05-22" });
 
       expect(result.status).toBe("saved");
       expect(invoke).toHaveBeenCalledTimes(1);
       expect(saveClassifications).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", source: "llm", aiResult: true })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("uses nearest classified YouTube video with confidence, duration, and start-time tie breakers", async () => {
+    const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/feed/subscriptions");
+    const lowerConfidence = createYouTubeVideoSegment(2, {
+      startedAt: "2026-05-22T08:59:00.000Z",
+      endedAt: "2026-05-22T09:00:00.000Z",
+      durationSeconds: 60,
+      classification: { category: "entertainment", productivity: "drift", source: "manual", confidence: 0.7, reason: "Test" },
+    });
+    const shorter = createYouTubeVideoSegment(3, {
+      startedAt: "2026-05-22T09:06:00.000Z",
+      endedAt: "2026-05-22T09:07:00.000Z",
+      durationSeconds: 60,
+      classification: { category: "learning", productivity: "focus", source: "manual", confidence: 0.9, reason: "Test" },
+    });
+    const longer = createYouTubeVideoSegment(4, {
+      startedAt: "2026-05-22T08:57:00.000Z",
+      endedAt: "2026-05-22T09:00:00.000Z",
+      durationSeconds: 180,
+      classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 0.9, reason: "Test" },
+    });
+
+    try {
+      const { runAiClassification, saveClassifications } = await importServiceWithSegments([browse], { timeline: [lowerConfidence, shorter, longer] });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({
         segmentId: "segment-1",
-        source: "llm",
-        aiResult: true,
+        category: "workspace",
+        productivity: "focus",
+        source: "system",
       })]);
-      expect(saveClassifications.mock.calls[0]?.[0]).not.toEqual([expect.objectContaining({
-        segmentId: "segment-1",
-        source: "rule",
-        aiResult: false,
-      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("keeps inherited YouTube home, feed, search, and channel pages out of Edge and local AI payloads", async () => {
+    const browseSegments = [
+      createYouTubeBrowseSegment(1, "https://www.youtube.com/"),
+      createYouTubeBrowseSegment(2, "https://www.youtube.com/feed"),
+      createYouTubeBrowseSegment(3, "https://www.youtube.com/results?search_query=typescript"),
+      createYouTubeBrowseSegment(4, "https://www.youtube.com/@drifty/videos"),
+    ];
+    const neighbor = createYouTubeVideoSegment(5, {
+      startedAt: "2026-05-22T08:58:00.000Z",
+      endedAt: "2026-05-22T09:00:00.000Z",
+      durationSeconds: 120,
+    });
+
+    try {
+      const { runAiClassification, invoke, nativeInvoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments(browseSegments, { timeline: [neighbor] });
+      const edgeResult = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
+      });
+
+      expect(edgeResult.status).toBe("saved");
+      expect(invoke).not.toHaveBeenCalled();
+      expect(nativeInvoke).not.toHaveBeenCalled();
+      expect(getReusableAiClassifications).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(4);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining(browseSegments.map((segment) => expect.objectContaining({ segmentId: segment.id, source: "system", aiResult: false }))));
     } finally {
       cleanupServiceMocks();
     }
