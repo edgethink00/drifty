@@ -779,30 +779,36 @@ describe('domain helpers', () => {
   });
 
   it('keeps ordinary YouTube watch pages as entertainment when no stronger signal exists', () => {
-    const classification = classifyActivity({
-      ...segments[0],
-      appName: 'Safari',
-      siteDomain: 'youtube.com',
-      siteTitle: 'A day in my life',
-      siteUrl: 'https://www.youtube.com/watch?v=abc123',
-      youtubeVideoId: 'abc123',
-    });
-
-    expect(classification).toEqual({ category: 'entertainment', productivity: 'drift' });
-  });
-
-  it('keeps YouTube navigation pages unknown so AI can classify intent', () => {
-    const navigationUrls = [
-      'https://www.youtube.com/results?search_query=typescript',
-      'https://www.youtube.com/',
-      'https://www.youtube.com/feed/subscriptions',
-    ];
-
-    for (const siteUrl of navigationUrls) {
+    for (const siteDomain of ['youtube.com', 'www.youtube.com']) {
       expect(classifyActivity({
         ...segments[0],
         appName: 'Safari',
-        siteDomain: 'youtube.com',
+        siteDomain,
+        siteTitle: 'A day in my life',
+        siteUrl: 'https://www.youtube.com/watch?v=abc123',
+        youtubeVideoId: 'abc123',
+      })).toEqual({ category: 'entertainment', productivity: 'drift' });
+    }
+  });
+
+  it('keeps YouTube browse pages unknown and neutral across home, feed, search, and channel paths', () => {
+    const navigationCases = [
+      { siteDomain: 'www.youtube.com', siteUrl: 'https://www.youtube.com/' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/results?search_query=typescript' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/feed' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/feed/subscriptions' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/@drifty' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/@drifty/videos' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/channel/UC123' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/c/Drifty' },
+      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/user/drifty' },
+    ];
+
+    for (const { siteDomain, siteUrl } of navigationCases) {
+      expect(classifyActivity({
+        ...segments[0],
+        appName: 'Safari',
+        siteDomain,
         siteTitle: 'YouTube',
         siteUrl,
       })).toEqual({ category: 'unknown', productivity: 'neutral' });
