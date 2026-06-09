@@ -31,6 +31,7 @@ const {
     hasBlockingAuthConfigurationError: false,
     signInAnonymously: vi.fn(),
     signInWithWebsite: vi.fn(),
+    signInWithGoogle: vi.fn(),
     signInWithEmail: vi.fn(),
     signUpWithEmail: vi.fn(),
     clearCallbackStatus: vi.fn(),
