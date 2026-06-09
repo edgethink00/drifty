@@ -23,7 +23,7 @@ import {
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
-const DESKTOP_GOOGLE_AUTH_CALLBACK_URL = "drifty://auth/google-callback";
+const DESKTOP_GOOGLE_AUTH_BRIDGE_URL = "https://drifty.so/auth/desktop-google-callback/";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -679,7 +679,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: DESKTOP_GOOGLE_AUTH_CALLBACK_URL,
+        redirectTo: DESKTOP_GOOGLE_AUTH_BRIDGE_URL,
         skipBrowserRedirect: true,
         queryParams: {
           prompt: "select_account consent",

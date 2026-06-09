@@ -239,7 +239,7 @@ describe("AuthContext", () => {
     expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "drifty://auth/google-callback",
+        redirectTo: "https://drifty.so/auth/desktop-google-callback/",
         skipBrowserRedirect: true,
         queryParams: {
           prompt: "select_account consent",
