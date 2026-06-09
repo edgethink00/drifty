@@ -142,7 +142,7 @@ fn remember_auth_deep_links<R: Runtime>(
 }
 
 fn is_auth_callback_deep_link(url: &str) -> bool {
-    url.starts_with("drifty://auth/callback")
+    url.starts_with("drifty://auth/callback") || url.starts_with("drifty://auth/google-callback")
 }
 
 fn is_billing_success_deep_link(url: &str) -> bool {
@@ -469,6 +469,9 @@ mod tests {
         ));
         assert!(is_auth_callback_deep_link(
             "drifty://auth/callback#access_token=access&refresh_token=refresh"
+        ));
+        assert!(is_auth_callback_deep_link(
+            "drifty://auth/google-callback?code=google-code"
         ));
         assert!(!is_auth_callback_deep_link(
             "drifty://auth/not-callback?code=ignored"

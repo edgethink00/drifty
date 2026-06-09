@@ -37,6 +37,7 @@ const {
     hasBlockingAuthConfigurationError: false,
     signInAnonymously: vi.fn(),
     signInWithWebsite: vi.fn(),
+    signInWithGoogle: vi.fn(),
     signInWithEmail: vi.fn(),
     signUpWithEmail: vi.fn(),
     clearCallbackStatus: vi.fn(),
@@ -236,6 +237,8 @@ describe("App onboarding", () => {
     authState.allowsAnonymousAuth = true;
     authState.hasRequiredAccountAuth = true;
     authState.hasBlockingAuthConfigurationError = false;
+    authState.signInWithWebsite.mockResolvedValue({ error: null });
+    authState.signInWithGoogle.mockResolvedValue({ error: null });
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     window.localStorage.clear();
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
@@ -373,6 +376,23 @@ describe("App onboarding", () => {
     fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
 
     expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+    expect(authState.signInWithGoogle).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+  });
+
+  it("starts direct Google OAuth from the onboarding Google button", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+
+    render(<App />);
+
+    await chooseSimpleSetup();
+
+    fireEvent.click(await screen.findByRole("button", { name: /continue with google/i }));
+
+    expect(authState.signInWithGoogle).toHaveBeenCalledTimes(1);
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
   });
 
@@ -386,6 +406,7 @@ describe("App onboarding", () => {
     await clickEnabledNext();
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+    expect(authState.signInWithGoogle).not.toHaveBeenCalled();
     expect(await screen.findByRole("dialog", { name: /tell drifty about your work/i })).toBeTruthy();
   });
 

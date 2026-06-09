@@ -41,6 +41,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
     hasBlockingAuthConfigurationError: false,
     signInAnonymously: vi.fn(),
     signInWithWebsite: vi.fn(),
+    signInWithGoogle: vi.fn(),
     signInWithEmail: vi.fn(),
     signUpWithEmail: vi.fn(),
     clearCallbackStatus: vi.fn(),

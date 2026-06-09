@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 
-const { authMocks, getSession, onAuthStateChange, exchangeCodeForSession, setSession, signInAnonymously, signOut, invoke } = vi.hoisted(() => {
+const { authMocks, getSession, onAuthStateChange, exchangeCodeForSession, setSession, signInAnonymously, signInWithOAuth, signOut, invoke } = vi.hoisted(() => {
   const mocks = {
     authChangeHandler: null as ((event: string, session: Session | null) => void) | null,
   };
@@ -25,6 +25,7 @@ const { authMocks, getSession, onAuthStateChange, exchangeCodeForSession, setSes
     exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
     setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
+    signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null }),
     signOut: vi.fn().mockResolvedValue({ error: null }),
     invoke: vi.fn().mockResolvedValue([]),
   };
@@ -68,6 +69,7 @@ vi.mock("../../lib/supabase/client", () => ({
       exchangeCodeForSession,
       setSession,
       signInAnonymously,
+      signInWithOAuth,
       signOut,
       signInWithPassword: vi.fn(),
       signUp: vi.fn(),
@@ -125,6 +127,7 @@ describe("AuthContext", () => {
     getSession.mockResolvedValue({ data: { session: null } });
     exchangeCodeForSession.mockResolvedValue({ error: null });
     setSession.mockResolvedValue({ data: { session: null }, error: null });
+    signInWithOAuth.mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null });
     signOut.mockResolvedValue({ error: null });
     invoke.mockResolvedValue([]);
     authMocks.authChangeHandler = null;
@@ -211,6 +214,107 @@ describe("AuthContext", () => {
     });
   });
 
+  it("starts direct Google OAuth in Tauri builds", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let googleError: Error | null | undefined;
+    await act(async () => {
+      googleError = (await authApi!.signInWithGoogle()).error;
+    });
+
+    expect(googleError).toBeNull();
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "drifty://auth/google-callback",
+        skipBrowserRedirect: true,
+        queryParams: {
+          prompt: "select_account consent",
+          access_type: "offline",
+          include_granted_scopes: "false",
+        },
+      },
+    });
+    expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://accounts.google.com/oauth");
+    expect(tauriMocks.openUrl).not.toHaveBeenCalledWith("https://drifty.so/auth/login/");
+    await waitFor(() => {
+      expect(authApi?.callbackStatus?.message).toBe("Browser opened. Complete Google sign-in, then choose Open Drifty.");
+    });
+  });
+
+  it("returns an error when direct Google OAuth does not return a URL", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    signInWithOAuth.mockResolvedValueOnce({ data: { url: null }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let googleError: Error | null | undefined;
+    await act(async () => {
+      googleError = (await authApi!.signInWithGoogle()).error;
+    });
+
+    expect(googleError?.message).toBe("Google sign-in did not return an OAuth URL.");
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(authApi?.callbackStatus?.phase).toBe("failed");
+    });
+    expect(authApi!.callbackStatus?.message).toBe("Google sign-in did not return an OAuth URL.");
+  });
+
+  it("returns the Supabase error when direct Google OAuth fails", async () => {
+    const oauthError = new Error("Google provider is disabled");
+    signInWithOAuth.mockResolvedValueOnce({ data: { url: null }, error: oauthError });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let googleError: Error | null | undefined;
+    await act(async () => {
+      googleError = (await authApi!.signInWithGoogle()).error;
+    });
+
+    expect(googleError).toBe(oauthError);
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(authApi?.callbackStatus?.phase).toBe("failed");
+    });
+    expect(authApi!.callbackStatus?.message).toBe("Google provider is disabled");
+  });
+
   it("exchanges startup Tauri deep-link auth codes", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();
@@ -286,6 +390,69 @@ describe("AuthContext", () => {
       expect(exchangeCodeForSession).toHaveBeenCalledWith("live-code");
     });
     expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("exchanges direct Google OAuth callbacks through the code-only path", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    exchangeCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={() => undefined} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(tauriMocks.onOpenUrl).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      tauriMocks.emitOpenUrl([
+        "drifty://auth/google-callback?code=google-code",
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("google-code");
+    });
+    expect(setSession).not.toHaveBeenCalledWith({
+      access_token: "google-access",
+      refresh_token: "google-refresh",
+    });
+  });
+
+  it("rejects direct Google OAuth callbacks that contain session tokens instead of a code", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(tauriMocks.onOpenUrl).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      tauriMocks.emitOpenUrl([
+        "drifty://auth/google-callback#access_token=google-access&refresh_token=google-refresh",
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(authApi?.callbackStatus?.phase).toBe("failed");
+    });
+    expect(authApi!.callbackStatus?.message).toBe("Google OAuth callback did not include an authorization code.");
+    expect(setSession).not.toHaveBeenCalledWith({
+      access_token: "google-access",
+      refresh_token: "google-refresh",
+    });
+    expect(exchangeCodeForSession).not.toHaveBeenCalledWith("google-access");
   });
 
   it("dispatches billing success events for Tauri billing success deep links", async () => {

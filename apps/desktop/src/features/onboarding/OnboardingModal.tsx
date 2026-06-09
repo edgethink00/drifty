@@ -181,7 +181,8 @@ export function OnboardingModal({
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
-  onStartCloudTrial,
+  onStartCloudTrialWithGoogle,
+  onStartCloudTrialWithEmail,
   onComplete,
   __devInitialStep,
 }: {
@@ -195,7 +196,8 @@ export function OnboardingModal({
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
-  onStartCloudTrial: () => void;
+  onStartCloudTrialWithGoogle: () => void;
+  onStartCloudTrialWithEmail: () => void;
   onComplete: (state: UserOnboardingState) => void;
   /** Dev-only: start on a specific step for visual review / Playwright. */
   __devInitialStep?: OnboardingStep;
@@ -763,7 +765,7 @@ export function OnboardingModal({
                   <button
                     type="button"
                     className="onb-button onb-button--primary onb-account__provider"
-                    onClick={onStartCloudTrial}
+                    onClick={onStartCloudTrialWithGoogle}
                     disabled={accountConnected}
                   >
                     {accountConnected ? "Account connected" : "Continue with Google"}
@@ -771,7 +773,7 @@ export function OnboardingModal({
                   <button
                     type="button"
                     className="onb-button onb-button--ghost onb-account__provider"
-                    onClick={onStartCloudTrial}
+                    onClick={onStartCloudTrialWithEmail}
                     disabled={accountConnected}
                   >
                     {accountConnected ? "Signed in" : "Continue with email"}
