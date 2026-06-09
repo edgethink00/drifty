@@ -18,6 +18,7 @@ import {
   computePreservedFocusStrikeSeconds,
   classifyActivity,
   classifyActivityDetailed,
+  isYouTubeBrowsePage,
   buildDailyTotals,
   buildDayRibbonSegments,
   buildHourlySummary,
@@ -8231,7 +8232,7 @@ function buildDriftAlarmCandidates({
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
     } satisfies ClassificationOptions;
-    const currentClassification = classifyActivity(currentSegment, currentClassificationOptions);
+    const currentClassification = classifyActivity(segmentForLiveDriftAlarmClassification(currentSegment), currentClassificationOptions);
 
     if (currentClassification.productivity === "drift" && currentSegment.durationSeconds >= minimumDurationSeconds) {
       return [{
@@ -8247,7 +8248,7 @@ function buildDriftAlarmCandidates({
   const latestSegment = getLatestWatcherSegment(segments);
   if (!latestSegment) return [];
 
-  const latestClassification = classifyActivity(latestSegment, classificationOptions);
+  const latestClassification = classifyActivity(segmentForLiveDriftAlarmClassification(latestSegment), classificationOptions);
   if (latestClassification.productivity !== "drift" || latestSegment.durationSeconds < minimumDurationSeconds) return [];
 
   return [{
@@ -8255,6 +8256,11 @@ function buildDriftAlarmCandidates({
     category: latestClassification.category,
     segment: latestSegment,
   }];
+}
+
+function segmentForLiveDriftAlarmClassification(segment: ActivitySegment): ActivitySegment {
+  if (!isYouTubeBrowsePage(segment)) return segment;
+  return { ...segment, classification: null };
 }
 
 function isCurrentSnapshotFreshEnoughForDriftAlarm(current: CurrentActivitySnapshot, segments: ActivitySegment[]): boolean {
