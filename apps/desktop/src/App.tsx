@@ -60,6 +60,7 @@ import { DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCH
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
+import { CategoryColorControls, ClassificationPicker, ThemeColorControls, type AppThemeColorKey, type ColorOption } from "./features/settings/SettingsColorControls";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import {
   OnboardingModal,
@@ -117,7 +118,6 @@ import {
 type ThemeMode = "light" | "dark";
 type StartOfWeek = "sunday" | "monday" | "saturday";
 type CategoryColorOverrides = Partial<Record<ActivityCategory, string>>;
-type AppThemeColorKey = "accent" | "productivityFocus" | "productivityDrift" | "productivityNeutral";
 type AppThemeColorOverrides = Partial<Record<AppThemeColorKey, string>>;
 type TabId = "dashboard" | "classify" | "drift" | "leaderboard" | "settings";
 
@@ -532,26 +532,38 @@ const START_OF_WEEK_OPTIONS = [
   { value: "sunday", label: "Sunday" },
   { value: "saturday", label: "Saturday" },
 ] satisfies ReadonlyArray<{ value: StartOfWeek; label: string }>;
-const APP_THEME_COLOR_OPTIONS: Array<{ key: AppThemeColorKey; label: string; cssVariable: string; defaultColor: string }> = [
-  { key: "accent", label: "Accent", cssVariable: "--accent", defaultColor: "#6b7a22" },
-  { key: "productivityFocus", label: "Focus", cssVariable: "--productivity-focus", defaultColor: "#536414" },
-  { key: "productivityDrift", label: "Drift", cssVariable: "--productivity-drift", defaultColor: "#8f352d" },
-  { key: "productivityNeutral", label: "Neutral", cssVariable: "--productivity-neutral", defaultColor: "#b8b3a7" },
-];
+const APP_THEME_COLOR_OPTIONS = [
+  { key: "accent", label: "Accent", cssVariable: "--accent", defaultColor: "#5f7f31" },
+  { key: "productivityFocus", label: "Focus", cssVariable: "--productivity-focus", defaultColor: "#4f751e" },
+  { key: "productivityDrift", label: "Drift", cssVariable: "--productivity-drift", defaultColor: "#a34139" },
+  { key: "productivityNeutral", label: "Neutral", cssVariable: "--productivity-neutral", defaultColor: "#9b968b" },
+] satisfies ReadonlyArray<ColorOption<AppThemeColorKey>>;
 const APP_THEME_ACCENT_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filter((option) => option.key === "accent");
 const APP_THEME_PRODUCTIVITY_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filter((option) => option.key !== "accent");
-const CATEGORY_COLOR_OPTIONS: Array<{ key: ActivityCategory; label: string; cssVariable: string; defaultColor: string }> = [
-  { key: "workspace", label: "Workspace", cssVariable: "--category-workspace", defaultColor: "#7f912b" },
-  { key: "learning", label: "Learning", cssVariable: "--category-learning", defaultColor: "#577b72" },
-  { key: "communication", label: "Communication", cssVariable: "--category-communication", defaultColor: "#9b978b" },
-  { key: "music", label: "Music", cssVariable: "--category-music", defaultColor: "#7c6d95" },
-  { key: "game", label: "Game", cssVariable: "--category-game", defaultColor: "#9a633d" },
-  { key: "social_media", label: "Social media", cssVariable: "--category-social-media", defaultColor: "#a8564f" },
-  { key: "entertainment", label: "Entertainment", cssVariable: "--category-entertainment", defaultColor: "#b76055" },
-  { key: "shopping", label: "Shopping", cssVariable: "--category-shopping", defaultColor: "#a9783f" },
-  { key: "utility", label: "Utility", cssVariable: "--category-utility", defaultColor: "#817e75" },
-  { key: "unknown", label: "Unknown", cssVariable: "--category-unknown", defaultColor: "#5f5d56" },
-];
+const CATEGORY_COLOR_OPTIONS = [
+  { key: "workspace", label: "Workspace", cssVariable: "--category-workspace", defaultColor: "#5f7f31" },
+  { key: "learning", label: "Learning", cssVariable: "--category-learning", defaultColor: "#2f7f78" },
+  { key: "communication", label: "Communication", cssVariable: "--category-communication", defaultColor: "#6f6a5e" },
+  { key: "music", label: "Music", cssVariable: "--category-music", defaultColor: "#7b5ea7" },
+  { key: "game", label: "Game", cssVariable: "--category-game", defaultColor: "#9a6530" },
+  { key: "social_media", label: "Social media", cssVariable: "--category-social-media", defaultColor: "#b9565b" },
+  { key: "entertainment", label: "Entertainment", cssVariable: "--category-entertainment", defaultColor: "#c05d48" },
+  { key: "shopping", label: "Shopping", cssVariable: "--category-shopping", defaultColor: "#a1792f" },
+  { key: "utility", label: "Utility", cssVariable: "--category-utility", defaultColor: "#66707a" },
+  { key: "unknown", label: "Unknown", cssVariable: "--category-unknown", defaultColor: "#4d4b45" },
+] satisfies ReadonlyArray<ColorOption<ActivityCategory>>;
+
+function categoryControlColor(category: ActivityCategory, overrides: CategoryColorOverrides): string {
+  return overrides[category] ?? CATEGORY_COLOR_OPTIONS.find((option) => option.key === category)?.defaultColor ?? "#66707a";
+}
+
+function productivityControlColor(productivity: ProductivityLabel, overrides: AppThemeColorOverrides): string {
+  switch (productivity) {
+    case "focus": return overrides.productivityFocus ?? "#4f751e";
+    case "drift": return overrides.productivityDrift ?? "#a34139";
+    case "neutral": return overrides.productivityNeutral ?? "#9b968b";
+  }
+}
 const DEFAULT_THEME: ThemeMode = "light";
 const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   provider: "openrouter_byok",
@@ -3435,23 +3447,17 @@ export default function App() {
     if (!isHexColor(value)) return;
     setAppThemeColorOverrides((current) => ({ ...current, [key]: value }));
   }, []);
-  const hasCategoryColorOverrides = CATEGORY_COLOR_OPTIONS.some((option) => Boolean(categoryColorOverrides[option.key]));
-  const hasAccentColorOverride = APP_THEME_ACCENT_COLOR_OPTIONS.some((option) => Boolean(appThemeColorOverrides[option.key]));
-  const hasProductivityColorOverrides = APP_THEME_PRODUCTIVITY_COLOR_OPTIONS.some((option) => Boolean(appThemeColorOverrides[option.key]));
-  const handleResetCategoryColors = useCallback(() => {
-    setCategoryColorOverrides({});
-  }, []);
-  const handleResetAccentColor = useCallback(() => {
-    setAppThemeColorOverrides((current) => {
+  const handleCategoryColorReset = useCallback((category: ActivityCategory) => {
+    setCategoryColorOverrides((current) => {
       const next = { ...current };
-      delete next.accent;
+      delete next[category];
       return next;
     });
   }, []);
-  const handleResetProductivityColors = useCallback(() => {
+  const handleAppThemeColorReset = useCallback((key: AppThemeColorKey) => {
     setAppThemeColorOverrides((current) => {
       const next = { ...current };
-      for (const option of APP_THEME_PRODUCTIVITY_COLOR_OPTIONS) delete next[option.key];
+      delete next[key];
       return next;
     });
   }, []);
@@ -4256,9 +4262,19 @@ export default function App() {
                       <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Grant Accessibility permission so Drifty can read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleRequestAccessibility()}>Grant Accessibility access</button></div></div>
                     </div>
                     <div className="settings-block"><h3>Colors</h3>
-                      <div className="settings-row settings-row--fallback" role="group" aria-label="Category colors"><div><div className="lbl">Category colors</div><div className="desc">Customize the colors used for classification categories.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{CATEGORY_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} category color`} value={categoryColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleCategoryColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetCategoryColors} disabled={!hasCategoryColorOverrides}>Set default</button></div></div>
-                      <div className="settings-row settings-row--fallback" role="group" aria-label="Accent color"><div><div className="lbl">Accent</div><div className="desc">Adjust the primary app accent used for emphasis and selected states.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{APP_THEME_ACCENT_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} theme color`} value={appThemeColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleAppThemeColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetAccentColor} disabled={!hasAccentColorOverride}>Set default</button></div></div>
-                      <div className="settings-row settings-row--fallback" role="group" aria-label="Productivity colors"><div><div className="lbl">Productivity colors</div><div className="desc">Tune the Focus, Drift, and Neutral tones used in productivity views.</div></div><div className="ctrl settings-row__actions"><div className="settings-color-grid">{APP_THEME_PRODUCTIVITY_COLOR_OPTIONS.map((option) => (<label key={option.key} className="settings-color-field"><span>{option.label}</span><input type="color" aria-label={`${option.label} theme color`} value={appThemeColorOverrides[option.key] ?? option.defaultColor} onChange={(event) => handleAppThemeColorChange(option.key, event.target.value)} /></label>))}</div><button type="button" className="settings-btn" onClick={handleResetProductivityColors} disabled={!hasProductivityColorOverrides}>Set default</button></div></div>
+                      <CategoryColorControls
+                        options={CATEGORY_COLOR_OPTIONS}
+                        overrides={categoryColorOverrides}
+                        onColorChange={handleCategoryColorChange}
+                        onColorReset={handleCategoryColorReset}
+                      />
+                      <ThemeColorControls
+                        accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
+                        productivityOptions={APP_THEME_PRODUCTIVITY_COLOR_OPTIONS}
+                        overrides={appThemeColorOverrides}
+                        onColorChange={handleAppThemeColorChange}
+                        onColorReset={handleAppThemeColorReset}
+                      />
                     </div>
                     <div className="settings-block"><h3>Debugging</h3>
                       <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleDownloadDebugLogs}>Download debug logs</button></div></div>
@@ -4285,18 +4301,8 @@ export default function App() {
                             <span>Domain or URL</span>
                             <input className="settings-input" type="text" value={domainRuleInput} onChange={(event) => setDomainRuleInput(event.target.value)} placeholder="example.com" aria-label="Domain rule domain or URL" />
                           </label>
-                          <label className="classification-rule-field">
-                            <span>Category</span>
-                            <select className="settings-input settings-select" value={domainRuleCategory} onChange={(event) => setDomainRuleCategory(event.target.value as ActivityCategory)} aria-label="Domain rule category">
-                              {CATEGORY_ORDER.map((category) => <option key={category} value={category}>{categoryLabel(category)}</option>)}
-                            </select>
-                          </label>
-                          <label className="classification-rule-field">
-                            <span>Productivity</span>
-                            <select className="settings-input settings-select" value={domainRuleProductivity} onChange={(event) => setDomainRuleProductivity(event.target.value as ProductivityLabel)} aria-label="Domain rule productivity">
-                              {PRODUCTIVITY_ORDER.map((productivity) => <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>)}
-                            </select>
-                          </label>
+                          <ClassificationPicker label="Category" ariaLabel="Domain rule category" value={domainRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={setDomainRuleCategory} />
+                          <ClassificationPicker label="Productivity" ariaLabel="Domain rule productivity" value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={setDomainRuleProductivity} />
                           <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleSaveDomainRule()} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? "Saving..." : "Save Domain rule"}</button>
                         </div>
                       </div>
@@ -4310,18 +4316,8 @@ export default function App() {
                             <span>Recorded app</span>
                             <input className="settings-input" type="search" value={appRuleSearch} onChange={(event) => { setAppRuleSearch(event.target.value); setAppRuleTargetValue(""); setAppRuleDisplayName(""); }} placeholder="Search apps..." aria-label="Search recorded apps for App rule" />
                           </label>
-                          <label className="classification-rule-field">
-                            <span>Category</span>
-                            <select className="settings-input settings-select" value={appRuleCategory} onChange={(event) => setAppRuleCategory(event.target.value as ActivityCategory)} aria-label="App rule category">
-                              {CATEGORY_ORDER.map((category) => <option key={category} value={category}>{categoryLabel(category)}</option>)}
-                            </select>
-                          </label>
-                          <label className="classification-rule-field">
-                            <span>Productivity</span>
-                            <select className="settings-input settings-select" value={appRuleProductivity} onChange={(event) => setAppRuleProductivity(event.target.value as ProductivityLabel)} aria-label="App rule productivity">
-                              {PRODUCTIVITY_ORDER.map((productivity) => <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>)}
-                            </select>
-                          </label>
+                          <ClassificationPicker label="Category" ariaLabel="App rule category" value={appRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={setAppRuleCategory} />
+                          <ClassificationPicker label="Productivity" ariaLabel="App rule productivity" value={appRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={setAppRuleProductivity} />
                           <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleSaveAppRule()} disabled={classificationRuleSavingKind !== null || !appRuleTargetValue.trim()}>{classificationRuleSavingKind === "app" ? "Saving..." : "Save App rule"}</button>
                         </div>
                         {appRuleDisplayName ? <p className="classification-rule-selected" role="status">Selected app: {appRuleDisplayName}</p> : null}
