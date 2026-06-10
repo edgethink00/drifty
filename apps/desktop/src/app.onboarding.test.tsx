@@ -293,7 +293,10 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
     expect(screen.getByText(/choose up to 5 activities/i)).toBeTruthy();
     expect(screen.getByLabelText(/search activities/i, { selector: "select" })).toBeTruthy();
+    const onboardingDragStrip = document.querySelector(".onboarding-window-drag-strip");
+    const onboardingTopbar = document.querySelector(".onboarding-topbar");
     for (const selector of [
+      ".onboarding-window-drag-strip",
       ".onboarding-copy-column",
       ".onboarding-topbar",
       ".onboarding-progress-bar--full",
@@ -306,6 +309,8 @@ describe("App onboarding", () => {
     ]) {
       expect(document.querySelector(selector)).toBeTruthy();
     }
+    expect(onboardingDragStrip?.hasAttribute("data-tauri-drag-region")).toBe(true);
+    expect(onboardingTopbar?.hasAttribute("data-tauri-drag-region")).toBe(true);
     expect(document.querySelector(".onboarding-flow-mark")).toBeNull();
 
     await clickEnabledAction(/^continue$/i);
