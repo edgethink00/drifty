@@ -414,6 +414,64 @@ input, textarea { color: inherit; }
   padding-left: 12px;
 }
 
+.ai-connection-status {
+  --ai-connection-dot: var(--text-soft);
+  --ai-connection-bg: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+  --ai-connection-line: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  align-items: center;
+  align-self: center;
+  background: var(--ai-connection-bg);
+  border: 1px solid var(--ai-connection-line);
+  border-radius: 999px;
+  color: var(--window-chrome-icon);
+  display: inline-grid;
+  gap: 6px;
+  grid-template-columns: 7px auto minmax(0, auto);
+  height: 22px;
+  max-width: min(36vw, 280px);
+  min-width: 0;
+  padding: 0 9px;
+}
+
+.ai-connection-status[data-tone="ok"] {
+  --ai-connection-dot: var(--productivity-focus);
+  --ai-connection-bg: color-mix(in srgb, var(--productivity-focus-soft) 52%, transparent);
+  --ai-connection-line: color-mix(in srgb, var(--productivity-focus) 22%, transparent);
+}
+
+.ai-connection-status[data-tone="error"] {
+  --ai-connection-dot: var(--productivity-drift);
+  --ai-connection-bg: color-mix(in srgb, var(--productivity-drift-soft) 54%, transparent);
+  --ai-connection-line: color-mix(in srgb, var(--productivity-drift) 26%, transparent);
+}
+
+.ai-connection-status__dot {
+  background: var(--ai-connection-dot);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ai-connection-dot) 12%, transparent);
+  height: 7px;
+  width: 7px;
+}
+
+.ai-connection-status__label,
+.ai-connection-status__provider {
+  font-size: var(--type-caption-size);
+  line-height: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-connection-status__label {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.ai-connection-status__provider {
+  color: var(--text-soft);
+}
+
 .window-theme-toggle {
   width: 24px;
   height: 24px;
@@ -4912,6 +4970,14 @@ input, textarea { color: inherit; }
 
 @media (max-width: 860px) {
   .app-shell:not(.app-shell--sidebar-collapsed) { grid-template-columns: 1fr; }
+
+  .ai-connection-status {
+    max-width: 42vw;
+  }
+
+  .ai-connection-status__provider {
+    display: none;
+  }
 
   .app-shell:not(.app-shell--sidebar-collapsed) .sidebar {
     border-right: 0;

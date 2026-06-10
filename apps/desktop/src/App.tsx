@@ -41,6 +41,7 @@ import { SiteFavicon } from "./components/SiteFavicon";
 import { AppUsagePanel } from "./features/dashboard/AppUsagePanel";
 import { FlowChartView } from "./features/flow-chart/FlowChartView";
 import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
+import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
@@ -3665,6 +3666,15 @@ export default function App() {
   const cloudDetailLabel = driftyCloudDetailLabel(billingEntitlement, billingEntitlementError, isSupabaseConfigured, hasRequiredAccountAuth);
   const aiServerStatusLabel = aiServerStatusLabelForCloud(billingEntitlement, billingEntitlementLoading, isSupabaseConfigured, hasRequiredAccountAuth);
   const cloudSetupActionLabel = driftyCloudSetupActionLabel(billingEntitlement, isSupabaseConfigured, hasRequiredAccountAuth);
+  const localAiConnectionProviderLabel = localAiSetup.provider === "openrouter_byok" ? "BYOK AI" : "Local AI";
+  const aiConnectionStatus = resolveAiConnectionStatus({
+    canUseCloudAi: canUseCloudAiClassification,
+    hasLocalAiProvider: Boolean(localAiClassificationOptions),
+    localProviderLabel: localAiClassificationOptions ? localAiConnectionProviderLabel : null,
+    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
+    classificationError: classificationSummary?.status === "error" ? classificationSummary.message : null,
+    cloudError: billingEntitlementError,
+  });
 
   return (
     <div className={isSidebarVisuallyCollapsed ? "app-shell app-shell--sidebar-collapsed" : "app-shell"}>
@@ -3691,6 +3701,7 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
+          <AiConnectionStatusBar status={aiConnectionStatus} />
           <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
       </div>
