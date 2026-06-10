@@ -450,6 +450,31 @@ class TrackerDatabase:
                 ),
             )
 
+    @staticmethod
+    def _normalize_range_bound(value: str) -> str:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.astimezone()
+        return parsed.astimezone(timezone.utc).isoformat()
+
+    @staticmethod
+    def _append_overlap_filters(
+        query: str,
+        params: list[Any],
+        start: str | None,
+        end: str | None,
+        table_name: str | None = None,
+    ) -> str:
+        started_at = f"{table_name}.started_at" if table_name else "started_at"
+        ended_at = f"{table_name}.ended_at" if table_name else "ended_at"
+        if start:
+            query += f" AND datetime({ended_at}) >= datetime(?)"
+            params.append(TrackerDatabase._normalize_range_bound(start))
+        if end:
+            query += f" AND datetime({started_at}) <= datetime(?)"
+            params.append(TrackerDatabase._normalize_range_bound(end))
+        return query
+
     def fetch_timeline(self, day: str, limit: int | None = None) -> list[dict[str, Any]]:
         rows = self.timeline(limit=limit)
         filtered = [row for row in rows if self._local_day(row["started_at"]) == day]
@@ -520,12 +545,7 @@ class TrackerDatabase:
             WHERE activity_classifications.segment_id IS NULL
         """
         params: list[Any] = []
-        if start:
-            query += " AND ended_at >= ?"
-            params.append(start)
-        if end:
-            query += " AND started_at <= ?"
-            params.append(end)
+        query = self._append_overlap_filters(query, params, start, end)
         query += " ORDER BY started_at ASC LIMIT ?"
         params.append(limit)
         with self.connect() as conn:
@@ -745,12 +765,7 @@ class TrackerDatabase:
 
             query = "SELECT * FROM activity_segments WHERE 1=1"
             params: list[Any] = []
-            if start:
-                query += " AND ended_at >= ?"
-                params.append(start)
-            if end:
-                query += " AND started_at <= ?"
-                params.append(end)
+            query = self._append_overlap_filters(query, params, start, end)
             rows = conn.execute(query, tuple(params)).fetchall()
 
             matched_count = 0
@@ -964,11 +979,11 @@ class TrackerDatabase:
         params: list[Any] = []
         filters: list[str] = []
         if start:
-            filters.append("ended_at >= ?")
-            params.append(start)
+            filters.append("datetime(ended_at) >= datetime(?)")
+            params.append(self._normalize_range_bound(start))
         if end:
-            filters.append("started_at <= ?")
-            params.append(end)
+            filters.append("datetime(started_at) <= datetime(?)")
+            params.append(self._normalize_range_bound(end))
         if filters:
             query += f" AND segment_id IN (SELECT id FROM activity_segments WHERE {' AND '.join(filters)})"
         with self.connect() as conn:
@@ -990,12 +1005,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        if start:
-            query += " AND activity_segments.ended_at >= ?"
-            params.append(start)
-        if end:
-            query += " AND activity_segments.started_at <= ?"
-            params.append(end)
+        query = self._append_overlap_filters(query, params, start, end, "activity_segments")
         with self.connect() as conn:
             row = conn.execute(query, tuple(params)).fetchone()
         total = int(row["total_segments"] or 0)
@@ -1047,12 +1057,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        if start:
-            query += " AND ended_at >= ?"
-            params.append(start)
-        if end:
-            query += " AND started_at <= ?"
-            params.append(end)
+        query = self._append_overlap_filters(query, params, start, end)
         query += " ORDER BY started_at ASC"
         if limit:
             query += " LIMIT ?"
@@ -1104,12 +1109,7 @@ class TrackerDatabase:
             WHERE 1=1
         """
         params: list[Any] = []
-        if start:
-            query += " AND ended_at >= ?"
-            params.append(start)
-        if end:
-            query += " AND started_at <= ?"
-            params.append(end)
+        query = self._append_overlap_filters(query, params, start, end)
         if app_name:
             query += " AND app_name = ?"
             params.append(app_name)
