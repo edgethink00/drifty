@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment, ClassificationMetrics, ClassificationQuery } from "@drifty/domain";
-import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
+import { todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
@@ -324,27 +324,6 @@ function setRendererFocus(focused: boolean) {
   });
 }
 
-function formatDayLabel(day: string): string {
-  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
-}
-
-async function selectDashboardDayOffset(daysBack: number) {
-  const selectedDay = shiftIsoDate(todayIsoDate(), -daysBack);
-
-  await screen.findByRole("navigation", { name: /dashboard views/i });
-  for (let index = 0; index < daysBack; index += 1) {
-    fireEvent.click(screen.getByRole("button", { name: /show previous today/i }));
-  }
-  await waitFor(() => expect(aiClassificationMocks.getAiClassificationUsageSummary).toHaveBeenCalledWith(selectedDay));
-
-  return selectedDay;
-}
-
-function usageCallCountForDay(day: string) {
-  const calls = aiClassificationMocks.getAiClassificationUsageSummary.mock.calls as Array<[string]>;
-  return calls.filter((call) => call[0] === day).length;
-}
-
 describe("App AI classification controls", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -566,7 +545,7 @@ describe("App AI classification controls", () => {
     expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*min-height:\s*3rem;/);
     expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*padding:\s*5px 8px;/);
     expect(styles).toMatch(/\.classification-panel-view__bar\s*{[\s\S]*height:\s*6px;/);
-    expect(styles).toMatch(/\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*var\(--classification-selected-tone\)/);
+    expect(styles).toMatch(/\.classification-panel-view__category-row:has\(\.category-dot--entertainment\)\s*{[\s\S]*--classification-category-tone:\s*var\(--category-entertainment\);[\s\S]*\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*var\(--classification-category-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__source-row\[data-selected="true"\]\s*{[\s\S]*var\(--classification-selected-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__activity-row\s*{[\s\S]*align-items:\s*center;/);
   });
