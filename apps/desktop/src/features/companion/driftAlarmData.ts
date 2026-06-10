@@ -104,6 +104,7 @@ export type DriftAlarmCandidate = {
   alertKey: string;
   category: ActivityCategory;
   segment: ActivitySegment;
+  sourceSegmentId: string | null;
 };
 
 const SHOPPING_DRIFT_ALARM_MINIMUM_SECONDS = 5 * 60;
@@ -126,6 +127,7 @@ export function buildDriftAlarmCandidates({
 
     const durationSeconds = getCurrentSnapshotAlarmDurationSeconds(currentSnapshot, segments);
     const currentSegment = currentSnapshotToSegment(currentSnapshot, durationSeconds);
+    const sourceSegmentId = getCurrentSnapshotSourceSegmentId(currentSnapshot, segments);
     const currentClassificationOptions = {
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
@@ -147,6 +149,7 @@ export function buildDriftAlarmCandidates({
         alertKey: `current:${currentSnapshotIdentity(currentSnapshot)}`,
         category: currentClassification.category,
         segment: currentSegment,
+        sourceSegmentId,
       }];
     }
 
@@ -173,6 +176,7 @@ export function buildDriftAlarmCandidates({
     alertKey: `${latestSegment.id}:${latestSegment.endedAt}`,
     category: latestClassification.category,
     segment: latestSegment,
+    sourceSegmentId: latestSegment.id,
   }];
 }
 
@@ -254,6 +258,13 @@ export function getCurrentSnapshotAlarmDurationSeconds(current: CurrentActivityS
   const endedAt = new Date(latestSegment.endedAt).getTime();
   const elapsedSeconds = Number.isFinite(observedAt) && Number.isFinite(endedAt) ? Math.max(0, Math.round((observedAt - endedAt) / 1000)) : 0;
   return latestSegment.durationSeconds + elapsedSeconds;
+}
+
+export function getCurrentSnapshotSourceSegmentId(current: CurrentActivitySnapshot, segments: ActivitySegment[]): string | null {
+  const latestSegment = getLatestWatcherSegment(segments);
+  if (!latestSegment) return null;
+  if (activitySegmentIdentity(latestSegment) !== currentSnapshotIdentity(current)) return null;
+  return latestSegment.id;
 }
 
 export function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {

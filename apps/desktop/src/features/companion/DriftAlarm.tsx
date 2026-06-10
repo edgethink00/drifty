@@ -39,6 +39,7 @@ type DriftAlarmEventBase = {
   generatedAt: string;
   breakOptions: number[];
   focusTargets: DriftAlarmFocusTarget[];
+  sourceSegmentId?: string | null;
 };
 
 export type DriftAlarmEvent = DriftAlarmEventBase & (
@@ -54,6 +55,7 @@ type DriftAlarmEventInput = {
   generatedAt: string;
   breakOptions?: number[];
   focusTargets?: DriftAlarmFocusTarget[];
+  sourceSegmentId?: string | null;
 };
 
 type BreakReturnAlarmEventInput = DriftAlarmEventInput & {
