@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-extreme-nudge-apply"
+description = "Enables the extreme_nudge_apply command without any pre-configured scope."
+commands.allow = ["extreme_nudge_apply"]
+
+[[permission]]
+identifier = "deny-extreme-nudge-apply"
+description = "Denies the extreme_nudge_apply command without any pre-configured scope."
+commands.deny = ["extreme_nudge_apply"]
