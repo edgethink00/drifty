@@ -230,6 +230,7 @@
   overflow: visible;
 }
 
+.onboarding-card .onboarding-middle--account,
 .onboarding-card .onboarding-middle--job,
 .onboarding-card .onboarding-middle--work_profile {
   flex: 0 1 auto;
@@ -239,6 +240,8 @@
   justify-content: flex-start;
 }
 
+.onboarding-card .onboarding-middle--account .onboarding-body,
+.onboarding-card .onboarding-middle--account .onboarding-viewport,
 .onboarding-card .onboarding-middle--job .onboarding-body,
 .onboarding-card .onboarding-middle--job .onboarding-viewport,
 .onboarding-card .onboarding-middle--work_profile .onboarding-body,
@@ -269,6 +272,7 @@
   margin-top: 10px;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: base body styles sit after step modifiers in the imported onboarding prototype cascade. */
 .onboarding-card .onboarding-body {
   display: flex;
   flex-direction: column;
@@ -285,6 +289,7 @@
 }
 
 /* ── Step transition (content fade + slide, smooth card height) ── */
+/* biome-ignore lint/style/noDescendingSpecificity: viewport base styles intentionally follow body-specific viewport overrides. */
 .onboarding-card .onboarding-viewport {
   position: relative;
   flex: 0 1 auto;
@@ -302,9 +307,10 @@
   backdrop-filter: none;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: direct viewport fallback mirrors the prototype cascade. */
 .onboarding-card > .onboarding-viewport {
   flex: 0 0 var(--onb-step-frame-baseline);
-  height: var(--onb-step-frame-baseline) !important;
+  height: var(--onb-step-frame-baseline);
   min-height: var(--onb-step-frame-baseline);
   max-height: var(--onb-step-frame-baseline);
 }
@@ -699,7 +705,11 @@
   .onb-summary,
   .onb-privacy,
   .onb-instructions,
-  .onb-setup-card__actions
+  .onb-setup-card__actions,
+  .onb-activity-picker,
+  .onb-job__question,
+  .onb-data-cards,
+  .onb-checklist
 ) {
   margin-top: var(--onb-content-gap);
 }
@@ -1217,6 +1227,7 @@
   margin-bottom: 8px;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: setup title base style follows selected-card state by design. */
 .onboarding-card .onb-setup-choice__title {
   display: block;
   font-family: var(--onb-font-display);
@@ -1377,6 +1388,110 @@
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-email-auth {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-3);
+  width: 100%;
+  padding: var(--onb-space-3);
+  border: 1px solid var(--onb-line-strong);
+  border-radius: var(--onb-radius-md);
+  background: color-mix(in oklch, var(--onb-surface) 86%, var(--onb-bg-2));
+}
+
+.onboarding-card .onb-email-auth__mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--onb-space-1);
+  padding: var(--onb-space-1);
+  border: 1px solid var(--onb-line);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-surface-strong);
+}
+
+.onboarding-card .onb-email-auth__mode-button {
+  min-height: 32px;
+  border: 0;
+  border-radius: calc(var(--onb-radius-sm) - 2px);
+  background: transparent;
+  color: var(--onb-text-soft);
+  font-family: var(--onb-font-sans);
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background var(--onb-transition-fast), color var(--onb-transition-fast), box-shadow var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-email-auth__mode-button:hover {
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-email-auth__mode-button--selected {
+  background: var(--onb-surface);
+  color: var(--onb-text);
+  box-shadow: var(--onb-shadow-soft);
+}
+
+.onboarding-card .onb-email-auth__mode-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--onb-accent-rgb), 0.14);
+}
+
+.onboarding-card .onb-email-auth .onb-field {
+  gap: var(--onb-space-1);
+}
+
+.onboarding-card .onb-email-auth .onb-field label,
+.onboarding-card .onb-email-auth .onb-field span {
+  font-size: 12.5px;
+}
+
+.onboarding-card .onb-email-auth .onb-field input {
+  min-height: 40px;
+  padding: var(--onb-space-2) var(--onb-space-3);
+  font-size: 14px;
+}
+
+.onboarding-card .onb-email-auth__notice {
+  margin: 0;
+  padding: var(--onb-space-2) var(--onb-space-3);
+  border-radius: var(--onb-radius-sm);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.onboarding-card .onb-email-auth__notice--error {
+  border: 1px solid color-mix(in oklch, var(--onb-warn) 22%, transparent);
+  background: var(--onb-warn-soft);
+  color: var(--onb-warn);
+}
+
+.onboarding-card .onb-email-auth__notice--success {
+  border: 1px solid color-mix(in oklch, var(--onb-blue) 22%, transparent);
+  background: var(--onb-blue-soft);
+  color: var(--onb-blue);
+}
+
+.onboarding-card .onb-account .onb-email-auth__submit {
+  min-height: 40px;
+  background: var(--onb-primary-bg);
+  border-color: var(--onb-primary-bg);
+  color: color-mix(in oklch, var(--onb-surface) 96%, var(--onb-bg-2));
+}
+
+.onboarding-card .onb-account .onb-email-auth__submit:hover:not(:disabled) {
+  background: var(--onb-primary-bg-hover);
+  border-color: var(--onb-primary-bg-hover);
+  color: color-mix(in oklch, var(--onb-surface) 96%, var(--onb-bg-2));
+}
+
+.onboarding-card .onb-account .onb-email-auth__submit:disabled {
+  background: color-mix(in oklch, var(--onb-text) 20%, var(--onb-bg-2));
+  border-color: var(--onb-line);
+  color: var(--onb-text-soft);
+  cursor: not-allowed;
 }
 
 /* ── Data handling summary ── */
@@ -1940,6 +2055,107 @@
   margin-top: var(--onb-content-gap);
 }
 
+
+.onboarding-card .onboarding-title.onb-title--job {
+  margin-bottom: var(--onb-space-1);
+}
+
+.onboarding-card .onboarding-body--job {
+  --onb-job-desc-control-gap: 0.375rem;
+}
+
+.onboarding-card .onboarding-body--job .onb-step-desc + .onb-job__compact {
+  margin-top: var(--onb-job-desc-control-gap);
+}
+
+.onboarding-card .onb-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--onb-text-muted);
+  letter-spacing: -0.01em;
+}
+
+.onboarding-card .onb-secure-field__mask {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 var(--onb-space-3);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-accent-soft);
+  color: var(--onb-accent-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.onboarding-card .onb-job__question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-job-desc-control-gap, var(--onb-content-gap));
+}
+
+.onboarding-card .onb-inline-question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-1);
+}
+
+.onboarding-card .onb-inline-question-title {
+  margin: 0;
+  font-family: var(--onb-font-display);
+  font-size: clamp(24px, 2.7vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  color: var(--onb-text);
+  text-wrap: balance;
+}
+
+.onboarding-card .onb-activity-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-2);
+}
+
+.onboarding-card .onb-activity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--onb-space-2);
+  min-height: 0;
+}
+
+.onboarding-card .onb-activity-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--onb-space-1);
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--onb-accent);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--onb-surface) 84%, var(--onb-accent-soft));
+  color: var(--onb-accent-strong);
+  font-family: var(--onb-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+
+.onboarding-card .onb-activity-tag__remove {
+  color: var(--onb-text-soft);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.onboarding-card .onb-activity-picker select.onb-dropdown__input {
+  appearance: none;
+  cursor: pointer;
+}
+
 /* ── Responsive ── */
 @media (max-width: 560px) {
   .onboarding-screen .onboarding-card .onb-privacy { grid-template-columns: 1fr; }
@@ -1959,7 +2175,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding-screen .onboarding-progress-bar__fill,
-  .onboarding-screen .onboarding-viewport,
   .onboarding-screen .onboarding-step,
   .onboarding-screen .onb-focus-bar__fill,
   .onboarding-screen .onb-typewriter .tw-line,

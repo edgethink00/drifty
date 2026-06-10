@@ -1367,6 +1367,8 @@ export default function App() {
     status: authStatus,
     signInWithWebsite,
     signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
     signInAnonymously,
     signOut,
     isEnabled: isSupabaseConfigured,
@@ -4601,7 +4603,9 @@ export default function App() {
           onRequestAccessibility={handleRequestAccessibility}
           onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
           onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
-          onStartCloudTrialWithEmail={() => void signInWithWebsite()}
+          onStartCloudTrialWithEmail={(email, password, mode) =>
+            mode === "sign-up" ? signUpWithEmail(email, password) : signInWithEmail(email, password)
+          }
           onComplete={handleOnboardingComplete}
         />
       ) : null}
