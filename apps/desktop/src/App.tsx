@@ -60,6 +60,7 @@ import { DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCH
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
+import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
@@ -449,7 +450,6 @@ type MonthCellStyle = CSSProperties & {
   "--activity-ink"?: string;
 };
 
-type SettingsSection = "general" | "classification" | "aiSetup" | "notifications" | "privacy" | "data" | "dev";
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 type LocalAiProvider = "openrouter_byok" | "self_hosted";
 type LocalAiSetupState = {
@@ -1148,6 +1148,15 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+  const handleSettingsBack = useCallback(() => {
+    setAccountMenuOpen(false);
+    if (canNavigateBack) {
+      navigateBack();
+      return;
+    }
+
+    navigateToTab("dashboard", "Today");
+  }, [canNavigateBack, navigateBack, navigateToTab]);
 
   const handleCheckForUpdates = useCallback(async () => {
     if (updaterCheckingRef.current || updaterInstallingRef.current) return;
@@ -1385,7 +1394,7 @@ export default function App() {
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const canUseCloudAiClassification = isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
-  const isSidebarVisuallyCollapsed = sidebarCollapsed;
+  const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const leaderboardRefreshRequestRef = useRef(0);
@@ -3657,7 +3666,15 @@ export default function App() {
         </div>
       </div>
       {/* ── Sidebar ── */}
-      <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
+      {activeTab === "settings" ? (
+        <SettingsSidebar
+          activeSection={settingsSection}
+          isCollapsed={isSidebarVisuallyCollapsed}
+          onBack={handleSettingsBack}
+          onSectionChange={setSettingsSection}
+        />
+      ) : (
+        <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
         <div className="brand" aria-label="Drifty status">
           <img className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
           <div className="dot" aria-hidden="true" />
@@ -3741,7 +3758,8 @@ export default function App() {
             }}
           />
         </div>
-      </aside>
+        </aside>
+      )}
 
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>
@@ -4223,20 +4241,7 @@ export default function App() {
         {activeTab === "settings" ? (
           <div className="page">
             <div className="pg-head"><div><div className="eyebrow">Account</div><h1>Settings</h1></div></div>
-            <div className="settings-layout">
-              <nav className="settings-nav" aria-label="Settings sections">
-                  {([
-                    { id: "general" as const, label: "General" },
-                    { id: "classification" as const, label: "Classification" },
-                    { id: "aiSetup" as const, label: "AI setup" },
-                    { id: "notifications" as const, label: "Notifications" },
-                    { id: "privacy" as const, label: "Privacy" },
-                  { id: "data" as const, label: "Data & Export" },
-                ]).map((n) => (
-                  <button key={n.id} className={`settings-nav-item${settingsSection === n.id ? " on" : ""}`} onClick={() => setSettingsSection(n.id)}>{n.label}</button>
-                ))}
-              </nav>
-              <div>
+            <div className="settings-panel-stack">
                 {settingsSection === "general" && (
                   <div className="settings-section settings-section--general">
                     <div className="settings-block"><h3>General</h3>
@@ -4460,7 +4465,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-              </div>
             </div>
           </div>
         ) : null}
