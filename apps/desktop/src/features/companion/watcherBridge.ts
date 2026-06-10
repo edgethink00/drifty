@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
 
 type UnlistenFn = () => void;
@@ -13,7 +14,7 @@ type EndOfDayReviewActionEvent = {
   action: unknown;
 };
 
-export type WatcherWindowEvent = WatcherPeekEvent | EndOfDayReviewEvent;
+export type WatcherWindowEvent = WatcherPeekEvent | EndOfDayReviewEvent | ExtremeNudgeToastEvent;
 export type EndOfDayReviewAction = "openDashboard" | "viewDetails" | "openNotificationSettings";
 
 export function isTauriRuntime() {
@@ -29,6 +30,12 @@ export async function showNativeWatcherPeek(event: WatcherPeekEvent): Promise<bo
 }
 
 export async function showNativeEndOfDayReview(event: EndOfDayReviewEvent): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  await invoke("watcher_peek_show", { payload: event });
+  return true;
+}
+
+export async function showNativeExtremeNudgeToast(event: ExtremeNudgeToastEvent): Promise<boolean> {
   if (!isTauriRuntime()) return false;
   await invoke("watcher_peek_show", { payload: event });
   return true;

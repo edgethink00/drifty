@@ -7,6 +7,7 @@
   "permissions": [
     "core:default",
     "core:event:allow-listen",
+    "allow-watcher-peek-hide",
     "allow-watcher-peek-dismiss",
     "allow-watcher-peek-set-interactive",
     "allow-watcher-peek-respond",

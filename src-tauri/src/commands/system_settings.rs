@@ -54,6 +54,16 @@ pub async fn focus_target_open_app(bundle_id: String) -> Result<(), String> {
         .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub async fn focus_target_activate_browser_tab(
+    browser_name: String,
+    site_url: String,
+) -> Result<bool, String> {
+    async_runtime::spawn_blocking(move || activate_focus_target_browser_tab(&browser_name, &site_url))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 fn normalize_focus_target_bundle_id(bundle_id: &str) -> Result<String, String> {
     let trimmed = bundle_id.trim();
     if trimmed.is_empty() {
@@ -65,6 +75,15 @@ fn normalize_focus_target_bundle_id(bundle_id: &str) -> Result<String, String> {
 
 fn focus_target_open_args(bundle_id: &str) -> Result<Vec<String>, String> {
     Ok(vec!["-b".to_string(), normalize_focus_target_bundle_id(bundle_id)?])
+}
+
+fn normalize_focus_target_url(site_url: &str) -> Result<String, String> {
+    let trimmed = site_url.trim();
+    if trimmed.is_empty() {
+        return Err("Focus target site URL is required".to_string());
+    }
+
+    Ok(trimmed.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -80,6 +99,86 @@ fn open_focus_target_app(bundle_id: &str) -> Result<(), String> {
 #[cfg(not(target_os = "macos"))]
 fn open_focus_target_app(_bundle_id: &str) -> Result<(), String> {
     Err("Focus target app activation is only available on macOS".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn activate_focus_target_browser_tab(browser_name: &str, site_url: &str) -> Result<bool, String> {
+    let site_url = normalize_focus_target_url(site_url)?;
+    let Some(app_name) = focus_target_browser_app_name(browser_name) else {
+        return Ok(false);
+    };
+
+    let script = focus_target_browser_tab_script(app_name, &site_url);
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim() == "activated_browser_tab")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_focus_target_browser_tab(_browser_name: &str, _site_url: &str) -> Result<bool, String> {
+    Err("Focus target browser tab activation is only available on macOS".to_string())
+}
+
+fn focus_target_browser_app_name(browser_name: &str) -> Option<&'static str> {
+    match browser_name.trim() {
+        "Google Chrome" | "Chrome" => Some("Google Chrome"),
+        "Microsoft Edge" | "Edge" => Some("Microsoft Edge"),
+        "Arc" => Some("Arc"),
+        "Brave Browser" | "Brave" => Some("Brave Browser"),
+        "Chromium" => Some("Chromium"),
+        "Safari" => Some("Safari"),
+        _ => None,
+    }
+}
+
+fn focus_target_browser_tab_script(browser_name: &str, site_url: &str) -> String {
+    let browser_name = applescript_string_literal(browser_name);
+    let site_url = applescript_string_literal(site_url);
+
+    if browser_name == "Safari" {
+        return format!(
+            r#"tell application "{browser_name}"
+  repeat with browserWindow in windows
+    repeat with tabIndex from 1 to count of tabs of browserWindow
+      if URL of tab tabIndex of browserWindow is "{site_url}" then
+        set current tab of browserWindow to tab tabIndex of browserWindow
+        set index of browserWindow to 1
+        activate
+        return "activated_browser_tab"
+      end if
+    end repeat
+  end repeat
+  return "not_found"
+end tell"#
+        );
+    }
+
+    format!(
+        r#"tell application "{browser_name}"
+  repeat with browserWindow in windows
+    repeat with tabIndex from 1 to count of tabs of browserWindow
+      if URL of tab tabIndex of browserWindow is "{site_url}" then
+        set active tab index of browserWindow to tabIndex
+        set index of browserWindow to 1
+        activate
+        return "activated_browser_tab"
+      end if
+    end repeat
+  end repeat
+  return "not_found"
+end tell"#
+    )
+}
+
+fn applescript_string_literal(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(target_os = "macos")]
@@ -157,5 +256,27 @@ mod tests {
             focus_target_open_args("com.microsoft.VSCode").unwrap(),
             vec!["-b".to_string(), "com.microsoft.VSCode".to_string()]
         );
+    }
+
+    #[test]
+    fn focus_target_browser_tab_command_accepts_supported_browsers() {
+        assert_eq!(
+            focus_target_browser_app_name("Google Chrome"),
+            Some("Google Chrome")
+        );
+        assert_eq!(focus_target_browser_app_name("Safari"), Some("Safari"));
+        assert_eq!(focus_target_browser_app_name("Firefox"), None);
+    }
+
+    #[test]
+    fn focus_target_browser_tab_script_activates_matching_chrome_tab() {
+        let script = focus_target_browser_tab_script(
+            "Google Chrome",
+            "https://docs.drifty.so/work",
+        );
+
+        assert!(script.contains("repeat with tabIndex from 1 to count of tabs"));
+        assert!(script.contains("set active tab index of browserWindow to tabIndex"));
+        assert!(script.contains("return \"activated_browser_tab\""));
     }
 }

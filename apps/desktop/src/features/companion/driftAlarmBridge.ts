@@ -144,10 +144,16 @@ function isFocusTarget(value: unknown): value is DriftAlarmFocusTarget {
     && typeof candidate.detail === "string"
     && typeof candidate.appName === "string"
     && isNullableString(candidate.bundleId)
+    && isOptionalNullableString(candidate.browserName)
     && isNullableString(candidate.siteDomain)
     && isNullableString(candidate.siteTitle)
+    && isOptionalNullableString(candidate.siteUrl)
     && isNullableString(candidate.iconSrc)
   );
+}
+
+function isOptionalNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || isNullableString(value);
 }
 
 function isNullableString(value: unknown): value is string | null {

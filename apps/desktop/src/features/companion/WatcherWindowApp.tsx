@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { EndOfDayReview, type EndOfDayReviewEvent } from "./EndOfDayReview";
+import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import {
   dismissNativeWatcherPeek,
+  hideNativeWatcherPeek,
   listenToNativeWatcherShow,
   setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction,
@@ -51,6 +53,11 @@ export function WatcherWindowApp() {
     ignoreWatcherBridgePromise(dismissNativeWatcherPeek());
   }, []);
 
+  const handleToastDismiss = useCallback(() => {
+    setEvent(null);
+    ignoreWatcherBridgePromise(hideNativeWatcherPeek());
+  }, []);
+
   const handlePhaseChange = useCallback((_phase: WatcherPhase, _currentEvent: WatcherPeekEvent | null) => {
     ignoreWatcherBridgePromise(setNativeWatcherInteractive(false));
   }, []);
@@ -68,6 +75,7 @@ export function WatcherWindowApp() {
   }, []);
 
   const isReviewEvent = isEndOfDayReviewEvent(event);
+  const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
 
   useEffect(() => {
     if (isReviewEvent) ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
@@ -83,6 +91,8 @@ export function WatcherWindowApp() {
           onOpenNotificationSettings={handleOpenNotificationSettings}
           onClose={handleDismiss}
         />
+      ) : isExtremeNudgeToastEvent ? (
+        <ExtremeNudgeToast event={event} onDismiss={handleToastDismiss} />
       ) : (
         <WatcherPeek event={event} onDismiss={handleDismiss} onPhaseChange={handlePhaseChange} />
       )}
@@ -92,6 +102,10 @@ export function WatcherWindowApp() {
 
 function isEndOfDayReviewEvent(event: WatcherWindowEvent | null): event is EndOfDayReviewEvent {
   return event !== null && "kind" in event && event.kind === "endOfDayReview";
+}
+
+function isExtremeNudgeToast(event: WatcherWindowEvent | null): event is ExtremeNudgeToastEvent {
+  return event !== null && "kind" in event && event.kind === "extremeNudgeToast";
 }
 
 function ignoreWatcherBridgePromise(promise: Promise<unknown>) {

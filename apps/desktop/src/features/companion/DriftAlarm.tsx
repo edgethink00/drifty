@@ -15,8 +15,10 @@ export type DriftAlarmFocusTarget = {
   detail: string;
   appName: string;
   bundleId: string | null;
+  browserName?: string | null;
   siteDomain: string | null;
   siteTitle: string | null;
+  siteUrl?: string | null;
   iconSrc: string | null;
 };
 
