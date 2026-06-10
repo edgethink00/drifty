@@ -1,4 +1,6 @@
+import os
 import sys
+import time
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -315,6 +317,51 @@ class TrackerDatabaseTests(unittest.TestCase):
         rows = self.database.timeline(start="2026-04-07T00:00:00+00:00", end="2026-04-09T00:00:00+00:00")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["app_name"], "Code")
+
+    def test_timeline_range_filters_treat_naive_bounds_as_local_time(self) -> None:
+        previous_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "Asia/Seoul"
+        time.tzset()
+        try:
+            self.database.insert_segment(
+                {
+                    "started_at": "2026-06-10T00:41:46+00:00",
+                    "ended_at": "2026-06-10T00:55:00+00:00",
+                    "duration_seconds": 795,
+                    "app_name": "Calendar",
+                    "bundle_id": None,
+                    "window_title": None,
+                    "platform": "macos",
+                    "source": "nsworkspace",
+                    "confidence": None,
+                    "raw_context_json": "{}",
+                }
+            )
+            self.database.insert_segment(
+                {
+                    "started_at": "2026-06-10T19:30:00+00:00",
+                    "ended_at": "2026-06-10T19:45:00+00:00",
+                    "duration_seconds": 900,
+                    "app_name": "Slack",
+                    "bundle_id": None,
+                    "window_title": None,
+                    "platform": "macos",
+                    "source": "nsworkspace",
+                    "confidence": None,
+                    "raw_context_json": "{}",
+                }
+            )
+
+            rows = self.database.timeline(start="2026-06-10T04:00:00", end="2026-06-11T03:59:59")
+        finally:
+            if previous_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous_tz
+            time.tzset()
+
+        self.assertEqual([row["app_name"] for row in rows], ["Calendar"])
+        self.assertEqual(rows[0]["started_at"], "2026-06-10T00:41:46+00:00")
 
     def test_saved_classification_is_serialized_with_timeline(self) -> None:
         self.database.record_snapshot(
