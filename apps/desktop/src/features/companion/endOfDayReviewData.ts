@@ -1,0 +1,178 @@
+import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
+
+export type EndOfDayReviewSummaryInput = {
+  day: string;
+  generatedAt: string;
+  segments: ActivitySegment[];
+  isMock?: boolean;
+};
+
+export const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
+
+export const END_OF_DAY_REVIEW_TRIGGER_MINUTE = 18 * 60;
+
+export function collectMissingEndOfDayReviewIconRequests(event: EndOfDayReviewEvent): AppIdentity[] {
+  return (event.sourceSummaries ?? []).flatMap((source) => {
+    if (source.iconSrc) return [];
+    return [{ appName: source.appName, bundleId: source.bundleId ?? null }];
+  });
+}
+
+export function mergeResolvedAppIcons(currentIcons: AppIconMap, identities: AppIdentity[], resolvedIcons: AppIconMap): AppIconMap {
+  const nextIcons = { ...currentIcons };
+
+  for (const identity of identities) {
+    const identityKey = identity.bundleId || identity.appName;
+    const iconSrc = resolvedIcons[identityKey] ?? resolvedIcons[identity.appName] ?? null;
+    if (!iconSrc) continue;
+
+    nextIcons[identityKey] = iconSrc;
+    nextIcons[identity.appName] = iconSrc;
+  }
+
+  return nextIcons;
+}
+
+export function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] {
+  const previewSegment = ({
+    id,
+    startHour,
+    startMinute = 0,
+    durationMinutes,
+    appName,
+    bundleId,
+    windowTitle,
+    category,
+    productivity,
+    browserName,
+    siteDomain,
+    siteTitle,
+    siteUrl,
+  }: {
+    id: string;
+    startHour: number;
+    startMinute?: number;
+    durationMinutes: number;
+    appName: string;
+    bundleId: string;
+    windowTitle: string;
+    category: ActivityCategory;
+    productivity: ProductivityLabel;
+    browserName?: string;
+    siteDomain?: string;
+    siteTitle?: string;
+    siteUrl?: string;
+  }): ActivitySegment => {
+    const startedAt = new Date(`${day}T${String(startHour).padStart(2, "0")}:${String(startMinute).padStart(2, "0")}:00`);
+    const endedAt = new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
+    return {
+      id,
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      durationSeconds: durationMinutes * 60,
+      appName,
+      bundleId,
+      browserName,
+      siteDomain,
+      siteTitle,
+      siteUrl,
+      windowTitle,
+      platform: "macos",
+      source: "nsworkspace",
+      classification: {
+        category,
+        productivity,
+        source: "manual",
+        confidence: 1,
+        reason: "Deterministic end-of-day review preview",
+      },
+    };
+  };
+
+  return [
+    previewSegment({
+      id: "end-of-day-review-preview-vscode-focus",
+      startHour: 9,
+      durationMinutes: 138,
+      appName: "VS Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "companion/DriftAlarm.tsx",
+      category: "workspace",
+      productivity: "focus",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-code-focus",
+      startHour: 11,
+      startMinute: 30,
+      durationMinutes: 28,
+      appName: "Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "EndOfDayReview.tsx",
+      category: "workspace",
+      productivity: "focus",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-figma-focus",
+      startHour: 13,
+      startMinute: 15,
+      durationMinutes: 42,
+      appName: "Figma",
+      bundleId: "com.figma.Desktop",
+      windowTitle: "Notification specs - frame 12",
+      category: "workspace",
+      productivity: "focus",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-youtube-drift",
+      startHour: 14,
+      startMinute: 20,
+      durationMinutes: 38,
+      appName: "YouTube",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Design rabbit hole",
+      siteUrl: "https://youtube.com/watch?v=preview",
+      windowTitle: "Design rabbit hole",
+      category: "entertainment",
+      productivity: "drift",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-slack-neutral",
+      startHour: 15,
+      startMinute: 30,
+      durationMinutes: 33,
+      appName: "Slack",
+      bundleId: "com.tinyspeck.slackmacgap",
+      windowTitle: "Product design sync",
+      category: "communication",
+      productivity: "neutral",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-unknown-neutral",
+      startHour: 17,
+      durationMinutes: 28,
+      appName: "Unknown",
+      bundleId: "com.drifty.preview.unknown",
+      windowTitle: "Unclassified local activity",
+      category: "unknown",
+      productivity: "neutral",
+    }),
+    previewSegment({
+      id: "end-of-day-review-preview-social-drift",
+      startHour: 18,
+      startMinute: 20,
+      durationMinutes: 20,
+      appName: "X",
+      bundleId: "com.apple.Safari",
+      browserName: "Safari",
+      siteDomain: "x.com",
+      siteTitle: "Timeline",
+      siteUrl: "https://x.com/home",
+      windowTitle: "Timeline",
+      category: "social_media",
+      productivity: "drift",
+    }),
+  ];
+}
