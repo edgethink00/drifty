@@ -4344,14 +4344,21 @@ export default function App() {
               }}
             />
 
-            <ProductivityPersonaCard report={productivityPersonaReport} hasData={insightSegments.length > 0} />
-
-            <AttentionRhythmCard
-              appIcons={appIcons}
-              cells={attentionRhythm}
-              classificationOptions={insightClassificationOptions}
-              segments={insightSegments}
-            />
+            <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
+              <ProductivityPersonaCard
+                classificationOptions={insightClassificationOptions}
+                hasData={insightSegments.length > 0}
+                report={productivityPersonaReport}
+                segments={insightSegments}
+                variant="radar"
+              />
+              <AttentionRhythmCard
+                appIcons={appIcons}
+                cells={attentionRhythm}
+                classificationOptions={insightClassificationOptions}
+                segments={insightSegments}
+              />
+            </div>
 
             <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
               <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
@@ -5272,15 +5279,6 @@ function MetricTile({ label, value, detail, className }: { label: string; value:
   return (<div className={tileClassName}><span className="eyebrow">{label}</span><strong>{value}</strong>{detail ? <p>{detail}</p> : null}</div>);
 }
 
-const PERSONA_AXIS_LABELS: Record<string, string> = {
-  focus: "Focus depth",
-  drift: "Drift tendency",
-  switching: "Context switching",
-  surfaces: "Surface variety",
-  reactive: "Reactive work",
-  night: "Night work",
-};
-
 const PERSONA_CONTENT: Record<string, { tags: string; copy: [string, string] }> = {
   deep_diver: {
     tags: "Long focus sessions · Low drift · Stable context",
@@ -5332,6 +5330,98 @@ const PERSONA_CONTENT: Record<string, { tags: string; copy: [string, string] }> 
     ],
   },
 };
+
+type FocusProfileAxisKey = "focus_start" | "focus_endurance" | "short_drifts" | "focus_routine" | "balanced_focus";
+
+type FocusProfileAxis = {
+  readonly key: FocusProfileAxisKey;
+  readonly label: string;
+  readonly value: number;
+};
+
+const FOCUS_PROFILE_HELP =
+  "Focus profile is calculated from focus starts, focus endurance, short drift recovery, focus routine consistency, and balanced focus ratio.";
+
+const FOCUS_ENDURANCE_TARGET_SECONDS = 45 * 60;
+const MEANINGFUL_DAILY_FOCUS_SECONDS = 30 * 60;
+const STRONG_DAILY_FOCUS_SECONDS = 3 * 60 * 60;
+const SHORT_DRIFT_REFERENCE_SECONDS = 20 * 60;
+const BALANCED_FOCUS_TARGET = 0.65;
+const BALANCED_FOCUS_LOW_TOLERANCE = 0.55;
+const BALANCED_FOCUS_HIGH_TOLERANCE = 0.65;
+
+function buildFocusProfileAxes(
+  segments: ActivitySegment[],
+  classificationOptions: ClassificationOptions,
+  metrics: ReturnType<typeof buildProductivityPersona>["metrics"],
+): FocusProfileAxis[] {
+  const dayStats = buildFocusProfileDayStats(segments, classificationOptions);
+  const activeDayCount = dayStats.length;
+  const focusStartScore = activeDayCount > 0
+    ? calibrateCoverage(dayStats.filter((day) => day.firstProductivity === "focus").length / activeDayCount)
+    : metrics.focusShare;
+  const focusDays = dayStats.filter((day) => day.focusSeconds >= MEANINGFUL_DAILY_FOCUS_SECONDS).length;
+  const dailyFocusAverage = activeDayCount > 0
+    ? dayStats.reduce((total, day) => total + day.focusSeconds, 0) / activeDayCount
+    : metrics.focusAverageSegmentSeconds;
+  const focusRoutineScore = activeDayCount > 0
+    ? (calibrateCoverage(focusDays / activeDayCount) * 0.7) + (calibrateSqrt(dailyFocusAverage, STRONG_DAILY_FOCUS_SECONDS) * 0.3)
+    : metrics.focusShare;
+  const shortDriftScore = metrics.driftSeconds > 0
+    ? SHORT_DRIFT_REFERENCE_SECONDS / (SHORT_DRIFT_REFERENCE_SECONDS + metrics.driftAverageSegmentSeconds)
+    : 1;
+  const focusBalanceTolerance = metrics.focusShare <= BALANCED_FOCUS_TARGET
+    ? BALANCED_FOCUS_LOW_TOLERANCE
+    : BALANCED_FOCUS_HIGH_TOLERANCE;
+  const balancedFocusScore = 1 - clampFocusProfileValue(Math.abs(metrics.focusShare - BALANCED_FOCUS_TARGET) / focusBalanceTolerance);
+
+  return [
+    { key: "focus_start", label: "Focus Start", value: clampFocusProfileValue(focusStartScore) },
+    { key: "focus_endurance", label: "Focus Endurance", value: calibrateSqrt(metrics.focusAverageSegmentSeconds, FOCUS_ENDURANCE_TARGET_SECONDS) },
+    { key: "short_drifts", label: "Short Drifts", value: clampFocusProfileValue(shortDriftScore) },
+    { key: "focus_routine", label: "Focus Routine", value: clampFocusProfileValue(focusRoutineScore) },
+    { key: "balanced_focus", label: "Balanced Focus", value: clampFocusProfileValue(balancedFocusScore) },
+  ];
+}
+
+function buildFocusProfileDayStats(segments: ActivitySegment[], classificationOptions: ClassificationOptions): Array<{
+  readonly firstProductivity: ProductivityLabel;
+  readonly focusSeconds: number;
+}> {
+  const byDay = new Map<string, { firstProductivity: ProductivityLabel; focusSeconds: number }>();
+  const orderedSegments = segments.slice().sort((left, right) => {
+    const startedAtOrder = left.startedAt.localeCompare(right.startedAt);
+    if (startedAtOrder !== 0) return startedAtOrder;
+    return left.id.localeCompare(right.id);
+  });
+
+  for (const segment of orderedSegments) {
+    const dayKey = logicalDayIsoDateForDate(new Date(segment.startedAt));
+    const classification = classifyActivity(segment, classificationOptions);
+    const existing = byDay.get(dayKey);
+    const focusSeconds = classification.productivity === "focus" ? segment.durationSeconds : 0;
+
+    byDay.set(dayKey, {
+      firstProductivity: existing?.firstProductivity ?? classification.productivity,
+      focusSeconds: (existing?.focusSeconds ?? 0) + focusSeconds,
+    });
+  }
+
+  return Array.from(byDay.values());
+}
+
+function clampFocusProfileValue(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function calibrateSqrt(value: number, target: number): number {
+  if (value <= 0 || target <= 0) return 0;
+  return clampFocusProfileValue(Math.sqrt(value / target));
+}
+
+function calibrateCoverage(value: number): number {
+  return clampFocusProfileValue(0.15 + (0.85 * clampFocusProfileValue(value)));
+}
 
 function formatRhythmHourLabel(hour: number): string {
   if (hour === 0) return "12a";
@@ -5494,20 +5584,19 @@ function WeeklyCategoryRow({
           </div>
         ) : <EmptyState title="No weekly trend yet" detail="Weekly focus and drift totals appear after activity is recorded." />}
       </section>
-      <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail is-linked" aria-label="Insight weekly summaries">
+      <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail weekly-breakdown-analytical is-linked" aria-label="Insight weekly summaries">
         {productivityDonut.rows.length > 0 || categoryDonut.rows.length > 0 ? (
-          <div className="weekly-summary-rail__stack">
+          <div className="weekly-summary-rail__stack weekly-breakdown-analytical__stack">
             <WeeklyDonutSummary
               ariaLabel="Insight productivity breakdown"
-              className="weekly-summary-rail__summary--productivity"
+              className="weekly-summary-rail__summary--productivity weekly-breakdown-analytical__productivity productivity-donut-compact"
               view={productivityDonut}
               onShowHover={showAggregateHover}
               onMoveHover={moveSegmentHover}
               onHideHover={() => setHoveredSegment(null)}
             />
-            <WeeklyDonutSummary
+            <WeeklyCategoryBreakdown
               ariaLabel="Insight category breakdown"
-              className="weekly-summary-rail__summary--category"
               view={categoryDonut}
               onShowHover={showAggregateHover}
               onMoveHover={moveSegmentHover}
@@ -5588,6 +5677,45 @@ function WeeklyDonutSummary({
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WeeklyCategoryBreakdown({
+  ariaLabel,
+  view,
+  onShowHover,
+  onMoveHover,
+  onHideHover,
+}: {
+  ariaLabel: string;
+  view: DonutView;
+  onShowHover: (key: string, x: number, y: number) => void;
+  onMoveHover: (x: number, y: number) => void;
+  onHideHover: () => void;
+}) {
+  return (
+    <div className="weekly-summary-rail__summary weekly-summary-rail__summary--category top-categories-breakdown" role="group" aria-label={ariaLabel}>
+      <span className="weekly-breakdown-analytical__eyebrow">Top categories</span>
+      <div className="top-categories-breakdown__list">
+        {view.rows.map((row) => (
+          <div
+            className="top-categories-breakdown__row"
+            key={row.key}
+            onMouseEnter={(event: MouseEvent<HTMLDivElement>) => onShowHover(row.key, event.clientX, event.clientY)}
+            onMouseMove={(event: MouseEvent<HTMLDivElement>) => onMoveHover(event.clientX, event.clientY)}
+            onMouseLeave={onHideHover}
+          >
+            <div className="top-categories-breakdown__meta">
+              <span>{row.name}</span>
+              <strong>{Math.round(row.pct)}%</strong>
+            </div>
+            <div className="top-categories-breakdown__bar">
+              <span style={{ width: `${Math.max(row.fillPct, 3)}%`, background: row.color }} />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -5682,8 +5810,6 @@ function AttentionRhythmCard({
   );
 }
 
-const INSIGHT_SOURCE_VISIBLE_COUNT = 3;
-
 function InsightSourceGroup({
   variant,
   lists,
@@ -5693,33 +5819,29 @@ function InsightSourceGroup({
   lists: InsightSourceLists;
   appIcons: AppIconMap;
 }) {
-  const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const tone = variant === "drift" ? "var(--warn)" : "var(--accent)";
   const label = variant === "drift" ? "Drift patterns" : "Focus patterns";
   const topicsLabel = variant === "drift" ? "Drift after focus" : "Focus before drift";
   const transitionsLabel = variant === "drift" ? "Top drift after focus transitions" : "Top focus before drift transitions";
   const appsLabel = variant === "drift" ? "Drift apps" : "Focus apps";
   const toneStyle = { "--trend-tone": tone } as CSSProperties;
-  const hasHiddenSources = lists.apps.length > INSIGHT_SOURCE_VISIBLE_COUNT || lists.topics.length > INSIGHT_SOURCE_VISIBLE_COUNT;
 
   const renderSourceList = (
     kind: keyof InsightSourceLists,
     sourceLabel: string,
     emptyTitle: string,
     emptyDetail: string,
-    includeRank: boolean,
   ) => {
     const items = lists[kind];
-    const visibleItems = sourcesExpanded ? items : items.slice(0, INSIGHT_SOURCE_VISIBLE_COUNT);
     const maxValue = Math.max(1, ...items.map((item) => insightSourceValue(item)));
 
     return (
       <div className="drift-time-trend__sources">
         <span className="label-mono drift-time-trend__sources-label">{sourceLabel}</span>
         <div className="drift-time-trend__sources-items" style={toneStyle}>
-          {visibleItems.map((item, index) => (
+          {items.map((item, index) => (
             <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={item.id}>
-              <span className={`drift-time-trend__sources-rank${includeRank ? "" : " drift-time-trend__sources-rank--empty"}`} aria-hidden={!includeRank}>{includeRank ? index + 1 : null}</span>
+              <span className="drift-time-trend__sources-rank" aria-hidden="true">{index + 1}</span>
               <span className="drift-time-trend__sources-icon" aria-hidden="true">
                 {item.isSite && item.siteDomain
                   ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
@@ -5741,37 +5863,33 @@ function InsightSourceGroup({
       <div className="productivity-insight-group__head"><span className="label-mono insight-section__label">{label}</span></div>
       <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section" aria-label={transitionsLabel} style={toneStyle}>
         <div className="trend-topics-card__columns">
-          {renderSourceList("apps", appsLabel, `No ${variant} apps yet`, "Apps appear after classified activity is recorded.", false)}
-          {renderSourceList("topics", topicsLabel, `No ${variant} transitions yet`, "Transitions appear after focus is followed by drift.", true)}
+          {renderSourceList("apps", appsLabel, `No ${variant} apps yet`, "Apps appear after classified activity is recorded.")}
+          {renderSourceList("topics", topicsLabel, `No ${variant} transitions yet`, "Transitions appear after focus is followed by drift.")}
         </div>
-        {hasHiddenSources && !sourcesExpanded ? (
-          <div className="drift-time-trend__sources-more-row">
-            <button
-              type="button"
-              className="drift-time-trend__sources-more"
-              aria-expanded="false"
-              onClick={() => setSourcesExpanded(true)}
-            >
-              Show more
-            </button>
-          </div>
-        ) : null}
       </section>
     </section>
   );
 }
 
-function ProductivityPersonaCard({ report, hasData }: { report: ReturnType<typeof buildProductivityPersona>; hasData: boolean }) {
+function ProductivityPersonaCard({
+  classificationOptions = {},
+  report,
+  hasData,
+  segments = [],
+  variant = "profile",
+}: {
+  classificationOptions?: ClassificationOptions;
+  report: ReturnType<typeof buildProductivityPersona>;
+  hasData: boolean;
+  segments?: ActivitySegment[];
+  variant?: "profile" | "radar";
+}) {
   const content = PERSONA_CONTENT[report.personaId] ?? PERSONA_CONTENT.balanced_builder;
   const activeDays = report.metrics.activeDays;
   const tagPills = content.tags.split(" · ");
   const radarCenter = { x: 150, y: 116 };
   const radarRadius = 86;
-  const radarAxes = report.axes.map((axis) => ({
-    ...axis,
-    displayLabel: PERSONA_AXIS_LABELS[axis.key] ?? axis.label,
-    value: Math.min(1, Math.max(0, axis.value)),
-  }));
+  const radarAxes = buildFocusProfileAxes(segments, classificationOptions, report.metrics);
   const pointFor = (index: number, value: number, radius = radarRadius) => {
     const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarAxes.length;
     return {
@@ -5787,15 +5905,60 @@ function ProductivityPersonaCard({ report, hasData }: { report: ReturnType<typeo
     const point = pointFor(index, axis.value);
     return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
   }).join(" ");
-  const radarLabel = `${report.personaName} persona radar: ${radarAxes.map((axis) => `${axis.displayLabel} ${formatSharePercent(axis.value * 100)}`).join(", ")}`;
+  const radarLabel = `${report.personaName} persona radar: ${radarAxes.map((axis) => `${axis.label} ${formatSharePercent(axis.value * 100)}`).join(", ")}`;
+  const renderRadarLabel = (axis: FocusProfileAxis, index: number) => {
+    const point = pointFor(index, 1, radarRadius + 22);
+    const x = point.x.toFixed(1);
+    const y = point.y.toFixed(1);
+    const labelParts = axis.label.split(" ");
+
+    return (
+      <text className="persona-radar__label" x={x} y={y} textAnchor="middle" dominantBaseline="middle" key={axis.key}>
+        {labelParts.map((part, partIndex) => (
+          <tspan x={x} dy={partIndex === 0 ? "0" : "1.12em"} key={`${axis.key}-${part}`}>
+            {part}
+          </tspan>
+        ))}
+        <tspan className="persona-radar__label-value" x={x} dy="1.38em">
+          {formatSharePercent(axis.value * 100)}
+        </tspan>
+      </text>
+    );
+  };
   const cardClassName = [
     "editorial-panel editorial-panel--soft insight-section productivity-persona-card",
-    hasData ? "persona-profile-card" : null,
+    hasData && variant === "profile" ? "persona-profile-card" : null,
+    hasData && variant === "radar" ? "productivity-persona-card--radar-only" : null,
   ].filter(Boolean).join(" ");
 
   return (
     <section className={cardClassName} aria-label="Local productivity persona report">
-      {hasData ? (
+      {hasData && variant === "radar" ? (
+        <div className="persona-radar-card">
+          <div className="persona-radar-card__head">
+            <span className="label-mono insight-section__label">Focus profile</span>
+            <span className="persona-radar-card__help-wrap">
+              <button type="button" className="persona-radar-card__help" aria-label="Focus profile help" aria-describedby="focus-profile-help-tooltip">?</button>
+              <span className="persona-radar-card__tooltip" id="focus-profile-help-tooltip" role="tooltip">{FOCUS_PROFILE_HELP}</span>
+            </span>
+          </div>
+          <div className="persona-radar-card__chart">
+            <svg className="persona-radar" viewBox="0 0 300 232" role="img" aria-label={radarLabel}>
+              {[1, 0.8, 0.6, 0.4, 0.2].map((level) => <polygon className="persona-radar__grid" points={polygonPoints(level)} key={level} />)}
+              {radarAxes.map((axis, index) => {
+                const point = pointFor(index, 1);
+                return <line className="persona-radar__axis" x1={radarCenter.x} y1={radarCenter.y} x2={point.x.toFixed(1)} y2={point.y.toFixed(1)} key={axis.key} />;
+              })}
+              <polygon className="persona-radar__shape" points={radarShape} />
+              {radarAxes.map((axis, index) => {
+                const point = pointFor(index, axis.value);
+                return <circle className="persona-radar__point" cx={point.x.toFixed(1)} cy={point.y.toFixed(1)} r="2.35" key={axis.key} />;
+              })}
+              {radarAxes.map(renderRadarLabel)}
+            </svg>
+          </div>
+        </div>
+      ) : hasData ? (
         <>
           <div className="persona-profile-card__identity">
             <div className="persona-profile-card__intro">
@@ -5822,14 +5985,11 @@ function ProductivityPersonaCard({ report, hasData }: { report: ReturnType<typeo
                   const point = pointFor(index, axis.value);
                   return <circle className="persona-radar__point" cx={point.x.toFixed(1)} cy={point.y.toFixed(1)} r="2.35" key={axis.key} />;
                 })}
-                {radarAxes.map((axis, index) => {
-                  const point = pointFor(index, 1, radarRadius + 22);
-                  return <text className="persona-radar__label" x={point.x.toFixed(1)} y={point.y.toFixed(1)} textAnchor="middle" dominantBaseline="middle" key={axis.key}>{axis.displayLabel}</text>;
-                })}
+                {radarAxes.map(renderRadarLabel)}
               </svg>
             </div>
             <div className="persona-radar-card__axis-list" aria-hidden="true">
-              {radarAxes.map((axis) => <span key={axis.key}>{axis.displayLabel}<strong>{formatSharePercent(axis.value * 100)}</strong></span>)}
+              {radarAxes.map((axis) => <span key={axis.key}>{axis.label}<strong>{formatSharePercent(axis.value * 100)}</strong></span>)}
             </div>
           </div>
         </>
