@@ -491,6 +491,73 @@ describe("App AI classification controls", () => {
     expect(sourceRows[0]?.textContent).not.toContain("Google Chrome");
   });
 
+  it("shows source productivity mix dots and short AI source labels in classification details", async () => {
+    const selectedDay = todayIsoDate();
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
+      timelineQueryIncludesDay(query, selectedDay)
+        ? [
+            {
+              ...createSegmentForDay(selectedDay),
+              id: "gmail-neutral",
+              startedAt: `${selectedDay}T09:00:00.000`,
+              endedAt: `${selectedDay}T09:10:00.000`,
+              durationSeconds: 600,
+              appName: "Google Chrome",
+              bundleId: "com.google.Chrome",
+              browserName: "Google Chrome",
+              siteDomain: "mail.google.com",
+              siteTitle: "Gmail",
+              windowTitle: "Inbox",
+              classification: {
+                category: "communication",
+                productivity: "neutral",
+                source: "llm",
+                confidence: 0.96,
+                reason: "Messaging context",
+                aiResult: true,
+              },
+            },
+            {
+              ...createSegmentForDay(selectedDay),
+              id: "gmail-drift",
+              startedAt: `${selectedDay}T09:10:00.000`,
+              endedAt: `${selectedDay}T09:15:00.000`,
+              durationSeconds: 300,
+              appName: "Google Chrome",
+              bundleId: "com.google.Chrome",
+              browserName: "Google Chrome",
+              siteDomain: "mail.google.com",
+              siteTitle: "Gmail",
+              windowTitle: "Inbox",
+              classification: {
+                category: "communication",
+                productivity: "drift",
+                source: "llm",
+                confidence: 0.94,
+                reason: "Messaging drift",
+                aiResult: true,
+              },
+            },
+          ]
+        : [],
+    ));
+    render(<App />);
+
+    const primaryNavigation = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(primaryNavigation).getByRole("button", { name: /^classification$/i }));
+
+    const panel = await screen.findByLabelText("Classification panel view") as HTMLElement;
+    const sourceRow = await screen.findByRole("button", { name: /mail\.google\.com/i });
+    const mix = sourceRow.querySelector(".classification-panel-view__source-productivity");
+    expect(mix?.getAttribute("aria-label")).toBe("Neutral 10m, Drift 5m");
+    expect(sourceRow.querySelectorAll(".classification-panel-view__source-productivity-dot")).toHaveLength(2);
+
+    const activityToggle = panel.querySelector<HTMLButtonElement>(".classification-panel-view__activity-toggle");
+    expect(activityToggle).toBeTruthy();
+    fireEvent.click(activityToggle as HTMLButtonElement);
+    expect(panel.querySelector(".classification-panel-view__activity-classification")?.textContent).toContain("SourceAI");
+  });
+
   it("uses the selected category tone for classification selections and activity detail bars", async () => {
     const selectedDay = todayIsoDate();
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
@@ -542,8 +609,10 @@ describe("App AI classification controls", () => {
     expect(cssRule(".content--classify .classification-panel-view")).toMatch(/flex:\s*1 1 auto;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".classification-panel-view__grid")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
     expect(styles).toMatch(/\.panel-header\s*{[\s\S]*min-height:\s*52px;[\s\S]*padding:\s*8px 10px 7px;/);
-    expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*min-height:\s*3rem;/);
+    expect(styles).toMatch(/\.classification-panel-view\s*\{[\s\S]*--classification-row-height:\s*48px;/);
+    expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*min-height:\s*var\(--classification-row-height\);/);
     expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*padding:\s*5px 8px;/);
+    expect(cssRule(".classification-panel-view__activity-summary,\n.classification-panel-view__activity-toggle")).toContain("min-height: var(--classification-row-height);");
     expect(styles).toMatch(/\.classification-panel-view__bar\s*{[\s\S]*height:\s*6px;/);
     expect(styles).toMatch(/\.classification-panel-view__category-row:has\(\.category-dot--entertainment\)\s*{[\s\S]*--classification-category-tone:\s*var\(--category-entertainment\);[\s\S]*\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*var\(--classification-category-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__source-row\[data-selected="true"\]\s*{[\s\S]*var\(--classification-selected-tone\)/);

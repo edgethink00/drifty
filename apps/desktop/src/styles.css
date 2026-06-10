@@ -2108,12 +2108,16 @@ input, textarea { color: inherit; }
   gap: 4px;
 }
 
+.classification-panel-view {
+  --classification-row-height: 48px;
+}
+
 .classification-panel-view__category-row,
 .classification-panel-view__source-row {
   display: grid;
   gap: 4px;
   width: 100%;
-  min-height: 3rem;
+  min-height: var(--classification-row-height);
   min-width: 0;
   padding: 5px 8px;
   border: 1px solid transparent;
@@ -2240,7 +2244,8 @@ input, textarea { color: inherit; }
 }
 
 .classification-panel-view__row-meta,
-.classification-panel-view__source-copy span,
+.classification-panel-view__source-meta,
+.classification-panel-view__source-meta > span:first-child,
 .classification-panel-view__activity-copy span {
   display: block;
   overflow: hidden;
@@ -2249,6 +2254,17 @@ input, textarea { color: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-soft);
+}
+
+.classification-panel-view__source-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.classification-panel-view__source-meta > span:first-child {
+  min-width: 0;
 }
 
 .classification-panel-view__bar {
@@ -2280,6 +2296,37 @@ input, textarea { color: inherit; }
 .classification-panel-view__source-copy,
 .classification-panel-view__activity-copy {
   min-width: 0;
+}
+
+.classification-panel-view__source-productivity {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  height: 7px;
+}
+
+.classification-panel-view__source-productivity-dot {
+  display: inline-block;
+  height: 5px;
+  min-width: 7px;
+  max-width: 18px;
+  border-radius: 999px;
+  opacity: 0.88;
+}
+
+.classification-panel-view__source-productivity-dot--focus {
+  background: var(--productivity-focus);
+}
+
+.classification-panel-view__source-productivity-dot--neutral {
+  background: var(--productivity-neutral);
+}
+
+.classification-panel-view__source-productivity-dot--drift {
+  background: var(--productivity-drift);
 }
 
 .classification-panel-view__source-measure,
@@ -2334,8 +2381,9 @@ input, textarea { color: inherit; }
   align-items: center;
   gap: var(--space-2);
   width: 100%;
+  min-height: var(--classification-row-height);
   min-width: 0;
-  padding: var(--space-2);
+  padding: 5px 8px;
   border: 0;
   border-radius: calc(var(--radius-md) - 1px);
   background: transparent;

@@ -1,4 +1,4 @@
-import { buildAppUsageSummaries, classifyActivityDetailed, formatTimelineItems, secondsToLabel } from "@drifty/domain";
+import { buildAppUsageSummaries, classifyActivityDetailed, formatTimelineItems, PRODUCTIVITY_ORDER, secondsToLabel } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleTargetKind, ClassificationSource, ProductivityLabel } from "@drifty/domain";
 import { FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
@@ -14,6 +14,17 @@ export type ClassificationSourceSummary = {
   sessionCount: number;
   averageSessionSeconds: number;
   shareOfTotal: number;
+  productivityMix: ClassificationSourceProductivityMix[];
+};
+
+export type ClassificationSourceProductivityMix = {
+  productivity: ProductivityLabel;
+  totalSeconds: number;
+  ratio: number;
+};
+
+type ClassificationSourceSummaryDraft = ClassificationSourceSummary & {
+  productivitySeconds: Record<ProductivityLabel, number>;
 };
 
 export type ClassificationActivityRow = {
@@ -246,8 +257,8 @@ export function classificationRowSummary(segments: ActivitySegment[], options?: 
   };
 }
 
-export function buildClassificationSourceSummaries(segments: ActivitySegment[]): ClassificationSourceSummary[] {
-  const sourceMap = new Map<string, ClassificationSourceSummary>();
+export function buildClassificationSourceSummaries(segments: ActivitySegment[], options?: ClassificationOptions): ClassificationSourceSummary[] {
+  const sourceMap = new Map<string, ClassificationSourceSummaryDraft>();
   for (const segment of segments) {
     const identity = classificationSourceIdentity(segment);
     const existing = sourceMap.get(identity.id) ?? {
@@ -256,20 +267,41 @@ export function buildClassificationSourceSummaries(segments: ActivitySegment[]):
       sessionCount: 0,
       averageSessionSeconds: 0,
       shareOfTotal: 0,
+      productivityMix: [],
+      productivitySeconds: { focus: 0, neutral: 0, drift: 0 },
     };
+    const classification = classifyActivityDetailed(segment, options);
     existing.totalSeconds += segment.durationSeconds;
     existing.sessionCount += 1;
+    existing.productivitySeconds[classification.productivity] += segment.durationSeconds;
     if (existing.usageKind === "site" && !existing.siteTitle) existing.siteTitle = normalizeClassificationSourceTitle(segment.siteTitle);
     sourceMap.set(identity.id, existing);
   }
   const total = segments.reduce((sum, s) => sum + s.durationSeconds, 0);
   return Array.from(sourceMap.values())
-    .map((item) => ({
-      ...item,
-      averageSessionSeconds: item.sessionCount > 0 ? Math.round(item.totalSeconds / item.sessionCount) : 0,
-      shareOfTotal: total > 0 ? item.totalSeconds / total : 0,
-    }))
+    .map((item) => {
+      const productivityMix = PRODUCTIVITY_ORDER
+        .map((productivity) => ({
+          productivity,
+          totalSeconds: item.productivitySeconds[productivity],
+          ratio: item.totalSeconds > 0 ? item.productivitySeconds[productivity] / item.totalSeconds : 0,
+        }))
+        .filter((entry) => entry.totalSeconds > 0);
+      return {
+        ...item,
+        averageSessionSeconds: item.sessionCount > 0 ? Math.round(item.totalSeconds / item.sessionCount) : 0,
+        shareOfTotal: total > 0 ? item.totalSeconds / total : 0,
+        productivityMix,
+      };
+    })
     .sort((a, b) => b.totalSeconds - a.totalSeconds);
+}
+
+export function formatClassificationSourceProductivityMix(mix: ClassificationSourceProductivityMix[]): string {
+  if (mix.length === 0) return "No productivity signal";
+  return mix
+    .map((entry) => `${productivityLabel(entry.productivity)} ${formatCompactDurationFromSeconds(entry.totalSeconds)}`)
+    .join(", ");
 }
 
 export function buildClassificationActivityRows(segs: ActivitySegment[]): ClassificationActivityRow[] {
@@ -384,7 +416,7 @@ export function productivityMixAriaLabel(label: string, entries: CategoryProduct
 }
 
 export function classificationSourceLabel(source?: ClassificationSource | null, ai?: boolean | null): string {
-  if (ai || source === "llm") return "AI classified";
+  if (ai || source === "llm") return "AI";
   if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefined rule";
   if (source === "context") return "Context rule";
   if (source === "fallback") return "Fallback";

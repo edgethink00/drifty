@@ -122,6 +122,7 @@ import {
   showNativeDriftAlarm,
   type ExtremeNudgeTarget,
 } from "./features/companion/driftAlarmBridge";
+import { evaluateYouTubeDriftAlarmGate } from "./features/companion/youtubeDriftAlarmGate";
 import {
   fallbackDisplayName,
   fetchOwnProfile,
@@ -138,7 +139,7 @@ import {
 } from "./features/billing/billingService";
 import { IndividualPlanCards } from "./features/billing/IndividualPlanCards";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
-import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
+import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
 import type { DriftAlarmBreakSnooze, DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
@@ -692,6 +693,7 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const driftAlarmSnoozeRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
@@ -1536,9 +1538,10 @@ export default function App() {
   }, [clearDriftAlarmEvent, dismissWatcherPeek, handleDriftAlarmAction, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   useEffect(() => {
-    if (!driftAlertsEnabled) return;
-    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return;
-    if (!status?.running) return;
+    if (!driftAlertsEnabled || selectedDay !== logicalTodayIsoDate(startOfDayMinutes) || !status?.running) {
+      pendingDriftAlarmGateRef.current = null;
+      return;
+    }
 
     const driftCandidates = buildDriftAlarmCandidates({
       segments,
@@ -1549,41 +1552,14 @@ export default function App() {
     const latestDrift = driftCandidates[0] ?? null;
     const activeSnooze = driftAlarmSnoozeRef.current;
     if (activeSnooze !== null) {
+      pendingDriftAlarmGateRef.current = null;
       if (Date.now() < activeSnooze.untilMs) return;
       return;
     }
 
-    const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
-    if (pendingBreakReturnAlarm) {
-      if (!latestDrift) {
-        pendingBreakReturnAlarmRef.current = null;
-        lastDriftAlertSegmentRef.current = null;
-        return;
-      }
-
-      const focusTargets = pendingBreakReturnAlarm.focusTargets.length
-        ? pendingBreakReturnAlarm.focusTargets
-        : recentDriftAlarmFocusTargets;
-      const breakReturnContextLabel = getWatcherContextLabel(latestDrift.segment, latestDrift.category);
-      const breakReturnIdContext = latestDrift.alertKey;
-
-      showDriftAlarm(buildBreakReturnAlarmEvent({
-        id: `break-return:${breakReturnIdContext}:${pendingBreakReturnAlarm.untilMs}`,
-        contextLabel: breakReturnContextLabel,
-        driftDurationSeconds: latestDrift.segment.durationSeconds,
-        preservedFocusStrikeSeconds: 0,
-        generatedAt: new Date().toISOString(),
-        focusTargets,
-        breakDurationMinutes: pendingBreakReturnAlarm.minutes,
-        pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
-        nextFocusLabel: focusTargets[0]?.label ?? "your focus",
-      }));
-      pendingBreakReturnAlarmRef.current = null;
-      lastDriftAlertSegmentRef.current = latestDrift?.alertKey ?? null;
-      return;
-    }
-
     if (!latestDrift) {
+      pendingDriftAlarmGateRef.current = null;
+      pendingBreakReturnAlarmRef.current = null;
       lastDriftAlertSegmentRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
@@ -1632,30 +1608,93 @@ export default function App() {
       });
     };
 
-    if (lastDriftAlertSegmentRef.current === null) {
-      if (extremeNudgeEnabled) {
-        applyCurrentExtremeNudge(false);
+    const deliverCurrentDriftAlarm = () => {
+      const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
+      if (pendingBreakReturnAlarm) {
+        const focusTargets = pendingBreakReturnAlarm.focusTargets.length
+          ? pendingBreakReturnAlarm.focusTargets
+          : recentDriftAlarmFocusTargets;
+        const breakReturnContextLabel = getWatcherContextLabel(segment, category);
+
+        showDriftAlarm(buildBreakReturnAlarmEvent({
+          id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
+          contextLabel: breakReturnContextLabel,
+          driftDurationSeconds: segment.durationSeconds,
+          preservedFocusStrikeSeconds: 0,
+          generatedAt: new Date().toISOString(),
+          focusTargets,
+          breakDurationMinutes: pendingBreakReturnAlarm.minutes,
+          pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
+          nextFocusLabel: focusTargets[0]?.label ?? "your focus",
+        }));
+        pendingBreakReturnAlarmRef.current = null;
+        lastDriftAlertSegmentRef.current = alertKey;
         return;
       }
+
+      if (lastDriftAlertSegmentRef.current === null) {
+        if (extremeNudgeEnabled) {
+          applyCurrentExtremeNudge(false);
+          return;
+        }
+        lastDriftAlertSegmentRef.current = alertKey;
+        showCurrentDriftAlarm();
+        return;
+      }
+      if (lastDriftAlertSegmentRef.current === alertKey) {
+        if (driftAlarmEventRef.current?.id === alertKey) {
+          showCurrentDriftAlarm();
+        }
+        return;
+      }
+
       lastDriftAlertSegmentRef.current = alertKey;
+      if (extremeNudgeEnabled) {
+        applyCurrentExtremeNudge(true);
+        return;
+      }
       showCurrentDriftAlarm();
-      return;
-    }
-    if (lastDriftAlertSegmentRef.current === alertKey) {
+      void sendDriftNotification(segment);
+    };
+
+    if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
       if (driftAlarmEventRef.current?.id === alertKey) {
         showCurrentDriftAlarm();
       }
       return;
     }
 
-    lastDriftAlertSegmentRef.current = alertKey;
-    if (extremeNudgeEnabled) {
-      applyCurrentExtremeNudge(true);
-      return;
+    if (pendingDriftAlarmGateRef.current === alertKey) return;
+    if (pendingDriftAlarmGateRef.current !== null && pendingDriftAlarmGateRef.current !== alertKey) {
+      pendingDriftAlarmGateRef.current = null;
     }
-    showCurrentDriftAlarm();
-    void sendDriftNotification(segment);
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, recentDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+
+    pendingDriftAlarmGateRef.current = alertKey;
+    void evaluateYouTubeDriftAlarmGate({
+      segment,
+      category,
+      aiOptions: localAiClassificationOptions,
+    }).then((gateResult) => {
+      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      pendingDriftAlarmGateRef.current = null;
+
+      if (gateResult.kind === "suppress") {
+        pendingBreakReturnAlarmRef.current = null;
+        lastDriftAlertSegmentRef.current = alertKey;
+        return;
+      }
+
+      deliverCurrentDriftAlarm();
+    }).catch((error) => {
+      if (error instanceof Error) {
+        console.warn("Failed to evaluate YouTube drift alarm AI gate", error);
+      }
+      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      pendingDriftAlarmGateRef.current = null;
+      pendingBreakReturnAlarmRef.current = null;
+      lastDriftAlertSegmentRef.current = alertKey;
+    });
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -1954,8 +1993,8 @@ export default function App() {
   );
   const classificationSourceSegments = selectedClassificationSegments;
   const classificationSourceSummaries = useMemo(
-    () => buildClassificationSourceSummaries(classificationSourceSegments),
-    [classificationSourceSegments],
+    () => buildClassificationSourceSummaries(classificationSourceSegments, classificationOptions),
+    [classificationOptions, classificationSourceSegments],
   );
   const effectiveClassifySourceId = useMemo(() => {
     if (classificationSourceSummaries.some((s) => classifySourceKey(s) === classifySelectedSourceId)) return classifySelectedSourceId;
@@ -3398,7 +3437,19 @@ export default function App() {
                                 </div>
                                 <div className="classification-panel-view__source-copy">
                                   <strong>{item.label}</strong>
-                                  <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
+                                  <div className="classification-panel-view__source-meta">
+                                    <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
+                                    <span className="classification-panel-view__source-productivity" aria-label={formatClassificationSourceProductivityMix(item.productivityMix)} title={formatClassificationSourceProductivityMix(item.productivityMix)}>
+                                      {item.productivityMix.map((entry) => (
+                                        <span
+                                          key={entry.productivity}
+                                          className={`classification-panel-view__source-productivity-dot classification-panel-view__source-productivity-dot--${entry.productivity}`}
+                                          style={{ width: `${Math.max(7, Math.round(entry.ratio * 18))}px` }}
+                                          aria-hidden="true"
+                                        />
+                                      ))}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="classification-panel-view__source-measure">
                                   <strong>{formatCompactDurationFromSeconds(item.totalSeconds)}</strong>
@@ -4146,4 +4197,3 @@ export default function App() {
     </div>
   );
 }
-
