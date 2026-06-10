@@ -11,6 +11,8 @@ const WATCHER_PEEK_WIDTH: f64 = 560.0;
 const WATCHER_PEEK_HEIGHT: f64 = 340.0;
 const END_OF_DAY_REVIEW_WIDTH: f64 = 560.0;
 const END_OF_DAY_REVIEW_HEIGHT: f64 = 720.0;
+const EXTREME_NUDGE_TOAST_WIDTH: f64 = 440.0;
+const EXTREME_NUDGE_TOAST_HEIGHT: f64 = 132.0;
 const WATCHER_PEEK_WORK_AREA_MARGIN: f64 = 32.0;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -167,6 +169,13 @@ fn position_watcher_window(app: &AppHandle, payload: &Value) -> Result<(), Strin
     let size = work_area.size.to_logical::<f64>(scale_factor);
     let watcher_position = if is_end_of_day_review_payload(payload) {
         calculate_end_of_day_review_window_position(position.x, position.y, size.width, size.height)
+    } else if is_extreme_nudge_toast_payload(payload) {
+        calculate_extreme_nudge_toast_window_position(
+            position.x,
+            position.y,
+            size.width,
+            size.height,
+        )
     } else {
         calculate_watcher_window_position(position.x, position.y, size.width, size.height)
     };
@@ -203,6 +212,8 @@ fn resize_watcher_window(app: &AppHandle, payload: &Value) -> Result<(), String>
 fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
     if is_end_of_day_review_payload(payload) {
         (END_OF_DAY_REVIEW_WIDTH, END_OF_DAY_REVIEW_HEIGHT)
+    } else if is_extreme_nudge_toast_payload(payload) {
+        (EXTREME_NUDGE_TOAST_WIDTH, EXTREME_NUDGE_TOAST_HEIGHT)
     } else {
         (WATCHER_PEEK_WIDTH, WATCHER_PEEK_HEIGHT)
     }
@@ -242,11 +253,32 @@ fn calculate_end_of_day_review_window_position(
 }
 
 fn is_end_of_day_review_payload(payload: &Value) -> bool {
-    matches!(payload.get("placement").and_then(Value::as_str), Some("top-right"))
-        || matches!(
-            payload.get("kind").and_then(Value::as_str),
-            Some("endOfDayReview")
-        )
+    matches!(
+        payload.get("kind").and_then(Value::as_str),
+        Some("endOfDayReview")
+    )
+}
+
+fn calculate_extreme_nudge_toast_window_position(
+    work_area_x: f64,
+    work_area_y: f64,
+    work_area_width: f64,
+    _work_area_height: f64,
+) -> LogicalPosition<f64> {
+    let available_x = (work_area_width - EXTREME_NUDGE_TOAST_WIDTH).max(0.0);
+    let x_margin = WATCHER_PEEK_WORK_AREA_MARGIN.min(available_x);
+
+    LogicalPosition::new(
+        work_area_x + available_x - x_margin,
+        work_area_y + WATCHER_PEEK_WORK_AREA_MARGIN,
+    )
+}
+
+fn is_extreme_nudge_toast_payload(payload: &Value) -> bool {
+    matches!(
+        payload.get("kind").and_then(Value::as_str),
+        Some("extremeNudgeToast")
+    )
 }
 
 fn resolve_watcher_monitor(app: &AppHandle) -> Option<Monitor> {
@@ -320,6 +352,24 @@ mod tests {
     }
 
     #[test]
+    fn sizes_extreme_nudge_toast_as_compact_top_right_overlay() {
+        let payload = serde_json::json!({"kind": "extremeNudgeToast", "placement": "top-right"});
+        let (width, height) = watcher_window_dimensions_for_payload(&payload);
+
+        assert_eq!(width, EXTREME_NUDGE_TOAST_WIDTH);
+        assert_eq!(height, EXTREME_NUDGE_TOAST_HEIGHT);
+        assert!(should_ignore_cursor_events_for_payload(&payload));
+    }
+
+    #[test]
+    fn positions_extreme_nudge_toast_top_right_in_work_area() {
+        let position = calculate_extreme_nudge_toast_window_position(0.0, 25.0, 1440.0, 775.0);
+
+        assert_eq!(position.x, 968.0);
+        assert_eq!(position.y, 57.0);
+    }
+
+    #[test]
     fn keeps_end_of_day_review_inside_shifted_work_area_when_space_allows() {
         let position = calculate_end_of_day_review_window_position(80.0, 24.0, 1360.0, 900.0);
 
@@ -335,10 +385,10 @@ mod tests {
     }
 
     #[test]
-    fn detects_end_of_day_review_payload_by_placement() {
+    fn does_not_detect_end_of_day_review_payload_by_placement_only() {
         let payload = serde_json::json!({"placement": "top-right"});
 
-        assert!(is_end_of_day_review_payload(&payload));
+        assert!(!is_end_of_day_review_payload(&payload));
     }
 
     #[test]

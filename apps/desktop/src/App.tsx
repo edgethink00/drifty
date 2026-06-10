@@ -109,9 +109,11 @@ import {
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
   showNativeEndOfDayReview,
+  showNativeExtremeNudgeToast,
   showNativeWatcherPeek,
   type EndOfDayReviewAction,
 } from "./features/companion/watcherBridge";
+import type { ExtremeNudgeToastEvent } from "./features/companion/ExtremeNudgeToast";
 import {
   applyNativeExtremeNudge,
   hideNativeDriftAlarm,
@@ -1778,6 +1780,18 @@ export default function App() {
     void hideNativeDriftAlarm();
   }, [clearDriftAlarmEvent]);
 
+  const returnToFocusTarget = useCallback((target: DriftAlarmFocusTarget | null) => {
+    if (target?.siteDomain) {
+      void activateFocusTargetSite(target).catch((error) => console.warn("Failed to open focus target site", error));
+      return;
+    }
+    if (target?.bundleId && isTauriRuntime()) {
+      void invoke("focus_target_open_app", { bundleId: target.bundleId }).catch((error) => console.warn("Failed to open focus target app", error));
+      return;
+    }
+    navigateToTab("dashboard");
+  }, [navigateToTab]);
+
   const handleDriftAlarmAction = useCallback((action: DriftAlarmAction) => {
     const currentAlarmEvent = driftAlarmEventRef.current ?? lastDriftAlarmEventRef.current;
     dismissDriftAlarm();
@@ -1792,15 +1806,7 @@ export default function App() {
         return;
       case "return_to_focus": {
         const target = currentAlarmEvent?.focusTargets.find((focusTarget) => focusTarget.targetId === action.targetId) ?? null;
-        if (target?.siteDomain) {
-          void openFocusTargetSite(target.siteDomain).catch((error) => console.warn("Failed to open focus target site", error));
-          return;
-        }
-        if (target?.bundleId) {
-          void invoke("focus_target_open_app", { bundleId: target.bundleId }).catch((error) => console.warn("Failed to open focus target app", error));
-          return;
-        }
-        navigateToTab("dashboard");
+        returnToFocusTarget(target);
         return;
       }
       case "start_break": {
@@ -1820,7 +1826,7 @@ export default function App() {
         return;
       }
     }
-  }, [dismissDriftAlarm, navigateToTab]);
+  }, [dismissDriftAlarm, navigateToTab, returnToFocusTarget]);
 
   const dismissWatcherPeek = useCallback(() => {
     clearWatcherEvent();
@@ -2363,7 +2369,17 @@ export default function App() {
     const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
       lastDriftAlertSegmentRef.current = alertKey;
       void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then((applied) => {
-        if (!applied && lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
+        if (!applied) {
+          if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
+          return;
+        }
+        const latestFocusTarget = recentDriftAlarmFocusTargets[0] ?? null;
+        void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
+        if (latestFocusTarget) {
+          window.setTimeout(() => {
+            if (lastDriftAlertSegmentRef.current === alertKey) returnToFocusTarget(latestFocusTarget);
+          }, 120);
+        }
       }).catch((error) => {
         console.warn("Failed to apply extreme nudge", error);
         if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
@@ -2393,7 +2409,7 @@ export default function App() {
     }
     showCurrentDriftAlarm();
     void sendDriftNotification(segment);
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, recentDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -4604,7 +4620,7 @@ export default function App() {
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div><div className="desc">Choose how long drift must continue before the alarm appears.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span><small>{option.detail}</small></button>))}</div></div></div>
-                    <div className="settings-row"><div><div className="lbl">Extreme nudge</div><div className="desc">Close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
+                    <div className="settings-row"><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
                     <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Show a local summary after 6:00 PM when the tracker is running, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
                     {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
                       <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
@@ -8254,6 +8270,22 @@ function buildExtremeNudgeTarget(segment: ActivitySegment): ExtremeNudgeTarget {
   };
 }
 
+function buildExtremeNudgeToastEvent(segment: ActivitySegment, focusTarget: DriftAlarmFocusTarget | null): ExtremeNudgeToastEvent {
+  const closedLabel = segment.siteDomain?.trim()
+    || segment.siteTitle?.trim()
+    || segment.appName.trim()
+    || "drift";
+
+  return {
+    kind: "extremeNudgeToast",
+    placement: "top-right",
+    id: `extreme-nudge:${segment.id}:${Date.now()}`,
+    generatedAt: new Date().toISOString(),
+    closedLabel,
+    focusLabel: focusTarget?.label ?? null,
+  };
+}
+
 type CurrentSnapshotTiming = {
   durationSeconds: number;
   uncapturedSeconds: number;
@@ -8387,8 +8419,10 @@ function getWatcherContextLabel(segment: ActivitySegment, category: ActivityCate
 function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIconMap): DriftAlarmFocusTarget {
   const appName = segment.appName.trim() || "Unknown app";
   const bundleId = segment.bundleId?.trim() || null;
+  const browserName = segment.browserName?.trim() || null;
   const siteDomain = segment.siteDomain?.trim() || null;
   const siteTitle = segment.siteTitle?.trim() || null;
+  const siteUrl = segment.siteUrl?.trim() || null;
   const windowTitle = segment.windowTitle?.trim() || null;
   const iconKey = bundleId ?? appName;
   const iconSrc = appIcons[iconKey] ?? appIcons[appName] ?? null;
@@ -8401,8 +8435,10 @@ function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIcon
     detail,
     appName,
     bundleId,
+    browserName,
     siteDomain,
     siteTitle,
+    siteUrl,
     iconSrc,
   };
 }
@@ -8564,8 +8600,10 @@ function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: A
         detail: formatFocusTargetDetail({ appName: target.appName, siteDomain: null, siteTitle: null, windowTitle: target.windowTitle }),
         appName: target.appName,
         bundleId: target.bundleId,
+        browserName: null,
         siteDomain: null,
         siteTitle: null,
+        siteUrl: null,
         iconSrc: appIcons[iconKey] ?? appIcons[target.appName] ?? null,
       } satisfies DriftAlarmFocusTarget;
     });
@@ -9675,6 +9713,24 @@ async function openFocusTargetSite(siteDomain: string): Promise<void> {
   if (!domain) return;
   const { openUrl } = await import("@tauri-apps/plugin-opener");
   await openUrl(`https://${domain}`);
+}
+
+async function activateFocusTargetSite(target: DriftAlarmFocusTarget): Promise<void> {
+  const siteDomain = target.siteDomain?.trim() ?? "";
+  if (!siteDomain) return;
+
+  const browserName = target.browserName?.trim() ?? "";
+  const siteUrl = target.siteUrl?.trim() ?? "";
+  if (browserName && siteUrl && isTauriRuntime()) {
+    try {
+      const activated = await invoke<boolean>("focus_target_activate_browser_tab", { browserName, siteUrl });
+      if (activated) return;
+    } catch (error) {
+      console.warn("Failed to activate focus target browser tab", error);
+    }
+  }
+
+  await openFocusTargetSite(siteDomain);
 }
 
 
