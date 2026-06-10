@@ -783,8 +783,9 @@ export function OnboardingModal({
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
-      <div className="onboarding-topbar">
-        <img className="onboarding-logo onboarding-logo--image" src={wordmarkUrl} alt="drifty" />
+      <div className="onboarding-window-drag-strip" data-tauri-drag-region aria-hidden="true" />
+      <div className="onboarding-topbar" data-tauri-drag-region>
+        <img className="onboarding-logo onboarding-logo--image" src={wordmarkUrl} alt="drifty" data-tauri-drag-region />
         <div className="onboarding-progress-bar--full" aria-label="Setup progress">
           <div className="onboarding-progress-bar__fill" style={{ width: `${progressPct}%` }} />
         </div>

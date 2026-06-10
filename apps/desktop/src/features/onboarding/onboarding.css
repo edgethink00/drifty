@@ -105,6 +105,15 @@
   border-bottom: 1px solid rgba(28, 28, 25, 0.06);
 }
 
+.onboarding-window-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 96px;
+  right: 0;
+  z-index: 7;
+  height: var(--window-chrome-height, 32px);
+}
+
 .onboarding-progress-bar--full {
   position: absolute;
   left: 0;
@@ -132,10 +141,9 @@
 
 .onboarding-logo--image {
   display: block;
-  width: auto;
-  height: 22px;
-  max-height: 22px;
-  max-width: 92px;
+  width: 76px;
+  height: auto;
+  max-width: none;
   object-fit: contain;
 }
 
@@ -2166,7 +2174,7 @@
   .onboarding-screen .onboarding-card .onb-perms__control { width: 100%; justify-content: space-between; }
   .onboarding-screen .onboarding-flow-mark { gap: var(--onb-space-5); }
   .onboarding-screen .onboarding-logo { font-size: 13px; }
-  .onboarding-screen .onboarding-logo--image { height: 21px; max-height: 21px; max-width: 84px; }
+  .onboarding-screen .onboarding-logo--image { width: 68px; }
   .onboarding-screen .onboarding-content-area { padding: 18px var(--onb-space-3) var(--onb-space-4); }
   .onboarding-screen .onboarding-card { width: min(100%, var(--onb-content-width)); }
   .onboarding-screen .onboarding-card .onboarding-title { font-size: 24px; }
