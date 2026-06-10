@@ -124,6 +124,10 @@ import {
 } from "./features/companion/driftAlarmBridge";
 import { evaluateYouTubeDriftAlarmGate } from "./features/companion/youtubeDriftAlarmGate";
 import {
+  buildDriftAlarmManualCorrectionRecord,
+  buildDriftAlarmManualCorrectionRuleInput,
+} from "./features/companion/driftAlarmManualCorrection";
+import {
   fallbackDisplayName,
   fetchOwnProfile,
   fetchPublicProfile,
@@ -1028,6 +1032,30 @@ export default function App() {
     void hideNativeDriftAlarm();
   }, [clearDriftAlarmEvent]);
 
+  async function applyDriftAlarmManualCorrection(event: DriftAlarmEvent | null): Promise<void> {
+    const sourceSegmentId = event?.sourceSegmentId?.trim();
+    if (!sourceSegmentId) return;
+
+    const sourceSegment = segmentsRef.current.find((segment) => segment.id === sourceSegmentId);
+    if (!sourceSegment) return;
+
+    await trackerClient.saveClassifications([
+      buildDriftAlarmManualCorrectionRecord({
+        classifiedAt: new Date().toISOString(),
+        classificationOptions: selectedDayClassificationOptions,
+        segment: sourceSegment,
+      }),
+    ]);
+
+    const ruleInput = buildDriftAlarmManualCorrectionRuleInput({
+      classificationOptions: selectedDayClassificationOptions,
+      segment: sourceSegment,
+    });
+    if (ruleInput) await saveClassificationRule(ruleInput);
+
+    await refresh(selectedDayRef.current);
+  }
+
   const returnToFocusTarget = useCallback((target: DriftAlarmFocusTarget | null) => {
     if (target?.siteDomain) {
       void activateFocusTargetSite(target).catch((error) => console.warn("Failed to open focus target site", error));
@@ -1050,6 +1078,10 @@ export default function App() {
         navigateToTab("settings");
         return;
       case "manual_correction":
+        void applyDriftAlarmManualCorrection(currentAlarmEvent).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn("Failed to save drift alarm manual correction", message);
+        });
         navigateToTab("classify");
         return;
       case "return_to_focus": {
@@ -1579,6 +1611,7 @@ export default function App() {
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
+        sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
       });
     };
     const showCurrentDriftAlarm = () => {
@@ -1623,6 +1656,7 @@ export default function App() {
           preservedFocusStrikeSeconds: 0,
           generatedAt: new Date().toISOString(),
           focusTargets,
+          sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,
           pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
           nextFocusLabel: focusTargets[0]?.label ?? "your focus",

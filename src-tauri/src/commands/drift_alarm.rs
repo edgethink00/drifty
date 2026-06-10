@@ -23,6 +23,7 @@ pub struct DriftAlarmPayload {
     pub generated_at: String,
     pub break_options: Vec<i64>,
     pub focus_targets: Vec<DriftAlarmFocusTarget>,
+    pub source_segment_id: Option<String>,
     pub break_return: Option<DriftAlarmBreakReturnDetails>,
 }
 
