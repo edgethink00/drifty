@@ -4,12 +4,14 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { Dropdown } from "./components/Dropdown";
 import { TypewriterSequence } from "./components/TypewriterSequence";
 import {
+  MAIN_ACTIVITY_OPTIONS,
   WORK_DOMAIN_OPTIONS,
   WORK_TYPE_OPTIONS,
 } from "./constants";
@@ -45,6 +47,7 @@ type OnboardingStep =
   | "permissions"
   | "ready"
   | "connect_server"
+  | "test_connection"
   | "self_data_review"
   | "privacy"
   | "work_profile"
@@ -53,28 +56,29 @@ type OnboardingStep =
 
 type OnboardingStepDef = { id: OnboardingStep; label: string };
 type SetupChoice = "simple" | "local_ai" | "byok";
+type EmailAuthMode = "sign-in" | "sign-up";
+type EmailAuthResult = { error: Error | null; needsEmailConfirmation?: boolean };
 
 // Steps shared by every path until the user picks a setup type.
 const BASE_STEPS: OnboardingStepDef[] = [
   { id: "welcome", label: "Welcome" },
+  { id: "job", label: "Work" },
+  { id: "permissions", label: "Permissions" },
   { id: "choose_setup", label: "Setup" },
 ];
 
-// Simple Setup path: Drifty-hosted, guided account + permission flow.
+// Simple Setup path: Drifty-hosted, guided account + ready flow after the shared basics.
 const SIMPLE_SETUP_STEPS: OnboardingStepDef[] = [
   { id: "account", label: "Account" },
-  { id: "job", label: "Work" },
-  { id: "permissions", label: "Permissions" },
   { id: "ready", label: "Ready" },
 ];
 
-// "Use your own server" path: connect to a self-hosted Drifty server, verify
-// the connection, then review data handling and grant local permissions.
+// Local AI and BYOK paths keep their separate connection inputs, run a check,
+// then review data handling before the ready step.
 const SELF_HOST_STEPS: OnboardingStepDef[] = [
   { id: "connect_server", label: "Connect" },
+  { id: "test_connection", label: "Test" },
   { id: "self_data_review", label: "Data" },
-  { id: "job", label: "Work" },
-  { id: "permissions", label: "Permissions" },
   { id: "ready", label: "Ready" },
 ];
 
@@ -104,7 +108,23 @@ const PRIVACY_NOT_RECORDED = [
   "Message bodies",
 ];
 
+const MAX_MAIN_ACTIVITY_SELECTIONS = 5;
+
+type ConnectionCheckStatus = "pending" | "loading" | "success" | "error";
 type ConnectionPhase = "idle" | "testing" | "success" | "failed";
+type ConnectionCheck = { id: string; label: string };
+
+const LOCAL_AI_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
+  { id: "reachable", label: "Server reachable" },
+  { id: "detected", label: "Drifty server detected" },
+  { id: "model", label: "Local model endpoint ready" },
+];
+
+const BYOK_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
+  { id: "key", label: "OpenRouter key shape valid" },
+  { id: "provider", label: "Provider reachable" },
+  { id: "classifier", label: "Classification ready" },
+];
 
 // Masks an OpenRouter API key so only the final four characters are ever shown
 // after a successful connection. The raw key is never persisted or logged.
@@ -197,7 +217,7 @@ export function OnboardingModal({
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
   onStartCloudTrialWithGoogle: () => void;
-  onStartCloudTrialWithEmail: () => void;
+  onStartCloudTrialWithEmail: (email: string, password: string, mode: EmailAuthMode) => Promise<EmailAuthResult>;
   onComplete: (state: UserOnboardingState) => void;
   /** Dev-only: start on a specific step for visual review / Playwright. */
   __devInitialStep?: OnboardingStep;
@@ -212,16 +232,27 @@ export function OnboardingModal({
   // version for display.
   const [serverUrl, setServerUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
   const [connectionPhase, setConnectionPhase] = useState<ConnectionPhase>("idle");
+  const [checkStatuses, setCheckStatuses] = useState<ConnectionCheckStatus[]>([]);
+  const [connectionFailureLabel, setConnectionFailureLabel] = useState<string | null>(null);
+  const [testRunId, setTestRunId] = useState(0);
 
+  const [mainActivities, setMainActivities] = useState<string[]>([]);
+  const [mainActivityOther, setMainActivityOther] = useState("");
   const [workType, setWorkType] = useState<string | null>(null);
   const [workTypeOther, setWorkTypeOther] = useState("");
   const [workDomain, setWorkDomain] = useState<string | null>(null);
   const [workDomainOther, setWorkDomainOther] = useState("");
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
+  const [emailAuthExpanded, setEmailAuthExpanded] = useState(false);
+  const [emailAuthMode, setEmailAuthMode] = useState<EmailAuthMode>("sign-in");
+  const [emailAuthEmail, setEmailAuthEmail] = useState("");
+  const [emailAuthPassword, setEmailAuthPassword] = useState("");
+  const [emailAuthPending, setEmailAuthPending] = useState(false);
+  const [emailAuthError, setEmailAuthError] = useState<string | null>(null);
+  const [emailAuthSuccess, setEmailAuthSuccess] = useState<string | null>(null);
 
   const [step, setStep] = useState<OnboardingStep>(__devInitialStep ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -239,7 +270,6 @@ export function OnboardingModal({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const screenRef = useRef<HTMLElement>(null);
   const stepBodyRef = useRef<HTMLDivElement>(null);
-  const connectionTimerRef = useRef<number | null>(null);
 
   const steps = useMemo(() => getOnboardingSteps(setupChoice), [setupChoice]);
   const stepIndex = steps.findIndex((item) => item.id === step);
@@ -248,12 +278,14 @@ export function OnboardingModal({
   const accessibilityGranted = accessibilityGrantedFromApp || Boolean(trackerStatus?.accessibilityGranted);
   const accessibilityReady = accessibilityGranted || (!isDesktopRuntime && trackerUnavailable);
   const accountConnected = Boolean(userEmail);
+  const emailAuthFeedbackId = emailAuthError || emailAuthSuccess ? "onboarding-email-auth-feedback" : undefined;
   const permissionSummaryLabel = accessibilityGranted ? "Accessibility verified" : "Tracking readiness verified";
   const previousAccessibilityGrantedRef = useRef(accessibilityGranted);
   const notificationsReady =
     notificationPermission === "granted" || notificationPermission === "unavailable";
   const isFinalStep = stepIndex === steps.length - 1;
   const isByokSetup = setupChoice === "byok";
+  const connectionChecks = isByokSetup ? BYOK_CONNECTION_CHECKS : LOCAL_AI_CONNECTION_CHECKS;
   const serverUrlIsValid = /^https?:\/\//i.test(serverUrl.trim());
   const apiKeyIsValid = apiKey.trim().toLowerCase().startsWith("sk-or-");
 
@@ -270,10 +302,11 @@ export function OnboardingModal({
       case "data_review":
         return true;
       case "connect_server":
-        if (connectionPhase === "testing") return false;
         if (setupChoice === "local_ai") return serverUrlIsValid;
         if (setupChoice === "byok") return apiKeyIsValid;
         return false;
+      case "test_connection":
+        return connectionPhase === "success";
       case "self_data_review":
         return true;
       case "permissions":
@@ -301,8 +334,10 @@ export function OnboardingModal({
       case "job":
         return null;
       case "connect_server":
-        if (connectionPhase === "testing") return "Checking your connection.";
         return isByokSetup ? "Enter an OpenRouter key that starts with sk-or-." : "Server URL must start with http:// or https://.";
+      case "test_connection":
+        if (connectionPhase === "failed") return "Connection failed. Try again or edit your details.";
+        return "Checking your connection.";
       case "accessibility":
         if (accessibilityRecheckPending) return "Checking Accessibility access.";
         return "Enable Accessibility to continue.";
@@ -318,17 +353,23 @@ export function OnboardingModal({
       case "welcome":
         return "Welcome to drifty";
       case "choose_setup":
-        return "Choose your AI mode";
+        return "Choose your setup";
       case "account":
         return "Connect your account";
       case "job":
-        return "Tell Drifty about your work";
+        return "What do you usually do?";
       case "data_review":
         return "Review your data settings";
       case "connect_server":
-        return isByokSetup ? "Add your OpenRouter key" : "Add your server URL";
+        return isByokSetup ? "Add your OpenRouter key" : "Add your Local AI server URL";
+      case "test_connection":
+        return connectionPhase === "success"
+          ? "Connection successful"
+          : connectionPhase === "failed"
+            ? "Connection failed"
+            : "Testing connection";
       case "self_data_review":
-        return "Review your data settings";
+        return "Review how your data is handled";
       case "permissions":
         return "Set up permissions";
       case "ready":
@@ -342,10 +383,10 @@ export function OnboardingModal({
       case "notifications":
         return "Allow notifications";
     }
-  }, [isByokSetup, step]);
+  }, [connectionPhase, isByokSetup, step]);
 
   const subtitle = step === "choose_setup"
-    ? "Drifty uses AI to understand your focus and drift. Choose the option that fits your privacy, setup, and cost preferences."
+    ? "Start with Drifty Cloud, run AI locally, or bring your own AI key. You can change this later."
     : "";
 
   useEffect(() => {
@@ -363,12 +404,6 @@ export function OnboardingModal({
   useEffect(() => {
     titleRef.current?.focus();
   }, [step]);
-
-  useEffect(() => {
-    return () => {
-      if (connectionTimerRef.current !== null) window.clearTimeout(connectionTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     const screen = screenRef.current;
@@ -457,28 +492,73 @@ export function OnboardingModal({
     if (step !== "accessibility") setAccessibilityJustGranted(false);
   }, [step]);
 
-  function clearConnectionTimer() {
-    if (connectionTimerRef.current === null) return;
-    window.clearTimeout(connectionTimerRef.current);
-    connectionTimerRef.current = null;
-  }
+  useEffect(() => {
+    if (step !== "test_connection") return;
+
+    const checks = setupChoice === "byok" ? BYOK_CONNECTION_CHECKS : LOCAL_AI_CONNECTION_CHECKS;
+    const failIndex = setupChoice === "byok"
+      ? apiKeyIsValid ? -1 : 0
+      : serverUrlIsValid ? -1 : 0;
+
+    setConnectionPhase("testing");
+    setConnectionFailureLabel(null);
+    setCheckStatuses(checks.map(() => "pending"));
+
+    let cancelled = false;
+    const timers: number[] = [];
+
+    function runCheck(index: number) {
+      if (cancelled) return;
+      if (index >= checks.length) {
+        setMaskedApiKey(setupChoice === "byok" ? maskApiKey(apiKey) : null);
+        setConnectionPhase("success");
+        return;
+      }
+
+      setCheckStatuses((current) => current.map((status, statusIndex) => (statusIndex === index ? "loading" : status)));
+      const timerId = window.setTimeout(() => {
+        if (cancelled) return;
+        const failedHere = failIndex === index;
+        setCheckStatuses((current) => current.map((status, statusIndex) => (statusIndex === index ? failedHere ? "error" : "success" : status)));
+        if (failedHere) {
+          setConnectionFailureLabel(checks[index]?.label ?? "the connection check");
+          setConnectionPhase("failed");
+          return;
+        }
+        runCheck(index + 1);
+      }, 260);
+      timers.push(timerId);
+    }
+
+    const startTimerId = window.setTimeout(() => runCheck(0), 120);
+    timers.push(startTimerId);
+
+    return () => {
+      cancelled = true;
+      for (const timerId of timers) window.clearTimeout(timerId);
+    };
+  }, [apiKey, apiKeyIsValid, serverUrlIsValid, setupChoice, step, testRunId]);
 
   function resetConnectionValidation() {
-    clearConnectionTimer();
     setConnectionPhase("idle");
+    setCheckStatuses([]);
+    setConnectionFailureLabel(null);
   }
 
-  function startConnectionValidation() {
-    if (!canAdvance || (setupChoice !== "local_ai" && setupChoice !== "byok")) return;
-    clearConnectionTimer();
-    setConnectionPhase("testing");
-    setSetupError(null);
-    connectionTimerRef.current = window.setTimeout(() => {
-      setMaskedApiKey(setupChoice === "byok" ? maskApiKey(apiKey) : null);
-      setConnectionPhase("success");
-      connectionTimerRef.current = null;
-      setStep("self_data_review");
-    }, 900);
+  function toggleMainActivity(option: string) {
+    setMainActivities((current) => {
+      if (current.includes(option)) return current.filter((item) => item !== option);
+      if (current.length >= MAX_MAIN_ACTIVITY_SELECTIONS) return current;
+      return [...current, option];
+    });
+  }
+
+  function addMainActivity(option: string) {
+    if (!option) return;
+    setMainActivities((current) => {
+      if (current.includes(option) || current.length >= MAX_MAIN_ACTIVITY_SELECTIONS) return current;
+      return [...current, option];
+    });
   }
 
   async function completeOnboarding() {
@@ -493,12 +573,12 @@ export function OnboardingModal({
     const result = saveUserOnboardingState({
       userId,
       displayName,
-      workType,
-      workTypeOther,
+      workType: mainActivities[0] ?? workType,
+      workTypeOther: mainActivities.includes("Other") ? mainActivityOther : workTypeOther,
       workDomain,
       workDomainOther,
-      jobType,
-      jobTypeOther,
+      jobType: mainActivities.length > 0 ? mainActivities.join(", ") : jobType,
+      jobTypeOther: mainActivities.includes("Other") ? mainActivityOther : jobTypeOther,
       focusGoalHours: null,
       driftThresholdMinutes: null,
     });
@@ -601,6 +681,60 @@ export function OnboardingModal({
     setMaskedApiKey(null);
   }
 
+  function resetEmailAuthFeedback() {
+    setEmailAuthError(null);
+    setEmailAuthSuccess(null);
+  }
+
+  function handleEmailAuthModeChange(nextMode: EmailAuthMode) {
+    setEmailAuthMode(nextMode);
+    resetEmailAuthFeedback();
+  }
+
+  function validateEmailAuth() {
+    const trimmedEmail = emailAuthEmail.trim();
+    if (!trimmedEmail) return "Enter your email address.";
+    if (!trimmedEmail.includes("@")) return "Enter a valid email address.";
+    if (!emailAuthPassword) return "Enter your password.";
+    if (emailAuthPassword.length < 6) return "Password must be at least 6 characters.";
+    return null;
+  }
+
+  async function handleEmailAuthSubmit() {
+    if (emailAuthPending || accountConnected) return;
+    resetEmailAuthFeedback();
+    const validationError = validateEmailAuth();
+    if (validationError) {
+      setEmailAuthError(validationError);
+      return;
+    }
+
+    setEmailAuthPending(true);
+    try {
+      const trimmedEmail = emailAuthEmail.trim();
+      const result = await onStartCloudTrialWithEmail(trimmedEmail, emailAuthPassword, emailAuthMode);
+      if (result.error) {
+        setEmailAuthError(result.error.message);
+        return;
+      }
+      setEmailAuthPassword("");
+      if (emailAuthMode === "sign-up" && result.needsEmailConfirmation) {
+        setEmailAuthSuccess(`Check ${trimmedEmail} to confirm your account, then return to Drifty.`);
+      }
+    } catch (error) {
+      setEmailAuthError(error instanceof Error ? error.message : "Unable to continue with email.");
+    } finally {
+      setEmailAuthPending(false);
+    }
+  }
+
+  function handleEmailAuthInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    void handleEmailAuthSubmit();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isFinalStep) {
@@ -608,7 +742,7 @@ export function OnboardingModal({
       setSetupError(null);
       if (!canAdvance) return;
       if (step === "connect_server") {
-        startConnectionValidation();
+        setStep("test_connection");
         return;
       }
       goToNextStep();
@@ -627,6 +761,8 @@ export function OnboardingModal({
       case "choose_setup":
         return "Continue";
       case "connect_server":
+        return "Test connection";
+      case "test_connection":
         return "Continue";
       case "self_data_review":
         return "Continue";
@@ -647,19 +783,19 @@ export function OnboardingModal({
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
+      <div className="onboarding-topbar">
+        <img className="onboarding-logo onboarding-logo--image" src={wordmarkUrl} alt="drifty" />
+        <div className="onboarding-progress-bar--full" aria-label="Setup progress">
+          <div className="onboarding-progress-bar__fill" style={{ width: `${progressPct}%` }} />
+        </div>
+      </div>
+
       <div className="onboarding-content-area">
         <form className="onboarding-card" onSubmit={handleSubmit}>
           <div className="onboarding-copy-column">
-            <div className="onboarding-flow-mark">
-              <img className="onboarding-logo onboarding-logo--image" src={wordmarkUrl} alt="drifty" />
-              <div className="onboarding-progress-bar" aria-label="Setup progress">
-                <div className="onboarding-progress-bar__fill" style={{ width: `${progressPct}%` }} />
-              </div>
-            </div>
-
             <div className={`onboarding-middle onboarding-middle--${step}`}>
               <h1
-                className={`onboarding-title${titleIsVisible ? "" : " onb-visually-hidden"}`}
+                className={`onboarding-title${titleIsVisible ? "" : " onb-visually-hidden"}${step === "job" ? " onb-title--job" : ""}`}
                 id="onboarding-title"
                 ref={titleRef}
                 tabIndex={-1}
@@ -681,10 +817,10 @@ export function OnboardingModal({
                     { text: "Your AI Time Tracker.", className: "tw-title" },
                     {
                       text:
-                        "See where your focus goes. Drifty tracks your work patterns and shows when attention starts to drift.",
+                        "I'm your focus companion. I show where your time goes and help you stay with what matters.",
                       className: "tw-message",
                     },
-                    { text: "Let's set up the basics. This takes about a minute.", className: "tw-sub" },
+                    { text: "Let's set up a few things. This takes about a minute.", className: "tw-sub" },
                   ]}
                 />
               </div>
@@ -773,11 +909,103 @@ export function OnboardingModal({
                   <button
                     type="button"
                     className="onb-button onb-button--ghost onb-account__provider"
-                    onClick={onStartCloudTrialWithEmail}
+                    onClick={() => {
+                      setEmailAuthExpanded(true);
+                      resetEmailAuthFeedback();
+                    }}
                     disabled={accountConnected}
+                    aria-expanded={emailAuthExpanded && !accountConnected}
                   >
                     {accountConnected ? "Signed in" : "Continue with email"}
                   </button>
+                  {emailAuthExpanded && !accountConnected ? (
+                    <div className="onb-email-auth">
+                      <div className="onb-email-auth__mode" aria-label="Email account mode">
+                        <button
+                          type="button"
+                          className={`onb-email-auth__mode-button${
+                            emailAuthMode === "sign-in" ? " onb-email-auth__mode-button--selected" : ""
+                          }`}
+                          aria-pressed={emailAuthMode === "sign-in"}
+                          disabled={emailAuthPending}
+                          onClick={() => handleEmailAuthModeChange("sign-in")}
+                        >
+                          Sign in
+                        </button>
+                        <button
+                          type="button"
+                          className={`onb-email-auth__mode-button${
+                            emailAuthMode === "sign-up" ? " onb-email-auth__mode-button--selected" : ""
+                          }`}
+                          aria-pressed={emailAuthMode === "sign-up"}
+                          disabled={emailAuthPending}
+                          onClick={() => handleEmailAuthModeChange("sign-up")}
+                        >
+                          Create account
+                        </button>
+                      </div>
+                      <label className="onb-field">
+                        <span>Email</span>
+                        <input
+                          className={`onb-field__input${emailAuthError ? " onb-field__input--invalid" : ""}`}
+                          type="email"
+                          inputMode="email"
+                          autoCapitalize="none"
+                          autoComplete="email"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          value={emailAuthEmail}
+                          disabled={emailAuthPending}
+                          aria-describedby={emailAuthFeedbackId}
+                          onKeyDown={handleEmailAuthInputKeyDown}
+                          onChange={(event) => {
+                            setEmailAuthEmail(event.target.value);
+                            resetEmailAuthFeedback();
+                          }}
+                          aria-invalid={emailAuthError ? "true" : "false"}
+                        />
+                      </label>
+                      <label className="onb-field">
+                        <span>Password</span>
+                        <input
+                          className={`onb-field__input${emailAuthError ? " onb-field__input--invalid" : ""}`}
+                          type="password"
+                          autoComplete={emailAuthMode === "sign-up" ? "new-password" : "current-password"}
+                          value={emailAuthPassword}
+                          disabled={emailAuthPending}
+                          aria-describedby={emailAuthFeedbackId}
+                          onKeyDown={handleEmailAuthInputKeyDown}
+                          onChange={(event) => {
+                            setEmailAuthPassword(event.target.value);
+                            resetEmailAuthFeedback();
+                          }}
+                          aria-invalid={emailAuthError ? "true" : "false"}
+                        />
+                      </label>
+                      {emailAuthError ? (
+                        <p id="onboarding-email-auth-feedback" className="onb-email-auth__notice onb-email-auth__notice--error" role="alert">
+                          {emailAuthError}
+                        </p>
+                      ) : null}
+                      {emailAuthSuccess ? (
+                        <p id="onboarding-email-auth-feedback" className="onb-email-auth__notice onb-email-auth__notice--success" role="status">
+                          {emailAuthSuccess}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="onb-button onb-button--primary onb-email-auth__submit"
+                        onClick={() => void handleEmailAuthSubmit()}
+                        disabled={emailAuthPending}
+                      >
+                        {emailAuthPending
+                          ? "Checking..."
+                          : emailAuthMode === "sign-up"
+                            ? "Create account with email"
+                            : "Sign in with email"}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
                 <p className="onb-account__helper">
                   Drifty never shares your activity data with teammates unless you choose to join a team or
@@ -788,31 +1016,77 @@ export function OnboardingModal({
 
             {step === "job" ? (
               <>
-                <p className="onb-step-desc">
-                  Optional. Add your role or field so Drifty can group your work patterns more clearly. You can
-                  change it later in settings.
-                </p>
+                <p className="onb-step-desc">Choose up to 5 activities.</p>
                 <div className="onb-job__compact">
-                  <Dropdown
-                    options={WORK_TYPE_OPTIONS}
-                    value={workType}
-                    onChange={setWorkType}
-                    placeholder="What's your role?"
-                    otherText={workTypeOther}
-                    onOtherTextChange={setWorkTypeOther}
-                    searchable
-                    ariaLabel="Your role"
-                  />
-                  <Dropdown
-                    options={WORK_DOMAIN_OPTIONS}
-                    value={workDomain}
-                    onChange={setWorkDomain}
-                    placeholder="What field do you work in?"
-                    otherText={workDomainOther}
-                    onOtherTextChange={setWorkDomainOther}
-                    searchable
-                    ariaLabel="Your field"
-                  />
+                  <div className="onb-activity-picker">
+                    {mainActivities.length > 0 ? (
+                      <div className="onb-activity-tags" role="group" aria-label="Selected activities">
+                        {mainActivities.map((option) => (
+                          <button
+                            type="button"
+                            className="onb-activity-tag"
+                            key={option}
+                            onClick={() => toggleMainActivity(option)}
+                            aria-label={`Remove ${option}`}
+                          >
+                            <span>{option}</span>
+                            <span className="onb-activity-tag__remove" aria-hidden="true">x</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="onb-dropdown">
+                      <div className="onb-dropdown__trigger" role="combobox" aria-expanded="false" aria-label="Search activities">
+                        <select
+                          className="onb-dropdown__input"
+                          value=""
+                          disabled={mainActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS}
+                          onChange={(event) => addMainActivity(event.target.value)}
+                          aria-label="Search activities"
+                        >
+                          <option value="">
+                            {mainActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS ? "Maximum 5 selected" : "Search activities..."}
+                          </option>
+                          {MAIN_ACTIVITY_OPTIONS.filter((option) => !mainActivities.includes(option)).map((option) => (
+                            <option value={option} key={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="onb-dropdown__icons">
+                          <svg className="onb-dropdown__chevron" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                    {mainActivities.includes("Other") ? (
+                      <input
+                        className="onb-dropdown__other-input"
+                        type="text"
+                        placeholder="e.g. Coaching, recruiting, compliance"
+                        value={mainActivityOther}
+                        onChange={(event) => setMainActivityOther(event.target.value)}
+                        aria-label="Enter your activity"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="onb-job__question">
+                    <div className="onb-inline-question">
+                      <h2 className="onb-inline-question-title">What field are you in?</h2>
+                      <p className="onb-step-desc">This helps Drifty understand the context of your work.</p>
+                    </div>
+                    <Dropdown
+                      options={WORK_DOMAIN_OPTIONS}
+                      value={workDomain}
+                      onChange={setWorkDomain}
+                      placeholder="Search field..."
+                      otherText={workDomainOther}
+                      onOtherTextChange={setWorkDomainOther}
+                      searchable
+                      ariaLabel="Your field"
+                    />
+                  </div>
                 </div>
               </>
             ) : null}
@@ -845,18 +1119,19 @@ export function OnboardingModal({
               <>
                 <p className="onb-step-desc">
                   {isByokSetup
-                    ? "Enter the OpenRouter key Drifty uses for focus insights."
+                    ? "Enter the OpenRouter key Drifty uses for focus insights. The key stays masked during setup."
                     : "Enter the localhost address for your Local AI server."}
                 </p>
                 <div className="onb-server-form">
                   {isByokSetup ? (
                     <label className="onb-field">
+                      <span className="onb-field__label">OpenRouter API key</span>
                       <span className="onb-secure-field">
                         <input
                           className={`onb-field__input onb-secure-field__input${
                             apiKey.trim() && !apiKeyIsValid ? " onb-field__input--invalid" : ""
                           }`}
-                          type={showApiKey ? "text" : "password"}
+                          type="password"
                           autoCapitalize="none"
                           autoCorrect="off"
                           autoComplete="off"
@@ -867,25 +1142,21 @@ export function OnboardingModal({
                           aria-label="OpenRouter API key"
                           aria-invalid={apiKey.trim() && !apiKeyIsValid ? "true" : "false"}
                         />
-                        <button
-                          type="button"
-                          className="onb-secure-field__toggle"
-                          aria-pressed={showApiKey}
-                          onClick={() => setShowApiKey((prev) => !prev)}
-                        >
-                          {showApiKey ? "Hide" : "Show"}
-                        </button>
+                        <span className="onb-secure-field__mask" aria-hidden="true">Masked</span>
                       </span>
                       <span
                         className={`onb-field__hint${
                           apiKey.trim() && !apiKeyIsValid ? " onb-field__hint--error" : ""
                         }`}
                       >
-                        {apiKey.trim() && !apiKeyIsValid ? "OpenRouter key should start with sk-or-." : ""}
+                        {apiKey.trim() && !apiKeyIsValid
+                          ? "OpenRouter key should start with sk-or-."
+                          : "Drifty never displays the raw key after you leave this field."}
                       </span>
                     </label>
                   ) : (
                     <label className="onb-field">
+                      <span className="onb-field__label">Local AI server URL</span>
                       <input
                         className={`onb-field__input${
                           serverUrl.trim() && !serverUrlIsValid ? " onb-field__input--invalid" : ""
@@ -906,17 +1177,64 @@ export function OnboardingModal({
                           serverUrl.trim() && !serverUrlIsValid ? " onb-field__hint--error" : ""
                         }`}
                       >
-                        {serverUrl.trim() && !serverUrlIsValid ? "Server URL must start with http:// or https://." : ""}
+                        {serverUrl.trim() && !serverUrlIsValid
+                          ? "Server URL must start with http:// or https://."
+                          : "Use the local Drifty AI server address you control."}
                       </span>
                     </label>
                   )}
                 </div>
+              </>
+            ) : null}
+
+            {step === "test_connection" ? (
+              <>
+                <p className="onb-step-desc">
+                  {connectionPhase === "success"
+                    ? isByokSetup
+                      ? "Your OpenRouter key is connected and ready for AI classification."
+                      : "Your Local AI server is connected and ready for classification."
+                    : connectionPhase === "failed"
+                      ? `Drifty could not complete "${connectionFailureLabel ?? "the connection check"}". Review the details below and try again.`
+                      : isByokSetup
+                        ? "Checking that Drifty can use your masked OpenRouter key."
+                        : "Checking that Drifty can reach your Local AI server."}
+                </p>
+                <ul className="onb-checklist" aria-label="Connection checks">
+                  {connectionChecks.map((check, index) => {
+                    const status = checkStatuses[index] ?? "pending";
+                    return (
+                      <li className={`onb-checklist__row onb-checklist__row--${status}`} key={check.id}>
+                        <span className="onb-checklist__icon" aria-hidden="true" />
+                        <span className="onb-checklist__label">{check.label}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
                 {connectionPhase === "failed" ? (
-                  <p className="onb-connection-error" role="status">
-                    {isByokSetup
-                      ? "Could not connect. Check the OpenRouter key."
-                      : "Could not connect. Check the server URL."}
-                  </p>
+                  <>
+                    <ul className="onb-checklist__fixes" aria-label="Possible fixes">
+                      {isByokSetup ? (
+                        <>
+                          <li>Confirm the key starts with sk-or- and is active in OpenRouter.</li>
+                          <li>Check your provider billing and model access.</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>Confirm the server URL is correct and the local server is running.</li>
+                          <li>Make sure your Mac can reach the local address.</li>
+                        </>
+                      )}
+                    </ul>
+                    <div className="onb-setup-card__actions">
+                      <button type="button" className="onb-button onb-button--primary" onClick={() => setTestRunId((id) => id + 1)}>
+                        Try again
+                      </button>
+                      <button type="button" className="onb-button onb-button--ghost" onClick={() => setStep("connect_server")}>
+                        Edit connection details
+                      </button>
+                    </div>
+                  </>
                 ) : null}
               </>
             ) : null}
@@ -925,52 +1243,36 @@ export function OnboardingModal({
               <>
                 <p className="onb-step-desc">
                   {isByokSetup
-                    ? "With OpenRouter, Drifty uses your key to connect to your AI provider for focus insights. You can change the connection and permissions later."
-                    : "With a server URL, activity data goes to your connected server, not Drifty Cloud. You can change the server and permissions later."}
+                    ? "With BYOK, Drifty sends minimized activity context to your chosen AI provider through OpenRouter using your masked key."
+                    : "With Local AI, activity context stays pointed at the server you control instead of Drifty Cloud."}
                 </p>
-                <div className="onb-data-rows" aria-label="Self-hosted data handling summary">
-                  {isByokSetup ? (
-                    <>
-                      <div className="onb-data-row">
-                        <span className="onb-data-row__label">Connects with</span>
-                        <span className="onb-data-row__copy">
-                          OpenRouter using your key{maskedApiKey ? ` ${maskedApiKey}` : ""}.
-                        </span>
-                      </div>
-                      <div className="onb-data-row">
-                        <span className="onb-data-row__label">Used for</span>
-                        <span className="onb-data-row__copy">AI-assisted focus and drift classification.</span>
-                      </div>
-                      <div className="onb-data-row">
-                        <span className="onb-data-row__label">You control</span>
-                        <span className="onb-data-row__copy">
-                          Which provider key Drifty uses and when to change it.
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="onb-data-row">
-                        <span className="onb-data-row__label">Goes to</span>
-                        <span className="onb-data-row__copy">
-                          {serverUrl.trim() || "Your connected server"} instead of Drifty Cloud.
-                        </span>
-                      </div>
-                      <div className="onb-data-row">
-                        <span className="onb-data-row__label">Used for</span>
-                        <span className="onb-data-row__copy">
-                          Focus and drift classification through your connected server.
-                        </span>
-                      </div>
-                      <div className="onb-data-row">
-                        <span className="onb-data-row__label">You control</span>
-                        <span className="onb-data-row__copy">
-                          Where the server runs, how data is stored, and who can access it.
-                        </span>
-                      </div>
-                    </>
-                  )}
+                <div className="onb-data-cards" aria-label="Self-hosted data handling summary">
+                  <div className="onb-data-card">
+                    <h2 className="onb-data-card__title">Where data goes</h2>
+                    <p className="onb-data-card__desc">
+                      {isByokSetup
+                        ? "Minimized classification context goes to OpenRouter for the model call."
+                        : `Activity goes to ${serverUrl.trim() || "your Local AI server"}, not to Drifty Cloud.`}
+                    </p>
                   </div>
+                  <div className="onb-data-card">
+                    <h2 className="onb-data-card__title">Who manages it</h2>
+                    <p className="onb-data-card__desc">
+                      {isByokSetup
+                        ? "You manage the provider key, model access, and provider billing."
+                        : "You manage where the server runs, how it stores data, and who can access it."}
+                    </p>
+                  </div>
+                  <div className="onb-data-card">
+                    <h2 className="onb-data-card__title">What Drifty needs</h2>
+                    <p className="onb-data-card__desc">
+                      {isByokSetup
+                        ? `A masked OpenRouter key${maskedApiKey ? ` (${maskedApiKey})` : ""} plus local permissions for activity context.`
+                        : "Local permissions to read activity context and a reachable Local AI server URL."}
+                    </p>
+                  </div>
+                </div>
+                <p className="onb-account__helper">You can change these settings later.</p>
               </>
             ) : null}
 

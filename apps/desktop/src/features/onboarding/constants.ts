@@ -1,23 +1,46 @@
 export const WORK_TYPE_OPTIONS = [
   "Design",
+  "Designing",
   "Software Development",
+  "Coding",
   "Engineering",
   "Marketing",
+  "Data Analysis",
   "Content Creation",
   "Research",
   "Studying",
   "Writing",
   "Founder",
   "Operations",
+  "Meetings & Communication",
   "Product Management",
+  "Project Management",
   "Data Science",
   "Sales",
+  "Trading",
   "Consulting",
   "Customer Service",
   "Teaching",
   "Healthcare",
   "Legal",
   "Finance",
+  "Other",
+] as const;
+
+export const MAIN_ACTIVITY_OPTIONS = [
+  "Coding",
+  "Designing",
+  "Writing",
+  "Researching",
+  "Studying",
+  "Data Analysis",
+  "Marketing",
+  "Sales",
+  "Trading",
+  "Content Creation",
+  "Meetings & Communication",
+  "Project Management",
+  "Operations",
   "Other",
 ] as const;
 
@@ -67,4 +90,5 @@ export const DRIFT_REMINDER_OPTIONS: ReadonlyArray<{ label: string; minutes: num
 ];
 
 export type WorkType = (typeof WORK_TYPE_OPTIONS)[number];
+export type MainActivity = (typeof MAIN_ACTIVITY_OPTIONS)[number];
 export type WorkDomain = (typeof WORK_DOMAIN_OPTIONS)[number];

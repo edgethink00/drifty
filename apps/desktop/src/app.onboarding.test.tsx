@@ -178,26 +178,39 @@ async function settleAppStartupEffects() {
   });
 }
 
-async function chooseSimpleSetup() {
+function selectMainActivity(option: string) {
+  const activitySelect = document.querySelector('select[aria-label="Search activities"]');
+  if (!(activitySelect instanceof HTMLSelectElement)) {
+    throw new Error("Activity select was not rendered");
+  }
+  fireEvent.change(activitySelect, { target: { value: option } });
+}
+
+async function advanceThroughSharedBasics(options: { activity?: string } = {}) {
   await screen.findByRole("dialog", { name: /welcome to drifty/i });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /choose your ai mode/i });
+  await screen.findByRole("dialog", { name: /what do you usually do/i });
+  if (options.activity) selectMainActivity(options.activity);
+  await clickEnabledAction(/^continue$/i);
+  await screen.findByRole("dialog", { name: /set up permissions/i });
+  await clickEnabledNext();
+  await screen.findByRole("dialog", { name: /choose your setup/i });
+}
+
+async function chooseSimpleSetup(options: { activity?: string } = {}) {
+  await advanceThroughSharedBasics(options);
   fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
   await clickEnabledAction(/^continue$/i);
 }
 
-async function chooseLocalAiSetup() {
-  await screen.findByRole("dialog", { name: /welcome to drifty/i });
-  await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /choose your ai mode/i });
+async function chooseLocalAiSetup(options: { activity?: string } = {}) {
+  await advanceThroughSharedBasics(options);
   fireEvent.click(screen.getByRole("button", { name: /local ai/i }));
   await clickEnabledAction(/^continue$/i);
 }
 
-async function chooseByokSetup() {
-  await screen.findByRole("dialog", { name: /welcome to drifty/i });
-  await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /choose your ai mode/i });
+async function chooseByokSetup(options: { activity?: string } = {}) {
+  await advanceThroughSharedBasics(options);
   fireEvent.click(screen.getByRole("button", { name: /byok \(bring your own key\)/i }));
   await clickEnabledAction(/^continue$/i);
 }
@@ -207,22 +220,16 @@ async function connectAccount() {
   await clickEnabledNext();
 }
 
-async function chooseJobType(role = "Designer") {
-  void role;
-  await screen.findByRole("dialog", { name: /tell drifty about your work/i });
+async function advanceToPermissionsStep() {
+  await screen.findByRole("dialog", { name: /welcome to drifty/i });
+  await clickEnabledNext();
+  await screen.findByRole("dialog", { name: /what do you usually do/i });
   await clickEnabledAction(/^continue$/i);
 }
 
-async function advanceToPermissionsStep() {
-  await chooseSimpleSetup();
+async function advanceToReadyStep(options: { activity?: string } = {}) {
+  await chooseSimpleSetup(options);
   await connectAccount();
-  await chooseJobType();
-}
-
-async function advanceToReadyStep() {
-  await advanceToPermissionsStep();
-  await screen.findByRole("dialog", { name: /set up permissions/i });
-  await clickEnabledNext();
 }
 
 describe("App onboarding", () => {
@@ -239,6 +246,8 @@ describe("App onboarding", () => {
     authState.hasBlockingAuthConfigurationError = false;
     authState.signInWithWebsite.mockResolvedValue({ error: null });
     authState.signInWithGoogle.mockResolvedValue({ error: null });
+    authState.signInWithEmail.mockResolvedValue({ error: null });
+    authState.signUpWithEmail.mockResolvedValue({ error: null, needsEmailConfirmation: false });
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     window.localStorage.clear();
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
@@ -281,26 +290,37 @@ describe("App onboarding", () => {
 
     await clickEnabledNext();
 
-    expect(await screen.findByRole("dialog", { name: /choose your ai mode/i })).toBeTruthy();
-    expect(screen.getByText(/choose the option that fits your privacy, setup, and cost preferences/i)).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    expect(screen.getByText(/choose up to 5 activities/i)).toBeTruthy();
+    expect(screen.getByLabelText(/search activities/i, { selector: "select" })).toBeTruthy();
     for (const selector of [
       ".onboarding-copy-column",
-      ".onboarding-progress-bar",
+      ".onboarding-topbar",
+      ".onboarding-progress-bar--full",
       ".onboarding-middle",
       ".onboarding-viewport",
       ".onboarding-step",
       ".onb-actions",
+      ".onb-title--job",
+      ".onb-activity-picker",
     ]) {
       expect(document.querySelector(selector)).toBeTruthy();
     }
+    expect(document.querySelector(".onboarding-flow-mark")).toBeNull();
+
+    await clickEnabledAction(/^continue$/i);
+    expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
+    expect(screen.queryByText("Screen Recording")).toBeNull();
+    expect(screen.queryByText("Browser Activity")).toBeNull();
+    await clickEnabledNext();
+
+    expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
+    expect(screen.getByText(/start with drifty cloud, run ai locally, or bring your own ai key/i)).toBeTruthy();
     const continueButton = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
     expect(continueButton.disabled).toBe(true);
     expect(screen.getByRole("button", { name: /drifty cloud/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /local ai/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /byok \(bring your own key\)/i })).toBeTruthy();
-    expect(document.querySelector(".onboarding-flow-mark")).toBeTruthy();
-    expect(document.querySelector(".onboarding-topbar")).toBeNull();
-    expect(screen.queryByRole("dialog", { name: /choose your setup/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /use simple setup/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /set up my own server/i })).toBeNull();
   });
@@ -314,7 +334,11 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /choose your ai mode/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
+    expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /drifty cloud/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /local ai/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /byok \(bring your own key\)/i })).toBeTruthy();
@@ -358,7 +382,11 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /choose your ai mode/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
+    expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
   });
 
   it("requires the real account callback before Drifty Cloud can continue", async () => {
@@ -375,9 +403,137 @@ describe("App onboarding", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
 
-    expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(/^email$/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^password$/i)).toBeTruthy();
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
+    expect(authState.signInWithEmail).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("signs in from the inline onboarding email form without a website handoff", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+
+    render(<App />);
+
+    await chooseSimpleSetup();
+    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
+      target: { value: "riley@example.com" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
+      target: { value: "hunter22" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /sign in with email/i }));
+
+    await waitFor(() => {
+      expect(authState.signInWithEmail).toHaveBeenCalledWith("riley@example.com", "hunter22");
+    });
+    expect(authState.signUpWithEmail).not.toHaveBeenCalled();
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+  });
+
+  it("creates an account from the inline onboarding email form", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+    authState.signUpWithEmail.mockResolvedValueOnce({ error: null, needsEmailConfirmation: true });
+
+    render(<App />);
+
+    await chooseSimpleSetup();
+    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /create account/i }));
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
+      target: { value: "new@example.com" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
+      target: { value: "hunter22" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /create account with email/i }));
+
+    await waitFor(() => {
+      expect(authState.signUpWithEmail).toHaveBeenCalledWith("new@example.com", "hunter22");
+    });
+    expect(authState.signInWithEmail).not.toHaveBeenCalled();
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+    expect(await within(dialog).findByText(/check new@example\.com/i)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows inline onboarding email validation and Supabase errors", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+    authState.signInWithEmail.mockResolvedValueOnce({ error: new Error("Invalid login credentials") });
+
+    render(<App />);
+
+    await chooseSimpleSetup();
+    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /sign in with email/i }));
+
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(/enter your email address/i);
+    expect(authState.signInWithEmail).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
+      target: { value: "riley@example.com" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
+      target: { value: "hunter22" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /sign in with email/i }));
+
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(/invalid login credentials/i);
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+  });
+
+  it("submits inline email auth from input Enter without hijacking mode buttons", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+    const emailSignIn = createDeferred<{ error: Error | null }>();
+    authState.signInWithEmail.mockReturnValueOnce(emailSignIn.promise);
+
+    render(<App />);
+
+    await chooseSimpleSetup();
+    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /create account/i }));
+    expect(authState.signInWithEmail).not.toHaveBeenCalled();
+    expect(authState.signUpWithEmail).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^sign in$/i }));
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
+      target: { value: "enter@example.com" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
+      target: { value: "hunter22" },
+    });
+    fireEvent.keyDown(within(dialog).getByLabelText(/^password$/i), { key: "Enter" });
+
+    await waitFor(() => {
+      expect(authState.signInWithEmail).toHaveBeenCalledWith("enter@example.com", "hunter22");
+    });
+    expect((within(dialog).getByRole("button", { name: /^sign in$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByLabelText(/^email$/i) as HTMLInputElement).disabled).toBe(true);
+
+    await act(async () => {
+      emailSignIn.resolve({ error: null });
+    });
   });
 
   it("starts direct Google OAuth from the onboarding Google button", async () => {
@@ -407,7 +563,7 @@ describe("App onboarding", () => {
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog", { name: /tell drifty about your work/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
   });
 
   it("waits for profile loading to settle before showing onboarding", async () => {
@@ -460,7 +616,7 @@ describe("App onboarding", () => {
   it("stores v2 onboarding state and hides the modal after completion", async () => {
     render(<App />);
 
-    await advanceToReadyStep();
+    await advanceToReadyStep({ activity: "Coding" });
     await screen.findByRole("dialog", { name: /you're ready to start/i });
 
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
@@ -475,8 +631,8 @@ describe("App onboarding", () => {
     expect(storedRecord.version).toBe(2);
     expect(storedRecord.completed).toBe(true);
     expect(storedRecord.displayName).toBe("alex");
-    expect(storedRecord.jobType).toBeNull();
-    expect(storedRecord.workType).toBeNull();
+    expect(storedRecord.jobType).toBe("Coding");
+    expect(storedRecord.workType).toBe("Coding");
     expect(storedRecord.workDomain).toBeNull();
     expect(storedRecord.focusGoalHours).toBeNull();
     expect(storedRecord.driftThresholdMinutes).toBeNull();
@@ -593,20 +749,26 @@ describe("App onboarding", () => {
 
     await chooseLocalAiSetup();
 
-    const serverDialog = await screen.findByRole("dialog", { name: /add your server url/i });
+    const serverDialog = await screen.findByRole("dialog", { name: /add your local ai server url/i });
     fireEvent.change(within(serverDialog).getByRole("textbox", { name: /server url/i }), {
       target: { value: "http://localhost:3000" },
     });
     expect(screen.queryByLabelText(/openrouter api key/i)).toBeNull();
-    await clickEnabledAction(/^continue$/i);
+    await clickEnabledAction(/^test connection$/i);
 
+    expect(await screen.findByRole("dialog", { name: /testing connection/i })).toBeTruthy();
+    expect(screen.getByRole("list", { name: /connection checks/i })).toBeTruthy();
+    expect(screen.getByText(/server reachable/i)).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /review your data settings/i })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: /connection successful/i })).toBeTruthy();
     }, { timeout: 6000 });
-    expect(screen.getByText(/http:\/\/localhost:3000 instead of drifty cloud/i)).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
+
+    expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
+    expect(screen.getByText(/activity goes to http:\/\/localhost:3000, not to drifty cloud/i)).toBeTruthy();
 
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /tell drifty about your work/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
   });
 
   it("routes BYOK through OpenRouter key data handling review without exposing the raw key", async () => {
@@ -617,12 +779,17 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /add your openrouter key/i })).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/openrouter api key/i), { target: { value: "sk-or-validkey1234" } });
     expect(screen.queryByLabelText(/server url/i)).toBeNull();
+    await clickEnabledAction(/^test connection$/i);
+
+    expect(await screen.findByRole("dialog", { name: /testing connection/i })).toBeTruthy();
+    expect(screen.getByText(/openrouter key shape valid/i)).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /connection successful/i })).toBeTruthy();
+    }, { timeout: 6000 });
     await clickEnabledAction(/^continue$/i);
 
-    await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /review your data settings/i })).toBeTruthy();
-    }, { timeout: 6000 });
-    expect(screen.getByText(/openrouter using your key/i).textContent).toContain("1234");
+    expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
+    expect(screen.getByText(/masked openrouter key/i).textContent).toContain("1234");
     expect(screen.queryByText(/validkey1234/i)).toBeNull();
   });
 
@@ -635,6 +802,11 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Screen Recording")).toBeNull();
     expect(screen.queryByText("Browser Activity")).toBeNull();
 
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
+    await clickEnabledAction(/^continue$/i);
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();
