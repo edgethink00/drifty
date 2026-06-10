@@ -2070,6 +2070,55 @@ input, textarea { color: inherit; }
     transform var(--transition-fast);
 }
 
+.classification-panel-view__category-row {
+  --classification-category-tone: var(--classification-selected-tone);
+  border-color: color-mix(in srgb, var(--classification-category-tone) 14%, var(--line));
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--classification-category-tone) 12%, var(--surface)),
+      color-mix(in srgb, var(--classification-category-tone) 5%, var(--surface)));
+}
+
+.classification-panel-view__category-row:has(.category-dot--workspace) {
+  --classification-category-tone: var(--category-workspace);
+}
+
+.classification-panel-view__category-row:has(.category-dot--learning) {
+  --classification-category-tone: var(--category-learning);
+}
+
+.classification-panel-view__category-row:has(.category-dot--communication) {
+  --classification-category-tone: var(--category-communication);
+}
+
+.classification-panel-view__category-row:has(.category-dot--music) {
+  --classification-category-tone: var(--category-music);
+}
+
+.classification-panel-view__category-row:has(.category-dot--game) {
+  --classification-category-tone: var(--category-game);
+}
+
+.classification-panel-view__category-row:has(.category-dot--social_media) {
+  --classification-category-tone: var(--category-social-media);
+}
+
+.classification-panel-view__category-row:has(.category-dot--entertainment) {
+  --classification-category-tone: var(--category-entertainment);
+}
+
+.classification-panel-view__category-row:has(.category-dot--shopping) {
+  --classification-category-tone: var(--category-shopping);
+}
+
+.classification-panel-view__category-row:has(.category-dot--utility) {
+  --classification-category-tone: var(--category-utility);
+}
+
+.classification-panel-view__category-row:has(.category-dot--unknown) {
+  --classification-category-tone: var(--category-unknown);
+}
+
 .classification-panel-view__category-row:hover,
 .classification-panel-view__source-row:hover {
   background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
@@ -2077,10 +2126,23 @@ input, textarea { color: inherit; }
   transform: none;
 }
 
+.classification-panel-view__category-row:hover {
+  border-color: color-mix(in srgb, var(--classification-category-tone) 26%, var(--line-strong));
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--classification-category-tone) 18%, var(--surface-strong)),
+      color-mix(in srgb, var(--classification-category-tone) 8%, var(--surface)));
+}
+
 .classification-panel-view__category-row[data-selected="true"] {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 36%, var(--line));
-  background: linear-gradient(135deg, color-mix(in srgb, var(--classification-selected-tone) 12%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--classification-selected-tone) 7%, transparent);
+  border-color: color-mix(in srgb, var(--classification-category-tone) 52%, var(--line));
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--classification-category-tone) 34%, var(--surface-strong)),
+      color-mix(in srgb, var(--classification-category-tone) 15%, var(--surface)));
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--classification-category-tone) 13%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--classification-category-tone) 10%, transparent);
 }
 
 .classification-panel-view__source-row[data-selected="true"] {
