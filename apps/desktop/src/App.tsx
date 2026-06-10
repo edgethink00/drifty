@@ -8571,13 +8571,15 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
   const eventsByDay = new Map<string, WeekCalendarEvent[]>(days.map((day) => [day, []]));
   const minMinute = startHour * 60;
   const maxMinute = endHour * 60;
-  const bucketMinutes = 30;
+  const bucketMinutes = 15;
+  const shortEventMinutes = 30;
   const meaningfulGapMinutes = 10;
   const visualMergeWindowMinutes = 24;
   const maxVisibleIdentities = 4;
   const meaningfulInterruptionSeconds = 10 * 60;
   const mixedShareThreshold = 0.25;
   const mixedMinimumSeconds = 8 * 60;
+  const standaloneEventSeconds = 5 * 60;
   type WeekCalendarSourceInterval = {
     startMinute: number;
     endMinute: number;
@@ -8762,12 +8764,19 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
       for (const bucket of buckets) {
         const bucketStartMs = dayStartMs + bucket.startMinute * 60 * 1000;
         const bucketEndMs = dayStartMs + bucket.endMinute * 60 * 1000;
-        const overlapMs = Math.max(0, Math.min(overlap.endedAt.getTime(), bucketEndMs) - Math.max(overlap.startedAt.getTime(), bucketStartMs));
+        const overlapStartMs = Math.max(overlap.startedAt.getTime(), bucketStartMs);
+        const overlapEndMs = Math.min(overlap.endedAt.getTime(), bucketEndMs);
+        const overlapMs = overlapEndMs - overlapStartMs;
         if (overlapMs <= 0) continue;
         const overlapSeconds = Math.round(overlapMs / 1000);
-        const intervalStartMinute = Math.max(bucket.startMinute, Math.floor((Math.max(overlap.startedAt.getTime(), bucketStartMs) - dayStartMs) / 60000));
-        const intervalEndMinute = Math.min(bucket.endMinute, Math.ceil((Math.min(overlap.endedAt.getTime(), bucketEndMs) - dayStartMs) / 60000));
-        if (intervalEndMinute <= intervalStartMinute) continue;
+        let intervalStartMinute = Math.max(bucket.startMinute, Math.round((overlapStartMs - dayStartMs) / 60000));
+        let intervalEndMinute = Math.min(bucket.endMinute, Math.round((overlapEndMs - dayStartMs) / 60000));
+        if (intervalEndMinute <= intervalStartMinute) {
+          // Sub-minute slice: keep it only when it carries enough activity to matter visually.
+          if (overlapSeconds < 30) continue;
+          intervalStartMinute = Math.min(Math.max(bucket.startMinute, intervalStartMinute), bucket.endMinute - 1);
+          intervalEndMinute = intervalStartMinute + 1;
+        }
         bucket.sourceIntervals.push({
           startMinute: intervalStartMinute,
           endMinute: intervalEndMinute,
@@ -8787,6 +8796,9 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
   for (const [day, buckets] of bucketsByDay.entries()) {
     const dominantBuckets = buckets.flatMap(bucketComponents);
     let group: WeekCalendarBucketComponent[] = [];
+    const groupCategorySeconds = new Map<ActivityCategory, number>();
+    const groupProductivitySeconds = new Map<ProductivityLabel, number>();
+    let groupTotalSeconds = 0;
 
     const flushGroup = () => {
       if (group.length === 0) return;
@@ -8864,11 +8876,14 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
         aiClassification: aiSeconds > totalSeconds / 2,
         topMinutes: startMinute - minMinute,
         durationMinutes: Math.max(1, endMinute - startMinute),
-        isShort: endMinute - startMinute <= bucketMinutes,
+        isShort: endMinute - startMinute <= shortEventMinutes,
         lane: 0,
         laneCount: 1,
       });
       group = [];
+      groupCategorySeconds.clear();
+      groupProductivitySeconds.clear();
+      groupTotalSeconds = 0;
     };
 
     const visuallyCollidesWithGroup = (entry: WeekCalendarBucketComponent): boolean => {
@@ -8883,10 +8898,22 @@ function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, 
       if (group.length > 0) {
         const previous = group[group.length - 1];
         const hasMeaningfulGap = entry.coveredStartMinute - previous.coveredEndMinute >= meaningfulGapMinutes;
-        const dominantChanged = previous.category !== entry.category || previous.productivity !== entry.productivity;
-        if ((hasMeaningfulGap || dominantChanged) && !visuallyCollidesWithGroup(entry)) flushGroup();
+        // Compare against the group's accumulated dominant, not just the previous component,
+        // so brief classification flaps don't flip the boundary decision.
+        const groupCategory = topEntry(groupCategorySeconds)?.[0] ?? previous.category;
+        const groupProductivity = topEntry(groupProductivitySeconds)?.[0] ?? previous.productivity;
+        const categoryChanged = groupCategory !== entry.category;
+        const productivityChanged = groupProductivity !== entry.productivity;
+        // Both sides are substantial enough to render as separate blocks.
+        const canStandAlone = groupTotalSeconds >= standaloneEventSeconds && entry.totalSeconds >= standaloneEventSeconds;
+        const softBreak = (hasMeaningfulGap || categoryChanged || productivityChanged) && !visuallyCollidesWithGroup(entry);
+        const hardBreak = (hasMeaningfulGap || categoryChanged) && canStandAlone;
+        if (softBreak || hardBreak) flushGroup();
       }
       group.push(entry);
+      for (const [category, seconds] of entry.categoryTotals) groupCategorySeconds.set(category, (groupCategorySeconds.get(category) ?? 0) + seconds);
+      for (const [productivity, seconds] of entry.productivityTotals) groupProductivitySeconds.set(productivity, (groupProductivitySeconds.get(productivity) ?? 0) + seconds);
+      groupTotalSeconds += entry.totalSeconds;
     }
     flushGroup();
   }
