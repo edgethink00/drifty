@@ -85,13 +85,17 @@ type EdgeClassificationResponse = {
   latencyMs?: unknown;
 };
 
-type LocalAiProviderConfig =
+export type LocalAiProviderConfig =
   | { provider: "openrouter_byok"; apiKey: string; model: string; fallbackModels?: string[] }
   | { provider: "self_hosted"; baseUrl: string; model: string };
 
-type AiClassificationRunOptions = {
+export type AiClassificationRunOptions = {
   localProvider?: LocalAiProviderConfig | null;
 };
+
+export type LiveAiClassificationResult =
+  | { kind: "classified"; classification: ActivityClassificationRecord }
+  | { kind: "unavailable"; reason: string };
 
 type NativeOpenAiChatResponse = {
   status?: unknown;
@@ -291,16 +295,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     body: {
       ...cloudApiClientMetadata,
       ...(workProfile ? { workProfile } : {}),
-      items: reusableResult.misses.map((item) => ({
-        id: item.segmentId,
-        inputFingerprint: item.inputFingerprint,
-        appName: item.appName,
-        domain: item.siteDomain,
-        urlHost: item.siteDomain,
-        windowTitle: item.windowTitle,
-        title: item.siteTitle ?? item.youtubeTitle,
-        durationSeconds: item.durationSeconds,
-      })),
+      items: toEdgeClassificationRequestItems(reusableResult.misses),
     },
   });
 
@@ -408,16 +403,7 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     body: {
       ...cloudApiClientMetadata,
       ...(workProfile ? { workProfile } : {}),
-      items: reusableResult.misses.map((item) => ({
-        id: item.segmentId,
-        inputFingerprint: item.inputFingerprint,
-        appName: item.appName,
-        domain: item.siteDomain,
-        urlHost: item.siteDomain,
-        windowTitle: item.windowTitle,
-        title: item.siteTitle ?? item.youtubeTitle,
-        durationSeconds: item.durationSeconds,
-      })),
+      items: toEdgeClassificationRequestItems(reusableResult.misses),
     },
   });
 
@@ -447,6 +433,23 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
+}
+
+export async function classifyLiveActivityWithAi(segment: ActivitySegment, options: AiClassificationRunOptions = {}): Promise<LiveAiClassificationResult> {
+  try {
+    const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
+    const payload = await toMinimizedPayload(segment, workProfile);
+    const reusableRecord = await readReusableAiClassification(payload);
+    if (reusableRecord) return { kind: "classified", classification: reusableRecord };
+
+    if (options.localProvider) {
+      return await classifyLivePayloadWithLocalAi(payload, options.localProvider, workProfile);
+    }
+
+    return await classifyLivePayloadWithCloudAi(payload, workProfile);
+  } catch (error) {
+    return unavailableLiveClassification(messageFromUnknownError(error, "AI classification unavailable."));
+  }
 }
 
 export async function runAiClassificationUntilEmpty(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
@@ -582,6 +585,28 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     durationSeconds: segment.durationSeconds,
     ...input,
   };
+}
+
+function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): Array<{
+  id: string;
+  inputFingerprint: string;
+  appName: string;
+  domain: string | null;
+  urlHost: string | null;
+  windowTitle: string | null;
+  title: string | null;
+  durationSeconds: number;
+}> {
+  return payload.map((item) => ({
+    id: item.segmentId,
+    inputFingerprint: item.inputFingerprint,
+    appName: item.appName,
+    domain: item.siteDomain,
+    urlHost: item.siteDomain,
+    windowTitle: item.windowTitle,
+    title: item.siteTitle ?? item.youtubeTitle,
+    durationSeconds: item.durationSeconds,
+  }));
 }
 
 function toDeterministicClassificationRecords(segments: ActivitySegment[], payload: MinimizedActivityPayload[]): ActivityClassificationRecord[] {
@@ -779,6 +804,12 @@ async function saveReusableAiClassifications(unknownPayload: MinimizedActivityPa
   return { saved: saveResult.saved, misses };
 }
 
+async function readReusableAiClassification(payload: MinimizedActivityPayload): Promise<ActivityClassificationRecord | null> {
+  const reusableByFingerprint = await trackerClient.getReusableAiClassifications([payload.inputFingerprint]);
+  const reusableRecords = toReusableClassificationRecords([payload], reusableByFingerprint);
+  return reusableRecords[0] ?? null;
+}
+
 function toReusableClassificationRecords(
   unknownPayload: MinimizedActivityPayload[],
   reusableByFingerprint: Record<string, ActivityClassificationRecord>,
@@ -827,6 +858,66 @@ async function savedPartialAiSummary(
     message: `Saved ${reusedSavedRecords} reused AI and ${localSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}. ${blockerMessage} Run AI classification for the remaining ${remainingUnknownSegments} unknown ${remainingLabel} after fixing provider access.`,
     metrics,
   };
+}
+
+async function classifyLivePayloadWithLocalAi(
+  payload: MinimizedActivityPayload,
+  provider: LocalAiProviderConfig,
+  workProfile: string | null,
+): Promise<LiveAiClassificationResult> {
+  const providerRequest = toLocalProviderRequest(provider, [payload], workProfile);
+  if (!providerRequest) return unavailableLiveClassification("Local AI provider is not fully configured.");
+
+  try {
+    const response = await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: providerRequest.request });
+    const status = typeof response.status === "number" ? response.status : 0;
+    if (status < 200 || status >= 300) {
+      return unavailableLiveClassification(`Local AI classification failed with HTTP ${status || "unknown"}.`);
+    }
+
+    const data = toLocalClassificationResponse(response, providerRequest.model);
+    return firstLiveClassification(data, payload, "Local AI classification returned no usable classification.");
+  } catch (error) {
+    return unavailableLiveClassification(messageFromUnknownError(error, "Local AI classification failed."));
+  }
+}
+
+async function classifyLivePayloadWithCloudAi(payload: MinimizedActivityPayload, workProfile: string | null): Promise<LiveAiClassificationResult> {
+  const cloudAvailability = await requireCloudAiClassification();
+  if (cloudAvailability) return unavailableLiveClassification(cloudAvailability.message);
+
+  const cloudClient = supabase;
+  if (!cloudClient) return unavailableLiveClassification("Supabase is not configured.");
+
+  try {
+    const { data, error } = await cloudClient.functions.invoke("classify-activity", {
+      body: {
+        ...cloudApiClientMetadata,
+        ...(workProfile ? { workProfile } : {}),
+        items: toEdgeClassificationRequestItems([payload]),
+      },
+    });
+
+    if (error) return unavailableLiveClassification(await edgeFunctionErrorMessage(error));
+    return firstLiveClassification(data, payload, "AI classification returned no usable classification.");
+  } catch (error) {
+    return unavailableLiveClassification(messageFromUnknownError(error, "AI classification failed."));
+  }
+}
+
+function firstLiveClassification(data: unknown, payload: MinimizedActivityPayload, unavailableReason: string): LiveAiClassificationResult {
+  const records = toClassificationRecords(data, [payload]);
+  const classification = records[0];
+  if (!classification) return unavailableLiveClassification(unavailableReason);
+  return { kind: "classified", classification };
+}
+
+function unavailableLiveClassification(reason: string): LiveAiClassificationResult {
+  return { kind: "unavailable", reason };
+}
+
+function messageFromUnknownError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 async function runLocalAiClassification(

@@ -120,6 +120,7 @@ import {
   showNativeDriftAlarm,
   type ExtremeNudgeTarget,
 } from "./features/companion/driftAlarmBridge";
+import { evaluateYouTubeDriftAlarmGate } from "./features/companion/youtubeDriftAlarmGate";
 import {
   fallbackDisplayName,
   fetchOwnProfile,
@@ -505,6 +506,17 @@ type ClassificationSourceSummary = {
   sessionCount: number;
   averageSessionSeconds: number;
   shareOfTotal: number;
+  productivityMix: ClassificationSourceProductivityMix[];
+};
+
+type ClassificationSourceProductivityMix = {
+  productivity: ProductivityLabel;
+  totalSeconds: number;
+  ratio: number;
+};
+
+type ClassificationSourceSummaryDraft = ClassificationSourceSummary & {
+  productivitySeconds: Record<ProductivityLabel, number>;
 };
 
 type ClassificationActivityRow = {
@@ -1013,8 +1025,8 @@ export function classificationRowSummary(segments: ActivitySegment[], options?: 
   };
 }
 
-function buildClassificationSourceSummaries(segments: ActivitySegment[]): ClassificationSourceSummary[] {
-  const sourceMap = new Map<string, ClassificationSourceSummary>();
+function buildClassificationSourceSummaries(segments: ActivitySegment[], options?: ClassificationOptions): ClassificationSourceSummary[] {
+  const sourceMap = new Map<string, ClassificationSourceSummaryDraft>();
   for (const segment of segments) {
     const identity = classificationSourceIdentity(segment);
     const existing = sourceMap.get(identity.id) ?? {
@@ -1023,20 +1035,41 @@ function buildClassificationSourceSummaries(segments: ActivitySegment[]): Classi
       sessionCount: 0,
       averageSessionSeconds: 0,
       shareOfTotal: 0,
+      productivityMix: [],
+      productivitySeconds: { focus: 0, neutral: 0, drift: 0 },
     };
+    const classification = classifyActivity(segment, options);
     existing.totalSeconds += segment.durationSeconds;
     existing.sessionCount += 1;
+    existing.productivitySeconds[classification.productivity] += segment.durationSeconds;
     if (existing.usageKind === "site" && !existing.siteTitle) existing.siteTitle = normalizeClassificationSourceTitle(segment.siteTitle);
     sourceMap.set(identity.id, existing);
   }
   const total = segments.reduce((sum, s) => sum + s.durationSeconds, 0);
   return Array.from(sourceMap.values())
-    .map((item) => ({
-      ...item,
-      averageSessionSeconds: item.sessionCount > 0 ? Math.round(item.totalSeconds / item.sessionCount) : 0,
-      shareOfTotal: total > 0 ? item.totalSeconds / total : 0,
-    }))
+    .map((item) => {
+      const productivityMix = PRODUCTIVITY_ORDER
+        .map((productivity) => ({
+          productivity,
+          totalSeconds: item.productivitySeconds[productivity],
+          ratio: item.totalSeconds > 0 ? item.productivitySeconds[productivity] / item.totalSeconds : 0,
+        }))
+        .filter((entry) => entry.totalSeconds > 0);
+      return {
+        ...item,
+        averageSessionSeconds: item.sessionCount > 0 ? Math.round(item.totalSeconds / item.sessionCount) : 0,
+        shareOfTotal: total > 0 ? item.totalSeconds / total : 0,
+        productivityMix,
+      };
+    })
     .sort((a, b) => b.totalSeconds - a.totalSeconds);
+}
+
+function formatClassificationSourceProductivityMix(mix: ClassificationSourceProductivityMix[]): string {
+  if (mix.length === 0) return "No productivity signal";
+  return mix
+    .map((entry) => `${productivityLabel(entry.productivity)} ${formatCompactDurationFromSeconds(entry.totalSeconds)}`)
+    .join(", ");
 }
 
 function buildClassificationActivityRows(segs: ActivitySegment[]): ClassificationActivityRow[] {
@@ -1444,6 +1477,7 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const driftAlarmSnoozeRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
@@ -2284,9 +2318,10 @@ export default function App() {
   }, [clearDriftAlarmEvent, dismissWatcherPeek, handleDriftAlarmAction, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   useEffect(() => {
-    if (!driftAlertsEnabled) return;
-    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return;
-    if (!status?.running) return;
+    if (!driftAlertsEnabled || selectedDay !== logicalTodayIsoDate(startOfDayMinutes) || !status?.running) {
+      pendingDriftAlarmGateRef.current = null;
+      return;
+    }
 
     const driftCandidates = buildDriftAlarmCandidates({
       segments,
@@ -2297,41 +2332,14 @@ export default function App() {
     const latestDrift = driftCandidates[0] ?? null;
     const activeSnooze = driftAlarmSnoozeRef.current;
     if (activeSnooze !== null) {
+      pendingDriftAlarmGateRef.current = null;
       if (Date.now() < activeSnooze.untilMs) return;
       return;
     }
 
-    const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
-    if (pendingBreakReturnAlarm) {
-      if (!latestDrift) {
-        pendingBreakReturnAlarmRef.current = null;
-        lastDriftAlertSegmentRef.current = null;
-        return;
-      }
-
-      const focusTargets = pendingBreakReturnAlarm.focusTargets.length
-        ? pendingBreakReturnAlarm.focusTargets
-        : recentDriftAlarmFocusTargets;
-      const breakReturnContextLabel = getWatcherContextLabel(latestDrift.segment, latestDrift.category);
-      const breakReturnIdContext = latestDrift.alertKey;
-
-      showDriftAlarm(buildBreakReturnAlarmEvent({
-        id: `break-return:${breakReturnIdContext}:${pendingBreakReturnAlarm.untilMs}`,
-        contextLabel: breakReturnContextLabel,
-        driftDurationSeconds: latestDrift.segment.durationSeconds,
-        preservedFocusStrikeSeconds: 0,
-        generatedAt: new Date().toISOString(),
-        focusTargets,
-        breakDurationMinutes: pendingBreakReturnAlarm.minutes,
-        pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
-        nextFocusLabel: focusTargets[0]?.label ?? "your focus",
-      }));
-      pendingBreakReturnAlarmRef.current = null;
-      lastDriftAlertSegmentRef.current = latestDrift?.alertKey ?? null;
-      return;
-    }
-
     if (!latestDrift) {
+      pendingDriftAlarmGateRef.current = null;
+      pendingBreakReturnAlarmRef.current = null;
       lastDriftAlertSegmentRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
@@ -2370,30 +2378,93 @@ export default function App() {
       });
     };
 
-    if (lastDriftAlertSegmentRef.current === null) {
-      if (extremeNudgeEnabled) {
-        applyCurrentExtremeNudge(false);
+    const deliverCurrentDriftAlarm = () => {
+      const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
+      if (pendingBreakReturnAlarm) {
+        const focusTargets = pendingBreakReturnAlarm.focusTargets.length
+          ? pendingBreakReturnAlarm.focusTargets
+          : recentDriftAlarmFocusTargets;
+        const breakReturnContextLabel = getWatcherContextLabel(segment, category);
+
+        showDriftAlarm(buildBreakReturnAlarmEvent({
+          id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
+          contextLabel: breakReturnContextLabel,
+          driftDurationSeconds: segment.durationSeconds,
+          preservedFocusStrikeSeconds: 0,
+          generatedAt: new Date().toISOString(),
+          focusTargets,
+          breakDurationMinutes: pendingBreakReturnAlarm.minutes,
+          pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
+          nextFocusLabel: focusTargets[0]?.label ?? "your focus",
+        }));
+        pendingBreakReturnAlarmRef.current = null;
+        lastDriftAlertSegmentRef.current = alertKey;
         return;
       }
+
+      if (lastDriftAlertSegmentRef.current === null) {
+        if (extremeNudgeEnabled) {
+          applyCurrentExtremeNudge(false);
+          return;
+        }
+        lastDriftAlertSegmentRef.current = alertKey;
+        showCurrentDriftAlarm();
+        return;
+      }
+      if (lastDriftAlertSegmentRef.current === alertKey) {
+        if (driftAlarmEventRef.current?.id === alertKey) {
+          showCurrentDriftAlarm();
+        }
+        return;
+      }
+
       lastDriftAlertSegmentRef.current = alertKey;
+      if (extremeNudgeEnabled) {
+        applyCurrentExtremeNudge(true);
+        return;
+      }
       showCurrentDriftAlarm();
-      return;
-    }
-    if (lastDriftAlertSegmentRef.current === alertKey) {
+      void sendDriftNotification(segment);
+    };
+
+    if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
       if (driftAlarmEventRef.current?.id === alertKey) {
         showCurrentDriftAlarm();
       }
       return;
     }
 
-    lastDriftAlertSegmentRef.current = alertKey;
-    if (extremeNudgeEnabled) {
-      applyCurrentExtremeNudge(true);
-      return;
+    if (pendingDriftAlarmGateRef.current === alertKey) return;
+    if (pendingDriftAlarmGateRef.current !== null && pendingDriftAlarmGateRef.current !== alertKey) {
+      pendingDriftAlarmGateRef.current = null;
     }
-    showCurrentDriftAlarm();
-    void sendDriftNotification(segment);
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+
+    pendingDriftAlarmGateRef.current = alertKey;
+    void evaluateYouTubeDriftAlarmGate({
+      segment,
+      category,
+      aiOptions: localAiClassificationOptions,
+    }).then((gateResult) => {
+      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      pendingDriftAlarmGateRef.current = null;
+
+      if (gateResult.kind === "suppress") {
+        pendingBreakReturnAlarmRef.current = null;
+        lastDriftAlertSegmentRef.current = alertKey;
+        return;
+      }
+
+      deliverCurrentDriftAlarm();
+    }).catch((error) => {
+      if (error instanceof Error) {
+        console.warn("Failed to evaluate YouTube drift alarm AI gate", error);
+      }
+      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      pendingDriftAlarmGateRef.current = null;
+      pendingBreakReturnAlarmRef.current = null;
+      lastDriftAlertSegmentRef.current = alertKey;
+    });
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -2692,8 +2763,8 @@ export default function App() {
   );
   const classificationSourceSegments = selectedClassificationSegments;
   const classificationSourceSummaries = useMemo(
-    () => buildClassificationSourceSummaries(classificationSourceSegments),
-    [classificationSourceSegments],
+    () => buildClassificationSourceSummaries(classificationSourceSegments, classificationOptions),
+    [classificationOptions, classificationSourceSegments],
   );
   const effectiveClassifySourceId = useMemo(() => {
     if (classificationSourceSummaries.some((s) => classifySourceKey(s) === classifySelectedSourceId)) return classifySelectedSourceId;
@@ -4136,7 +4207,19 @@ export default function App() {
                                 </div>
                                 <div className="classification-panel-view__source-copy">
                                   <strong>{item.label}</strong>
-                                  <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
+                                  <div className="classification-panel-view__source-meta">
+                                    <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
+                                    <span className="classification-panel-view__source-productivity" aria-label={formatClassificationSourceProductivityMix(item.productivityMix)} title={formatClassificationSourceProductivityMix(item.productivityMix)}>
+                                    {item.productivityMix.map((entry) => (
+                                      <span
+                                        key={entry.productivity}
+                                        className={`classification-panel-view__source-productivity-dot classification-panel-view__source-productivity-dot--${entry.productivity}`}
+                                        style={{ width: `${Math.max(7, Math.round(entry.ratio * 18))}px` }}
+                                        aria-hidden="true"
+                                      />
+                                    ))}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="classification-panel-view__source-measure">
                                   <strong>{formatCompactDurationFromSeconds(item.totalSeconds)}</strong>
@@ -7240,7 +7323,7 @@ function ClassificationSourcePill({ source, ai }: { source?: ClassificationSourc
 }
 
 function classificationSourceLabel(source?: ClassificationSource | null, ai?: boolean | null): string {
-  if (ai || source === "llm") return "AI classified";
+  if (ai || source === "llm") return "AI";
   if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefined rule";
   if (source === "context") return "Context rule";
   if (source === "fallback") return "Fallback";
@@ -8426,6 +8509,10 @@ type DriftAlarmCandidate = {
   segment: ActivitySegment;
 };
 
+const SHOPPING_DRIFT_ALARM_MINIMUM_SECONDS = 5 * 60;
+const SHOPPING_DRIFT_ALARM_CONTEXT_WINDOW_MS = 5 * 60 * 1000;
+const AI_DRIFT_ALARM_MINIMUM_CONFIDENCE = 0.85;
+
 function buildDriftAlarmCandidates({
   segments,
   currentSnapshot,
@@ -8446,9 +8533,19 @@ function buildDriftAlarmCandidates({
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
     } satisfies ClassificationOptions;
-    const currentClassification = classifyActivity(segmentForLiveDriftAlarmClassification(currentSegment), currentClassificationOptions);
+    const currentClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(currentSegment), currentClassificationOptions);
 
-    if (currentClassification.productivity === "drift" && currentSegment.durationSeconds >= minimumDurationSeconds) {
+    if (
+      currentClassification.productivity === "drift"
+      && classificationConfidenceAllowsDriftAlarm(currentClassification)
+      && driftAlarmDurationMeetsThreshold({
+        candidate: currentSegment,
+        category: currentClassification.category,
+        segments,
+        classificationOptions: currentClassificationOptions,
+        minimumDurationSeconds,
+      })
+    ) {
       return [{
         alertKey: `current:${currentSnapshotIdentity(currentSnapshot)}`,
         category: currentClassification.category,
@@ -8462,14 +8559,75 @@ function buildDriftAlarmCandidates({
   const latestSegment = getLatestWatcherSegment(segments);
   if (!latestSegment) return [];
 
-  const latestClassification = classifyActivity(segmentForLiveDriftAlarmClassification(latestSegment), classificationOptions);
-  if (latestClassification.productivity !== "drift" || latestSegment.durationSeconds < minimumDurationSeconds) return [];
+  const latestClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(latestSegment), classificationOptions);
+  if (
+    latestClassification.productivity !== "drift"
+    || !classificationConfidenceAllowsDriftAlarm(latestClassification)
+    || !driftAlarmDurationMeetsThreshold({
+      candidate: latestSegment,
+      category: latestClassification.category,
+      segments,
+      classificationOptions,
+      minimumDurationSeconds,
+    })
+  ) return [];
 
   return [{
     alertKey: `${latestSegment.id}:${latestSegment.endedAt}`,
     category: latestClassification.category,
     segment: latestSegment,
   }];
+}
+
+function classificationConfidenceAllowsDriftAlarm(classification: ReturnType<typeof classifyActivityDetailed>): boolean {
+  if (classification.source !== "llm") return true;
+  return classification.confidence >= AI_DRIFT_ALARM_MINIMUM_CONFIDENCE;
+}
+
+function driftAlarmDurationMeetsThreshold({
+  candidate,
+  category,
+  segments,
+  classificationOptions,
+  minimumDurationSeconds,
+}: {
+  candidate: ActivitySegment;
+  category: ActivityCategory;
+  segments: ActivitySegment[];
+  classificationOptions: ClassificationOptions;
+  minimumDurationSeconds: number;
+}): boolean {
+  if (category !== "shopping") return candidate.durationSeconds >= minimumDurationSeconds;
+
+  const shoppingMinimumSeconds = Math.max(minimumDurationSeconds, SHOPPING_DRIFT_ALARM_MINIMUM_SECONDS);
+  if (candidate.durationSeconds >= shoppingMinimumSeconds) return true;
+
+  return sumNearbyShoppingDriftSeconds(candidate, segments, classificationOptions) >= shoppingMinimumSeconds;
+}
+
+function sumNearbyShoppingDriftSeconds(candidate: ActivitySegment, segments: ActivitySegment[], classificationOptions: ClassificationOptions): number {
+  const candidateStart = new Date(candidate.startedAt).getTime();
+  const candidateEnd = new Date(candidate.endedAt).getTime();
+  if (!Number.isFinite(candidateStart) || !Number.isFinite(candidateEnd) || candidateEnd <= candidateStart) return candidate.durationSeconds;
+
+  const windowStart = candidateStart - SHOPPING_DRIFT_ALARM_CONTEXT_WINDOW_MS;
+  const windowEnd = candidateEnd + SHOPPING_DRIFT_ALARM_CONTEXT_WINDOW_MS;
+
+  return segments.reduce((total, segment) => {
+    if (segment.id === candidate.id) return total;
+
+    const segmentStart = new Date(segment.startedAt).getTime();
+    const segmentEnd = new Date(segment.endedAt).getTime();
+    if (!Number.isFinite(segmentStart) || !Number.isFinite(segmentEnd) || segmentEnd <= segmentStart) return total;
+    if (segmentEnd <= windowStart || segmentStart >= windowEnd) return total;
+    if (segmentStart < candidateEnd && segmentEnd > candidateStart) return total;
+
+    const classification = classifyActivity(segmentForLiveDriftAlarmClassification(segment), classificationOptions);
+    if (classification.category !== "shopping" || classification.productivity !== "drift") return total;
+
+    const overlapMs = Math.max(0, Math.min(segmentEnd, windowEnd) - Math.max(segmentStart, windowStart));
+    return total + Math.round(overlapMs / 1000);
+  }, candidate.durationSeconds);
 }
 
 function segmentForLiveDriftAlarmClassification(segment: ActivitySegment): ActivitySegment {

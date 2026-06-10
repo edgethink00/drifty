@@ -157,7 +157,13 @@ describe("runAiClassification cloud contract", () => {
     };
   }
 
-  async function importServiceWithSegments(segments: ActivitySegment[], options: { session?: unknown; reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord>; timeline?: ActivitySegment[] } = {}) {
+  async function importServiceWithSegments(segments: ActivitySegment[], options: {
+    session?: unknown;
+    reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord>;
+    timeline?: ActivitySegment[];
+    edgeResult?: Partial<ActivityClassificationRecord>;
+    nativeStatus?: number;
+  } = {}) {
     vi.resetModules();
     ensureTestWindow();
 
@@ -166,10 +172,10 @@ describe("runAiClassification cloud contract", () => {
         model: "gemini-3.1-flash-lite",
         results: segments.map((segment) => ({
           id: segment.id,
-          category: "workspace",
-          productivity: "focus",
-          confidence: 0.8,
-          reason: "Work context",
+          category: options.edgeResult?.category ?? "workspace",
+          productivity: options.edgeResult?.productivity ?? "focus",
+          confidence: options.edgeResult?.confidence ?? 0.8,
+          reason: options.edgeResult?.reason ?? "Work context",
         })),
       },
       error: null,
@@ -183,17 +189,17 @@ describe("runAiClassification cloud contract", () => {
       data: { session: "session" in options ? options.session : { access_token: "token" } },
     });
     const nativeInvoke = vi.fn().mockResolvedValue({
-      status: 200,
+      status: options.nativeStatus ?? 200,
       body: JSON.stringify({
         choices: [{
           message: {
             content: JSON.stringify({
               results: segments.map((segment) => ({
                 id: segment.id,
-                category: "workspace",
-                productivity: "focus",
-                confidence: 0.82,
-                reason: "Local work context",
+                category: options.edgeResult?.category ?? "workspace",
+                productivity: options.edgeResult?.productivity ?? "focus",
+                confidence: options.edgeResult?.confidence ?? 0.82,
+                reason: options.edgeResult?.reason ?? "Local work context",
               })),
             }),
           },
@@ -864,6 +870,118 @@ describe("runAiClassification cloud contract", () => {
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v2-work-profile" })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("classifies a supplied live segment with cloud AI without saving synthetic current snapshots", async () => {
+    const segment = createUnknownSegment(1, {
+      id: "current:2026-05-22T09:05:00.000Z",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: "https://www.youtube.com/watch?v=lecture",
+      youtubeVideoId: "lecture",
+      youtubeCategory: "Entertainment",
+    });
+
+    try {
+      const { classifyLiveActivityWithAi, invoke, saveClassifications } = await importServiceWithSegments([segment], {
+        edgeResult: {
+          category: "entertainment",
+          productivity: "drift",
+          confidence: 0.86,
+          reason: "AI confirms drift video",
+        },
+      });
+      const result = await classifyLiveActivityWithAi(segment);
+
+      expect(result.kind).toBe("classified");
+      if (result.kind !== "classified") throw new Error("Expected live AI classification to return a classified result.");
+      expect(result.classification).toEqual(expect.objectContaining({
+        segmentId: segment.id,
+        category: "entertainment",
+        productivity: "drift",
+        source: "llm",
+        aiResult: true,
+      }));
+      expect(invoke).toHaveBeenCalledWith("classify-activity", {
+        body: expect.objectContaining({
+          items: [expect.objectContaining({
+            id: segment.id,
+            domain: "youtube.com",
+            urlHost: "youtube.com",
+            title: "Video",
+            durationSeconds: 300,
+          })],
+        }),
+      });
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("reuses cached AI classifications for supplied live segments without a provider call or save", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: "https://www.youtube.com/watch?v=focus",
+      youtubeVideoId: "focus",
+      youtubeCategory: "Education",
+    });
+
+    try {
+      const { classifyLiveActivityWithAi, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment], {
+        reusable: (fingerprints) => ({ [fingerprints[0]]: createReusableRecord(fingerprints[0], { category: "learning", productivity: "focus" }) }),
+      });
+      const result = await classifyLiveActivityWithAi(segment);
+
+      expect(result.kind).toBe("classified");
+      if (result.kind !== "classified") throw new Error("Expected live AI classification reuse to return a classified result.");
+      expect(result.classification).toEqual(expect.objectContaining({
+        segmentId: segment.id,
+        category: "learning",
+        productivity: "focus",
+        source: "llm",
+      }));
+      expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("returns unavailable for supplied live segments when local AI provider fails", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: "https://www.youtube.com/watch?v=maybe-work",
+      youtubeVideoId: "maybe-work",
+      youtubeCategory: "People & Blogs",
+    });
+
+    try {
+      const { classifyLiveActivityWithAi, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], {
+        session: null,
+        nativeStatus: 503,
+      });
+      const result = await classifyLiveActivityWithAi(segment, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(result.kind).toBe("unavailable");
+      if (result.kind !== "unavailable") throw new Error("Expected failed local live AI classification to be unavailable.");
+      expect(result.reason).toContain("Local AI classification failed");
+      expect(nativeInvoke).toHaveBeenCalledTimes(1);
+      expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
       cleanupServiceMocks();
     }

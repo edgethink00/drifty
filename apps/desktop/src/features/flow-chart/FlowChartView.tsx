@@ -321,7 +321,7 @@ function ClassificationSourcePill({ source, ai }: { source?: ClassificationSourc
 }
 
 function classificationSourceLabel(source?: ClassificationSource | null, ai?: boolean | null): string {
-  if (ai || source === "llm") return "AI classified";
+  if (ai || source === "llm") return "AI";
   if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefined rule";
   if (source === "context") return "Context rule";
   if (source === "fallback") return "Fallback";
