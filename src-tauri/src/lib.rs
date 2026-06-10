@@ -9,8 +9,8 @@ use std::sync::Mutex;
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_openai_chat,
     drift_alarm_action, drift_alarm_current, drift_alarm_dismiss, drift_alarm_hide,
-    drift_alarm_show, focus_target_open_app, setup_drift_alarm_window, setup_watcher_window,
-    system_open_settings_pane,
+    drift_alarm_show, extreme_nudge_apply, focus_target_open_app, setup_drift_alarm_window,
+    setup_watcher_window, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_delete_classification_rule, tracker_get_app_icons,
     tracker_get_classification_metrics, tracker_get_classification_rules,
     tracker_get_current_snapshot, tracker_get_hourly_summary, tracker_get_raw_events,
@@ -267,6 +267,7 @@ pub fn run() {
             drift_alarm_hide,
             drift_alarm_dismiss,
             drift_alarm_action,
+            extreme_nudge_apply,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Drifty");

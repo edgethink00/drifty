@@ -47,6 +47,7 @@ fn main() {
             "drift_alarm_hide",
             "drift_alarm_dismiss",
             "drift_alarm_action",
+            "extreme_nudge_apply",
         ]),
     ))
     .expect("failed to build tauri app manifest");

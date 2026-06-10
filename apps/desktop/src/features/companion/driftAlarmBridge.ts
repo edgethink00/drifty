@@ -5,6 +5,14 @@ import { isTauriRuntime } from "./watcherBridge";
 
 type UnlistenFn = () => void;
 
+export type ExtremeNudgeTarget = {
+  readonly appName: string;
+  readonly bundleId: string | null;
+  readonly browserName: string | null;
+  readonly siteDomain: string | null;
+  readonly siteUrl: string | null;
+};
+
 type DriftAlarmActionEvent = {
   action: unknown;
 };
@@ -28,6 +36,12 @@ export async function dismissNativeDriftAlarm(): Promise<void> {
 export async function triggerNativeDriftAlarmAction(action: DriftAlarmAction): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("drift_alarm_action", { action });
+}
+
+export async function applyNativeExtremeNudge(target: ExtremeNudgeTarget): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  await invoke("extreme_nudge_apply", { target });
+  return true;
 }
 
 export async function getNativeDriftAlarmCurrent(): Promise<DriftAlarmEvent | null> {

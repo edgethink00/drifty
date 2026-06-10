@@ -95,10 +95,12 @@ import {
   type EndOfDayReviewAction,
 } from "./features/companion/watcherBridge";
 import {
+  applyNativeExtremeNudge,
   hideNativeDriftAlarm,
   listenToNativeDriftAlarmAction,
   listenToNativeDriftAlarmDismissed,
   showNativeDriftAlarm,
+  type ExtremeNudgeTarget,
 } from "./features/companion/driftAlarmBridge";
 import {
   fallbackDisplayName,
@@ -507,6 +509,7 @@ type EndOfDayReviewSummaryInput = {
 const THEME_STORAGE_KEY = "drifty.theme";
 const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
 const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
+const EXTREME_NUDGE_STORAGE_KEY = "drifty.notifications.extremeNudge";
 const WATCHER_PEEK_STORAGE_KEY = "drifty.companion.watcherPeek";
 const WATCHER_MODE_STORAGE_KEY = "drifty.companion.watcherMode";
 const WATCHER_PERIODIC_MIN_STORAGE_KEY = "drifty.companion.periodicMinMinutes";
@@ -1084,6 +1087,7 @@ export default function App() {
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(resolveInitialExtremeNudgeEnabled);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
@@ -2010,6 +2014,10 @@ export default function App() {
   }, [driftAlertDelaySeconds]);
 
   useEffect(() => {
+    window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, extremeNudgeEnabled ? "1" : "0");
+  }, [extremeNudgeEnabled]);
+
+  useEffect(() => {
     driftAlarmSnoozeRef.current = driftAlarmSnooze;
     if (driftAlarmSnooze === null) return undefined;
 
@@ -2298,8 +2306,25 @@ export default function App() {
     const showCurrentDriftAlarm = () => {
       showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
+    const showFallbackDriftAlarm = (notify: boolean) => {
+      showCurrentDriftAlarm();
+      if (notify) void sendDriftNotification(segment);
+    };
+    const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
+      lastDriftAlertSegmentRef.current = alertKey;
+      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then((applied) => {
+        if (!applied && lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
+      }).catch((error) => {
+        console.warn("Failed to apply extreme nudge", error);
+        if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
+      });
+    };
 
     if (lastDriftAlertSegmentRef.current === null) {
+      if (extremeNudgeEnabled) {
+        applyCurrentExtremeNudge(false);
+        return;
+      }
       lastDriftAlertSegmentRef.current = alertKey;
       showCurrentDriftAlarm();
       return;
@@ -2312,9 +2337,13 @@ export default function App() {
     }
 
     lastDriftAlertSegmentRef.current = alertKey;
+    if (extremeNudgeEnabled) {
+      applyCurrentExtremeNudge(true);
+      return;
+    }
     showCurrentDriftAlarm();
     void sendDriftNotification(segment);
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, recentDriftAlarmFocusTargets, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -4428,6 +4457,7 @@ export default function App() {
                   <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div><div className="desc">Choose how long drift must continue before the alarm appears.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span><small>{option.detail}</small></button>))}</div></div></div>
+                    <div className="settings-row"><div><div className="lbl">Extreme nudge</div><div className="desc">Close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
                     <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Show a local summary after 6:00 PM when the tracker is running, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
                     {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
                       <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
@@ -8048,6 +8078,16 @@ function currentSnapshotToSegment(current: CurrentActivitySnapshot, durationSeco
   };
 }
 
+function buildExtremeNudgeTarget(segment: ActivitySegment): ExtremeNudgeTarget {
+  return {
+    appName: segment.appName.trim() || "Unknown app",
+    bundleId: segment.bundleId?.trim() || null,
+    browserName: segment.browserName?.trim() || null,
+    siteDomain: segment.siteDomain?.trim() || null,
+    siteUrl: segment.siteUrl?.trim() || null,
+  };
+}
+
 type CurrentSnapshotTiming = {
   durationSeconds: number;
   uncapturedSeconds: number;
@@ -9452,6 +9492,11 @@ function resolveInitialDriftAlertsEnabled(): boolean {
 function resolveInitialDriftAlertDelaySeconds(): DriftAlertDelaySeconds {
   if (typeof window === "undefined") return 0;
   return normalizeDriftAlertDelaySeconds(window.localStorage.getItem(DRIFT_ALERT_DELAY_STORAGE_KEY));
+}
+
+function resolveInitialExtremeNudgeEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(EXTREME_NUDGE_STORAGE_KEY) === "1";
 }
 
 function normalizeDriftAlertDelaySeconds(value: string | number | null): DriftAlertDelaySeconds {
