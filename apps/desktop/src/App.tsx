@@ -39,6 +39,22 @@ import logoUrl from "./assets/drifty-icon.png";
 import { AppGlyph } from "./components/AppGlyph";
 import { SiteFavicon } from "./components/SiteFavicon";
 import { AppUsagePanel } from "./features/dashboard/AppUsagePanel";
+import {
+  DashboardAiUnavailableNotice,
+  isCloudBillingVariant,
+  resolveDashboardAiUnavailableState,
+  type DashboardAiUnavailableVariant,
+} from "./features/dashboard/DashboardAiUnavailableNotice";
+import {
+  DashboardAiRecoveryOverlay,
+  isDashboardAiRecoveryOverlayVariant,
+} from "./features/dashboard/DashboardAiRecoveryOverlay";
+import {
+  buildDashboardAiUnavailablePreviewInput,
+  DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS,
+  type DashboardAiUnavailablePreviewCase,
+  type DashboardAiUnavailablePreviewState,
+} from "./features/dashboard/dashboardAiUnavailablePreview";
 import { FlowChartView } from "./features/flow-chart/FlowChartView";
 import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
@@ -57,7 +73,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -112,10 +128,12 @@ import {
   type UserProfile,
 } from "./features/profile/profileService";
 import {
+  type BillingInterval,
   createIndividualCheckout,
   fetchBillingEntitlement,
   type BillingEntitlement,
 } from "./features/billing/billingService";
+import { IndividualPlanCards } from "./features/billing/IndividualPlanCards";
 
 type ThemeMode = "light" | "dark";
 type StartOfWeek = "sunday" | "monday" | "saturday";
@@ -1116,6 +1134,9 @@ export default function App() {
   const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
   const [selfHostedModelPickerOpen, setSelfHostedModelPickerOpen] = useState(false);
   const [selfHostedCustomModel, setSelfHostedCustomModel] = useState("");
+  const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
+  const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
+  const [dismissedDashboardAiRecoveryKey, setDismissedDashboardAiRecoveryKey] = useState<string | null>(null);
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
   const [watcherPeriodicMaxMinutes, setWatcherPeriodicMaxMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("max"));
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
@@ -1255,6 +1276,7 @@ export default function App() {
   const [aiClassificationUsageDay, setAiClassificationUsageDay] = useState<string | null>(null);
   const [classificationActionLoading, setClassificationActionLoading] = useState(false);
   const [classificationSummary, setClassificationSummary] = useState<AiClassificationSummary | null>(null);
+  const [observedAiClassificationFailure, setObservedAiClassificationFailure] = useState(false);
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
   const [focusDriftHover, setFocusDriftHover] = useState<FocusDriftHoverState | null>(null);
@@ -1265,6 +1287,7 @@ export default function App() {
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
+  const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
   const [driftyCloudSetupOpen, setDriftyCloudSetupOpen] = useState(false);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
@@ -1399,6 +1422,9 @@ export default function App() {
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const canUseCloudAiClassification = isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  useEffect(() => {
+    setObservedAiClassificationFailure(false);
+  }, [canUseCloudAiClassification, localAiClassificationOptions]);
   const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
@@ -1574,6 +1600,17 @@ export default function App() {
   function shiftDashboardPeriod(direction: -1 | 1) {
     if (direction === 1 && !canShiftDashboardForward) return;
     selectDay((currentDay) => shiftDashboardPeriodDay(currentDay, dashPeriod, direction));
+  }
+
+  function previewDashboardAiUnavailableCase() {
+    const previewDay = shiftIsoDate(logicalTodayIsoDate(startOfDayMinutes), -3);
+    setDashboardAiUnavailablePreview({ caseId: dashboardAiUnavailablePreviewCase, appliedDay: previewDay });
+    selectDay(previewDay);
+    navigateToTab("dashboard", "Today");
+  }
+
+  function clearDashboardAiUnavailablePreview() {
+    setDashboardAiUnavailablePreview(null);
   }
 
   const clearWatcherRecoveryTimer = useCallback(() => {
@@ -2422,6 +2459,32 @@ export default function App() {
   );
   const dashboardPeriodLabel = formatDashboardPeriodLabel(dashPeriod, dashboardRange.startDay, dashboardRange.endDay);
   const totalSeconds = useMemo(() => totalDurationSeconds(dashboardSegments), [dashboardSegments]);
+  const activeDashboardAiUnavailablePreviewInput = useMemo(
+    () => dashboardAiUnavailablePreview?.appliedDay === selectedDay
+      ? buildDashboardAiUnavailablePreviewInput(dashboardAiUnavailablePreview.caseId)
+      : null,
+    [dashboardAiUnavailablePreview, selectedDay],
+  );
+  const dashboardAiUnavailableState = activeDashboardAiUnavailablePreviewInput
+    ? resolveDashboardAiUnavailableState(activeDashboardAiUnavailablePreviewInput)
+    : totalSeconds > 0
+      ? resolveDashboardAiUnavailableState({
+        billingEntitlement,
+        billingEntitlementError,
+        billingEntitlementLoading,
+        canUseCloudAiClassification,
+        hasRequiredAccountAuth,
+        isSupabaseConfigured,
+        localAiReady: Boolean(localAiClassificationOptions),
+        observedAiClassificationFailure,
+      })
+      : null;
+  const dashboardAiRecoveryKey = dashboardAiUnavailableState && isDashboardAiRecoveryOverlayVariant(dashboardAiUnavailableState.variant)
+    ? `${dashPeriod}:${selectedDay}:${dashboardAiUnavailableState.variant}`
+    : null;
+  const dashboardAiRecoveryState = dashboardAiRecoveryKey !== null && dismissedDashboardAiRecoveryKey !== dashboardAiRecoveryKey
+    ? dashboardAiUnavailableState
+    : null;
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
   const selectedDayProductivityTotals = useMemo(
     () => buildProductivityDurations(segments, selectedDayClassificationOptions),
@@ -2825,6 +2888,9 @@ export default function App() {
       const summary = localAiClassificationOptions
         ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
         : await runAiClassificationForUnknownThreshold(query, threshold);
+      if (selectedDayRef.current === today) {
+        setObservedAiClassificationFailure(summary.status === "error");
+      }
       if (summary.status === "empty" && summary.savedRecords === 0) return;
       if (selectedDayRef.current === today) {
         setClassificationSummary(summary);
@@ -2840,6 +2906,7 @@ export default function App() {
     } catch (nextError) {
       if (selectedDayRef.current === today) {
         setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });
+        setObservedAiClassificationFailure(true);
       }
     } finally {
       aiClassificationInFlightRef.current = false;
@@ -2891,7 +2958,7 @@ export default function App() {
     }
   }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
 
-  const handleStartDriftyCloudSetup = useCallback(async () => {
+  const handleStartDriftyCloudSetup = useCallback(async (billingInterval: BillingInterval = "monthly") => {
     if (!isSupabaseConfigured) {
       setAuthModalOpen(true);
       return;
@@ -2904,23 +2971,37 @@ export default function App() {
 
     if (billingEntitlement?.status === "locked") {
       setBillingEntitlementError(null);
-      const checkoutResult = await createIndividualCheckout();
-      if (!checkoutResult.success) {
-        setBillingEntitlementError(checkoutResult.error);
-        return;
-      }
-
+      setBillingCheckoutLoadingInterval(billingInterval);
       try {
+        const checkoutResult = await createIndividualCheckout(billingInterval);
+        if (!checkoutResult.success) {
+          setBillingEntitlementError(checkoutResult.error);
+          return;
+        }
+
         const { openUrl } = await import("@tauri-apps/plugin-opener");
         await openUrl(checkoutResult.data.url);
       } catch (error) {
         setBillingEntitlementError(toErrorMessage(error));
+      } finally {
+        setBillingCheckoutLoadingInterval(null);
       }
       return;
     }
 
     void refreshBillingEntitlement();
   }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, signInWithWebsite, user]);
+
+  const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
+    setSettingsSection("aiSetup");
+    setDriftyCloudSetupOpen(isCloudBillingVariant(variant));
+    navigateToTab("settings");
+  }, [navigateToTab]);
+
+  const handleDismissDashboardAiRecovery = useCallback(() => {
+    if (dashboardAiRecoveryKey === null) return;
+    setDismissedDashboardAiRecoveryKey(dashboardAiRecoveryKey);
+  }, [dashboardAiRecoveryKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3128,6 +3209,7 @@ export default function App() {
         ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
         : await runAiClassification(toClassificationQueryForDay(selectedDay));
       setClassificationSummary(summary);
+      setObservedAiClassificationFailure(summary.status === "error");
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
@@ -3137,6 +3219,7 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
     } catch (nextError) {
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });
+      setObservedAiClassificationFailure(true);
     } finally {
       aiClassificationInFlightRef.current = false;
       setClassificationActionLoading(false);
@@ -3165,6 +3248,7 @@ export default function App() {
         ...summary,
         message: `${summary.message} Target: ${formatDayLabel(targetDay)}.`,
       });
+      setObservedAiClassificationFailure(summary.status === "error");
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
@@ -3174,6 +3258,7 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
     } catch (nextError) {
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });
+      setObservedAiClassificationFailure(true);
     } finally {
       aiClassificationInFlightRef.current = false;
       setClassificationActionLoading(false);
@@ -3662,10 +3747,16 @@ export default function App() {
     </>
   );
 
-  const cloudStatusLabel = driftyCloudStatusLabel(billingEntitlement, billingEntitlementLoading, isSupabaseConfigured, hasRequiredAccountAuth);
-  const cloudDetailLabel = driftyCloudDetailLabel(billingEntitlement, billingEntitlementError, isSupabaseConfigured, hasRequiredAccountAuth);
-  const aiServerStatusLabel = aiServerStatusLabelForCloud(billingEntitlement, billingEntitlementLoading, isSupabaseConfigured, hasRequiredAccountAuth);
-  const cloudSetupActionLabel = driftyCloudSetupActionLabel(billingEntitlement, isSupabaseConfigured, hasRequiredAccountAuth);
+  const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;
+  const effectiveBillingEntitlementError = activeDashboardAiUnavailablePreviewInput?.billingEntitlementError ?? billingEntitlementError;
+  const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
+  const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
+  const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
+  const cloudStatusLabel = driftyCloudStatusLabel(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
+  const aiServerStatusLabel = aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
+  const cloudSetupActionLabel = driftyCloudSetupActionLabel(effectiveBillingEntitlement, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
+  const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
+  const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
   const localAiConnectionProviderLabel = localAiSetup.provider === "openrouter_byok" ? "BYOK AI" : "Local AI";
   const aiConnectionStatus = resolveAiConnectionStatus({
     canUseCloudAi: canUseCloudAiClassification,
@@ -3807,6 +3898,25 @@ export default function App() {
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <div className={`page${dashPeriod === "Week" ? " page--week-dashboard" : ""}`}>
+            {dashboardAiUnavailableState ? (
+              <DashboardAiUnavailableNotice
+                state={dashboardAiUnavailableState}
+                onAction={handleDashboardAiUnavailableAction}
+              />
+            ) : null}
+            {dashboardAiRecoveryState ? (
+              <DashboardAiRecoveryOverlay
+                billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+                billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                retrying={classificationActionLoading}
+                state={dashboardAiRecoveryState}
+                onClose={handleDismissDashboardAiRecovery}
+                onOpenAiSetup={() => handleDashboardAiUnavailableAction(dashboardAiRecoveryState.variant)}
+                onRetryAi={() => void handleRunSelectedDayAiClassification()}
+                onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
+              />
+            ) : null}
+
             {dashPeriod === "Week" ? null : (
               <div className={`pg-head dashboard-page-head${dashPeriod === "Today" ? " dashboard-page-head--today" : ""}`}>
                 <div className="dashboard-page-head__row">
@@ -4433,34 +4543,64 @@ export default function App() {
                   </div>
                 )}
                 {settingsSection === "aiSetup" && (
-                  <div className="settings-section">
+                  <div className="settings-section settings-section--ai-setup">
                     <div className="settings-block cloud-overview">
                       <div className="cloud-overview__header">
                         <div>
                           <h3>AI setup</h3>
-                          <p>Choose how Drifty should reach AI later. Local tracking stays on this Mac; AI setup only controls optional classification providers.</p>
                         </div>
                         <span className="chip green">Local-first</span>
                       </div>
-                      <div className="settings-row"><div><div className="lbl">Drifty Cloud status</div><div className="desc">Account availability only. Choose an AI provider below; local tracking stays on this Mac. {cloudDetailLabel}</div></div><div className="ctrl settings-row__actions"><span className="ctrl--value">{cloudStatusLabel}</span><span className="chip">{aiServerStatusLabel}</span><button type="button" className="settings-btn" onClick={handleShowDriftyCloudSetup}>View Cloud setup</button></div></div>
-                      <div className="settings-row settings-row--fallback"><div><div className="lbl">AI provider</div><div className="desc">Choose the provider Drifty should use for optional AI classification. Cloud account availability is shown above.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="AI provider options"><button type="button" className={`settings-mode-option${!driftyCloudSetupOpen && localAiSetup.provider === "openrouter_byok" ? " is-active" : ""}`} role="radio" aria-checked={!driftyCloudSetupOpen && localAiSetup.provider === "openrouter_byok"} onClick={() => handleSelectLocalAiProvider("openrouter_byok")}><span>OpenRouter BYOK</span><small>Use your own key</small></button><button type="button" className={`settings-mode-option${!driftyCloudSetupOpen && localAiSetup.provider === "self_hosted" ? " is-active" : ""}`} role="radio" aria-checked={!driftyCloudSetupOpen && localAiSetup.provider === "self_hosted"} onClick={() => handleSelectLocalAiProvider("self_hosted")}><span>Self-hosted</span><small>OpenAI-compatible endpoint</small></button><button type="button" className={`settings-mode-option${driftyCloudSetupOpen ? " is-active" : ""}`} role="radio" aria-checked={driftyCloudSetupOpen} title={cloudDetailLabel} onClick={handleShowDriftyCloudSetup}><span>Drifty Cloud</span><small>{cloudStatusLabel} · {aiServerStatusLabel}</small></button></div></div></div>
-                      {driftyCloudSetupOpen ? (
-                        <div className="settings-row settings-row--fallback" role="group" aria-label="Drifty Cloud setup"><div><div className="lbl">Drifty Cloud setup</div><div className="desc">Drifty Cloud is optional account-backed AI. Local tracking remains on this Mac.</div></div><div className="ctrl settings-row__actions"><span className="ctrl--value">{cloudStatusLabel}</span><span className="chip">{aiServerStatusLabel}</span><button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleStartDriftyCloudSetup()}>{cloudSetupActionLabel}</button></div></div>
-                      ) : null}
-                      {!driftyCloudSetupOpen && localAiSetup.provider === "openrouter_byok" ? (
-                        <>
-                          <div className="settings-row"><label><div className="lbl">OpenRouter API key</div><div className="desc">Kept only for this app session; paste it again after restart.</div></label><div className="ctrl"><input className="settings-input" type="password" autoComplete="off" aria-label="OpenRouter API key" value={localAiSetup.openRouterApiKey} onChange={(event) => setLocalAiSetup((current) => ({ ...current, openRouterApiKey: event.target.value }))} placeholder="sk-or-v1-..." /></div></div>
-                          <div className="settings-row settings-row--model-picker"><div><div className="lbl">OpenRouter models</div><div className="desc">Choose a primary model and optional fallbacks. Drifty stores model IDs only.</div></div><div className="ctrl model-picker-summary"><div className="model-picker-summary__chips"><span className="chip green">Primary: {openRouterPrimaryModel}</span>{openRouterFallbackModels.length > 0 ? <span className="chip gray">{openRouterFallbackModels.length} fallback{openRouterFallbackModels.length === 1 ? "" : "s"}</span> : null}</div><button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={() => setOpenRouterModelPickerOpen(true)}>Choose models</button></div></div>
-                        </>
-                      ) : !driftyCloudSetupOpen ? (
-                        <>
-                          <div className="settings-row"><label><div className="lbl">Self-hosted base URL</div><div className="desc">Use an OpenAI-compatible local or private endpoint.</div></label><div className="ctrl"><input className="settings-input" aria-label="Self-hosted base URL" value={localAiSetup.selfHostedBaseUrl} onChange={(event) => setLocalAiSetup((current) => ({ ...current, selfHostedBaseUrl: event.target.value }))} placeholder="http://localhost:11434/v1" /></div></div>
-                          <div className="settings-row settings-row--model-picker"><div><div className="lbl">Self-hosted model</div><div className="desc">Choose a known local model or enter the model ID exposed by your endpoint.</div></div><div className="ctrl model-picker-summary"><div className="model-picker-summary__chips"><span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span></div><button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={() => setSelfHostedModelPickerOpen(true)}>Choose model</button></div></div>
-                        </>
-                      ) : null}
-                      {!driftyCloudSetupOpen ? (
-                        <div className="settings-row"><div><div className="lbl">Local provider settings</div><div className="desc">Saved on this Mac for the selected local provider. Rule-based local classification remains available.</div></div><div className="ctrl"><span className="chip">Saved on this Mac</span></div></div>
-                      ) : null}
+                      <div className="settings-row settings-row--fallback settings-row--cloud-pricing" role="group" aria-label="Drifty Cloud pricing">
+                        <div className="settings-row__summary">
+                          <div className="lbl">Drifty Cloud</div>
+                          <span className="chip" aria-label={`Drifty Cloud status: ${cloudStatusLabel}`}>{aiServerStatusLabel}</span>
+                          {effectiveBillingEntitlementError ? <span className="settings-row__message">{effectiveBillingEntitlementError}</span> : null}
+                        </div>
+                        <div className="ctrl settings-row__actions">
+                          <IndividualPlanCards
+                            disabled={isDashboardAiUnavailablePreviewActive}
+                            loadingInterval={billingCheckoutLoadingInterval}
+                            mode={shouldShowCloudCheckoutPlans ? "checkout" : "display"}
+                            onSelectPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
+                          />
+                          {shouldShowCloudCheckoutPlans ? null : <button type="button" className="settings-btn settings-btn--primary settings-btn--compact" onClick={() => void handleStartDriftyCloudSetup()}>{cloudSetupActionLabel}</button>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="settings-block ai-provider-settings">
+                      <div className="cloud-overview__header">
+                        <div>
+                          <h3>Provider settings</h3>
+                        </div>
+                        <span className="chip">Saved on this Mac</span>
+                      </div>
+                      <div className="settings-row settings-row--fallback settings-row--provider-card" role="group" aria-label="OpenRouter BYOK settings">
+                        <div>
+                          <div className="lbl">OpenRouter BYOK</div>
+                        </div>
+                        <div className="ctrl settings-row__actions">
+                          <button type="button" className={`settings-btn settings-btn--compact${localAiSetup.provider === "openrouter_byok" ? " settings-btn--primary" : ""}`} onClick={() => handleSelectLocalAiProvider("openrouter_byok")}>{localAiSetup.provider === "openrouter_byok" ? "Selected" : "Use OpenRouter"}</button>
+                          <input className="settings-input" type="password" autoComplete="off" aria-label="OpenRouter API key" value={localAiSetup.openRouterApiKey} onChange={(event) => setLocalAiSetup((current) => ({ ...current, openRouterApiKey: event.target.value }))} placeholder="sk-or-v1-..." />
+                          <div className="model-picker-summary">
+                            <div className="model-picker-summary__chips"><span className="chip green">Primary: {openRouterPrimaryModel}</span>{openRouterFallbackModels.length > 0 ? <span className="chip gray">{openRouterFallbackModels.length} fallback{openRouterFallbackModels.length === 1 ? "" : "s"}</span> : null}</div>
+                            <button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={() => setOpenRouterModelPickerOpen(true)}>Choose models</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="settings-row settings-row--fallback settings-row--provider-card" role="group" aria-label="Self-hosted AI settings">
+                        <div>
+                          <div className="lbl">Self-hosted local AI</div>
+                        </div>
+                        <div className="ctrl settings-row__actions">
+                          <button type="button" className={`settings-btn settings-btn--compact${localAiSetup.provider === "self_hosted" ? " settings-btn--primary" : ""}`} onClick={() => handleSelectLocalAiProvider("self_hosted")}>{localAiSetup.provider === "self_hosted" ? "Selected" : "Use self-hosted"}</button>
+                          <input className="settings-input" aria-label="Self-hosted base URL" value={localAiSetup.selfHostedBaseUrl} onChange={(event) => setLocalAiSetup((current) => ({ ...current, selfHostedBaseUrl: event.target.value }))} placeholder="http://localhost:11434/v1" />
+                          <div className="model-picker-summary">
+                            <div className="model-picker-summary__chips"><span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span></div>
+                            <button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={() => setSelfHostedModelPickerOpen(true)}>Choose model</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -4501,6 +4641,38 @@ export default function App() {
                       <div className="settings-row"><div><div className="lbl">Database</div></div><div className="ctrl ctrl--value">{status?.databasePath ?? "Unknown"}</div></div>
                       <div className="settings-row"><div><div className="lbl">Sessions logged</div></div><div className="ctrl ctrl--value">{segments.length} today</div></div>
                     </div>
+                    {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
+                      <div className="settings-block settings-block--dev-preview">
+                        <h3>AI unavailable preview</h3>
+                        <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="AI unavailable preview case">
+                          <div>
+                            <div className="lbl">AI unavailable preview</div>
+                            <div className="desc">
+                              Apply a selected AI unavailable case to the dashboard three days ago. {dashboardAiUnavailablePreview ? `Active on ${formatDayLabel(dashboardAiUnavailablePreview.appliedDay)}.` : "Dev builds only."}
+                            </div>
+                          </div>
+                          <div className="ctrl settings-row__actions">
+                            <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="AI unavailable preview cases">
+                              {DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`settings-mode-option${dashboardAiUnavailablePreviewCase === option.id ? " is-active" : ""}`}
+                                  role="radio"
+                                  aria-checked={dashboardAiUnavailablePreviewCase === option.id}
+                                  onClick={() => setDashboardAiUnavailablePreviewCase(option.id)}
+                                >
+                                  <span>{option.label}</span>
+                                  <small>{option.detail}</small>
+                                </button>
+                              ))}
+                            </div>
+                            <button type="button" className="settings-btn settings-btn--primary" onClick={previewDashboardAiUnavailableCase}>Preview 3 days ago</button>
+                            {dashboardAiUnavailablePreview ? <button type="button" className="settings-btn" onClick={clearDashboardAiUnavailablePreview}>Clear preview</button> : null}
+                          </div>
+                        </div>
+                      </div>
+                      ) : null}
                     <div className="settings-block"><h3>Export</h3>
                       <div className="settings-row"><div><div className="lbl">Export session data</div><div className="desc">All sessions as CSV</div></div><div className="ctrl"><button className="settings-btn">Download CSV</button></div></div>
                     </div>
@@ -5790,19 +5962,6 @@ function driftyCloudStatusLabel(
   if (loading) return "Checking cloud";
   if (entitlement?.status === "locked") return "Drifty Cloud needs attention";
   return "Drifty Cloud is connected";
-}
-
-function driftyCloudDetailLabel(
-  entitlement: BillingEntitlement | null,
-  error: string | null,
-  isConfigured: boolean,
-  hasAccount: boolean,
-): string {
-  if (!isConfigured) return "Supabase is not configured. Local tracking and local rules still work.";
-  if (!hasAccount) return "Sign in only when you want Drifty Cloud, sync, profile, leaderboard, or AI classification.";
-  if (error) return error;
-  if (entitlement?.status === "locked") return "Cloud account access needs attention, but the local app remains available.";
-  return "Account-backed cloud features are available. Local tracking remains stored on this Mac.";
 }
 
 function aiServerStatusLabelForCloud(
