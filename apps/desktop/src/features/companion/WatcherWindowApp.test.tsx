@@ -3,6 +3,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WatcherWindowApp } from "./WatcherWindowApp";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { WatcherPeekEvent } from "./WatcherPeek";
 import type { WatcherWindowEvent } from "./watcherBridge";
 
@@ -28,6 +29,7 @@ function buildEvent(overrides: Partial<WatcherPeekEvent>): WatcherPeekEvent {
 
 const bridge = vi.hoisted(() => ({
   dismissNativeWatcherPeek: vi.fn().mockResolvedValue(undefined),
+  hideNativeWatcherPeek: vi.fn().mockResolvedValue(undefined),
   listenToNativeWatcherShow: vi.fn().mockResolvedValue(vi.fn()),
   respondNativeWatcherPeek: vi.fn().mockResolvedValue(undefined),
   setNativeWatcherInteractive: vi.fn().mockResolvedValue(undefined),
@@ -37,6 +39,7 @@ const bridge = vi.hoisted(() => ({
 
 vi.mock("./watcherBridge", () => ({
   dismissNativeWatcherPeek: bridge.dismissNativeWatcherPeek,
+  hideNativeWatcherPeek: bridge.hideNativeWatcherPeek,
   listenToNativeWatcherShow: bridge.listenToNativeWatcherShow,
   respondNativeWatcherPeek: bridge.respondNativeWatcherPeek,
   setNativeWatcherInteractive: bridge.setNativeWatcherInteractive,
@@ -89,6 +92,15 @@ const passiveDriftEvent = buildEvent({
   driftPattern: "first",
 });
 
+const extremeNudgeToastEvent: ExtremeNudgeToastEvent = {
+  kind: "extremeNudgeToast",
+  placement: "top-right",
+  id: "extreme-toast-1",
+  generatedAt: "2026-05-20T13:16:20.000Z",
+  closedLabel: "youtube.com",
+  focusLabel: "docs.drifty.so",
+};
+
 describe("WatcherWindowApp", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -134,6 +146,38 @@ describe("WatcherWindowApp", () => {
     expect(watcher.querySelector("button")).toBeNull();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(false);
     expect(bridge.respondNativeWatcherPeek).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("renders extreme nudge toasts and hides the watcher window after the exit animation", async () => {
+    vi.useFakeTimers();
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+
+    render(<WatcherWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.showHandler?.(extremeNudgeToastEvent);
+    });
+
+    const toast = screen.getByRole("status");
+    expect(toast.textContent).toContain("Closed youtube.com");
+    expect(toast.textContent).toContain("Returned to docs.drifty.so");
+    expect(toast.getAttribute("data-phase")).toBe("visible");
+
+    act(() => {
+      vi.advanceTimersByTime(4_000);
+    });
+    expect(toast.getAttribute("data-phase")).toBe("leaving");
+
+    act(() => {
+      vi.advanceTimersByTime(280);
+    });
+    expect(bridge.hideNativeWatcherPeek).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).toBeNull();
     vi.useRealTimers();
   });
 

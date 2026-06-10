@@ -1,0 +1,78 @@
+import { shiftIsoDate } from "@drifty/domain";
+import { getCalendarWeekStartDay } from "./weekCalendar";
+import { DEFAULT_START_OF_WEEK } from "../settings/settingsStorage";
+import type { StartOfWeek } from "../settings/settingsStorage";
+import { formatDayLabel, getLogicalDayRange, shiftIsoMonth } from "../../lib/formatting";
+
+export type DashboardPeriod = "Today" | "Week" | "Month";
+
+export type ClassificationRange = "Day" | "Week";
+
+export type DashboardPeriodOption = {
+  period: DashboardPeriod;
+  label: string;
+  detail: string;
+};
+
+export function getDashboardPeriodRange(selectedDay: string, period: DashboardPeriod, startOfDayMinutes = 0, startOfWeek: StartOfWeek = DEFAULT_START_OF_WEEK) {
+  if (period === "Today") {
+    return {
+      startDay: selectedDay,
+      endDay: selectedDay,
+      ...getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes),
+    };
+  }
+
+  const startDay = period === "Week" ? getCalendarWeekStartDay(selectedDay, startOfWeek) : shiftIsoDate(selectedDay, -29);
+  const endDay = period === "Week" ? shiftIsoDate(startDay, 6) : selectedDay;
+  return {
+    startDay,
+    endDay,
+    ...getLogicalDayRange(startDay, endDay, startOfDayMinutes),
+  };
+}
+
+export function getDashboardCurrentPeriodLabel(period: DashboardPeriod): string {
+  if (period === "Week") return "This Week";
+  if (period === "Month") return "This Month";
+  return "Today";
+}
+
+export function shiftDashboardPeriodDay(day: string, period: DashboardPeriod, direction: -1 | 1): string {
+  if (period === "Week") return shiftIsoDate(day, direction * 7);
+  if (period === "Month") return shiftIsoMonth(day, direction);
+  return shiftIsoDate(day, direction);
+}
+
+export function getSafeClassificationNavigationDay(
+  day: string,
+  range: ClassificationRange,
+  direction: -1 | 0 | 1,
+  todayDay: string,
+  startOfDayMinutes = 0,
+  startOfWeek: StartOfWeek = DEFAULT_START_OF_WEEK,
+): string {
+  if (direction === 0) return todayDay;
+
+  const targetDay = shiftIsoDate(day, range === "Week" ? direction * 7 : direction);
+  if (direction < 0) return targetDay;
+  if (range === "Day") return targetDay <= todayDay ? targetDay : todayDay;
+
+  const targetWeekRange = getDashboardPeriodRange(targetDay, "Week", startOfDayMinutes, startOfWeek);
+  return targetWeekRange.startDay <= todayDay && todayDay <= targetWeekRange.endDay ? todayDay : targetDay;
+}
+
+export function getInsightPeriodRange(selectedDay: string, startOfDayMinutes = 0) {
+  const days = 90;
+  const startDay = shiftIsoDate(selectedDay, -(days - 1));
+  return {
+    startDay,
+    endDay: selectedDay,
+    ...getLogicalDayRange(startDay, selectedDay, startOfDayMinutes),
+  };
+}
+
+export function formatDashboardPeriodLabel(period: DashboardPeriod, startDay: string, endDay: string): string {
+  if (period === "Today") return formatDayLabel(endDay);
+  return `${period} · ${formatDayLabel(startDay)}–${formatDayLabel(endDay)}`;
+}
