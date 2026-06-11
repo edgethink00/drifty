@@ -565,8 +565,9 @@ export default function App() {
     () => ({
       fallbackCandidates: segments,
       includeAiClassifications: showAiClassificationImpact,
+      rules: classificationRules,
     }),
-    [segments, showAiClassificationImpact],
+    [classificationRules, segments, showAiClassificationImpact],
   );
   const recentDriftAlarmFocusTargets = useMemo(
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
@@ -1400,6 +1401,11 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedLocalAiSetup(localAiSetup)));
   }, [localAiSetup]);
+
+  // Load rules at startup too: live drift detection reads them through classification options.
+  useEffect(() => {
+    void loadClassificationRules();
+  }, [loadClassificationRules]);
 
   useEffect(() => {
     if (activeTab !== "settings" || settingsSection !== "classification") return;

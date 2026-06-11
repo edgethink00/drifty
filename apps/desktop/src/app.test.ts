@@ -534,6 +534,69 @@ describe('domain helpers', () => {
     expect(classifyActivity(segment, { includeAiClassifications: false })).toEqual({ category: 'workspace', productivity: 'focus' });
   });
 
+  it('applies a matching site rule before built-in heuristics', () => {
+    const netflix = {
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'www.netflix.com',
+      siteTitle: 'Netflix',
+    };
+    const rules = [{ targetKind: 'site' as const, targetValue: 'netflix.com', category: 'entertainment' as const, productivity: 'neutral' as const, enabled: true }];
+
+    expect(classifyActivityDetailed(netflix, { rules })).toMatchObject({ productivity: 'neutral', source: 'rule' });
+    expect(classifyActivityDetailed({ ...netflix, siteDomain: 'help.netflix.com' }, { rules })).toMatchObject({ productivity: 'neutral', source: 'rule' });
+    expect(classifyActivityDetailed(netflix)).toMatchObject({ productivity: 'drift', source: 'domain-db' });
+  });
+
+  it('applies app rules by bundle id or normalized app name', () => {
+    const game = {
+      ...segments[0],
+      appName: 'League of Legends',
+      bundleId: 'com.riotgames.LeagueofLegends',
+      windowTitle: 'Summoner\'s Rift',
+    };
+
+    expect(classifyActivityDetailed(game, {
+      rules: [{ targetKind: 'app', targetValue: 'com.riotgames.LeagueofLegends', category: 'game', productivity: 'neutral', enabled: true }],
+    })).toMatchObject({ productivity: 'neutral', source: 'rule' });
+
+    expect(classifyActivityDetailed({ ...game, bundleId: null }, {
+      rules: [{ targetKind: 'app', targetValue: '  league  OF legends ', category: 'game', productivity: 'neutral', enabled: true }],
+    })).toMatchObject({ productivity: 'neutral', source: 'rule' });
+  });
+
+  it('lets rules override stored llm classifications but not manual corrections', () => {
+    const rules = [{ targetKind: 'site' as const, targetValue: 'youtube.com', category: 'entertainment' as const, productivity: 'neutral' as const, enabled: true }];
+    const base = {
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'youtube.com',
+    };
+
+    expect(classifyActivityDetailed({
+      ...base,
+      classification: { category: 'entertainment', productivity: 'drift', source: 'llm', confidence: 0.9, aiResult: true },
+    }, { rules })).toMatchObject({ productivity: 'neutral', source: 'rule' });
+
+    expect(classifyActivityDetailed({
+      ...base,
+      classification: { category: 'entertainment', productivity: 'focus', source: 'manual', confidence: 1, aiResult: false },
+    }, { rules })).toMatchObject({ productivity: 'focus', source: 'manual' });
+  });
+
+  it('skips disabled rules', () => {
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'netflix.com',
+    }, {
+      rules: [{ targetKind: 'site', targetValue: 'netflix.com', category: 'entertainment', productivity: 'neutral', enabled: false }],
+    })).toMatchObject({ productivity: 'drift', source: 'domain-db' });
+  });
+
   it('uses the native app registry before context fallback', () => {
     expect(classifyActivityDetailed({
       ...segments[0],

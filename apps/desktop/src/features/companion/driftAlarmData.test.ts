@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+
+import { buildDriftAlarmCandidates } from "./driftAlarmData";
+import type { ActivitySegment, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
+
+const driftSegment: ActivitySegment = {
+  id: "seg-1",
+  startedAt: "2026-06-11T09:00:00.000Z",
+  endedAt: "2026-06-11T09:10:00.000Z",
+  durationSeconds: 600,
+  appName: "Safari",
+  bundleId: "com.apple.Safari",
+  windowTitle: "Netflix",
+  browserName: "Safari",
+  siteDomain: "netflix.com",
+  siteTitle: "Netflix",
+  platform: "macos",
+  source: "nsworkspace",
+};
+
+const currentSnapshot: CurrentActivitySnapshot = {
+  observedAt: "2026-06-11T09:10:00.000Z",
+  appName: "Safari",
+  bundleId: "com.apple.Safari",
+  windowTitle: "Netflix",
+  browserName: "Safari",
+  siteDomain: "netflix.com",
+  siteTitle: "Netflix",
+  source: "nsworkspace",
+};
+
+function buildCandidates(classificationOptions: ClassificationOptions) {
+  return buildDriftAlarmCandidates({
+    segments: [driftSegment],
+    currentSnapshot,
+    classificationOptions,
+    minimumDurationSeconds: 0,
+  });
+}
+
+describe("buildDriftAlarmCandidates", () => {
+  it("flags a live drift snapshot without a correction rule", () => {
+    const candidates = buildCandidates({});
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ category: "entertainment", sourceSegmentId: "seg-1" });
+  });
+
+  it("suppresses the same window after a Not a drift correction rule", () => {
+    const candidates = buildCandidates({
+      rules: [{ targetKind: "site", targetValue: "netflix.com", category: "entertainment", productivity: "neutral", enabled: true }],
+    });
+
+    expect(candidates).toEqual([]);
+  });
+
+  it("suppresses an app-target correction rule for non-browser windows", () => {
+    const gameSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "seg-2",
+      appName: "League of Legends",
+      bundleId: "com.riotgames.LeagueofLegends",
+      windowTitle: "Summoner's Rift",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+    };
+    const gameSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      appName: "League of Legends",
+      bundleId: "com.riotgames.LeagueofLegends",
+      windowTitle: "Summoner's Rift",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+    };
+
+    const withoutRule = buildDriftAlarmCandidates({
+      segments: [gameSegment],
+      currentSnapshot: gameSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+    const withRule = buildDriftAlarmCandidates({
+      segments: [gameSegment],
+      currentSnapshot: gameSnapshot,
+      classificationOptions: {
+        rules: [{ targetKind: "app", targetValue: "com.riotgames.LeagueofLegends", category: "game", productivity: "neutral", enabled: true }],
+      },
+      minimumDurationSeconds: 0,
+    });
+
+    expect(withoutRule).toHaveLength(1);
+    expect(withRule).toEqual([]);
+  });
+});

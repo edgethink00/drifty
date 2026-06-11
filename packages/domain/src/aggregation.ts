@@ -3,6 +3,7 @@ import type {
   ActivityClassification,
   ActivitySegment,
   ClassificationOptions,
+  ClassificationRuleOption,
   FlowIntervalMinutes,
   FlowBlock,
   HourBucket,
@@ -630,18 +631,84 @@ export function classifyActivity(segment: ActivitySegment, options?: Classificat
 
 export function classifyActivityDetailed(segment: ActivitySegment, options?: ClassificationOptions): ActivityClassificationDetail {
   const stored = segment.classification;
-  if (stored && (stored.aiResult !== true || options?.includeAiClassifications !== false)) {
-    const source: ClassificationSource = stored.source === "llm" || stored.source === "manual" || stored.source === "rule" ? stored.source : "stored";
+  const storedUsable = stored && (stored.aiResult !== true || options?.includeAiClassifications !== false) ? stored : null;
+  const surface: ClassificationSurface = isBrowserActivity(segment) ? "browser" : "app";
+
+  // Precedence: manual correction > user rule > other stored (llm/rule batch) > heuristics.
+  // Live rules must beat stored llm results to mirror apply_classification_rules, which
+  // overwrites llm rows when stamping rules onto persisted segments.
+  if (storedUsable && storedUsable.source === "manual") {
     return detail(
-      { category: stored.category, productivity: stored.productivity },
-      isBrowserActivity(segment) ? "browser" : "app",
+      { category: storedUsable.category, productivity: storedUsable.productivity },
+      surface,
+      "manual",
+      storedUsable.confidence,
+      storedUsable.reason ?? "Stored activity classification",
+    );
+  }
+
+  const matchedRule = findMatchingClassificationRule(segment, options?.rules);
+  if (matchedRule) {
+    return detail(
+      { category: matchedRule.category, productivity: matchedRule.productivity },
+      surface,
+      "rule",
+      matchedRule.confidence ?? 1,
+      `Matched local ${matchedRule.targetKind} rule: ${matchedRule.targetValue}`,
+    );
+  }
+
+  if (storedUsable) {
+    const source: ClassificationSource = storedUsable.source === "llm" || storedUsable.source === "rule" ? storedUsable.source : "stored";
+    return detail(
+      { category: storedUsable.category, productivity: storedUsable.productivity },
+      surface,
       source,
-      stored.confidence,
-      stored.reason ?? "Stored activity classification",
+      storedUsable.confidence,
+      storedUsable.reason ?? "Stored activity classification",
     );
   }
 
   return isBrowserActivity(segment) ? classifyBrowserActivity(segment) : classifyAppActivity(segment);
+}
+
+export function findMatchingClassificationRule(segment: ActivitySegment, rules?: ClassificationRuleOption[]): ClassificationRuleOption | null {
+  if (!rules || rules.length === 0) return null;
+
+  for (const rule of rules) {
+    if (rule.enabled === false) continue;
+
+    if (rule.targetKind === "site") {
+      const host = normalizeRuleSiteTarget(segment.siteDomain || segment.siteUrl);
+      const target = normalizeRuleSiteTarget(rule.targetValue);
+      if (host && target && (host === target || host.endsWith(`.${target}`))) return rule;
+      continue;
+    }
+
+    const bundleId = segment.bundleId?.trim() ?? "";
+    if (bundleId && bundleId === rule.targetValue.trim()) return rule;
+    const normalizedTarget = normalizeRuleAppTarget(rule.targetValue);
+    if (normalizedTarget && normalizeRuleAppTarget(segment.appName) === normalizedTarget) return rule;
+  }
+
+  return null;
+}
+
+// Mirrors the tracker's _normalize_site_target so live matching agrees with the stored batch.
+function normalizeRuleSiteTarget(value?: string | null): string {
+  let host = normalizeText(value);
+  const schemeIndex = host.indexOf("://");
+  if (schemeIndex !== -1) host = host.slice(schemeIndex + 3);
+  host = host.split("/")[0].split("?")[0].split("#")[0];
+  const credentialsIndex = host.lastIndexOf("@");
+  if (credentialsIndex !== -1) host = host.slice(credentialsIndex + 1);
+  host = host.split(":")[0];
+  while (host.startsWith("www.")) host = host.slice(4);
+  return host.replace(/^\.+|\.+$/g, "");
+}
+
+function normalizeRuleAppTarget(value?: string | null): string {
+  return normalizeText(value).split(/\s+/).filter(Boolean).join(" ");
 }
 
 export function categorizeActivity(segment: ActivitySegment, options?: ClassificationOptions): ProductivityLabel {
