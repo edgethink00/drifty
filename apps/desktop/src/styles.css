@@ -6102,6 +6102,10 @@ input, textarea { color: inherit; }
   gap: var(--space-4);
 }
 
+.history-show-more {
+  justify-self: center;
+}
+
 .history-group {
   display: grid;
   gap: var(--space-2);
