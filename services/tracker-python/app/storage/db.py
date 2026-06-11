@@ -366,7 +366,7 @@ class TrackerDatabase:
                     snapshot.site_source,
                     "macos",
                     snapshot.source,
-                    1.0,
+                    getattr(snapshot, "capture_confidence", 1.0),
                     json.dumps(asdict(snapshot)),
                 ),
             )

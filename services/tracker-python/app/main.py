@@ -346,6 +346,8 @@ def get_current_snapshot():
             "youtubePlaylistId": snapshot.youtube_playlist_id,
             "youtubeIsShorts": snapshot.youtube_is_shorts,
             "source": snapshot.source,
+            "siteSource": snapshot.site_source,
+            "captureConfidence": snapshot.capture_confidence,
         },
     )
 

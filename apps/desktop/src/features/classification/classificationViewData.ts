@@ -142,12 +142,20 @@ export function stableChromeWindowTitle(segment: ActivitySegment, title: string)
   return null;
 }
 
+export function windowTitleMatchesSiteTitle(windowTitle: string, siteTitle: string, stableWindowTitle: string | null): boolean {
+  if (!windowTitle || !siteTitle) return true;
+  return windowTitle.startsWith(siteTitle) || siteTitle.startsWith(stableWindowTitle ?? windowTitle);
+}
+
 export function classificationActivityLabel(segment: ActivitySegment): string {
   const windowTitle = (segment.windowTitle || "").trim();
+  const siteTitle = (segment.siteTitle || "").trim();
   const stableWindowTitle = windowTitle ? stableChromeWindowTitle(segment, windowTitle) : null;
-  const rawLabel = stableWindowTitle
-    || windowTitle
-    || (segment.siteTitle || "").trim()
+  // Segments are grouped by site fields, so a window title captured from a
+  // different window than the recorded tab must not be used as the label.
+  const windowTitleUsable = windowTitleMatchesSiteTitle(windowTitle, siteTitle, stableWindowTitle);
+  const rawLabel = (windowTitleUsable ? stableWindowTitle || windowTitle : "")
+    || siteTitle
     || (segment.siteDomain || "").trim()
     || segment.appName;
   return sanitizeCaptureText(rawLabel);

@@ -7,7 +7,13 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.tracker.macos_workspace import _browser_metadata, _browser_script, _youtube_ids, current_snapshot
+from app.tracker.macos_workspace import (
+    BrowserMetadata,
+    _browser_metadata,
+    _browser_script,
+    _youtube_ids,
+    current_snapshot,
+)
 
 
 class MacosWorkspaceTests(unittest.TestCase):
@@ -15,16 +21,19 @@ class MacosWorkspaceTests(unittest.TestCase):
         safari_script = _browser_script("Safari")
         self.assertIsNotNone(safari_script)
         self.assertIn('tell application "Safari"', safari_script)
-        self.assertIn('front document', safari_script)
+        self.assertIn('name of current tab of w', safari_script)
         self.assertIn('URL of front document', safari_script)
         self.assertIn('name of front document', safari_script)
+        self.assertIn('"STALE"', safari_script)
 
         for app_name in ["Google Chrome", "Arc", "Brave Browser", "Chromium", "Microsoft Edge"]:
             with self.subTest(app_name=app_name):
                 script = _browser_script(app_name)
                 self.assertIsNotNone(script)
                 self.assertIn(f'tell application "{app_name}"', script)
-                self.assertIn('active tab of front window', script)
+                self.assertIn('title of active tab of w', script)
+                self.assertIn('URL of active tab of front window', script)
+                self.assertIn('"STALE"', script)
 
         firefox_script = _browser_script("Firefox")
         self.assertIsNotNone(firefox_script)
@@ -35,6 +44,15 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertNotIn('keystroke', firefox_script.lower())
 
         self.assertIsNone(_browser_script("Preview"))
+
+    def test_browser_scripts_read_ax_title_in_same_pass(self) -> None:
+        for app_name in ["Safari", "Google Chrome", "Arc", "Brave Browser", "Chromium", "Microsoft Edge"]:
+            with self.subTest(app_name=app_name):
+                script = _browser_script(app_name)
+                self.assertIn('first application process whose frontmost is true', script)
+                self.assertIn('axTitle starts with tabTitle', script)
+                self.assertIn('"front-fallback"', script)
+                self.assertIn('"matched"', script)
 
     def test_browser_metadata_matrix_for_supported_browsers(self) -> None:
         cases = [
@@ -48,25 +66,42 @@ class MacosWorkspaceTests(unittest.TestCase):
         ]
         url = 'https://www.example.com/path?ref=tracker'
         title = 'Example Title'
+        ax_title = 'Example Title - Google Chrome - Profile'
 
         for app_name in cases:
             with self.subTest(app_name=app_name):
-                with patch('app.tracker.macos_workspace._run_osascript', return_value=f'{url}\n{title}') as mock_run:
+                with patch(
+                    'app.tracker.macos_workspace._run_osascript',
+                    return_value=f'{url}\n{title}\nmatched\n{ax_title}',
+                ) as mock_run:
                     result = _browser_metadata(app_name)
 
                 self.assertEqual(
                     result,
-                    (
-                        app_name,
-                        'example.com',
-                        title,
-                        url,
-                        None,
-                        None,
-                        None,
+                    BrowserMetadata(
+                        browser_name=app_name,
+                        site_domain='example.com',
+                        site_title=title,
+                        site_url=url,
+                        ax_window_title=ax_title,
+                        match_state='matched',
                     ),
                 )
                 mock_run.assert_called_once()
+
+    def test_browser_metadata_parses_legacy_two_line_output(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript', return_value='https://www.example.com/path\nExample'):
+            result = _browser_metadata('Safari')
+
+        self.assertEqual(
+            result,
+            BrowserMetadata(
+                browser_name='Safari',
+                site_domain='example.com',
+                site_title='Example',
+                site_url='https://www.example.com/path',
+            ),
+        )
 
     def test_browser_metadata_returns_none_title_for_single_line_output(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', return_value='https://www.example.com/path'):
@@ -74,14 +109,10 @@ class MacosWorkspaceTests(unittest.TestCase):
 
         self.assertEqual(
             result,
-            (
-                'Safari',
-                'example.com',
-                None,
-                'https://www.example.com/path',
-                None,
-                None,
-                None,
+            BrowserMetadata(
+                browser_name='Safari',
+                site_domain='example.com',
+                site_url='https://www.example.com/path',
             ),
         )
 
@@ -89,21 +120,29 @@ class MacosWorkspaceTests(unittest.TestCase):
         with patch('app.tracker.macos_workspace._run_osascript', return_value='') as mock_run:
             result = _browser_metadata('Microsoft Edge')
 
-        self.assertEqual(result, ('Microsoft Edge', None, None, None, None, None, None))
+        self.assertEqual(result, BrowserMetadata(browser_name='Microsoft Edge'))
+        mock_run.assert_called_once()
+
+    def test_browser_metadata_marks_stale_when_frontmost_app_changed(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript', return_value='STALE') as mock_run:
+            result = _browser_metadata('Google Chrome')
+
+        self.assertEqual(result, BrowserMetadata(browser_name='Google Chrome', match_state='stale'))
+        self.assertIsNone(result.site_domain)
         mock_run.assert_called_once()
 
     def test_browser_metadata_skips_unsupported_apps_without_running_osascript(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run:
             result = _browser_metadata('Preview')
 
-        self.assertEqual(result, (None, None, None, None, None, None, None))
+        self.assertEqual(result, BrowserMetadata())
         mock_run.assert_not_called()
 
     def test_browser_metadata_returns_empty_metadata_for_supported_browser_exception(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('osascript failed')) as mock_run:
             result = _browser_metadata('Firefox')
 
-        self.assertEqual(result, ('Firefox', None, None, None, None, None, None))
+        self.assertEqual(result, BrowserMetadata(browser_name='Firefox'))
         mock_run.assert_called_once()
 
     def test_youtube_ids_cover_supported_url_shapes(self) -> None:
@@ -124,7 +163,7 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_current_snapshot_preserves_app_tracking_without_window_title(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
-             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)) as mock_browser_metadata:
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
             mock_run.return_value = 'Notes\ncom.apple.Notes'
 
             snapshot = current_snapshot()
@@ -133,12 +172,13 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.bundle_id, 'com.apple.Notes')
         self.assertIsNone(snapshot.window_title)
         self.assertEqual(snapshot.source, 'nsworkspace')
+        self.assertEqual(snapshot.capture_confidence, 1.0)
         mock_browser_metadata.assert_called_once_with('Notes')
 
     def test_current_snapshot_uses_atomic_window_title_when_available(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
              patch('app.tracker.macos_workspace.read_front_window_title') as mock_window_title, \
-             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)) as mock_browser_metadata:
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
             mock_run.return_value = 'Claude\ncom.anthropic.claude\nClaude Chat'
 
             snapshot = current_snapshot()
@@ -153,7 +193,7 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_current_snapshot_uses_same_frontmost_process_for_app_and_window_title(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value='Virev AI - Google Chrome') as mock_window_title, \
-             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)) as mock_browser_metadata:
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
             mock_run.return_value = 'Claude\ncom.anthropic.claude'
 
             snapshot = current_snapshot()
@@ -169,7 +209,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events lookup failed')) as mock_run, \
              patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes')) as mock_lsappinfo, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
-             patch('app.tracker.macos_workspace._browser_metadata', return_value=(None, None, None, None, None, None, None)):
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
             snapshot = current_snapshot()
 
         self.assertEqual(snapshot.app_name, 'Notes')
@@ -178,6 +218,77 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.source, 'nsworkspace')
         mock_run.assert_called_once()
         mock_lsappinfo.assert_called_once()
+
+    def test_current_snapshot_prefers_ax_title_from_browser_pass(self) -> None:
+        metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            site_domain='youtube.com',
+            site_title='Video - YouTube',
+            site_url='https://www.youtube.com/watch?v=abc123',
+            youtube_video_id='abc123',
+            ax_window_title='Video - YouTube - 오디오 재생 - Chrome - Alex',
+            match_state='matched',
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nStale earlier title'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.window_title, 'Video - YouTube - 오디오 재생 - Chrome - Alex')
+        self.assertEqual(snapshot.site_domain, 'youtube.com')
+        self.assertEqual(snapshot.site_source, 'applescript')
+        self.assertEqual(snapshot.capture_confidence, 1.0)
+        self.assertEqual(snapshot.source, 'accessibility')
+
+    def test_current_snapshot_lowers_confidence_on_front_fallback_with_ax_title(self) -> None:
+        metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            site_domain='newtab',
+            site_title='새 탭',
+            site_url='chrome://newtab/',
+            ax_window_title='Video - YouTube - Chrome - Alex',
+            match_state='front-fallback',
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nVideo - YouTube - Chrome - Alex'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.site_source, 'applescript-front-window')
+        self.assertEqual(snapshot.capture_confidence, 0.5)
+
+    def test_current_snapshot_front_fallback_without_ax_title_keeps_moderate_confidence(self) -> None:
+        metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            site_domain='example.com',
+            site_title='Example',
+            site_url='https://example.com/',
+            ax_window_title=None,
+            match_state='front-fallback',
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.site_source, 'applescript-front-window')
+        self.assertEqual(snapshot.capture_confidence, 0.8)
+        self.assertIsNone(snapshot.window_title)
+
+    def test_current_snapshot_records_no_site_data_for_stale_browser_read(self) -> None:
+        metadata = BrowserMetadata(browser_name='Google Chrome', match_state='stale')
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nSome window'
+
+            snapshot = current_snapshot()
+
+        self.assertIsNone(snapshot.site_domain)
+        self.assertIsNone(snapshot.site_source)
+        self.assertEqual(snapshot.capture_confidence, 1.0)
 
 
 if __name__ == '__main__':

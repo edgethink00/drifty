@@ -1,5 +1,5 @@
 export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "unknown";
-export type SiteSource = "applescript" | "window-title" | "unknown" | null;
+export type SiteSource = "applescript" | "applescript-front-window" | "window-title" | "unknown" | null;
 export const FLOW_INTERVAL_OPTIONS = [3, 5, 10] as const;
 export type FlowIntervalMinutes = typeof FLOW_INTERVAL_OPTIONS[number];
 export type ProductivityLabel = "focus" | "neutral" | "drift";

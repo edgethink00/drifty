@@ -28,6 +28,20 @@ class Snapshot:
     youtube_playlist_id: str | None = None
     youtube_is_shorts: bool | None = None
     site_source: str | None = None
+    capture_confidence: float = 1.0
+
+
+@dataclass
+class BrowserMetadata:
+    browser_name: str | None = None
+    site_domain: str | None = None
+    site_title: str | None = None
+    site_url: str | None = None
+    youtube_video_id: str | None = None
+    youtube_playlist_id: str | None = None
+    youtube_is_shorts: bool | None = None
+    ax_window_title: str | None = None
+    match_state: str | None = None
 
 
 def _run_osascript(script: str) -> str:
@@ -115,26 +129,29 @@ def _normalize_domain(url: str | None) -> str | None:
 
 
 def _browser_script(app_name: str) -> str | None:
+    # The AX front-window title is read in the same osascript pass as the tab
+    # query, then used to pick the window the user is actually looking at:
+    # Chrome's AppleScript "front window" can lag the real z-order when several
+    # windows (e.g. multiple profiles, fullscreen Spaces) are open.
     if app_name == "Safari":
-        return """
-        tell application "Safari"
-          if not (exists front document) then return ""
-          set currentUrl to URL of front document
-          set currentTitle to name of front document
-          return currentUrl & linefeed & currentTitle
-        end tell
-        """
+        return _tab_matching_script(
+            app_name="Safari",
+            exists_check="exists front document",
+            tab_title="name of current tab of w",
+            tab_url="URL of current tab of w",
+            fallback_url="URL of front document",
+            fallback_title="name of front document",
+        )
 
     if app_name in {"Google Chrome", "Microsoft Edge", "Arc", "Brave Browser", "Chromium"}:
-        return f'''
-        tell application "{app_name}"
-          if not (exists front window) then return ""
-          set activeTab to active tab of front window
-          set currentUrl to URL of activeTab
-          set currentTitle to title of activeTab
-          return currentUrl & linefeed & currentTitle
-        end tell
-        '''
+        return _tab_matching_script(
+            app_name=app_name,
+            exists_check="exists front window",
+            tab_title="title of active tab of w",
+            tab_url="URL of active tab of w",
+            fallback_url="URL of active tab of front window",
+            fallback_title="title of active tab of front window",
+        )
 
     if app_name == "Firefox":
         return """
@@ -144,12 +161,61 @@ def _browser_script(app_name: str) -> str | None:
             if not (exists front window) then return ""
             set currentUrl to value of text field 1 of toolbar 1 of front window
             set currentTitle to value of attribute "AXTitle" of front window
-            return currentUrl & linefeed & currentTitle
+            return currentUrl & linefeed & currentTitle & linefeed & "focused" & linefeed & currentTitle
           end tell
         end tell
         """
 
     return None
+
+
+def _tab_matching_script(
+    app_name: str,
+    exists_check: str,
+    tab_title: str,
+    tab_url: str,
+    fallback_url: str,
+    fallback_title: str,
+) -> str:
+    return f'''
+        set axTitle to ""
+        tell application "System Events"
+          try
+            set frontProc to first application process whose frontmost is true
+            if name of frontProc is not equal to "{app_name}" then return "STALE"
+            tell frontProc
+              if exists front window then set axTitle to name of front window
+            end tell
+          end try
+        end tell
+        tell application "{app_name}"
+          if not ({exists_check}) then return ""
+          set matchedUrl to ""
+          set matchedTitle to ""
+          set bestLength to -1
+          if axTitle is not "" then
+            repeat with w in windows
+              try
+                set tabTitle to {tab_title}
+                if tabTitle is not "" and axTitle starts with tabTitle then
+                  if (length of tabTitle) > bestLength then
+                    set matchedUrl to {tab_url}
+                    set matchedTitle to tabTitle
+                    set bestLength to length of tabTitle
+                  end if
+                end if
+              end try
+            end repeat
+          end if
+          set matchState to "matched"
+          if bestLength < 0 then
+            set matchState to "front-fallback"
+            set matchedUrl to {fallback_url}
+            set matchedTitle to {fallback_title}
+          end if
+          return matchedUrl & linefeed & matchedTitle & linefeed & matchState & linefeed & axTitle
+        end tell
+    '''
 
 
 def _youtube_ids(url: str | None) -> tuple[str | None, str | None, bool | None]:
@@ -179,27 +245,42 @@ def _youtube_ids(url: str | None) -> tuple[str | None, str | None, bool | None]:
     return video_id, playlist_id, is_shorts
 
 
-def _browser_metadata(app_name: str | None) -> tuple[str | None, str | None, str | None, str | None, str | None, str | None, bool | None]:
+def _browser_metadata(app_name: str | None) -> BrowserMetadata:
     if not app_name:
-        return None, None, None, None, None, None, None
+        return BrowserMetadata()
 
     script = _browser_script(app_name)
     if not script:
-        return None, None, None, None, None, None, None
+        return BrowserMetadata()
 
     try:
         result = _run_osascript(script)
     except Exception:
-        return app_name, None, None, None, None, None, None
+        return BrowserMetadata(browser_name=app_name)
 
     if not result:
-        return app_name, None, None, None, None, None, None
+        return BrowserMetadata(browser_name=app_name)
+
+    if result.strip() == "STALE":
+        return BrowserMetadata(browser_name=app_name, match_state="stale")
 
     parts = result.splitlines()
     url = parts[0].strip() if parts else None
     title = parts[1].strip() if len(parts) > 1 else None
+    match_state = parts[2].strip() if len(parts) > 2 else None
+    ax_window_title = parts[3].strip() if len(parts) > 3 else None
     video_id, playlist_id, is_shorts = _youtube_ids(url)
-    return app_name, _normalize_domain(url), title or None, url or None, video_id, playlist_id, is_shorts
+    return BrowserMetadata(
+        browser_name=app_name,
+        site_domain=_normalize_domain(url),
+        site_title=title or None,
+        site_url=url or None,
+        youtube_video_id=video_id,
+        youtube_playlist_id=playlist_id,
+        youtube_is_shorts=is_shorts,
+        ax_window_title=ax_window_title or None,
+        match_state=match_state or None,
+    )
 
 
 def current_snapshot() -> Snapshot:
@@ -212,7 +293,23 @@ def current_snapshot() -> Snapshot:
     if not app_name:
         app_name = "Unavailable"
 
-    browser_name, site_domain, site_title, site_url, youtube_video_id, youtube_playlist_id, youtube_is_shorts = _browser_metadata(app_name)
+    browser = _browser_metadata(app_name)
+
+    # Prefer the AX title captured in the same osascript pass as the tab read,
+    # so window_title and site_* cannot describe two different moments.
+    if browser.ax_window_title:
+        window_title = browser.ax_window_title
+
+    site_source = None
+    capture_confidence = 1.0
+    if browser.site_domain:
+        if browser.match_state == "front-fallback":
+            # No window's active tab matched the focused window's title, so the
+            # tab data may belong to a window other than the one on screen.
+            site_source = "applescript-front-window"
+            capture_confidence = 0.5 if browser.ax_window_title else 0.8
+        else:
+            site_source = "applescript"
 
     return Snapshot(
         observed_at=utc_now_iso(),
@@ -220,14 +317,15 @@ def current_snapshot() -> Snapshot:
         bundle_id=bundle_id,
         window_title=window_title,
         source="accessibility" if window_title else "nsworkspace",
-        browser_name=browser_name,
-        site_domain=site_domain,
-        site_title=site_title,
-        site_url=site_url,
-        youtube_video_id=youtube_video_id,
-        youtube_playlist_id=youtube_playlist_id,
-        youtube_is_shorts=youtube_is_shorts,
-        site_source="applescript" if site_domain else None,
+        browser_name=browser.browser_name,
+        site_domain=browser.site_domain,
+        site_title=browser.site_title,
+        site_url=browser.site_url,
+        youtube_video_id=browser.youtube_video_id,
+        youtube_playlist_id=browser.youtube_playlist_id,
+        youtube_is_shorts=browser.youtube_is_shorts,
+        site_source=site_source,
+        capture_confidence=capture_confidence,
     )
 
 
