@@ -2139,11 +2139,11 @@ input, textarea { color: inherit; }
 
 .classification-panel-view__category-row {
   --classification-category-tone: var(--classification-selected-tone);
-  border-color: color-mix(in srgb, var(--classification-category-tone) 14%, var(--line));
+  border: 2px solid color-mix(in srgb, color-mix(in srgb, var(--classification-category-tone) 2.5%, var(--line)) 50%, transparent);
   background:
     linear-gradient(135deg,
-      color-mix(in srgb, var(--classification-category-tone) 12%, var(--surface)),
-      color-mix(in srgb, var(--classification-category-tone) 5%, var(--surface)));
+      color-mix(in srgb, var(--classification-category-tone) 2%, var(--surface)),
+      color-mix(in srgb, var(--classification-category-tone) 1%, var(--surface)));
 }
 
 .classification-panel-view__category-row:has(.category-dot--workspace) {
@@ -2194,11 +2194,11 @@ input, textarea { color: inherit; }
 }
 
 .classification-panel-view__category-row:hover {
-  border-color: color-mix(in srgb, var(--classification-category-tone) 26%, var(--line-strong));
+  border-color: color-mix(in srgb, color-mix(in srgb, var(--classification-category-tone) 5%, var(--line-strong)) 50%, transparent);
   background:
     linear-gradient(135deg,
-      color-mix(in srgb, var(--classification-category-tone) 18%, var(--surface-strong)),
-      color-mix(in srgb, var(--classification-category-tone) 8%, var(--surface)));
+      color-mix(in srgb, var(--classification-category-tone) 4%, var(--surface-strong)),
+      color-mix(in srgb, var(--classification-category-tone) 2%, var(--surface)));
 }
 
 .classification-panel-view__category-row[data-selected="true"] {
