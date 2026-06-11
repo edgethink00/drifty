@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { secondsToLabel, type FlowBlock } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
+import { ClassificationSourcePill } from "../classification/ClassificationBreakdownCards";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import { blockDetailLabel, blockDisplayName, groupContextLabel } from "./flowChartFormat";
@@ -108,7 +109,7 @@ export function FlowHoverCard({
         <FlowIdentityPill color={PRODUCTIVITY_COLORS[block.productivity]} label={productivityLabel(block.productivity)} />
       </div>
       {detailLabel ? <p className="flow-hover-card__detail">{detailLabel}</p> : null}
-      <ClassificationSourcePill source={block.classificationSource} ai={block.aiClassification} />
+      <ClassificationSourcePill source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} />
     </div>
   );
 }
@@ -122,29 +123,3 @@ function FlowIdentityPill({ color, label }: { readonly color: string; readonly l
   );
 }
 
-function ClassificationSourcePill({ source, ai }: { readonly source?: string | null; readonly ai?: boolean | null }) {
-  return <span className={`classification-source-pill${ai ? " classification-source-pill--ai" : ""}`}>{classificationSourceLabel(source, ai)}</span>;
-}
-
-function classificationSourceLabel(source?: string | null, ai?: boolean | null): string {
-  if (ai) return "AI";
-
-  switch (source) {
-    case "llm": return "AI";
-    case "domain-db":
-    case "app-db":
-    case "youtube":
-    case "rule":
-      return "Predefined rule";
-    case "context": return "Context rule";
-    case "fallback": return "Fallback";
-    case "manual": return "Manual";
-    case "stored": return "Stored";
-    case "unknown":
-    case null:
-    case undefined:
-      return "Unclassified rule";
-    default:
-      return "Unclassified rule";
-  }
-}

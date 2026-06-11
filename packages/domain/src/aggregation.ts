@@ -68,6 +68,7 @@ export interface DayRibbonSegment {
   productivity: ProductivityLabel;
   classificationSource?: ClassificationSource | null;
   aiClassification?: boolean | null;
+  aiCachedClassification?: boolean | null;
   classificationReason?: string | null;
   startMinute: number;
   endMinute: number;
@@ -80,6 +81,7 @@ export interface DayRibbonSegment {
     durationSeconds: number;
     classificationSource?: ClassificationSource | null;
     aiClassification?: boolean | null;
+    aiCachedClassification?: boolean | null;
     classificationReason?: string | null;
   }>;
 }
@@ -109,6 +111,7 @@ export interface ActivityClassificationDetail extends ActivityClassification {
   source: ClassificationSource;
   confidence: number;
   reason: string;
+  aiCached?: boolean | null;
 }
 
 export type ProductivityPersonaId =
@@ -508,6 +511,7 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
             productivity: classification.productivity,
             classificationSource: classification.source,
             aiClassification: classification.source === "llm",
+            aiCachedClassification: classification.aiCached ?? null,
             classificationReason: classification.reason,
             colorKey,
             durationSeconds: overlapSeconds,
@@ -545,6 +549,7 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
             productivity: classification.productivity,
             classificationSource: classification.source,
             aiClassification: classification.source === "llm",
+            aiCachedClassification: classification.aiCached ?? null,
             classificationReason: classification.reason,
             colorKey,
             durationSeconds: existing.block.durationSeconds,
@@ -659,7 +664,12 @@ export function classifyActivityDetailed(segment: ActivitySegment, options?: Cla
     );
   }
 
-  if (storedUsable) {
+  // Stored "rule" rows without a rule id are snapshots of the built-in heuristics
+  // stamped by the AI batch; recompute those below so the original source
+  // (predefined registry vs keyword hints) and any registry updates win over the
+  // snapshot. Rows with a rule id come from user rules and stay authoritative.
+  const stampedHeuristic = storedUsable?.source === "rule" && !storedUsable.classificationRuleId;
+  if (storedUsable && !stampedHeuristic) {
     const source: ClassificationSource = storedUsable.source === "llm" || storedUsable.source === "rule" ? storedUsable.source : "stored";
     return detail(
       { category: storedUsable.category, productivity: storedUsable.productivity },
@@ -667,6 +677,7 @@ export function classifyActivityDetailed(segment: ActivitySegment, options?: Cla
       source,
       storedUsable.confidence,
       storedUsable.reason ?? "Stored activity classification",
+      source === "llm" && storedUsable.reusedAiResult === true ? { aiCached: true } : undefined,
     );
   }
 
@@ -813,6 +824,7 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
     productivity: ProductivityLabel;
     classificationSource?: ClassificationSource | null;
     aiClassification?: boolean | null;
+    aiCachedClassification?: boolean | null;
     classificationReason?: string | null;
     startMinute: number;
     endMinute: number;
@@ -830,6 +842,7 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
       productivity: classification.productivity,
       classificationSource: classification.source,
       aiClassification: classification.source === "llm",
+      aiCachedClassification: classification.aiCached ?? null,
       classificationReason: classification.reason,
       startMinute: Math.max(0, Math.floor((startMs - dayStart) / 60000)),
       endMinute: Math.min(24 * 60, Math.ceil((endMs - dayStart) / 60000)),
@@ -841,6 +854,7 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
         durationSeconds: Math.max(0, Math.round((endMs - startMs) / 1000)),
         classificationSource: classification.source,
         aiClassification: classification.source === "llm",
+        aiCachedClassification: classification.aiCached ?? null,
         classificationReason: classification.reason,
       },
     });
@@ -856,6 +870,7 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
       previous.endMinute = Math.max(previous.endMinute, segment.endMinute);
       previous.totalSeconds = Math.max((previous.endMinute - previous.startMinute) * 60, previous.totalSeconds);
       if (segment.aiClassification) previous.aiClassification = true;
+      if (segment.aiCachedClassification) previous.aiCachedClassification = true;
       previous.activities.push(segment.activity);
       continue;
     }
@@ -866,6 +881,7 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
       productivity: segment.productivity,
       classificationSource: segment.classificationSource,
       aiClassification: segment.aiClassification,
+      aiCachedClassification: segment.aiCachedClassification,
       classificationReason: segment.classificationReason,
       startMinute: segment.startMinute,
       endMinute: segment.endMinute,
@@ -1388,8 +1404,9 @@ function detail(
   source: ClassificationSource,
   confidence: number,
   reason: string,
+  extras?: Pick<ActivityClassificationDetail, "aiCached">,
 ): ActivityClassificationDetail {
-  return { category: classification.category, productivity: classification.productivity, surface, source, confidence, reason };
+  return { category: classification.category, productivity: classification.productivity, surface, source, confidence, reason, ...extras };
 }
 
 function unknownDetail(surface: ClassificationSurface, reason: string): ActivityClassificationDetail {

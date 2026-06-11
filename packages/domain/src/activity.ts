@@ -33,6 +33,8 @@ export interface StoredActivityClassification extends ActivityClassification {
   classifiedAt?: string | null;
   aiResult?: boolean | null;
   stale?: boolean | null;
+  reusedAiResult?: boolean | null;
+  classificationRuleId?: string | null;
 }
 
 export interface ClassificationRuleOption {
@@ -175,6 +177,7 @@ export interface FlowBlock {
   productivity: ProductivityLabel;
   classificationSource?: string | null;
   aiClassification?: boolean | null;
+  aiCachedClassification?: boolean | null;
   classificationReason?: string | null;
   colorKey: string;
   durationSeconds: number;

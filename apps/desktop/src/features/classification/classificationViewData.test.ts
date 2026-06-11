@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
-import { classificationActivityLabel, windowTitleMatchesSiteTitle } from "./classificationViewData";
+import { classificationActivityLabel, classificationSourceLabel, windowTitleMatchesSiteTitle } from "./classificationViewData";
 
 function segment(overrides: Partial<ActivitySegment>): ActivitySegment {
   return {
@@ -14,6 +14,23 @@ function segment(overrides: Partial<ActivitySegment>): ActivitySegment {
     ...overrides,
   };
 }
+
+describe("classificationSourceLabel", () => {
+  it("labels predefined, keyword, and custom rule sources distinctly", () => {
+    expect(classificationSourceLabel("domain-db")).toBe("Predefined rule");
+    expect(classificationSourceLabel("app-db")).toBe("Predefined rule");
+    expect(classificationSourceLabel("youtube")).toBe("Predefined rule");
+    expect(classificationSourceLabel("context")).toBe("Keyword rule");
+    expect(classificationSourceLabel("rule")).toBe("Custom rule");
+  });
+
+  it("labels fresh AI and fingerprint-cache reuse separately", () => {
+    expect(classificationSourceLabel("llm", true)).toBe("AI");
+    expect(classificationSourceLabel("llm", true, true)).toBe("AI cache");
+    expect(classificationSourceLabel(null, true, true)).toBe("AI cache");
+    expect(classificationSourceLabel("unknown")).toBe("Unclassified rule");
+  });
+});
 
 describe("classificationActivityLabel", () => {
   it("keeps the cleaned window title when it matches the captured tab", () => {

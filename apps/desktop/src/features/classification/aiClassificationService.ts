@@ -802,7 +802,9 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
       promptVersion: AI_CLASSIFICATION_PROMPT_VERSION,
       taxonomyVersion: "v1",
       aiResult: true,
-      latencyMs: responseLatencyMs(data),
+      // Fresh responses must always carry a latency so fingerprint-cache reuse
+      // (which stores none) stays distinguishable as "AI cache" downstream.
+      latencyMs: responseLatencyMs(data) ?? 0,
       classifiedAt,
     }];
   });

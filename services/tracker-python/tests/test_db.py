@@ -401,6 +401,23 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(classified["classification"]["productivity"], "focus")
         self.assertEqual(classified["classification"]["source"], "llm")
         self.assertTrue(classified["classification"]["aiResult"])
+        # No request id or latency means the row was copied from the fingerprint cache.
+        self.assertTrue(classified["classification"]["reusedAiResult"])
+
+        self.database.save_classifications([
+            {
+                "segmentId": segment["id"],
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "llm",
+                "confidence": 0.91,
+                "inputFingerprint": "fp-example",
+                "aiResult": True,
+                "latencyMs": 420,
+            }
+        ])
+        fresh = self.database.fetch_timeline("2026-04-06")[0]
+        self.assertFalse(fresh["classification"]["reusedAiResult"])
 
     def test_refresh_non_ai_classifications_preserves_ai_results(self) -> None:
         self.database.insert_segment(

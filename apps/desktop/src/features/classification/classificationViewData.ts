@@ -260,7 +260,7 @@ export function classificationRowSummary(segments: ActivitySegment[], options?: 
   return {
     categoryLabel: categoryValues.size > 1 ? "Mixed" : categoryLabel(firstClassification.category),
     productivityLabel: productivityValues.size > 1 ? "Mixed" : productivityLabel(firstClassification.productivity),
-    sourceLabel: sourceValues.size > 1 ? "Mixed" : classificationSourceLabel(firstClassification.source, firstClassification.source === "llm"),
+    sourceLabel: sourceValues.size > 1 ? "Mixed" : classificationSourceLabel(firstClassification.source, firstClassification.source === "llm", firstClassification.aiCached),
     confidenceLabel,
   };
 }
@@ -423,10 +423,10 @@ export function productivityMixAriaLabel(label: string, entries: CategoryProduct
   return `${label} productivity mix: ${parts.join(", ")}`;
 }
 
-export function classificationSourceLabel(source?: ClassificationSource | null, ai?: boolean | null): string {
-  if (ai || source === "llm") return "AI";
+export function classificationSourceLabel(source?: ClassificationSource | string | null, ai?: boolean | null, aiCached?: boolean | null): string {
+  if (ai || source === "llm") return aiCached ? "AI cache" : "AI";
   if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefined rule";
-  if (source === "context") return "Context rule";
+  if (source === "context") return "Keyword rule";
   if (source === "fallback") return "Fallback";
   if (source === "manual") return "Manual";
   if (source === "rule") return "Custom rule";
