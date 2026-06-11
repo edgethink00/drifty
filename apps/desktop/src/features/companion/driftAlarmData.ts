@@ -1,10 +1,11 @@
 import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
 import { isTauriRuntime } from "./watcherBridge";
-import { classifyActivity, classifyActivityDetailed, isYouTubeBrowsePage } from "@drifty/domain";
+import { classifyActivity, classifyActivityDetailed } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { activitySegmentIdentity, currentSnapshotIdentity, currentSnapshotToSegment, getLatestWatcherSegment } from "./watcherData";
 import { EXTREME_NUDGE_STORAGE_KEY } from "./extremeNudgeData";
+import { segmentForLiveDriftAlarmClassification } from "./liveDriftAlarmClassification";
 export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export type DriftAlarmBreakSnooze = {
@@ -104,7 +105,7 @@ export function buildDriftAlarmCandidates({
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
     } satisfies ClassificationOptions;
-    const currentClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(currentSegment), currentClassificationOptions);
+    const currentClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(currentSegment, segments), currentClassificationOptions);
 
     if (
       currentClassification.productivity === "drift"
@@ -131,7 +132,7 @@ export function buildDriftAlarmCandidates({
   const latestSegment = getLatestWatcherSegment(segments);
   if (!latestSegment) return [];
 
-  const latestClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(latestSegment), classificationOptions);
+  const latestClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(latestSegment, segments), classificationOptions);
   if (
     latestClassification.productivity !== "drift"
     || !classificationConfidenceAllowsDriftAlarm(latestClassification)
@@ -195,18 +196,13 @@ function sumNearbyShoppingDriftSeconds(candidate: ActivitySegment, segments: Act
     if (segmentEnd <= windowStart || segmentStart >= windowEnd) return total;
     if (segmentStart < candidateEnd && segmentEnd > candidateStart) return total;
 
-    const classification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(segment), classificationOptions);
+    const classification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(segment, segments), classificationOptions);
     if (classification.category !== "shopping" || classification.productivity !== "drift") return total;
     if (!classificationConfidenceAllowsDriftAlarm(classification)) return total;
 
     const overlapMs = Math.max(0, Math.min(segmentEnd, windowEnd) - Math.max(segmentStart, windowStart));
     return total + Math.round(overlapMs / 1000);
   }, candidate.durationSeconds);
-}
-
-export function segmentForLiveDriftAlarmClassification(segment: ActivitySegment): ActivitySegment {
-  if (!isYouTubeBrowsePage(segment)) return segment;
-  return { ...segment, classification: null };
 }
 
 export function isCurrentSnapshotFreshEnoughForDriftAlarm(current: CurrentActivitySnapshot, segments: ActivitySegment[]): boolean {
