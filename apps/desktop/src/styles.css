@@ -7143,6 +7143,7 @@ input, textarea { color: inherit; }
   display: grid;
   gap: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 0;
 }
 

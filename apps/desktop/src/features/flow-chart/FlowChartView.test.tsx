@@ -157,6 +157,7 @@ describe("FlowChartView", () => {
     const currentHourLabel = Array.from(document.querySelectorAll(".flow-chart-hours > span"))
       .find((label) => label.textContent === "2pm");
     const currentMinuteLabel = document.querySelector(".flow-chart-row--time-label .flow-chart-row-label");
+    const gridRule = cssRule(".flow-chart-grid");
     const hoursRule = cssRule(".flow-chart-hours");
     const currentHourRule = cssRule(".flow-chart-hours .flow-chart-hour--now");
     const currentHourBackgroundRule = cssRule(".flow-chart-hours .flow-chart-hour--now::before");
@@ -170,6 +171,8 @@ describe("FlowChartView", () => {
 
     expect(currentHourLabel?.classList.contains("flow-chart-hour--now")).toBe(true);
     expect(currentMinuteLabel?.textContent).toBe(":09");
+    expect(gridRule).toContain("overflow-x: auto;");
+    expect(gridRule).toContain("overflow-y: hidden;");
     expect(hoursRule).toContain("overflow: visible;");
     expect(currentHourRule).toContain("justify-self: center;");
     expect(currentHourRule).not.toContain("padding:");
