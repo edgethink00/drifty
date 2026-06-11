@@ -14576,8 +14576,8 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .content--classify .clf-stat {
   min-width: 0;
   min-height: 0;
-  padding: 8px 10px;
-  gap: 4px;
+  padding: 5px 10px;
+  gap: 3px;
   justify-content: center;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
