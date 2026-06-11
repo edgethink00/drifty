@@ -93,4 +93,35 @@ describe("buildDriftAlarmCandidates", () => {
     expect(withoutRule).toHaveLength(1);
     expect(withRule).toEqual([]);
   });
+
+  it("suppresses live YouTube radio playlist drift alarms from the matching history URL", () => {
+    const playlistSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "youtube-playlist-segment",
+      windowTitle: "Summer playlist",
+      siteDomain: "youtube.com",
+      siteTitle: "Summer playlist - YouTube",
+      siteUrl: "https://www.youtube.com/watch?v=MusicQA0001&list=RDMusicQA0001&start_radio=1",
+      youtubeVideoId: "MusicQA0001",
+    };
+    const playlistSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      observedAt: "2026-06-11T09:10:30.000Z",
+      windowTitle: "Summer playlist",
+      siteDomain: "youtube.com",
+      siteTitle: "Summer playlist - YouTube",
+      siteUrl: "https://www.youtube.com/watch?v=MusicQA0001",
+      youtubeVideoId: "MusicQA0001",
+      youtubePlaylistId: null,
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [playlistSegment],
+      currentSnapshot: playlistSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([]);
+  });
 });
