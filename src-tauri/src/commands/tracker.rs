@@ -60,6 +60,12 @@ pub struct ClassificationRuleDeleteQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeleteActivitySegmentsQuery {
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClassificationRuleCandidateQuery {
     pub query: String,
 }
@@ -287,6 +293,22 @@ pub async fn tracker_delete_classification_rule(
     async_runtime::spawn_blocking(move || {
         controller
             .delete_classification_rule(&app, query.id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_activity_segments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DeleteActivitySegmentsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_activity_segments(&app, query.ids)
             .map_err(|error| error.to_string())
     })
     .await

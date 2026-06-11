@@ -27,6 +27,7 @@ class TrackerDatabase:
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
     def _init_db(self) -> None:
@@ -641,6 +642,23 @@ class TrackerDatabase:
                 (rule_id,),
             )
             cursor = conn.execute("DELETE FROM classification_rules WHERE id = ?", (rule_id,))
+            return cursor.rowcount
+
+    def delete_activity_segments(self, segment_ids: list[str]) -> int:
+        normalized_ids = sorted({
+            int(segment_id)
+            for segment_id in segment_ids
+            if segment_id.strip().isdecimal()
+        })
+        if not normalized_ids:
+            return 0
+
+        placeholders = ",".join("?" for _ in normalized_ids)
+        with self.connect() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM activity_segments WHERE id IN ({placeholders})",
+                tuple(normalized_ids),
+            )
             return cursor.rowcount
 
     def search_classification_rule_candidates(self, query: str, limit: int = 20) -> list[dict[str, Any]]:

@@ -132,6 +132,17 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.search_classification_rule_candidates.assert_called_once_with("lin")
         mock_db.apply_classification_rules.assert_called_once_with("2026-04-06T00:00:00", "2026-04-07T00:00:00")
 
+    def test_delete_activity_segments_forwards_string_ids_to_database(self) -> None:
+        mock_db = MagicMock()
+        mock_db.delete_activity_segments.return_value = 2
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.delete_activity_segments({"ids": ["1", 2, "3", None]})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["deleted"], 2)
+        mock_db.delete_activity_segments.assert_called_once_with(["1", "3"])
+
     def test_handle_idle_sample_trims_and_skips_when_threshold_reached(self) -> None:
         mock_db = MagicMock()
         now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)

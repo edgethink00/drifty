@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-tracker-delete-activity-segments"
+description = "Enables the tracker_delete_activity_segments command without any pre-configured scope."
+commands.allow = ["tracker_delete_activity_segments"]
+
+[[permission]]
+identifier = "deny-tracker-delete-activity-segments"
+description = "Denies the tracker_delete_activity_segments command without any pre-configured scope."
+commands.deny = ["tracker_delete_activity_segments"]
