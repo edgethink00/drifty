@@ -105,4 +105,48 @@ describe("HistoryView", () => {
     await waitFor(() => expect(deleteSelected).toHaveBeenCalledWith(["1"]));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
   });
+
+  it("renders adjacent matching app and window records as one selectable row", async () => {
+    const deleteSelected = vi.fn().mockResolvedValue(undefined);
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        onDeleteSelected={deleteSelected}
+        segments={[
+          {
+            id: "cmux-1",
+            appName: "cmux",
+            bundleId: "com.example.cmux",
+            durationSeconds: 600,
+            endedAt: "2026-06-10T09:10:00+00:00",
+            platform: "macos",
+            source: "accessibility",
+            startedAt: "2026-06-10T09:00:00+00:00",
+            windowTitle: "drifty_mac",
+          },
+          {
+            id: "cmux-2",
+            appName: "cmux",
+            bundleId: "com.example.cmux",
+            durationSeconds: 1_200,
+            endedAt: "2026-06-10T09:30:00+00:00",
+            platform: "macos",
+            source: "accessibility",
+            startedAt: "2026-06-10T09:10:00+00:00",
+            windowTitle: "drifty_mac",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("checkbox", { name: /select drifty_mac/i })).toHaveLength(1);
+    expect(screen.getByText("30m")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /select drifty_mac/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete 2 selected/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete records$/i }));
+
+    await waitFor(() => expect(deleteSelected).toHaveBeenCalledWith(["cmux-1", "cmux-2"]));
+  });
 });

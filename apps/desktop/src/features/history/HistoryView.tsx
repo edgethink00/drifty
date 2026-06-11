@@ -1,10 +1,10 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { classifyActivityDetailed } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ProductivityLabel } from "@drifty/domain";
+import type { ActivitySegment, AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
+import { buildHistoryDayGroups, buildHistoryRows, historyRowTitle } from "./historyGroups";
+import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -12,25 +12,6 @@ type HistoryViewProps = {
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
   readonly segments: readonly ActivitySegment[];
 };
-
-type HistoryGroup = {
-  readonly dayKey: string;
-  readonly label: string;
-  readonly segments: readonly ActivitySegment[];
-};
-
-type HistoryClassification = {
-  readonly category: ActivityCategory;
-  readonly productivity: ProductivityLabel;
-  readonly categoryLabel: string;
-  readonly productivityLabel: string;
-};
-
-const historyDayFormatter = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
 
 // History loads ~90 days of segments (easily 10k+); rendering them all at once
 // blocks the main thread, so the list grows in pages instead.
@@ -43,41 +24,28 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
   const normalizedQuery = query.trim().toLowerCase();
 
-  const sortedSegments = useMemo(() => (
-    [...segments].sort((left, right) => (
-      new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime()
-    ))
-  ), [segments]);
+  const historyRows = useMemo(() => buildHistoryRows(segments), [segments]);
 
-  const searchTextCache = useMemo(() => new Map<string, string>(), [segments]);
+  const visibleRows = useMemo(() => (
+    normalizedQuery
+      ? historyRows.filter((row) => row.searchText.includes(normalizedQuery))
+      : historyRows
+  ), [historyRows, normalizedQuery]);
 
-  const visibleSegments = useMemo(() => {
-    if (!normalizedQuery) return sortedSegments;
+  const renderedRows = visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
+  const hiddenCount = visibleRows.length - renderedRows.length;
 
-    return sortedSegments.filter((segment) => {
-      let text = searchTextCache.get(segment.id);
-      if (text === undefined) {
-        text = historySearchText(segment);
-        searchTextCache.set(segment.id, text);
-      }
-      return text.includes(normalizedQuery);
-    });
-  }, [normalizedQuery, searchTextCache, sortedSegments]);
-
-  const renderedSegments = visibleSegments.length > renderLimit
-    ? visibleSegments.slice(0, renderLimit)
-    : visibleSegments;
-  const hiddenCount = visibleSegments.length - renderedSegments.length;
-
-  const groups = useMemo(() => groupHistorySegments(renderedSegments), [renderedSegments]);
+  const groups = useMemo(() => buildHistoryDayGroups(renderedRows), [renderedRows]);
   const selectedCount = selectedIds.size;
   const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
 
-  const toggleSegment = useCallback((segmentId: string, selected: boolean) => {
+  const toggleRow = useCallback((segmentIds: readonly string[], selected: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (selected) next.add(segmentId);
-      else next.delete(segmentId);
+      for (const segmentId of segmentIds) {
+        if (selected) next.add(segmentId);
+        else next.delete(segmentId);
+      }
       return next;
     });
   }, []);
@@ -138,13 +106,13 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
             <section className="history-group" key={group.dayKey} aria-labelledby={`history-day-${group.dayKey}`}>
               <h2 id={`history-day-${group.dayKey}`}>{group.label}</h2>
               <div className="history-list">
-                {group.segments.map((segment) => (
+                {group.rows.map((row) => (
                   <HistoryRow
                     appIcons={appIcons}
-                    key={segment.id}
-                    onSelectedChange={toggleSegment}
-                    segment={segment}
-                    selected={selectedIds.has(segment.id)}
+                    key={row.id}
+                    onSelectedChange={toggleRow}
+                    row={row}
+                    selected={row.segmentIds.every((segmentId) => selectedIds.has(segmentId))}
                   />
                 ))}
               </div>
@@ -187,17 +155,17 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
 const HistoryRow = memo(function HistoryRow({
   appIcons,
   onSelectedChange,
-  segment,
+  row,
   selected,
 }: {
   readonly appIcons: AppIconMap;
-  readonly onSelectedChange: (segmentId: string, selected: boolean) => void;
-  readonly segment: ActivitySegment;
+  readonly onSelectedChange: (segmentIds: readonly string[], selected: boolean) => void;
+  readonly row: HistoryRowModel;
   readonly selected: boolean;
 }) {
-  const title = historyTitle(segment);
-  const iconKey = segment.bundleId ?? segment.appName;
-  const classification = historyClassification(segment);
+  const title = historyRowTitle(row);
+  const iconKey = row.bundleId ?? row.appName;
+  const classification = row.classification;
 
   return (
     <article className="history-row" data-selected={selected ? "true" : "false"}>
@@ -206,22 +174,22 @@ const HistoryRow = memo(function HistoryRow({
           type="checkbox"
           checked={selected}
           aria-label={`Select ${title}`}
-          onChange={(event) => onSelectedChange(segment.id, event.target.checked)}
+          onChange={(event) => onSelectedChange(row.segmentIds, event.target.checked)}
         />
       </label>
       <div className="history-row__time">
-        <span>{formatTimeLabel(segment.startedAt)} - {formatTimeLabel(segment.endedAt)}</span>
-        <strong>{formatCompactDurationFromSeconds(segment.durationSeconds)}</strong>
+        <span>{formatTimeLabel(row.startedAt)} - {formatTimeLabel(row.endedAt)}</span>
+        <strong>{formatCompactDurationFromSeconds(row.durationSeconds)}</strong>
       </div>
       <div className="history-row__identity">
-        {segment.siteDomain ? (
-          <SiteFavicon domain={segment.siteDomain} size={20} fallbackIconSrc={appIcons[iconKey] ?? null} />
+        {row.siteDomain ? (
+          <SiteFavicon domain={row.siteDomain} size={20} fallbackIconSrc={appIcons[iconKey] ?? null} />
         ) : (
-          <AppGlyph appName={segment.appName} iconSrc={appIcons[iconKey] ?? null} size="sm" />
+          <AppGlyph appName={row.appName} iconSrc={appIcons[iconKey] ?? null} size="sm" />
         )}
         <div>
           <strong>{title}</strong>
-          <span>{segment.siteDomain ?? segment.appName}</span>
+          <span>{row.siteDomain ?? row.appName}</span>
         </div>
       </div>
       <div className="history-row__category" aria-label={`${classification.categoryLabel} category`}>
@@ -231,47 +199,3 @@ const HistoryRow = memo(function HistoryRow({
     </article>
   );
 });
-
-function groupHistorySegments(segments: readonly ActivitySegment[]): readonly HistoryGroup[] {
-  const groups = new Map<string, ActivitySegment[]>();
-  for (const segment of segments) {
-    const dayKey = segment.startedAt.slice(0, 10);
-    const daySegments = groups.get(dayKey) ?? [];
-    daySegments.push(segment);
-    groups.set(dayKey, daySegments);
-  }
-
-  return Array.from(groups.entries()).map(([dayKey, daySegments]) => ({
-    dayKey,
-    label: historyDayFormatter.format(new Date(`${dayKey}T12:00:00`)),
-    segments: daySegments,
-  }));
-}
-
-function historySearchText(segment: ActivitySegment): string {
-  const classification = historyClassification(segment);
-  return [
-    segment.appName,
-    segment.browserName,
-    segment.siteDomain,
-    segment.siteTitle,
-    segment.siteUrl,
-    segment.windowTitle,
-    classification.categoryLabel,
-    classification.productivityLabel,
-  ].filter(Boolean).join(" ").toLowerCase();
-}
-
-function historyTitle(segment: ActivitySegment): string {
-  return segment.siteTitle ?? segment.windowTitle ?? segment.siteDomain ?? segment.appName;
-}
-
-function historyClassification(segment: ActivitySegment): HistoryClassification {
-  const classification = segment.classification ?? classifyActivityDetailed(segment, { includeAiClassifications: false });
-  return {
-    category: classification.category,
-    productivity: classification.productivity,
-    categoryLabel: categoryLabel(classification.category),
-    productivityLabel: productivityLabel(classification.productivity),
-  };
-}
