@@ -4,6 +4,7 @@ import { categorizeActivity, classifyActivity, computePreservedFocusStrikeSecond
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, CurrentActivitySnapshot, ProductivityLabel } from "@drifty/domain";
 import { isProductivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 
 export type WatcherSnapshot = Omit<WatcherPeekEvent, "id" | "slotIndex">;
 
@@ -376,7 +377,7 @@ export function normalizeWatcherPeriodicMinutes(value: string | null, fallback: 
   return Math.min(WATCHER_PERIODIC_MAX_LIMIT_MINUTES, Math.max(WATCHER_PERIODIC_MIN_LIMIT_MINUTES, Math.round(parsedValue)));
 }
 
-export async function sendDriftNotification(segment: ActivitySegment) {
+export async function sendDriftNotification(segment: ActivitySegment, copySettings: DriftAlarmCopySettingsValue = buildDefaultDriftAlarmCopy()) {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
 
   try {
@@ -393,9 +394,13 @@ export async function sendDriftNotification(segment: ActivitySegment) {
     if (!hasPermission) return;
 
     const place = segment.siteDomain ?? segment.appName;
+    const copy = buildDriftNotificationCopy(copySettings, {
+      driftDurationLabel: formatCompactDurationFromSeconds(segment.durationSeconds),
+      place,
+    });
     sendNotification({
-      title: "Drift detected",
-      body: `${formatCompactDurationFromSeconds(segment.durationSeconds)} on ${place}. Take a breath and choose the next action.`,
+      title: copy.title,
+      body: copy.body,
     });
   } catch {
     // Notifications are a convenience; tracking should continue even if macOS denies permission.

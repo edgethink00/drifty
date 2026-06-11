@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
+import { buildDefaultDriftAlarmCopy, buildDriftAlarmCopy, type DriftAlarmCopySettingsValue, type DriftAlarmRenderedCopy } from "./driftAlarmCopy";
 
 export type DriftAlarmAction =
   | { type: "return_to_focus"; targetId: string }
@@ -39,6 +40,7 @@ type DriftAlarmEventBase = {
   generatedAt: string;
   breakOptions: number[];
   focusTargets: DriftAlarmFocusTarget[];
+  copy?: DriftAlarmRenderedCopy;
   sourceSegmentId?: string | null;
 };
 
@@ -55,6 +57,7 @@ type DriftAlarmEventInput = {
   generatedAt: string;
   breakOptions?: number[];
   focusTargets?: DriftAlarmFocusTarget[];
+  copySettings?: DriftAlarmCopySettingsValue;
   sourceSegmentId?: string | null;
 };
 
@@ -78,14 +81,22 @@ const DRIFT_ALARM_FOCUSABLE_SELECTOR = [
 ].join(", ");
 
 export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEvent {
+  const driftDurationLabel = formatDuration(input.driftDurationSeconds);
+  const focusTargets = normalizeFocusTargets(input.focusTargets);
   return {
     ...input,
     mode: "drift",
     breakReturn: null,
-    driftDurationLabel: formatDuration(input.driftDurationSeconds),
+    driftDurationLabel,
     preservedFocusStrikeLabel: formatFocusStrike(input.preservedFocusStrikeSeconds),
     breakOptions: normalizeBreakOptions(input.breakOptions),
-    focusTargets: normalizeFocusTargets(input.focusTargets),
+    focusTargets,
+    copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
+      mode: "drift",
+      contextLabel: input.contextLabel,
+      driftDurationLabel,
+      latestFocusLabel: focusTargets[0]?.label ?? null,
+    }),
   };
 }
 
@@ -93,19 +104,27 @@ export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): D
   const { breakDurationMinutes, pausedFromLabel, nextFocusLabel, ...eventInput } = input;
   const breakOptions = normalizeBreakOptions(input.breakOptions);
   const focusTargets = normalizeFocusTargets(input.focusTargets);
+  const driftDurationLabel = formatDuration(input.driftDurationSeconds);
+  const breakReturn = {
+    breakDurationMinutes,
+    breakDurationLabel: formatBreakOption(breakDurationMinutes),
+    pausedFromLabel: pausedFromLabel.trim() || "This drift",
+    nextFocusLabel: nextFocusLabel.trim() || focusTargets[0]?.label || "your focus",
+  };
   return {
     ...eventInput,
     mode: "break_return",
-    breakReturn: {
-      breakDurationMinutes,
-      breakDurationLabel: formatBreakOption(breakDurationMinutes),
-      pausedFromLabel: pausedFromLabel.trim() || "This drift",
-      nextFocusLabel: nextFocusLabel.trim() || focusTargets[0]?.label || "your focus",
-    },
-    driftDurationLabel: formatDuration(input.driftDurationSeconds),
+    breakReturn,
+    driftDurationLabel,
     preservedFocusStrikeLabel: formatFocusStrike(input.preservedFocusStrikeSeconds),
     breakOptions,
     focusTargets,
+    copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
+      mode: "break_return",
+      breakDurationLabel: breakReturn.breakDurationLabel,
+      pausedFromLabel: breakReturn.pausedFromLabel,
+      nextFocusLabel: breakReturn.nextFocusLabel,
+    }),
   };
 }
 
@@ -113,10 +132,12 @@ export function DriftAlarm({
   event,
   onAction,
   onCancel,
+  isPreview = false,
 }: {
   event: DriftAlarmEvent | null;
   onAction: (action: DriftAlarmAction) => void;
   onCancel?: () => void;
+  isPreview?: boolean;
 }) {
   const alarmRef = useRef<HTMLElement | null>(null);
   const eventId = event?.id ?? null;
@@ -124,6 +145,7 @@ export function DriftAlarm({
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
+    if (isPreview) return undefined;
     if (!eventId) return undefined;
 
     const alarm = alarmRef.current;
@@ -143,7 +165,7 @@ export function DriftAlarm({
       window.clearTimeout(focusTimer);
       if (previousFocus && document.contains(previousFocus)) previousFocus.focus({ preventScroll: true });
     };
-  }, [eventId]);
+  }, [eventId, isPreview]);
 
   useEffect(() => {
     setSelectedActionId(null);
@@ -153,12 +175,14 @@ export function DriftAlarm({
   if (!event) return null;
 
   const isBreakReturn = event.mode === "break_return";
-  const heatSource = event.contextLabel || "This drift";
   const focusTargets = event.focusTargets.slice(0, DRIFT_ALARM_FOCUS_TARGET_LIMIT);
-  const latestFocusTargetLabel = focusTargets[0]?.label ?? null;
   const breakReturn = event.breakReturn;
-  const titleId = isBreakReturn ? "break-return-alarm-title" : DRIFT_ALARM_TITLE_ID;
-  const descriptionId = isBreakReturn ? "break-return-alarm-description" : DRIFT_ALARM_DESCRIPTION_ID;
+  const copy = event.copy ?? buildFallbackDriftAlarmCopy(event, focusTargets);
+  const contextPillEmphasisValues = isBreakReturn && breakReturn
+    ? [breakReturn.pausedFromLabel, breakReturn.nextFocusLabel]
+    : [event.contextLabel || "This drift", focusTargets[0]?.label ?? null];
+  const titleId = isPreview ? `${event.id}-title` : isBreakReturn ? "break-return-alarm-title" : DRIFT_ALARM_TITLE_ID;
+  const descriptionId = isPreview ? `${event.id}-description` : isBreakReturn ? "break-return-alarm-description" : DRIFT_ALARM_DESCRIPTION_ID;
 
   const selectAction = (actionId: string, action: DriftAlarmAction) => {
     setSelectedActionId(actionId);
@@ -214,14 +238,14 @@ export function DriftAlarm({
 
   return (
     <aside
-      className={`da${isBreakReturn ? " da--return" : ""}${isDismissed ? " is-dismissed" : ""}`}
+      className={`da${isBreakReturn ? " da--return" : ""}${isPreview ? " da--preview" : ""}${isDismissed ? " is-dismissed" : ""}`}
       ref={alarmRef}
-      role="alertdialog"
-      aria-modal="true"
+      role={isPreview ? "group" : "alertdialog"}
+      aria-modal={isPreview ? undefined : "true"}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      aria-live={isBreakReturn ? "polite" : "assertive"}
-      tabIndex={-1}
+      aria-live={isPreview ? undefined : isBreakReturn ? "polite" : "assertive"}
+      tabIndex={isPreview ? undefined : -1}
       onKeyDown={handleAlarmKeyDown}
     >
       <div className="da__topbar">
@@ -239,35 +263,23 @@ export function DriftAlarm({
       <div className="da__hero">
         <div className="da__hero-copy">
           {isBreakReturn && breakReturn ? (
-            <h2 className="da__hero-title" id={titleId}><span className="da__time-prefix">{breakReturn.breakDurationLabel}</span><span>Break finished</span></h2>
+            <h2 className="da__hero-title" id={titleId}>{breakReturn ? renderBreakReturnTitle(copy.title, breakReturn.breakDurationLabel) : copy.title}</h2>
           ) : (
-            <h2 id={titleId}>Drift detected</h2>
+            <h2 id={titleId}>{copy.title}</h2>
           )}
           <p className="da__drift" id={descriptionId}>
             <span className={`src-tile${isBreakReturn ? "" : " src-tile--drift"}`} aria-hidden="true">
               {isBreakReturn && breakReturn ? <span className="da__target-glyph">{breakReturn.breakDurationMinutes}</span> : <DriftSourceGlyph />}
             </span>
-            {isBreakReturn && breakReturn ? (
-              <span>Break · <strong>{breakReturn.breakDurationLabel} complete</strong></span>
-            ) : (
-              <span>{heatSource} · <strong>{event.driftDurationLabel} drift</strong></span>
-            )}
+            <span>{isBreakReturn && breakReturn ? renderBreakReturnSummary(copy.summary, breakReturn.breakDurationLabel) : copy.summary}</span>
           </p>
           <div className="da__context" aria-label={isBreakReturn ? "Break return context" : "Drift context"}>
             <div className="da__context-pills">
-              {isBreakReturn && breakReturn ? (
-                <>
-                  <span className="da__context-pill">Paused from <strong>{breakReturn.pausedFromLabel}</strong></span>
-                  <span className="da__context-pill">Next focus <strong>{breakReturn.nextFocusLabel}</strong></span>
-                </>
-              ) : (
-                <>
-                  <span className="da__context-pill">Now <strong>{heatSource}</strong></span>
-                  {latestFocusTargetLabel ? (
-                    <span className="da__context-pill">Latest focus <strong>{latestFocusTargetLabel}</strong></span>
-                  ) : null}
-                </>
-              )}
+              {copy.contextPills.map((pill, index) => (
+                <span className="da__context-pill" key={pill}>
+                  {renderContextPill(pill, contextPillEmphasisValues[index] ?? null)}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -275,7 +287,7 @@ export function DriftAlarm({
 
       <div className="da__choices">
         <section className="da__choice" aria-labelledby="drift-alarm-focus-targets">
-          <h3 className="overline da__choice-label" id="drift-alarm-focus-targets">Return to focus</h3>
+          <h3 className="overline da__choice-label" id="drift-alarm-focus-targets">{copy.returnToFocusLabel}</h3>
           <div className="da__target-list">
             {focusTargets.length > 0 ? focusTargets.map((target, index) => (
               <button
@@ -296,7 +308,7 @@ export function DriftAlarm({
               </button>
             )) : (
               <div className="da__target-empty">
-                <span>No recent focus destination yet.</span>
+                <span>{copy.noFocusTargetLabel}</span>
                 <button
                   className={`da__target da__target--primary${selectedActionId === "target:dashboard" ? " is-selected" : ""}`}
                   type="button"
@@ -304,7 +316,7 @@ export function DriftAlarm({
                   data-drift-alarm-initial-focus="true"
                 >
                   <span className="da__target-icon" aria-hidden="true"><span className="da__target-glyph">Dr</span></span>
-                  <span className="da__target-copy"><strong>Back to dashboard</strong><small aria-hidden="true">Choose a focus destination</small></span>
+                  <span className="da__target-copy"><strong>{copy.backToDashboardLabel}</strong><small aria-hidden="true">Choose a focus destination</small></span>
                   <span className="da__target-go" aria-hidden="true"><ArrowRightIcon /></span>
                 </button>
               </div>
@@ -313,7 +325,7 @@ export function DriftAlarm({
         </section>
 
         <section className="da__choice da__choice--break" aria-labelledby="drift-alarm-break-options">
-          <h3 className="overline da__choice-label" id="drift-alarm-break-options">{isBreakReturn ? "Extend break" : "Take a break"}</h3>
+          <h3 className="overline da__choice-label" id="drift-alarm-break-options">{copy.breakChoiceLabel}</h3>
           <div className="da__breaks">
             {event.breakOptions.map((minutes, index) => (
               <button
@@ -332,7 +344,7 @@ export function DriftAlarm({
 
       <button className={`da__correct${selectedActionId === "manual_correction" ? " is-selected" : ""}`} type="button" onClick={() => selectAction("manual_correction", { type: "manual_correction" })}>
         <FlagIcon />
-        Not a drift
+        {copy.manualCorrectionLabel}
       </button>
     </aside>
   );
@@ -342,6 +354,67 @@ export function DriftAlarm({
 function getDriftAlarmFocusableElements(alarm: HTMLElement): HTMLElement[] {
   return Array.from(alarm.querySelectorAll<HTMLElement>(DRIFT_ALARM_FOCUSABLE_SELECTOR))
     .filter((element) => element.tabIndex >= 0 && element.getAttribute("aria-hidden") !== "true");
+}
+
+function buildFallbackDriftAlarmCopy(event: DriftAlarmEvent, focusTargets: DriftAlarmFocusTarget[]): DriftAlarmRenderedCopy {
+  const defaultCopy = buildDefaultDriftAlarmCopy();
+  switch (event.mode) {
+    case "drift":
+      return buildDriftAlarmCopy(defaultCopy, {
+        mode: "drift",
+        contextLabel: event.contextLabel,
+        driftDurationLabel: event.driftDurationLabel,
+        latestFocusLabel: focusTargets[0]?.label ?? null,
+      });
+    case "break_return":
+      return buildDriftAlarmCopy(defaultCopy, {
+        mode: "break_return",
+        breakDurationLabel: event.breakReturn.breakDurationLabel,
+        pausedFromLabel: event.breakReturn.pausedFromLabel,
+        nextFocusLabel: event.breakReturn.nextFocusLabel,
+      });
+    default:
+      return assertNeverDriftAlarmEvent(event);
+  }
+}
+
+function renderBreakReturnTitle(title: string, breakDurationLabel: string) {
+  if (!title.startsWith(breakDurationLabel)) return <span>{title}</span>;
+  const titleBody = title.slice(breakDurationLabel.length).trim();
+  return (
+    <>
+      <span className="da__time-prefix">{breakDurationLabel}</span>
+      <span>{titleBody || title}</span>
+    </>
+  );
+}
+
+function renderBreakReturnSummary(summary: string, breakDurationLabel: string) {
+  const breakDurationIndex = summary.indexOf(breakDurationLabel);
+  if (breakDurationIndex < 0) return summary;
+  const prefix = summary.slice(0, breakDurationIndex);
+  const durationSummary = summary.slice(breakDurationIndex);
+  return (
+    <>
+      {prefix}
+      <strong>{durationSummary}</strong>
+    </>
+  );
+}
+
+function renderContextPill(pill: string, emphasizedValue: string | null) {
+  if (!emphasizedValue) return pill;
+  const valueIndex = pill.indexOf(emphasizedValue);
+  if (valueIndex < 0) return pill;
+  const prefix = pill.slice(0, valueIndex);
+  const suffix = pill.slice(valueIndex + emphasizedValue.length);
+  return (
+    <>
+      {prefix}
+      <strong>{emphasizedValue}</strong>
+      {suffix}
+    </>
+  );
 }
 
 function DriftAlarmFocusTargetIcon({ target }: { target: DriftAlarmFocusTarget }) {
@@ -450,4 +523,8 @@ function formatDuration(seconds: number): string {
   if (minutes === 60) return "1 hour";
   if (minutes % 60 === 0) return `${minutes / 60} hours`;
   return `${minutes} minutes`;
+}
+
+function assertNeverDriftAlarmEvent(value: never): never {
+  throw new Error(`Unexpected drift alarm event: ${JSON.stringify(value)}`);
 }

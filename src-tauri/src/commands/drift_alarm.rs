@@ -23,6 +23,7 @@ pub struct DriftAlarmPayload {
     pub generated_at: String,
     pub break_options: Vec<i64>,
     pub focus_targets: Vec<DriftAlarmFocusTarget>,
+    pub copy: Option<DriftAlarmCopy>,
     pub source_segment_id: Option<String>,
     pub break_return: Option<DriftAlarmBreakReturnDetails>,
 }
@@ -54,6 +55,19 @@ pub struct DriftAlarmFocusTarget {
     pub site_domain: Option<String>,
     pub site_title: Option<String>,
     pub icon_src: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriftAlarmCopy {
+    pub title: String,
+    pub summary: String,
+    pub context_pills: Vec<String>,
+    pub return_to_focus_label: String,
+    pub break_choice_label: String,
+    pub no_focus_target_label: String,
+    pub back_to_dashboard_label: String,
+    pub manual_correction_label: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -81,6 +81,7 @@ import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { SettingsBuildInfoRow } from "./features/settings/SettingsBuildInfoRow";
 import { CategoryColorControls, ClassificationPicker, ThemeColorControls, type AppThemeColorKey, type ColorOption } from "./features/settings/SettingsColorControls";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
+import { DriftAlarmCopySettings } from "./features/companion/DriftAlarmCopySettings";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
@@ -149,6 +150,7 @@ import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns,
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
 import type { DriftAlarmBreakSnooze, DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
+import { persistDriftAlarmCopy, resolveInitialDriftAlarmCopy } from "./features/companion/driftAlarmCopyStorage";
 import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_MODE_STORAGE_KEY, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PEEK_STORAGE_KEY, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MAX_STORAGE_KEY, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_STORAGE_KEY, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, normalizeWatcherPeriodicMinutes, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek, resolveInitialWatcherMode, resolveInitialWatcherPeekEnabled, resolveInitialWatcherPeriodicMinutes } from "./features/companion/watcherData";
@@ -376,6 +378,7 @@ export default function App() {
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
+  const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(resolveInitialExtremeNudgeEnabled);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
@@ -1021,8 +1024,9 @@ export default function App() {
       preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
       generatedAt: new Date().toISOString(),
       focusTargets: recentDriftAlarmFocusTargets,
+      copySettings: driftAlarmCopy,
     }));
-  }, [recentDriftAlarmFocusTargets, showDriftAlarm]);
+  }, [driftAlarmCopy, recentDriftAlarmFocusTargets, showDriftAlarm]);
 
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
@@ -1357,6 +1361,10 @@ export default function App() {
   }, [driftAlertDelaySeconds]);
 
   useEffect(() => {
+    persistDriftAlarmCopy(driftAlarmCopy);
+  }, [driftAlarmCopy]);
+
+  useEffect(() => {
     window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, extremeNudgeEnabled ? "1" : "0");
   }, [extremeNudgeEnabled]);
 
@@ -1623,6 +1631,7 @@ export default function App() {
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
+        copySettings: driftAlarmCopy,
         sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
       });
     };
@@ -1631,7 +1640,7 @@ export default function App() {
     };
     const showFallbackDriftAlarm = (notify: boolean) => {
       showCurrentDriftAlarm();
-      if (notify) void sendDriftNotification(segment);
+      if (notify) void sendDriftNotification(segment, driftAlarmCopy);
     };
     const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
       lastDriftAlertSegmentRef.current = alertKey;
@@ -1641,7 +1650,7 @@ export default function App() {
           return;
         }
         const latestFocusTarget = recentDriftAlarmFocusTargets[0] ?? null;
-        void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
+        void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
         if (latestFocusTarget) {
           window.setTimeout(() => {
             if (lastDriftAlertSegmentRef.current === alertKey) returnToFocusTarget(latestFocusTarget);
@@ -1668,6 +1677,7 @@ export default function App() {
           preservedFocusStrikeSeconds: 0,
           generatedAt: new Date().toISOString(),
           focusTargets,
+          copySettings: driftAlarmCopy,
           sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,
           pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
@@ -1700,7 +1710,7 @@ export default function App() {
         return;
       }
       showCurrentDriftAlarm();
-      void sendDriftNotification(segment);
+      void sendDriftNotification(segment, driftAlarmCopy);
     };
 
     if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
@@ -1740,7 +1750,7 @@ export default function App() {
       pendingBreakReturnAlarmRef.current = null;
       lastDriftAlertSegmentRef.current = alertKey;
     });
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -4005,6 +4015,7 @@ export default function App() {
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div><div className="desc">Choose how long drift must continue before the alarm appears.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span><small>{option.detail}</small></button>))}</div></div></div>
                     <div className="settings-row"><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
+                    <DriftAlarmCopySettings value={driftAlarmCopy} onChange={setDriftAlarmCopy} />
                     <div className="settings-row"><div><div className="lbl">Peak reminders</div><div className="desc">Remind when peak window starts</div></div><div className="ctrl"><Toggle ariaLabel="Toggle peak reminders" /></div></div>
                   </div></div>
                 )}

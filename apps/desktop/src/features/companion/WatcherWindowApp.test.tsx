@@ -97,6 +97,7 @@ const extremeNudgeToastEvent: ExtremeNudgeToastEvent = {
   placement: "top-right",
   id: "extreme-toast-1",
   generatedAt: "2026-05-20T13:16:20.000Z",
+  title: "Removed youtube.com",
   closedLabel: "youtube.com",
   focusLabel: "docs.drifty.so",
 };
@@ -165,7 +166,7 @@ describe("WatcherWindowApp", () => {
     });
 
     const toast = screen.getByRole("status");
-    expect(toast.textContent).toContain("Closed youtube.com");
+    expect(toast.textContent).toContain("Removed youtube.com");
     expect(toast.textContent).toContain("Focus switched to docs.drifty.so");
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
