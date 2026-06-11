@@ -78,6 +78,7 @@ import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
+import { SettingsBuildInfoRow } from "./features/settings/SettingsBuildInfoRow";
 import { CategoryColorControls, ClassificationPicker, ThemeColorControls, type AppThemeColorKey, type ColorOption } from "./features/settings/SettingsColorControls";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import {
@@ -3821,6 +3822,7 @@ export default function App() {
                     </div>
                     <div className="settings-block"><h3>Debugging</h3>
                       <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleDownloadDebugLogs}>Download debug logs</button></div></div>
+                      <SettingsBuildInfoRow />
                     </div>
                   </div>
                 )}
