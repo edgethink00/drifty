@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type KeyboardEvent,
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
@@ -56,8 +55,6 @@ type OnboardingStep =
 
 type OnboardingStepDef = { id: OnboardingStep; label: string };
 type SetupChoice = "simple" | "local_ai" | "byok";
-type EmailAuthMode = "sign-in" | "sign-up";
-type EmailAuthResult = { error: Error | null; needsEmailConfirmation?: boolean };
 
 // Steps shared by every path until the user picks a setup type.
 const BASE_STEPS: OnboardingStepDef[] = [
@@ -217,7 +214,7 @@ export function OnboardingModal({
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
   onStartCloudTrialWithGoogle: () => void;
-  onStartCloudTrialWithEmail: (email: string, password: string, mode: EmailAuthMode) => Promise<EmailAuthResult>;
+  onStartCloudTrialWithEmail: () => void;
   onComplete: (state: UserOnboardingState) => void;
   /** Dev-only: start on a specific step for visual review / Playwright. */
   __devInitialStep?: OnboardingStep;
@@ -246,13 +243,6 @@ export function OnboardingModal({
   const [workDomainOther, setWorkDomainOther] = useState("");
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
-  const [emailAuthExpanded, setEmailAuthExpanded] = useState(false);
-  const [emailAuthMode, setEmailAuthMode] = useState<EmailAuthMode>("sign-in");
-  const [emailAuthEmail, setEmailAuthEmail] = useState("");
-  const [emailAuthPassword, setEmailAuthPassword] = useState("");
-  const [emailAuthPending, setEmailAuthPending] = useState(false);
-  const [emailAuthError, setEmailAuthError] = useState<string | null>(null);
-  const [emailAuthSuccess, setEmailAuthSuccess] = useState<string | null>(null);
 
   const [step, setStep] = useState<OnboardingStep>(__devInitialStep ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -278,7 +268,6 @@ export function OnboardingModal({
   const accessibilityGranted = accessibilityGrantedFromApp || Boolean(trackerStatus?.accessibilityGranted);
   const accessibilityReady = accessibilityGranted || (!isDesktopRuntime && trackerUnavailable);
   const accountConnected = Boolean(userEmail);
-  const emailAuthFeedbackId = emailAuthError || emailAuthSuccess ? "onboarding-email-auth-feedback" : undefined;
   const permissionSummaryLabel = accessibilityGranted ? "Accessibility verified" : "Tracking readiness verified";
   const previousAccessibilityGrantedRef = useRef(accessibilityGranted);
   const notificationsReady =
@@ -681,60 +670,6 @@ export function OnboardingModal({
     setMaskedApiKey(null);
   }
 
-  function resetEmailAuthFeedback() {
-    setEmailAuthError(null);
-    setEmailAuthSuccess(null);
-  }
-
-  function handleEmailAuthModeChange(nextMode: EmailAuthMode) {
-    setEmailAuthMode(nextMode);
-    resetEmailAuthFeedback();
-  }
-
-  function validateEmailAuth() {
-    const trimmedEmail = emailAuthEmail.trim();
-    if (!trimmedEmail) return "Enter your email address.";
-    if (!trimmedEmail.includes("@")) return "Enter a valid email address.";
-    if (!emailAuthPassword) return "Enter your password.";
-    if (emailAuthPassword.length < 6) return "Password must be at least 6 characters.";
-    return null;
-  }
-
-  async function handleEmailAuthSubmit() {
-    if (emailAuthPending || accountConnected) return;
-    resetEmailAuthFeedback();
-    const validationError = validateEmailAuth();
-    if (validationError) {
-      setEmailAuthError(validationError);
-      return;
-    }
-
-    setEmailAuthPending(true);
-    try {
-      const trimmedEmail = emailAuthEmail.trim();
-      const result = await onStartCloudTrialWithEmail(trimmedEmail, emailAuthPassword, emailAuthMode);
-      if (result.error) {
-        setEmailAuthError(result.error.message);
-        return;
-      }
-      setEmailAuthPassword("");
-      if (emailAuthMode === "sign-up" && result.needsEmailConfirmation) {
-        setEmailAuthSuccess(`Check ${trimmedEmail} to confirm your account, then return to Drifty.`);
-      }
-    } catch (error) {
-      setEmailAuthError(error instanceof Error ? error.message : "Unable to continue with email.");
-    } finally {
-      setEmailAuthPending(false);
-    }
-  }
-
-  function handleEmailAuthInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    event.stopPropagation();
-    void handleEmailAuthSubmit();
-  }
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isFinalStep) {
@@ -910,103 +845,11 @@ export function OnboardingModal({
                   <button
                     type="button"
                     className="onb-button onb-button--ghost onb-account__provider"
-                    onClick={() => {
-                      setEmailAuthExpanded(true);
-                      resetEmailAuthFeedback();
-                    }}
+                    onClick={onStartCloudTrialWithEmail}
                     disabled={accountConnected}
-                    aria-expanded={emailAuthExpanded && !accountConnected}
                   >
                     {accountConnected ? "Signed in" : "Continue with email"}
                   </button>
-                  {emailAuthExpanded && !accountConnected ? (
-                    <div className="onb-email-auth">
-                      <div className="onb-email-auth__mode" aria-label="Email account mode">
-                        <button
-                          type="button"
-                          className={`onb-email-auth__mode-button${
-                            emailAuthMode === "sign-in" ? " onb-email-auth__mode-button--selected" : ""
-                          }`}
-                          aria-pressed={emailAuthMode === "sign-in"}
-                          disabled={emailAuthPending}
-                          onClick={() => handleEmailAuthModeChange("sign-in")}
-                        >
-                          Sign in
-                        </button>
-                        <button
-                          type="button"
-                          className={`onb-email-auth__mode-button${
-                            emailAuthMode === "sign-up" ? " onb-email-auth__mode-button--selected" : ""
-                          }`}
-                          aria-pressed={emailAuthMode === "sign-up"}
-                          disabled={emailAuthPending}
-                          onClick={() => handleEmailAuthModeChange("sign-up")}
-                        >
-                          Create account
-                        </button>
-                      </div>
-                      <label className="onb-field">
-                        <span>Email</span>
-                        <input
-                          className={`onb-field__input${emailAuthError ? " onb-field__input--invalid" : ""}`}
-                          type="email"
-                          inputMode="email"
-                          autoCapitalize="none"
-                          autoComplete="email"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          value={emailAuthEmail}
-                          disabled={emailAuthPending}
-                          aria-describedby={emailAuthFeedbackId}
-                          onKeyDown={handleEmailAuthInputKeyDown}
-                          onChange={(event) => {
-                            setEmailAuthEmail(event.target.value);
-                            resetEmailAuthFeedback();
-                          }}
-                          aria-invalid={emailAuthError ? "true" : "false"}
-                        />
-                      </label>
-                      <label className="onb-field">
-                        <span>Password</span>
-                        <input
-                          className={`onb-field__input${emailAuthError ? " onb-field__input--invalid" : ""}`}
-                          type="password"
-                          autoComplete={emailAuthMode === "sign-up" ? "new-password" : "current-password"}
-                          value={emailAuthPassword}
-                          disabled={emailAuthPending}
-                          aria-describedby={emailAuthFeedbackId}
-                          onKeyDown={handleEmailAuthInputKeyDown}
-                          onChange={(event) => {
-                            setEmailAuthPassword(event.target.value);
-                            resetEmailAuthFeedback();
-                          }}
-                          aria-invalid={emailAuthError ? "true" : "false"}
-                        />
-                      </label>
-                      {emailAuthError ? (
-                        <p id="onboarding-email-auth-feedback" className="onb-email-auth__notice onb-email-auth__notice--error" role="alert">
-                          {emailAuthError}
-                        </p>
-                      ) : null}
-                      {emailAuthSuccess ? (
-                        <p id="onboarding-email-auth-feedback" className="onb-email-auth__notice onb-email-auth__notice--success" role="status">
-                          {emailAuthSuccess}
-                        </p>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="onb-button onb-button--primary onb-email-auth__submit"
-                        onClick={() => void handleEmailAuthSubmit()}
-                        disabled={emailAuthPending}
-                      >
-                        {emailAuthPending
-                          ? "Checking..."
-                          : emailAuthMode === "sign-up"
-                            ? "Create account with email"
-                            : "Sign in with email"}
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
                 <p className="onb-account__helper">
                   Drifty never shares your activity data with teammates unless you choose to join a team or
