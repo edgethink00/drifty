@@ -15,6 +15,7 @@ export type TrackerCommand =
   | "tracker_get_classification_rules"
   | "tracker_save_classification_rule"
   | "tracker_delete_classification_rule"
+  | "tracker_delete_activity_segments"
   | "tracker_search_classification_rule_candidates"
   | "tracker_apply_classification_rules"
   | "tracker_save_classifications"
@@ -147,6 +148,7 @@ export interface TrackerApi {
   getClassificationRules(): Promise<ClassificationRule[]>;
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
+  deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
   searchClassificationRuleCandidates(query: string): Promise<ClassificationRuleCandidate[]>;
   applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;

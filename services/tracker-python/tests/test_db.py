@@ -594,6 +594,27 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(deleted, 1)
         self.assertNotIn("classification", refreshed[0])
 
+    def test_delete_activity_segments_removes_segments_and_classifications(self) -> None:
+        segment_id = self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00",
+            "delete-me",
+        )
+        kept_segment_id = self._insert_classified_segment(
+            "2026-04-06T10:00:00+00:00",
+            "keep-me",
+        )
+
+        deleted = self.database.delete_activity_segments([str(segment_id)])
+
+        self.assertEqual(deleted, 1)
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual([event["id"] for event in events], [str(kept_segment_id)])
+        with self.database.connect() as conn:
+            classifications = conn.execute(
+                "SELECT segment_id FROM activity_classifications ORDER BY segment_id"
+            ).fetchall()
+        self.assertEqual([row["segment_id"] for row in classifications], [kept_segment_id])
+
     def test_disabling_classification_rule_removes_materialized_rule_classifications(self) -> None:
         self.database.insert_segment(
             {

@@ -57,6 +57,7 @@ import {
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { FlowChartView } from "./features/flow-chart/FlowChartView";
 import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
+import { HistoryView } from "./features/history/HistoryView";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import {
@@ -185,7 +186,7 @@ import { WeekDashboard } from "./features/dashboard/WeekDashboard";
 import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./features/insights/InsightCards";
 import { EditProfileModal, ProfileModal, buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl } from "./features/profile/ProfileModals";
 
-type TabId = "dashboard" | "classify" | "drift" | "leaderboard" | "settings";
+type TabId = "dashboard" | "classify" | "history" | "drift" | "leaderboard" | "settings";
 
 type NavigationSnapshot = {
   tabId: TabId;
@@ -210,7 +211,7 @@ type NavItem = {
   icon: NavIconType;
 };
 
-type NavIconType = "home" | "calendar" | "classify" | "insights" | "leaderboard" | "settings";
+type NavIconType = "home" | "calendar" | "classify" | "history" | "insights" | "leaderboard" | "settings";
 
 type PlanItem = {
   id: string;
@@ -229,6 +230,7 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
 
 const workspaceNav: NavItem[] = [
   { id: "classify", label: "Classification", icon: "classify" },
+  { id: "history", label: "History", icon: "history" },
   { id: "drift", label: "Insights", icon: "insights" },
   { id: "leaderboard", label: "Leaderboard", icon: "leaderboard" },
 ];
@@ -264,6 +266,8 @@ function NavIcon({ type }: { type: NavIconType }) {
       return (<svg {...props}><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /><path d="M8 14h2M14 14h2M8 17h2" /></svg>);
     case "classify":
       return (<svg {...props}><path d="M4 5h16M4 12h10M4 19h14" /><circle cx="18" cy="12" r="2" /><circle cx="20" cy="19" r="2" /></svg>);
+    case "history":
+      return (<svg {...props}><path d="M12 8v5l3 2" /><path d="M5.6 5.6A9 9 0 1 1 3 12" /><path d="M3 4v5h5" /></svg>);
     case "insights":
       return (<svg {...props}><path d="M4 20h16" /><path d="M6 16l4-5 3 3 5-7" /></svg>);
     case "leaderboard":
@@ -525,6 +529,7 @@ export default function App() {
   const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardActionLoading, setLeaderboardActionLoading] = useState(false);
+  const [historyDeleting, setHistoryDeleting] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardActionError, setLeaderboardActionError] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -2180,6 +2185,18 @@ export default function App() {
     void refreshLeaderboardData();
   }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
 
+  const handleDeleteHistorySegments = useCallback(async (ids: readonly string[]) => {
+    if (ids.length === 0 || historyDeleting) return;
+
+    setHistoryDeleting(true);
+    try {
+      await trackerClient.deleteActivitySegments(ids);
+      await refresh(selectedDayRef.current);
+    } finally {
+      setHistoryDeleting(false);
+    }
+  }, [historyDeleting, refresh]);
+
   useEffect(() => {
     selectedDayRef.current = selectedDay;
   }, [selectedDay]);
@@ -3636,6 +3653,17 @@ export default function App() {
                 </div>
               </section>
             )}
+          </div>
+        ) : null}
+
+        {activeTab === "history" ? (
+          <div className="page page--history">
+            <HistoryView
+              appIcons={appIcons}
+              deleting={historyDeleting}
+              segments={historySegments}
+              onDeleteSelected={handleDeleteHistorySegments}
+            />
           </div>
         ) : null}
 

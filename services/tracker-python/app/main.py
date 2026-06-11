@@ -306,6 +306,15 @@ def delete_classification_rule(payload: dict):
     return response(True, {"deleted": deleted})
 
 
+def delete_activity_segments(payload: dict):
+    raw_ids = payload.get("ids")
+    if not isinstance(raw_ids, list):
+        return response(False, error="ids is required")
+    ids = [segment_id for segment_id in raw_ids if isinstance(segment_id, str) and segment_id]
+    deleted = database().delete_activity_segments(ids)
+    return response(True, {"deleted": deleted})
+
+
 def search_classification_rule_candidates(payload: dict):
     query = payload.get("query", "")
     if not isinstance(query, str):
@@ -440,6 +449,7 @@ COMMANDS = {
     "get_classification_rules": get_classification_rules,
     "save_classification_rule": save_classification_rule,
     "delete_classification_rule": delete_classification_rule,
+    "delete_activity_segments": delete_activity_segments,
     "search_classification_rule_candidates": search_classification_rule_candidates,
     "apply_classification_rules": apply_classification_rules,
     "save_classifications": save_classifications,

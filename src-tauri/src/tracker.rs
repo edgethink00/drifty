@@ -193,6 +193,18 @@ impl TrackerController {
         self.invoke::<Value>(app, "delete_classification_rule", json!({ "id": id }))
     }
 
+    pub fn delete_activity_segments(
+        &self,
+        app: &AppHandle,
+        ids: Vec<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "delete_activity_segments",
+            build_delete_activity_segments_payload(&ids),
+        )
+    }
+
     pub fn search_classification_rule_candidates(
         &self,
         app: &AppHandle,
@@ -382,6 +394,10 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
     }
 
     Value::Object(payload)
+}
+
+fn build_delete_activity_segments_payload(ids: &[String]) -> Value {
+    json!({ "ids": ids })
 }
 
 fn merged_accessibility_granted(python_granted: bool, native_granted: Option<bool>) -> bool {
@@ -650,6 +666,13 @@ mod tests {
         assert!(value.get("trackerMode").is_some());
         assert!(value.get("idleSeconds").is_some());
         assert!(value.get("idleDetectionAvailable").is_some());
+    }
+
+    #[test]
+    fn delete_activity_segments_payload_preserves_selected_ids() {
+        let payload = build_delete_activity_segments_payload(&["42".into(), "43".into()]);
+
+        assert_eq!(payload, json!({ "ids": ["42", "43"] }));
     }
 
     #[test]
