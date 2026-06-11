@@ -7,16 +7,20 @@ const SETTINGS_NAV_ITEMS = [
   { id: "notifications", label: "Notifications" },
   { id: "privacy", label: "Privacy" },
   { id: "data", label: "Data & Export" },
+  { id: "dev", label: "Dev" },
 ] satisfies ReadonlyArray<{ id: SettingsSection; label: string }>;
 
 type SettingsSidebarProps = {
   readonly activeSection: SettingsSection;
   readonly isCollapsed: boolean;
+  readonly showDevSection: boolean;
   readonly onBack: () => void;
   readonly onSectionChange: (section: SettingsSection) => void;
 };
 
-export function SettingsSidebar({ activeSection, isCollapsed, onBack, onSectionChange }: SettingsSidebarProps) {
+export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, onBack, onSectionChange }: SettingsSidebarProps) {
+  const visibleNavItems = showDevSection ? SETTINGS_NAV_ITEMS : SETTINGS_NAV_ITEMS.filter((item) => item.id !== "dev");
+
   return (
     <aside className={isCollapsed ? "sidebar sidebar--settings sidebar--collapsed" : "sidebar sidebar--settings"} aria-label="Settings navigation">
       <button type="button" className="settings-sidebar-back" onClick={onBack}>
@@ -32,7 +36,7 @@ export function SettingsSidebar({ activeSection, isCollapsed, onBack, onSectionC
       </div>
 
       <nav className="settings-nav" aria-label="Settings sections">
-        {SETTINGS_NAV_ITEMS.map((item) => (
+        {visibleNavItems.map((item) => (
           <button
             key={item.id}
             type="button"

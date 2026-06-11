@@ -14,6 +14,9 @@ export const IS_PRODUCTION_BUILD = RELEASE_CHANNEL === "production";
 export const WATCHER_PEEK_PROTOTYPE_ENABLED = !IS_PRODUCTION_BUILD;
 export const DRIFT_ALARM_PANEL_PREVIEWS_ENABLED = !IS_PRODUCTION_BUILD;
 export const AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED = !IS_PRODUCTION_BUILD;
+export const DEV_SETTINGS_ENABLED = !IS_PRODUCTION_BUILD;
+// MVP scope: end-of-day review notifications remain dev-only until this post-MVP surface is ready for production.
+export const END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED = !IS_PRODUCTION_BUILD;
 
 const RAW_DEV_SKIP_ONBOARDING = typeof __DRIFTY_DEV_SKIP_ONBOARDING__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING__ : false;
 

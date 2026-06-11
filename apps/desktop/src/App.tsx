@@ -74,7 +74,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -498,8 +498,9 @@ export default function App() {
   }, [handleCheckForUpdates, openSettingsTab]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
+    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
     shouldFocusEndOfDayReviewSettingsRef.current = true;
-    setSettingsSection("notifications");
+    setSettingsSection("dev");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -968,6 +969,7 @@ export default function App() {
   }, []);
 
   const handleEndOfDayReviewPreview = useCallback(() => {
+    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
     const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
     void buildEndOfDayReviewEvent({
       day: selectedDay,
@@ -1450,7 +1452,7 @@ export default function App() {
   useEffect(() => () => clearWatcherRecoveryTimer(), [clearWatcherRecoveryTimer]);
 
   useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "notifications") return;
+    if (activeTab !== "settings" || settingsSection !== "dev") return;
     if (!shouldFocusEndOfDayReviewSettingsRef.current) return;
 
     shouldFocusEndOfDayReviewSettingsRef.current = false;
@@ -1946,9 +1948,10 @@ export default function App() {
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
-  const shouldShowEndOfDayReviewPreview = import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
+  const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
 
   useEffect(() => {
+    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
     if (!hasLoadedOnce) return;
     if (endOfDayReviewQueryPreviewShownRef.current) return;
     if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
@@ -1963,6 +1966,7 @@ export default function App() {
   }, [buildEndOfDayReviewEvent, hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
   useEffect(() => {
+    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
     if (!hasLoadedOnce) return;
     if (selectedDay !== todayDay) return;
     if (segmentsLoadedDay !== todayDay) return;
@@ -3165,6 +3169,7 @@ export default function App() {
         <SettingsSidebar
           activeSection={settingsSection}
           isCollapsed={isSidebarVisuallyCollapsed}
+          showDevSection={DEV_SETTINGS_ENABLED}
           onBack={handleSettingsBack}
           onSectionChange={setSettingsSection}
         />
@@ -3994,21 +3999,6 @@ export default function App() {
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div><div className="desc">Choose how long drift must continue before the alarm appears.</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span><small>{option.detail}</small></button>))}</div></div></div>
                     <div className="settings-row"><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
-                    <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Show a local summary after 6:00 PM when the tracker is running, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
-                    {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
-                      <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
-                    ) : null}
-                    {WATCHER_PEEK_SETTINGS_VISIBLE && WATCHER_PEEK_PROTOTYPE_ENABLED && (
-                    <>
-                    <div className="settings-row" role="group" aria-label="Peek watcher prototype"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
-                    <div className="settings-row"><div><div className="lbl">Watcher mode</div><div className="desc">Choose regular check-ins or a quieter mode that only speaks when drift continues.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Watcher mode"><button type="button" className={`settings-mode-option${watcherMode === "periodic" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "periodic"} onClick={() => setWatcherMode("periodic")}><span>Periodic</span><small>Every few minutes</small></button><button type="button" className={`settings-mode-option${watcherMode === "drift_only" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "drift_only"} onClick={() => setWatcherMode("drift_only")}><span>Drift only</span><small>Quiet during focus</small></button></div></div></div>
-                    {watcherMode === "periodic" ? (
-                      <div className="settings-row"><div><div className="lbl">Periodic cadence</div><div className="desc">Show the watcher at a random interval inside this range. Default is 10-30 minutes.</div></div><div className="ctrl settings-row__actions"><input className="settings-input settings-input--compact" type="number" min={WATCHER_PERIODIC_MIN_LIMIT_MINUTES} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMinMinutes} onChange={handleWatcherPeriodicMinChange} aria-label="Minimum watcher interval minutes" /><span className="settings-inline-unit">to</span><input className="settings-input settings-input--compact" type="number" min={watcherPeriodicMinMinutes} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMaxMinutes} onChange={handleWatcherPeriodicMaxChange} aria-label="Maximum watcher interval minutes" /><span className="settings-inline-unit">min</span></div></div>
-                    ) : (
-                      <div className="settings-row"><div><div className="lbl">Drift-only cadence</div><div className="desc">No focus messages. First nudge appears 10 seconds after drift is detected, then 5 minutes, 30 minutes, 1 hour, and 2 hours if it continues.</div></div><div className="ctrl"><span className="chip">10s · 5m · 30m · 1h · 2h</span></div></div>
-                    )}
-                    </>
-                    )}
                     <div className="settings-row"><div><div className="lbl">Peak reminders</div><div className="desc">Remind when peak window starts</div></div><div className="ctrl"><Toggle ariaLabel="Toggle peak reminders" /></div></div>
                   </div></div>
                 )}
@@ -4063,6 +4053,31 @@ export default function App() {
                     </div>
                   </div>
                 )}
+                {settingsSection === "dev" && DEV_SETTINGS_ENABLED && (
+                  <div className="settings-section">
+                    <div className="settings-block settings-block--dev-preview">
+                      <h3>Dev notifications</h3>
+                      {/* MVP scope: end-of-day review notifications are excluded from production until the post-MVP review surface is ready. */}
+                      {END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED ? (
+                        <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Dev-only local summary after 6:00 PM, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
+                      ) : null}
+                      {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
+                        <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
+                      ) : null}
+                      {WATCHER_PEEK_SETTINGS_VISIBLE && WATCHER_PEEK_PROTOTYPE_ENABLED && (
+                      <>
+                      <div className="settings-row" role="group" aria-label="Peek watcher prototype"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
+                      <div className="settings-row"><div><div className="lbl">Watcher mode</div><div className="desc">Choose regular check-ins or a quieter mode that only speaks when drift continues.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Watcher mode"><button type="button" className={`settings-mode-option${watcherMode === "periodic" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "periodic"} onClick={() => setWatcherMode("periodic")}><span>Periodic</span><small>Every few minutes</small></button><button type="button" className={`settings-mode-option${watcherMode === "drift_only" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "drift_only"} onClick={() => setWatcherMode("drift_only")}><span>Drift only</span><small>Quiet during focus</small></button></div></div></div>
+                      {watcherMode === "periodic" ? (
+                        <div className="settings-row"><div><div className="lbl">Periodic cadence</div><div className="desc">Show the watcher at a random interval inside this range. Default is 10-30 minutes.</div></div><div className="ctrl settings-row__actions"><input className="settings-input settings-input--compact" type="number" min={WATCHER_PERIODIC_MIN_LIMIT_MINUTES} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMinMinutes} onChange={handleWatcherPeriodicMinChange} aria-label="Minimum watcher interval minutes" /><span className="settings-inline-unit">to</span><input className="settings-input settings-input--compact" type="number" min={watcherPeriodicMinMinutes} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMaxMinutes} onChange={handleWatcherPeriodicMaxChange} aria-label="Maximum watcher interval minutes" /><span className="settings-inline-unit">min</span></div></div>
+                      ) : (
+                        <div className="settings-row"><div><div className="lbl">Drift-only cadence</div><div className="desc">No focus messages. First nudge appears 10 seconds after drift is detected, then 5 minutes, 30 minutes, 1 hour, and 2 hours if it continues.</div></div><div className="ctrl"><span className="chip">10s · 5m · 30m · 1h · 2h</span></div></div>
+                      )}
+                      </>
+                      )}
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
         ) : null}
@@ -4071,7 +4086,7 @@ export default function App() {
       {!isTauriRuntime() ? (
         <>
           <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} />
-          {endOfDayReviewEvent ? (
+          {END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED && endOfDayReviewEvent ? (
             <EndOfDayReview
               event={endOfDayReviewEvent}
               onOpenDashboard={() => handleEndOfDayReviewAction("openDashboard")}
