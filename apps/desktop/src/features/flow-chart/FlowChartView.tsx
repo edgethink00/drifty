@@ -3,7 +3,9 @@ import type { CSSProperties, MouseEvent } from "react";
 import { FLOW_INTERVAL_OPTIONS, logicalMinuteOfDay, type ActivityCategory, type FlowBlock, type FlowIntervalMinutes, type ProductivityLabel } from "@drifty/domain";
 import { PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { FlowHoverCard, FlowLegendHoverCard, buildLegendActivityBreakdown, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
-import { cellTitle, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell, normalizeStartOfDayMinutes } from "./flowChartFormat";
+import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
+import { buildFlowBlockHoverGroups, flowBlockHoverGroupPosition } from "./flowHoverGroups";
+import { cellGroupTitle, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell, normalizeStartOfDayMinutes } from "./flowChartFormat";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
@@ -54,6 +56,10 @@ export function FlowChartView({
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   const [colorMode, setColorMode] = useState<FlowColorMode>("category");
+  const hoveredGroupMinutes = useMemo(
+    () => hoveredBlock ? new Set(hoveredBlock.group.blocks.map((block) => block.minuteOfDay)) : null,
+    [hoveredBlock],
+  );
   const rowMinuteOffsets = useMemo(
     () => Array.from({ length: 60 / intervalMinutes }, (_, index) => index * intervalMinutes),
     [intervalMinutes],
@@ -69,9 +75,14 @@ export function FlowChartView({
     for (const block of blocks) next.set(`${block.minuteOfDay}`, block);
     return next;
   }, [blocks]);
-  const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height", string> = {
+  const hoverGroupsByCell = useMemo(
+    () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes),
+    [blocks, boundaryMinutes, intervalMinutes],
+  );
+  const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height" | "--flow-row-count", string> = {
     "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
     "--flow-breakdown-cell-min-height": `${(FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
+    "--flow-row-count": `${60 / intervalMinutes}`,
   };
   const showLegendHover = (
     event: MouseEvent<HTMLElement>,
@@ -183,6 +194,7 @@ export function FlowChartView({
         })}
       </div>
       <div className="flow-chart-grid">
+        {hoveredBlock ? <FlowHoverGroupHighlights group={hoveredBlock.group} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} /> : null}
         {rowMinuteOffsets.map((minuteOffset) => {
           const isCurrentMinuteRow = minuteOffset === currentMinuteOffset;
           const nearestLabelMinuteOffset = currentMinuteOffset !== null && currentMinuteOffset + intervalMinutes < 60
@@ -192,46 +204,52 @@ export function FlowChartView({
           const isTerminalCurrentMinuteRow = isCurrentMinuteRow && minuteOffset + intervalMinutes >= 60;
 
           return (
-          <div
-            className={`flow-chart-row${isCurrentMinuteRow ? " flow-chart-row--now" : ""}${isTerminalCurrentMinuteRow ? " flow-chart-row--now-terminal" : ""}${isCurrentTimeLabelRow ? " flow-chart-row--time-label" : ""}`}
-            key={minuteOffset}
-            style={isCurrentMinuteRow && currentHourIndex !== null ? { "--flow-current-hour": currentHourIndex } as CSSProperties & Record<"--flow-current-hour", number> : undefined}
-          >
-            <div className="flow-chart-row-label">:{`${minuteOffset}`.padStart(2, "0")}</div>
-            {HOURS.map((hour) => {
-              const minuteOfDay = minuteOfDayForCell(hour, minuteOffset, boundaryMinutes);
-              const block = blockByCell.get(`${minuteOfDay}`);
-              const isCurrentHourCell = hour === currentHourIndex && minuteOffset === currentMinuteOffset;
-              if (!block) {
-                return (
-                  <span
-                    className={`flow-cell flow-cell--empty${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
-                    key={minuteOfDay}
-                    aria-hidden="true"
-                  />
-                );
-              }
+            <div
+              className={`flow-chart-row${isCurrentMinuteRow ? " flow-chart-row--now" : ""}${isTerminalCurrentMinuteRow ? " flow-chart-row--now-terminal" : ""}${isCurrentTimeLabelRow ? " flow-chart-row--time-label" : ""}`}
+              key={minuteOffset}
+              style={isCurrentMinuteRow && currentHourIndex !== null ? { "--flow-current-hour": currentHourIndex } as CSSProperties & Record<"--flow-current-hour", number> : undefined}
+            >
+              <div className="flow-chart-row-label">:{`${minuteOffset}`.padStart(2, "0")}</div>
+              {HOURS.map((hour) => {
+                const minuteOfDay = minuteOfDayForCell(hour, minuteOffset, boundaryMinutes);
+                const block = blockByCell.get(`${minuteOfDay}`);
+                const isCurrentHourCell = hour === currentHourIndex && minuteOffset === currentMinuteOffset;
+                if (!block) {
+                  return (
+                    <span
+                      className={`flow-cell flow-cell--empty${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
+                      key={minuteOfDay}
+                      aria-hidden="true"
+                    />
+                  );
+                }
+                const hoverGroup = hoverGroupsByCell.get(block.minuteOfDay);
+                if (!hoverGroup) return null;
+                const hoverGroupPosition = hoveredGroupMinutes?.has(block.minuteOfDay) === true
+                  ? flowBlockHoverGroupPosition(hoverGroup, block.minuteOfDay)
+                  : null;
+                const hoverGroupClass = hoverGroupPosition ? ` flow-cell--hover-group flow-cell--hover-group-${hoverGroupPosition}` : "";
 
-              return (
-                <button
-                  className={`flow-cell flow-cell--${colorMode === "productivity" ? block.productivity : block.category}${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
-                  key={block.minuteOfDay}
-                  type="button"
-                  aria-label={cellTitle(block, intervalMinutes).replace(/\n/g, ", ")}
-                  onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => setHoveredBlock({ block, x: event.clientX, y: event.clientY })}
-                  onMouseMove={(event: MouseEvent<HTMLButtonElement>) => setHoveredBlock({ block, x: event.clientX, y: event.clientY })}
-                  onMouseLeave={() => setHoveredBlock(null)}
-                >
-                  <span className="flow-cell__mark" aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
+                return (
+                  <button
+                    className={`flow-cell flow-cell--${colorMode === "productivity" ? block.productivity : block.category}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
+                    key={block.minuteOfDay}
+                    type="button"
+                    aria-label={cellGroupTitle(hoverGroup).replace(/\n/g, ", ")}
+                    onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => setHoveredBlock({ group: hoverGroup, x: event.clientX, y: event.clientY })}
+                    onMouseMove={(event: MouseEvent<HTMLButtonElement>) => setHoveredBlock({ group: hoverGroup, x: event.clientX, y: event.clientY })}
+                    onMouseLeave={() => setHoveredBlock(null)}
+                  >
+                    <span className="flow-cell__mark" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </div>
 
-      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} intervalMinutes={intervalMinutes} /> : null}
+      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} /> : null}
       {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} /> : null}
     </section>
   );

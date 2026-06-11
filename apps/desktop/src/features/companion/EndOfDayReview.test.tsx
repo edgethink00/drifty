@@ -158,8 +158,10 @@ describe("EndOfDayReview", () => {
     expect(container.querySelector(".eodr-dial-shell")).toBeTruthy();
     expect(container.querySelector(".eodr-dial")).toBeTruthy();
     expect(container.querySelector(".eodr-dial__track")?.getAttribute("r")).toBe("40");
-    expect(container.querySelector(".eodr-dial__segment--focus")?.getAttribute("r")).toBe("40");
-    expect(container.querySelector(".eodr-dial__segment--focus")).toBeTruthy();
+    const focusSegment = container.querySelector(".eodr-dial__segment--focus");
+    expect(focusSegment?.tagName.toLowerCase()).toBe("path");
+    expect(focusSegment?.getAttribute("d")).toMatch(/^M /);
+    expect(focusSegment?.getAttribute("r")).toBeNull();
     expect(container.querySelector(".eodr-dial__segment--drift")).toBeTruthy();
     expect(container.querySelector(".eodr-dial__segment--other")).toBeTruthy();
   });

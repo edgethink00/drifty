@@ -1,12 +1,13 @@
 import type { CSSProperties } from "react";
-import { secondsToLabel, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+import { secondsToLabel, type FlowBlock } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { blockContextLabel, blockDetailLabel, blockDisplayName } from "./flowChartFormat";
+import type { FlowBlockHoverGroup } from "./flowHoverGroups";
+import { blockDetailLabel, blockDisplayName, groupContextLabel } from "./flowChartFormat";
 
 export type FlowHoverState = {
-  readonly block: FlowBlock;
+  readonly group: FlowBlockHoverGroup;
   readonly x: number;
   readonly y: number;
 };
@@ -84,13 +85,11 @@ export function FlowLegendHoverCard({ hover, appIcons }: { readonly hover: FlowL
 export function FlowHoverCard({
   hover,
   appIcons,
-  intervalMinutes,
 }: {
   readonly hover: FlowHoverState;
   readonly appIcons: Record<string, string | null>;
-  readonly intervalMinutes: FlowIntervalMinutes;
 }) {
-  const { block } = hover;
+  const { block } = hover.group;
   const iconSrc = appIcons[block.bundleId ?? block.appName] ?? null;
   const displayName = blockDisplayName(block);
   const detailLabel = blockDetailLabel(block);
@@ -101,7 +100,7 @@ export function FlowHoverCard({
         {block.siteDomain ? <SiteFavicon domain={block.siteDomain} size={24} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={displayName} iconSrc={iconSrc} size="sm" />}
         <div>
           <strong>{displayName}</strong>
-          <span>{blockContextLabel(block, intervalMinutes)}</span>
+          <span>{groupContextLabel(hover.group)}</span>
         </div>
       </div>
       <div className="flow-hover-card__identity-row">
