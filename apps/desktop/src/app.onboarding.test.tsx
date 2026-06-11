@@ -124,9 +124,15 @@ vi.mock("./features/billing/billingService", () => ({
 }));
 
 vi.mock("./appFeatureSwitches", () => ({
+  AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: true,
   DEV_ONBOARDING_BYPASS_ENABLED: false,
-  isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
+  DEV_SETTINGS_ENABLED: true,
+  DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: true,
+  END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: true,
+  IS_PRODUCTION_BUILD: false,
+  RELEASE_CHANNEL: "dev",
   WATCHER_PEEK_PROTOTYPE_ENABLED: true,
+  isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
 }));
 
 import App from "./App";

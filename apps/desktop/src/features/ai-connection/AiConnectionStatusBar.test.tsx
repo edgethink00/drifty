@@ -58,7 +58,7 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
-  it("returns setup when no AI provider is connected", () => {
+  it("returns setup with a warning tone when no AI provider is connected", () => {
     const status = resolveAiConnectionStatus({
       canUseCloudAi: false,
       hasLocalAiProvider: false,
@@ -69,7 +69,7 @@ describe("resolveAiConnectionStatus", () => {
     });
 
     expect(status).toMatchObject({
-      tone: "neutral",
+      tone: "error",
       label: "Disconnected",
       providerLabel: "Setup needed",
     });

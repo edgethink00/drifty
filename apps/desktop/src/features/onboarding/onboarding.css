@@ -645,6 +645,7 @@
   flex-direction: column;
   gap: 0.375rem;
   text-align: left;
+  width: 100%;
 }
 
 .onboarding-card .onb-typewriter .tw-title {
@@ -658,11 +659,12 @@
 }
 
 .onboarding-card .onb-typewriter .tw-message {
-  max-width: 38ch;
+  max-width: min(100%, 48ch);
   margin-top: var(--onb-space-3);
   font-size: 15px;
   color: var(--onb-text-muted);
   line-height: 1.58;
+  text-wrap: pretty;
 }
 
 .onboarding-card .onb-typewriter .tw-sub {

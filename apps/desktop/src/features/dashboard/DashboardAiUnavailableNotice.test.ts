@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+
+import { createElement } from "react";
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { BillingEntitlement } from "../billing/billingService";
-import { resolveDashboardAiUnavailableState } from "./DashboardAiUnavailableNotice";
+import { DashboardAiUnavailableNotice, resolveDashboardAiUnavailableState } from "./DashboardAiUnavailableNotice";
 
 const trialExpiredEntitlement = {
   plan: "individual",
@@ -102,5 +106,29 @@ describe("resolveDashboardAiUnavailableState", () => {
       variant: "provider-disconnected",
       ctaLabel: "Open AI setup",
     });
+  });
+});
+
+describe("DashboardAiUnavailableNotice", () => {
+  it("renders the setup-needed notice with a visible non-color status cue", () => {
+    const onAction = vi.fn();
+
+    render(createElement(
+      DashboardAiUnavailableNotice,
+      {
+        state: {
+          variant: "connect-ai",
+          title: "Connect an AI provider",
+          body: "Richer AI analysis is unavailable until Cloud AI or a local provider is connected.",
+          ctaLabel: "Connect AI",
+        },
+        onAction,
+      },
+    ));
+
+    const notice = screen.getByLabelText(/AI unavailable notice/i);
+    expect(within(notice).getByText(/^AI setup needed$/i)).toBeTruthy();
+    expect(notice.querySelector(".dashboard-ai-notice__signal")).toBeTruthy();
+    expect(notice.querySelector(".dashboard-ai-notice__signal-dot")).toBeTruthy();
   });
 });

@@ -70,6 +70,9 @@ export function DashboardAiUnavailableNotice({
 }) {
   return (
     <section className={`dashboard-ai-notice dashboard-ai-notice--${state.variant}`} aria-label="AI unavailable notice" role="status">
+      <span className="dashboard-ai-notice__signal" aria-hidden="true">
+        <span className="dashboard-ai-notice__signal-dot" />
+      </span>
       <div className="dashboard-ai-notice__copy">
         <span className="label-mono">{isCloudBillingVariant(state.variant) ? "Cloud AI paused" : "AI setup needed"}</span>
         <strong>{state.title}</strong>
