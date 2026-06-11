@@ -42,19 +42,18 @@
 }
 
 .flow-compact-productivity-circle__segment:hover {
-  stroke-width: 20;
+  filter: brightness(1.08) saturate(1.05);
+  stroke-width: 19;
 }
 
-.flow-compact-productivity-circle__dial-shell:hover .flow-compact-productivity-circle__segment:not(:hover) {
-  opacity: 0.72;
+.eodr-dial__segment {
+  pointer-events: stroke;
+  transition: filter 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart);
 }
 
-.flow-compact-productivity-circle__center {
-  transition: transform 180ms var(--ease-out-quart);
-}
-
-.flow-compact-productivity-circle__dial-shell:hover .flow-compact-productivity-circle__center {
-  transform: translate(-50%, -50%) scale(1.04);
+.eodr-dial__segment:hover {
+  filter: brightness(1.08) saturate(1.05);
+  stroke-width: 19;
 }
 
 .flow-compact-split-chart__segment {
@@ -71,6 +70,38 @@
   transform: scaleY(1.35);
 }
 
+.week-v2-summary__bar-fill,
+.week-v2-cat-row__bar span,
+.week-v2-rank__bar span {
+  transform-origin: left bottom;
+  transition: filter 160ms var(--ease-out-quart), transform 160ms var(--ease-out-quart);
+}
+
+.week-v2-summary__bar:hover .week-v2-summary__bar-fill {
+  filter: brightness(1.08) saturate(1.05);
+  transform: scaleY(1.2);
+}
+
+.week-v2-cat-row:hover .week-v2-cat-row__bar span,
+.week-v2-rank li:hover .week-v2-rank__bar span {
+  filter: brightness(1.08) saturate(1.04);
+  transform: scaleX(1.015);
+}
+
+.week-v2-calendar__event {
+  transform-origin: center;
+  transition: border-color 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);
+}
+
+.week-v2-calendar__event:hover {
+  border-color: color-mix(in srgb, white 28%, var(--event-tone, var(--accent)));
+  filter: brightness(1.08) saturate(1.05);
+  box-shadow:
+    0 10px 20px color-mix(in srgb, var(--canvas) 50%, transparent),
+    0 0 0 1px color-mix(in srgb, white 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+}
+
 .flow-cell {
   transform-origin: center;
   transition: box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);
@@ -81,16 +112,48 @@ button.flow-cell:focus {
   transform: none;
 }
 
+button.flow-cell.flow-cell--hover-group {
+  filter: none;
+  box-shadow: none;
+}
+
 .flow-cell__mark {
   transform-origin: center;
-  transition: opacity 160ms var(--ease-out-quart), background 160ms var(--ease-out-quart);
+  transition: opacity 160ms var(--ease-out-quart), background 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);
+}
+
+.flow-cell--hover-group .flow-cell__mark {
+  box-shadow: none;
+  opacity: 0;
+  transform: none;
 }
 
 button.flow-cell:hover .flow-cell__mark,
 button.flow-cell:focus .flow-cell__mark {
   background: color-mix(in srgb, var(--surface) 16%, transparent);
-  opacity: 0.62;
+  box-shadow: none;
+  opacity: 0.5;
   transform: none;
+}
+
+button.flow-cell.flow-cell--hover-group:hover .flow-cell__mark,
+button.flow-cell.flow-cell--hover-group:focus .flow-cell__mark {
+  opacity: 0;
+}
+
+.flow-hover-group-highlight {
+  position: absolute;
+  top: calc((100% / var(--flow-row-count)) * var(--flow-hover-row));
+  left: calc(var(--flow-axis-gutter) + ((100% - var(--flow-axis-gutter)) / 24) * var(--flow-hover-hour));
+  z-index: 2;
+  width: calc((100% - var(--flow-axis-gutter)) / 24);
+  height: calc((100% / var(--flow-row-count)) * var(--flow-hover-row-span));
+  border: 1px solid color-mix(in srgb, var(--surface) 64%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--surface) 26%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 4%, transparent), 0 8px 16px color-mix(in srgb, var(--text) 9%, transparent);
+  pointer-events: none;
+  animation: flow-hover-group-in 160ms var(--ease-out-quart) both;
 }
 
 .timeline-hover-card,
@@ -112,25 +175,38 @@ button.flow-cell:focus .flow-cell__mark {
   }
 }
 
+@keyframes flow-hover-group-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bar-fill,
   .focus-drift__line,
   .focus-drift__target,
   .flow-compact-productivity-circle__segment,
-  .flow-compact-productivity-circle__center,
+  .eodr-dial__segment,
   .flow-compact-split-chart__segment,
+  .week-v2-summary__bar-fill,
+  .week-v2-cat-row__bar span,
+  .week-v2-rank__bar span,
+  .week-v2-calendar__event,
   .flow-cell,
   .flow-cell__mark,
+  .flow-hover-group-highlight,
   .timeline-hover-card,
   .flow-hover-card,
   .focus-drift-hover-card {
     transition-duration: 0.01ms !important;
     animation: none !important;
     transform: none !important;
-  }
-
-  .flow-compact-productivity-circle__center {
-    transform: translate(-50%, -50%) !important;
   }
 
   .flow-compact-productivity-circle__segment {

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment, type AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
+import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 
 type ReviewBreakdownKey = "focus" | "drift" | "other";
@@ -83,7 +84,6 @@ type ReviewCategoryStyle = CSSProperties & {
 };
 
 const REVIEW_GRAPH_RADIUS = 40;
-const REVIEW_GRAPH_CIRCUMFERENCE = 2 * Math.PI * REVIEW_GRAPH_RADIUS;
 const BREAKDOWN_ORDER: Record<ReviewBreakdownKey, number> = { focus: 0, drift: 1, other: 2 };
 const REVIEW_CATEGORY_COLORS = [
   "var(--productivity-focus)",
@@ -228,7 +228,7 @@ function ReviewMetrics({ event }: { event: EndOfDayReviewEvent }) {
 }
 
 function ReviewDonut({ breakdown, leadingItem }: { breakdown: ReviewBreakdownItem[]; leadingItem: ReviewBreakdownItem | undefined }) {
-  let offset = 0;
+  const segments = buildDonutArcSegments(breakdown, (item) => item.percent / 100, 50, 50, REVIEW_GRAPH_RADIUS);
 
   return (
     <div className="eodr-dial-shell">
@@ -240,23 +240,13 @@ function ReviewDonut({ breakdown, leadingItem }: { breakdown: ReviewBreakdownIte
         focusable="false"
       >
         <circle className="eodr-dial__track" cx="50" cy="50" r={REVIEW_GRAPH_RADIUS} />
-        {breakdown.map((item) => {
-          const length = (item.percent / 100) * REVIEW_GRAPH_CIRCUMFERENCE;
-          const dashOffset = -offset;
-          offset += length;
-
-          return (
-            <circle
-              key={item.key}
-              className={`eodr-dial__segment eodr-dial__segment--${item.key}`}
-              cx="50"
-              cy="50"
-              r={REVIEW_GRAPH_RADIUS}
-              strokeDasharray={`${length} ${REVIEW_GRAPH_CIRCUMFERENCE - length}`}
-              strokeDashoffset={dashOffset}
-            />
-          );
-        })}
+        {segments.map(({ entry, pathData }) => (
+          <path
+            key={entry.key}
+            className={`eodr-dial__segment eodr-dial__segment--${entry.key}`}
+            d={pathData}
+          />
+        ))}
       </svg>
       <div className="eodr-dial__center" aria-hidden="true"><strong>{formatReviewPercent(leadingItem?.percent ?? 0)}</strong></div>
     </div>

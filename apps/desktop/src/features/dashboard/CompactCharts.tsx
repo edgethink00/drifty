@@ -1,6 +1,7 @@
 import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { buildAppUsageSummaries } from "@drifty/domain";
 import type { ActivitySegment, AppIconMap, CategoryDuration, FlowBlock, ProductivityDuration } from "@drifty/domain";
 import { CompactClassificationHoverCard } from "./HoverCards";
@@ -72,14 +73,8 @@ export function CompactProductivityCircleChart({
   const focusSeconds = focusEntry?.totalSeconds ?? 0;
   const focusPercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
   const circleLabel = formatCompactBarLabel("Productivity", entries, (entry) => productivityLabel(entry.productivity));
-  let cursor = 0;
   const gap = activeEntries.length > 1 ? 1.6 : 0;
-  const circleSegments = activeEntries.map((entry) => {
-    const dash = Math.max(0, entry.ratio * DONUT_CIRCUMFERENCE - gap);
-    const offset = -(cursor * DONUT_CIRCUMFERENCE);
-    cursor += entry.ratio;
-    return { entry, dash, offset };
-  });
+  const circleSegments = buildDonutArcSegments(activeEntries, (entry) => entry.ratio, 50, 50, 40, gap / DONUT_CIRCUMFERENCE);
 
   function showSegmentHover(entry: ProductivityDuration, x: number, y: number) {
     setHoveredSegment({
@@ -104,18 +99,14 @@ export function CompactProductivityCircleChart({
         <div className="flow-compact-productivity-circle__dial-shell">
           <svg className="flow-compact-productivity-circle__dial" role="img" aria-label={circleLabel} viewBox="0 0 100 100">
             <circle className="flow-compact-productivity-circle__track" cx="50" cy="50" r="40" />
-            {circleSegments.map(({ entry, dash, offset }) => (
-              <circle
+            {circleSegments.map(({ entry, pathData }) => (
+              <path
                 className="flow-compact-productivity-circle__segment"
-                cx="50"
-                cy="50"
+                d={pathData}
                 key={entry.productivity}
-                r="40"
                 stroke={PRODUCTIVITY_COLORS[entry.productivity]}
-                strokeDasharray={`${dash} ${DONUT_CIRCUMFERENCE}`}
-                strokeDashoffset={offset}
-                onMouseEnter={(event: MouseEvent<SVGCircleElement>) => showSegmentHover(entry, event.clientX, event.clientY)}
-                onMouseMove={(event: MouseEvent<SVGCircleElement>) => showSegmentHover(entry, event.clientX, event.clientY)}
+                onMouseEnter={(event: MouseEvent<SVGPathElement>) => showSegmentHover(entry, event.clientX, event.clientY)}
+                onMouseMove={(event: MouseEvent<SVGPathElement>) => showSegmentHover(entry, event.clientX, event.clientY)}
                 onMouseLeave={() => setHoveredSegment(null)}
               />
             ))}
