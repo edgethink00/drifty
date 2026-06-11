@@ -8,6 +8,7 @@ import {
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { Dropdown } from "./components/Dropdown";
+import { GoogleMark } from "./components/GoogleMark";
 import { TypewriterSequence } from "./components/TypewriterSequence";
 import {
   MAIN_ACTIVITY_OPTIONS,
@@ -840,7 +841,14 @@ export function OnboardingModal({
                     onClick={onStartCloudTrialWithGoogle}
                     disabled={accountConnected}
                   >
-                    {accountConnected ? "Account connected" : "Continue with Google"}
+                    {accountConnected ? (
+                      "Account connected"
+                    ) : (
+                      <>
+                        <GoogleMark />
+                        <span>Continue with Google</span>
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"

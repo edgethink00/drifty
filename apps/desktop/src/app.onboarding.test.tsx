@@ -431,7 +431,11 @@ describe("App onboarding", () => {
 
     await chooseSimpleSetup();
 
-    fireEvent.click(await screen.findByRole("button", { name: /continue with google/i }));
+    const googleButton = await screen.findByRole("button", { name: /continue with google/i });
+
+    expect(googleButton.querySelector(".onb-google-mark svg")).toBeTruthy();
+
+    fireEvent.click(googleButton);
 
     expect(authState.signInWithGoogle).toHaveBeenCalledTimes(1);
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
