@@ -4330,6 +4330,13 @@ input, textarea { color: inherit; }
 .settings-row .ctrl { flex-shrink: 0; }
 .settings-row .ctrl--value { font-family: var(--font-mono); font-size: var(--type-setting-value-size); }
 
+.settings-build-code {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  overflow-wrap: anywhere;
+}
+
 .settings-row--fallback {
   align-items: stretch;
   flex-direction: column;
