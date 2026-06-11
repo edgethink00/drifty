@@ -1,0 +1,139 @@
+:root {
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.bar-fill {
+  transform-origin: left center;
+  transition: filter 160ms var(--ease-out-quart), transform 160ms var(--ease-out-quart);
+}
+
+.bar-row:hover .bar-fill {
+  filter: brightness(1.06) saturate(1.04);
+  transform: scaleY(1.55);
+}
+
+.focus-drift__line {
+  transition: filter 180ms var(--ease-out-quart), opacity 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart);
+}
+
+.focus-drift:has(.focus-drift-hover-card) .focus-drift__line {
+  filter: drop-shadow(0 0 0.32rem color-mix(in srgb, var(--text) 18%, transparent));
+  opacity: 0.94;
+}
+
+.focus-drift__target {
+  transition: fill 180ms var(--ease-out-quart), stroke 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart), filter 180ms var(--ease-out-quart);
+}
+
+.focus-drift__target--focus:hover,
+.focus-drift__target--focus:focus {
+  stroke-width: 0.68;
+  filter: drop-shadow(0 0 0.42rem color-mix(in srgb, var(--productivity-focus) 34%, transparent));
+}
+
+.focus-drift__target--drift:hover,
+.focus-drift__target--drift:focus {
+  stroke-width: 0.68;
+  filter: drop-shadow(0 0 0.42rem color-mix(in srgb, var(--productivity-drift) 34%, transparent));
+}
+
+.flow-compact-productivity-circle__segment {
+  transition: filter 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart), opacity 180ms var(--ease-out-quart);
+}
+
+.flow-compact-productivity-circle__segment:hover {
+  stroke-width: 20;
+}
+
+.flow-compact-productivity-circle__dial-shell:hover .flow-compact-productivity-circle__segment:not(:hover) {
+  opacity: 0.72;
+}
+
+.flow-compact-productivity-circle__center {
+  transition: transform 180ms var(--ease-out-quart);
+}
+
+.flow-compact-productivity-circle__dial-shell:hover .flow-compact-productivity-circle__center {
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.flow-compact-split-chart__segment {
+  transform-origin: center;
+  transition: filter 160ms var(--ease-out-quart), transform 160ms var(--ease-out-quart), opacity 160ms var(--ease-out-quart);
+}
+
+.flow-compact-split-chart__bar:hover .flow-compact-split-chart__segment:not(:hover) {
+  opacity: 0.72;
+}
+
+.flow-compact-split-chart__segment:hover {
+  filter: brightness(1.07) saturate(1.04);
+  transform: scaleY(1.35);
+}
+
+.flow-cell {
+  transform-origin: center;
+  transition: box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);
+}
+
+button.flow-cell:hover,
+button.flow-cell:focus {
+  transform: none;
+}
+
+.flow-cell__mark {
+  transform-origin: center;
+  transition: opacity 160ms var(--ease-out-quart), background 160ms var(--ease-out-quart);
+}
+
+button.flow-cell:hover .flow-cell__mark,
+button.flow-cell:focus .flow-cell__mark {
+  background: color-mix(in srgb, var(--surface) 16%, transparent);
+  opacity: 0.62;
+  transform: none;
+}
+
+.timeline-hover-card,
+.flow-hover-card,
+.focus-drift-hover-card {
+  animation: chart-hover-card-in 160ms var(--ease-out-quart) both;
+  transform-origin: top left;
+}
+
+@keyframes chart-hover-card-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.18rem, 0) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill,
+  .focus-drift__line,
+  .focus-drift__target,
+  .flow-compact-productivity-circle__segment,
+  .flow-compact-productivity-circle__center,
+  .flow-compact-split-chart__segment,
+  .flow-cell,
+  .flow-cell__mark,
+  .timeline-hover-card,
+  .flow-hover-card,
+  .focus-drift-hover-card {
+    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .flow-compact-productivity-circle__center {
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .flow-compact-productivity-circle__segment {
+    transform: rotate(-90deg) !important;
+  }
+}
