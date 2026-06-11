@@ -37,13 +37,24 @@ export function ExtremeNudgeToast({
   return (
     <aside className="extreme-nudge-toast" data-phase={phase} role="status" aria-live="polite" aria-atomic="true">
       <div className="extreme-nudge-toast__mark" aria-hidden="true">
-        <span />
+        <ExtremeNudgeScissorsIcon />
       </div>
       <div className="extreme-nudge-toast__copy">
         <p className="extreme-nudge-toast__eyebrow">Extreme nudge</p>
         <h2>Closed {event.closedLabel}</h2>
-        <p>{event.focusLabel ? `Returned to ${event.focusLabel}` : "Drift target is out of the way"}</p>
+        <p>{event.focusLabel ? `Focus switched to ${event.focusLabel}` : "Focus target was not available"}</p>
       </div>
     </aside>
+  );
+}
+
+function ExtremeNudgeScissorsIcon() {
+  return (
+    <svg className="extreme-nudge-toast__icon" viewBox="0 0 24 24" fill="none" focusable="false">
+      <circle cx="6.4" cy="7.2" r="2.25" />
+      <circle cx="6.4" cy="16.8" r="2.25" />
+      <path d="M8.25 8.45 19 19.2" />
+      <path d="M8.25 15.55 19 4.8" />
+    </svg>
   );
 }

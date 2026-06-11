@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WatcherWindowApp } from "./WatcherWindowApp";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
@@ -103,6 +103,7 @@ const extremeNudgeToastEvent: ExtremeNudgeToastEvent = {
 
 describe("WatcherWindowApp", () => {
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
     bridge.showHandler = null;
     window.localStorage.clear();
@@ -165,7 +166,7 @@ describe("WatcherWindowApp", () => {
 
     const toast = screen.getByRole("status");
     expect(toast.textContent).toContain("Closed youtube.com");
-    expect(toast.textContent).toContain("Returned to docs.drifty.so");
+    expect(toast.textContent).toContain("Focus switched to docs.drifty.so");
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
     act(() => {
