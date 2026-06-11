@@ -57,7 +57,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
   }
 
   return {
-    tone: "neutral",
+    tone: "error",
     label: "Disconnected",
     providerLabel: "Setup needed",
   };
