@@ -46,8 +46,12 @@ export async function evaluateYouTubeDriftAlarmGate(input: YouTubeDriftAlarmGate
 
   const timeoutMs = input.timeoutMs ?? DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS;
   try {
+    const aiOptions = {
+      ...(input.aiOptions ?? {}),
+      persistLiveResult: true,
+    } satisfies AiClassificationRunOptions;
     const aiResult = await withTimeout(
-      classifyLiveActivityWithAi(input.segment, input.aiOptions ?? {}),
+      classifyLiveActivityWithAi(input.segment, aiOptions),
       timeoutMs,
     );
 

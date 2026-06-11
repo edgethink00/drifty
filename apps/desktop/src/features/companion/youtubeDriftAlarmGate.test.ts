@@ -68,6 +68,9 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
 
     expect(result).toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
     expect(classifyLiveActivityWithAi).toHaveBeenCalledTimes(1);
+    expect(classifyLiveActivityWithAi).toHaveBeenCalledWith(expect.objectContaining({
+      id: "youtube-video-1",
+    }), { persistLiveResult: true });
   });
 
   it("suppresses a YouTube drift video when AI classifies it as focus", async () => {
