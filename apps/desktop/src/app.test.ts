@@ -586,6 +586,54 @@ describe('domain helpers', () => {
     }, { rules })).toMatchObject({ productivity: 'focus', source: 'manual' });
   });
 
+  it('marks reused AI classifications as cached', () => {
+    const segment = {
+      ...segments[0],
+      appName: 'Unmapped App',
+      classification: {
+        category: 'entertainment' as const,
+        productivity: 'drift' as const,
+        source: 'llm' as const,
+        confidence: 0.8,
+        reason: 'Reused AI result',
+        aiResult: true,
+        reusedAiResult: true,
+      },
+    };
+
+    expect(classifyActivityDetailed(segment)).toMatchObject({ source: 'llm', aiCached: true });
+    expect(classifyActivityDetailed({
+      ...segment,
+      classification: { ...segment.classification, reusedAiResult: false },
+    }).aiCached).toBeUndefined();
+  });
+
+  it('keeps stored user-rule rows but recomputes stamped heuristic rule rows', () => {
+    const stored = {
+      category: 'entertainment' as const,
+      productivity: 'neutral' as const,
+      source: 'rule' as const,
+      confidence: 1,
+      reason: 'Matched local app rule: code',
+      aiResult: false,
+    };
+    const vsCode = {
+      ...segments[0],
+      appName: 'Code',
+      bundleId: 'com.microsoft.VSCode',
+    };
+
+    expect(classifyActivityDetailed({
+      ...vsCode,
+      classification: { ...stored, classificationRuleId: 'rule-1' },
+    })).toMatchObject({ category: 'entertainment', productivity: 'neutral', source: 'rule' });
+
+    expect(classifyActivityDetailed({
+      ...vsCode,
+      classification: stored,
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+  });
+
   it('skips disabled rules', () => {
     expect(classifyActivityDetailed({
       ...segments[0],

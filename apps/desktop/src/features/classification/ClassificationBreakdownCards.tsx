@@ -148,7 +148,7 @@ export function CategoryUsageList({
   );
 }
 
-export function ClassificationSourcePill({ source, ai }: { source?: ClassificationSource | null; ai?: boolean | null }) {
-  const label = classificationSourceLabel(source, ai);
+export function ClassificationSourcePill({ source, ai, aiCached }: { source?: ClassificationSource | string | null; ai?: boolean | null; aiCached?: boolean | null }) {
+  const label = classificationSourceLabel(source, ai, aiCached);
   return <span className={`classification-source-pill${ai ? " classification-source-pill--ai" : ""}`}>{label}</span>;
 }

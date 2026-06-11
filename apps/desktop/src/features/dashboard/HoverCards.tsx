@@ -292,7 +292,7 @@ export function TimelineHoverCard({ hover }: { hover: TimelineHoverState }) {
         <strong>{heading}</strong>
       </div>
       <div className="timeline-hover-card__duration">{duration}</div>
-      <ClassificationSourcePill source={hover.segment.classificationSource} ai={hover.segment.aiClassification} />
+      <ClassificationSourcePill source={hover.segment.classificationSource} ai={hover.segment.aiClassification} aiCached={hover.segment.aiCachedClassification} />
       {activityLines.length > 0 ? (
         <div className="timeline-hover-card__activities">
           {activityLines.map((line) => <span key={line}>{line.replace(/^-\s*/, "")}</span>)}

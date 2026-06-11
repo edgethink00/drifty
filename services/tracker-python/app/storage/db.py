@@ -1066,6 +1066,8 @@ class TrackerDatabase:
                 activity_classifications.classified_at AS classification_classified_at,
                 activity_classifications.ai_result AS classification_ai_result,
                 activity_classifications.stale AS classification_stale,
+                activity_classifications.request_id AS classification_request_id,
+                activity_classifications.latency_ms AS classification_latency_ms,
                 activity_classifications.classification_rule_id AS classification_rule_id
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
@@ -1118,6 +1120,8 @@ class TrackerDatabase:
                 activity_classifications.classified_at AS classification_classified_at,
                 activity_classifications.ai_result AS classification_ai_result,
                 activity_classifications.stale AS classification_stale,
+                activity_classifications.request_id AS classification_request_id,
+                activity_classifications.latency_ms AS classification_latency_ms,
                 activity_classifications.classification_rule_id AS classification_rule_id
             FROM activity_segments
             LEFT JOIN youtube_video_metadata
@@ -1232,6 +1236,12 @@ class TrackerDatabase:
                 "aiResult": bool(row.get("classification_ai_result")),
                 "stale": bool(row.get("classification_stale")),
                 "classificationRuleId": row.get("classification_rule_id"),
+                # Fresh LLM responses always record latency; fingerprint-cache
+                # reuse stores neither request_id nor latency_ms.
+                "reusedAiResult": bool(row.get("classification_ai_result"))
+                and (row.get("classification_source") or "") == "llm"
+                and row.get("classification_request_id") is None
+                and row.get("classification_latency_ms") is None,
             }
 
         serialized = {
