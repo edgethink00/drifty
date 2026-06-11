@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { classifyActivityDetailed } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ProductivityLabel } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
@@ -32,33 +32,55 @@ const historyDayFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+// History loads ~90 days of segments (easily 10k+); rendering them all at once
+// blocks the main thread, so the list grows in pages instead.
+const HISTORY_RENDER_STEP = 200;
+
 export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: HistoryViewProps) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
   const normalizedQuery = query.trim().toLowerCase();
 
-  const visibleSegments = useMemo(() => {
-    const sortedSegments = [...segments].sort((left, right) => (
+  const sortedSegments = useMemo(() => (
+    [...segments].sort((left, right) => (
       new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime()
-    ));
+    ))
+  ), [segments]);
+
+  const searchTextCache = useMemo(() => new Map<string, string>(), [segments]);
+
+  const visibleSegments = useMemo(() => {
     if (!normalizedQuery) return sortedSegments;
 
-    return sortedSegments.filter((segment) => historySearchText(segment).includes(normalizedQuery));
-  }, [normalizedQuery, segments]);
+    return sortedSegments.filter((segment) => {
+      let text = searchTextCache.get(segment.id);
+      if (text === undefined) {
+        text = historySearchText(segment);
+        searchTextCache.set(segment.id, text);
+      }
+      return text.includes(normalizedQuery);
+    });
+  }, [normalizedQuery, searchTextCache, sortedSegments]);
 
-  const groups = useMemo(() => groupHistorySegments(visibleSegments), [visibleSegments]);
+  const renderedSegments = visibleSegments.length > renderLimit
+    ? visibleSegments.slice(0, renderLimit)
+    : visibleSegments;
+  const hiddenCount = visibleSegments.length - renderedSegments.length;
+
+  const groups = useMemo(() => groupHistorySegments(renderedSegments), [renderedSegments]);
   const selectedCount = selectedIds.size;
   const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
 
-  function toggleSegment(segmentId: string, selected: boolean) {
+  const toggleSegment = useCallback((segmentId: string, selected: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (selected) next.add(segmentId);
       else next.delete(segmentId);
       return next;
     });
-  }
+  }, []);
 
   async function confirmDelete() {
     const ids = Array.from(selectedIds);
@@ -96,7 +118,10 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
             type="search"
             aria-label="Search history"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setRenderLimit(HISTORY_RENDER_STEP);
+            }}
             placeholder="Search history"
           />
         </label>
@@ -125,6 +150,15 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
               </div>
             </section>
           ))}
+          {hiddenCount > 0 ? (
+            <button
+              type="button"
+              className="settings-btn history-show-more"
+              onClick={() => setRenderLimit((current) => current + HISTORY_RENDER_STEP)}
+            >
+              Show more ({hiddenCount.toLocaleString("en-US")} older {hiddenCount === 1 ? "record" : "records"})
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -150,7 +184,7 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
   );
 }
 
-function HistoryRow({
+const HistoryRow = memo(function HistoryRow({
   appIcons,
   onSelectedChange,
   segment,
@@ -196,7 +230,7 @@ function HistoryRow({
       </div>
     </article>
   );
-}
+});
 
 function groupHistorySegments(segments: readonly ActivitySegment[]): readonly HistoryGroup[] {
   const groups = new Map<string, ActivitySegment[]>();

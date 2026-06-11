@@ -41,6 +41,7 @@ export function SiteFavicon({
       alt=""
       width={size}
       height={size}
+      loading="lazy"
       onError={() => setSourceIndex((current) => current + 1)}
     />
   );
