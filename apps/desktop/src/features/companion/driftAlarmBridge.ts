@@ -96,9 +96,29 @@ export function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
     && typeof candidate.generatedAt === "string"
     && isBreakOptions(candidate.breakOptions)
     && isFocusTargets(candidate.focusTargets)
+    && (candidate.copy === undefined || isDriftAlarmRenderedCopy(candidate.copy))
     && (candidate.sourceSegmentId === undefined || isNullableString(candidate.sourceSegmentId))
     && isDriftAlarmModePayload(candidate)
   );
+}
+
+function isDriftAlarmRenderedCopy(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.title === "string"
+    && typeof candidate.summary === "string"
+    && isStringArray(candidate.contextPills)
+    && typeof candidate.returnToFocusLabel === "string"
+    && typeof candidate.breakChoiceLabel === "string"
+    && typeof candidate.noFocusTargetLabel === "string"
+    && typeof candidate.backToDashboardLabel === "string"
+    && typeof candidate.manualCorrectionLabel === "string"
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function isDriftAlarmModePayload(candidate: Record<string, unknown>): boolean {

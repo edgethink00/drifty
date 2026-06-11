@@ -1,11 +1,11 @@
 import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
-import type { ExtremeNudgeTarget } from "./driftAlarmBridge";
 import { isTauriRuntime } from "./watcherBridge";
 import { classifyActivity, classifyActivityDetailed, isYouTubeBrowsePage } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { activitySegmentIdentity, currentSnapshotIdentity, currentSnapshotToSegment, getLatestWatcherSegment } from "./watcherData";
+import { EXTREME_NUDGE_STORAGE_KEY } from "./extremeNudgeData";
+export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export type DriftAlarmBreakSnooze = {
   untilMs: number;
@@ -20,8 +20,6 @@ export const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
 
 export const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
 
-export const EXTREME_NUDGE_STORAGE_KEY = "drifty.notifications.extremeNudge";
-
 export const DRIFT_ALERT_DELAY_OPTIONS = [
   { value: 0, label: "Instant", detail: "As soon as drift is detected" },
   { value: 60, label: "1m", detail: "After 1 minute of drift" },
@@ -33,32 +31,6 @@ export const DRIFT_ALARM_PREVIEW_OPTIONS = [
   { id: "x-12m", label: "X 12m", contextLabel: "x.com", driftDurationSeconds: 12 * 60, preservedFocusStrikeSeconds: 60 * 60 },
   { id: "no-context-1h", label: "No context 1h", contextLabel: "", driftDurationSeconds: 60 * 60, preservedFocusStrikeSeconds: 2 * 60 * 60 },
 ] as const;
-
-export function buildExtremeNudgeTarget(segment: ActivitySegment): ExtremeNudgeTarget {
-  return {
-    appName: segment.appName.trim() || "Unknown app",
-    bundleId: segment.bundleId?.trim() || null,
-    browserName: segment.browserName?.trim() || null,
-    siteDomain: segment.siteDomain?.trim() || null,
-    siteUrl: segment.siteUrl?.trim() || null,
-  };
-}
-
-export function buildExtremeNudgeToastEvent(segment: ActivitySegment, focusTarget: DriftAlarmFocusTarget | null): ExtremeNudgeToastEvent {
-  const closedLabel = segment.siteDomain?.trim()
-    || segment.siteTitle?.trim()
-    || segment.appName.trim()
-    || "drift";
-
-  return {
-    kind: "extremeNudgeToast",
-    placement: "top-right",
-    id: `extreme-nudge:${segment.id}:${Date.now()}`,
-    generatedAt: new Date().toISOString(),
-    closedLabel,
-    focusLabel: focusTarget?.label ?? null,
-  };
-}
 
 export function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIconMap): DriftAlarmFocusTarget {
   const appName = segment.appName.trim() || "Unknown app";
