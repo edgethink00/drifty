@@ -1,88 +1,177 @@
+import { useState } from "react";
+
 import type { BillingInterval } from "./billingService";
 
-type IndividualPlan = {
-  readonly interval: BillingInterval;
-  readonly name: string;
+export type BillingPlanId = "free" | "individual" | "pro";
+
+type VisibleBillingInterval = Extract<BillingInterval, "monthly" | "yearly">;
+
+type IndividualPrice = {
   readonly price: string;
   readonly cadence: string;
-  readonly note: string;
-  readonly badge?: string;
 };
 
-const INDIVIDUAL_PLANS: readonly IndividualPlan[] = [
-  {
-    interval: "monthly",
-    name: "Monthly",
-    price: "$10",
-    cadence: "billed monthly",
-    note: "Flexible Cloud AI access",
-  },
-  {
-    interval: "quarterly",
-    name: "Quarterly",
-    price: "$27",
-    cadence: "billed quarterly",
-    note: "$9/mo equivalent",
-    badge: "Save 10%",
-  },
-  {
-    interval: "yearly",
-    name: "Yearly",
-    price: "$96",
-    cadence: "billed yearly",
-    note: "$8/mo equivalent",
-    badge: "Save 20%",
-  },
+const INTERVAL_OPTIONS: readonly { readonly id: VisibleBillingInterval; readonly label: string; readonly badge?: string }[] = [
+  { id: "monthly", label: "Monthly" },
+  { id: "yearly", label: "Yearly", badge: "Save 20%" },
 ];
 
+const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, IndividualPrice> = {
+  monthly: {
+    price: "$5/mo",
+    cadence: "billed monthly",
+  },
+  yearly: {
+    price: "$4/mo",
+    cadence: "$48 billed yearly",
+  },
+};
+
+const FREE_PLAN_FEATURES = [
+  "Local classification and predefined rules",
+  "OpenRouter BYOK supported",
+  "Self-hosted local AI endpoint supported",
+  "No Drifty Cloud billing required",
+] as const;
+
+const INDIVIDUAL_PLAN_FEATURES = [
+  "Drifty Cloud AI analysis",
+  "Richer focus and drift summaries",
+  "Account-backed access on this Mac",
+  "Local tracking remains local-first",
+] as const;
+
+const PRO_PLAN_FEATURES = [
+  "Pro model access",
+  "Longer context analysis",
+  "Priority AI experiments",
+  "Advanced weekly review workflows",
+] as const;
+
+function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
+  return (
+    <ul className="individual-plan-card__feature-list">
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
 export function IndividualPlanCards({
+  billingInterval,
+  currentPlan = null,
   disabled = false,
   loadingInterval,
   mode = "checkout",
+  onBillingIntervalChange,
   onSelectPlan,
 }: {
+  readonly billingInterval?: VisibleBillingInterval;
+  readonly currentPlan?: BillingPlanId | null;
   readonly disabled?: boolean;
   readonly loadingInterval: BillingInterval | null;
   readonly mode?: "checkout" | "display";
-  readonly onSelectPlan?: (interval: BillingInterval) => void;
+  readonly onBillingIntervalChange?: (interval: VisibleBillingInterval) => void;
+  readonly onSelectPlan?: (interval: VisibleBillingInterval) => void;
 }) {
-  return (
-    <div className={`individual-plan-cards individual-plan-cards--${mode}`} aria-label="Individual billing plans">
-      {INDIVIDUAL_PLANS.map((plan) => {
-        const className = `individual-plan-card${plan.interval === "yearly" ? " individual-plan-card--featured" : ""}`;
-        const content = (
-          <>
-          <span className="individual-plan-card__topline">
-            <span>{plan.name}</span>
-            {plan.badge ? <small>{plan.badge}</small> : null}
+  const [internalBillingInterval, setInternalBillingInterval] = useState<VisibleBillingInterval>("monthly");
+  const selectedInterval = billingInterval ?? internalBillingInterval;
+  const individualPrice = INDIVIDUAL_PRICE_BY_INTERVAL[selectedInterval];
+  const individualIsCurrent = currentPlan === "individual";
+  const canCheckoutIndividual = mode === "checkout" && !individualIsCurrent;
+
+  const handleIntervalChange = (interval: VisibleBillingInterval) => {
+    setInternalBillingInterval(interval);
+    onBillingIntervalChange?.(interval);
+  };
+
+  const individualContent = (
+    <>
+      <span className="individual-plan-card__topline">
+        <span>Individual</span>
+        {individualIsCurrent ? <small className="individual-plan-card__badge">Current plan</small> : null}
+      </span>
+      <span className="individual-plan-card__price-row">
+        <span className="individual-plan-card__price-stack">
+          <span className="individual-plan-card__price-line">
+            <strong>{individualPrice.price}</strong>
           </span>
-          <strong>{plan.price}</strong>
-          <span className="individual-plan-card__cadence">{plan.cadence}</span>
-          <span className="individual-plan-card__note">{loadingInterval === plan.interval ? "Opening checkout..." : plan.note}</span>
-          </>
-        );
+        </span>
+      </span>
+      <span className="individual-plan-card__cadence">{individualPrice.cadence}</span>
+      <span className="individual-plan-card__note">
+        {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis without managing keys or models."}
+      </span>
+      <PlanFeatureList items={INDIVIDUAL_PLAN_FEATURES} />
+      <span className="individual-plan-card__cta">{individualIsCurrent ? "Current plan" : "Start Individual"}</span>
+    </>
+  );
 
-        if (mode === "display") {
-          return (
-            <article key={plan.interval} className={className} aria-label={`${plan.name} plan`}>
-              {content}
-            </article>
-          );
-        }
-
-        return (
+  return (
+    <div className={`individual-plan-suite individual-plan-suite--${mode}`} aria-label="Drifty billing plans">
+      <div className="individual-plan-intervals" role="radiogroup" aria-label="Billing interval">
+        {INTERVAL_OPTIONS.map((option) => (
           <button
-            key={plan.interval}
+            key={option.id}
             type="button"
-            className={className}
-            aria-label={`Choose ${plan.name} plan`}
-            onClick={() => onSelectPlan?.(plan.interval)}
+            className={`individual-plan-interval${selectedInterval === option.id ? " is-active" : ""}`}
+            role="radio"
+            aria-checked={selectedInterval === option.id}
+            onClick={() => handleIntervalChange(option.id)}
+          >
+            {option.badge ? <small className="individual-plan-interval__badge">{option.badge}</small> : null}
+            <span>{option.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="individual-plan-cards">
+        <article className={`individual-plan-card${currentPlan === "free" ? " individual-plan-card--current" : ""}`} aria-label="Free plan">
+          <span className="individual-plan-card__topline">
+            <span>Free</span>
+            <small className="individual-plan-card__badge">Local-first</small>
+          </span>
+          <span className="individual-plan-card__price-row">
+            <span className="individual-plan-card__price-stack">
+              <span className="individual-plan-card__price-line">
+                <strong>$0</strong>
+              </span>
+            </span>
+          </span>
+          <span className="individual-plan-card__cadence">local-first</span>
+          <span className="individual-plan-card__note">Use Drifty locally with rule-based classification and your own optional AI setup.</span>
+          <PlanFeatureList items={FREE_PLAN_FEATURES} />
+          <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
+        </article>
+        {canCheckoutIndividual ? (
+          <button
+            type="button"
+            className="individual-plan-card individual-plan-card--featured"
+            aria-label="Choose Individual plan"
+            onClick={() => onSelectPlan?.(selectedInterval)}
             disabled={disabled || loadingInterval !== null}
           >
-            {content}
+            {individualContent}
           </button>
-        );
-      })}
+        ) : (
+          <article
+            className={`individual-plan-card individual-plan-card--featured${individualIsCurrent ? " individual-plan-card--current" : ""}`}
+            aria-label="Individual plan"
+          >
+            {individualContent}
+          </article>
+        )}
+        <article className="individual-plan-card individual-plan-card--pro" aria-label="Pro plan">
+          <span className="individual-plan-card__topline">
+            <span>Pro</span>
+            <small className="individual-plan-card__badge">Soon</small>
+          </span>
+          <span className="individual-plan-card__cadence">for heavier AI workflows</span>
+          <span className="individual-plan-card__note">Deeper review loops for heavier AI workflows.</span>
+          <PlanFeatureList items={PRO_PLAN_FEATURES} />
+          <span className="individual-plan-card__cta individual-plan-card__cta--muted">Coming soon</span>
+        </article>
+      </div>
     </div>
   );
 }
