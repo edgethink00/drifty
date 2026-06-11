@@ -43,7 +43,54 @@ describe("buildDriftAlarmCandidates", () => {
     const candidates = buildCandidates({});
 
     expect(candidates).toHaveLength(1);
-    expect(candidates[0]).toMatchObject({ category: "entertainment", sourceSegmentId: "seg-1" });
+    expect(candidates[0]).toMatchObject({
+      alertKey: "active:seg-1",
+      category: "entertainment",
+      sourceSegmentId: "seg-1",
+      segment: expect.objectContaining({
+        id: "seg-1",
+        durationSeconds: 600,
+      }),
+    });
+  });
+
+  it("extends the stored segment duration only while the current snapshot still matches it", () => {
+    const candidates = buildDriftAlarmCandidates({
+      segments: [driftSegment],
+      currentSnapshot: { ...currentSnapshot, observedAt: "2026-06-11T09:10:30.000Z" },
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      alertKey: "active:seg-1",
+      sourceSegmentId: "seg-1",
+      segment: expect.objectContaining({
+        id: "seg-1",
+        endedAt: "2026-06-11T09:10:30.000Z",
+        durationSeconds: 630,
+      }),
+    });
+  });
+
+  it("does not flag a stored drift segment after the current snapshot moves elsewhere", () => {
+    const candidates = buildDriftAlarmCandidates({
+      segments: [driftSegment],
+      currentSnapshot: {
+        ...currentSnapshot,
+        appName: "Code",
+        bundleId: "com.microsoft.VSCode",
+        windowTitle: "Back in code",
+        browserName: null,
+        siteDomain: null,
+        siteTitle: null,
+      },
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([]);
   });
 
   it("suppresses the same window after a Not a drift correction rule", () => {

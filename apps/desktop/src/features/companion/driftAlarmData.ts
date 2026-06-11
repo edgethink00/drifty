@@ -3,7 +3,8 @@ import { isTauriRuntime } from "./watcherBridge";
 import { classifyActivity, classifyActivityDetailed } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
-import { activitySegmentIdentity, currentSnapshotIdentity, currentSnapshotToSegment, getLatestWatcherSegment } from "./watcherData";
+import { getLatestWatcherSegment } from "./watcherData";
+import { getActiveDriftAlarmSegment } from "./driftAlarmCurrentSegment";
 import { EXTREME_NUDGE_STORAGE_KEY } from "./extremeNudgeData";
 import { segmentForLiveDriftAlarmClassification } from "./liveDriftAlarmClassification";
 export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
@@ -96,11 +97,10 @@ export function buildDriftAlarmCandidates({
   minimumDurationSeconds: number;
 }): DriftAlarmCandidate[] {
   if (currentSnapshot) {
-    if (!isCurrentSnapshotFreshEnoughForDriftAlarm(currentSnapshot, segments)) return [];
+    const currentDriftAlarmSegment = getActiveDriftAlarmSegment(currentSnapshot, segments);
+    if (!currentDriftAlarmSegment) return [];
 
-    const durationSeconds = getCurrentSnapshotAlarmDurationSeconds(currentSnapshot, segments);
-    const currentSegment = currentSnapshotToSegment(currentSnapshot, durationSeconds);
-    const sourceSegmentId = getCurrentSnapshotSourceSegmentId(currentSnapshot, segments);
+    const { alertKey, segment: currentSegment, sourceSegmentId } = currentDriftAlarmSegment;
     const currentClassificationOptions = {
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
@@ -119,7 +119,7 @@ export function buildDriftAlarmCandidates({
       })
     ) {
       return [{
-        alertKey: `current:${currentSnapshotIdentity(currentSnapshot)}`,
+        alertKey,
         category: currentClassification.category,
         segment: currentSegment,
         sourceSegmentId,
@@ -203,36 +203,6 @@ function sumNearbyShoppingDriftSeconds(candidate: ActivitySegment, segments: Act
     const overlapMs = Math.max(0, Math.min(segmentEnd, windowEnd) - Math.max(segmentStart, windowStart));
     return total + Math.round(overlapMs / 1000);
   }, candidate.durationSeconds);
-}
-
-export function isCurrentSnapshotFreshEnoughForDriftAlarm(current: CurrentActivitySnapshot, segments: ActivitySegment[]): boolean {
-  const latestSegment = getLatestWatcherSegment(segments);
-  if (!latestSegment) return true;
-  if (activitySegmentIdentity(latestSegment) === currentSnapshotIdentity(current)) return true;
-
-  const observedAt = new Date(current.observedAt).getTime();
-  const latestEndedAt = new Date(latestSegment.endedAt).getTime();
-  if (!Number.isFinite(observedAt) || !Number.isFinite(latestEndedAt)) return false;
-
-  return observedAt >= latestEndedAt;
-}
-
-export function getCurrentSnapshotAlarmDurationSeconds(current: CurrentActivitySnapshot, segments: ActivitySegment[]): number {
-  const latestSegment = getLatestWatcherSegment(segments);
-  if (!latestSegment) return 0;
-  if (activitySegmentIdentity(latestSegment) !== currentSnapshotIdentity(current)) return 0;
-
-  const observedAt = new Date(current.observedAt).getTime();
-  const endedAt = new Date(latestSegment.endedAt).getTime();
-  const elapsedSeconds = Number.isFinite(observedAt) && Number.isFinite(endedAt) ? Math.max(0, Math.round((observedAt - endedAt) / 1000)) : 0;
-  return latestSegment.durationSeconds + elapsedSeconds;
-}
-
-export function getCurrentSnapshotSourceSegmentId(current: CurrentActivitySnapshot, segments: ActivitySegment[]): string | null {
-  const latestSegment = getLatestWatcherSegment(segments);
-  if (!latestSegment) return null;
-  if (activitySegmentIdentity(latestSegment) !== currentSnapshotIdentity(current)) return null;
-  return latestSegment.id;
 }
 
 export function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {

@@ -163,6 +163,7 @@ describe("runAiClassification cloud contract", () => {
     timeline?: ActivitySegment[];
     edgeResult?: Partial<ActivityClassificationRecord>;
     nativeStatus?: number;
+    saveError?: Error;
   } = {}) {
     vi.resetModules();
     ensureTestWindow();
@@ -182,7 +183,10 @@ describe("runAiClassification cloud contract", () => {
     });
     const getUnclassifiedSegments = vi.fn().mockResolvedValue(segments);
     const getTimeline = vi.fn().mockResolvedValue(options.timeline ?? []);
-    const saveClassifications = vi.fn((records: unknown[]) => Promise.resolve({ saved: records.length }));
+    const saveClassifications = vi.fn((records: unknown[]) => {
+      if (options.saveError) return Promise.reject(options.saveError);
+      return Promise.resolve({ saved: records.length });
+    });
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
     const getReusableAiClassifications = vi.fn((fingerprints: string[]) => Promise.resolve(options.reusable?.(fingerprints) ?? {}));
     const getSession = vi.fn().mockResolvedValue({
@@ -919,6 +923,82 @@ describe("runAiClassification cloud contract", () => {
         }),
       });
       expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("saves supplied live segment classifications when persistence is requested", async () => {
+    const segment = createUnknownSegment(1, {
+      id: "42",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: "https://www.youtube.com/watch?v=lecture",
+      youtubeVideoId: "lecture",
+      youtubeCategory: "Entertainment",
+    });
+
+    try {
+      const { classifyLiveActivityWithAi, saveClassifications } = await importServiceWithSegments([segment], {
+        edgeResult: {
+          category: "entertainment",
+          productivity: "drift",
+          confidence: 0.86,
+          reason: "AI confirms drift video",
+        },
+      });
+      const result = await classifyLiveActivityWithAi(segment, { persistLiveResult: true });
+
+      expect(result.kind).toBe("classified");
+      expect(saveClassifications).toHaveBeenCalledWith([
+        expect.objectContaining({
+          segmentId: "42",
+          category: "entertainment",
+          productivity: "drift",
+          source: "llm",
+          aiResult: true,
+        }),
+      ]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("keeps supplied live segment classifications when optional persistence fails", async () => {
+    const segment = createUnknownSegment(1, {
+      id: "42",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: "https://www.youtube.com/watch?v=lecture",
+      youtubeVideoId: "lecture",
+      youtubeCategory: "Entertainment",
+    });
+
+    try {
+      const { classifyLiveActivityWithAi, saveClassifications } = await importServiceWithSegments([segment], {
+        edgeResult: {
+          category: "entertainment",
+          productivity: "drift",
+          confidence: 0.86,
+          reason: "AI confirms drift video",
+        },
+        saveError: new Error("tracker unavailable"),
+      });
+      const result = await classifyLiveActivityWithAi(segment, { persistLiveResult: true });
+
+      expect(result).toMatchObject({
+        kind: "classified",
+        classification: {
+          segmentId: "42",
+          category: "entertainment",
+          productivity: "drift",
+        },
+      });
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
     } finally {
       cleanupServiceMocks();
     }

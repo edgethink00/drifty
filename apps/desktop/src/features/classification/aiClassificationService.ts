@@ -12,6 +12,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { readUserOnboardingState, type UserOnboardingState } from "../onboarding/onboardingState";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
+import { saveLiveClassificationIfRequested } from "./liveAiClassificationPersistence";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -91,6 +92,7 @@ export type LocalAiProviderConfig =
 
 export type AiClassificationRunOptions = {
   localProvider?: LocalAiProviderConfig | null;
+  persistLiveResult?: boolean;
 };
 
 export type LiveAiClassificationResult =
@@ -440,16 +442,32 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
     const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
     const payload = await toMinimizedPayload(segment, workProfile);
     const reusableRecord = await readReusableAiClassification(payload);
-    if (reusableRecord) return { kind: "classified", classification: reusableRecord };
-
-    if (options.localProvider) {
-      return await classifyLivePayloadWithLocalAi(payload, options.localProvider, workProfile);
+    if (reusableRecord) {
+      await saveLiveClassificationIfRequested(reusableRecord, options.persistLiveResult);
+      return { kind: "classified", classification: reusableRecord };
     }
 
-    return await classifyLivePayloadWithCloudAi(payload, workProfile);
+    if (options.localProvider) {
+      return await saveLiveResultIfRequested(
+        await classifyLivePayloadWithLocalAi(payload, options.localProvider, workProfile),
+        options,
+      );
+    }
+
+    return await saveLiveResultIfRequested(
+      await classifyLivePayloadWithCloudAi(payload, workProfile),
+      options,
+    );
   } catch (error) {
     return unavailableLiveClassification(messageFromUnknownError(error, "AI classification unavailable."));
   }
+}
+
+async function saveLiveResultIfRequested(result: LiveAiClassificationResult, options: AiClassificationRunOptions): Promise<LiveAiClassificationResult> {
+  if (result.kind === "classified") {
+    await saveLiveClassificationIfRequested(result.classification, options.persistLiveResult);
+  }
+  return result;
 }
 
 export async function runAiClassificationUntilEmpty(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
