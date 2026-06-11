@@ -15,6 +15,8 @@ describe("app feature switches", () => {
     expect(switches.IS_PRODUCTION_BUILD).toBe(true);
     expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(false);
     expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(false);
+    expect(switches.DEV_SETTINGS_ENABLED).toBe(false);
+    expect(switches.END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED).toBe(false);
   });
 
   it("treats beta as an unsupported channel and falls back to dev", async () => {
@@ -26,6 +28,8 @@ describe("app feature switches", () => {
     expect(switches.IS_PRODUCTION_BUILD).toBe(false);
     expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(true);
     expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
+    expect(switches.DEV_SETTINGS_ENABLED).toBe(true);
+    expect(switches.END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED).toBe(true);
   });
 
   it("keeps the onboarding bypass dev-only even when the raw skip flag is present", async () => {
