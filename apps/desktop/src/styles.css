@@ -6983,6 +6983,7 @@ input, textarea { color: inherit; }
 .flow-chart-legend__parent {
   display: inline-flex;
   align-items: center;
+  gap: 0.28rem;
   padding: 0.16rem 0.42rem;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -6994,6 +6995,10 @@ input, textarea { color: inherit; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: default;
+}
+
+.flow-chart-legend__parent--tone {
+  color: var(--text-soft);
 }
 
 .flow-chart-legend__categories {
@@ -7019,13 +7024,25 @@ input, textarea { color: inherit; }
 .flow-chart-legend__dot--utility { background: var(--category-utility); }
 .flow-chart-legend__dot--unknown { background: var(--category-unknown); }
 
+.flow-chart-legend__tone-dot {
+  width: 0.546rem;
+  height: 0.546rem;
+  border-radius: 999px;
+  background: var(--flow-legend-tone);
+}
+
 .flow-interval-control {
   flex: 0 0 auto;
 }
 
-.flow-interval-control button {
+.flow-interval-control button,
+.flow-color-mode-control button {
   padding: 3px var(--space-2);
   font-size: 0.58rem;
+}
+
+.flow-color-mode-control {
+  flex: 0 0 auto;
 }
 
 .flow-chart-hours,
@@ -7229,6 +7246,42 @@ button.flow-cell:focus {
   color: var(--text-soft);
   font-size: 0.72rem;
   line-height: 1.45;
+}
+
+.flow-hover-card__identity-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
+.flow-hover-card__identity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  padding: 0.19rem 0.44rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 58%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 76%, transparent);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.flow-hover-card__identity-dot {
+  flex: 0 0 auto;
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: var(--flow-hover-identity-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 78%, transparent);
+}
+
+.flow-hover-card__detail {
+  margin: 0;
 }
 
 .focus-drift-hover-card__head {
