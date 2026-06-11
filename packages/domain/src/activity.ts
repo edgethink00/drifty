@@ -35,9 +35,19 @@ export interface StoredActivityClassification extends ActivityClassification {
   stale?: boolean | null;
 }
 
+export interface ClassificationRuleOption {
+  targetKind: "app" | "site";
+  targetValue: string;
+  category: ActivityCategory;
+  productivity: ProductivityLabel;
+  enabled?: boolean;
+  confidence?: number | null;
+}
+
 export interface ClassificationOptions {
   fallbackCandidates?: ActivitySegment[];
   includeAiClassifications?: boolean;
+  rules?: ClassificationRuleOption[];
 }
 
 export interface ActivitySegment {
