@@ -142,7 +142,7 @@ import {
   fetchBillingEntitlement,
   type BillingEntitlement,
 } from "./features/billing/billingService";
-import { IndividualPlanCards } from "./features/billing/IndividualPlanCards";
+import { IndividualPlanCards, type BillingPlanId } from "./features/billing/IndividualPlanCards";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
@@ -3114,6 +3114,12 @@ export default function App() {
   const aiServerStatusLabel = aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const cloudSetupActionLabel = driftyCloudSetupActionLabel(effectiveBillingEntitlement, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
+  const currentBillingPlan: BillingPlanId | null =
+    effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing"
+      ? "individual"
+      : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
+        ? "free"
+        : null;
   const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
   const localAiConnectionProviderLabel = localAiSetup.provider === "openrouter_byok" ? "BYOK AI" : "Local AI";
   const aiConnectionStatus = resolveAiConnectionStatus({
@@ -3937,6 +3943,7 @@ export default function App() {
                         </div>
                         <div className="ctrl settings-row__actions">
                           <IndividualPlanCards
+                            currentPlan={currentBillingPlan}
                             disabled={isDashboardAiUnavailablePreviewActive}
                             loadingInterval={billingCheckoutLoadingInterval}
                             mode={shouldShowCloudCheckoutPlans ? "checkout" : "display"}
