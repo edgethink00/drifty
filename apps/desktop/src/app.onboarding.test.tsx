@@ -400,7 +400,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
   });
 
-  it("requires the real account callback before Drifty Cloud can continue", async () => {
+  it("routes onboarding email continuation to the website handoff", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.isEnabled = false;
@@ -414,137 +414,12 @@ describe("App onboarding", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
 
-    expect(screen.getByLabelText(/^email$/i)).toBeTruthy();
-    expect(screen.getByLabelText(/^password$/i)).toBeTruthy();
-    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+    expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
     expect(authState.signInWithEmail).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("signs in from the inline onboarding email form without a website handoff", async () => {
-    authState.user = null;
-    authState.status = "unauthenticated";
-    authState.hasRequiredAccountAuth = false;
-
-    render(<App />);
-
-    await chooseSimpleSetup();
-    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
-    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
-      target: { value: "riley@example.com" },
-    });
-    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
-      target: { value: "hunter22" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: /sign in with email/i }));
-
-    await waitFor(() => {
-      expect(authState.signInWithEmail).toHaveBeenCalledWith("riley@example.com", "hunter22");
-    });
     expect(authState.signUpWithEmail).not.toHaveBeenCalled();
-    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-  });
-
-  it("creates an account from the inline onboarding email form", async () => {
-    authState.user = null;
-    authState.status = "unauthenticated";
-    authState.hasRequiredAccountAuth = false;
-    authState.signUpWithEmail.mockResolvedValueOnce({ error: null, needsEmailConfirmation: true });
-
-    render(<App />);
-
-    await chooseSimpleSetup();
-    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
-    fireEvent.click(within(dialog).getByRole("button", { name: /create account/i }));
-    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
-      target: { value: "new@example.com" },
-    });
-    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
-      target: { value: "hunter22" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: /create account with email/i }));
-
-    await waitFor(() => {
-      expect(authState.signUpWithEmail).toHaveBeenCalledWith("new@example.com", "hunter22");
-    });
-    expect(authState.signInWithEmail).not.toHaveBeenCalled();
-    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
-    expect(await within(dialog).findByText(/check new@example\.com/i)).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("shows inline onboarding email validation and Supabase errors", async () => {
-    authState.user = null;
-    authState.status = "unauthenticated";
-    authState.hasRequiredAccountAuth = false;
-    authState.signInWithEmail.mockResolvedValueOnce({ error: new Error("Invalid login credentials") });
-
-    render(<App />);
-
-    await chooseSimpleSetup();
-    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
-    fireEvent.click(within(dialog).getByRole("button", { name: /sign in with email/i }));
-
-    expect((await within(dialog).findByRole("alert")).textContent).toMatch(/enter your email address/i);
-    expect(authState.signInWithEmail).not.toHaveBeenCalled();
-
-    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
-      target: { value: "riley@example.com" },
-    });
-    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
-      target: { value: "hunter22" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: /sign in with email/i }));
-
-    expect((await within(dialog).findByRole("alert")).textContent).toMatch(/invalid login credentials/i);
-    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
-  });
-
-  it("submits inline email auth from input Enter without hijacking mode buttons", async () => {
-    authState.user = null;
-    authState.status = "unauthenticated";
-    authState.hasRequiredAccountAuth = false;
-    const emailSignIn = createDeferred<{ error: Error | null }>();
-    authState.signInWithEmail.mockReturnValueOnce(emailSignIn.promise);
-
-    render(<App />);
-
-    await chooseSimpleSetup();
-    const dialog = await screen.findByRole("dialog", { name: /connect your account/i });
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
-    fireEvent.click(within(dialog).getByRole("button", { name: /create account/i }));
-    expect(authState.signInWithEmail).not.toHaveBeenCalled();
-    expect(authState.signUpWithEmail).not.toHaveBeenCalled();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /^sign in$/i }));
-    fireEvent.change(within(dialog).getByLabelText(/^email$/i), {
-      target: { value: "enter@example.com" },
-    });
-    fireEvent.change(within(dialog).getByLabelText(/^password$/i), {
-      target: { value: "hunter22" },
-    });
-    fireEvent.keyDown(within(dialog).getByLabelText(/^password$/i), { key: "Enter" });
-
-    await waitFor(() => {
-      expect(authState.signInWithEmail).toHaveBeenCalledWith("enter@example.com", "hunter22");
-    });
-    expect((within(dialog).getByRole("button", { name: /^sign in$/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect((within(dialog).getByLabelText(/^email$/i) as HTMLInputElement).disabled).toBe(true);
-
-    await act(async () => {
-      emailSignIn.resolve({ error: null });
-    });
   });
 
   it("starts direct Google OAuth from the onboarding Google button", async () => {
