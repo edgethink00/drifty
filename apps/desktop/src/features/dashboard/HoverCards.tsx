@@ -8,6 +8,7 @@ import { secondsToLabel } from "@drifty/domain";
 import type { AppIconMap, DayRibbonSegment } from "@drifty/domain";
 import { ClassificationSourcePill } from "../classification/ClassificationBreakdownCards";
 import { WeekCalendarIdentityIcon } from "./WeekDashboard";
+import { createPortal } from "react-dom";
 import { useLayoutEffect, useRef, useState } from "react";
 
 export type TimelineHoverState = {
@@ -81,7 +82,7 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
     return () => window.removeEventListener("resize", updatePosition);
   }, [hover.appBreakdown, hover.durationLabel, hover.label, hover.shareLabel, hover.x, hover.y]);
 
-  return (
+  const card = (
     <div ref={cardRef} className="flow-hover-card category-hover-card compact-classification-hover-card" style={position}>
       <div className="category-hover-card__head">
         <span className={`category-dot ${hover.dotClassName}`} style={{ background: hover.color }} aria-hidden="true" />
@@ -111,6 +112,8 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
       </div>
     </div>
   );
+
+  return createPortal(card, document.body);
 }
 
 export function WeekCalendarHoverCard({ hover, appIcons }: { hover: WeekCalendarHoverState; appIcons: AppIconMap }) {
