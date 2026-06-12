@@ -357,6 +357,8 @@ def get_current_snapshot():
             "source": snapshot.source,
             "siteSource": snapshot.site_source,
             "captureConfidence": snapshot.capture_confidence,
+            "browserAutomationStatus": snapshot.browser_automation_status,
+            "browserAutomationError": snapshot.browser_automation_error,
         },
     )
 

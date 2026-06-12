@@ -5,8 +5,11 @@ import subprocess
 from urllib.parse import parse_qs, urlparse
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+from typing import Literal
 
 from app.permissions.accessibility import read_front_window_title
+
+BrowserAutomationStatus = Literal["granted", "denied", "unavailable", "stale", "not_applicable"]
 
 
 def utc_now_iso() -> str:
@@ -29,6 +32,8 @@ class Snapshot:
     youtube_is_shorts: bool | None = None
     site_source: str | None = None
     capture_confidence: float = 1.0
+    browser_automation_status: BrowserAutomationStatus | None = None
+    browser_automation_error: str | None = None
 
 
 @dataclass
@@ -42,6 +47,8 @@ class BrowserMetadata:
     youtube_is_shorts: bool | None = None
     ax_window_title: str | None = None
     match_state: str | None = None
+    browser_automation_status: BrowserAutomationStatus | None = None
+    browser_automation_error: str | None = None
 
 
 def _run_osascript(script: str) -> str:
@@ -169,6 +176,21 @@ def _browser_script(app_name: str) -> str | None:
     return None
 
 
+def _is_supported_browser_app(app_name: str | None) -> bool:
+    return bool(app_name and _browser_script(app_name))
+
+
+def _browser_automation_status_from_error(message: str) -> BrowserAutomationStatus:
+    normalized = message.lower()
+    if "not authorized" in normalized or "not permitted" in normalized or "-1743" in normalized:
+        return "denied"
+    return "unavailable"
+
+
+def _safe_browser_automation_error(error: RuntimeError) -> str:
+    return " ".join(str(error).split())[:240]
+
+
 def _tab_matching_script(
     app_name: str,
     exists_check: str,
@@ -255,14 +277,19 @@ def _browser_metadata(app_name: str | None) -> BrowserMetadata:
 
     try:
         result = _run_osascript(script)
-    except Exception:
-        return BrowserMetadata(browser_name=app_name)
+    except RuntimeError as error:
+        error_message = _safe_browser_automation_error(error)
+        return BrowserMetadata(
+            browser_name=app_name,
+            browser_automation_status=_browser_automation_status_from_error(error_message),
+            browser_automation_error=error_message,
+        )
 
     if not result:
-        return BrowserMetadata(browser_name=app_name)
+        return BrowserMetadata(browser_name=app_name, browser_automation_status="granted")
 
     if result.strip() == "STALE":
-        return BrowserMetadata(browser_name=app_name, match_state="stale")
+        return BrowserMetadata(browser_name=app_name, match_state="stale", browser_automation_status="stale")
 
     parts = result.splitlines()
     url = parts[0].strip() if parts else None
@@ -280,6 +307,7 @@ def _browser_metadata(app_name: str | None) -> BrowserMetadata:
         youtube_is_shorts=is_shorts,
         ax_window_title=ax_window_title or None,
         match_state=match_state or None,
+        browser_automation_status="granted",
     )
 
 
@@ -311,6 +339,10 @@ def current_snapshot() -> Snapshot:
         else:
             site_source = "applescript"
 
+    browser_automation_status = browser.browser_automation_status
+    if browser_automation_status is None and not _is_supported_browser_app(app_name):
+        browser_automation_status = "not_applicable"
+
     return Snapshot(
         observed_at=utc_now_iso(),
         app_name=app_name,
@@ -326,6 +358,8 @@ def current_snapshot() -> Snapshot:
         youtube_is_shorts=browser.youtube_is_shorts,
         site_source=site_source,
         capture_confidence=capture_confidence,
+        browser_automation_status=browser_automation_status,
+        browser_automation_error=browser.browser_automation_error,
     )
 
 
