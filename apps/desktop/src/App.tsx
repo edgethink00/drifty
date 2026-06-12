@@ -78,9 +78,11 @@ import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
+import { DebugLogModal } from "./features/settings/DebugLogModal";
 import { SettingsBuildInfoRow } from "./features/settings/SettingsBuildInfoRow";
 import { CategoryColorControls, ClassificationPicker, ThemeColorControls, type AppThemeColorKey, type ColorOption } from "./features/settings/SettingsColorControls";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
+import { buildDebugLogPayload } from "./features/settings/debugLog";
 import { DriftAlarmCopySettings } from "./features/companion/DriftAlarmCopySettings";
 import {
   OnboardingModal,
@@ -543,6 +545,7 @@ export default function App() {
   }, [openEndOfDayReviewDashboard, openEndOfDayReviewSettings]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [developerAuthRequiredPreview, setDeveloperAuthRequiredPreview] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
@@ -3130,53 +3133,47 @@ export default function App() {
       return next;
     });
   }, []);
-  const handleDownloadDebugLogs = useCallback(async () => {
+  const handleOpenDebugLogs = useCallback(async () => {
     const snapshotForDebug = await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
       if (snapshotError instanceof Error) return null;
       throw snapshotError;
     });
-    const payload = {
-      exportedAt: new Date().toISOString(),
+    const payload = buildDebugLogPayload({
       selectedDay,
-      settings: {
-        startOfDayMinutes,
-        startOfWeek,
-        theme,
-        categoryColorOverrides,
-        appThemeColorOverrides,
-      },
-      tracker: {
-        running: status?.running ?? null,
-        lastEventAt: status?.lastEventAt ?? null,
-        databasePath: status?.databasePath ?? null,
-        accessibilityGranted,
-        browserAutomation: snapshotForDebug
-          ? {
-              browserName: snapshotForDebug.browserName ?? null,
-              status: snapshotForDebug.browserAutomationStatus ?? null,
-              error: snapshotForDebug.browserAutomationError ?? null,
-              siteSource: snapshotForDebug.siteSource ?? null,
-              captureConfidence: snapshotForDebug.captureConfidence ?? null,
-              hasSiteContext: Boolean(snapshotForDebug.siteDomain || snapshotForDebug.siteTitle || snapshotForDebug.siteUrl),
-            }
-          : null,
-      },
+      startOfDayMinutes,
+      startOfWeek,
+      theme,
+      categoryColorOverrides,
+      appThemeColorOverrides,
+      status,
+      accessibilityGranted,
+      currentSnapshot: snapshotForDebug,
       driftAlarm: driftAlarmTrayStatus,
-      counts: {
-        todaySegments: segments.length,
-        historySegments: historySegments.length,
-        leaderboardSegments: leaderboardSegments.length,
-      },
+      segments,
+      historySegments,
+      leaderboardSegments,
       error,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    });
+    setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
+  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, driftAlarmTrayStatus, error, historySegments, leaderboardSegments, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  const handleDownloadDebugLogs = useCallback(() => {
+    if (!debugLogPreview) return;
+    const blob = new Blob([debugLogPreview.text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `drifty-debug-log-${payload.exportedAt.replace(/[:.]/g, "-")}.json`;
+    anchor.download = `drifty-debug-log-${debugLogPreview.exportedAt.replace(/[:.]/g, "-")}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, driftAlarmTrayStatus, error, historySegments.length, leaderboardSegments.length, segments.length, selectedDay, startOfDayMinutes, startOfWeek, status?.databasePath, status?.lastEventAt, status?.running, theme]);
+  }, [debugLogPreview]);
+  const handleCopyDebugLogs = useCallback(async () => {
+    if (!debugLogPreview) return;
+    try {
+      await copyTextToClipboard(debugLogPreview.text);
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+    }
+  }, [debugLogPreview]);
 
   if (authStatus === "loading") {
     return <AuthLoadingGate />;
@@ -4035,7 +4032,7 @@ export default function App() {
                       />
                     </div>
                     <div className="settings-block"><h3>Debugging</h3>
-                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleDownloadDebugLogs()}>Download debug logs</button></div></div>
+                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Preview a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleOpenDebugLogs()}>View debug logs</button></div></div>
                       <SettingsBuildInfoRow />
                     </div>
                   </div>
@@ -4346,6 +4343,15 @@ export default function App() {
       {authModalOpen ? <AuthModal onClose={() => setAuthModalOpen(false)} /> : null}
 
       {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
+
+      {debugLogPreview ? (
+        <DebugLogModal
+          text={debugLogPreview.text}
+          onClose={() => setDebugLogPreview(null)}
+          onCopy={() => void handleCopyDebugLogs()}
+          onDownload={handleDownloadDebugLogs}
+        />
+      ) : null}
 
       {openRouterModelPickerOpen ? (
         <div className="auth-modal__overlay" onClick={() => setOpenRouterModelPickerOpen(false)}>
