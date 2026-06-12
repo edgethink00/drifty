@@ -3308,8 +3308,8 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={aiConnectionStatus} />
           <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
+          <AiConnectionStatusBar status={aiConnectionStatus} />
         </div>
       </div>
       {/* ── Sidebar ── */}
