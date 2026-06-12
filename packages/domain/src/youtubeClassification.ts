@@ -71,6 +71,15 @@ export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClass
   return { category: "entertainment", productivity: "drift" };
 }
 
+export function classifyYouTubeWindowTitle(segment: ActivitySegment): ActivityClassification | null {
+  if (normalizeYouTubeSite(segment.siteDomain)) return null;
+
+  const titleParts = normalizeText(segment.windowTitle).split(" - ").map((part) => part.trim());
+  if (titleParts.includes("youtube music")) return { category: "music", productivity: "neutral" };
+  if (titleParts.includes("youtube")) return { category: "entertainment", productivity: "drift" };
+  return null;
+}
+
 export function isYouTubeSite(site: string): boolean {
   const normalizedSite = normalizeYouTubeSite(site);
   return normalizedSite === "youtube.com" || normalizedSite === "m.youtube.com" || normalizedSite === "music.youtube.com" || normalizedSite === "youtu.be";
