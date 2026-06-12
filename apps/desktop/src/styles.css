@@ -17119,25 +17119,25 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 }
 
 .weekly-breakdown-analytical {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
+  padding: 0.34rem 0.42rem;
 }
 
 .insights-row--weekly-categories > .weekly-breakdown-analytical {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
+  padding: 0.34rem 0.42rem;
 }
 
 .weekly-breakdown-analytical__stack {
   display: grid;
   grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-  gap: 0.46rem;
+  gap: 0.4rem;
   align-items: stretch;
 }
 
@@ -17145,9 +17145,9 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .top-categories-breakdown {
   display: grid;
   align-content: start;
-  gap: 0.42rem;
+  gap: 0.36rem;
   min-width: 0;
-  padding: 0.48rem 0.54rem;
+  padding: 0.42rem 0.46rem;
 }
 
 .weekly-breakdown-analytical__eyebrow {
