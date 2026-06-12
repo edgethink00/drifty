@@ -5,6 +5,9 @@ import { formatCompactDurationFromSeconds, formatDuration, getLocalDaysBetween, 
 
 export type ProductivityAnalysisKind = Extract<ProductivityLabel, "focus" | "drift">;
 
+export { buildAttentionRhythm } from "./attentionRhythm";
+export type { AttentionRhythmCell, AttentionRhythmState } from "./attentionRhythm";
+
 export type ProductivitySurfaceInsight = {
   id: string;
   label: string;
@@ -103,82 +106,6 @@ export function buildWeeklyBreakdown(
       categorySeconds,
     };
   });
-}
-
-export type AttentionRhythmState = "focus" | "drift" | "neutral";
-
-export interface AttentionRhythmCell {
-  weekdayIndex: number;
-  hour: number;
-  state: AttentionRhythmState;
-  intensity: 0 | 1 | 2 | 3;
-}
-
-// 7 weekdays x 24 hours grid. Each cell takes the dominant productivity in that
-// weekday/hour bucket; focus/drift cells get an intensity tier relative to the
-// busiest bucket of the same kind.
-
-export function buildAttentionRhythm(
-  segments: ActivitySegment[],
-  options?: ClassificationOptions,
-  visibility?: InsightWeekVisibility,
-): AttentionRhythmCell[] {
-  const focus = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
-  const drift = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
-  const neutral = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
-  const hidden = hiddenWeekdayIndexes(visibility);
-
-  for (const segment of segments) {
-    const started = new Date(segment.startedAt);
-    if (Number.isNaN(started.getTime())) continue;
-    const weekday = weekdayOrderIndex(started);
-    if (hidden.has(weekday)) continue;
-    const hour = started.getHours();
-    const seconds = segment.durationSeconds;
-    const { productivity } = classifyActivity(segment, options);
-    if (productivity === "focus") focus[weekday][hour] += seconds;
-    else if (productivity === "drift") drift[weekday][hour] += seconds;
-    else neutral[weekday][hour] += seconds;
-  }
-
-  let maxFocus = 0;
-  let maxDrift = 0;
-  for (let weekday = 0; weekday < 7; weekday += 1) {
-    for (let hour = 0; hour < 24; hour += 1) {
-      if (focus[weekday][hour] > maxFocus) maxFocus = focus[weekday][hour];
-      if (drift[weekday][hour] > maxDrift) maxDrift = drift[weekday][hour];
-    }
-  }
-
-  const tier = (value: number, max: number): 1 | 2 | 3 => {
-    if (max <= 0) return 1;
-    const ratio = value / max;
-    if (ratio >= 0.66) return 3;
-    if (ratio >= 0.33) return 2;
-    return 1;
-  };
-
-  const cells: AttentionRhythmCell[] = [];
-  for (let weekday = 0; weekday < 7; weekday += 1) {
-    for (let hour = 0; hour < 24; hour += 1) {
-      const focusSeconds = focus[weekday][hour];
-      const driftSeconds = drift[weekday][hour];
-      const neutralSeconds = neutral[weekday][hour];
-      const total = focusSeconds + driftSeconds + neutralSeconds;
-      if (total <= 0) {
-        cells.push({ weekdayIndex: weekday, hour, state: "neutral", intensity: 0 });
-        continue;
-      }
-      if (focusSeconds >= driftSeconds && focusSeconds >= neutralSeconds && focusSeconds > 0) {
-        cells.push({ weekdayIndex: weekday, hour, state: "focus", intensity: tier(focusSeconds, maxFocus) });
-      } else if (driftSeconds >= focusSeconds && driftSeconds >= neutralSeconds && driftSeconds > 0) {
-        cells.push({ weekdayIndex: weekday, hour, state: "drift", intensity: tier(driftSeconds, maxDrift) });
-      } else {
-        cells.push({ weekdayIndex: weekday, hour, state: "neutral", intensity: 0 });
-      }
-    }
-  }
-  return cells;
 }
 
 export type InsightSourceValueKind = "duration" | "count";
