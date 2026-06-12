@@ -98,6 +98,10 @@ export interface CurrentActivitySnapshot {
   youtubeVideoId?: string | null;
   youtubePlaylistId?: string | null;
   youtubeIsShorts?: boolean | null;
+  siteSource?: SiteSource;
+  captureConfidence?: number | null;
+  browserAutomationStatus?: "granted" | "denied" | "unavailable" | "stale" | "not_applicable" | null;
+  browserAutomationError?: string | null;
   source: TrackerSource;
 }
 

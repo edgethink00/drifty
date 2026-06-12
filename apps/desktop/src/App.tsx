@@ -3066,7 +3066,11 @@ export default function App() {
       return next;
     });
   }, []);
-  const handleDownloadDebugLogs = useCallback(() => {
+  const handleDownloadDebugLogs = useCallback(async () => {
+    const snapshotForDebug = await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
+      if (snapshotError instanceof Error) return null;
+      throw snapshotError;
+    });
     const payload = {
       exportedAt: new Date().toISOString(),
       selectedDay,
@@ -3082,6 +3086,16 @@ export default function App() {
         lastEventAt: status?.lastEventAt ?? null,
         databasePath: status?.databasePath ?? null,
         accessibilityGranted,
+        browserAutomation: snapshotForDebug
+          ? {
+              browserName: snapshotForDebug.browserName ?? null,
+              status: snapshotForDebug.browserAutomationStatus ?? null,
+              error: snapshotForDebug.browserAutomationError ?? null,
+              siteSource: snapshotForDebug.siteSource ?? null,
+              captureConfidence: snapshotForDebug.captureConfidence ?? null,
+              hasSiteContext: Boolean(snapshotForDebug.siteDomain || snapshotForDebug.siteTitle || snapshotForDebug.siteUrl),
+            }
+          : null,
       },
       counts: {
         todaySegments: segments.length,
@@ -3956,7 +3970,7 @@ export default function App() {
                       />
                     </div>
                     <div className="settings-block"><h3>Debugging</h3>
-                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleDownloadDebugLogs}>Download debug logs</button></div></div>
+                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleDownloadDebugLogs()}>Download debug logs</button></div></div>
                       <SettingsBuildInfoRow />
                     </div>
                   </div>
