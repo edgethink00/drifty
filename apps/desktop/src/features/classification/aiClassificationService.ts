@@ -30,7 +30,7 @@ const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
 
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
-  "gemini-3.1-flash-lite": { input: 0.25, output: 1.5 },
+  "gemini-3.1-flash-lite": { input: 0, output: 0 },
   "deepseek/deepseek-v4-flash:free": { input: 0, output: 0 },
   "deepseek/deepseek-v4-flash": { input: 0.14, output: 0.28 },
 };
