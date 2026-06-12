@@ -777,6 +777,54 @@ describe('domain helpers', () => {
     })).toMatchObject({ category: 'unknown', productivity: 'neutral', surface: 'app', source: 'unknown' });
   });
 
+  it('covers single-purpose registry additions for apps and domains', () => {
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Microsoft PowerPoint',
+      bundleId: 'com.microsoft.Powerpoint',
+      windowTitle: '0612_weekly_meeting',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Linear',
+      bundleId: 'com.linear',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'drifty',
+      bundleId: 'so.drifty.mac',
+    })).toMatchObject({ category: 'utility', productivity: 'neutral', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Claude',
+      bundleId: 'com.anthropic.claudefordesktop',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'supabase.com',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'linkedin.com',
+    })).toMatchObject({ category: 'social_media', productivity: 'neutral', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'lichess.org',
+    })).toMatchObject({ category: 'game', productivity: 'drift', source: 'domain-db' });
+  });
+
   it('classifies promoted registry domains as predefined rules', () => {
     expect(classifyActivityDetailed({
       ...segments[0],
