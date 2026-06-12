@@ -5910,7 +5910,26 @@ input, textarea { color: inherit; }
 .account-trigger__copy { min-width: 0; display: grid; gap: 1px; }
 .account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .account-trigger__copy span { color: var(--text-soft); font-size: 11px; }
-.account-trigger__chevron { color: var(--text-soft); font-size: 16px; }
+.account-trigger__chevrons {
+  display: grid;
+  width: 16px;
+  gap: 2px;
+  place-items: center;
+  color: var(--text-soft);
+}
+.account-trigger__chevron-mark {
+  width: 7px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 1.6px 1.6px 0 0;
+  border-radius: 1px;
+}
+.account-trigger__chevron-mark--up {
+  transform: rotate(-45deg);
+}
+.account-trigger__chevron-mark--down {
+  transform: rotate(135deg);
+}
 
 .account-popover {
   position: fixed;
@@ -16361,7 +16380,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .sidebar-tracker-toggle,
 .account-trigger,
 .account-trigger__copy,
-.account-trigger__chevron {
+.account-trigger__chevrons {
   transition:
     opacity var(--sidebar-fade-duration) ease-out,
     transform var(--sidebar-duration) var(--sidebar-ease),
@@ -16392,7 +16411,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-name,
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-class,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__copy,
-.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevron {
+.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevrons {
   transition-delay: var(--sidebar-fade-delay);
 }
 
@@ -16403,7 +16422,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .sidebar--collapsed .live-pill .app-name,
 .sidebar--collapsed .live-pill .app-class,
 .sidebar--collapsed .account-trigger__copy,
-.sidebar--collapsed .account-trigger__chevron {
+.sidebar--collapsed .account-trigger__chevrons {
   transition-delay: 0ms;
 }
 
@@ -16620,7 +16639,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   }
 
   .sidebar--collapsed .account-trigger__copy,
-  .sidebar--collapsed .account-trigger__chevron {
+  .sidebar--collapsed .account-trigger__chevrons {
     width: 0;
     max-width: 0;
     opacity: 0;
@@ -16648,7 +16667,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   .sidebar-tracker-toggle,
   .account-trigger,
   .account-trigger__copy,
-  .account-trigger__chevron {
+  .account-trigger__chevrons {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
   }
