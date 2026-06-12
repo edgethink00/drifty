@@ -47,17 +47,40 @@ export interface WeeklyBreakdownDay {
   categorySeconds: Partial<Record<ActivityCategory, number>>;
 }
 
-export function buildWeeklyBreakdown(segments: ActivitySegment[], options?: ClassificationOptions): WeeklyBreakdownDay[] {
+export type InsightWeekVisibility = {
+  readonly visibleThroughDay?: string;
+};
+
+function hiddenWeekdayIndexes(visibility?: InsightWeekVisibility): ReadonlySet<number> {
+  if (!visibility?.visibleThroughDay) return new Set<number>();
+  const visibleThroughDate = new Date(`${visibility.visibleThroughDay}T12:00:00`);
+  if (Number.isNaN(visibleThroughDate.getTime())) return new Set<number>();
+
+  const visibleThroughIndex = weekdayOrderIndex(visibleThroughDate);
+  const hidden = new Set<number>();
+  for (let index = visibleThroughIndex + 1; index < WEEKLY_BREAKDOWN_WEEKDAYS.length; index += 1) {
+    hidden.add(index);
+  }
+  return hidden;
+}
+
+export function buildWeeklyBreakdown(
+  segments: ActivitySegment[],
+  options?: ClassificationOptions,
+  visibility?: InsightWeekVisibility,
+): WeeklyBreakdownDay[] {
   const focus = Array.from({ length: 7 }, () => 0);
   const neutral = Array.from({ length: 7 }, () => 0);
   const drift = Array.from({ length: 7 }, () => 0);
   const categories = Array.from({ length: 7 }, () => new Map<ActivityCategory, number>());
   const dates = Array.from({ length: 7 }, () => new Set<string>());
+  const hidden = hiddenWeekdayIndexes(visibility);
 
   for (const segment of segments) {
     const started = new Date(segment.startedAt);
     if (Number.isNaN(started.getTime())) continue;
     const index = weekdayOrderIndex(started);
+    if (hidden.has(index)) continue;
     const seconds = segment.durationSeconds;
     const { category, productivity } = classifyActivity(segment, options);
     if (productivity === "focus") focus[index] += seconds;
@@ -95,15 +118,21 @@ export interface AttentionRhythmCell {
 // weekday/hour bucket; focus/drift cells get an intensity tier relative to the
 // busiest bucket of the same kind.
 
-export function buildAttentionRhythm(segments: ActivitySegment[], options?: ClassificationOptions): AttentionRhythmCell[] {
+export function buildAttentionRhythm(
+  segments: ActivitySegment[],
+  options?: ClassificationOptions,
+  visibility?: InsightWeekVisibility,
+): AttentionRhythmCell[] {
   const focus = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
   const drift = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
   const neutral = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
+  const hidden = hiddenWeekdayIndexes(visibility);
 
   for (const segment of segments) {
     const started = new Date(segment.startedAt);
     if (Number.isNaN(started.getTime())) continue;
     const weekday = weekdayOrderIndex(started);
+    if (hidden.has(weekday)) continue;
     const hour = started.getHours();
     const seconds = segment.durationSeconds;
     const { productivity } = classifyActivity(segment, options);

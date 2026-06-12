@@ -2008,12 +2008,12 @@ export default function App() {
   const insightProductivityTotals = useMemo(() => buildProductivityDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
   const activeInsightProductivityTotals = useMemo(() => insightProductivityTotals.filter((entry) => entry.totalSeconds > 0), [insightProductivityTotals]);
   const weeklyBreakdown = useMemo(
-    () => buildWeeklyBreakdown(insightSegments, insightClassificationOptions),
-    [insightClassificationOptions, insightSegments],
+    () => buildWeeklyBreakdown(insightSegments, insightClassificationOptions, { visibleThroughDay: insightRange.endDay }),
+    [insightClassificationOptions, insightRange.endDay, insightSegments],
   );
   const attentionRhythm = useMemo(
-    () => buildAttentionRhythm(insightSegments, insightClassificationOptions),
-    [insightClassificationOptions, insightSegments],
+    () => buildAttentionRhythm(insightSegments, insightClassificationOptions, { visibleThroughDay: insightRange.endDay }),
+    [insightClassificationOptions, insightRange.endDay, insightSegments],
   );
   const driftSourceLists = useMemo(
     () => buildInsightSourceLists(insightSegments, "drift", insightClassificationOptions),
