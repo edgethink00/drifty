@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -150,6 +150,7 @@ import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns,
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
+import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
 import { persistDriftAlarmCopy, resolveInitialDriftAlarmCopy } from "./features/companion/driftAlarmCopyStorage";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
@@ -386,6 +387,14 @@ export default function App() {
   const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(resolveInitialExtremeNudgeEnabled);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
+  const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
+    const enabled = resolveInitialDriftAlertsEnabled();
+    return buildDriftAlarmTrayStatus({
+      enabled,
+      checkedAt: null,
+      result: enabled ? { kind: "no_candidate" } : { kind: "disabled" },
+    });
+  });
   const [breakRecoveryAssessment, setBreakRecoveryAssessment] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmInteractions, setDriftAlarmInteractions] = useState<DriftAlarmInteraction[]>(readDriftAlarmInteractions);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
@@ -728,6 +737,13 @@ export default function App() {
   const driftAlarmRequestInFlightRef = useRef(false);
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
+  const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date()) => {
+    setDriftAlarmTrayStatus(buildDriftAlarmTrayStatus({
+      enabled: driftAlertsEnabled,
+      checkedAt,
+      result,
+    }));
+  }, [driftAlertsEnabled]);
   const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
@@ -1677,7 +1693,19 @@ export default function App() {
   }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   useEffect(() => {
-    if (!driftAlertsEnabled || selectedDay !== logicalTodayIsoDate(startOfDayMinutes) || !status?.running) {
+    const checkedAt = new Date();
+    if (!driftAlertsEnabled) {
+      publishDriftAlarmTrayStatus({ kind: "disabled" }, null);
+      pendingDriftAlarmGateRef.current = null;
+      return;
+    }
+    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) {
+      publishDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
+      pendingDriftAlarmGateRef.current = null;
+      return;
+    }
+    if (!status?.running) {
+      publishDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       return;
     }
@@ -1692,11 +1720,16 @@ export default function App() {
     const activeSnooze = driftAlarmSnoozeRef.current;
     if (activeSnooze !== null) {
       pendingDriftAlarmGateRef.current = null;
+      publishDriftAlarmTrayStatus({
+        kind: "snoozed",
+        detail: `Until ${formatTimeLabel(new Date(activeSnooze.untilMs))}`,
+      }, checkedAt);
       if (Date.now() < activeSnooze.untilMs) return;
       return;
     }
 
     if (!latestDrift) {
+      publishDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastDriftAlertSegmentRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
@@ -1707,6 +1740,10 @@ export default function App() {
     }
 
     const { alertKey, category, segment } = latestDrift;
+    const candidateDetail = buildDriftAlarmTrayCandidateDetail(
+      getWatcherContextLabel(segment, category),
+      segment.durationSeconds,
+    );
     const buildCurrentDriftAlarmEvent = () => {
       const contextLabel = getWatcherContextLabel(segment, category);
 
@@ -1724,8 +1761,12 @@ export default function App() {
     const showCurrentDriftAlarm = () => {
       showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
+    const markCurrentDriftAlarmDelivered = () => {
+      publishDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
+    };
     const showFallbackDriftAlarm = (notify: boolean) => {
       showCurrentDriftAlarm();
+      markCurrentDriftAlarmDelivered();
       if (notify) void sendDriftNotification(segment, driftAlarmCopy);
     };
     const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
@@ -1737,6 +1778,7 @@ export default function App() {
         }
         const latestFocusTarget = recentDriftAlarmFocusTargets[0] ?? null;
         void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
+        markCurrentDriftAlarmDelivered();
         if (latestFocusTarget) {
           window.setTimeout(() => {
             if (lastDriftAlertSegmentRef.current === alertKey) returnToFocusTarget(latestFocusTarget);
@@ -1784,6 +1826,7 @@ export default function App() {
         }));
         pendingBreakReturnAlarmRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
+        markCurrentDriftAlarmDelivered();
         return;
       }
 
@@ -1804,12 +1847,14 @@ export default function App() {
         }
         lastDriftAlertSegmentRef.current = alertKey;
         showCurrentDriftAlarm();
+        markCurrentDriftAlarmDelivered();
         return;
       }
       if (lastDriftAlertSegmentRef.current === alertKey) {
         if (driftAlarmEventRef.current?.id === alertKey) {
           showCurrentDriftAlarm();
         }
+        publishDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
         return;
       }
 
@@ -1819,6 +1864,7 @@ export default function App() {
         return;
       }
       showCurrentDriftAlarm();
+      markCurrentDriftAlarmDelivered();
       void sendDriftNotification(segment, driftAlarmCopy);
     };
 
@@ -1826,6 +1872,7 @@ export default function App() {
       if (driftAlarmEventRef.current?.id === alertKey) {
         showCurrentDriftAlarm();
       }
+      publishDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
       return;
     }
 
@@ -1835,6 +1882,7 @@ export default function App() {
     }
 
     pendingDriftAlarmGateRef.current = alertKey;
+    publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
     void evaluateYouTubeDriftAlarmGate({
       segment,
       category,
@@ -1845,6 +1893,11 @@ export default function App() {
 
       if (gateResult.kind === "suppress") {
         lastDriftAlertSegmentRef.current = alertKey;
+        publishDriftAlarmTrayStatus({
+          kind: "suppressed",
+          reason: gateResult.reason,
+          candidateDetail,
+        }, checkedAt);
         return;
       }
 
@@ -1856,8 +1909,12 @@ export default function App() {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
       pendingDriftAlarmGateRef.current = null;
       lastDriftAlertSegmentRef.current = alertKey;
+      publishDriftAlarmTrayStatus({
+        kind: "error",
+        reason: error instanceof Error ? error.message : "AI gate failed",
+      }, checkedAt);
     });
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -1988,6 +2045,11 @@ export default function App() {
     if (typeof client.updateTrayProductivityIcon !== "function") return;
     void client.updateTrayProductivityIcon(trayProductivityMix).catch(() => undefined);
   }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, trayProductivityMix]);
+  useEffect(() => {
+    const client = trackerClient as Partial<typeof trackerClient>;
+    if (typeof client.updateTrayDriftAlarmStatus !== "function") return;
+    void client.updateTrayDriftAlarmStatus(driftAlarmTrayStatus).catch(() => undefined);
+  }, [driftAlarmTrayStatus]);
   const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 6 }), [dashboardSegments]);
   const dashboardTopApps = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 1, groupBy: "app" }), [dashboardSegments]);
   const dayField = useMemo(() => buildQuarterHourDayField(segments, selectedDay, startOfDayMinutes), [segments, selectedDay, startOfDayMinutes]);
@@ -3066,7 +3128,11 @@ export default function App() {
       return next;
     });
   }, []);
-  const handleDownloadDebugLogs = useCallback(() => {
+  const handleDownloadDebugLogs = useCallback(async () => {
+    const snapshotForDebug = await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
+      if (snapshotError instanceof Error) return null;
+      throw snapshotError;
+    });
     const payload = {
       exportedAt: new Date().toISOString(),
       selectedDay,
@@ -3082,7 +3148,18 @@ export default function App() {
         lastEventAt: status?.lastEventAt ?? null,
         databasePath: status?.databasePath ?? null,
         accessibilityGranted,
+        browserAutomation: snapshotForDebug
+          ? {
+              browserName: snapshotForDebug.browserName ?? null,
+              status: snapshotForDebug.browserAutomationStatus ?? null,
+              error: snapshotForDebug.browserAutomationError ?? null,
+              siteSource: snapshotForDebug.siteSource ?? null,
+              captureConfidence: snapshotForDebug.captureConfidence ?? null,
+              hasSiteContext: Boolean(snapshotForDebug.siteDomain || snapshotForDebug.siteTitle || snapshotForDebug.siteUrl),
+            }
+          : null,
       },
+      driftAlarm: driftAlarmTrayStatus,
       counts: {
         todaySegments: segments.length,
         historySegments: historySegments.length,
@@ -3097,7 +3174,7 @@ export default function App() {
     anchor.download = `drifty-debug-log-${payload.exportedAt.replace(/[:.]/g, "-")}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, error, historySegments.length, leaderboardSegments.length, segments.length, selectedDay, startOfDayMinutes, startOfWeek, status?.databasePath, status?.lastEventAt, status?.running, theme]);
+  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, driftAlarmTrayStatus, error, historySegments.length, leaderboardSegments.length, segments.length, selectedDay, startOfDayMinutes, startOfWeek, status?.databasePath, status?.lastEventAt, status?.running, theme]);
 
   if (authStatus === "loading") {
     return <AuthLoadingGate />;
@@ -3294,8 +3371,8 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={aiConnectionStatus} />
           <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
+          <AiConnectionStatusBar status={aiConnectionStatus} />
         </div>
       </div>
       {/* ── Sidebar ── */}
@@ -3956,7 +4033,7 @@ export default function App() {
                       />
                     </div>
                     <div className="settings-block"><h3>Debugging</h3>
-                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleDownloadDebugLogs}>Download debug logs</button></div></div>
+                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Download a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleDownloadDebugLogs()}>Download debug logs</button></div></div>
                       <SettingsBuildInfoRow />
                     </div>
                   </div>

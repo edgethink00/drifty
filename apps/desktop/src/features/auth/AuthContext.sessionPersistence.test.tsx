@@ -1,0 +1,196 @@
+// @vitest-environment jsdom
+import { act, render, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type AuthChangeHandler = (event: string, session: Session | null) => void;
+
+const { authMocks, getSession, onAuthStateChange, setSession, invoke } = vi.hoisted(() => {
+  const mocks: { authChangeHandler: AuthChangeHandler | null } = {
+    authChangeHandler: null,
+  };
+
+  return {
+    authMocks: mocks,
+    getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+    onAuthStateChange: vi.fn((handler: AuthChangeHandler) => {
+      mocks.authChangeHandler = handler;
+      return {
+        data: {
+          subscription: {
+            unsubscribe: vi.fn(),
+          },
+        },
+      };
+    }),
+    setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+    invoke: vi.fn().mockResolvedValue([]),
+  };
+});
+
+const tauriMocks = vi.hoisted(() => ({
+  getCurrent: vi.fn().mockResolvedValue(null),
+  onOpenUrl: vi.fn(() => Promise.resolve(vi.fn())),
+}));
+
+vi.mock("../../lib/supabase/client", () => ({
+  authModePolicy: {
+    mode: "optional",
+    isAuthRequired: false,
+    allowsAnonymousAuth: true,
+  },
+  hasBlockingAuthConfigurationError: () => false,
+  isSupabaseEnabled: () => true,
+  supabase: {
+    auth: {
+      exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+      getSession,
+      onAuthStateChange,
+      setSession,
+      signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
+      signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: null }, error: null }),
+      signInWithPassword: vi.fn(),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
+      signUp: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke,
+}));
+
+vi.mock("@tauri-apps/plugin-deep-link", () => ({
+  getCurrent: tauriMocks.getCurrent,
+  onOpenUrl: tauriMocks.onOpenUrl,
+}));
+
+import { AuthProvider, useAuth } from "./AuthContext";
+import { clearAuthDiagnostics } from "./authDiagnostics";
+
+type SupabaseSessionResult = {
+  readonly data: {
+    readonly session: Session | null;
+  };
+  readonly error: Error | null;
+};
+
+function createDeferred<T>() {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+
+  if (!resolve) {
+    throw new Error("Deferred promise resolver was not initialized.");
+  }
+
+  return { promise, resolve };
+}
+
+function createSession(): Session {
+  const user: Session["user"] = {
+    id: "user-id",
+    app_metadata: {},
+    user_metadata: {},
+    aud: "authenticated",
+    created_at: new Date().toISOString(),
+    is_anonymous: false,
+  };
+
+  return {
+    access_token: "access-token",
+    refresh_token: "refresh-token",
+    token_type: "bearer",
+    expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user,
+  };
+}
+
+function CaptureAuth({ onReady }: { readonly onReady: (value: ReturnType<typeof useAuth>) => void }) {
+  const auth = useAuth();
+
+  useEffect(() => {
+    onReady(auth);
+  }, [auth, onReady]);
+
+  return null;
+}
+
+describe("AuthContext desktop session persistence", () => {
+  beforeEach(() => {
+    getSession.mockResolvedValue({ data: { session: null } });
+    setSession.mockResolvedValue({ data: { session: null }, error: null });
+    invoke.mockResolvedValue([]);
+    authMocks.authChangeHandler = null;
+    tauriMocks.getCurrent.mockResolvedValue(null);
+    tauriMocks.onOpenUrl.mockResolvedValue(vi.fn());
+    clearAuthDiagnostics({ mirrorToConsole: false });
+    window.history.replaceState({}, "", "/");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    clearAuthDiagnostics({ mirrorToConsole: false });
+    window.history.replaceState({}, "", "/");
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("keeps native session while restore is in flight when Supabase emits an initial null session", async () => {
+    const restoredSession = createSession();
+    const restoreSession = createDeferred<SupabaseSessionResult>();
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+
+    setSession.mockImplementation(() => restoreSession.promise);
+    invoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "auth_take_pending_deep_links":
+          return [];
+        case "auth_load_saved_session":
+          return JSON.stringify({ accessToken: "saved-access", refreshToken: "saved-refresh" });
+        case "auth_clear_saved_session":
+        case "auth_save_session":
+          return undefined;
+        default:
+          return undefined;
+      }
+    });
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          latestAuth.current = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(setSession).toHaveBeenCalledWith({
+        access_token: "saved-access",
+        refresh_token: "saved-refresh",
+      });
+      expect(authMocks.authChangeHandler).not.toBeNull();
+    });
+
+    act(() => {
+      authMocks.authChangeHandler?.("INITIAL_SESSION", null);
+    });
+
+    expect(latestAuth.current?.status).toBe("loading");
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+
+    await act(async () => {
+      restoreSession.resolve({ data: { session: restoredSession }, error: null });
+      await restoreSession.promise;
+    });
+
+    await waitFor(() => {
+      expect(latestAuth.current?.status).toBe("authenticated");
+      expect(latestAuth.current?.session).toEqual(restoredSession);
+    });
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+  });
+});

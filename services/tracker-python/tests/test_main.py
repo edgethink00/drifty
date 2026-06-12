@@ -60,6 +60,7 @@ class TrackerMainTests(unittest.TestCase):
             bundle_id="dev.cmux",
             window_title="workspace",
             source="accessibility",
+            browser_automation_status="not_applicable",
         )
 
         with patch.object(tracker_main, "current_snapshot", return_value=snapshot):
@@ -69,6 +70,8 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["observedAt"], snapshot.observed_at)
         self.assertEqual(result["data"]["appName"], "cmux")
         self.assertEqual(result["data"]["bundleId"], "dev.cmux")
+        self.assertEqual(result["data"]["browserAutomationStatus"], "not_applicable")
+        self.assertIsNone(result["data"]["browserAutomationError"])
 
     def test_get_timeline_uses_day_filter(self) -> None:
         mock_db = MagicMock()

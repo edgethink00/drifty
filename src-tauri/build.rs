@@ -31,6 +31,7 @@ fn main() {
             "tracker_refresh_non_ai_classifications",
             "tracker_get_classification_metrics",
             "tray_update_productivity_icon",
+            "tray_update_drift_alarm_status",
             "auth_take_pending_deep_links",
             "auth_load_saved_session",
             "auth_save_session",

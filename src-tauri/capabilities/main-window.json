@@ -38,6 +38,7 @@
     "allow-tracker-refresh-non-ai-classifications",
     "allow-tracker-get-classification-metrics",
     "allow-tray-update-productivity-icon",
+    "allow-tray-update-drift-alarm-status",
     "allow-auth-take-pending-deep-links",
     "allow-auth-load-saved-session",
     "allow-auth-save-session",
