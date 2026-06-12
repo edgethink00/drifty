@@ -237,7 +237,7 @@ type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 type UpdateCheckMode = "manual" | "automatic";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
-const AUTO_UPDATE_DISMISS_SUPPRESSION_MS = 24 * 60 * 60 * 1000;
+const AUTO_UPDATE_DISMISS_SUPPRESSION_MS = 48 * 60 * 60 * 1000;
 const AUTO_UPDATE_DISMISS_STORAGE_KEY = "drifty.updates.dismissedAutoUpdate.v1";
 
 type DismissedAutoUpdate = {

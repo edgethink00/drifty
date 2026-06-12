@@ -163,8 +163,8 @@ export function resolveInitialAiClassificationVisibility(): boolean {
 }
 
 export function resolveInitialAutoUpdateChecksEnabled(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(AUTO_UPDATE_CHECKS_STORAGE_KEY) !== "0";
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(AUTO_UPDATE_CHECKS_STORAGE_KEY) === "1";
 }
 
 export function applyThemeToDocument(theme: ThemeMode) {
