@@ -1,0 +1,270 @@
+.break-recovery-card {
+  container-type: inline-size;
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.break-recovery-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+}
+
+.break-recovery-card__header h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.05;
+}
+
+.break-recovery-card__header-stat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 360px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.break-recovery-card__header-stat strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.break-recovery-card__header-stat > span {
+  color: var(--text-soft);
+}
+
+.break-recovery-card__header-pill {
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 54%, transparent);
+}
+
+.break-recovery-card__compact-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.92fr) minmax(240px, 1fr) minmax(280px, 1.1fr);
+  gap: 10px 24px;
+  align-items: start;
+  min-width: 0;
+}
+
+.break-recovery-card__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 54%, transparent);
+}
+
+.break-recovery-card__metric {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-height: 50px;
+  padding: 6px 8px;
+  border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.break-recovery-card__metric:nth-child(2n) {
+  border-right: 0;
+}
+
+.break-recovery-card__metric:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.break-recovery-card__metric span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-recovery-card__metric strong {
+  color: var(--text);
+  font-size: 1.06rem;
+  line-height: 1;
+}
+
+.break-recovery-card__metric small {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 0.63rem;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-recovery-card__distribution {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.break-recovery-card__distribution-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.break-recovery-card__distribution-head span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-recovery-card__distribution-head small {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 0.62rem;
+  line-height: 1.1;
+}
+
+.break-recovery-card__rows {
+  display: grid;
+  gap: 3px;
+}
+
+.break-recovery-card__distribution-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.54fr) minmax(52px, 1fr) 1.45rem;
+  gap: 6px;
+  align-items: center;
+  min-height: 17px;
+}
+
+.break-recovery-card__distribution-row > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.break-recovery-card__distribution-row > strong {
+  color: var(--text);
+  font-size: 0.74rem;
+  line-height: 1;
+  text-align: right;
+}
+
+.break-recovery-card__bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.break-recovery-card__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.break-recovery-card__bar-fill--success {
+  background: color-mix(in srgb, var(--productivity-focus) 76%, var(--text) 24%);
+}
+
+.break-recovery-card__bar-fill--warning {
+  background: color-mix(in srgb, var(--warn) 72%, var(--text-muted) 28%);
+}
+
+.break-recovery-card__bar-fill--neutral {
+  background: color-mix(in srgb, var(--accent) 62%, var(--text-muted) 38%);
+}
+
+.break-recovery-card__bar-fill--muted {
+  background: color-mix(in srgb, var(--text-soft) 56%, var(--line) 44%);
+}
+
+.break-recovery-card__bar-fill--action {
+  background: color-mix(in srgb, var(--accent) 72%, var(--productivity-focus) 28%);
+}
+
+@container (max-width: 780px) {
+  .break-recovery-card__compact-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .break-recovery-card__summary-grid {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .break-recovery-card__metric {
+    border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    border-bottom: 0;
+  }
+
+  .break-recovery-card__metric:nth-child(2n) {
+    border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .break-recovery-card__metric:last-child {
+    border-right: 0;
+  }
+}
+
+@container (max-width: 520px) {
+  .break-recovery-card {
+    padding: 12px;
+  }
+
+  .break-recovery-card__header {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .break-recovery-card__header-stat {
+    justify-content: flex-start;
+  }
+
+  .break-recovery-card__compact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .break-recovery-card__summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .break-recovery-card__metric {
+    min-height: 48px;
+    border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .break-recovery-card__metric:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .break-recovery-card__metric:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .break-recovery-card__distribution-row {
+    grid-template-columns: minmax(86px, 0.56fr) minmax(56px, 1fr) 1.45rem;
+  }
+}

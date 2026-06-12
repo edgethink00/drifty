@@ -84,8 +84,8 @@ describe("projectAiClassificationCost", () => {
 });
 
 describe("estimateAiClassificationCostUsd", () => {
-  it("uses model-specific pricing for Gemini, OpenRouter free, and OpenRouter paid rows", () => {
-    expect(estimateAiClassificationCostUsd("gemini-3.1-flash-lite", 1_000_000, 1_000_000)).toBeCloseTo(1.75);
+  it("treats Gemini and OpenRouter free rows as free and estimates DeepSeek V4 Flash paid rows", () => {
+    expect(estimateAiClassificationCostUsd("gemini-3.1-flash-lite", 1_000_000, 1_000_000)).toBe(0);
     expect(estimateAiClassificationCostUsd("deepseek/deepseek-v4-flash:free", 1_000_000, 1_000_000)).toBe(0);
     expect(estimateAiClassificationCostUsd("deepseek/deepseek-v4-flash", 1_000_000, 1_000_000)).toBeCloseTo(0.42);
   });

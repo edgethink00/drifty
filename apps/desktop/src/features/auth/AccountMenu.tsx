@@ -139,7 +139,10 @@ export function AccountMenu({
           <strong>{displayName}</strong>
           <span>{accountStatusLabel}</span>
         </span>
-        <span className="account-trigger__chevron">⌃</span>
+        <span className="account-trigger__chevrons" aria-hidden="true">
+          <span className="account-trigger__chevron-mark account-trigger__chevron-mark--up" />
+          <span className="account-trigger__chevron-mark account-trigger__chevron-mark--down" />
+        </span>
       </button>
     </div>
   );
