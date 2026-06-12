@@ -200,6 +200,8 @@ async function advanceThroughSharedBasics(options: { activity?: string } = {}) {
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /set up permissions/i });
   await clickEnabledNext();
+  await screen.findByRole("dialog", { name: /set up drift alerts/i });
+  await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /choose your setup/i });
 }
 
@@ -324,6 +326,10 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Screen Recording")).toBeNull();
     expect(screen.queryByText("Browser Activity")).toBeNull();
     await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /drift alarm/i }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: /extreme nudge/i }).getAttribute("aria-pressed")).toBe("false");
+    await clickEnabledAction(/^continue$/i);
 
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
     expect(screen.getByText(/start with drifty cloud, run ai locally, or bring your own ai key/i)).toBeTruthy();
@@ -349,6 +355,8 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /drifty cloud/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /local ai/i })).toBeTruthy();
@@ -397,6 +405,8 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
   });
 
@@ -524,10 +534,56 @@ describe("App onboarding", () => {
     expect(storedRecord.jobType).toBe("Coding");
     expect(storedRecord.workType).toBe("Coding");
     expect(storedRecord.workDomain).toBeNull();
+    expect(storedRecord.driftAlarmEnabled).toBe(false);
+    expect(storedRecord.extremeNudgeEnabled).toBe(false);
     expect(storedRecord.focusGoalHours).toBeNull();
     expect(storedRecord.driftThresholdMinutes).toBeNull();
     expect(typeof storedRecord.completedAt).toBe("string");
     expect(saveOwnProfile).not.toHaveBeenCalled();
+  });
+
+  it("stores selected drift alarm and extreme nudge preferences from onboarding", async () => {
+    render(<App />);
+
+    await screen.findByRole("dialog", { name: /welcome to drifty/i });
+    await clickEnabledNext();
+    await screen.findByRole("dialog", { name: /what do you usually do/i });
+    await clickEnabledAction(/^continue$/i);
+    await screen.findByRole("dialog", { name: /set up permissions/i });
+    await clickEnabledNext();
+    await screen.findByRole("dialog", { name: /set up drift alerts/i });
+
+    const extremeNudgeToggle = screen.getByRole("button", { name: "Extreme nudge" });
+    fireEvent.click(extremeNudgeToggle);
+    const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
+    expect(confirmDialog.textContent).toContain("close the distracting browser tab or quit the distracting app");
+    expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: /keep off/i }));
+    expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
+    expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(extremeNudgeToggle);
+    fireEvent.click(await screen.findByRole("button", { name: /allow closing/i }));
+    expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
+    expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByText(/can close distracting tabs or apps/i)).toBeNull();
+    await clickEnabledAction(/^continue$/i);
+    fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
+    await clickEnabledAction(/^continue$/i);
+    await connectAccount();
+
+    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
+    });
+
+    const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
+    const storedRecord = JSON.parse(storedValue ?? "{}") as Record<string, unknown>;
+    expect(storedRecord.driftAlarmEnabled).toBe(false);
+    expect(storedRecord.extremeNudgeEnabled).toBe(true);
+    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("0");
+    expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1");
   });
 
   it("stores onboarding completion under the v2 drifty key and ignores the legacy keys", async () => {
@@ -693,6 +749,8 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Browser Activity")).toBeNull();
 
     await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
     await clickEnabledAction(/^continue$/i);

@@ -9,6 +9,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { Dropdown } from "./components/Dropdown";
 import { GoogleMark } from "./components/GoogleMark";
+import { NudgesStep } from "./components/NudgesStep";
 import { TypewriterSequence } from "./components/TypewriterSequence";
 import {
   MAIN_ACTIVITY_OPTIONS,
@@ -45,6 +46,7 @@ type OnboardingStep =
   | "job"
   | "data_review"
   | "permissions"
+  | "nudges"
   | "ready"
   | "connect_server"
   | "test_connection"
@@ -62,6 +64,7 @@ const BASE_STEPS: OnboardingStepDef[] = [
   { id: "welcome", label: "Welcome" },
   { id: "job", label: "Work" },
   { id: "permissions", label: "Permissions" },
+  { id: "nudges", label: "Nudges" },
   { id: "choose_setup", label: "Setup" },
 ];
 
@@ -147,6 +150,8 @@ export function saveUserOnboardingState({
   workDomainOther,
   jobType,
   jobTypeOther,
+  driftAlarmEnabled,
+  extremeNudgeEnabled,
   focusGoalHours,
   driftThresholdMinutes,
 }: {
@@ -158,6 +163,8 @@ export function saveUserOnboardingState({
   workDomainOther: string;
   jobType: string | null;
   jobTypeOther: string;
+  driftAlarmEnabled: boolean;
+  extremeNudgeEnabled: boolean;
   focusGoalHours: number | null;
   driftThresholdMinutes: number | null;
 }): SaveUserOnboardingStateResult {
@@ -171,6 +178,8 @@ export function saveUserOnboardingState({
     workDomainOther,
     jobType,
     jobTypeOther,
+    driftAlarmEnabled,
+    extremeNudgeEnabled,
     focusGoalHours,
     driftThresholdMinutes,
     purpose: null,
@@ -244,6 +253,8 @@ export function OnboardingModal({
   const [workDomainOther, setWorkDomainOther] = useState("");
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
+  const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(false);
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(false);
 
   const [step, setStep] = useState<OnboardingStep>(__devInitialStep ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -300,6 +311,8 @@ export function OnboardingModal({
       case "self_data_review":
         return true;
       case "permissions":
+        return true;
+      case "nudges":
         return true;
       case "ready":
         return true;
@@ -362,6 +375,8 @@ export function OnboardingModal({
         return "Review how your data is handled";
       case "permissions":
         return "Set up permissions";
+      case "nudges":
+        return "Set up drift alerts";
       case "ready":
         return "You're ready to start";
       case "privacy":
@@ -571,6 +586,8 @@ export function OnboardingModal({
       jobTypeOther: mainActivities.includes("Other") ? mainActivityOther : jobTypeOther,
       focusGoalHours: null,
       driftThresholdMinutes: null,
+      driftAlarmEnabled,
+      extremeNudgeEnabled,
     });
     if (!result.success) {
       setStorageError(result.error);
@@ -704,6 +721,8 @@ export function OnboardingModal({
         return "Continue";
       case "permissions":
         return setupChoice === "local_ai" || setupChoice === "byok" ? "Continue" : "Next";
+      case "nudges":
+        return "Continue";
       case "ready":
         return "Start tracking";
       default:
@@ -1179,6 +1198,15 @@ export function OnboardingModal({
                   </li>
                 </ul>
               </>
+            ) : null}
+
+            {step === "nudges" ? (
+              <NudgesStep
+                driftAlarmEnabled={driftAlarmEnabled}
+                extremeNudgeEnabled={extremeNudgeEnabled}
+                onDriftAlarmChange={setDriftAlarmEnabled}
+                onExtremeNudgeChange={setExtremeNudgeEnabled}
+              />
             ) : null}
 
             {step === "ready" ? (
