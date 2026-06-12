@@ -2680,6 +2680,8 @@ export default function App() {
     if (displayName) {
       setProfileDraft((draft) => ({ ...draft, displayName }));
     }
+    setDriftAlertsEnabled(state.driftAlarmEnabled);
+    setExtremeNudgeEnabled(state.extremeNudgeEnabled);
     setOnboardingOpen(false);
   }
 

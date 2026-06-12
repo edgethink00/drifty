@@ -17,6 +17,8 @@ export type UserOnboardingState = {
   workDomainOther: string;
   jobType: string | null;
   jobTypeOther: string;
+  driftAlarmEnabled: boolean;
+  extremeNudgeEnabled: boolean;
   focusGoalHours: number | null;
   driftThresholdMinutes: number | null;
   purpose: OnboardingPurpose | null;
@@ -56,6 +58,8 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
     const workDomainOther = typeof record.workDomainOther === "string" ? record.workDomainOther : "";
     const jobType = typeof record.jobType === "string" ? record.jobType : null;
     const jobTypeOther = typeof record.jobTypeOther === "string" ? record.jobTypeOther : "";
+    const driftAlarmEnabled = typeof record.driftAlarmEnabled === "boolean" ? record.driftAlarmEnabled : false;
+    const extremeNudgeEnabled = typeof record.extremeNudgeEnabled === "boolean" ? record.extremeNudgeEnabled : false;
     const focusGoalHours = typeof record.focusGoalHours === "number" ? record.focusGoalHours : null;
     const driftThresholdMinutes =
       typeof record.driftThresholdMinutes === "number" ? record.driftThresholdMinutes : null;
@@ -70,6 +74,8 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
       workDomainOther,
       jobType,
       jobTypeOther,
+      driftAlarmEnabled,
+      extremeNudgeEnabled,
       focusGoalHours,
       driftThresholdMinutes,
       purpose,
