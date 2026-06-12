@@ -8,11 +8,21 @@ function segmentOnDay(
   category: ActivityCategory,
   productivity: ProductivityLabel,
 ): ActivitySegment {
+  return segmentBetween(id, `${day}T10:00:00.000`, `${day}T11:00:00.000`, category, productivity);
+}
+
+function segmentBetween(
+  id: string,
+  startedAt: string,
+  endedAt: string,
+  category: ActivityCategory,
+  productivity: ProductivityLabel,
+): ActivitySegment {
   return {
     id,
-    startedAt: `${day}T10:00:00.000`,
-    endedAt: `${day}T11:00:00.000`,
-    durationSeconds: 60 * 60,
+    startedAt,
+    endedAt,
+    durationSeconds: Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000),
     appName: "Code",
     bundleId: "com.example.code",
     windowTitle: "Insight test",
@@ -44,7 +54,7 @@ describe("insight weekly builders", () => {
     expect(weekly[6]).toMatchObject({ weekday: "Sun", isActive: false, focusSeconds: 0, driftSeconds: 0 });
   });
 
-  it("leaves attention rhythm cells empty after the insight window end weekday", () => {
+  it("keeps historical weekend attention rhythm cells in a partial current-week insight window", () => {
     const segments = [
       segmentOnDay("friday-focus", "2026-06-12", "workspace", "focus"),
       segmentOnDay("saturday-focus", "2026-06-06", "workspace", "focus"),
@@ -52,11 +62,23 @@ describe("insight weekly builders", () => {
     ];
 
     const cells = buildAttentionRhythm(segments, undefined, { visibleThroughDay: "2026-06-12" });
-    const saturdayCells = cells.filter((cell) => cell.weekdayIndex === 5);
-    const sundayCells = cells.filter((cell) => cell.weekdayIndex === 6);
-
     expect(cells.find((cell) => cell.weekdayIndex === 4 && cell.hour === 10)).toMatchObject({ state: "focus", intensity: 3 });
-    expect(saturdayCells.every((cell) => cell.state === "neutral" && cell.intensity === 0)).toBe(true);
-    expect(sundayCells.every((cell) => cell.state === "neutral" && cell.intensity === 0)).toBe(true);
+    expect(cells.find((cell) => cell.weekdayIndex === 5 && cell.hour === 10)).toMatchObject({ state: "focus", intensity: 3 });
+    expect(cells.find((cell) => cell.weekdayIndex === 6 && cell.hour === 10)).toMatchObject({ state: "drift", intensity: 3 });
+  });
+
+  it("spreads long attention rhythm segments across every overlapped hour", () => {
+    const segments = [
+      segmentBetween("long-focus", "2026-06-10T09:05:00.000", "2026-06-10T12:05:00.000", "workspace", "focus"),
+    ];
+
+    const cells = buildAttentionRhythm(segments, undefined, { visibleThroughDay: "2026-06-12" });
+    const activeWednesdayHours = cells
+      .filter((cell) => cell.weekdayIndex === 2 && cell.intensity > 0)
+      .map((cell) => cell.hour);
+
+    expect(activeWednesdayHours).toEqual([9, 10, 11, 12]);
+    expect(cells.find((cell) => cell.weekdayIndex === 2 && cell.hour === 9)).toMatchObject({ state: "focus", intensity: 3 });
+    expect(cells.find((cell) => cell.weekdayIndex === 2 && cell.hour === 12)).toMatchObject({ state: "focus", intensity: 1 });
   });
 });
