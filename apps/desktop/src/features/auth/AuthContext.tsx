@@ -20,6 +20,11 @@ import {
   getSessionDiagnosticSummary,
   recordAuthDiagnostic,
 } from "./authDiagnostics";
+import {
+  parseDesktopAuthSession,
+  serializeDesktopAuthSession,
+  type SaveDesktopSessionOptions,
+} from "./desktopAuthSession";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -83,31 +88,6 @@ type OAuthCallbackResult =
   | null;
 
 type TauriInvoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-
-type DesktopAuthSession = {
-  accessToken: string;
-  refreshToken: string;
-};
-
-function serializeDesktopAuthSession(session: Session): string {
-  return JSON.stringify({
-    accessToken: session.access_token,
-    refreshToken: session.refresh_token,
-  });
-}
-
-function parseDesktopAuthSession(value: string | null): DesktopAuthSession | null {
-  if (!value) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (!parsed || typeof parsed !== "object") return null;
-    const record = parsed as Record<string, unknown>;
-    if (typeof record.accessToken !== "string" || typeof record.refreshToken !== "string") return null;
-    return { accessToken: record.accessToken, refreshToken: record.refreshToken };
-  } catch {
-    return null;
-  }
-}
 
 function getOAuthCallbackResultFromUrl(value: string, source: "web" | "tauri"): OAuthCallbackResult {
   try {
@@ -198,19 +178,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     identifyPostHogUser(nextSession?.user ?? null);
   }
 
-  const saveDesktopSession = async (nextSession: Session | null) => {
+  const saveDesktopSession = async (nextSession: Session | null, options: SaveDesktopSessionOptions = {}) => {
     const invoke = tauriInvokeRef.current;
     const saveId = saveSequenceRef.current + 1;
     saveSequenceRef.current = saveId;
+    const operation = nextSession ? "save" : "clear";
     recordAuthDiagnostic("auth.native_save.start", {
       saveId,
-      operation: nextSession ? "save" : "clear",
+      operation,
       ...getSessionDiagnosticSummary(nextSession),
     });
+    if (!nextSession && options.allowClear === false) {
+      recordAuthDiagnostic("auth.native_save.skipped", {
+        saveId,
+        operation,
+        reason: options.skipReason ?? "native-restore-failed",
+      });
+      return;
+    }
     if (!invoke) {
       recordAuthDiagnostic("auth.native_save.skipped", {
         saveId,
-        operation: nextSession ? "save" : "clear",
+        operation,
         reason: "tauri-unavailable",
       });
       return;
@@ -223,13 +212,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       recordAuthDiagnostic("auth.native_save.success", {
         saveId,
-        operation: nextSession ? "save" : "clear",
+        operation,
         ...getSessionDiagnosticSummary(nextSession),
       });
     } catch (error) {
       recordAuthDiagnostic("auth.native_save.error", {
         saveId,
-        operation: nextSession ? "save" : "clear",
+        operation,
         ...getAuthDiagnosticError(error),
       });
       console.warn("Unable to persist desktop auth session.", error);
@@ -246,6 +235,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const exchangedCodes = new Set<string>();
     const appliedSessionCallbacks = new Set<string>();
     let isActive = true;
+    let isInitializingAuth = true;
+    let preserveNativeSessionAfterRestoreFailure = false;
 
     recordAuthDiagnostic("auth.provider.start", {
       authMode: authModePolicy.mode,
@@ -291,7 +282,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             source: "native",
             ...getAuthDiagnosticError(error ?? new Error("No session returned from setSession")),
           });
-          await saveDesktopSession(null);
+          preserveNativeSessionAfterRestoreFailure = true;
+          await saveDesktopSession(null, {
+            allowClear: false,
+            skipReason: "native-restore-failed",
+          });
           return null;
         }
 
@@ -301,6 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         return data.session;
       } catch (error) {
+        preserveNativeSessionAfterRestoreFailure = true;
         recordAuthDiagnostic("auth.restore.error", {
           source: "native",
           ...getAuthDiagnosticError(error),
@@ -537,20 +533,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...getSessionDiagnosticSummary(session),
       });
       applySession(session);
-      await saveDesktopSession(session);
+      await saveDesktopSession(session, {
+        allowClear: !preserveNativeSessionAfterRestoreFailure,
+        skipReason: "native-restore-failed",
+      });
       recordAuthDiagnostic("auth.init.complete", {
         source: "supabase-storage",
         ...getSessionDiagnosticSummary(session),
       });
     };
 
-    void initializeAuth().catch((error) => {
-      recordAuthDiagnostic("auth.init.error", getAuthDiagnosticError(error));
-      console.warn("Unable to initialize auth.", error);
-      if (isActive) {
-        clearSession();
-      }
-    });
+    void initializeAuth()
+      .catch((error) => {
+        recordAuthDiagnostic("auth.init.error", getAuthDiagnosticError(error));
+        console.warn("Unable to initialize auth.", error);
+        if (isActive) {
+          clearSession();
+        }
+      })
+      .finally(() => {
+        isInitializingAuth = false;
+      });
 
     const { data: { subscription } } = client.auth.onAuthStateChange(
       (event, session) => {
@@ -558,6 +561,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           eventType: event,
           ...getSessionDiagnosticSummary(session),
         });
+        if (event === "INITIAL_SESSION" && !session && isInitializingAuth) {
+          recordAuthDiagnostic("auth.state_change.skipped", {
+            eventType: event,
+            reason: "initial-null-session-during-auth-init",
+          });
+          void saveDesktopSession(null, {
+            allowClear: false,
+            skipReason: "initial-null-session-during-auth-init",
+          });
+          return;
+        }
         applySession(session);
         void saveDesktopSession(session);
       }
