@@ -2066,7 +2066,7 @@ input, textarea { color: inherit; }
   --classification-selected-tone: var(--accent);
 }
 
-.content--classify .classification-panel-view {
+.content--classification .classification-panel-view {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -5100,7 +5100,7 @@ input, textarea { color: inherit; }
 
   .clf-summary-strip { grid-template-columns: repeat(2, 1fr); }
 
-  .content--classify .classification-panel-view {
+  .content--classification .classification-panel-view {
     flex: 0 1 auto;
   }
 
@@ -10395,15 +10395,15 @@ button.flow-cell:focus {
 }
 
 /* ── Non-day polish pass: keep Today/Day untouched ── */
-.content--classify .page,
-.content--drift .page,
+.content--classification .page,
+.content--trends .page,
 .content--team .page,
 .content--leaderboard .page,
 .content--settings .page {
   animation: none;
 }
 
-.content--classify .page {
+.content--classification .page {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -10411,11 +10411,11 @@ button.flow-cell:focus {
   min-height: 0;
 }
 
-.content--classify {
+.content--classification {
   overflow-y: hidden;
 }
 
-.content--classify .clf-summary {
+.content--classification .clf-summary {
   gap: var(--space-2);
   overflow: visible;
   border: 0;
@@ -10423,7 +10423,7 @@ button.flow-cell:focus {
   margin-bottom: var(--space-1);
 }
 
-.content--classify .clf-stat {
+.content--classification .clf-stat {
   min-width: 0;
   min-height: 3.7rem;
   justify-content: space-between;
@@ -10436,7 +10436,7 @@ button.flow-cell:focus {
   box-shadow: 0 12px 26px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
-.content--classify .clf-stat strong {
+.content--classification .clf-stat strong {
   overflow: hidden;
   font-size: clamp(0.95rem, 1.15vw, 1.12rem);
   line-height: 1.05;
@@ -10444,7 +10444,7 @@ button.flow-cell:focus {
   white-space: nowrap;
 }
 
-.content--classify .editorial-panel {
+.content--classification .editorial-panel {
   border-radius: 18px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-strong) 42%, transparent)),
@@ -10452,28 +10452,28 @@ button.flow-cell:focus {
   box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
-.content--drift .page {
+.content--trends .page {
   max-width: 1220px;
 }
 
-.content--drift .insight-chart-panel {
+.content--trends .insight-chart-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: none;
 }
 
-.content--drift .insight-section {
+.content--trends .insight-section {
   border-radius: 18px;
 }
 
 .dashboard-insight-stack .kpi-row--insights,
-.content--drift .kpi-row--insights {
+.content--trends .kpi-row--insights {
   border-radius: 18px;
 }
 
 .dashboard-insight-stack .insight-summary,
-.content--drift .insight-summary {
+.content--trends .insight-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
@@ -10500,7 +10500,7 @@ button.flow-cell:focus {
 }
 
 .dashboard-insight-stack .insight-summary__tile,
-.content--drift .insight-summary__tile {
+.content--trends .insight-summary__tile {
   flex: 0.72 1 8.5rem;
   min-width: 0;
   min-height: 5.25rem;
@@ -10515,7 +10515,7 @@ button.flow-cell:focus {
 }
 
 .dashboard-insight-stack .insight-summary__tile--primary,
-.content--drift .insight-summary__tile--primary {
+.content--trends .insight-summary__tile--primary {
   flex: 1.45 1 15rem;
   min-height: 6.35rem;
   padding: var(--space-4);
@@ -10524,33 +10524,33 @@ button.flow-cell:focus {
 }
 
 .dashboard-insight-stack .insight-summary__tile--top-app,
-.content--drift .insight-summary__tile--top-app {
+.content--trends .insight-summary__tile--top-app {
   flex: 1.15 1 14rem;
 }
 
 .dashboard-insight-stack .insight-summary__tile--window,
-.content--drift .insight-summary__tile--window {
+.content--trends .insight-summary__tile--window {
   flex: 0.92 1 11.5rem;
 }
 
 .dashboard-insight-stack .insight-summary__tile--focus,
 .dashboard-insight-stack .insight-summary__tile--drift,
-.content--drift .insight-summary__tile--focus,
-.content--drift .insight-summary__tile--drift {
+.content--trends .insight-summary__tile--focus,
+.content--trends .insight-summary__tile--drift {
   flex-basis: 7.75rem;
   background: color-mix(in srgb, var(--surface) 66%, transparent);
 }
 
 .dashboard-insight-stack .insight-summary__tile .eyebrow,
-.content--drift .insight-summary__tile .eyebrow {
+.content--trends .insight-summary__tile .eyebrow {
   margin: 0;
   letter-spacing: .16em;
 }
 
 .dashboard-insight-stack .insight-summary__tile strong,
 .dashboard-insight-stack .insight-summary__tile p,
-.content--drift .insight-summary__tile strong,
-.content--drift .insight-summary__tile p {
+.content--trends .insight-summary__tile strong,
+.content--trends .insight-summary__tile p {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -10559,28 +10559,28 @@ button.flow-cell:focus {
 }
 
 .dashboard-insight-stack .insight-summary__tile strong,
-.content--drift .insight-summary__tile strong {
+.content--trends .insight-summary__tile strong {
   font-size: 1.08rem;
   letter-spacing: -0.03em;
   line-height: 1.04;
 }
 
 .dashboard-insight-stack .insight-summary__tile--primary strong,
-.content--drift .insight-summary__tile--primary strong {
+.content--trends .insight-summary__tile--primary strong {
   font-size: 1.55rem;
   letter-spacing: -0.055em;
 }
 
 .dashboard-insight-stack .insight-summary__tile--focus strong,
 .dashboard-insight-stack .insight-summary__tile--drift strong,
-.content--drift .insight-summary__tile--focus strong,
-.content--drift .insight-summary__tile--drift strong {
+.content--trends .insight-summary__tile--focus strong,
+.content--trends .insight-summary__tile--drift strong {
   color: var(--text-muted);
   font-size: 1rem;
 }
 
 .dashboard-insight-stack .insight-summary__tile p,
-.content--drift .insight-summary__tile p {
+.content--trends .insight-summary__tile p {
   color: var(--text-soft);
 }
 
@@ -10629,8 +10629,8 @@ button.flow-cell:focus {
 
   .dashboard-insight-stack .insight-summary__tile--primary,
   .dashboard-insight-stack .insight-summary__tile--top-app,
-  .content--drift .insight-summary__tile--primary,
-  .content--drift .insight-summary__tile--top-app {
+  .content--trends .insight-summary__tile--primary,
+  .content--trends .insight-summary__tile--top-app {
     flex-basis: calc(50% - var(--space-2));
   }
 }
@@ -10663,7 +10663,7 @@ button.flow-cell:focus {
     grid-template-columns: 1fr;
   }
 
-  .content--drift .insight-summary {
+  .content--trends .insight-summary {
     padding: var(--space-1);
   }
 
@@ -10674,9 +10674,9 @@ button.flow-cell:focus {
   .dashboard-insight-stack .insight-summary__tile,
   .dashboard-insight-stack .insight-summary__tile--primary,
   .dashboard-insight-stack .insight-summary__tile--top-app,
-  .content--drift .insight-summary__tile,
-  .content--drift .insight-summary__tile--primary,
-  .content--drift .insight-summary__tile--top-app {
+  .content--trends .insight-summary__tile,
+  .content--trends .insight-summary__tile--primary,
+  .content--trends .insight-summary__tile--top-app {
     flex-basis: 100%;
   }
 }
@@ -14514,18 +14514,18 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 /* Visual parity pass: mock-visible shell and non-settings surfaces */
 .content > .theme-toggle { display: none; }
 
-.content--classify .clf-stat--with-icon {
+.content--classification .clf-stat--with-icon {
   gap: 6px;
 }
 
-.content--classify .clf-stat__row {
+.content--classification .clf-stat__row {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.content--classify .clf-stat__row strong {
+.content--classification .clf-stat__row strong {
   flex: 1;
   min-width: 0;
 }
@@ -15467,7 +15467,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 }
 
 /* Corrected Drifty prototype parity: compact Classification, Insights analysis, and quiet leaderboard ledger. */
-.content--classify .clf-stat {
+.content--classification .clf-stat {
   min-width: 0;
   min-height: 0;
   padding: 5px 10px;
@@ -15479,7 +15479,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   box-shadow: none;
 }
 
-.content--classify .clf-stat strong {
+.content--classification .clf-stat strong {
   overflow: hidden;
   font-size: 1rem;
   line-height: 1.1;
@@ -15487,14 +15487,14 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   white-space: nowrap;
 }
 
-.content--classify .clf-stat__row {
+.content--classification .clf-stat__row {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.content--classify .clf-stat__row strong {
+.content--classification .clf-stat__row strong {
   flex: 1;
   min-width: 0;
   font-size: 0.95rem;
