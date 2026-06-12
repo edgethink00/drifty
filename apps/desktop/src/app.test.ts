@@ -645,7 +645,7 @@ describe('domain helpers', () => {
     })).toMatchObject({ productivity: 'drift', source: 'domain-db' });
   });
 
-  it('uses the native app registry before context fallback', () => {
+  it('uses the native app registry for known apps', () => {
     expect(classifyActivityDetailed({
       ...segments[0],
       appName: 'League of Legends',
@@ -760,22 +760,128 @@ describe('domain helpers', () => {
     })).toMatchObject({ category: 'unknown', productivity: 'neutral', surface: 'browser', source: 'unknown' });
   });
 
-  it('routes multipurpose domains through contextual classification', () => {
+  it('leaves multipurpose domains unknown for AI classification', () => {
     expect(classifyActivityDetailed({
       ...segments[0],
       appName: 'Safari',
       browserName: 'Safari',
       siteDomain: 'github.com',
       siteTitle: 'React developer guide',
-    })).toMatchObject({ category: 'learning', productivity: 'focus', surface: 'browser', source: 'context' });
+    })).toMatchObject({ category: 'unknown', productivity: 'neutral', surface: 'browser', source: 'unknown' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Discord',
+      bundleId: 'com.hnc.Discord',
+      windowTitle: '#general | drifty - Discord',
+    })).toMatchObject({ category: 'unknown', productivity: 'neutral', surface: 'app', source: 'unknown' });
+  });
+
+  it('covers single-purpose registry additions for apps and domains', () => {
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Microsoft PowerPoint',
+      bundleId: 'com.microsoft.Powerpoint',
+      windowTitle: '0612_weekly_meeting',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Linear',
+      bundleId: 'com.linear',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'drifty',
+      bundleId: 'so.drifty.mac',
+    })).toMatchObject({ category: 'utility', productivity: 'neutral', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Claude',
+      bundleId: 'com.anthropic.claudefordesktop',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
 
     expect(classifyActivityDetailed({
       ...segments[0],
       appName: 'Safari',
       browserName: 'Safari',
-      siteDomain: 'github.com',
-      siteTitle: 'Pull request',
-    })).toMatchObject({ category: 'unknown', productivity: 'neutral', surface: 'browser', source: 'unknown' });
+      siteDomain: 'supabase.com',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'linkedin.com',
+    })).toMatchObject({ category: 'social_media', productivity: 'neutral', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'lichess.org',
+    })).toMatchObject({ category: 'game', productivity: 'drift', source: 'domain-db' });
+  });
+
+  it('classifies promoted registry domains as predefined rules', () => {
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: 'meet.google.com',
+    })).toMatchObject({ category: 'communication', productivity: 'neutral', surface: 'browser', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: 'calendar.google.com',
+    })).toMatchObject({ category: 'communication', productivity: 'neutral', surface: 'browser', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: '127.0.0.1',
+      siteUrl: 'http://127.0.0.1:1420/?driftypreview=1',
+      windowTitle: 'drifty',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', surface: 'browser', source: 'domain-db' });
+  });
+
+  it('classifies YouTube window titles when tab metadata is missing', () => {
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: null,
+      windowTitle: '인첸트 갑옷 농사 - YouTube - 오디오 재생 - Chrome - Alex',
+    })).toMatchObject({ category: 'entertainment', productivity: 'drift', surface: 'browser', source: 'youtube', confidence: 0.7 });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: null,
+      windowTitle: '플레이리스트 - YouTube Music - Chrome - Alex',
+    })).toMatchObject({ category: 'music', productivity: 'neutral', surface: 'browser', source: 'youtube' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: '127.0.0.1',
+      windowTitle: '폭풍갈퀴의 주인 - YouTube - 오디오 재생 - Chrome - Alex',
+    })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'domain-db' });
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Google Chrome',
+      browserName: 'Google Chrome',
+      siteDomain: null,
+      windowTitle: 'how to use youtube api - stack overflow - Chrome - Alex',
+    })).toMatchObject({ category: 'unknown', source: 'unknown' });
   });
 
   it.each([

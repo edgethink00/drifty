@@ -11,7 +11,7 @@ import type {
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
-import { classifyYouTubeActivity } from "./youtubeClassification";
+import { classifyYouTubeActivity, classifyYouTubeWindowTitle } from "./youtubeClassification";
 
 const UI_LOCALE = "en-US";
 const MINUTES_PER_DAY = 24 * 60;
@@ -1107,44 +1107,6 @@ export const CATEGORY_ORDER: ActivityCategory[] = [
 
 export const PRODUCTIVITY_ORDER: ProductivityLabel[] = ["focus", "neutral", "drift"];
 
-const COMMUNICATION_HINTS = [
-  "slack",
-  "mail",
-  "gmail",
-  "calendar",
-  "meet",
-  "zoom",
-  "teams",
-  "discord",
-  "messages",
-  "inbox",
-  "kakao",
-  "telegram",
-];
-
-const LEARNING_HINTS = [
-  "docs",
-  "documentation",
-  "developer",
-  "mdn",
-  "tutorial",
-  "guide",
-  "course",
-  "academy",
-  "learn",
-  "reference",
-  "readme",
-  "coursera",
-  "udemy",
-];
-
-const MUSIC_HINTS = [
-  "spotify",
-  "music",
-  "soundcloud",
-  "apple music",
-];
-
 type ClassificationMode = "single-purpose" | "multipurpose";
 
 interface ClassificationRegistryEntry {
@@ -1179,6 +1141,11 @@ const APP_CLASSIFICATIONS: ClassificationRegistryEntry[] = [
   { id: "docker-desktop", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.85, appNames: ["docker desktop", "docker"] },
   { id: "postman", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.85, appNames: ["postman"] },
   { id: "figma", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, appNames: ["figma"] },
+  { id: "microsoft-office", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.85, appNames: ["microsoft powerpoint", "microsoft word", "microsoft excel"], bundleIds: ["com.microsoft.powerpoint", "com.microsoft.word", "com.microsoft.excel"] },
+  { id: "linear", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, appNames: ["linear"], bundleIds: ["com.linear"] },
+  { id: "claude-desktop", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.7, appNames: ["claude"], bundleIds: ["com.anthropic.claudefordesktop"] },
+  { id: "codex-desktop", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, appNames: ["codex"], bundleIds: ["com.openai.codex"] },
+  { id: "apple-developer-app", mode: "single-purpose", category: "learning", productivity: "focus", confidence: 0.8, appNames: ["developer"], bundleIds: ["developer.apple.wwdc-release"] },
   { id: "slack", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.9, appNames: ["slack"], bundleIds: ["com.tinyspeck.slackmacgap"] },
   { id: "zoom", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.9, appNames: ["zoom", "zoom.us"], bundleIds: ["us.zoom.xos"] },
   { id: "microsoft-teams", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.9, appNames: ["microsoft teams", "teams"], bundleIds: ["com.microsoft.teams", "com.microsoft.teams2"] },
@@ -1197,6 +1164,9 @@ const APP_CLASSIFICATIONS: ClassificationRegistryEntry[] = [
   { id: "system-settings", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.9, appNames: ["settings", "system settings"], bundleIds: ["com.apple.systempreferences", "com.apple.systemsettings"] },
   { id: "one-password", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.9, appNames: ["1password"], bundleIds: ["com.1password.1password"] },
   { id: "preview-calculator", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.85, appNames: ["preview", "calculator"], bundleIds: ["com.apple.preview", "com.apple.calculator"] },
+  { id: "apple-system-utilities", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.85, appNames: ["keychain access", "certificate assistant", "activity monitor"], bundleIds: ["com.apple.keychainaccess", "com.apple.certificateassistant", "com.apple.activitymonitor"] },
+  { id: "drifty", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.7, appNames: ["drifty", "dtime"], bundleIds: ["so.drifty.mac"] },
+  { id: "rize", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.8, appNames: ["rize"], bundleIds: ["io.rize"] },
   { id: "notion", mode: "multipurpose", confidence: 0.55, appNames: ["notion"], bundleIds: ["notion.id"] },
   { id: "discord", mode: "multipurpose", confidence: 0.55, appNames: ["discord"], bundleIds: ["com.hnc.discord"] },
   { id: "obsidian", mode: "multipurpose", confidence: 0.55, appNames: ["obsidian"], bundleIds: ["md.obsidian"] },
@@ -1208,6 +1178,8 @@ const DOMAIN_CLASSIFICATIONS: ClassificationRegistryEntry[] = [
   { id: "zoom", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.9, domains: ["zoom.us"] },
   { id: "microsoft-teams", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.85, domains: ["teams.microsoft.com"] },
   { id: "whatsapp", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.85, domains: ["whatsapp.com", "web.whatsapp.com"] },
+  { id: "google-meet", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.9, domains: ["meet.google.com"] },
+  { id: "google-calendar", mode: "single-purpose", category: "communication", productivity: "neutral", confidence: 0.85, domains: ["calendar.google.com"] },
   { id: "spotify", mode: "single-purpose", category: "music", productivity: "neutral", confidence: 0.95, domains: ["spotify.com", "open.spotify.com"] },
   { id: "soundcloud", mode: "single-purpose", category: "music", productivity: "neutral", confidence: 0.9, domains: ["soundcloud.com"] },
   { id: "apple-music", mode: "single-purpose", category: "music", productivity: "neutral", confidence: 0.9, domains: ["music.apple.com"] },
@@ -1231,6 +1203,17 @@ const DOMAIN_CLASSIFICATIONS: ClassificationRegistryEntry[] = [
   { id: "gitlab-bitbucket", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.85, domains: ["gitlab.com", "bitbucket.org"] },
   { id: "developer-tools", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.85, domains: ["code.visualstudio.com", "jetbrains.com", "docker.com", "docs.docker.com", "postman.com"] },
   { id: "ai-dev-tools", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, domains: ["copilot.github.com", "platform.kimi.ai", "platform.deepseek.com", "cursor.com"] },
+  { id: "local-dev", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.7, domains: ["localhost", "127.0.0.1", "0.0.0.0"] },
+  { id: "supabase", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.85, domains: ["supabase.com"] },
+  { id: "polar", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, domains: ["polar.sh"] },
+  { id: "openrouter", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, domains: ["openrouter.ai"] },
+  { id: "google-search-console", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.8, domains: ["search.google.com"] },
+  { id: "apple-developer", mode: "single-purpose", category: "workspace", productivity: "focus", confidence: 0.75, domains: ["developer.apple.com"] },
+  { id: "drifty-site", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.7, domains: ["drifty.so"] },
+  { id: "google-accounts", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.7, domains: ["accounts.google.com"] },
+  { id: "maps", mode: "single-purpose", category: "utility", productivity: "neutral", confidence: 0.85, domains: ["map.naver.com", "maps.google.com"] },
+  { id: "chess", mode: "single-purpose", category: "game", productivity: "drift", confidence: 0.9, domains: ["lichess.org", "chess.com"] },
+  { id: "linkedin", mode: "single-purpose", category: "social_media", productivity: "neutral", confidence: 0.7, domains: ["linkedin.com"] },
   { id: "ai-learning", mode: "single-purpose", category: "learning", productivity: "focus", confidence: 0.75, domains: ["phind.com"] },
   { id: "ai-assistants", mode: "multipurpose", confidence: 0.55, domains: ["claude.ai", "claude.com", "chatgpt.com", "gemini.google.com", "perplexity.ai", "poe.com", "kimi.com", "chat.mistral.ai", "chat.deepseek.com", "grok.com", "huggingface.co"] },
   { id: "work-management", mode: "multipurpose", confidence: 0.6, domains: ["linear.app", "atlassian.net", "jira.com", "figma.com"] },
@@ -1239,57 +1222,6 @@ const DOMAIN_CLASSIFICATIONS: ClassificationRegistryEntry[] = [
   { id: "google-docs", mode: "multipurpose", confidence: 0.55, domains: ["docs.google.com"] },
   { id: "reddit", mode: "multipurpose", confidence: 0.55, domains: ["reddit.com"] },
   { id: "discord", mode: "multipurpose", confidence: 0.55, domains: ["discord.com"] },
-];
-
-const GAME_HINTS = [
-  "steam",
-  "game",
-  "games",
-  "minecraft",
-  "roblox",
-  "riot",
-  "battle.net",
-];
-
-const SOCIAL_HINTS = [
-  "reddit",
-  "twitter",
-  "x.com",
-  "instagram",
-  "facebook",
-  "tiktok",
-  "social",
-];
-
-const ENTERTAINMENT_HINTS = [
-  "youtube",
-  "netflix",
-  "twitch",
-  "disney",
-  "hulu",
-  "news",
-  "entertainment",
-];
-
-const SHOPPING_HINTS = [
-  "amazon",
-  "shopping",
-  "shop",
-  "store",
-  "cart",
-  "checkout",
-  "coupang",
-];
-
-const UTILITY_HINTS = [
-  "finder",
-  "settings",
-  "system settings",
-  "1password",
-  "password",
-  "calendar",
-  "preview",
-  "calculator",
 ];
 
 function classifyBrowserActivity(segment: ActivitySegment): ActivityClassificationDetail {
@@ -1303,15 +1235,12 @@ function classifyBrowserActivity(segment: ActivitySegment): ActivityClassificati
     return detail(domainEntry, "browser", "domain-db", domainEntry.confidence, `Matched domain registry entry: ${domainEntry.id}`);
   }
 
-  const contextClassification = classifyContext(browserContextText(segment));
-  if (contextClassification) {
-    const reason = domainEntry?.mode === "multipurpose"
-      ? `Matched context hints for multipurpose domain: ${domainEntry.id}`
-      : "Matched browser domain/title context hints";
-    return detail(contextClassification, "browser", "context", 0.65, reason);
+  const windowTitleClassification = classifyYouTubeWindowTitle(segment);
+  if (windowTitleClassification) {
+    return detail(windowTitleClassification, "browser", "youtube", 0.7, "Matched YouTube window title without tab metadata");
   }
 
-  return unknownDetail("browser", domainEntry ? `Multipurpose domain had no context match: ${domainEntry.id}` : "No domain registry or context match");
+  return unknownDetail("browser", domainEntry ? `Multipurpose domain needs AI classification: ${domainEntry.id}` : "No domain registry match");
 }
 
 function classifyAppActivity(segment: ActivitySegment): ActivityClassificationDetail {
@@ -1320,15 +1249,7 @@ function classifyAppActivity(segment: ActivitySegment): ActivityClassificationDe
     return detail(appEntry, "app", "app-db", appEntry.confidence, `Matched app registry entry: ${appEntry.id}`);
   }
 
-  const contextClassification = classifyContext(appContextText(segment));
-  if (contextClassification) {
-    const reason = appEntry?.mode === "multipurpose"
-      ? `Matched context hints for multipurpose app: ${appEntry.id}`
-      : "Matched app/window context hints";
-    return detail(contextClassification, "app", "context", 0.6, reason);
-  }
-
-  return unknownDetail("app", appEntry ? `Multipurpose app had no context match: ${appEntry.id}` : "No app registry or context match");
+  return unknownDetail("app", appEntry ? `Multipurpose app needs AI classification: ${appEntry.id}` : "No app registry match");
 }
 
 function isBrowserActivity(segment: ActivitySegment): boolean {
@@ -1357,30 +1278,6 @@ function isResolvedEntry(entry: ClassificationRegistryEntry | null): entry is Cl
   return Boolean(entry && entry.mode === "single-purpose" && entry.category && entry.productivity);
 }
 
-function classifyContext(text: string): ActivityClassification | null {
-  if (matchesAny(text, COMMUNICATION_HINTS)) return { category: "communication", productivity: "neutral" };
-  if (matchesAny(text, LEARNING_HINTS)) return { category: "learning", productivity: "focus" };
-  if (matchesAny(text, MUSIC_HINTS)) return { category: "music", productivity: "neutral" };
-  if (matchesAny(text, GAME_HINTS)) return { category: "game", productivity: "drift" };
-  if (matchesAny(text, SOCIAL_HINTS)) return { category: "social_media", productivity: "drift" };
-  if (matchesAny(text, SHOPPING_HINTS)) return { category: "shopping", productivity: "drift" };
-  if (matchesAny(text, ENTERTAINMENT_HINTS)) return { category: "entertainment", productivity: "drift" };
-  if (matchesAny(text, UTILITY_HINTS)) return { category: "utility", productivity: "neutral" };
-  return null;
-}
-
-function browserContextText(segment: ActivitySegment): string {
-  return joinContext(segment.siteDomain, segment.siteTitle, segment.siteUrl, segment.windowTitle);
-}
-
-function appContextText(segment: ActivitySegment): string {
-  return joinContext(segment.appName, segment.bundleId, segment.windowTitle);
-}
-
-function joinContext(...values: Array<string | null | undefined>): string {
-  return values.map((value) => normalizeText(value)).filter(Boolean).join(" ");
-}
-
 function normalizeText(value?: string | null): string {
   return (value ?? "").trim().toLowerCase();
 }
@@ -1392,10 +1289,6 @@ function normalizeDomain(value?: string | null): string {
 function domainMatches(domain: string, candidate: string): boolean {
   const normalizedCandidate = normalizeDomain(candidate);
   return domain === normalizedCandidate || domain.endsWith(`.${normalizedCandidate}`);
-}
-
-function matchesAny(value: string, hints: string[]) {
-  return hints.some((hint) => value.includes(hint));
 }
 
 function detail(

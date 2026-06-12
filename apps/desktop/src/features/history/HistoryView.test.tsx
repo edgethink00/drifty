@@ -28,8 +28,8 @@ const historySegments: ActivitySegment[] = [
   },
   {
     id: "2",
-    appName: "Linear",
-    bundleId: "com.linear",
+    appName: "Acme Tracker",
+    bundleId: "com.acme.tracker",
     durationSeconds: 900,
     endedAt: "2026-06-09T11:15:00+00:00",
     platform: "macos",
