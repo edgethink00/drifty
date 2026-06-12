@@ -3998,6 +3998,33 @@ input, textarea { color: inherit; }
   line-height: 1.6;
 }
 
+.update-dialog-title {
+  margin: 0 0 var(--space-3);
+}
+
+.update-dialog-checkbox {
+  align-items: center;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  max-width: 100%;
+}
+
+.update-dialog-checkbox:has(.drifty-checkbox:focus-visible) {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline-offset: 3px;
+}
+
+.update-dialog-checkbox__label {
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  line-height: 1.25;
+  min-width: 0;
+}
+
 .profile-socials {
   display: flex;
   flex-wrap: wrap;
@@ -4645,6 +4672,61 @@ input, textarea { color: inherit; }
 }
 
 .settings-input:focus { border-color: var(--accent); }
+
+.drifty-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--settings-control-bg, color-mix(in srgb, var(--surface) 82%, var(--bg-2)));
+  border: 1px solid var(--settings-control-border, color-mix(in srgb, var(--text) 11%, var(--line)));
+  border-radius: calc(var(--settings-control-radius, var(--radius-sm)) - 3px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
+  color: var(--canvas);
+  cursor: pointer;
+  display: grid;
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0;
+  place-content: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  width: 1rem;
+}
+
+.drifty-checkbox::after {
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: "";
+  height: 0.28rem;
+  transform: translateY(-0.03rem) rotate(-45deg) scale(0);
+  transition: transform var(--transition-fast);
+  width: 0.5rem;
+}
+
+.drifty-checkbox:hover {
+  background: var(--settings-control-bg-hover, color-mix(in srgb, var(--surface-strong) 88%, var(--surface)));
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+}
+
+.drifty-checkbox:checked {
+  background: color-mix(in srgb, var(--accent) 88%, var(--accent-strong));
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 20%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent-soft) 34%, transparent);
+}
+
+.drifty-checkbox:checked::after {
+  transform: translateY(-0.03rem) rotate(-45deg) scale(1);
+}
+
+.drifty-checkbox:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline-offset: 2px;
+}
+
+.drifty-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 
 .settings-color-grid {
   display: grid;
