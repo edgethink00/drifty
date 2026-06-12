@@ -131,6 +131,14 @@ export interface ProductivityShareMix {
   drift: number;
 }
 
+export interface DriftAlarmTrayStatus {
+  readonly enabled: boolean;
+  readonly lastCheckedAt: string | null;
+  readonly lastCheckedLabel: string;
+  readonly resultLabel: string;
+  readonly detailLabel: string | null;
+}
+
 export type AppIconMap = Record<string, string | null>;
 
 export interface TrackerApi {
@@ -155,4 +163,5 @@ export interface TrackerApi {
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
+  updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;
 }

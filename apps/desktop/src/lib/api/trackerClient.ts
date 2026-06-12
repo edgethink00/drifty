@@ -10,6 +10,7 @@ import type {
   ClassificationRuleApplyResult,
   ClassificationRuleCandidate,
   ClassificationRuleInput,
+  DriftAlarmTrayStatus,
   CurrentActivitySnapshot,
   ProductivityShareMix,
   RawEventsQuery,
@@ -218,5 +219,9 @@ export const trackerClient: TrackerApi = {
       drift: mix.drift,
       neutral: mix.neutral,
     });
+  },
+  async updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus) {
+    if (shouldUsePreviewData()) return;
+    await safeInvoke<void>("tray_update_drift_alarm_status", { status });
   },
 };
