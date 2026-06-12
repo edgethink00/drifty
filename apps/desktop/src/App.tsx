@@ -149,8 +149,10 @@ import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
-import type { DriftAlarmBreakSnooze, DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
+import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
 import { persistDriftAlarmCopy, resolveInitialDriftAlarmCopy } from "./features/companion/driftAlarmCopyStorage";
+import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
+import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
 import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_MODE_STORAGE_KEY, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PEEK_STORAGE_KEY, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MAX_STORAGE_KEY, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_STORAGE_KEY, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, normalizeWatcherPeriodicMinutes, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek, resolveInitialWatcherMode, resolveInitialWatcherPeekEnabled, resolveInitialWatcherPeriodicMinutes } from "./features/companion/watcherData";
@@ -186,6 +188,7 @@ import { HistoryCalendarPanel } from "./features/dashboard/HistoryCalendarPanel"
 import { FocusDriftHoverCard, formatFocusDriftHoverLabel } from "./features/dashboard/HoverCards";
 import type { FocusDriftHoverKind, FocusDriftHoverState, TimelineHoverState } from "./features/dashboard/HoverCards";
 import { WeekDashboard } from "./features/dashboard/WeekDashboard";
+import { BreakRecoveryCard } from "./features/insights/BreakRecoveryCard";
 import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./features/insights/InsightCards";
 import { EditProfileModal, ProfileModal, buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl } from "./features/profile/ProfileModals";
 
@@ -383,6 +386,8 @@ export default function App() {
   const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(resolveInitialExtremeNudgeEnabled);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
+  const [breakRecoveryAssessment, setBreakRecoveryAssessment] = useState<DriftAlarmBreakSnooze | null>(null);
+  const [driftAlarmInteractions, setDriftAlarmInteractions] = useState<DriftAlarmInteraction[]>(readDriftAlarmInteractions);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
@@ -710,6 +715,7 @@ export default function App() {
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const driftAlarmSnoozeRef = useRef<DriftAlarmBreakSnooze | null>(null);
+  const breakRecoveryAssessmentRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
@@ -984,6 +990,22 @@ export default function App() {
     }).then(showEndOfDayReview);
   }, [buildEndOfDayReviewEvent, segments, selectedDay, showEndOfDayReview]);
 
+  const recordDriftInteraction = useCallback((interaction: DriftAlarmInteraction) => {
+    setDriftAlarmInteractions(recordDriftAlarmInteraction(interaction));
+  }, []);
+
+  const recordBreakRecoveryOutcome = useCallback((attempt: DriftAlarmBreakSnooze, outcome: BreakRecoveryOutcome) => {
+    recordDriftInteraction({
+      kind: "break_outcome",
+      alarmId: attempt.alarmId,
+      attemptId: attempt.attemptId,
+      minutes: attempt.minutes,
+      outcome,
+      sourceLabel: attempt.source.label,
+      resolvedAt: new Date().toISOString(),
+    });
+  }, [recordDriftInteraction]);
+
   const clearDriftAlarmEvent = useCallback(() => {
     driftAlarmEventRef.current = null;
     pendingDriftAlarmEventRef.current = null;
@@ -1045,6 +1067,29 @@ export default function App() {
     void hideNativeDriftAlarm();
   }, [clearDriftAlarmEvent]);
 
+  const recordCurrentDriftAlarmDismiss = useCallback(() => {
+    const currentAlarmEvent = driftAlarmEventRef.current;
+    if (!currentAlarmEvent) return;
+
+    recordDriftInteraction({
+      kind: "action",
+      alarmId: currentAlarmEvent.id,
+      mode: currentAlarmEvent.mode,
+      action: "dismiss",
+      actedAt: new Date().toISOString(),
+    });
+  }, [recordDriftInteraction]);
+
+  const handleDriftAlarmDismissed = useCallback(() => {
+    recordCurrentDriftAlarmDismiss();
+    clearDriftAlarmEvent();
+  }, [clearDriftAlarmEvent, recordCurrentDriftAlarmDismiss]);
+
+  const cancelDriftAlarm = useCallback(() => {
+    recordCurrentDriftAlarmDismiss();
+    dismissDriftAlarm();
+  }, [dismissDriftAlarm, recordCurrentDriftAlarmDismiss]);
+
   async function applyDriftAlarmManualCorrection(event: DriftAlarmEvent | null): Promise<void> {
     const sourceSegmentId = event?.sourceSegmentId?.trim();
     if (!sourceSegmentId) return;
@@ -1083,6 +1128,26 @@ export default function App() {
 
   const handleDriftAlarmAction = useCallback((action: DriftAlarmAction) => {
     const currentAlarmEvent = driftAlarmEventRef.current ?? lastDriftAlarmEventRef.current;
+    if (currentAlarmEvent) {
+      const actedAt = new Date().toISOString();
+      const interaction: DriftAlarmInteraction = action.type === "start_break"
+        ? {
+          kind: "action",
+          alarmId: currentAlarmEvent.id,
+          mode: currentAlarmEvent.mode,
+          action: action.type,
+          minutes: action.minutes,
+          actedAt,
+        }
+        : {
+          kind: "action",
+          alarmId: currentAlarmEvent.id,
+          mode: currentAlarmEvent.mode,
+          action: action.type,
+          actedAt,
+        };
+      recordDriftInteraction(interaction);
+    }
     dismissDriftAlarm();
 
     switch (action.type) {
@@ -1103,23 +1168,24 @@ export default function App() {
         return;
       }
       case "start_break": {
-        const snoozeUntilMs = Date.now() + action.minutes * 60_000;
-        const pausedFromLabel = currentAlarmEvent?.mode === "break_return"
-          ? currentAlarmEvent.breakReturn.pausedFromLabel
-          : currentAlarmEvent?.contextLabel || "This drift";
-        const nextSnooze = {
-          untilMs: snoozeUntilMs,
-          minutes: action.minutes,
-          pausedFromLabel,
-          focusTargets: currentAlarmEvent?.focusTargets ?? [],
-        } satisfies DriftAlarmBreakSnooze;
+        if (!currentAlarmEvent) return;
+        const attempt = buildBreakRecoveryAttempt({
+          action,
+          event: currentAlarmEvent,
+          segments: segmentsRef.current,
+          classificationOptions: selectedDayClassificationOptions,
+          startedAtMs: Date.now(),
+        });
+        const nextSnooze = buildBreakSnooze({ attempt, event: currentAlarmEvent });
         pendingBreakReturnAlarmRef.current = null;
+        breakRecoveryAssessmentRef.current = null;
         driftAlarmSnoozeRef.current = nextSnooze;
+        setBreakRecoveryAssessment(null);
         setDriftAlarmSnooze(nextSnooze);
         return;
       }
     }
-  }, [dismissDriftAlarm, navigateToTab, returnToFocusTarget]);
+  }, [dismissDriftAlarm, navigateToTab, recordDriftInteraction, returnToFocusTarget, selectedDayClassificationOptions]);
 
   const dismissWatcherPeek = useCallback(() => {
     clearWatcherEvent();
@@ -1385,7 +1451,9 @@ export default function App() {
         }
 
         pendingBreakReturnAlarmRef.current = driftAlarmSnooze;
+        breakRecoveryAssessmentRef.current = driftAlarmSnooze;
         driftAlarmSnoozeRef.current = null;
+        setBreakRecoveryAssessment(driftAlarmSnooze);
         setDriftAlarmSnooze(null);
         lastDriftAlertSegmentRef.current = null;
       });
@@ -1393,6 +1461,23 @@ export default function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [driftAlarmSnooze, selectedDay]);
+
+  useEffect(() => {
+    breakRecoveryAssessmentRef.current = breakRecoveryAssessment;
+    if (breakRecoveryAssessment === null) return undefined;
+
+    const assessmentEndsAtMs = new Date(breakRecoveryAssessment.assessmentEndsAt).getTime();
+    const delayMs = Math.max(0, assessmentEndsAtMs - Date.now());
+    const timeoutId = window.setTimeout(() => {
+      if (breakRecoveryAssessmentRef.current?.attemptId !== breakRecoveryAssessment.attemptId) return;
+      recordBreakRecoveryOutcome(breakRecoveryAssessment, "recovered");
+      breakRecoveryAssessmentRef.current = null;
+      pendingBreakReturnAlarmRef.current = null;
+      setBreakRecoveryAssessment(null);
+    }, delayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [breakRecoveryAssessment, recordBreakRecoveryOutcome]);
 
   useEffect(() => {
     window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
@@ -1576,7 +1661,7 @@ export default function App() {
       unlisteners.push(unlisten);
     });
 
-    void listenToNativeDriftAlarmDismissed(clearDriftAlarmEvent).then((unlisten) => {
+    void listenToNativeDriftAlarmDismissed(handleDriftAlarmDismissed).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
         unlisten();
@@ -1589,7 +1674,7 @@ export default function App() {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [clearDriftAlarmEvent, dismissWatcherPeek, handleDriftAlarmAction, handleEndOfDayReviewAction, handleWatcherResponse]);
+  }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   useEffect(() => {
     if (!driftAlertsEnabled || selectedDay !== logicalTodayIsoDate(startOfDayMinutes) || !status?.running) {
@@ -1613,7 +1698,6 @@ export default function App() {
 
     if (!latestDrift) {
       pendingDriftAlarmGateRef.current = null;
-      pendingBreakReturnAlarmRef.current = null;
       lastDriftAlertSegmentRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
@@ -1664,9 +1748,22 @@ export default function App() {
       });
     };
 
+    const completeBreakRecoveryAssessment = (attempt: DriftAlarmBreakSnooze, outcome: BreakRecoveryOutcome) => {
+      recordBreakRecoveryOutcome(attempt, outcome);
+      if (breakRecoveryAssessmentRef.current?.attemptId !== attempt.attemptId) return;
+      breakRecoveryAssessmentRef.current = null;
+      setBreakRecoveryAssessment(null);
+    };
+
     const deliverCurrentDriftAlarm = () => {
       const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
       if (pendingBreakReturnAlarm) {
+        const outcome = resolveBreakRecoveryOutcome({
+          attempt: pendingBreakReturnAlarm,
+          driftCandidate: latestDrift,
+          nowMs: Date.now(),
+        });
+        if (outcome) completeBreakRecoveryAssessment(pendingBreakReturnAlarm, outcome);
         const focusTargets = pendingBreakReturnAlarm.focusTargets.length
           ? pendingBreakReturnAlarm.focusTargets
           : recentDriftAlarmFocusTargets;
@@ -1688,6 +1785,16 @@ export default function App() {
         pendingBreakReturnAlarmRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
         return;
+      }
+
+      const activeAssessment = breakRecoveryAssessmentRef.current;
+      if (activeAssessment) {
+        const outcome = resolveBreakRecoveryOutcome({
+          attempt: activeAssessment,
+          driftCandidate: latestDrift,
+          nowMs: Date.now(),
+        });
+        if (outcome) completeBreakRecoveryAssessment(activeAssessment, outcome);
       }
 
       if (lastDriftAlertSegmentRef.current === null) {
@@ -1737,7 +1844,6 @@ export default function App() {
       pendingDriftAlarmGateRef.current = null;
 
       if (gateResult.kind === "suppress") {
-        pendingBreakReturnAlarmRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
         return;
       }
@@ -1749,10 +1855,9 @@ export default function App() {
       }
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
       pendingDriftAlarmGateRef.current = null;
-      pendingBreakReturnAlarmRef.current = null;
       lastDriftAlertSegmentRef.current = alertKey;
     });
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -2022,6 +2127,14 @@ export default function App() {
   const focusSourceLists = useMemo(
     () => buildInsightSourceLists(insightSegments, "focus", insightClassificationOptions),
     [insightClassificationOptions, insightSegments],
+  );
+  const breakRecoveryInsight = useMemo(
+    () => buildBreakRecoveryInsight({
+      interactions: driftAlarmInteractions,
+      rangeStart: insightRange.start,
+      rangeEnd: insightRange.end,
+    }),
+    [driftAlarmInteractions, insightRange.end, insightRange.start],
   );
   const insightSiteSummary = insightTopSites.slice(0, 5);
   const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
@@ -3755,6 +3868,8 @@ export default function App() {
               <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
               <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
             </div>
+
+            <BreakRecoveryCard summary={breakRecoveryInsight} />
           </div>
         ) : null}
 
@@ -4122,7 +4237,7 @@ export default function App() {
             <div className="drift-alarm-browser-surface" aria-label="Drifty drift alarm browser overlay">
               <div className="drift-alarm-browser-backdrop" aria-hidden="true" />
               <div className="drift-alarm-browser-overlay">
-                <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} onCancel={dismissDriftAlarm} />
+                <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} onCancel={cancelDriftAlarm} />
               </div>
             </div>
           ) : null}
