@@ -109,6 +109,13 @@ describe("HistoryView", () => {
     expect(cssRule(".history-view .settings-btn--danger")).toMatch(/background:\s*var\(--warn\);[\s\S]*color:\s*var\(--canvas\);/);
   });
 
+  it("keeps History search controls fixed while records scroll independently", () => {
+    expect(cssRule(".content--history")).toContain("overflow-y: hidden;");
+    expect(cssRule(".content--history .page--history")).toMatch(/display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-height:\s*0;/);
+    expect(cssRule(".history-view")).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\);[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;/);
+    expect(cssRule(".history-groups")).toMatch(/min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
+  });
+
   it("requires confirmation before deleting selected history records", async () => {
     const deleteSelected = vi.fn().mockResolvedValue(undefined);
     render(

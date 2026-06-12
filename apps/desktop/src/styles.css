@@ -5995,12 +5995,29 @@ input, textarea { color: inherit; }
 }
 
 .page--history {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
   max-width: 1040px;
+}
+
+.content--history {
+  overflow-y: hidden;
+}
+
+.content--history .page--history {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .history-view {
   display: grid;
   gap: var(--space-4);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -6071,6 +6088,10 @@ input, textarea { color: inherit; }
 .history-groups {
   display: grid;
   gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .history-show-more {
