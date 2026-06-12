@@ -604,9 +604,9 @@ describe("App AI classification controls", () => {
     expect(selectedCategories[0]?.textContent).toContain("Entertainment");
     expect(selectedSource?.textContent).toContain("youtube.com");
     expect(panel.querySelector(".classification-panel-view__insight-card")).toBeNull();
-    expect(cssRule(".content--classify")).toContain("overflow-y: hidden;");
-    expect(cssRule(".content--classify .page")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
-    expect(cssRule(".content--classify .classification-panel-view")).toMatch(/flex:\s*1 1 auto;[\s\S]*min-height:\s*0;/);
+    expect(cssRule(".content--classification")).toContain("overflow-y: hidden;");
+    expect(cssRule(".content--classification .page")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
+    expect(cssRule(".content--classification .classification-panel-view")).toMatch(/flex:\s*1 1 auto;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".classification-panel-view__grid")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
     expect(styles).toMatch(/\.panel-header\s*{[\s\S]*min-height:\s*52px;[\s\S]*padding:\s*8px 10px 7px;/);
     expect(styles).toMatch(/\.classification-panel-view\s*\{[\s\S]*--classification-row-height:\s*48px;/);

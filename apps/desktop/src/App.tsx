@@ -189,7 +189,7 @@ import { WeekDashboard } from "./features/dashboard/WeekDashboard";
 import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./features/insights/InsightCards";
 import { EditProfileModal, ProfileModal, buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl } from "./features/profile/ProfileModals";
 
-type TabId = "dashboard" | "classify" | "history" | "drift" | "leaderboard" | "settings";
+type TabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "settings";
 
 type NavigationSnapshot = {
   tabId: TabId;
@@ -203,9 +203,11 @@ type NavigationHistoryState = {
 
 const commandBarTabs = [
   { id: "dashboard", label: "Dashboard", sub: "Today at a glance" },
-  { id: "classify", label: "Classification", sub: "Activity breakdown" },
-  { id: "drift", label: "Insights", sub: "Patterns and trends" },
+  { id: "classification", label: "Classification", sub: "Activity breakdown" },
+  { id: "trends", label: "Trends", sub: "Patterns and trends" },
+  { id: "history", label: "History", sub: "Local records" },
   { id: "leaderboard", label: "Leaderboard", sub: "Global focus ranking" },
+  { id: "settings", label: "Settings", sub: "App preferences" },
 ] satisfies ReadonlyArray<{ id: TabId; label: string; sub: string }>;
 
 type NavItem = {
@@ -214,7 +216,7 @@ type NavItem = {
   icon: NavIconType;
 };
 
-type NavIconType = "home" | "calendar" | "classify" | "history" | "insights" | "leaderboard" | "settings";
+type NavIconType = "home" | "calendar" | "classification" | "history" | "trends" | "leaderboard" | "settings";
 
 type PlanItem = {
   id: string;
@@ -231,10 +233,10 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
 
-const workspaceNav: NavItem[] = [
-  { id: "classify", label: "Classification", icon: "classify" },
+const activityNav: NavItem[] = [
+  { id: "classification", label: "Classification", icon: "classification" },
+  { id: "trends", label: "Trends", icon: "trends" },
   { id: "history", label: "History", icon: "history" },
-  { id: "drift", label: "Insights", icon: "insights" },
   { id: "leaderboard", label: "Leaderboard", icon: "leaderboard" },
 ];
 
@@ -267,11 +269,11 @@ function NavIcon({ type }: { type: NavIconType }) {
       return (<svg {...props}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" /></svg>);
     case "calendar":
       return (<svg {...props}><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /><path d="M8 14h2M14 14h2M8 17h2" /></svg>);
-    case "classify":
+    case "classification":
       return (<svg {...props}><path d="M4 5h16M4 12h10M4 19h14" /><circle cx="18" cy="12" r="2" /><circle cx="20" cy="19" r="2" /></svg>);
     case "history":
       return (<svg {...props}><path d="M12 8v5l3 2" /><path d="M5.6 5.6A9 9 0 1 1 3 12" /><path d="M3 4v5h5" /></svg>);
-    case "insights":
+    case "trends":
       return (<svg {...props}><path d="M4 20h16" /><path d="M6 16l4-5 3 3 5-7" /></svg>);
     case "leaderboard":
       return (<svg {...props}><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" /><path d="M7 5H5a2 2 0 0 0 2 4" /><path d="M17 5h2a2 2 0 0 1-2 4" /></svg>);
@@ -1093,7 +1095,7 @@ export default function App() {
           const message = error instanceof Error ? error.message : String(error);
           console.warn("Failed to save drift alarm manual correction", message);
         });
-        navigateToTab("classify");
+        navigateToTab("classification");
         return;
       case "return_to_focus": {
         const target = currentAlarmEvent?.focusTargets.find((focusTarget) => focusTarget.targetId === action.targetId) ?? null;
@@ -2916,7 +2918,11 @@ export default function App() {
     });
   }
 
-  function handleCmdNav(tabId: TabId) { navigateToTab(tabId); setCmdOpen(false); }
+  function handleCmdNav(tabId: TabId) {
+    if (tabId === "settings") openSettingsTab();
+    else navigateToTab(tabId);
+    setCmdOpen(false);
+  }
 
   const startOfDayValue = minutesToHourlyStartOfDayValue(startOfDayMinutes);
   const handleStartOfDayChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
@@ -3210,9 +3216,9 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="nav-label">Workspace</div>
+        <div className="nav-label">Activity</div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
-          {workspaceNav.map((item) => (
+          {activityNav.map((item) => (
             <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} onClick={() => navigateToTab(item.id)}>
               <NavIcon type={item.icon} /><span>{item.label}</span>
             </button>
@@ -3385,7 +3391,7 @@ export default function App() {
         ) : null}
 
         {/* Classification */}
-        {activeTab === "classify" ? (
+        {activeTab === "classification" ? (
           <div className="page">
             <div className="pg-head">
               <div>
@@ -3694,11 +3700,11 @@ export default function App() {
         ) : null}
 
         {/* Insights */}
-        {activeTab === "drift" ? (
+        {activeTab === "trends" ? (
           <div className="page insights-page">
             <div className="pg-head insights-page__head">
               <div>
-                <div className="eyebrow">Insights</div>
+                <div className="eyebrow">Trends</div>
                 <h1>Patterns and trends</h1>
               </div>
               <DateNavigator
@@ -3758,7 +3764,7 @@ export default function App() {
             <div className="pg-head">
               <div>
                 <div className="eyebrow">Leaderboard</div>
-                <h1>Leaderboard</h1>
+                <h1>Global focus ranking</h1>
               </div>
             </div>
 
