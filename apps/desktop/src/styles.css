@@ -6004,46 +6004,14 @@ input, textarea { color: inherit; }
   min-width: 0;
 }
 
-.history-view__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.history-view__header h1 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-
-.history-view__header p {
-  max-width: 40rem;
-  margin: 6px 0 0;
-  color: var(--text-soft);
-  font-size: 0.76rem;
-  line-height: 1.5;
-}
-
-.history-view__actions {
-  display: flex;
-  justify-content: flex-end;
-  min-width: max-content;
-}
-
 .history-view .settings-btn--danger {
-  border: 1px solid color-mix(in srgb, var(--warn) 48%, var(--line));
-  background: transparent;
-  color: var(--warn);
+  background: var(--warn);
+  color: var(--canvas);
 }
 
 .history-view .settings-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn-soft) 78%, transparent);
-  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 88%, var(--text));
+  color: var(--canvas);
 }
 
 .history-view .settings-btn:disabled {
@@ -6053,7 +6021,9 @@ input, textarea { color: inherit; }
 }
 
 .history-view__toolbar {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .history-search {
@@ -6063,6 +6033,7 @@ input, textarea { color: inherit; }
   min-width: 0;
   min-height: 44px;
   width: min(100%, 780px);
+  flex: 1 1 auto;
   padding: 0 16px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-2) 76%, var(--surface));
@@ -6145,7 +6116,7 @@ input, textarea { color: inherit; }
 }
 
 .history-row[data-selected="true"] {
-  background: color-mix(in srgb, var(--accent-soft) 42%, transparent);
+  background: color-mix(in srgb, var(--text-soft) 14%, var(--surface));
 }
 
 .history-row__check {
@@ -6308,16 +6279,16 @@ input, textarea { color: inherit; }
 }
 
 @media (max-width: 760px) {
-  .history-view__header {
-    display: grid;
-  }
-
-  .history-view__actions,
   .history-confirm__actions {
     justify-content: stretch;
   }
 
-  .history-view__actions .settings-btn,
+  .history-view__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-view__toolbar .settings-btn,
   .history-confirm__actions .settings-btn {
     width: 100%;
   }

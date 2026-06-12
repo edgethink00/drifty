@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HistoryView } from "./HistoryView";
+
+const styles = readFileSync("src/styles.css", "utf8");
+
+function cssRule(selector: string): string {
+  return styles.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{[\\s\\S]*?\\}`))?.[0] ?? "";
+}
 
 const historySegments: ActivitySegment[] = [
   {
@@ -43,7 +50,7 @@ describe("HistoryView", () => {
   afterEach(() => cleanup());
 
   it("renders grouped local history and filters by query", () => {
-    render(
+    const { container } = render(
       <HistoryView
         appIcons={{}}
         segments={historySegments}
@@ -52,7 +59,10 @@ describe("HistoryView", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "History" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "History" })).toBeNull();
+    expect(screen.queryByText("Local records")).toBeNull();
+    const toolbar = container.querySelector<HTMLElement>(".history-view__toolbar");
+    expect(toolbar?.firstElementChild?.className).toBe("history-search");
     expect(screen.getByRole("heading", { name: "Jun 10, 2026" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Jun 9, 2026" })).toBeTruthy();
     expect(screen.getByText("docs.example.com")).toBeTruthy();
@@ -75,6 +85,28 @@ describe("HistoryView", () => {
 
     expect(screen.getByText("docs.example.com")).toBeTruthy();
     expect(screen.queryByText("Issue triage")).toBeNull();
+  });
+
+  it("uses a neutral tone for selected history rows and danger tone for action buttons", () => {
+    render(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+      />,
+    );
+
+    const firstRow = screen.getByRole("checkbox", { name: /select api reference/i }).closest(".history-row");
+    if (!firstRow) throw new Error("History row was not rendered");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /select api reference/i }));
+
+    expect(firstRow.getAttribute("data-selected")).toBe("true");
+    expect(cssRule('.history-row[data-selected="true"]')).toContain("background: color-mix(in srgb, var(--text-soft) 14%, var(--surface));");
+    expect(cssRule('.history-row[data-selected="true"]')).not.toContain("var(--warn)");
+    expect(cssRule('.history-row[data-selected="true"]')).not.toContain("var(--accent-soft)");
+    expect(cssRule(".history-view .settings-btn--danger")).toMatch(/background:\s*var\(--warn\);[\s\S]*color:\s*var\(--canvas\);/);
   });
 
   it("requires confirmation before deleting selected history records", async () => {

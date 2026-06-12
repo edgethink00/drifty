@@ -59,23 +59,6 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
 
   return (
     <section className="history-view" aria-label="History">
-      <header className="history-view__header">
-        <div>
-          <span className="eyebrow">Local records</span>
-          <h1>History</h1>
-        </div>
-        <div className="history-view__actions">
-          <button
-            type="button"
-            className="settings-btn settings-btn--danger"
-            disabled={selectedCount === 0 || deleting}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {selectedCount === 0 ? "Delete selected" : deleteLabel}
-          </button>
-        </div>
-      </header>
-
       <div className="history-view__toolbar">
         <label className="history-search">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
@@ -93,6 +76,14 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
             placeholder="Search history"
           />
         </label>
+        <button
+          type="button"
+          className="settings-btn settings-btn--danger"
+          disabled={selectedCount === 0 || deleting}
+          onClick={() => setConfirmOpen(true)}
+        >
+          {selectedCount === 0 ? "Delete selected" : deleteLabel}
+        </button>
       </div>
 
       {groups.length === 0 ? (
