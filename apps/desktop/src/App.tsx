@@ -174,7 +174,7 @@ import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceL
 import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
 import { LOCAL_AI_SETUP_STORAGE_KEY, OPENROUTER_RECOMMENDED_MODELS, SELF_HOSTED_RECOMMENDED_MODELS, isForbiddenOpenRouterModel, isRecommendedOpenRouterModel, isRecommendedSelfHostedModel, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel, resolveInitialLocalAiSetup, toPersistedLocalAiSetup, uniqueOpenRouterModels } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEFAULT_START_OF_WEEK, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, isStartOfWeek, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEFAULT_START_OF_WEEK, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, isStartOfWeek, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
@@ -233,6 +233,56 @@ type PlanItem = {
 };
 
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
+
+type UpdateCheckMode = "manual" | "automatic";
+
+const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
+const AUTO_UPDATE_DISMISS_SUPPRESSION_MS = 24 * 60 * 60 * 1000;
+const AUTO_UPDATE_DISMISS_STORAGE_KEY = "drifty.updates.dismissedAutoUpdate.v1";
+
+type DismissedAutoUpdate = {
+  readonly version: string;
+  readonly dismissedAtMs: number;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readDismissedAutoUpdate(): DismissedAutoUpdate | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const savedValue = window.localStorage.getItem(AUTO_UPDATE_DISMISS_STORAGE_KEY);
+    if (!savedValue) return null;
+    const parsedValue: unknown = JSON.parse(savedValue);
+    if (!isRecord(parsedValue)) return null;
+    const version = parsedValue["version"];
+    const dismissedAtMs = parsedValue["dismissedAtMs"];
+    if (typeof version !== "string" || typeof dismissedAtMs !== "number") return null;
+    if (!Number.isFinite(dismissedAtMs)) return null;
+    return { version, dismissedAtMs };
+  } catch (error) {
+    if (error instanceof Error) return null;
+    throw error;
+  }
+}
+
+function isAutomaticUpdateDismissed(version: string, nowMs: number): boolean {
+  const dismissedUpdate = readDismissedAutoUpdate();
+  if (!dismissedUpdate) return false;
+  if (dismissedUpdate.version !== version) return false;
+  return nowMs - dismissedUpdate.dismissedAtMs < AUTO_UPDATE_DISMISS_SUPPRESSION_MS;
+}
+
+function persistDismissedAutoUpdate(version: string, dismissedAtMs: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(AUTO_UPDATE_DISMISS_STORAGE_KEY, JSON.stringify({ version, dismissedAtMs }));
+  } catch (error) {
+    if (error instanceof Error) return;
+    throw error;
+  }
+}
 
 const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
@@ -342,6 +392,7 @@ export default function App() {
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
   const updaterCheckingRef = useRef(false);
   const updaterInstallingRef = useRef(false);
+  const autoUpdateLaunchCheckScheduledRef = useRef(false);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const activeTab = activeSnapshot.tabId;
@@ -376,6 +427,8 @@ export default function App() {
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
+  const [availableUpdateSource, setAvailableUpdateSource] = useState<UpdateCheckMode | null>(null);
+  const [autoUpdateChecksEnabled, setAutoUpdateChecksEnabled] = useState(resolveInitialAutoUpdateChecksEnabled);
   const [updaterChecking, setUpdaterChecking] = useState(false);
   const [updaterInstalling, setUpdaterInstalling] = useState(false);
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
@@ -475,24 +528,40 @@ export default function App() {
     navigateToTab("dashboard", "Today");
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
-  const handleCheckForUpdates = useCallback(async () => {
+  const handleCheckForUpdates = useCallback(async (mode: UpdateCheckMode = "manual") => {
     if (updaterCheckingRef.current || updaterInstallingRef.current) return;
 
+    const isManualCheck = mode === "manual";
     updaterCheckingRef.current = true;
-    setUpdaterChecking(true);
-    setUpdaterMessage(null);
-    setUpdaterError(null);
+    if (isManualCheck) {
+      setUpdaterChecking(true);
+      setUpdaterMessage(null);
+      setUpdaterError(null);
+    }
 
     try {
       const nextUpdate = await check();
-      setAvailableUpdate(nextUpdate);
-      if (!nextUpdate) setUpdaterMessage("Drifty is up to date.");
+      if (nextUpdate) {
+        if (isManualCheck || !isAutomaticUpdateDismissed(nextUpdate.version, Date.now())) {
+          setAvailableUpdate(nextUpdate);
+          setAvailableUpdateSource(mode);
+        }
+        return;
+      }
+      if (isManualCheck) {
+        setAvailableUpdate(null);
+        setAvailableUpdateSource(null);
+        setUpdaterMessage("Drifty is up to date.");
+      }
     } catch (nextError) {
-      setAvailableUpdate(null);
-      setUpdaterError(`Update check failed: ${toErrorMessage(nextError)}`);
+      if (isManualCheck) {
+        setAvailableUpdate(null);
+        setAvailableUpdateSource(null);
+        setUpdaterError(`Update check failed: ${toErrorMessage(nextError)}`);
+      }
     } finally {
       updaterCheckingRef.current = false;
-      setUpdaterChecking(false);
+      if (isManualCheck) setUpdaterChecking(false);
     }
   }, []);
 
@@ -518,6 +587,14 @@ export default function App() {
     openSettingsTab();
     void handleCheckForUpdates();
   }, [handleCheckForUpdates, openSettingsTab]);
+
+  const dismissAvailableUpdate = useCallback(() => {
+    if (availableUpdate && availableUpdateSource === "automatic") {
+      persistDismissedAutoUpdate(availableUpdate.version, Date.now());
+    }
+    setAvailableUpdate(null);
+    setAvailableUpdateSource(null);
+  }, [availableUpdate, availableUpdateSource]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
@@ -1440,6 +1517,10 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    window.localStorage.setItem(AUTO_UPDATE_CHECKS_STORAGE_KEY, autoUpdateChecksEnabled ? "1" : "0");
+  }, [autoUpdateChecksEnabled]);
+
+  useEffect(() => {
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, driftAlertsEnabled ? "1" : "0");
   }, [driftAlertsEnabled]);
 
@@ -1579,6 +1660,24 @@ export default function App() {
     if (typeof row?.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
     row?.focus();
   }, [activeTab, settingsSection]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+    if (!autoUpdateChecksEnabled) return undefined;
+    if (autoUpdateLaunchCheckScheduledRef.current) return undefined;
+    autoUpdateLaunchCheckScheduledRef.current = true;
+
+    let checkStarted = false;
+    const timeoutId = window.setTimeout(() => {
+      checkStarted = true;
+      void handleCheckForUpdates("automatic");
+    }, AUTO_UPDATE_CHECK_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (!checkStarted) autoUpdateLaunchCheckScheduledRef.current = false;
+    };
+  }, [autoUpdateChecksEnabled, handleCheckForUpdates]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -2021,6 +2120,18 @@ export default function App() {
   const dashboardAiRecoveryState = dashboardAiRecoveryKey !== null && dismissedDashboardAiRecoveryKey !== dashboardAiRecoveryKey
     ? dashboardAiUnavailableState
     : null;
+  const updateDialogBlocked = Boolean(
+    dashboardAiRecoveryState
+    || authModalOpen
+    || feedbackModalOpen
+    || openRouterModelPickerOpen
+    || selfHostedModelPickerOpen
+    || onboardingOpen
+    || selectedLeaderboardRow
+    || isProfileEditorOpen
+    || cmdOpen,
+  );
+  const visibleUpdate = updateDialogBlocked ? null : availableUpdate;
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
   const selectedDayProductivityTotals = useMemo(
     () => buildProductivityDurations(segments, selectedDayClassificationOptions),
@@ -4011,6 +4122,7 @@ export default function App() {
                       <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
                     </div>
                     <div className="settings-block"><h3>Updates</h3>
+                      <div className="settings-row"><label htmlFor="automatic-update-checks"><div className="lbl">Automatic update checks</div><div className="desc">Check for signed updates shortly after Drifty opens.</div></label><div className="ctrl"><input id="automatic-update-checks" className="drifty-checkbox" type="checkbox" aria-label="Automatically check for updates on launch" checked={autoUpdateChecksEnabled} onChange={(event) => setAutoUpdateChecksEnabled(event.target.checked)} /></div></div>
                       <div className="settings-row"><div><div className="lbl">Manual update check</div><div className="desc">Drifty checks GitHub Releases for signed update metadata before showing an available download.</div>{updaterMessage ? <p className="capture-recency" role="status">{updaterMessage}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleCheckForUpdates()} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? "Checking..." : "Check for Updates"}</button></div></div>
                     </div>
                     <div className="settings-block"><h3>Permissions</h3>
@@ -4479,20 +4591,21 @@ export default function App() {
         />
       ) : null}
 
-      {availableUpdate ? (
-        <div className="auth-modal__overlay" onClick={() => setAvailableUpdate(null)}>
+      {visibleUpdate ? (
+        <div className="auth-modal__overlay" onClick={dismissAvailableUpdate}>
           <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
-            <div className="profile-modal__header">
-              <div>
-                <span className="label-mono">Signed update</span>
-                <h2 id="available-update-title">Drifty {availableUpdate.version} is available</h2>
-              </div>
-            </div>
-            {availableUpdate.date ? <p className="capture-recency">Published {new Date(availableUpdate.date).toLocaleString()}</p> : null}
-            <p className="profile-modal__bio">{availableUpdate.body?.trim() || "No release notes were provided."}</p>
+            <h2 id="available-update-title" className="update-dialog-title">Drifty {visibleUpdate.version} is available</h2>
+            {visibleUpdate.date ? <p className="capture-recency">Published {new Date(visibleUpdate.date).toLocaleString()}</p> : null}
+            <p className="profile-modal__bio">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
             {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
+            {availableUpdateSource === "automatic" ? (
+              <label className="update-dialog-checkbox">
+                <input className="drifty-checkbox" type="checkbox" aria-label="Auto-check updates on launch" checked={autoUpdateChecksEnabled} onChange={(event) => setAutoUpdateChecksEnabled(event.target.checked)} />
+                <span className="update-dialog-checkbox__label">Auto-check updates on launch</span>
+              </label>
+            ) : null}
             <div className="profile-editor-modal__actions">
-              <button type="button" className="ghost-button" onClick={() => setAvailableUpdate(null)} disabled={updaterInstalling}>Not now</button>
+              <button type="button" className="ghost-button" onClick={dismissAvailableUpdate} disabled={updaterInstalling}>Not now</button>
               <button type="button" className="settings-btn" onClick={() => void handleInstallUpdate()} disabled={updaterChecking || updaterInstalling}>{updaterInstalling ? "Installing..." : "Install and restart"}</button>
             </div>
           </section>
