@@ -57,7 +57,7 @@ export const APP_THEME_PRODUCTIVITY_COLOR_OPTIONS = APP_THEME_COLOR_OPTIONS.filt
 export const CATEGORY_COLOR_OPTIONS = [
   { key: "workspace", label: "Workspace", cssVariable: "--category-workspace", defaultColor: "#5f7f31" },
   { key: "learning", label: "Learning", cssVariable: "--category-learning", defaultColor: "#2f7f78" },
-  { key: "communication", label: "Communication", cssVariable: "--category-communication", defaultColor: "#6f6a5e" },
+  { key: "communication", label: "Communication", cssVariable: "--category-communication", defaultColor: "#476f8f" },
   { key: "music", label: "Music", cssVariable: "--category-music", defaultColor: "#7b5ea7" },
   { key: "game", label: "Game", cssVariable: "--category-game", defaultColor: "#9a6530" },
   { key: "social_media", label: "Social media", cssVariable: "--category-social-media", defaultColor: "#b9565b" },
