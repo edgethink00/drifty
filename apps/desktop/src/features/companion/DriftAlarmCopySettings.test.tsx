@@ -40,7 +40,13 @@ describe("DriftAlarmCopySettings", () => {
       ...buildDefaultDriftAlarmCopy(),
       driftTitle: "Back from {context}",
     });
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Back from youtube.com");
+    const driftPreview = within(dialog).getByRole("complementary", { name: "Alarm copy preview" });
+    expect(driftPreview.textContent).toContain("Back from youtube.com");
+    expect(driftPreview.textContent).toContain("(now drifting)");
+    expect(driftPreview.textContent).not.toContain("Latest focus");
+    expect(driftPreview.textContent).not.toContain("Now youtube.com");
+    expect(driftPreview.querySelector(".da__drift-copy")).toBeTruthy();
+    expect(driftPreview.querySelector(".da__context")).toBeNull();
 
     fireEvent.click(within(dialog).getByRole("tab", { name: "Break return" }));
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();
