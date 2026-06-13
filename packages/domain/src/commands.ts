@@ -133,6 +133,7 @@ export interface ProductivityShareMix {
 
 export interface DriftAlarmTrayStatus {
   readonly enabled: boolean;
+  readonly statusLabel: string;
   readonly lastCheckedAt: string | null;
   readonly lastCheckedLabel: string;
   readonly resultLabel: string;

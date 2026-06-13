@@ -24,6 +24,7 @@ export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): Dri
 
   return {
     enabled: input.enabled,
+    statusLabel: statusLabel(input.enabled, input.result),
     lastCheckedAt: checkedAt?.toISOString() ?? null,
     lastCheckedLabel: checkedAt ? formatDriftAlarmTrayCheckTime(checkedAt) : input.enabled ? "Never" : "Off",
     resultLabel: resultLabel(input.result),
@@ -44,6 +45,35 @@ export function formatDriftAlarmTrayCheckTime(value: Date): string {
 function checkedAtOrNull(value: Date | null): Date | null {
   if (!value) return null;
   return Number.isFinite(value.getTime()) ? value : null;
+}
+
+function statusLabel(enabled: boolean, result: DriftAlarmTrayResult): string {
+  if (!enabled) return "Drift alerts: Off";
+
+  switch (result.kind) {
+    case "disabled":
+      return "Drift alerts: Off";
+    case "not_today":
+      return "Drift alerts: Idle";
+    case "tracker_paused":
+      return "Drift alerts: Paused";
+    case "no_candidate":
+      return "Drift alerts: Monitoring";
+    case "snoozed":
+      return "Drift alerts: Snoozed";
+    case "checking":
+      return "Drift alerts: Checking";
+    case "delivered":
+      return "Drift alerts: Delivered";
+    case "already_delivered":
+      return "Drift alerts: Already shown";
+    case "suppressed":
+      return suppressionStatusLabel(result.reason);
+    case "error":
+      return "Drift alerts: Check failed";
+    default:
+      return assertNever(result);
+  }
 }
 
 function resultLabel(result: DriftAlarmTrayResult): string {
@@ -102,6 +132,13 @@ function suppressionReasonLabel(reason: string): string {
   if (normalized === "ai-classified-neutral") return "AI classified neutral";
   if (normalized.startsWith("ai-unavailable:")) return "AI unavailable";
   return compactMenuLabel(normalized.replace(/[-_]+/g, " ")) ?? "suppressed";
+}
+
+function suppressionStatusLabel(reason: string): string {
+  const normalized = reason.trim();
+  if (normalized.startsWith("ai-unavailable:")) return "Drift alerts: AI unavailable";
+  if (normalized === "ai-timeout") return "Drift alerts: AI timed out";
+  return "Drift alerts: Suppressed";
 }
 
 function compactMenuLabel(value: string | null): string | null {

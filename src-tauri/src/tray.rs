@@ -1,11 +1,24 @@
+mod drift_alarm_status;
+mod productivity_icon;
+#[cfg(test)]
+mod tests;
+
 use std::sync::Mutex;
 
-use serde::Deserialize;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use self::drift_alarm_status::{
+    drift_alerts_status_label, drift_detail_label, drift_last_check_label, drift_result_label,
+    TrayDriftAlarmStatus,
+};
+use self::productivity_icon::{
+    latest_tray_productivity_mix, update_tray_productivity_mix, TrayProductivityMix,
+};
+
+pub use self::productivity_icon::TrayProductivityState;
 use crate::donut_icon;
 use crate::tracker::TrackerController;
 use crate::{reveal_main_window, MAIN_WINDOW_LABEL};
@@ -24,26 +37,6 @@ const MENU_SETTINGS: &str = "menu-settings";
 const MENU_QUIT: &str = "menu-quit";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 
-#[derive(Clone, Copy)]
-struct TrayProductivityMix {
-    focus: f64,
-    drift: f64,
-    neutral: f64,
-}
-
-#[derive(Default)]
-pub struct TrayProductivityState(Mutex<Option<TrayProductivityMix>>);
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TrayDriftAlarmStatus {
-    enabled: bool,
-    last_checked_at: Option<String>,
-    last_checked_label: String,
-    result_label: String,
-    detail_label: Option<String>,
-}
-
 #[derive(Default)]
 pub struct TrayDriftAlarmState(Mutex<TrayDriftAlarmStatus>);
 
@@ -55,13 +48,7 @@ pub fn tray_update_productivity_icon(
     drift: f64,
     neutral: f64,
 ) -> Result<(), String> {
-    let mut latest = state
-        .0
-        .lock()
-        .map_err(|_| "tray productivity state lock poisoned".to_string())?;
-    *latest = TrayProductivityMix::from_values(focus, drift, neutral);
-    drop(latest);
-
+    update_tray_productivity_mix(&state, focus, drift, neutral)?;
     update_tray_icon(&app);
     Ok(())
 }
@@ -164,7 +151,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let drift_alerts_status = MenuItem::with_id(
         app,
         MENU_DRIFT_ALERTS_STATUS,
-        drift_alerts_status_label(drift_status.enabled),
+        drift_alerts_status_label(&drift_status),
         false,
         None::<&str>,
     )?;
@@ -239,38 +226,6 @@ fn tracking_action_label(running: Option<bool>) -> &'static str {
     }
 }
 
-fn drift_alerts_status_label(enabled: bool) -> &'static str {
-    if enabled {
-        "Drift alerts: On"
-    } else {
-        "Drift alerts: Off"
-    }
-}
-
-fn drift_last_check_label(status: &TrayDriftAlarmStatus) -> String {
-    let label = status.last_checked_label.trim();
-    let display_label = if label.is_empty() && status.last_checked_at.is_some() {
-        "Recorded"
-    } else if label.is_empty() {
-        "Never"
-    } else {
-        label
-    };
-    format!("Last drift check: {display_label}")
-}
-
-fn drift_result_label(status: &TrayDriftAlarmStatus) -> String {
-    format!("Last result: {}", status.result_label)
-}
-
-fn drift_detail_label(status: &TrayDriftAlarmStatus) -> Option<String> {
-    let detail = status.detail_label.as_ref()?.trim();
-    if detail.is_empty() {
-        return None;
-    }
-    Some(format!("Detail: {detail}"))
-}
-
 fn update_tray_icon(app: &AppHandle) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
@@ -289,11 +244,6 @@ fn update_tray_icon(app: &AppHandle) {
     let _ = tray.set_icon(Some(Image::new_owned(rgba, w, h)));
 }
 
-fn latest_tray_productivity_mix(app: &AppHandle) -> Option<TrayProductivityMix> {
-    app.try_state::<TrayProductivityState>()
-        .and_then(|state| state.0.lock().ok().and_then(|latest| *latest))
-}
-
 fn latest_tray_drift_alarm_status(app: &AppHandle) -> TrayDriftAlarmStatus {
     app.try_state::<TrayDriftAlarmState>()
         .and_then(|state| state.0.lock().ok().map(|latest| latest.clone()))
@@ -306,117 +256,4 @@ fn is_dark_mode() -> bool {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Dark")
         .unwrap_or(false)
-}
-
-impl Default for TrayDriftAlarmStatus {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            last_checked_at: None,
-            last_checked_label: "Off".to_string(),
-            result_label: "Alerts disabled".to_string(),
-            detail_label: None,
-        }
-    }
-}
-
-impl TrayProductivityMix {
-    fn from_values(focus: f64, drift: f64, neutral: f64) -> Option<Self> {
-        let focus = finite_non_negative(focus);
-        let drift = finite_non_negative(drift);
-        let neutral = finite_non_negative(neutral);
-        let total = focus + drift + neutral;
-        if total <= f64::EPSILON {
-            return None;
-        }
-
-        Some(Self {
-            focus: focus / total,
-            drift: drift / total,
-            neutral: neutral / total,
-        })
-    }
-}
-
-fn finite_non_negative(value: f64) -> f64 {
-    if value.is_finite() {
-        value.max(0.0)
-    } else {
-        0.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn app_version_label_formats_drifty_version() {
-        assert_eq!(app_version_label("1.2.3"), "Drifty 1.2.3");
-    }
-
-    #[test]
-    fn update_status_label_prompts_manual_update_checks() {
-        assert_eq!(update_status_label(), "Check for Updates...");
-    }
-
-    #[test]
-    fn tracking_action_label_starts_when_stopped_or_unknown() {
-        assert_eq!(tracking_action_label(Some(false)), "Start Tracking");
-        assert_eq!(tracking_action_label(None), "Start Tracking");
-    }
-
-    #[test]
-    fn tracking_action_label_pauses_when_running() {
-        assert_eq!(tracking_action_label(Some(true)), "Pause Tracking");
-    }
-
-    #[test]
-    fn drift_alerts_status_label_reports_on_off() {
-        assert_eq!(drift_alerts_status_label(true), "Drift alerts: On");
-        assert_eq!(drift_alerts_status_label(false), "Drift alerts: Off");
-    }
-
-    #[test]
-    fn drift_detail_label_omits_blank_details() {
-        let status = TrayDriftAlarmStatus {
-            enabled: true,
-            last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
-            last_checked_label: "9:00:00 AM".to_string(),
-            result_label: "No eligible drift".to_string(),
-            detail_label: Some(" ".to_string()),
-        };
-
-        assert_eq!(drift_detail_label(&status), None);
-    }
-
-    #[test]
-    fn drift_detail_label_formats_candidate_details() {
-        let status = TrayDriftAlarmStatus {
-            enabled: true,
-            last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
-            last_checked_label: "9:00:00 AM".to_string(),
-            result_label: "Suppressed: AI low confidence".to_string(),
-            detail_label: Some("youtube.com - 2m".to_string()),
-        };
-
-        assert_eq!(
-            drift_detail_label(&status),
-            Some("Detail: youtube.com - 2m".to_string())
-        );
-    }
-
-    #[test]
-    fn tray_productivity_mix_normalizes_valid_values() {
-        let mix = TrayProductivityMix::from_values(30.0, 15.0, 15.0).expect("mix");
-
-        assert_eq!(mix.focus, 0.5);
-        assert_eq!(mix.drift, 0.25);
-        assert_eq!(mix.neutral, 0.25);
-    }
-
-    #[test]
-    fn tray_productivity_mix_rejects_empty_values() {
-        assert!(TrayProductivityMix::from_values(0.0, f64::NAN, -1.0).is_none());
-    }
 }
