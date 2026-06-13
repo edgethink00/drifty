@@ -7,8 +7,8 @@ import {
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
+import { AccountStep } from "./components/AccountStep";
 import { Dropdown } from "./components/Dropdown";
-import { GoogleMark } from "./components/GoogleMark";
 import { NudgesStep } from "./components/NudgesStep";
 import { TypewriterSequence } from "./components/TypewriterSequence";
 import {
@@ -849,40 +849,11 @@ export function OnboardingModal({
             ) : null}
 
             {step === "account" ? (
-              <>
-                <p className="onb-step-desc">
-                  Your account keeps your focus and drift insights synced across your devices.
-                </p>
-                <div className="onb-account">
-                  <button
-                    type="button"
-                    className="onb-button onb-button--primary onb-account__provider"
-                    onClick={onStartCloudTrialWithGoogle}
-                    disabled={accountConnected}
-                  >
-                    {accountConnected ? (
-                      "Account connected"
-                    ) : (
-                      <>
-                        <GoogleMark />
-                        <span>Continue with Google</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="onb-button onb-button--ghost onb-account__provider"
-                    onClick={onStartCloudTrialWithEmail}
-                    disabled={accountConnected}
-                  >
-                    {accountConnected ? "Signed in" : "Continue with email"}
-                  </button>
-                </div>
-                <p className="onb-account__helper">
-                  Drifty never shares your activity data with teammates unless you choose to join a team or
-                  share a report.
-                </p>
-              </>
+              <AccountStep
+                accountConnected={accountConnected}
+                onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
+                onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+              />
             ) : null}
 
             {step === "job" ? (

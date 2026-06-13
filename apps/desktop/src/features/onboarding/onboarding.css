@@ -1408,6 +1408,24 @@
   color: var(--onb-text-soft);
 }
 
+.onboarding-card .onb-account__legal {
+  margin: var(--onb-space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-account__legal a {
+  color: var(--onb-text);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.onboarding-card .onb-account__legal a:hover {
+  color: var(--onb-accent);
+}
+
 /* ── Data handling summary ── */
 .onboarding-card .onb-data-rows {
   display: flex;

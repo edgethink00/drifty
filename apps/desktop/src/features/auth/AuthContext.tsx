@@ -13,7 +13,7 @@ import {
   supabase,
   type DriftyAuthMode,
 } from "../../lib/supabase/client";
-import { identifyPostHogUser } from "../../lib/analytics/posthog";
+import { recordPostHogAuthState } from "../../lib/analytics/posthog";
 import {
   getAuthDiagnosticError,
   getDesktopSessionDiagnosticSummary,
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
     setStatus(nextSession?.user ? "authenticated" : "unauthenticated");
-    identifyPostHogUser(nextSession?.user ?? null);
+    recordPostHogAuthState(nextSession?.user ?? null);
   }
 
   const saveDesktopSession = async (nextSession: Session | null, options: SaveDesktopSessionOptions = {}) => {
