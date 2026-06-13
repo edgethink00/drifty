@@ -4,6 +4,28 @@ import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
 import { formatQuarterHourLabel } from "../../lib/formatting";
 import type { CSSProperties } from "react";
+import {
+  FOCUS_DRIFT_BUCKET_COUNT,
+  FOCUS_DRIFT_BUCKET_MINUTES,
+  FOCUS_DRIFT_CHART_BOUNDS,
+  FOCUS_DRIFT_CLIP_BOUNDS,
+  FOCUS_DRIFT_MINUTES_PER_DAY,
+  buildSmoothPath,
+  scaleFocusDriftY,
+} from "./focusDriftGeometry";
+
+export {
+  FOCUS_DRIFT_BUCKET_COUNT,
+  FOCUS_DRIFT_BUCKET_MINUTES,
+  FOCUS_DRIFT_CHART_BOUNDS,
+  FOCUS_DRIFT_CLIP_BOUNDS,
+  FOCUS_DRIFT_CLIP_PADDING,
+  FOCUS_DRIFT_MINUTES_PER_DAY,
+  buildSmoothPath,
+  clampFocusDriftChartX,
+  clampFocusDriftChartY,
+  scaleFocusDriftY,
+} from "./focusDriftGeometry";
 
 export type FocusDriftPoint = {
   id: string;
@@ -67,14 +89,6 @@ export type FocusDriftChart = {
   currentTimeLabel: string | null;
 };
 
-export const FOCUS_DRIFT_CHART_BOUNDS = { left: 5, right: 95, top: 8, bottom: 92 } as const;
-
-export const FOCUS_DRIFT_MINUTES_PER_DAY = 24 * 60;
-
-export const FOCUS_DRIFT_BUCKET_MINUTES = 30;
-
-export const FOCUS_DRIFT_BUCKET_COUNT = FOCUS_DRIFT_MINUTES_PER_DAY / FOCUS_DRIFT_BUCKET_MINUTES;
-
 export const FOCUS_DRIFT_AXIS_TICKS: FocusDriftAxisTick[] = Array.from({ length: 9 }, (_, index) => {
   const hour = index * 3;
   const chartWidth = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
@@ -84,15 +98,6 @@ export const FOCUS_DRIFT_AXIS_TICKS: FocusDriftAxisTick[] = Array.from({ length:
     x: FOCUS_DRIFT_CHART_BOUNDS.left + (hour / 24) * chartWidth,
   };
 });
-
-export const FOCUS_DRIFT_CLIP_PADDING = { x: 2.5, y: 2.5 } as const;
-
-export const FOCUS_DRIFT_CLIP_BOUNDS = {
-  left: FOCUS_DRIFT_CHART_BOUNDS.left - FOCUS_DRIFT_CLIP_PADDING.x,
-  right: FOCUS_DRIFT_CHART_BOUNDS.right + FOCUS_DRIFT_CLIP_PADDING.x,
-  top: FOCUS_DRIFT_CHART_BOUNDS.top - FOCUS_DRIFT_CLIP_PADDING.y,
-  bottom: FOCUS_DRIFT_CHART_BOUNDS.bottom + FOCUS_DRIFT_CLIP_PADDING.y,
-} as const;
 
 export const FOCUS_DRIFT_Y_AXIS_TICKS = [
   { label: "100%", y: scaleFocusDriftY(100) },
@@ -240,34 +245,4 @@ export function getTopFocusDriftSource(sources: Map<string, FocusDriftSourceAccu
     if (right.captures !== left.captures) return right.captures - left.captures;
     return left.label.localeCompare(right.label);
   })[0] ?? null;
-}
-
-export function scaleFocusDriftY(score: number): number {
-  const boundedScore = Math.min(Math.max(score, 0), 100);
-  const chartHeight = FOCUS_DRIFT_CHART_BOUNDS.bottom - FOCUS_DRIFT_CHART_BOUNDS.top;
-  return FOCUS_DRIFT_CHART_BOUNDS.top + ((100 - boundedScore) / 100) * chartHeight;
-}
-
-export function clampFocusDriftChartX(value: number): number {
-  return Math.min(Math.max(value, FOCUS_DRIFT_CLIP_BOUNDS.left), FOCUS_DRIFT_CLIP_BOUNDS.right);
-}
-
-export function clampFocusDriftChartY(value: number): number {
-  return Math.min(Math.max(value, FOCUS_DRIFT_CHART_BOUNDS.top), FOCUS_DRIFT_CHART_BOUNDS.bottom);
-}
-
-export function buildSmoothPath(points: FocusDriftPoint[], yKey: "focusY" | "driftY"): string {
-  if (points.length === 0) return "";
-  if (points.length === 1) return `M ${clampFocusDriftChartX(points[0].x)} ${clampFocusDriftChartY(points[0][yKey])}`;
-  const getPoint = (i: number) => { if (i < 0) return points[0]; if (i >= points.length) return points[points.length - 1]; return points[i]; };
-  return points.reduce((path, pt, i) => {
-    if (i === 0) return `M ${clampFocusDriftChartX(pt.x)} ${clampFocusDriftChartY(pt[yKey])}`;
-    const p0 = getPoint(i - 2), p1 = getPoint(i - 1), p2 = getPoint(i), p3 = getPoint(i + 1);
-    const t = 0.35;
-    const controlStartX = clampFocusDriftChartX(p1.x + (p2.x - p0.x) * t);
-    const controlStartY = clampFocusDriftChartY(p1[yKey] + (p2[yKey] - p0[yKey]) * t);
-    const controlEndX = clampFocusDriftChartX(p2.x - (p3.x - p1.x) * t);
-    const controlEndY = clampFocusDriftChartY(p2[yKey] - (p3[yKey] - p1[yKey]) * t);
-    return `${path} C ${controlStartX} ${controlStartY}, ${controlEndX} ${controlEndY}, ${clampFocusDriftChartX(p2.x)} ${clampFocusDriftChartY(p2[yKey])}`;
-  }, "");
 }
