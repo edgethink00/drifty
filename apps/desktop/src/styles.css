@@ -11935,8 +11935,28 @@ button.flow-cell:focus {
 }
 
 .drift-copy-editor__actions {
+  align-items: center;
   display: flex;
-  justify-content: flex-start;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.drift-copy-editor__commit-actions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.drift-copy-editor__commit-actions .settings-btn--primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--canvas);
+}
+
+.drift-copy-editor__commit-actions .settings-btn--primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--canvas);
 }
 
 .drift-copy-editor__fields {

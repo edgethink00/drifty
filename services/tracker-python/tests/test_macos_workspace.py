@@ -7,8 +7,10 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from app import main as tracker_main
 from app.tracker.macos_workspace import (
     BrowserMetadata,
+    Snapshot,
     _browser_metadata,
     _browser_script,
     _browser_automation_status_from_error,
@@ -190,6 +192,7 @@ class MacosWorkspaceTests(unittest.TestCase):
 
     def test_current_snapshot_preserves_app_tracking_without_window_title(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=[]), \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
              patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
             mock_run.return_value = 'Notes\ncom.apple.Notes'
@@ -202,7 +205,61 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.source, 'nsworkspace')
         self.assertEqual(snapshot.capture_confidence, 1.0)
         self.assertEqual(snapshot.browser_automation_status, 'not_applicable')
+        self.assertIsNone(snapshot.system_transient_activity)
         mock_browser_metadata.assert_called_once_with('Notes')
+
+    def test_current_snapshot_marks_mission_control_from_dock_cgwindow_rows(self) -> None:
+        mission_control_rows = [
+            {"owner_name": "Dock", "layer": 20, "name": "Dock"},
+            {"owner_name": "Dock", "layer": 18, "name": ""},
+            {"owner_name": "Dock", "layer": 17, "name": "appicon"},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=mission_control_rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nActive tab'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.app_name, 'Google Chrome')
+        self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
+        self.assertEqual(snapshot.window_title, 'Active tab')
+        self.assertEqual(snapshot.system_transient_activity, 'mission_control')
+        mock_browser_metadata.assert_called_once_with('Google Chrome')
+
+    def test_current_snapshot_marks_app_switcher_from_dock_cgwindow_rows(self) -> None:
+        app_switcher_rows = [
+            {"owner_name": "Dock", "layer": 20, "name": ""},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=app_switcher_rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nActive tab'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.app_name, 'Google Chrome')
+        self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
+        self.assertEqual(snapshot.window_title, 'Active tab')
+        self.assertEqual(snapshot.system_transient_activity, 'app_switcher')
+        mock_browser_metadata.assert_called_once_with('Google Chrome')
+
+    def test_get_current_snapshot_returns_system_transient_activity(self) -> None:
+        snapshot = Snapshot(
+            observed_at='2026-06-14T10:00:00+00:00',
+            app_name='Google Chrome',
+            bundle_id='com.google.Chrome',
+            window_title='Active tab',
+            source='accessibility',
+            system_transient_activity='app_switcher',
+            browser_automation_status='not_applicable',
+        )
+
+        with patch.object(tracker_main, 'current_snapshot', return_value=snapshot):
+            result = tracker_main.get_current_snapshot()
+
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['data']['systemTransientActivity'], 'app_switcher')
 
     def test_current_snapshot_uses_atomic_window_title_when_available(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \

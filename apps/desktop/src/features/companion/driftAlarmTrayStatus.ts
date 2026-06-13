@@ -1,5 +1,7 @@
-import type { DriftAlarmTrayStatus } from "@drifty/domain";
+import type { DriftAlarmTrayStatus, SystemTransientActivity } from "@drifty/domain";
 import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
+
+type DriftAlarmDeferredReason = Exclude<SystemTransientActivity, null>;
 
 export type DriftAlarmTrayResult =
   | { readonly kind: "disabled" }
@@ -11,6 +13,7 @@ export type DriftAlarmTrayResult =
   | { readonly kind: "delivered"; readonly candidateDetail?: string | null }
   | { readonly kind: "already_delivered"; readonly candidateDetail?: string | null }
   | { readonly kind: "suppressed"; readonly reason: string; readonly candidateDetail?: string | null }
+  | { readonly kind: "deferred"; readonly reason: DriftAlarmDeferredReason; readonly candidateDetail?: string | null }
   | { readonly kind: "error"; readonly reason: string };
 
 export type DriftAlarmTrayStatusInput = {
@@ -69,6 +72,8 @@ function statusLabel(enabled: boolean, result: DriftAlarmTrayResult): string {
       return "Drift alerts: Already shown";
     case "suppressed":
       return suppressionStatusLabel(result.reason);
+    case "deferred":
+      return "Drift alerts: Deferred";
     case "error":
       return "Drift alerts: Check failed";
     default:
@@ -96,6 +101,8 @@ function resultLabel(result: DriftAlarmTrayResult): string {
       return "Alarm already shown";
     case "suppressed":
       return `Suppressed: ${suppressionReasonLabel(result.reason)}`;
+    case "deferred":
+      return `Waiting for ${systemTransientActivityLabel(result.reason)}`;
     case "error":
       return "Check failed";
     default:
@@ -116,6 +123,7 @@ function resultDetailLabel(result: DriftAlarmTrayResult): string | null {
     case "delivered":
     case "already_delivered":
     case "suppressed":
+    case "deferred":
       return compactMenuLabel(result.candidateDetail ?? null);
     case "error":
       return compactMenuLabel(result.reason);
@@ -139,6 +147,23 @@ function suppressionStatusLabel(reason: string): string {
   if (normalized.startsWith("ai-unavailable:")) return "Drift alerts: AI unavailable";
   if (normalized === "ai-timeout") return "Drift alerts: AI timed out";
   return "Drift alerts: Suppressed";
+}
+
+function systemTransientActivityLabel(reason: DriftAlarmDeferredReason): string {
+  switch (reason) {
+    case "mission_control":
+      return "Mission Control";
+    case "app_switcher":
+      return "app switcher";
+    case "launchpad":
+      return "Launchpad";
+    case "spotlight":
+      return "Spotlight";
+    case "system_overlay":
+      return "system overlay";
+    default:
+      return assertNever(reason);
+  }
 }
 
 function compactMenuLabel(value: string | null): string | null {
