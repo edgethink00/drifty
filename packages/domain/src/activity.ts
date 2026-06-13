@@ -1,5 +1,6 @@
 export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "unknown";
 export type SiteSource = "applescript" | "applescript-front-window" | "window-title" | "unknown" | null;
+export type SystemTransientActivity = "mission_control" | "app_switcher" | "launchpad" | "spotlight" | "system_overlay" | null;
 export const FLOW_INTERVAL_OPTIONS = [3, 5, 10] as const;
 export type FlowIntervalMinutes = typeof FLOW_INTERVAL_OPTIONS[number];
 export type ProductivityLabel = "focus" | "neutral" | "drift";
@@ -102,6 +103,7 @@ export interface CurrentActivitySnapshot {
   captureConfidence?: number | null;
   browserAutomationStatus?: "granted" | "denied" | "unavailable" | "stale" | "not_applicable" | null;
   browserAutomationError?: string | null;
+  systemTransientActivity?: SystemTransientActivity;
   source: TrackerSource;
 }
 

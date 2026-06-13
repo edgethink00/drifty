@@ -276,11 +276,28 @@ fn previous_frontmost_app_from_bundle_id(bundle_id: &str) -> Option<PreviousFron
 
 fn normalize_previous_frontmost_app_bundle_id(bundle_id: &str) -> Option<String> {
     let trimmed = bundle_id.trim();
-    if trimmed.is_empty() || trimmed == "missing value" || trimmed == DRIFTY_BUNDLE_ID {
+    if trimmed.is_empty()
+        || trimmed == "missing value"
+        || trimmed == DRIFTY_BUNDLE_ID
+        || is_non_restorable_system_bundle_id(trimmed)
+    {
         return None;
     }
 
     Some(trimmed.to_string())
+}
+
+fn is_non_restorable_system_bundle_id(bundle_id: &str) -> bool {
+    matches!(
+        bundle_id,
+        "com.apple.exposelauncher"
+            | "com.apple.dock"
+            | "com.apple.loginwindow"
+            | "com.apple.Spotlight"
+            | "com.apple.controlcenter"
+            | "com.apple.notificationcenterui"
+            | "com.apple.systemuiserver"
+    )
 }
 
 fn parse_lsappinfo_bundle_id(output: &str) -> Option<String> {
@@ -488,6 +505,28 @@ mod tests {
             normalize_previous_frontmost_app_bundle_id(DRIFTY_BUNDLE_ID),
             None
         );
+    }
+
+    #[test]
+    fn previous_frontmost_bundle_id_rejects_system_transient_overlay_bundles() {
+        // Given: macOS transient or system overlay bundle identifiers.
+        let bundle_ids = [
+            "com.apple.exposelauncher",
+            "com.apple.dock",
+            "com.apple.loginwindow",
+            "com.apple.Spotlight",
+            "com.apple.controlcenter",
+            "com.apple.notificationcenterui",
+            "com.apple.systemuiserver",
+        ];
+
+        for bundle_id in bundle_ids {
+            // When: the previous frontmost bundle id is normalized.
+            let normalized = normalize_previous_frontmost_app_bundle_id(bundle_id);
+
+            // Then: it is rejected as non-restorable.
+            assert_eq!(normalized, None, "{bundle_id} should not be restorable");
+        }
     }
 
     #[test]

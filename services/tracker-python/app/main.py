@@ -359,6 +359,7 @@ def get_current_snapshot():
             "captureConfidence": snapshot.capture_confidence,
             "browserAutomationStatus": snapshot.browser_automation_status,
             "browserAutomationError": snapshot.browser_automation_error,
+            "systemTransientActivity": snapshot.system_transient_activity,
         },
     )
 
@@ -480,7 +481,7 @@ def daemon():
                 time.sleep(SAMPLE_SECONDS)
                 continue
 
-            snapshot = current_snapshot()
+            snapshot = current_snapshot(include_system_transient=False)
             capture_tick = time.monotonic()
             sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
             last_capture_tick = capture_tick

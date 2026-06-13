@@ -111,6 +111,7 @@ function buildCurrentSnapshotSummary(snapshot: CurrentActivitySnapshot | null) {
     appName: snapshot.appName,
     bundleId: snapshot.bundleId ?? null,
     source: snapshot.source,
+    systemTransientActivity: snapshot.systemTransientActivity ?? null,
     browserName: snapshot.browserName ?? null,
     siteSource: snapshot.siteSource ?? null,
     captureConfidence: snapshot.captureConfidence ?? null,

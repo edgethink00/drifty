@@ -69,4 +69,35 @@ describe("drift alarm tray status", () => {
     expect(status.statusLabel).toBe("Drift alerts: AI unavailable");
     expect(status.resultLabel).toBe("Suppressed: AI unavailable");
   });
+
+  it("shows deferred Mission Control state", () => {
+    const status = buildDriftAlarmTrayStatus({
+      enabled: true,
+      checkedAt: new Date(2026, 5, 12, 9, 8, 7),
+      result: {
+        kind: "deferred",
+        reason: "mission_control",
+        candidateDetail: buildDriftAlarmTrayCandidateDetail("youtube.com", 90),
+      },
+    });
+
+    expect(status.statusLabel).toBe("Drift alerts: Deferred");
+    expect(status.resultLabel).toBe("Waiting for Mission Control");
+    expect(status.detailLabel).toBe("youtube.com - 2m");
+  });
+
+  it("shows deferred app switcher state", () => {
+    const status = buildDriftAlarmTrayStatus({
+      enabled: true,
+      checkedAt: new Date(2026, 5, 12, 9, 8, 7),
+      result: {
+        kind: "deferred",
+        reason: "app_switcher",
+      },
+    });
+
+    expect(status.statusLabel).toBe("Drift alerts: Deferred");
+    expect(status.resultLabel).toBe("Waiting for app switcher");
+    expect(status.detailLabel).toBeNull();
+  });
 });
