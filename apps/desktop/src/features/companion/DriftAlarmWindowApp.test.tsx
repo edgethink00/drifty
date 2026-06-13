@@ -110,7 +110,9 @@ describe("DriftAlarmWindowApp", () => {
     expect(container.querySelector(".da")).toBeTruthy();
     expect(container.querySelector(".watcher-peek--top-right")).toBeNull();
     expect(screen.getByText(/drift detected/i)).toBeTruthy();
-    expect(screen.getByText(/latest focus/i)).toBeTruthy();
+    expect(screen.getByText("(now drifting)")).toBeTruthy();
+    expect(screen.queryByText(/latest focus/i)).toBeNull();
+    expect(container.querySelector(".da__context")).toBeNull();
     expect(screen.getAllByText(/visual studio code/i).length).toBeGreaterThan(0);
   });
 

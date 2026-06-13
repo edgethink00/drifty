@@ -178,9 +178,7 @@ export function DriftAlarm({
   const focusTargets = event.focusTargets.slice(0, DRIFT_ALARM_FOCUS_TARGET_LIMIT);
   const breakReturn = event.breakReturn;
   const copy = event.copy ?? buildFallbackDriftAlarmCopy(event, focusTargets);
-  const contextPillEmphasisValues = isBreakReturn && breakReturn
-    ? [breakReturn.pausedFromLabel, breakReturn.nextFocusLabel]
-    : [event.contextLabel || "This drift", focusTargets[0]?.label ?? null];
+  const driftContextLabel = event.contextLabel.trim() || "This drift";
   const titleId = isPreview ? `${event.id}-title` : isBreakReturn ? "break-return-alarm-title" : DRIFT_ALARM_TITLE_ID;
   const descriptionId = isPreview ? `${event.id}-description` : isBreakReturn ? "break-return-alarm-description" : DRIFT_ALARM_DESCRIPTION_ID;
 
@@ -268,20 +266,36 @@ export function DriftAlarm({
             <h2 id={titleId}>{copy.title}</h2>
           )}
           <p className="da__drift" id={descriptionId}>
-            <span className={`src-tile${isBreakReturn ? "" : " src-tile--drift"}`} aria-hidden="true">
-              {isBreakReturn && breakReturn ? <span className="da__target-glyph">{breakReturn.breakDurationMinutes}</span> : <DriftSourceGlyph />}
-            </span>
-            <span>{isBreakReturn && breakReturn ? renderBreakReturnSummary(copy.summary, breakReturn.breakDurationLabel) : copy.summary}</span>
-          </p>
-          <div className="da__context" aria-label={isBreakReturn ? "Break return context" : "Drift context"}>
-            <div className="da__context-pills">
-              {copy.contextPills.map((pill, index) => (
-                <span className="da__context-pill" key={pill}>
-                  {renderContextPill(pill, contextPillEmphasisValues[index] ?? null)}
+            {isBreakReturn && breakReturn ? (
+              <>
+                <span className="src-tile" aria-hidden="true">
+                  <span className="da__target-glyph">{breakReturn.breakDurationMinutes}</span>
                 </span>
-              ))}
+                <span>{renderBreakReturnSummary(copy.summary, breakReturn.breakDurationLabel)}</span>
+              </>
+            ) : (
+              <>
+                <span className="src-tile src-tile--drift" aria-hidden="true">
+                  <DriftSourceGlyph />
+                </span>
+                <span className="da__drift-copy">
+                  <strong>{driftContextLabel}</strong>
+                  <small>(now drifting)</small>
+                </span>
+              </>
+            )}
+          </p>
+          {isBreakReturn && breakReturn ? (
+            <div className="da__context" aria-label="Break return context">
+              <div className="da__context-pills">
+                {copy.contextPills.map((pill, index) => (
+                  <span className="da__context-pill" key={pill}>
+                    {renderContextPill(pill, [breakReturn.pausedFromLabel, breakReturn.nextFocusLabel][index] ?? null)}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
 

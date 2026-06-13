@@ -84,7 +84,10 @@ describe("DriftAlarm", () => {
     expect(screen.getByAltText("Drifty").classList.contains("window-logo")).toBe(true);
     expect(container.querySelector(".da__chrome")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Dismiss drift alarm" })).toBeTruthy();
-    expect(screen.getByText(/Latest focus/i)).toBeTruthy();
+    expect(screen.getByText("(now drifting)")).toBeTruthy();
+    expect(screen.queryByText(/Latest focus/i)).toBeNull();
+    expect(container.querySelector(".da__context")).toBeNull();
+    expect(container.querySelector(".da__drift-copy")).toBeTruthy();
     expect(screen.queryByText(/streak/i)).toBeNull();
 
     expect(screen.getByRole("heading", { name: /return to focus/i })).toBeTruthy();
@@ -252,7 +255,8 @@ describe("DriftAlarm", () => {
 
     expect(screen.getByText(/drift detected/i)).toBeTruthy();
     expect(screen.getAllByText(/this drift/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/1 hour drift/i)).toBeTruthy();
+    expect(screen.getByText("(now drifting)")).toBeTruthy();
+    expect(screen.queryByText(/1 hour drift/i)).toBeNull();
     expect(screen.queryByText(/streak/i)).toBeNull();
   });
 
