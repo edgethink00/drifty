@@ -760,6 +760,7 @@ describe("App AI classification controls", () => {
     fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /settings/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^AI setup$/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: /^BYOK\(OpenRouter\)$/i }));
     fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test" } });
 
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
