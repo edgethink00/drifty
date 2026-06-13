@@ -188,7 +188,7 @@ import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./feat
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
 import { FlowCompactSplitChart } from "./features/dashboard/CompactCharts";
 import { HistoryCalendarPanel } from "./features/dashboard/HistoryCalendarPanel";
-import { FocusDriftHoverCard, formatFocusDriftHoverLabel } from "./features/dashboard/HoverCards";
+import { FocusDriftHoverCard, formatFocusDriftHoverLabel } from "./features/dashboard/FocusDriftHoverCard";
 import type { FocusDriftHoverKind, FocusDriftHoverState, TimelineHoverState } from "./features/dashboard/HoverCards";
 import { WeekDashboard } from "./features/dashboard/WeekDashboard";
 import { BreakRecoveryCard } from "./features/insights/BreakRecoveryCard";
@@ -3409,7 +3409,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-            {focusDriftHover ? <FocusDriftHoverCard hover={focusDriftHover} /> : null}
+            {focusDriftHover ? <FocusDriftHoverCard appIcons={appIcons} hover={focusDriftHover} /> : null}
             <div className="focus-drift__axis" aria-hidden="true">
               {FOCUS_DRIFT_AXIS_TICKS.map((tick) => (
                 <span key={tick.id} style={{ "--focus-drift-axis-x": `${tick.x}%` } as FocusDriftAxisTickStyle}>{tick.label}</span>

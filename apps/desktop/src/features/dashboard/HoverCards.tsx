@@ -1,9 +1,9 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import type { FocusDriftPoint, FocusDriftSourceSummary } from "./focusDriftChart";
+import type { FocusDriftPoint } from "./focusDriftChart";
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { formatCompactDurationFromSeconds, formatDuration, formatQuarterHourLabel } from "../../lib/formatting";
+import { formatCompactDurationFromSeconds, formatQuarterHourLabel } from "../../lib/formatting";
 import { secondsToLabel } from "@drifty/domain";
 import type { AppIconMap, DayRibbonSegment } from "@drifty/domain";
 import { ClassificationSourcePill } from "../classification/ClassificationBreakdownCards";
@@ -157,110 +157,12 @@ export function WeekCalendarHoverCard({ hover, appIcons }: { hover: WeekCalendar
   );
 }
 
-export function FocusDriftHoverCard({ hover }: { hover: FocusDriftHoverState }) {
-  const { point } = hover;
-  const cardRef = useRef<HTMLDivElement>(null);
-  const focusPercent = formatSharePercent(point.focusScore);
-  const driftPercent = formatSharePercent(point.driftScore);
-  const focusDuration = formatDuration(point.focusSeconds);
-  const driftDuration = formatDuration(point.driftSeconds);
-  const isFocusHeavy = point.focusScore >= point.driftScore;
-  const verdict = isFocusHeavy ? "Focus-heavy" : "Drift-heavy";
-  const reason = isFocusHeavy
-    ? `Focus-labeled activity makes up ${focusPercent} (${focusDuration}), ahead of drift at ${driftPercent} (${driftDuration}).`
-    : `Drift-labeled activity makes up ${driftPercent} (${driftDuration}), ahead of focus at ${focusPercent} (${focusDuration}).`;
-  const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
-
-  useLayoutEffect(() => {
-    function updatePosition() {
-      const bounds = cardRef.current?.getBoundingClientRect();
-      const nextPosition = getViewportSafeHoverPosition(hover.x, hover.y, bounds?.width ?? 0, bounds?.height ?? 0);
-      setPosition((currentPosition) => (
-        currentPosition.left === nextPosition.left && currentPosition.top === nextPosition.top ? currentPosition : nextPosition
-      ));
-    }
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    return () => window.removeEventListener("resize", updatePosition);
-  }, [
-    driftDuration,
-    driftPercent,
-    focusDuration,
-    focusPercent,
-    hover.kind,
-    hover.x,
-    hover.y,
-    point.id,
-    point.label,
-    point.topDriftSource?.captures,
-    point.topDriftSource?.id,
-    point.topDriftSource?.seconds,
-    point.topFocusSource?.captures,
-    point.topFocusSource?.id,
-    point.topFocusSource?.seconds,
-    reason,
-  ]);
-
-  return (
-    <div ref={cardRef} className={`focus-drift-hover-card focus-drift-hover-card--${hover.kind}`} style={position}>
-      <div className="focus-drift-hover-card__head">
-        <span className={`productivity-dot productivity-dot--${hover.kind === "focus" ? "focus" : "drift"}`} aria-hidden="true" />
-        <strong>{point.label} · {verdict}</strong>
-      </div>
-      <div className="focus-drift-hover-card__duration">
-        {focusDuration} focus · {driftDuration} drift
-      </div>
-      <div className="focus-drift-hover-card__split" aria-hidden="true">
-        <span><strong>{focusPercent}</strong> focus</span>
-        <span><strong>{driftPercent}</strong> drift</span>
-      </div>
-      {point.topFocusSource || point.topDriftSource ? (
-        <div className="focus-drift-hover-card__sources" aria-label="Top sources for this window">
-          {point.topFocusSource ? <FocusDriftSourceRow source={point.topFocusSource} kind="focus" /> : null}
-          {point.topDriftSource ? <FocusDriftSourceRow source={point.topDriftSource} kind="drift" /> : null}
-        </div>
-      ) : null}
-      <p>{reason}</p>
-    </div>
-  );
-}
-
-export function FocusDriftSourceRow({ source, kind }: { source: FocusDriftSourceSummary; kind: FocusDriftHoverKind }) {
-  const kindLabel = kind === "focus" ? "Top focus source" : "Top drift source";
-  const sourceDetail = source.siteDomain ? `${source.detail} via ${source.appName}` : source.detail;
-  const captureLabel = source.captures === 1 ? "capture" : "captures";
-
-  return (
-    <div className={`focus-drift-hover-card__source-row focus-drift-hover-card__source-row--${kind}`}>
-      <span>{kindLabel}</span>
-      <div>
-        <strong>{source.label}</strong>
-        <em>{sourceDetail} · {formatCompactDurationFromSeconds(source.seconds)} · {source.captures} {captureLabel}</em>
-      </div>
-    </div>
-  );
-}
-
-export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind): string {
-  const kindLabel = kind === "focus" ? "Focus" : "Drift";
-  const focusPercent = formatSharePercent(point.focusScore);
-  const driftPercent = formatSharePercent(point.driftScore);
-  const focusDuration = formatDuration(point.focusSeconds);
-  const driftDuration = formatDuration(point.driftSeconds);
-  const verdict = point.focusScore >= point.driftScore ? "focus-heavy" : "drift-heavy";
-  const topFocusSource = point.topFocusSource ? ` Top focus source: ${point.topFocusSource.label}, ${formatCompactDurationFromSeconds(point.topFocusSource.seconds)} across ${point.topFocusSource.captures} ${point.topFocusSource.captures === 1 ? "capture" : "captures"}.` : "";
-  const topDriftSource = point.topDriftSource ? ` Top drift source: ${point.topDriftSource.label}, ${formatCompactDurationFromSeconds(point.topDriftSource.seconds)} across ${point.topDriftSource.captures} ${point.topDriftSource.captures === 1 ? "capture" : "captures"}.` : "";
-
-  return `${kindLabel} point for ${point.label}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
+export function clampHoverCoordinate(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 export function formatSharePercent(value: number): string {
   return `${Math.round(value)}%`;
-}
-
-export function clampHoverCoordinate(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 export function getViewportSafeHoverPosition(anchorX: number, anchorY: number, width: number, height: number): FixedHoverPosition {
