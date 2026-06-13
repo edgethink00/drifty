@@ -9,6 +9,8 @@ export type BrowserCaptureSummary = {
   readonly siteContextSegments: number;
   readonly missingSiteContextSegments: number;
   readonly siteContextRatio: number | null;
+  readonly accessibilityAddressBarFallbackSegments: number;
+  readonly accessibilityAddressBarFallbackRatio: number | null;
   readonly siteSourceCounts: Readonly<Record<string, number>>;
 };
 
@@ -27,6 +29,7 @@ type BrowserCaptureAccumulator = {
   totalSegments: number;
   siteContextSegments: number;
   missingSiteContextSegments: number;
+  accessibilityAddressBarFallbackSegments: number;
   siteSourceCounts: Record<string, number>;
 };
 
@@ -82,7 +85,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
         ? {
             browserName: currentSnapshot.browserName,
             status: currentSnapshot.browserAutomationStatus,
-            error: currentSnapshot.browserAutomationError,
+            hasError: currentSnapshot.hasBrowserAutomationError,
             siteSource: currentSnapshot.siteSource,
             captureConfidence: currentSnapshot.captureConfidence,
             hasSiteContext: currentSnapshot.hasSiteContext,
@@ -117,7 +120,7 @@ function buildCurrentSnapshotSummary(snapshot: CurrentActivitySnapshot | null) {
     captureConfidence: snapshot.captureConfidence ?? null,
     hasSiteContext: hasSiteContext(snapshot),
     browserAutomationStatus: snapshot.browserAutomationStatus ?? null,
-    browserAutomationError: snapshot.browserAutomationError ?? null,
+    hasBrowserAutomationError: Boolean(cleanText(snapshot.browserAutomationError)),
   };
 }
 
@@ -144,6 +147,7 @@ function buildBrowserCaptureDiagnostics(
       totalSegments: 0,
       siteContextSegments: 0,
       missingSiteContextSegments: 0,
+      accessibilityAddressBarFallbackSegments: 0,
       siteSourceCounts: {},
     };
 
@@ -152,7 +156,10 @@ function buildBrowserCaptureDiagnostics(
     else accumulator.missingSiteContextSegments += 1;
 
     const siteSource = segment.siteSource ?? "missing";
-    accumulator.siteSourceCounts[siteSource] = (accumulator.siteSourceCounts[siteSource] ?? 0) + 1;
+    incrementCount(accumulator.siteSourceCounts, siteSource);
+    if (siteSource === "accessibility-address-bar") {
+      accumulator.accessibilityAddressBarFallbackSegments += 1;
+    }
     byBrowser.set(browserName, accumulator);
   }
 
@@ -163,6 +170,8 @@ function buildBrowserCaptureDiagnostics(
       siteContextSegments: summary.siteContextSegments,
       missingSiteContextSegments: summary.missingSiteContextSegments,
       siteContextRatio: ratio(summary.siteContextSegments, summary.totalSegments),
+      accessibilityAddressBarFallbackSegments: summary.accessibilityAddressBarFallbackSegments,
+      accessibilityAddressBarFallbackRatio: ratio(summary.accessibilityAddressBarFallbackSegments, summary.totalSegments),
       siteSourceCounts: { ...summary.siteSourceCounts },
     }))
     .sort((left, right) => right.totalSegments - left.totalSegments || left.browserName.localeCompare(right.browserName));
@@ -193,6 +202,10 @@ function hasSiteContext(segment: Pick<ActivitySegment, "siteDomain" | "siteTitle
 function cleanText(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function incrementCount(counts: Record<string, number>, key: string): void {
+  counts[key] = (counts[key] ?? 0) + 1;
 }
 
 function ratio(value: number, total: number): number | null {

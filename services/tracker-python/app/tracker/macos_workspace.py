@@ -241,6 +241,12 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
             # tab data may belong to a window other than the one on screen.
             site_source = "applescript-front-window"
             capture_confidence = 0.5 if browser.ax_window_title else 0.8
+        elif browser.match_state == "accessibility-address-bar":
+            site_source = "accessibility-address-bar"
+            capture_confidence = 0.8
+        elif browser.match_state == "accessibility-address-bar-schemaless":
+            site_source = "accessibility-address-bar"
+            capture_confidence = 0.6
         else:
             site_source = "applescript"
 

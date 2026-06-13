@@ -35,7 +35,8 @@ class MacosWorkspaceTests(unittest.TestCase):
                 self.assertIsNotNone(script)
                 self.assertIn(f'tell application "{app_name}"', script)
                 self.assertIn('title of active tab of w', script)
-                self.assertIn('URL of active tab of front window', script)
+                self.assertIn('count of windows', script)
+                self.assertIn('URL of active tab of window 1', script)
                 self.assertIn('"STALE"', script)
 
         firefox_script = _browser_script("Firefox")
@@ -122,11 +123,18 @@ class MacosWorkspaceTests(unittest.TestCase):
             ),
         )
 
-    def test_browser_metadata_returns_empty_metadata_for_empty_output(self) -> None:
+    def test_browser_metadata_marks_empty_result_separately(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', return_value='') as mock_run:
-            result = _browser_metadata('Microsoft Edge')
+            result = _browser_metadata('Safari')
 
-        self.assertEqual(result, BrowserMetadata(browser_name='Microsoft Edge', browser_automation_status='granted'))
+        self.assertEqual(
+            result,
+            BrowserMetadata(
+                browser_name='Safari',
+                browser_automation_status='empty_result',
+                browser_automation_error='Safari returned an empty browser automation result.',
+            ),
+        )
         mock_run.assert_called_once()
 
     def test_browser_metadata_marks_stale_when_frontmost_app_changed(self) -> None:

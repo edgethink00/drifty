@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from typing import Final, Union
+
+RowValue = Union[str, int, float, None]
+SerializedValue = Union[str, int, float, bool, None, list[str], dict[str, "SerializedValue"]]
+
+BROWSER_AUTOMATION_STATUSES: Final[frozenset[str]] = frozenset(
+    {"granted", "denied", "unavailable", "stale", "empty_result", "not_applicable"}
+)
+
+
+def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
+    classification = classification_payload(row)
+    serialized: dict[str, SerializedValue] = {
+        "id": str(row.get("id", "")),
+        "startedAt": row["started_at"],
+        "endedAt": row["ended_at"],
+        "durationSeconds": row["duration_seconds"],
+        "appName": row["app_name"],
+        "bundleId": row.get("bundle_id"),
+        "windowTitle": row.get("window_title"),
+        "siteDomain": row.get("site_domain"),
+        "siteTitle": row.get("site_title"),
+        "siteUrl": row.get("site_url"),
+        "youtubeVideoId": row.get("youtube_video_id"),
+        "youtubePlaylistId": row.get("youtube_playlist_id"),
+        "youtubeIsShorts": bool(row.get("youtube_is_shorts")) if row.get("youtube_is_shorts") is not None else None,
+        "youtubeCategory": row.get("youtube_category"),
+        "youtubeChannelId": row.get("youtube_channel_id"),
+        "youtubeChannelName": row.get("youtube_channel_name"),
+        "youtubeTitle": row.get("youtube_title"),
+        "youtubeDescription": row.get("youtube_description"),
+        "youtubeKeywords": json_list(row.get("youtube_keywords_json")),
+        "youtubeDurationSeconds": row.get("youtube_duration_seconds"),
+        "youtubeViewCount": row.get("youtube_view_count"),
+        "youtubeIsLive": bool(row.get("youtube_is_live")) if row.get("youtube_is_live") is not None else None,
+        "youtubeIsUnlisted": bool(row.get("youtube_is_unlisted")) if row.get("youtube_is_unlisted") is not None else None,
+        "youtubePublishDate": row.get("youtube_publish_date"),
+        "youtubeUploadDate": row.get("youtube_upload_date"),
+        "browserName": row.get("browser_name"),
+        "siteSource": row.get("site_source"),
+        "browserAutomationStatus": browser_automation_status(row),
+        "browserAutomationError": raw_context_text(row, "browser_automation_error"),
+        "platform": row.get("platform", "macos"),
+        "source": row.get("source", "unknown"),
+        "confidence": row.get("confidence"),
+    }
+    if classification is not None:
+        serialized["classification"] = classification
+    return serialized
+
+
+def classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedValue] | None:
+    if not row.get("classification_category"):
+        return None
+
+    return {
+        "category": row.get("classification_category"),
+        "productivity": row.get("classification_productivity"),
+        "source": row.get("classification_source") or "unknown",
+        "confidence": row.get("classification_confidence") or 0,
+        "reason": row.get("classification_reason"),
+        "model": row.get("classification_model"),
+        "promptVersion": row.get("classification_prompt_version"),
+        "taxonomyVersion": row.get("classification_taxonomy_version"),
+        "inputFingerprint": row.get("classification_input_fingerprint"),
+        "classifiedAt": row.get("classification_classified_at"),
+        "aiResult": bool(row.get("classification_ai_result")),
+        "stale": bool(row.get("classification_stale")),
+        "classificationRuleId": row.get("classification_rule_id"),
+        "reusedAiResult": bool(row.get("classification_ai_result"))
+        and (row.get("classification_source") or "") == "llm"
+        and row.get("classification_request_id") is None
+        and row.get("classification_latency_ms") is None,
+    }
+
+
+def browser_automation_status(row: Mapping[str, RowValue]) -> str | None:
+    status = raw_context_text(row, "browser_automation_status")
+    if status not in BROWSER_AUTOMATION_STATUSES:
+        return None
+    return status
+
+
+def raw_context_text(row: Mapping[str, RowValue], key: str) -> str | None:
+    raw_context = row.get("raw_context_json")
+    if not isinstance(raw_context, str) or not raw_context:
+        return None
+    try:
+        parsed = json.loads(raw_context)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+
+    value = parsed.get(key)
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def json_list(value: RowValue) -> list[str] | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    items = [item for item in parsed if isinstance(item, str)]
+    return items or None
