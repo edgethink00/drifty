@@ -74,7 +74,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -598,7 +598,7 @@ export default function App() {
   }, [availableUpdate, availableUpdateSource]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
-    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
+    if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
     shouldFocusEndOfDayReviewSettingsRef.current = true;
     setSettingsSection("dev");
     navigateToTab("settings");
@@ -1077,7 +1077,7 @@ export default function App() {
   }, []);
 
   const handleEndOfDayReviewPreview = useCallback(() => {
-    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
+    if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
     const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
     void buildEndOfDayReviewEvent({
       day: selectedDay,
@@ -2247,10 +2247,10 @@ export default function App() {
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
-  const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
+  const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
 
   useEffect(() => {
-    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
+    if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
     if (!hasLoadedOnce) return;
     if (endOfDayReviewQueryPreviewShownRef.current) return;
     if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
@@ -2265,7 +2265,7 @@ export default function App() {
   }, [buildEndOfDayReviewEvent, hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
   useEffect(() => {
-    if (!END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED) return;
+    if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
     if (!hasLoadedOnce) return;
     if (selectedDay !== todayDay) return;
     if (segmentsLoadedDay !== todayDay) return;
@@ -4384,8 +4384,7 @@ export default function App() {
                   <div className="settings-section">
                     <div className="settings-block settings-block--dev-preview">
                       <h3>Dev notifications</h3>
-                      {/* MVP scope: end-of-day review notifications are excluded from production until the post-MVP review surface is ready. */}
-                      {END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED ? (
+                      {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
                         <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Dev-only local summary after 6:00 PM, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
                       ) : null}
                       {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
@@ -4413,7 +4412,7 @@ export default function App() {
       {!isTauriRuntime() ? (
         <>
           <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} />
-          {END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED && endOfDayReviewEvent ? (
+          {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && endOfDayReviewEvent ? (
             <EndOfDayReview
               event={endOfDayReviewEvent}
               onOpenDashboard={() => handleEndOfDayReviewAction("openDashboard")}
