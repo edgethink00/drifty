@@ -152,6 +152,7 @@ import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, Timel
 import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
+import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import { persistDriftAlarmCopy, resolveInitialDriftAlarmCopy } from "./features/companion/driftAlarmCopyStorage";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
@@ -1809,6 +1810,27 @@ export default function App() {
       setBreakRecoveryAssessment(null);
     };
 
+    const confirmFreshDriftAlarmCandidate = async (): Promise<"confirmed" | "current-window-changed" | "current-snapshot-unavailable"> => {
+      let freshSnapshot: CurrentActivitySnapshot | null = null;
+      try {
+        freshSnapshot = await trackerClient.getCurrentSnapshot();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        console.warn("Failed to refresh current activity before drift alarm", message);
+        return "current-snapshot-unavailable";
+      }
+
+      setCurrentSnapshot(freshSnapshot);
+      const freshCandidate = resolveFreshDriftAlarmCandidate({
+        candidate: latestDrift,
+        segments,
+        currentSnapshot: freshSnapshot,
+        classificationOptions: selectedDayClassificationOptions,
+        minimumDurationSeconds: driftAlertDelaySeconds,
+      });
+      return freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
+    };
+
     const deliverCurrentDriftAlarm = () => {
       const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
       if (pendingBreakReturnAlarm) {
@@ -1899,17 +1921,30 @@ export default function App() {
       segment,
       category,
       aiOptions: localAiClassificationOptions,
-    }).then((gateResult) => {
+    }).then(async (gateResult) => {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
-      pendingDriftAlarmGateRef.current = null;
 
       if (gateResult.kind === "suppress") {
+        pendingDriftAlarmGateRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
         publishDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: gateResult.reason,
           candidateDetail,
         }, checkedAt);
+        return;
+      }
+
+      const finalGateResult = await confirmFreshDriftAlarmCandidate();
+      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      pendingDriftAlarmGateRef.current = null;
+
+      if (finalGateResult !== "confirmed") {
+        publishDriftAlarmTrayStatus({
+          kind: "suppressed",
+          reason: finalGateResult,
+          candidateDetail,
+        }, new Date());
         return;
       }
 
