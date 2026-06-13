@@ -4247,17 +4247,17 @@ input, textarea { color: inherit; }
   min-height: 2.25rem;
   margin: 8px 0 2px;
   padding: 0.5rem 0.7rem;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 58%, transparent);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+  background: transparent;
   color: var(--text);
   font-size: var(--type-control-size);
   font-weight: 560;
 }
 
 .settings-sidebar-back:hover {
-  background: var(--surface);
-  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: transparent;
   transform: none;
 }
 
