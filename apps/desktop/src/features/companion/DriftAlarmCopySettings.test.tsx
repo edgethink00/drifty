@@ -6,20 +6,8 @@ import { DriftAlarmCopySettings } from "./DriftAlarmCopySettings";
 import { buildDefaultDriftAlarmCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 
 describe("DriftAlarmCopySettings", () => {
-  it("edits and resets production drift alarm copy", () => {
-    const onChange = vi.fn<(value: DriftAlarmCopySettingsValue) => void>();
-
-    function Harness() {
-      const [copy, setCopy] = useState(buildDefaultDriftAlarmCopy);
-      const handleChange = (nextCopy: DriftAlarmCopySettingsValue) => {
-        onChange(nextCopy);
-        setCopy(nextCopy);
-      };
-
-      return <DriftAlarmCopySettings value={copy} onChange={handleChange} />;
-    }
-
-    render(<Harness />);
+  it("previews draft edits and saves production drift alarm copy on command", () => {
+    const onChange = renderSettings();
 
     const alarmCopy = screen.getByRole("group", { name: "Alarm copy" });
     expect(within(alarmCopy).queryByLabelText("Title")).toBeNull();
@@ -36,10 +24,7 @@ describe("DriftAlarmCopySettings", () => {
     expect(within(dialog).queryByLabelText("Break section label")).toBeNull();
     expect(within(dialog).queryByLabelText("Correction action")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Back from {context}" } });
-    expect(onChange).toHaveBeenLastCalledWith({
-      ...buildDefaultDriftAlarmCopy(),
-      driftTitle: "Back from {context}",
-    });
+    expect(onChange).not.toHaveBeenCalled();
     const driftPreview = within(dialog).getByRole("complementary", { name: "Alarm copy preview" });
     expect(driftPreview.textContent).toContain("Back from youtube.com");
     expect(driftPreview.textContent).toContain("(now drifting)");
@@ -54,11 +39,7 @@ describe("DriftAlarmCopySettings", () => {
     expect(within(dialog).queryByLabelText("Next focus pill")).toBeNull();
     expect(within(dialog).queryByLabelText("Extend break label")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "{breakDuration} Back" } });
-    expect(onChange).toHaveBeenLastCalledWith({
-      ...buildDefaultDriftAlarmCopy(),
-      driftTitle: "Back from {context}",
-      breakReturnTitle: "{breakDuration} Back",
-    });
+    expect(onChange).not.toHaveBeenCalled();
     expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Back");
 
     fireEvent.click(within(dialog).getByRole("tab", { name: "Notification" }));
@@ -66,17 +47,16 @@ describe("DriftAlarmCopySettings", () => {
     expect(within(dialog).queryByLabelText("No focus target text")).toBeNull();
     expect(within(dialog).queryByLabelText("macOS notification body")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Decision needed" } });
-    expect(onChange).toHaveBeenLastCalledWith({
-      ...buildDefaultDriftAlarmCopy(),
-      driftTitle: "Back from {context}",
-      breakReturnTitle: "{breakDuration} Back",
-      notificationTitle: "Decision needed",
-    });
+    expect(onChange).not.toHaveBeenCalled();
     expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).not.toContain("Open dashboard");
 
     fireEvent.click(within(dialog).getByRole("tab", { name: "Extreme nudge" }));
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Removed {closed}" } });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Removed youtube.com");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(onChange).toHaveBeenLastCalledWith({
       ...buildDefaultDriftAlarmCopy(),
       driftTitle: "Back from {context}",
@@ -84,10 +64,44 @@ describe("DriftAlarmCopySettings", () => {
       notificationTitle: "Decision needed",
       extremeNudgeTitle: "Removed {closed}",
     });
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Removed youtube.com");
+    expect(screen.queryByRole("dialog", { name: "Edit alarm copy" })).toBeNull();
+  });
 
+  it("resets and cancels draft alarm copy without saving", () => {
+    const onChange = renderSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit alarm copy" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit alarm copy" });
+
+    fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Back from {context}" } });
+    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Back from youtube.com");
     fireEvent.click(within(dialog).getByRole("button", { name: "Reset alarm copy" }));
-    expect(onChange).toHaveBeenLastCalledWith(buildDefaultDriftAlarmCopy());
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Closed youtube.com");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Drift detected");
+
+    fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Back from {context}" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit alarm copy" }));
+    const reopenedDialog = screen.getByRole("dialog", { name: "Edit alarm copy" });
+    expect(within(reopenedDialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Drift detected");
   });
 });
+
+function renderSettings() {
+  const onChange = vi.fn<(value: DriftAlarmCopySettingsValue) => void>();
+
+  function Harness() {
+    const [copy, setCopy] = useState(buildDefaultDriftAlarmCopy);
+    const handleChange = (nextCopy: DriftAlarmCopySettingsValue) => {
+      onChange(nextCopy);
+      setCopy(nextCopy);
+    };
+
+    return <DriftAlarmCopySettings value={copy} onChange={handleChange} />;
+  }
+
+  render(<Harness />);
+  return onChange;
+}
