@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import type { ActivityCategory } from "@drifty/domain";
+import { SettingsSelect } from "./SettingsSelect";
 
 export type AppThemeColorKey = "accent" | "productivityFocus" | "productivityDrift" | "productivityNeutral";
 
@@ -233,25 +234,16 @@ export function ThemeColorControls({
 }
 
 export function ClassificationPicker<TValue extends string>({ label, ariaLabel, value, options, getLabel, getColor, onChange }: ClassificationPickerProps<TValue>) {
-  const selectedLabel = getLabel(value);
   return (
     <label className="classification-rule-field classification-rule-picker-field">
       <span>{label}</span>
-      <span className="classification-rule-picker-shell" style={swatchStyle(getColor(value))}>
-        <span className="classification-rule-picker-shell__dot" aria-hidden="true" />
-        <span className="classification-rule-picker-shell__label">{selectedLabel}</span>
-        <select
-          className="settings-input settings-select classification-rule-picker"
-          value={value}
-          onChange={(event) => {
-            const selected = options.find((option) => option === event.currentTarget.value);
-            if (selected) onChange(selected);
-          }}
-          aria-label={ariaLabel}
-        >
-          {options.map((option) => <option key={option} value={option}>{getLabel(option)}</option>)}
-        </select>
-      </span>
+      <SettingsSelect
+        ariaLabel={ariaLabel}
+        className="classification-rule-select"
+        value={value}
+        options={options.map((option) => ({ value: option, label: getLabel(option), accentColor: getColor(option) }))}
+        onChange={onChange}
+      />
     </label>
   );
 }

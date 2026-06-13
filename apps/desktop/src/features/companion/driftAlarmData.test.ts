@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDriftAlarmCandidates } from "./driftAlarmData";
+import { buildDriftAlarmCandidates, normalizeDriftAlertDelaySeconds } from "./driftAlarmData";
 import type { ActivitySegment, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 
 const driftSegment: ActivitySegment = {
@@ -170,5 +170,17 @@ describe("buildDriftAlarmCandidates", () => {
     });
 
     expect(candidates).toEqual([]);
+  });
+});
+
+describe("normalizeDriftAlertDelaySeconds", () => {
+  it("defaults to 1m when no saved timing exists", () => {
+    expect(normalizeDriftAlertDelaySeconds(null)).toBe(60);
+  });
+
+  it("keeps explicit supported timings", () => {
+    expect(normalizeDriftAlertDelaySeconds(0)).toBe(0);
+    expect(normalizeDriftAlertDelaySeconds("60")).toBe(60);
+    expect(normalizeDriftAlertDelaySeconds("300")).toBe(300);
   });
 });
