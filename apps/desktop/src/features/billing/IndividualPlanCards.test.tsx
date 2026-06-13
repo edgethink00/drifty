@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { IndividualPlanCards } from "./IndividualPlanCards";
 
 describe("IndividualPlanCards", () => {
   it("shows Free, Individual, and Pro with a monthly/yearly interval switch", () => {
-    render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} />);
+    render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} onSelectPlan={vi.fn()} />);
 
     const freePlan = screen.getByRole("article", { name: /free plan/i });
     const individualPlan = screen.getByRole("button", { name: /choose individual plan/i });
@@ -48,5 +48,15 @@ describe("IndividualPlanCards", () => {
     expect(within(individualPlan).getByText("$4")).toBeTruthy();
     expect(within(individualPlan).queryByText("$5")).toBeNull();
     expect(within(individualPlan).getByText("/ month · $48 billed yearly")).toBeTruthy();
+  });
+
+  it("starts Individual setup from the card when shown in display mode with a select handler", () => {
+    const onSelectPlan = vi.fn();
+
+    render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} mode="display" onSelectPlan={onSelectPlan} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /choose individual plan/i }));
+
+    expect(onSelectPlan).toHaveBeenCalledWith("monthly");
   });
 });

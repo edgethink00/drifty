@@ -5,7 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import { AiSetupPanel } from "./AiSetupPanel";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 
-function renderPanel(initialSetup: LocalAiSetupState = DEFAULT_LOCAL_AI_SETUP) {
+function renderPanel({
+  currentBillingPlan = "individual",
+  initialSetup = DEFAULT_LOCAL_AI_SETUP,
+}: {
+  readonly currentBillingPlan?: "free" | "individual";
+  readonly initialSetup?: LocalAiSetupState;
+} = {}) {
   const onStartCloudSetup = vi.fn();
 
   function Harness() {
@@ -17,9 +23,8 @@ function renderPanel(initialSetup: LocalAiSetupState = DEFAULT_LOCAL_AI_SETUP) {
         billingCheckoutLoadingInterval={null}
         billingEntitlementError={null}
         billingPlansDisabled={false}
-        cloudSetupActionLabel="Refresh"
         cloudStatusLabel="Cloud AI available"
-        currentBillingPlan="individual"
+        currentBillingPlan={currentBillingPlan}
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
         onDialogOpenChange={vi.fn()}
@@ -53,5 +58,15 @@ describe("AiSetupPanel", () => {
     expect(within(ollamaSettings).getByRole("button", { name: /^Selected$/ })).toBeTruthy();
     expect(within(ollamaSettings).getByLabelText(/Self-hosted base URL/i)).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
+  });
+
+  it("starts Cloud setup from the Individual plan card without a separate website button", () => {
+    const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free" });
+
+    expect(screen.queryByRole("button", { name: /continue on drifty\.so/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /choose individual plan/i }));
+
+    expect(onStartCloudSetup).toHaveBeenCalledWith("monthly");
   });
 });
