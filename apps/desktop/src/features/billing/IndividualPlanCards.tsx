@@ -18,20 +18,20 @@ const INTERVAL_OPTIONS: readonly { readonly id: VisibleBillingInterval; readonly
 
 const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, IndividualPrice> = {
   monthly: {
-    price: "$5/mo",
-    cadence: "billed monthly",
+    price: "$5",
+    cadence: "/ month",
   },
   yearly: {
-    price: "$4/mo",
-    cadence: "$48 billed yearly",
+    price: "$4",
+    cadence: "/ month · $48 billed yearly",
   },
 };
 
 const FREE_PLAN_FEATURES = [
   "Local classification and predefined rules",
-  "OpenRouter BYOK supported",
+  "OpenRouter API key supported",
   "Self-hosted local AI endpoint supported",
-  "No Drifty Cloud billing required",
+  "No drifty Cloud billing required",
 ] as const;
 
 const INDIVIDUAL_PLAN_FEATURES = [
@@ -88,20 +88,24 @@ export function IndividualPlanCards({
 
   const individualContent = (
     <>
-      <span className="individual-plan-card__topline">
-        <span>Individual</span>
-        {individualIsCurrent ? <small className="individual-plan-card__badge">Current plan</small> : null}
-      </span>
-      <span className="individual-plan-card__price-row">
-        <span className="individual-plan-card__price-stack">
-          <span className="individual-plan-card__price-line">
-            <strong>{individualPrice.price}</strong>
+      <span className="individual-plan-card__top">
+        <span className="individual-plan-card__topline">
+          <span>Individual</span>
+          <small className="individual-plan-card__badge individual-plan-card__badge--popular">
+            {individualIsCurrent ? "Current plan" : "Cloud AI"}
+          </small>
+        </span>
+        <span className="individual-plan-card__note">
+          {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis without managing keys or models."}
+        </span>
+        <span className="individual-plan-card__price-row">
+          <span className="individual-plan-card__price-stack">
+            <span className="individual-plan-card__price-line">
+              <strong>{individualPrice.price}</strong>
+            </span>
+            <span className="individual-plan-card__price-cadence">{individualPrice.cadence}</span>
           </span>
         </span>
-      </span>
-      <span className="individual-plan-card__cadence">{individualPrice.cadence}</span>
-      <span className="individual-plan-card__note">
-        {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis without managing keys or models."}
       </span>
       <PlanFeatureList items={INDIVIDUAL_PLAN_FEATURES} />
       <span className="individual-plan-card__cta">{individualIsCurrent ? "Current plan" : "Start Individual"}</span>
@@ -127,19 +131,21 @@ export function IndividualPlanCards({
       </div>
       <div className="individual-plan-cards">
         <article className={`individual-plan-card${currentPlan === "free" ? " individual-plan-card--current" : ""}`} aria-label="Free plan">
-          <span className="individual-plan-card__topline">
-            <span>Free</span>
-            <small className="individual-plan-card__badge">Local-first</small>
-          </span>
-          <span className="individual-plan-card__price-row">
-            <span className="individual-plan-card__price-stack">
-              <span className="individual-plan-card__price-line">
-                <strong>$0</strong>
+          <span className="individual-plan-card__top">
+            <span className="individual-plan-card__topline">
+              <span>Free</span>
+              <small className="individual-plan-card__badge">Local-first</small>
+            </span>
+            <span className="individual-plan-card__note">Use drifty locally with rule-based classification and your own optional AI setup.</span>
+            <span className="individual-plan-card__price-row">
+              <span className="individual-plan-card__price-stack">
+                <span className="individual-plan-card__price-line">
+                  <strong>$0</strong>
+                </span>
+                <span className="individual-plan-card__price-cadence">forever</span>
               </span>
             </span>
           </span>
-          <span className="individual-plan-card__cadence">local-first</span>
-          <span className="individual-plan-card__note">Use Drifty locally with rule-based classification and your own optional AI setup.</span>
           <PlanFeatureList items={FREE_PLAN_FEATURES} />
           <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
         </article>
@@ -161,15 +167,24 @@ export function IndividualPlanCards({
             {individualContent}
           </article>
         )}
-        <article className="individual-plan-card individual-plan-card--pro" aria-label="Pro plan">
-          <span className="individual-plan-card__topline">
-            <span>Pro</span>
-            <small className="individual-plan-card__badge">Soon</small>
+        <article className="individual-plan-card individual-plan-card--pro individual-plan-card--coming-soon" aria-label="Pro plan">
+          <span className="individual-plan-card__top">
+            <span className="individual-plan-card__topline">
+              <span>Pro</span>
+              <small className="individual-plan-card__badge">Soon</small>
+            </span>
+            <span className="individual-plan-card__note">For heavier AI workflows and deeper review loops.</span>
+            <span className="individual-plan-card__price-row individual-plan-card__price-row--soon">
+              <span className="individual-plan-card__price-stack">
+                <span className="individual-plan-card__price-line">
+                  <strong>Launch pricing</strong>
+                </span>
+                <span className="individual-plan-card__price-cadence">coming soon</span>
+              </span>
+            </span>
           </span>
-          <span className="individual-plan-card__cadence">for heavier AI workflows</span>
-          <span className="individual-plan-card__note">Deeper review loops for heavier AI workflows.</span>
           <PlanFeatureList items={PRO_PLAN_FEATURES} />
-          <span className="individual-plan-card__cta individual-plan-card__cta--muted">Coming soon</span>
+          <span className="individual-plan-card__cta individual-plan-card__cta--muted" aria-disabled="true">Coming soon</span>
         </article>
       </div>
     </div>

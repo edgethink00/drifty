@@ -6862,6 +6862,12 @@ input, textarea { color: inherit; }
   width: min(34rem, 100%);
 }
 
+.dashboard-ai-recovery--trial-ended .dashboard-ai-recovery__panel,
+.dashboard-ai-recovery--cloud-billing .dashboard-ai-recovery__panel {
+  max-height: min(88vh, 58rem);
+  width: min(64rem, 100%);
+}
+
 .dashboard-ai-recovery__close {
   align-items: center;
   appearance: none;
@@ -12147,22 +12153,22 @@ button.flow-cell:focus {
 
 .individual-plan-suite {
   display: grid;
-  gap: 0.62rem;
+  gap: 0.8rem;
   flex: 1 1 100%;
   width: 100%;
 }
 
 .individual-plan-intervals {
   align-items: center;
-  background: color-mix(in srgb, var(--bg-2) 86%, var(--surface));
+  background: color-mix(in srgb, var(--bg-2) 92%, var(--surface));
   border: 0;
   border-radius: 999px;
   display: inline-grid;
   gap: 0;
-  grid-template-columns: repeat(2, minmax(4.7rem, 1fr));
+  grid-template-columns: repeat(2, minmax(4.9rem, 1fr));
   justify-self: center;
-  margin: 0.72rem 0 0.22rem;
-  padding: 4px;
+  margin: 1rem 0 0.35rem;
+  padding: 5px;
 }
 
 .individual-plan-interval {
@@ -12173,9 +12179,9 @@ button.flow-cell:focus {
   color: var(--text-soft);
   cursor: pointer;
   display: grid;
-  min-height: 2.05rem;
-  min-width: 4.65rem;
-  padding: 0 0.9rem;
+  min-height: 2.32rem;
+  min-width: 4.9rem;
+  padding: 0 1rem;
   place-items: center;
   position: relative;
   text-align: center;
@@ -12233,8 +12239,10 @@ button.flow-cell:focus {
 
 .individual-plan-cards {
   display: grid;
-  gap: 0.72rem;
+  gap: 0.875rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 auto;
+  max-width: 57.5rem;
   width: 100%;
 }
 
@@ -12246,14 +12254,31 @@ button.flow-cell:focus {
   border-radius: 10px;
   color: var(--text);
   cursor: default;
-  display: grid;
-  gap: 0.72rem;
-  grid-template-rows: auto auto auto auto 1fr auto;
-  min-height: 19.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+  isolation: isolate;
+  min-height: 26.875rem;
   min-width: 0;
-  padding: 1.28rem;
+  overflow: hidden;
+  padding: 1.5625rem 1.5rem 1.5rem;
+  position: relative;
   text-align: left;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.individual-plan-card::before {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  content: "";
+  height: 4px;
+  inset: 0 0 auto;
+  position: absolute;
+  z-index: 0;
+}
+
+.individual-plan-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 button.individual-plan-card {
@@ -12279,8 +12304,15 @@ button.individual-plan-card:focus-visible {
 }
 
 .individual-plan-card--featured {
-  background: color-mix(in srgb, var(--surface) 92%, var(--bg-2));
-  border-color: color-mix(in srgb, var(--text) 7.5%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 58%, transparent), color-mix(in srgb, var(--surface) 86%, transparent) 38%),
+    color-mix(in srgb, var(--surface) 92%, var(--bg-2));
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--accent) 9%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.individual-plan-card--featured::before {
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent-mid) 58%, color-mix(in srgb, var(--accent) 20%, transparent));
 }
 
 .individual-plan-card--current {
@@ -12291,6 +12323,11 @@ button.individual-plan-card:focus-visible {
   background: color-mix(in srgb, var(--surface) 92%, var(--bg-2));
   border-color: color-mix(in srgb, var(--text) 7.5%, transparent);
   color: var(--text);
+}
+
+.individual-plan-card--coming-soon {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 70%, transparent), color-mix(in srgb, var(--bg-2) 32%, var(--surface)));
+  border-color: color-mix(in srgb, var(--text) 7.5%, transparent);
 }
 
 .individual-plan-card__badge {
@@ -12311,8 +12348,22 @@ button.individual-plan-card:focus-visible {
   white-space: nowrap;
 }
 
+.individual-plan-card__badge--popular {
+  background: color-mix(in srgb, var(--accent-soft) 92%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+}
+
+.individual-plan-card__top {
+  align-content: start;
+  display: grid;
+  gap: 0.8125rem;
+  grid-template-rows: auto minmax(4.25rem, 1fr) auto;
+  min-height: 12.125rem;
+}
+
 .individual-plan-card__topline {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 0.5rem;
   justify-content: space-between;
@@ -12321,54 +12372,89 @@ button.individual-plan-card:focus-visible {
 
 .individual-plan-card__topline span {
   font-family: var(--font-display);
-  font-size: 1.52rem;
-  font-weight: 580;
+  font-size: 1.5rem;
+  font-weight: 680;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.04;
   min-width: 0;
 }
 
 .individual-plan-card__price-row {
-  align-items: start;
-  display: inline-flex;
-  justify-content: start;
+  align-items: end;
+  border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  display: grid;
+  font-size: 2.625rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 0.95;
+  margin: 0.3125rem 0 0;
+  min-height: 4.375rem;
   min-width: 0;
+  padding-top: 0.9375rem;
 }
 
 .individual-plan-card__price-stack {
-  align-items: flex-start;
-  display: inline-grid;
-  gap: 1px;
-  justify-items: start;
+  align-items: end;
+  column-gap: 0.5rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
+  width: 100%;
 }
 
 .individual-plan-card__price-line {
-  align-items: start;
+  align-items: end;
   display: inline-flex;
   min-width: 0;
+}
+
+.individual-plan-card__price-cadence {
+  color: var(--text-soft);
+  font-size: 0.875rem;
+  font-weight: 560;
+  line-height: 1.2;
+  padding-bottom: 0.4375rem;
 }
 
 .individual-plan-card__price-row strong {
   font-family: var(--font-display);
-  font-size: 1.52rem;
-  font-weight: 680;
+  font-size: inherit;
+  font-weight: inherit;
   letter-spacing: 0;
-  line-height: 1.05;
-  white-space: nowrap;
+  line-height: inherit;
+  white-space: normal;
+}
+
+.individual-plan-card__price-row--soon {
+  align-content: center;
+  font-size: 1.25rem;
+  line-height: 1.08;
+}
+
+.individual-plan-card__price-row--soon .individual-plan-card__price-stack {
+  align-content: center;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.individual-plan-card__price-row--soon .individual-plan-card__price-cadence {
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  padding-bottom: 0;
 }
 
 .individual-plan-card__cadence,
 .individual-plan-card__note {
   color: var(--text-soft);
-  font-size: 0.78rem;
-  line-height: 1.46;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
 .individual-plan-card__feature-list {
-  align-self: start;
   display: grid;
-  gap: 0.46rem;
+  gap: 0.5625rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -12377,10 +12463,10 @@ button.individual-plan-card:focus-visible {
 .individual-plan-card__feature-list li {
   color: var(--text-muted);
   display: grid;
-  font-size: 0.73rem;
-  gap: 0.46rem;
-  grid-template-columns: 0.58rem minmax(0, 1fr);
-  line-height: 1.28;
+  font-size: 0.8125rem;
+  gap: 0.5rem;
+  grid-template-columns: 0.75rem minmax(0, 1fr);
+  line-height: 1.35;
 }
 
 .individual-plan-card__feature-list li::before {
@@ -12399,26 +12485,26 @@ button.individual-plan-card:focus-visible {
 
 .individual-plan-card__cta {
   align-items: center;
-  align-self: end;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 0.625rem;
   color: var(--text);
   display: inline-flex;
   font-family: var(--font-sans);
-  font-size: 0.84rem;
-  font-weight: 560;
+  font-size: 0.875rem;
+  font-weight: 720;
+  margin-top: auto;
   justify-self: center;
   justify-content: center;
   line-height: 1;
-  min-height: 2.5rem;
+  min-height: 2.625rem;
   padding: 0 1rem;
   white-space: nowrap;
-  width: min(100%, 13.8rem);
+  width: 100%;
 }
 
 .individual-plan-card--featured .individual-plan-card__cta {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
   color: var(--surface);
 }
 
@@ -12440,6 +12526,18 @@ button.individual-plan-card:focus-visible {
 
   .settings-row--ai-preview .settings-mode-switch--quad {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .dashboard-ai-recovery__plans .individual-plan-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-ai-recovery__plans .individual-plan-cards {
+    grid-template-columns: 1fr;
   }
 }
 
