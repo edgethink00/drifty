@@ -6745,7 +6745,9 @@ input, textarea { color: inherit; }
 .dashboard-ai-notice {
   --dashboard-ai-notice-accent: var(--warn);
   --dashboard-ai-notice-soft: var(--warn-soft);
-  --dashboard-ai-notice-line: color-mix(in srgb, var(--warn) 34%, var(--line));
+  --dashboard-ai-notice-line: color-mix(in srgb, var(--warn) 28%, var(--line));
+  --dashboard-ai-notice-panel: color-mix(in srgb, var(--surface) 96%, var(--dashboard-ai-notice-soft));
+  --dashboard-ai-notice-glow: color-mix(in srgb, var(--dashboard-ai-notice-soft) 52%, transparent);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -6755,16 +6757,19 @@ input, textarea { color: inherit; }
   border: 1px solid var(--dashboard-ai-notice-line);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--dashboard-ai-notice-soft) 76%, var(--surface)) 0%, var(--surface) 74%),
-    var(--surface);
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--dashboard-ai-notice-accent) 13%, transparent);
+    radial-gradient(58rem 12rem at -10rem -5rem, var(--dashboard-ai-notice-glow) 0%, transparent 72%),
+    linear-gradient(180deg, var(--dashboard-ai-notice-panel), color-mix(in srgb, var(--surface) 98%, var(--bg-2)));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 80%, transparent),
+    0 10px 22px color-mix(in srgb, var(--dashboard-ai-notice-accent) 8%, transparent);
 }
 
 .dashboard-ai-notice--trial-ended,
 .dashboard-ai-notice--cloud-billing {
   --dashboard-ai-notice-accent: var(--gold);
   --dashboard-ai-notice-soft: var(--gold-soft);
-  --dashboard-ai-notice-line: color-mix(in srgb, var(--gold) 36%, var(--line));
+  --dashboard-ai-notice-line: color-mix(in srgb, var(--gold) 28%, var(--line));
+  --dashboard-ai-notice-glow: color-mix(in srgb, var(--gold-soft) 42%, transparent);
 }
 
 .dashboard-ai-notice--provider-disconnected,
