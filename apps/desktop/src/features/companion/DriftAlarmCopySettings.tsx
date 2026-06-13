@@ -56,12 +56,12 @@ export function DriftAlarmCopySettings({
   };
 
   return (
-    <div className="settings-row settings-row--fallback settings-row--drift-copy" role="group" aria-label="Alarm copy">
+    <div className="settings-row settings-row--drift-copy" role="group" aria-label="Alarm copy">
       <div>
         <div className="lbl">Alarm copy</div>
         <div className="desc">Customize only the representative titles used by production drift alarms.</div>
       </div>
-      <div className="settings-row__actions">
+      <div className="ctrl settings-row__actions">
         <button type="button" className="settings-btn" onClick={() => setIsEditorOpen(true)}>
           Edit alarm copy
         </button>

@@ -22,6 +22,8 @@ export const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
 
 export const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
 
+export const DEFAULT_DRIFT_ALERT_DELAY_SECONDS: DriftAlertDelaySeconds = 60;
+
 export const DRIFT_ALERT_DELAY_OPTIONS = [
   { value: 0, label: "Instant", detail: "As soon as drift is detected" },
   { value: 60, label: "1m", detail: "After 1 minute of drift" },
@@ -313,7 +315,7 @@ export function resolveInitialDriftAlertsEnabled(): boolean {
 }
 
 export function resolveInitialDriftAlertDelaySeconds(): DriftAlertDelaySeconds {
-  if (typeof window === "undefined") return 0;
+  if (typeof window === "undefined") return DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
   return normalizeDriftAlertDelaySeconds(window.localStorage.getItem(DRIFT_ALERT_DELAY_STORAGE_KEY));
 }
 
@@ -323,8 +325,9 @@ export function resolveInitialExtremeNudgeEnabled(): boolean {
 }
 
 export function normalizeDriftAlertDelaySeconds(value: string | number | null): DriftAlertDelaySeconds {
+  if (value === null || value === "") return DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
   const numericValue = typeof value === "number" ? value : Number(value);
-  return DRIFT_ALERT_DELAY_OPTIONS.some((option) => option.value === numericValue) ? numericValue as DriftAlertDelaySeconds : 0;
+  return DRIFT_ALERT_DELAY_OPTIONS.find((option) => option.value === numericValue)?.value ?? DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
 }
 
 export async function openFocusTargetSite(siteDomain: string): Promise<void> {

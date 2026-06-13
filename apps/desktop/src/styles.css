@@ -48,6 +48,7 @@
   --radius-lg: 18px;
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;
+  --z-settings-popover: 70;
   --z-drift-alarm-browser: 50;
   font-family: var(--font-sans);
 }
@@ -4676,46 +4677,57 @@ input, textarea { color: inherit; }
 .drifty-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  background: var(--settings-control-bg, color-mix(in srgb, var(--surface) 82%, var(--bg-2)));
-  border: 1px solid var(--settings-control-border, color-mix(in srgb, var(--text) 11%, var(--line)));
-  border-radius: calc(var(--settings-control-radius, var(--radius-sm)) - 3px);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
-  color: var(--canvas);
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--text) 12%, var(--line));
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 1px color-mix(in srgb, var(--text) 9%, transparent),
+    0 1px 0 color-mix(in srgb, var(--surface) 72%, transparent);
   cursor: pointer;
-  display: grid;
+  display: inline-block;
   flex: 0 0 auto;
-  height: 1rem;
+  height: 1.14rem;
   margin: 0;
-  place-content: center;
+  position: relative;
   transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
-  width: 1rem;
+  width: 2.12rem;
 }
 
 .drifty-checkbox::after {
-  border-bottom: 2px solid currentColor;
-  border-left: 2px solid currentColor;
+  background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  border-radius: 999px;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--surface-strong) 78%, transparent);
   content: "";
-  height: 0.28rem;
-  transform: translateY(-0.03rem) rotate(-45deg) scale(0);
-  transition: transform var(--transition-fast);
-  width: 0.5rem;
+  height: 0.78rem;
+  left: 0.17rem;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  width: 0.78rem;
 }
 
 .drifty-checkbox:hover {
-  background: var(--settings-control-bg-hover, color-mix(in srgb, var(--surface-strong) 88%, var(--surface)));
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
   border-color: color-mix(in srgb, var(--text) 18%, var(--line));
 }
 
 .drifty-checkbox:checked {
-  background: color-mix(in srgb, var(--accent) 88%, var(--accent-strong));
-  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  background: color-mix(in srgb, var(--accent) 42%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line-strong));
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--surface) 20%, transparent),
-    0 0 0 3px color-mix(in srgb, var(--accent-soft) 34%, transparent);
+    inset 0 1px 1px color-mix(in srgb, var(--accent-strong) 14%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent-soft) 38%, transparent);
 }
 
 .drifty-checkbox:checked::after {
-  transform: translateY(-0.03rem) rotate(-45deg) scale(1);
+  background: var(--surface);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent-strong) 24%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--surface-strong) 78%, transparent);
+  transform: translate(0.95rem, -50%);
 }
 
 .drifty-checkbox:focus-visible {
@@ -4841,6 +4853,163 @@ input, textarea { color: inherit; }
   color: var(--text);
   outline: none;
   cursor: pointer;
+}
+
+.settings-select-control {
+  --settings-select-accent: var(--accent);
+  position: relative;
+  width: 10rem;
+  min-width: 10rem;
+  color: var(--text);
+}
+
+.settings-select-control__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: var(--settings-control-height, 2.25rem);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--settings-control-border, var(--line));
+  border-radius: var(--settings-control-radius, var(--radius-sm));
+  background: var(--settings-control-bg, var(--bg-2));
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  line-height: 1;
+  text-align: left;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-select-control__trigger:hover,
+.settings-select-control[data-open="true"] .settings-select-control__trigger {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: var(--settings-control-bg-hover, var(--surface));
+}
+
+.settings-select-control__trigger:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
+}
+
+.settings-select-control__value,
+.settings-select-control__option {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.settings-select-control__value {
+  gap: var(--space-2);
+}
+
+.settings-select-control__value span:last-child,
+.settings-select-control__option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select-control__dot {
+  display: none;
+  flex: 0 0 0.55rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, var(--line));
+  border-radius: 999px;
+  background: var(--settings-select-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--settings-select-accent) 14%, transparent);
+}
+
+.settings-select-control[data-has-accent="true"] .settings-select-control__value .settings-select-control__dot,
+.settings-select-control__option[data-has-accent="true"] .settings-select-control__dot {
+  display: inline-block;
+}
+
+.settings-select-control__chevron {
+  flex: 0 0 auto;
+  width: 0.44rem;
+  height: 0.44rem;
+  margin-left: var(--space-2);
+  border-right: 1.5px solid var(--text-soft);
+  border-bottom: 1.5px solid var(--text-soft);
+  transform: rotate(45deg) translateY(-0.12rem);
+  transition: transform var(--transition-fast);
+}
+
+.settings-select-control[data-open="true"] .settings-select-control__chevron {
+  transform: rotate(225deg) translate(-0.1rem, -0.02rem);
+}
+
+.settings-select-control__menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: var(--z-settings-popover);
+  display: grid;
+  width: 100%;
+  max-height: 14rem;
+  padding: var(--space-1);
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 13%, transparent);
+}
+
+.settings-select-control__option {
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 1.95rem;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  text-align: left;
+}
+
+.settings-select-control__option:hover,
+.settings-select-control__option.is-active {
+  background: color-mix(in srgb, var(--surface-strong) 82%, var(--accent-soft));
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.settings-select-control__option.is-selected {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.settings-select-control__check {
+  position: relative;
+  flex: 0 0 0.76rem;
+  width: 0.76rem;
+  height: 0.76rem;
+  opacity: 0;
+}
+
+.settings-select-control__check::after {
+  position: absolute;
+  top: 0.14rem;
+  left: 0.12rem;
+  width: 0.42rem;
+  height: 0.22rem;
+  border-bottom: 1.7px solid currentColor;
+  border-left: 1.7px solid currentColor;
+  content: "";
+  transform: rotate(-45deg);
+}
+
+.settings-select-control__option.is-selected .settings-select-control__check {
+  opacity: 1;
 }
 
 .settings-btn {
@@ -11062,6 +11231,9 @@ button.flow-cell:focus {
   --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
   --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --settings-segment-bg: color-mix(in srgb, var(--text) 5%, var(--surface));
+  --settings-segment-active-bg: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  --settings-segment-active-border: color-mix(in srgb, var(--accent) 18%, var(--line-strong));
   --settings-swatch-size: 1.25rem;
 }
 
@@ -11161,6 +11333,7 @@ button.flow-cell:focus {
 
 .content--settings .settings-section--general .settings-input,
 .content--settings .settings-section--general .settings-select,
+.content--settings .settings-section--general .settings-select-control__trigger,
 .content--settings .settings-section--general .settings-btn {
   min-width: 10rem;
   height: var(--settings-control-height);
@@ -11182,6 +11355,7 @@ button.flow-cell:focus {
 
 .content--settings .settings-section--general .settings-input:hover,
 .content--settings .settings-section--general .settings-select:hover,
+.content--settings .settings-section--general .settings-select-control__trigger:hover,
 .content--settings .settings-section--general .settings-btn:hover {
   border-color: color-mix(in srgb, var(--text) 18%, var(--line));
   background: var(--settings-control-bg-hover);
@@ -11191,6 +11365,7 @@ button.flow-cell:focus {
 
 .content--settings .settings-section--general .settings-input:focus-visible,
 .content--settings .settings-section--general .settings-select:focus-visible,
+.content--settings .settings-section--general .settings-select-control__trigger:focus-visible,
 .content--settings .settings-section--general .settings-btn:focus-visible,
 .content--settings .settings-section--general .settings-mode-option:focus-visible,
 .content--settings .settings-section--general .settings-color-preset:focus-visible,
@@ -11212,33 +11387,84 @@ button.flow-cell:focus {
 }
 
 .content--settings .settings-section--general .settings-mode-switch {
-  min-height: var(--settings-control-height);
-  padding: var(--space-1);
-  border: 1px solid var(--settings-control-border);
-  border-radius: calc(var(--settings-control-radius) + var(--space-1));
-  background: var(--settings-control-bg);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 76%, transparent);
+  min-height: 2.12rem;
+  padding: 0.18rem;
+  gap: 0.12rem;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--line));
+  border-radius: calc(var(--settings-control-radius) + 2px);
+  background: var(--settings-segment-bg);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .content--settings .settings-section--general .settings-mode-option {
   align-items: center;
-  min-height: calc(var(--settings-control-height) - var(--space-1));
+  min-height: 1.62rem;
   justify-content: center;
-  padding: 0 var(--space-3);
-  border-radius: var(--settings-control-radius);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: calc(var(--settings-control-radius) - 2px);
+  color: var(--text-muted);
   text-align: center;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
+.content--settings .settings-section--general .settings-mode-option span {
+  font-size: 0.74rem;
+  font-weight: 620;
+}
+
 .content--settings .settings-section--general .settings-mode-option:hover {
-  background: var(--settings-control-bg-hover);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
   color: var(--text);
 }
 
 .content--settings .settings-section--general .settings-mode-option.is-active {
-  background: color-mix(in srgb, var(--accent-soft) 64%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 72%, transparent);
+  background: var(--settings-segment-active-bg);
+  border-color: var(--settings-segment-active-border);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 7%, transparent),
+    0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.content--settings .settings-mode-switch--compact {
+  min-height: 2.12rem;
+  padding: 0.18rem;
+  gap: 0.12rem;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--line));
+  border-radius: calc(var(--settings-control-radius) + 2px);
+  background: var(--settings-segment-bg);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.content--settings .settings-mode-switch--compact .settings-mode-option {
+  align-items: center;
+  justify-content: center;
+  min-height: 1.62rem;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: calc(var(--settings-control-radius) - 2px);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.content--settings .settings-mode-switch--compact .settings-mode-option span {
+  font-size: 0.74rem;
+  font-weight: 620;
+}
+
+.content--settings .settings-mode-switch--compact .settings-mode-option:hover {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  color: var(--text);
+}
+
+.content--settings .settings-mode-switch--compact .settings-mode-option.is-active {
+  background: var(--settings-segment-active-bg);
+  border-color: var(--settings-segment-active-border);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 7%, transparent),
+    0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 
 .content--settings .settings-section--general .settings-row__actions {
@@ -12267,13 +12493,19 @@ button.individual-plan-card:focus-visible {
   font-size: var(--type-setting-desc-size);
 }
 
-.classification-rule-field .settings-input {
+.classification-rule-field .settings-input,
+.classification-rule-field .settings-select-control__trigger {
   min-height: var(--classification-rule-control-height);
   width: 100%;
 }
 
 .classification-rule-picker-field {
   position: relative;
+}
+
+.classification-rule-select {
+  width: 100%;
+  min-width: 0;
 }
 
 .classification-rule-picker-shell {
