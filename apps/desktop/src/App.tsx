@@ -181,7 +181,7 @@ import { DateNavigator } from "./components/DateNavigator";
 import { EmptyState } from "./components/EmptyState";
 import { MetricTile } from "./components/MetricTile";
 import { Toggle } from "./components/Toggle";
-import { aiServerStatusLabelForCloud, driftyCloudSetupActionLabel, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
+import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
@@ -3339,7 +3339,6 @@ export default function App() {
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
   const cloudStatusLabel = driftyCloudStatusLabel(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const aiServerStatusLabel = aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
-  const cloudSetupActionLabel = driftyCloudSetupActionLabel(effectiveBillingEntitlement, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
   const currentBillingPlan =
     effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing"
@@ -4165,7 +4164,6 @@ export default function App() {
                       billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                       billingEntitlementError={effectiveBillingEntitlementError}
                       billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
-                      cloudSetupActionLabel={cloudSetupActionLabel}
                       cloudStatusLabel={cloudStatusLabel}
                       currentBillingPlan={currentBillingPlan}
                       localAiSetup={localAiSetup}
