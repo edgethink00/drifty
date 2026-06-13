@@ -4337,7 +4337,6 @@ export default function App() {
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple settings-mode-switch--compact" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span></button>))}</div></div></div>
                     <div className="settings-row"><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
                     <DriftAlarmCopySettings value={driftAlarmCopy} onChange={setDriftAlarmCopy} />
-                    <div className="settings-row"><div><div className="lbl">Peak reminders</div><div className="desc">Remind when peak window starts</div></div><div className="ctrl"><Toggle ariaLabel="Toggle peak reminders" /></div></div>
                   </div></div>
                 )}
                 {settingsSection === "privacy" && (
