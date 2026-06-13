@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ChangeEvent, FocusEvent, FormEvent, MouseEvent, ReactNode, RefObject } from "react";
-import { createPortal } from "react-dom";
+import type { CSSProperties, ChangeEvent, FocusEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -41,7 +40,6 @@ import { SiteFavicon } from "./components/SiteFavicon";
 import { AppUsagePanel } from "./features/dashboard/AppUsagePanel";
 import {
   DashboardAiUnavailableNotice,
-  isCloudBillingVariant,
   resolveDashboardAiUnavailableState,
   type DashboardAiUnavailableVariant,
 } from "./features/dashboard/DashboardAiUnavailableNotice";
@@ -147,7 +145,7 @@ import {
   fetchBillingEntitlement,
   type BillingEntitlement,
 } from "./features/billing/billingService";
-import { IndividualPlanCards, type BillingPlanId } from "./features/billing/IndividualPlanCards";
+import { AiSetupPanel } from "./features/settings/AiSetupPanel";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
@@ -173,7 +171,7 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
-import { LOCAL_AI_SETUP_STORAGE_KEY, OPENROUTER_RECOMMENDED_MODELS, SELF_HOSTED_RECOMMENDED_MODELS, isForbiddenOpenRouterModel, isRecommendedOpenRouterModel, isRecommendedSelfHostedModel, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel, resolveInitialLocalAiSetup, toPersistedLocalAiSetup, uniqueOpenRouterModels } from "./features/settings/localAiSetup";
+import { LOCAL_AI_SETUP_STORAGE_KEY, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
@@ -475,10 +473,7 @@ export default function App() {
   const [appRuleProductivity, setAppRuleProductivity] = useState<ProductivityLabel>("focus");
   const [classificationRuleCandidates, setClassificationRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
   const [classificationRuleCandidatesLoading, setClassificationRuleCandidatesLoading] = useState(false);
-  const [openRouterModelPickerOpen, setOpenRouterModelPickerOpen] = useState(false);
-  const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
-  const [selfHostedModelPickerOpen, setSelfHostedModelPickerOpen] = useState(false);
-  const [selfHostedCustomModel, setSelfHostedCustomModel] = useState("");
+  const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
   const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
   const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
   const [dismissedDashboardAiRecoveryKey, setDismissedDashboardAiRecoveryKey] = useState<string | null>(null);
@@ -660,7 +655,6 @@ export default function App() {
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
-  const [driftyCloudSetupOpen, setDriftyCloudSetupOpen] = useState(false);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: segments,
@@ -673,91 +667,6 @@ export default function App() {
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
-  const openRouterPrimaryModel = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
-  const openRouterFallbackModels = useMemo(
-    () => normalizeOpenRouterFallbackModels(openRouterPrimaryModel, localAiSetup.openRouterFallbackModels),
-    [localAiSetup.openRouterFallbackModels, openRouterPrimaryModel],
-  );
-  const openRouterSelectedModels = useMemo(
-    () => uniqueOpenRouterModels([openRouterPrimaryModel, ...openRouterFallbackModels]),
-    [openRouterFallbackModels, openRouterPrimaryModel],
-  );
-  const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !isRecommendedOpenRouterModel(model));
-  const openRouterModelOptions = [
-    ...OPENROUTER_RECOMMENDED_MODELS,
-    ...openRouterCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-  ];
-  const openRouterSelectionSummary = openRouterFallbackModels.length > 0
-    ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`
-    : openRouterPrimaryModel;
-  const selfHostedSelectedModel = localAiSetup.selfHostedModel.trim();
-  const selfHostedCustomSelectedModels = selfHostedSelectedModel && !isRecommendedSelfHostedModel(selfHostedSelectedModel) ? [selfHostedSelectedModel] : [];
-  const selfHostedModelOptions = [
-    ...SELF_HOSTED_RECOMMENDED_MODELS,
-    ...selfHostedCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-  ];
-  const selfHostedModelSummary = selfHostedSelectedModel || "No model selected";
-  const handleOpenRouterModelToggle = useCallback((model: string, selected: boolean) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-
-    setLocalAiSetup((current) => {
-      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
-      if (selected) {
-        if (modelId === primaryModel || fallbackModels.includes(modelId)) return current;
-        return { ...current, openRouterFallbackModels: [...fallbackModels, modelId] };
-      }
-
-      if (modelId === primaryModel) {
-        const [nextPrimaryModel, ...nextFallbackModels] = fallbackModels;
-        if (!nextPrimaryModel) return current;
-        return { ...current, openRouterModel: nextPrimaryModel, openRouterFallbackModels: nextFallbackModels };
-      }
-
-      return { ...current, openRouterFallbackModels: fallbackModels.filter((fallbackModel) => fallbackModel !== modelId) };
-    });
-  }, []);
-  const handleOpenRouterPrimaryModelChange = useCallback((model: string) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-
-    setLocalAiSetup((current) => {
-      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
-      const selectedModels = uniqueOpenRouterModels([primaryModel, ...fallbackModels, modelId]);
-      return { ...current, openRouterModel: modelId, openRouterFallbackModels: selectedModels.filter((selectedModel) => selectedModel !== modelId) };
-    });
-  }, []);
-  const handleAddOpenRouterCustomModel = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const modelId = openRouterCustomModel.trim();
-    if (!modelId || isForbiddenOpenRouterModel(modelId)) return;
-
-    setLocalAiSetup((current) => {
-      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
-      if (modelId === primaryModel || fallbackModels.includes(modelId)) return current;
-      return { ...current, openRouterFallbackModels: [...fallbackModels, modelId] };
-    });
-    setOpenRouterCustomModel("");
-  }, [openRouterCustomModel]);
-  const handleSelfHostedModelChange = useCallback((model: string) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-    setLocalAiSetup((current) => ({ ...current, selfHostedModel: modelId }));
-  }, []);
-  const handleAddSelfHostedCustomModel = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const modelId = selfHostedCustomModel.trim();
-    if (!modelId) return;
-    setLocalAiSetup((current) => ({ ...current, selfHostedModel: modelId }));
-    setSelfHostedCustomModel("");
-  }, [selfHostedCustomModel]);
-  const handleSelectLocalAiProvider = useCallback((provider: LocalAiSetupState["provider"]) => {
-    setDriftyCloudSetupOpen(false);
-    setLocalAiSetup((current) => ({ ...current, provider }));
-  }, []);
   const localAiClassificationOptions = useMemo(() => {
     if (localAiSetup.provider === "openrouter_byok") {
       const apiKey = localAiSetup.openRouterApiKey.trim();
@@ -2125,8 +2034,7 @@ export default function App() {
     dashboardAiRecoveryState
     || authModalOpen
     || feedbackModalOpen
-    || openRouterModelPickerOpen
-    || selfHostedModelPickerOpen
+    || aiSetupDialogOpen
     || onboardingOpen
     || selectedLeaderboardRow
     || isProfileEditorOpen
@@ -2626,13 +2534,6 @@ export default function App() {
     return null;
   }, [shouldCheckBillingEntitlement]);
 
-  const handleShowDriftyCloudSetup = useCallback(() => {
-    setDriftyCloudSetupOpen(true);
-    if (isSupabaseConfigured && user && hasRequiredAccountAuth && billingEntitlement?.status !== "locked") {
-      void refreshBillingEntitlement();
-    }
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
-
   const handleStartDriftyCloudSetup = useCallback(async (billingInterval: BillingInterval = "monthly") => {
     if (!isSupabaseConfigured) {
       setAuthModalOpen(true);
@@ -2668,8 +2569,8 @@ export default function App() {
   }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, signInWithWebsite, user]);
 
   const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
+    void variant;
     setSettingsSection("aiSetup");
-    setDriftyCloudSetupOpen(isCloudBillingVariant(variant));
     navigateToTab("settings");
   }, [navigateToTab]);
 
@@ -3440,7 +3341,7 @@ export default function App() {
   const aiServerStatusLabel = aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const cloudSetupActionLabel = driftyCloudSetupActionLabel(effectiveBillingEntitlement, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
-  const currentBillingPlan: BillingPlanId | null =
+  const currentBillingPlan =
     effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing"
       ? "individual"
       : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
@@ -4259,65 +4160,20 @@ export default function App() {
                 )}
                 {settingsSection === "aiSetup" && (
                   <div className="settings-section settings-section--ai-setup">
-                    <div className="settings-block cloud-overview">
-                      <div className="cloud-overview__header">
-                        <div>
-                          <h3>AI setup</h3>
-                        </div>
-                        <span className="chip green">Local-first</span>
-                      </div>
-                      <div className="settings-row settings-row--fallback settings-row--cloud-pricing" role="group" aria-label="Drifty Cloud pricing">
-                        <div className="settings-row__summary">
-                          <div className="lbl">Drifty Cloud</div>
-                          <span className="chip" aria-label={`Drifty Cloud status: ${cloudStatusLabel}`}>{aiServerStatusLabel}</span>
-                          {effectiveBillingEntitlementError ? <span className="settings-row__message">{effectiveBillingEntitlementError}</span> : null}
-                        </div>
-                        <div className="ctrl settings-row__actions">
-                          <IndividualPlanCards
-                            currentPlan={currentBillingPlan}
-                            disabled={isDashboardAiUnavailablePreviewActive}
-                            loadingInterval={billingCheckoutLoadingInterval}
-                            mode={shouldShowCloudCheckoutPlans ? "checkout" : "display"}
-                            onSelectPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
-                          />
-                          {shouldShowCloudCheckoutPlans ? null : <button type="button" className="settings-btn settings-btn--primary settings-btn--compact" onClick={() => void handleStartDriftyCloudSetup()}>{cloudSetupActionLabel}</button>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="settings-block ai-provider-settings">
-                      <div className="cloud-overview__header">
-                        <div>
-                          <h3>Provider settings</h3>
-                        </div>
-                        <span className="chip">Saved on this Mac</span>
-                      </div>
-                      <div className="settings-row settings-row--fallback settings-row--provider-card" role="group" aria-label="OpenRouter BYOK settings">
-                        <div>
-                          <div className="lbl">OpenRouter BYOK</div>
-                        </div>
-                        <div className="ctrl settings-row__actions">
-                          <button type="button" className={`settings-btn settings-btn--compact${localAiSetup.provider === "openrouter_byok" ? " settings-btn--primary" : ""}`} onClick={() => handleSelectLocalAiProvider("openrouter_byok")}>{localAiSetup.provider === "openrouter_byok" ? "Selected" : "Use OpenRouter"}</button>
-                          <input className="settings-input" type="password" autoComplete="off" aria-label="OpenRouter API key" value={localAiSetup.openRouterApiKey} onChange={(event) => setLocalAiSetup((current) => ({ ...current, openRouterApiKey: event.target.value }))} placeholder="sk-or-v1-..." />
-                          <div className="model-picker-summary">
-                            <div className="model-picker-summary__chips"><span className="chip green">Primary: {openRouterPrimaryModel}</span>{openRouterFallbackModels.length > 0 ? <span className="chip gray">{openRouterFallbackModels.length} fallback{openRouterFallbackModels.length === 1 ? "" : "s"}</span> : null}</div>
-                            <button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={() => setOpenRouterModelPickerOpen(true)}>Choose models</button>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="settings-row settings-row--fallback settings-row--provider-card" role="group" aria-label="Self-hosted AI settings">
-                        <div>
-                          <div className="lbl">Self-hosted local AI</div>
-                        </div>
-                        <div className="ctrl settings-row__actions">
-                          <button type="button" className={`settings-btn settings-btn--compact${localAiSetup.provider === "self_hosted" ? " settings-btn--primary" : ""}`} onClick={() => handleSelectLocalAiProvider("self_hosted")}>{localAiSetup.provider === "self_hosted" ? "Selected" : "Use self-hosted"}</button>
-                          <input className="settings-input" aria-label="Self-hosted base URL" value={localAiSetup.selfHostedBaseUrl} onChange={(event) => setLocalAiSetup((current) => ({ ...current, selfHostedBaseUrl: event.target.value }))} placeholder="http://localhost:11434/v1" />
-                          <div className="model-picker-summary">
-                            <div className="model-picker-summary__chips"><span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span></div>
-                            <button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={() => setSelfHostedModelPickerOpen(true)}>Choose model</button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <AiSetupPanel
+                      aiServerStatusLabel={aiServerStatusLabel}
+                      billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+                      billingEntitlementError={effectiveBillingEntitlementError}
+                      billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                      cloudSetupActionLabel={cloudSetupActionLabel}
+                      cloudStatusLabel={cloudStatusLabel}
+                      currentBillingPlan={currentBillingPlan}
+                      localAiSetup={localAiSetup}
+                      shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+                      onDialogOpenChange={setAiSetupDialogOpen}
+                      onLocalAiSetupChange={setLocalAiSetup}
+                      onStartCloudSetup={handleStartDriftyCloudSetup}
+                    />
                   </div>
                 )}
                 {settingsSection === "notifications" && (
@@ -4463,83 +4319,6 @@ export default function App() {
           onCopy={() => void handleCopyDebugLogs()}
           onDownload={handleDownloadDebugLogs}
         />
-      ) : null}
-
-      {openRouterModelPickerOpen ? (
-        <div className="auth-modal__overlay" onClick={() => setOpenRouterModelPickerOpen(false)}>
-          <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
-            <div className="auth-modal__header">
-              <h2 id="openrouter-model-picker-title">OpenRouter models</h2>
-              <p>Drifty sends models in priority order. Your API key stays session-only.</p>
-            </div>
-            <div className="model-picker-modal__summary" aria-label="Selected OpenRouter model summary">
-              <span className="chip green">Primary: {openRouterPrimaryModel}</span>
-              <span className="chip gray">{openRouterSelectionSummary}</span>
-            </div>
-            <div className="model-picker-list" role="group" aria-label="OpenRouter model choices">
-              {openRouterModelOptions.map((option) => {
-                const isSelected = openRouterSelectedModels.includes(option.id);
-                const isPrimary = option.id === openRouterPrimaryModel;
-                return (
-                  <div key={option.id} className="model-picker-choice" data-selected={isSelected ? "true" : "false"}>
-                    <label className="model-picker-choice__select">
-                      <input type="checkbox" aria-label={`Select ${option.id}`} checked={isSelected} onChange={(event) => handleOpenRouterModelToggle(option.id, event.target.checked)} />
-                      <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
-                    </label>
-                    {"badge" in option && option.badge ? <span className="chip green">{option.badge}</span> : null}
-                    <label className="model-picker-choice__primary">
-                      <input type="radio" name="openrouter-primary-model" aria-label={`Use ${option.id} as primary`} checked={isPrimary} disabled={!isSelected} onChange={() => handleOpenRouterPrimaryModelChange(option.id)} />
-                      <span>Primary</span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-            <form className="model-picker-custom" onSubmit={handleAddOpenRouterCustomModel}>
-              <label htmlFor="openrouter-custom-model">Other model</label>
-              <div>
-                <input id="openrouter-custom-model" className="settings-input" aria-label="Other OpenRouter model" value={openRouterCustomModel} onChange={(event) => setOpenRouterCustomModel(event.target.value)} placeholder="provider/model-name" />
-                <button type="submit" className="settings-btn">Add model</button>
-              </div>
-            </form>
-            <button type="button" className="settings-btn auth-modal__close" onClick={() => setOpenRouterModelPickerOpen(false)}>Close</button>
-          </section>
-        </div>
-      ) : null}
-
-      {selfHostedModelPickerOpen ? (
-        <div className="auth-modal__overlay" onClick={() => setSelfHostedModelPickerOpen(false)}>
-          <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="self-hosted-model-picker-title" onClick={(event) => event.stopPropagation()}>
-            <div className="auth-modal__header">
-              <h2 id="self-hosted-model-picker-title">Self-hosted model</h2>
-              <p>Pick a common local model or enter the exact model ID returned by your endpoint.</p>
-            </div>
-            <div className="model-picker-modal__summary" aria-label="Selected self-hosted model summary">
-              <span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span>
-            </div>
-            <div className="model-picker-list" role="radiogroup" aria-label="Self-hosted model choices">
-              {selfHostedModelOptions.map((option) => {
-                const isSelected = option.id === selfHostedSelectedModel;
-                return (
-                  <div key={option.id} className="model-picker-choice model-picker-choice--single" data-selected={isSelected ? "true" : "false"}>
-                    <label className="model-picker-choice__select">
-                      <input type="radio" name="self-hosted-model" aria-label={`Use ${option.id}`} checked={isSelected} onChange={() => handleSelfHostedModelChange(option.id)} />
-                      <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-            <form className="model-picker-custom" onSubmit={handleAddSelfHostedCustomModel}>
-              <label htmlFor="self-hosted-custom-model">Other model</label>
-              <div>
-                <input id="self-hosted-custom-model" className="settings-input" aria-label="Other self-hosted model" value={selfHostedCustomModel} onChange={(event) => setSelfHostedCustomModel(event.target.value)} placeholder="model-name" />
-                <button type="submit" className="settings-btn">Use model</button>
-              </div>
-            </form>
-            <button type="button" className="settings-btn auth-modal__close" onClick={() => setSelfHostedModelPickerOpen(false)}>Close</button>
-          </section>
-        </div>
       ) : null}
 
       {onboardingOpen ? (
