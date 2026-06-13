@@ -1,17 +1,15 @@
 type PostHogUser = {
-  id: string;
-  email?: string | null;
-  is_anonymous?: boolean | null;
+  readonly id: string;
+  readonly email?: string | null;
+  readonly is_anonymous?: boolean | null;
 };
 
 type EventProperties = Record<string, unknown>;
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY?.trim();
 const posthogHost = (import.meta.env.VITE_POSTHOG_HOST?.trim() || "https://us.i.posthog.com").replace(/\/$/, "");
-const distinctIdStorageKey = "drifty.posthog.distinctId.v1";
 
 let isPostHogReady = false;
-let identifiedDistinctId: string | null = null;
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -29,24 +27,7 @@ function createDistinctId() {
   return `drifty-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function getAnonymousDistinctId() {
-  const storedId = window.localStorage.getItem(distinctIdStorageKey);
-  if (storedId) return storedId;
-
-  const nextId = createDistinctId();
-  window.localStorage.setItem(distinctIdStorageKey, nextId);
-  return nextId;
-}
-
-function resetAnonymousDistinctId() {
-  const nextId = createDistinctId();
-  window.localStorage.setItem(distinctIdStorageKey, nextId);
-  return nextId;
-}
-
-function getCurrentDistinctId() {
-  return identifiedDistinctId ?? getAnonymousDistinctId();
-}
+const anonymousSessionDistinctId = createDistinctId();
 
 function getDefaultProperties(): EventProperties {
   return {
@@ -58,13 +39,13 @@ function getDefaultProperties(): EventProperties {
   };
 }
 
-function sendPostHogEvent(event: string, distinctId: string, properties?: EventProperties) {
+function sendPostHogEvent(event: string, properties?: EventProperties) {
   if (!posthogKey) return;
 
   const payload = {
     api_key: posthogKey,
     event,
-    distinct_id: distinctId,
+    distinct_id: anonymousSessionDistinctId,
     properties: {
       ...getDefaultProperties(),
       ...properties,
@@ -89,31 +70,20 @@ export function initializePostHog() {
   }
 
   isPostHogReady = true;
-  sendPostHogEvent("app_opened", getCurrentDistinctId());
+  sendPostHogEvent("app_opened");
   return true;
 }
 
-export function identifyPostHogUser(user: PostHogUser | null) {
+export function recordPostHogAuthState(user: PostHogUser | null) {
   if (!isPostHogReady) return;
 
-  if (!user) {
-    identifiedDistinctId = null;
-    resetAnonymousDistinctId();
-    return;
-  }
-
-  const anonymousDistinctId = getAnonymousDistinctId();
-  identifiedDistinctId = user.id;
-  sendPostHogEvent("$identify", user.id, {
-    "$anon_distinct_id": anonymousDistinctId,
-    "$set": {
-      email: user.email ?? undefined,
-      is_anonymous: user.is_anonymous === true,
-    },
+  sendPostHogEvent("auth_state_changed", {
+    auth_state: user ? "signed_in" : "signed_out",
+    account_kind: user?.is_anonymous === true ? "anonymous_account" : user ? "account" : "none",
   });
 }
 
 export function capturePostHogEvent(event: string, properties?: EventProperties) {
   if (!isPostHogReady) return;
-  sendPostHogEvent(event, getCurrentDistinctId(), properties);
+  sendPostHogEvent(event, properties);
 }

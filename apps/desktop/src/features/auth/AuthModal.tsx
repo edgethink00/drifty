@@ -79,7 +79,12 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
         </button>
 
         <div className="auth-modal__footer auth-modal__footer--centered">
-          <span>Email and Google sign-in are handled in your browser.</span>
+          <span>
+            By continuing, you accept
+            {" "}<a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">Terms</a>
+            {" & "}
+            <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">Privacy</a>.
+          </span>
         </div>
 
         {onClose ? (

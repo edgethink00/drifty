@@ -264,6 +264,9 @@ describe("App auth modal", () => {
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
     expect(screen.getByText(/use drifty\.so to sign in or create an account/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /continue on drifty\.so/i })).toBeTruthy();
+    expect(screen.getByText(/by continuing, you accept/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /terms/i }).getAttribute("href")).toBe("https://drifty.so/terms/");
+    expect(screen.getByRole("link", { name: /privacy/i }).getAttribute("href")).toBe("https://drifty.so/privacy/");
     expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 

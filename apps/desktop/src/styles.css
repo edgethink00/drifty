@@ -5681,6 +5681,19 @@ input, textarea { color: inherit; }
 .auth-modal__footer span {
   font-size: .85rem;
   color: var(--text-soft);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.auth-modal__footer a {
+  color: var(--text);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-modal__footer a:hover {
+  color: var(--accent);
 }
 
 .auth-modal__close {
