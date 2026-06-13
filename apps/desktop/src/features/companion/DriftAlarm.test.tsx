@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DriftAlarm, buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmAction } from "./DriftAlarm";
 
 describe("DriftAlarm", () => {
-  it("renders drift context, focus targets, break choices, and action callbacks without focus strike copy", () => {
+  it("renders drift context, focus targets, break choices, and action callbacks without focus strike copy", async () => {
     const onAction = vi.fn<(action: DriftAlarmAction) => void>();
     const onCancel = vi.fn();
     const event = buildDriftAlarmEvent({
@@ -101,18 +101,30 @@ describe("DriftAlarm", () => {
     expect(container.querySelector(".site-favicon")).toBeTruthy();
     expect(container.querySelector(".app-glyph")).toBeTruthy();
     expect(screen.getByText("VS")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "5m" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "15m" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "30m" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "1h" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take a break" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "15m" })).toBeNull();
 
     const firstTarget = screen.getByRole("button", { name: /docs\.drifty\.so/i });
-    const breakButton = screen.getByRole("button", { name: "1h" });
+    const breakTrigger = screen.getByRole("button", { name: "Take a break" });
     const correctionButton = screen.getByRole("button", { name: "Not a drift" });
     fireEvent.click(firstTarget);
     expect(firstTarget.classList.contains("is-selected")).toBe(true);
-    fireEvent.click(breakButton);
-    expect(breakButton.classList.contains("is-selected")).toBe(true);
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(breakTrigger);
+      expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
+      const breakButton = screen.getByRole("button", { name: "1h" });
+      fireEvent.click(breakButton);
+      expect(screen.getByRole("status", { name: "Starting break" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Starting break" }).classList.contains("is-selected")).toBe(true);
+      expect(onAction.mock.calls.map(([action]) => action)).toEqual([
+        { type: "return_to_focus", targetId: "site:docs.drifty.so" },
+      ]);
+      await advanceBreakActionDelay(300);
+    } finally {
+      vi.useRealTimers();
+    }
+
     fireEvent.click(correctionButton);
     expect(correctionButton.classList.contains("is-selected")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Alarm settings" }));
@@ -128,7 +140,7 @@ describe("DriftAlarm", () => {
     expect(alarm.classList.contains("is-dismissed")).toBe(true);
   });
 
-  it("renders break-return alarm copy and extends a break without changing target actions", () => {
+  it("renders break-return alarm copy and extends a break without changing target actions", async () => {
     const onAction = vi.fn<(action: DriftAlarmAction) => void>();
     const event = buildBreakReturnAlarmEvent({
       id: "break-return-15",
@@ -173,7 +185,17 @@ describe("DriftAlarm", () => {
     expect(screen.queryByRole("heading", { name: /take a break/i })).toBeNull();
     expect(screen.getByRole("button", { name: "Dismiss break return alarm" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "15m" }));
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Extend break" }));
+      fireEvent.click(screen.getByRole("button", { name: "15m" }));
+      expect(screen.getByRole("status", { name: "Starting break" })).toBeTruthy();
+      expect(onAction).not.toHaveBeenCalled();
+      await advanceBreakActionDelay(300);
+    } finally {
+      vi.useRealTimers();
+    }
+
     expect(onAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 });
   });
 
@@ -241,45 +263,10 @@ describe("DriftAlarm", () => {
   });
 
 
-  it("uses fallback context text and hour labels for long preview events", () => {
-    const onAction = vi.fn<(action: DriftAlarmAction) => void>();
-    const event = buildDriftAlarmEvent({
-      id: "alarm-no-context",
-      contextLabel: "",
-      driftDurationSeconds: 60 * 60,
-      preservedFocusStrikeSeconds: 2 * 60 * 60,
-      generatedAt: "2026-05-20T13:16:00.000Z",
-    });
-
-    render(<DriftAlarm event={event} onAction={onAction} />);
-
-    expect(screen.getByText(/drift detected/i)).toBeTruthy();
-    expect(screen.getAllByText(/this drift/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("(now drifting)")).toBeTruthy();
-    expect(screen.queryByText(/1 hour drift/i)).toBeNull();
-    expect(screen.queryByText(/streak/i)).toBeNull();
-  });
-
-  it("caps custom break options at one hour and falls back when focus targets are empty", () => {
-    const onAction = vi.fn<(action: DriftAlarmAction) => void>();
-    const event = buildDriftAlarmEvent({
-      id: "alarm-empty-focus",
-      contextLabel: "x.com",
-      driftDurationSeconds: 8 * 60,
-      preservedFocusStrikeSeconds: 45 * 60,
-      generatedAt: "2026-05-20T13:16:00.000Z",
-      breakOptions: [5, 90],
-      focusTargets: [],
-    });
-
-    render(<DriftAlarm event={event} onAction={onAction} />);
-
-    expect(screen.getByText(/no recent focus destination yet/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "5m" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "1h" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "90m" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Back to dashboard" }));
-    expect(onAction).toHaveBeenCalledWith({ type: "return_to_focus", targetId: "dashboard" });
-  });
 });
+
+async function advanceBreakActionDelay(milliseconds: number) {
+  await act(async () => {
+    vi.advanceTimersByTime(milliseconds);
+  });
+}

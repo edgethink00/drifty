@@ -153,7 +153,19 @@ describe("DriftAlarmWindowApp", () => {
     expect(screen.getByText(/Next focus/i)).toBeTruthy();
     expect(screen.getByRole("heading", { name: /extend break/i })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "15m" }));
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Extend break" }));
+      fireEvent.click(screen.getByRole("button", { name: "15m" }));
+      expect(screen.getByRole("status", { name: "Starting break" })).toBeTruthy();
+      expect(bridge.triggerNativeDriftAlarmAction).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
     expect(bridge.triggerNativeDriftAlarmAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 });
     await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "15m Break finished" })).toBeNull());
   });
