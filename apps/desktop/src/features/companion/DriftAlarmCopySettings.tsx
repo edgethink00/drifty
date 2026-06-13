@@ -43,16 +43,32 @@ export function DriftAlarmCopySettings({
 }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeSectionKey, setActiveSectionKey] = useState<DriftAlarmCopySectionKey>("drift");
+  const [draftCopy, setDraftCopy] = useState(value);
   const activeSection = selectCopySection(activeSectionKey);
   const previewEvent = useMemo(
-    () => activeSectionKey === "drift" || activeSectionKey === "breakReturn" ? buildPreviewEvent(activeSectionKey, value) : null,
-    [activeSectionKey, value],
+    () => activeSectionKey === "drift" || activeSectionKey === "breakReturn" ? buildPreviewEvent(activeSectionKey, draftCopy) : null,
+    [activeSectionKey, draftCopy],
   );
-  const notificationPreview = useMemo(() => buildDriftNotificationCopy(value, NOTIFICATION_PREVIEW), [value]);
-  const extremeNudgePreview = useMemo(() => buildExtremeNudgePreviewEvent(value), [value]);
+  const notificationPreview = useMemo(() => buildDriftNotificationCopy(draftCopy, NOTIFICATION_PREVIEW), [draftCopy]);
+  const extremeNudgePreview = useMemo(() => buildExtremeNudgePreviewEvent(draftCopy), [draftCopy]);
+
+  const openEditor = () => {
+    setDraftCopy(value);
+    setIsEditorOpen(true);
+  };
+
+  const cancelEditor = () => {
+    setDraftCopy(value);
+    setIsEditorOpen(false);
+  };
+
+  const saveEditor = () => {
+    onChange(draftCopy);
+    setIsEditorOpen(false);
+  };
 
   const updateField = (key: keyof DriftAlarmCopySettingsValue, nextValue: string) => {
-    onChange({ ...value, [key]: nextValue });
+    setDraftCopy((currentValue) => ({ ...currentValue, [key]: nextValue }));
   };
 
   return (
@@ -62,12 +78,12 @@ export function DriftAlarmCopySettings({
         <div className="desc">Customize only the representative titles used by production drift alarms.</div>
       </div>
       <div className="ctrl settings-row__actions">
-        <button type="button" className="settings-btn" onClick={() => setIsEditorOpen(true)}>
+        <button type="button" className="settings-btn" onClick={openEditor}>
           Edit alarm copy
         </button>
       </div>
       {isEditorOpen ? (
-        <div className="auth-modal__overlay drift-copy-modal__overlay" onClick={() => setIsEditorOpen(false)}>
+        <div className="auth-modal__overlay drift-copy-modal__overlay" onClick={cancelEditor}>
           <section
             className="auth-modal drift-copy-modal"
             role="dialog"
@@ -83,7 +99,7 @@ export function DriftAlarmCopySettings({
               <button
                 type="button"
                 className="settings-btn auth-modal__close"
-                onClick={() => setIsEditorOpen(false)}
+                onClick={cancelEditor}
                 aria-label="Close"
                 title="Close"
               >
@@ -117,7 +133,7 @@ export function DriftAlarmCopySettings({
                         </span>
                         <input
                           className="settings-input drift-copy-field__input"
-                          value={value[field.key]}
+                          value={draftCopy[field.key]}
                           onChange={(event) => updateField(field.key, event.target.value)}
                           aria-label={field.label}
                         />
@@ -126,9 +142,17 @@ export function DriftAlarmCopySettings({
                   </div>
                 </section>
                 <div className="drift-copy-editor__actions">
-                  <button type="button" className="settings-btn" onClick={() => onChange(buildDefaultDriftAlarmCopy())}>
+                  <button type="button" className="settings-btn" onClick={() => setDraftCopy(buildDefaultDriftAlarmCopy())}>
                     Reset alarm copy
                   </button>
+                  <div className="drift-copy-editor__commit-actions">
+                    <button type="button" className="settings-btn" onClick={cancelEditor}>
+                      Cancel
+                    </button>
+                    <button type="button" className="settings-btn settings-btn--primary" onClick={saveEditor}>
+                      Save
+                    </button>
+                  </div>
                 </div>
               </div>
               <aside className="drift-copy-preview" role="complementary" aria-label="Alarm copy preview">
