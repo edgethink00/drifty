@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from app.storage.activity_segment_serialization import json_list, serialize_activity_row
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
@@ -320,10 +321,27 @@ class TrackerDatabase:
                 conn.execute(
                     """
                     UPDATE activity_segments
-                    SET ended_at = ?, duration_seconds = duration_seconds + ?
+                    SET ended_at = ?,
+                        duration_seconds = duration_seconds + ?,
+                        bundle_id = ?,
+                        browser_name = ?,
+                        site_source = ?,
+                        source = ?,
+                        confidence = ?,
+                        raw_context_json = ?
                     WHERE id = ?
                     """,
-                    (snapshot.observed_at, sample_seconds, last["id"]),
+                    (
+                        snapshot.observed_at,
+                        sample_seconds,
+                        snapshot.bundle_id,
+                        snapshot.browser_name,
+                        snapshot.site_source,
+                        snapshot.source,
+                        getattr(snapshot, "capture_confidence", 1.0),
+                        json.dumps(asdict(snapshot)),
+                        last["id"],
+                    ),
                 )
                 return
 
@@ -1220,65 +1238,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
-        classification = None
-        if row.get("classification_category"):
-            classification = {
-                "category": row.get("classification_category"),
-                "productivity": row.get("classification_productivity"),
-                "source": row.get("classification_source") or "unknown",
-                "confidence": row.get("classification_confidence") or 0,
-                "reason": row.get("classification_reason"),
-                "model": row.get("classification_model"),
-                "promptVersion": row.get("classification_prompt_version"),
-                "taxonomyVersion": row.get("classification_taxonomy_version"),
-                "inputFingerprint": row.get("classification_input_fingerprint"),
-                "classifiedAt": row.get("classification_classified_at"),
-                "aiResult": bool(row.get("classification_ai_result")),
-                "stale": bool(row.get("classification_stale")),
-                "classificationRuleId": row.get("classification_rule_id"),
-                # Fresh LLM responses always record latency; fingerprint-cache
-                # reuse stores neither request_id nor latency_ms.
-                "reusedAiResult": bool(row.get("classification_ai_result"))
-                and (row.get("classification_source") or "") == "llm"
-                and row.get("classification_request_id") is None
-                and row.get("classification_latency_ms") is None,
-            }
-
-        serialized = {
-            "id": str(row.get("id", "")),
-            "startedAt": row["started_at"],
-            "endedAt": row["ended_at"],
-            "durationSeconds": row["duration_seconds"],
-            "appName": row["app_name"],
-            "bundleId": row.get("bundle_id"),
-            "windowTitle": row.get("window_title"),
-            "siteDomain": row.get("site_domain"),
-            "siteTitle": row.get("site_title"),
-            "siteUrl": row.get("site_url"),
-            "youtubeVideoId": row.get("youtube_video_id"),
-            "youtubePlaylistId": row.get("youtube_playlist_id"),
-            "youtubeIsShorts": bool(row.get("youtube_is_shorts")) if row.get("youtube_is_shorts") is not None else None,
-            "youtubeCategory": row.get("youtube_category"),
-            "youtubeChannelId": row.get("youtube_channel_id"),
-            "youtubeChannelName": row.get("youtube_channel_name"),
-            "youtubeTitle": row.get("youtube_title"),
-            "youtubeDescription": row.get("youtube_description"),
-            "youtubeKeywords": TrackerDatabase._json_list(row.get("youtube_keywords_json")),
-            "youtubeDurationSeconds": row.get("youtube_duration_seconds"),
-            "youtubeViewCount": row.get("youtube_view_count"),
-            "youtubeIsLive": bool(row.get("youtube_is_live")) if row.get("youtube_is_live") is not None else None,
-            "youtubeIsUnlisted": bool(row.get("youtube_is_unlisted")) if row.get("youtube_is_unlisted") is not None else None,
-            "youtubePublishDate": row.get("youtube_publish_date"),
-            "youtubeUploadDate": row.get("youtube_upload_date"),
-            "browserName": row.get("browser_name"),
-            "siteSource": row.get("site_source"),
-            "platform": row.get("platform", "macos"),
-            "source": row.get("source", "unknown"),
-            "confidence": row.get("confidence"),
-        }
-        if classification:
-            serialized["classification"] = classification
-        return serialized
+        return serialize_activity_row(row)
 
     @staticmethod
     def _local_day(value: str) -> str:
@@ -1305,13 +1265,4 @@ class TrackerDatabase:
 
     @staticmethod
     def _json_list(value: str | None) -> list[str] | None:
-        if not value:
-            return None
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(parsed, list):
-            return None
-        items = [item for item in parsed if isinstance(item, str)]
-        return items or None
+        return json_list(value)

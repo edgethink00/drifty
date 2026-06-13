@@ -79,6 +79,43 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["durationSeconds"], 10)
 
+    def test_record_snapshot_refreshes_browser_diagnostics_when_merging(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:00+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title=None,
+                source="nsworkspace",
+                browser_name="Google Chrome",
+                browser_automation_status="granted",
+            ),
+            5,
+            max_merge_gap_seconds=180,
+        )
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:05+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title=None,
+                source="nsworkspace",
+                browser_name="Google Chrome",
+                browser_automation_status="empty_result",
+                browser_automation_error="Google Chrome returned an empty browser automation result.",
+            ),
+            5,
+            max_merge_gap_seconds=180,
+        )
+
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["browserAutomationStatus"], "empty_result")
+        self.assertEqual(
+            events[0]["browserAutomationError"],
+            "Google Chrome returned an empty browser automation result.",
+        )
+
     def test_trim_latest_segment_shortens_duration(self) -> None:
         self.database.insert_segment(
             {
