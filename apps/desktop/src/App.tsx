@@ -153,6 +153,7 @@ import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELA
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
+import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import {
   resolveDriftAlarmTransientDefer,
   sourceKeyForDriftAlarmCandidate,
@@ -187,7 +188,7 @@ import { DateNavigator } from "./components/DateNavigator";
 import { EmptyState } from "./components/EmptyState";
 import { MetricTile } from "./components/MetricTile";
 import { Toggle } from "./components/Toggle";
-import { aiServerStatusLabelForCloud, driftyCloudSetupActionLabel, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
+import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
@@ -1927,6 +1928,29 @@ export default function App() {
       setBreakRecoveryAssessment(null);
     };
 
+    const confirmFreshDriftAlarmCandidate = async (): Promise<"confirmed" | "current-window-changed" | "current-snapshot-unavailable" | "system-transient-active"> => {
+      let freshSnapshot: CurrentActivitySnapshot | null = null;
+      try {
+        freshSnapshot = await trackerClient.getCurrentSnapshot();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        console.warn("Failed to refresh current activity before drift alarm", message);
+        return "current-snapshot-unavailable";
+      }
+
+      setCurrentSnapshot(freshSnapshot);
+      if (freshSnapshot?.systemTransientActivity) return "system-transient-active";
+
+      const freshCandidate = resolveFreshDriftAlarmCandidate({
+        candidate: latestDrift,
+        segments,
+        currentSnapshot: freshSnapshot,
+        classificationOptions: selectedDayClassificationOptions,
+        minimumDurationSeconds: driftAlertDelaySeconds,
+      });
+      return freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
+    };
+
     const deliverCurrentDriftAlarm = () => {
       const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
       if (pendingBreakReturnAlarm) {
@@ -2017,17 +2041,32 @@ export default function App() {
       segment,
       category,
       aiOptions: localAiClassificationOptions,
-    }).then((gateResult) => {
+    }).then(async (gateResult) => {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
-      pendingDriftAlarmGateRef.current = null;
 
       if (gateResult.kind === "suppress") {
+        pendingDriftAlarmGateRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
         publishDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: gateResult.reason,
           candidateDetail,
         }, checkedAt);
+        return;
+      }
+
+      const finalGateResult = await confirmFreshDriftAlarmCandidate();
+      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      pendingDriftAlarmGateRef.current = null;
+
+      if (finalGateResult === "system-transient-active") return;
+
+      if (finalGateResult !== "confirmed") {
+        publishDriftAlarmTrayStatus({
+          kind: "suppressed",
+          reason: finalGateResult,
+          candidateDetail,
+        }, new Date());
         return;
       }
 
@@ -3457,7 +3496,6 @@ export default function App() {
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
   const cloudStatusLabel = driftyCloudStatusLabel(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const aiServerStatusLabel = aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
-  const cloudSetupActionLabel = driftyCloudSetupActionLabel(effectiveBillingEntitlement, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
   const currentBillingPlan =
     effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing"
@@ -4283,7 +4321,6 @@ export default function App() {
                       billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                       billingEntitlementError={effectiveBillingEntitlementError}
                       billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
-                      cloudSetupActionLabel={cloudSetupActionLabel}
                       cloudStatusLabel={cloudStatusLabel}
                       currentBillingPlan={currentBillingPlan}
                       localAiSetup={localAiSetup}

@@ -79,7 +79,7 @@ export function IndividualPlanCards({
   const selectedInterval = billingInterval ?? internalBillingInterval;
   const individualPrice = INDIVIDUAL_PRICE_BY_INTERVAL[selectedInterval];
   const individualIsCurrent = currentPlan === "individual";
-  const canCheckoutIndividual = mode === "checkout" && !individualIsCurrent;
+  const canSelectIndividual = Boolean(onSelectPlan) && !individualIsCurrent;
 
   const handleIntervalChange = (interval: VisibleBillingInterval) => {
     setInternalBillingInterval(interval);
@@ -149,7 +149,7 @@ export function IndividualPlanCards({
           <PlanFeatureList items={FREE_PLAN_FEATURES} />
           <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
         </article>
-        {canCheckoutIndividual ? (
+        {canSelectIndividual ? (
           <button
             type="button"
             className="individual-plan-card individual-plan-card--featured"

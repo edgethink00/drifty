@@ -650,16 +650,11 @@ export function ProductivityPersonaCard({
     const point = pointFor(index, 1, radarRadius + 22);
     const x = point.x.toFixed(1);
     const y = point.y.toFixed(1);
-    const labelParts = axis.label.split(" ");
 
     return (
       <text className="persona-radar__label" x={x} y={y} textAnchor="middle" dominantBaseline="middle" key={axis.key}>
-        {labelParts.map((part, partIndex) => (
-          <tspan x={x} dy={partIndex === 0 ? "0" : "1.12em"} key={`${axis.key}-${part}`}>
-            {part}
-          </tspan>
-        ))}
-        <tspan className="persona-radar__label-value" x={x} dy="1.38em">
+        <tspan x={x}>{axis.label}</tspan>
+        <tspan className="persona-radar__label-value" x={x} dy="1.24em">
           {formatSharePercent(axis.value * 100)}
         </tspan>
       </text>

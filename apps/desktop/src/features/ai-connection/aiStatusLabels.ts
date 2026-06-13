@@ -58,28 +58,6 @@ export function aiServerStatusLabelForCloud(
   return "Available";
 }
 
-export function driftyCloudActionLabel(
-  entitlement: BillingEntitlement | null,
-  isConfigured: boolean,
-  hasAccount: boolean,
-): string | null {
-  if (!isConfigured || !hasAccount || entitlement?.status !== "locked") return null;
-  if (entitlement.lockedReason === "payment_required") return "Resolve billing";
-  if (entitlement.lockedReason === "billing_missing") return "Set up billing";
-  return "Subscribe";
-}
-
-export function driftyCloudSetupActionLabel(
-  entitlement: BillingEntitlement | null,
-  isConfigured: boolean,
-  hasAccount: boolean,
-): string {
-  if (!isConfigured) return "Configure Supabase";
-  if (!hasAccount) return "Continue on drifty.so";
-  if (entitlement?.status === "locked") return driftyCloudActionLabel(entitlement, isConfigured, hasAccount) ?? "Subscribe";
-  return "Refresh Drifty Cloud";
-}
-
 export function aiConnectionStatusLabel(
   localAiSetup: LocalAiSetupState,
   entitlement: BillingEntitlement | null,

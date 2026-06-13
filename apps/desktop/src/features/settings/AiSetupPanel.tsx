@@ -30,7 +30,6 @@ type AiSetupPanelProps = {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
   readonly billingPlansDisabled: boolean;
-  readonly cloudSetupActionLabel: string;
   readonly cloudStatusLabel: string;
   readonly currentBillingPlan: BillingPlanId | null;
   readonly localAiSetup: LocalAiSetupState;
@@ -51,7 +50,6 @@ export function AiSetupPanel({
   billingCheckoutLoadingInterval,
   billingEntitlementError,
   billingPlansDisabled,
-  cloudSetupActionLabel,
   cloudStatusLabel,
   currentBillingPlan,
   localAiSetup,
@@ -187,7 +185,6 @@ export function AiSetupPanel({
               mode={shouldShowCloudCheckoutPlans ? "checkout" : "display"}
               onSelectPlan={(billingInterval) => void onStartCloudSetup(billingInterval)}
             />
-            {shouldShowCloudCheckoutPlans ? null : <button type="button" className="settings-btn settings-btn--primary settings-btn--compact" onClick={() => void onStartCloudSetup()}>{cloudSetupActionLabel}</button>}
           </div>
         </div>
       </div>
