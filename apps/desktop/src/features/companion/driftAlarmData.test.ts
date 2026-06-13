@@ -176,6 +176,7 @@ describe("buildDriftAlarmCandidates", () => {
 describe("normalizeDriftAlertDelaySeconds", () => {
   it("defaults to 1m when no saved timing exists", () => {
     expect(normalizeDriftAlertDelaySeconds(null)).toBe(60);
+    expect(normalizeDriftAlertDelaySeconds("")).toBe(60);
   });
 
   it("keeps explicit supported timings", () => {
