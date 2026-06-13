@@ -12245,27 +12245,29 @@ button.flow-cell:focus {
 
 .individual-plan-intervals {
   align-items: center;
-  background: color-mix(in srgb, var(--bg-2) 92%, var(--surface));
-  border: 0;
-  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--accent-strong) 6%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface) 84%, transparent);
   display: inline-grid;
-  gap: 0;
-  grid-template-columns: repeat(2, minmax(4.9rem, 1fr));
+  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   justify-self: center;
-  margin: 1rem 0 0.35rem;
-  padding: 5px;
+  margin: 1.75rem 0 1.25rem;
+  max-width: max-content;
+  padding: 4px;
 }
 
 .individual-plan-interval {
   appearance: none;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 8px;
   color: var(--text-soft);
   cursor: pointer;
   display: grid;
-  min-height: 2.32rem;
-  min-width: 4.9rem;
+  min-height: 2.125rem;
+  min-width: 5.375rem;
   padding: 0 1rem;
   place-items: center;
   position: relative;
@@ -12273,10 +12275,11 @@ button.flow-cell:focus {
 }
 
 .individual-plan-interval span {
-  color: var(--text);
+  color: currentColor;
   font-size: 0.86rem;
   font-weight: 720;
-  line-height: 1.1;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .individual-plan-interval small {
@@ -12286,25 +12289,34 @@ button.flow-cell:focus {
 }
 
 .individual-plan-interval.is-active {
-  background: var(--surface);
-  border-color: color-mix(in srgb, var(--text) 9%, var(--line));
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--text) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface) 90%, transparent);
+  background: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 82%, transparent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent-strong) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface) 16%, transparent);
+  color: var(--surface);
+}
+
+.individual-plan-interval:not(.is-active):hover,
+.individual-plan-interval:not(.is-active):focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 46%, transparent);
   color: var(--text);
 }
 
 .individual-plan-interval__badge {
-  background: var(--text);
-  border: 0;
-  border-radius: 8px;
-  color: #ff6a24;
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent-strong) 10%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-strong);
+  display: inline-flex;
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: 0.71875rem;
   font-weight: 760;
   left: 50%;
   line-height: 1;
-  padding: 5px 9px;
+  min-height: 1.375rem;
+  padding: 0 0.625rem;
   position: absolute;
-  top: -1.48rem;
+  top: -1.75rem;
   transform: translateX(-50%);
   white-space: nowrap;
 }
@@ -12312,7 +12324,7 @@ button.flow-cell:focus {
 .individual-plan-interval__badge::after {
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top: 7px solid var(--text);
+  border-top: 7px solid var(--accent-soft);
   bottom: -6px;
   content: "";
   height: 0;
