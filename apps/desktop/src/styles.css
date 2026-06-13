@@ -6338,9 +6338,10 @@ input, textarea { color: inherit; }
 
 /* Page wrapper (each page in App.tsx uses `<div class="page">`) */
 .page {
+  box-sizing: border-box;
   padding: 12px var(--space-4) 28px;
-  max-width: 1160px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   width: 100%;
 }
 
@@ -6376,7 +6377,7 @@ input, textarea { color: inherit; }
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  max-width: 1040px;
+  max-width: none;
 }
 
 .content--history {
@@ -10961,7 +10962,7 @@ button.flow-cell:focus {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-width: 1080px;
+  max-width: none;
   min-height: 0;
 }
 
@@ -11007,7 +11008,7 @@ button.flow-cell:focus {
 }
 
 .content--trends .page {
-  max-width: 1220px;
+  max-width: none;
 }
 
 .content--trends .insight-chart-panel {
@@ -11236,7 +11237,7 @@ button.flow-cell:focus {
 }
 
 .content--leaderboard .page {
-  max-width: 1120px;
+  max-width: none;
 }
 
 .content--leaderboard .leaderboard-page-layout > .editorial-panel {

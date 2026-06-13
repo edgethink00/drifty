@@ -1,7 +1,41 @@
+import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelineQuery, TrackerStatus } from "@drifty/domain";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
-import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
+type PreviewSegmentSpec = readonly [
+  id: string,
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number,
+  appName: string,
+  category: ActivityCategory,
+  productivity: ProductivityLabel,
+  overrides?: Partial<PreviewActivitySegment>,
+];
+
+const PREVIEW_APP_BUNDLE_IDS: Readonly<Record<string, string>> = {
+  Arc: "company.thebrowser.Browser",
+  Figma: "com.figma.Desktop",
+  Linear: "com.linear",
+  Mail: "com.apple.mail",
+  Messages: "com.apple.MobileSMS",
+  Notion: "notion.id",
+  Slack: "com.tinyspeck.slackmacgap",
+  Spotify: "com.spotify.client",
+  "Visual Studio Code": "com.microsoft.VSCode",
+};
+
+const PREVIEW_APP_ICON_SOURCES: Readonly<Record<string, string>> = {
+  "com.apple.mail": "./assets/mail-CrE6QGcD.png",
+  "com.apple.MobileSMS": "./assets/messages-aYNxSzkK.png",
+  "com.figma.Desktop": "https://www.google.com/s2/favicons?domain=figma.com&sz=64",
+  "com.linear": "./assets/linear-CuZX2ooj.png",
+  "com.microsoft.VSCode": "./assets/visual-studio-code-DW738tZv.png",
+  "com.spotify.client": "./assets/spotify-DuyINEyo.ico",
+  "com.tinyspeck.slackmacgap": "./assets/slack-BKg3hZEm.png",
+  "notion.id": "./assets/notion-CceIbM-j.png",
+};
 
 function isoDay(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -27,6 +61,10 @@ function secondsBetween(startedAt: string, endedAt: string) {
   return Math.max(0, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000));
 }
 
+function previewBundleId(appName: string) {
+  return PREVIEW_APP_BUNDLE_IDS[appName] ?? `com.fixture.${appName.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
+}
+
 function makeSegment(
   id: string,
   day: string,
@@ -47,7 +85,7 @@ function makeSegment(
     endedAt,
     durationSeconds: secondsBetween(startedAt, endedAt),
     appName,
-    bundleId: overrides.bundleId ?? `com.fixture.${appName.toLowerCase().replace(/[^a-z0-9]+/g, "")}`,
+    bundleId: overrides.bundleId ?? previewBundleId(appName),
     windowTitle: overrides.windowTitle ?? null,
     browserName: overrides.browserName ?? null,
     siteDomain: overrides.siteDomain ?? null,
@@ -87,24 +125,63 @@ function todaySegments(day: string): PreviewActivitySegment[] {
 }
 
 function weekSegments(today: string): PreviewActivitySegment[] {
-  const segments: PreviewActivitySegment[] = [];
-  const intensities = [0.7, 0.85, 0.6, 0.95, 0.5, 0.3];
-  for (let offset = 1; offset <= 6; offset += 1) {
+  const plans: ReadonlyArray<readonly [offset: number, segments: readonly PreviewSegmentSpec[]]> = [
+    [1, [
+      ["thu-mail", 8, 48, 9, 3, "Mail", "communication", "neutral", { windowTitle: "Investor updates" }],
+      ["thu-code-a", 9, 8, 10, 22, "Visual Studio Code", "workspace", "focus", { windowTitle: "billingService.ts" }],
+      ["thu-github", 10, 25, 10, 54, "Arc", "workspace", "focus", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Review billing entitlement PR" }],
+      ["thu-slack", 11, 6, 11, 22, "Slack", "communication", "neutral", { windowTitle: "#launch-room" }],
+      ["thu-figma", 13, 2, 14, 18, "Figma", "workspace", "focus", { windowTitle: "Pricing empty states" }],
+      ["thu-linear", 14, 26, 14, 49, "Linear", "workspace", "focus", { windowTitle: "DTM-231 · AI setup copy" }],
+      ["thu-code-b", 15, 4, 16, 36, "Visual Studio Code", "workspace", "focus", { windowTitle: "AiSetupPanel.tsx" }],
+      ["thu-youtube", 17, 28, 18, 2, "Arc", "entertainment", "drift", { browserName: "Arc", siteDomain: "youtube.com", siteTitle: "WWDC recaps" }],
+    ]],
+    [2, [
+      ["wed-notion", 8, 55, 9, 24, "Notion", "workspace", "focus", { windowTitle: "Release checklist" }],
+      ["wed-code-a", 9, 32, 10, 46, "Visual Studio Code", "workspace", "focus", { windowTitle: "WeekDashboard.tsx" }],
+      ["wed-docs", 10, 52, 11, 18, "Arc", "learning", "focus", { browserName: "Arc", siteDomain: "docs.rs", siteTitle: "tauri-plugin-store" }],
+      ["wed-spotify", 12, 16, 12, 48, "Spotify", "music", "neutral", { windowTitle: "Deep Focus" }],
+      ["wed-code-b", 13, 5, 14, 12, "Visual Studio Code", "workspace", "focus", { windowTitle: "previewData.ts" }],
+      ["wed-slack", 14, 24, 14, 44, "Slack", "communication", "neutral", { windowTitle: "Design QA thread" }],
+      ["wed-figma", 15, 9, 16, 2, "Figma", "workspace", "focus", { windowTitle: "Homepage crop options" }],
+      ["wed-x", 17, 6, 17, 32, "Arc", "social_media", "drift", { browserName: "Arc", siteDomain: "x.com", siteTitle: "Launch replies" }],
+    ]],
+    [3, [
+      ["tue-mail", 8, 35, 8, 58, "Mail", "communication", "neutral", { windowTitle: "Feedback digest" }],
+      ["tue-figma", 9, 14, 10, 18, "Figma", "workspace", "focus", { windowTitle: "Cloud connected state" }],
+      ["tue-code-a", 10, 26, 11, 37, "Visual Studio Code", "workspace", "focus", { windowTitle: "DashboardAiUnavailableNotice.tsx" }],
+      ["tue-github", 11, 40, 12, 7, "Arc", "workspace", "focus", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Actions run #842" }],
+      ["tue-messages", 13, 2, 13, 16, "Messages", "communication", "neutral", { windowTitle: "Min" }],
+      ["tue-linear", 13, 30, 14, 16, "Linear", "workspace", "focus", { windowTitle: "Triage visual regressions" }],
+      ["tue-code-b", 14, 28, 15, 42, "Visual Studio Code", "workspace", "focus", { windowTitle: "flowHoverGroups.ts" }],
+      ["tue-reddit", 17, 35, 18, 4, "Arc", "social_media", "drift", { browserName: "Arc", siteDomain: "reddit.com", siteTitle: "r/tauri" }],
+    ]],
+    [4, [
+      ["mon-notion", 8, 50, 9, 20, "Notion", "workspace", "focus", { windowTitle: "Weekly plan" }],
+      ["mon-code-a", 9, 28, 10, 52, "Visual Studio Code", "workspace", "focus", { windowTitle: "classificationViewData.ts" }],
+      ["mon-slack", 11, 10, 11, 31, "Slack", "communication", "neutral", { windowTitle: "#product" }],
+      ["mon-stack", 11, 36, 12, 3, "Arc", "learning", "focus", { browserName: "Arc", siteDomain: "stackoverflow.com", siteTitle: "CSS grid sticky rail" }],
+      ["mon-code-b", 13, 12, 14, 38, "Visual Studio Code", "workspace", "focus", { windowTitle: "AppUsagePanel.tsx" }],
+      ["mon-figma", 15, 2, 15, 46, "Figma", "workspace", "focus", { windowTitle: "Week calendar density" }],
+      ["mon-youtube", 17, 41, 18, 16, "Arc", "entertainment", "drift", { browserName: "Arc", siteDomain: "youtube.com", siteTitle: "Desk setup review" }],
+    ]],
+    [5, [
+      ["sun-docs", 10, 25, 11, 18, "Arc", "learning", "focus", { browserName: "Arc", siteDomain: "developer.apple.com", siteTitle: "App icon guidelines" }],
+      ["sun-spotify", 12, 40, 13, 18, "Spotify", "music", "neutral", { windowTitle: "Sunday reset" }],
+      ["sun-youtube", 14, 22, 15, 8, "Arc", "entertainment", "drift", { browserName: "Arc", siteDomain: "youtube.com", siteTitle: "Camera reviews" }],
+    ]],
+    [6, [
+      ["sat-mail", 9, 45, 10, 6, "Mail", "communication", "neutral", { windowTitle: "Newsletter skim" }],
+      ["sat-linear", 10, 22, 11, 4, "Linear", "workspace", "focus", { windowTitle: "Backlog pruning" }],
+      ["sat-x", 13, 20, 13, 58, "Arc", "social_media", "drift", { browserName: "Arc", siteDomain: "x.com", siteTitle: "Weekend scroll" }],
+    ]],
+  ];
+  return plans.flatMap(([offset, specs]) => {
     const day = shiftDay(today, -offset);
-    const intensity = intensities[offset - 1] ?? 0.6;
-    if (intensity > 0.4) {
-      segments.push(makeSegment(`preview-w${offset}a`, day, 9, 5, 11, 30, "Visual Studio Code", "workspace", "focus"));
-      segments.push(makeSegment(`preview-w${offset}b`, day, 11, 35, 12, 12, "Arc", "workspace", "focus", { siteDomain: "github.com", browserName: "Arc" }));
-      segments.push(makeSegment(`preview-w${offset}c`, day, 13, 15, 14, 40, "Visual Studio Code", "workspace", "focus"));
-      segments.push(makeSegment(`preview-w${offset}d`, day, 14, 45, 15, 10, "Slack", "communication", "neutral"));
-      segments.push(makeSegment(`preview-w${offset}e`, day, 15, 15, 16, 50 + Math.round(intensity * 60), "Figma", "workspace", "focus"));
-    }
-    if (intensity > 0.5) {
-      segments.push(makeSegment(`preview-w${offset}f`, day, 17, 30, 18, Math.round(intensity * 60), "Arc", "entertainment", "drift", { siteDomain: "youtube.com", browserName: "Arc" }));
-    }
-    segments.push(makeSegment(`preview-w${offset}g`, day, 8, 30, 8, 55, "Mail", "communication", "neutral"));
-  }
-  return segments;
+    return specs.map(([id, startHour, startMinute, endHour, endMinute, appName, category, productivity, overrides]) =>
+      makeSegment(`preview-w${offset}-${id}`, day, startHour, startMinute, endHour, endMinute, appName, category, productivity, overrides),
+    );
+  });
 }
 
 function historySegments(today: string): PreviewActivitySegment[] {
@@ -170,8 +247,9 @@ export function previewTopSites(query: TimelineQuery & { limit?: number }): Site
 export function previewAppIcons(apps: AppIdentity[]): AppIconMap {
   return apps.reduce<AppIconMap>((acc, app) => {
     const key = app.bundleId || app.appName;
-    acc[key] = null;
-    acc[app.appName] = null;
+    const iconSrc = PREVIEW_APP_ICON_SOURCES[key] ?? PREVIEW_APP_ICON_SOURCES[previewBundleId(app.appName)] ?? null;
+    acc[key] = iconSrc;
+    acc[app.appName] = iconSrc;
     return acc;
   }, {});
 }
