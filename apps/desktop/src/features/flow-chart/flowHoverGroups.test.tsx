@@ -26,6 +26,10 @@ function makeFlowBlock(overrides: Partial<FlowBlock> = {}): FlowBlock {
   };
 }
 
+function fireNativePointerMove(target: Element, clientX: number, clientY: number): void {
+  fireEvent(target, new MouseEvent("pointermove", { bubbles: true, clientX, clientY }));
+}
+
 describe("flow hover groups", () => {
   it("keeps separated or different-identity cells in separate hover groups", () => {
     const blocks = [
@@ -53,7 +57,7 @@ describe("flow hover groups", () => {
     const groupedCells = screen.getAllByRole("button", { name: /time block: 01:00–01:30/i });
     expect(groupedCells).toHaveLength(10);
 
-    fireEvent.mouseEnter(groupedCells[4], { clientX: 120, clientY: 80 });
+    fireNativePointerMove(groupedCells[4], 120, 80);
 
     const hoverCard = document.querySelector(".flow-hover-card");
     expect(hoverCard?.textContent).toContain("01:00–01:30");
