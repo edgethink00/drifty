@@ -4172,7 +4172,7 @@ export default function App() {
         {/* Settings */}
         {activeTab === "settings" ? (
           <div className="page">
-            <div className="pg-head"><div><div className="eyebrow">Account</div><h1>Settings</h1></div></div>
+            <h1 className="sr-only">Settings</h1>
             <div className="settings-panel-stack">
                 {settingsSection === "general" && (
                   <div className="settings-section settings-section--general">

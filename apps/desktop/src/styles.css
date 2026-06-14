@@ -4952,7 +4952,7 @@ input, textarea { color: inherit; }
   z-index: var(--z-settings-popover);
   display: grid;
   width: 100%;
-  max-height: 14rem;
+  max-height: 11.2rem;
   padding: var(--space-1);
   overflow-y: auto;
   border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
@@ -4965,7 +4965,7 @@ input, textarea { color: inherit; }
   justify-content: space-between;
   gap: var(--space-2);
   width: 100%;
-  min-height: 1.95rem;
+  min-height: 1.56rem;
   padding: 0 var(--space-2);
   border: 1px solid transparent;
   border-radius: calc(var(--radius-sm) - 2px);
@@ -11329,7 +11329,9 @@ button.flow-cell:focus {
 }
 
 .content--settings .page {
-  max-width: 1040px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px clamp(28px, 4vw, 56px) 40px;
 }
 
 .content--settings .settings-layout {
@@ -11367,33 +11369,43 @@ button.flow-cell:focus {
 }
 
 .content--settings {
-  --settings-control-height: 2.25rem;
+  --settings-control-height: 1.8rem;
   --settings-control-radius: var(--radius-sm);
   --settings-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
   --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
   --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --settings-row-card-bg: color-mix(in srgb, var(--text) 3%, var(--surface));
   --settings-segment-bg: color-mix(in srgb, var(--text) 5%, var(--surface));
   --settings-segment-active-bg: color-mix(in srgb, var(--surface) 94%, var(--canvas));
   --settings-segment-active-border: color-mix(in srgb, var(--accent) 18%, var(--line-strong));
   --settings-swatch-size: 1.25rem;
 }
 
-.content--settings .settings-block {
-  padding: 1.05rem 1.2rem;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-strong) 42%, transparent)),
-    var(--surface);
-  box-shadow: 0 12px 30px color-mix(in srgb, var(--text) 4%, transparent);
+.content--settings .settings-block:has(> h3) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.content--settings .settings-block h3 {
-  margin-bottom: var(--space-3);
-  padding-bottom: 0;
+.content--settings .settings-block > h3 {
+  margin: 0 0 0.62rem;
+  padding: 0 0 0 0.5rem;
   border-bottom: 0;
-  font-size: 1rem;
+  color: var(--text-soft);
+  font-size: 0.94rem;
+  font-weight: 620;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.content--settings .settings-section--general .settings-block:first-child > h3 {
+  margin-bottom: 0.78rem;
+  color: var(--text);
+  font-size: 1.18rem;
+  font-weight: 700;
 }
 
 .content--settings .settings-row {
@@ -11401,9 +11413,34 @@ button.flow-cell:focus {
   padding: 0.8rem 0;
 }
 
+.content--settings .settings-block:has(> h3) > .settings-row {
+  padding: 0.72rem 1rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: var(--settings-row-card-bg);
+}
+
+.content--settings .settings-block:has(> h3) > h3 + .settings-row {
+  border-top: 1px solid var(--line);
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+}
+
+.content--settings .settings-block:has(> h3) > .settings-row:last-child {
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+
 .content--settings .settings-row--fallback {
   align-items: stretch;
   gap: var(--space-3);
+}
+
+.content--settings .settings-row > label,
+.content--settings .settings-row > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .content--settings .settings-row--fallback > div:first-child {
@@ -11434,7 +11471,7 @@ button.flow-cell:focus {
 }
 
 .content--settings .settings-row .desc {
-  max-width: 62ch;
+  max-width: min(120ch, 100%);
   font-size: var(--type-setting-desc-size);
   line-height: 1.45;
 }
@@ -11543,8 +11580,8 @@ button.flow-cell:focus {
 }
 
 .content--settings .settings-section--general .settings-mode-switch {
-  min-height: 2.12rem;
-  padding: 0.18rem;
+  min-height: 1.8rem;
+  padding: 0.14rem;
   gap: 0.12rem;
   border: 1px solid transparent;
   border-radius: calc(var(--settings-control-radius) + 2px);
@@ -11554,7 +11591,7 @@ button.flow-cell:focus {
 
 .content--settings .settings-section--general .settings-mode-option {
   align-items: center;
-  min-height: 1.62rem;
+  min-height: 1.36rem;
   justify-content: center;
   padding: 0 var(--space-4);
   border: 1px solid transparent;
@@ -11582,8 +11619,8 @@ button.flow-cell:focus {
 }
 
 .content--settings .settings-mode-switch--compact {
-  min-height: 2.12rem;
-  padding: 0.18rem;
+  min-height: 1.8rem;
+  padding: 0.14rem;
   gap: 0.12rem;
   border: 1px solid transparent;
   border-radius: calc(var(--settings-control-radius) + 2px);
@@ -11594,7 +11631,7 @@ button.flow-cell:focus {
 .content--settings .settings-mode-switch--compact .settings-mode-option {
   align-items: center;
   justify-content: center;
-  min-height: 1.62rem;
+  min-height: 1.36rem;
   padding: 0 var(--space-4);
   border: 1px solid transparent;
   border-radius: calc(var(--settings-control-radius) - 2px);
