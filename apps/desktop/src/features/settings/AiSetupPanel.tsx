@@ -30,12 +30,15 @@ type AiSetupPanelProps = {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
   readonly billingPlansDisabled: boolean;
+  readonly cloudStatusRefreshing: boolean;
   readonly cloudStatusLabel: string;
   readonly currentBillingPlan: BillingPlanId | null;
+  readonly isSupabaseConfigured: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
+  readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
 };
 
@@ -50,12 +53,15 @@ export function AiSetupPanel({
   billingCheckoutLoadingInterval,
   billingEntitlementError,
   billingPlansDisabled,
+  cloudStatusRefreshing,
   cloudStatusLabel,
   currentBillingPlan,
+  isSupabaseConfigured,
   localAiSetup,
   shouldShowCloudCheckoutPlans,
   onDialogOpenChange,
   onLocalAiSetupChange,
+  onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
   const [activeSection, setActiveSection] = useState<AiSetupSection>("cloud");
@@ -183,8 +189,18 @@ export function AiSetupPanel({
               disabled={billingPlansDisabled}
               loadingInterval={billingCheckoutLoadingInterval}
               mode={shouldShowCloudCheckoutPlans ? "checkout" : "display"}
-              onSelectPlan={(billingInterval) => void onStartCloudSetup(billingInterval)}
+              onSelectPlan={isSupabaseConfigured ? (billingInterval) => void onStartCloudSetup(billingInterval) : undefined}
             />
+            {!isSupabaseConfigured ? (
+              <button type="button" className="settings-btn settings-btn--compact" onClick={() => void onStartCloudSetup()} disabled={billingPlansDisabled}>
+                Configure Supabase
+              </button>
+            ) : null}
+            {isSupabaseConfigured && !shouldShowCloudCheckoutPlans ? (
+              <button type="button" className="settings-btn settings-btn--compact" onClick={() => void onRefreshCloudStatus()} disabled={billingPlansDisabled || cloudStatusRefreshing}>
+                {cloudStatusRefreshing ? "Checking..." : "Refresh Drifty Cloud"}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
