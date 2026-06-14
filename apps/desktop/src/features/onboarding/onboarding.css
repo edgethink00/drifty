@@ -77,6 +77,38 @@
   -webkit-font-smoothing: antialiased;
 }
 
+:root[data-theme="dark"] .onboarding-screen {
+  --onb-canvas: oklch(0.145 0.01 120);
+  --onb-bg-2: oklch(0.18 0.012 120);
+  --onb-surface: oklch(0.205 0.012 120);
+  --onb-surface-strong: oklch(0.25 0.014 120);
+  --onb-line: oklch(0.86 0.014 100 / 0.08);
+  --onb-line-strong: oklch(0.86 0.014 100 / 0.17);
+  --onb-text: oklch(0.93 0.012 100);
+  --onb-text-muted: oklch(0.78 0.014 100);
+  --onb-text-soft: oklch(0.62 0.012 100);
+  --onb-accent: oklch(0.73 0.086 136);
+  --onb-accent-rgb: 170, 203, 105;
+  --onb-accent-mid: oklch(0.65 0.072 136);
+  --onb-accent-soft: oklch(0.265 0.04 136);
+  --onb-accent-strong: oklch(0.84 0.085 136);
+  --onb-primary-bg: oklch(0.72 0.086 136);
+  --onb-primary-bg-hover: oklch(0.78 0.09 136);
+  --onb-action-bg: color-mix(in oklch, var(--onb-surface) 72%, var(--onb-accent-soft));
+  --onb-action-bg-hover: color-mix(in oklch, var(--onb-surface-strong) 68%, var(--onb-accent-soft));
+  --onb-action-border: oklch(0.78 0.08 136 / 0.28);
+  --onb-warn: oklch(0.68 0.13 32);
+  --onb-warn-soft: oklch(0.235 0.04 32);
+  --onb-blue: oklch(0.7 0.055 245);
+  --onb-blue-soft: oklch(0.235 0.028 245);
+  --onb-shadow-soft: 0 1px 2px oklch(0 0 0 / 0.16);
+  --onb-shadow-card: inset 0 1px 0 oklch(1 0 0 / 0.045);
+
+  background:
+    linear-gradient(180deg, oklch(0.2 0.012 120) 0%, oklch(0.165 0.01 120) 48%, var(--onb-canvas) 100%),
+    var(--onb-canvas);
+}
+
 .onboarding-bg {
   position: fixed;
   inset: 0;
@@ -164,6 +196,21 @@
   position: relative;
   overflow: hidden;
   border-radius: 999px;
+}
+
+:root[data-theme="dark"] .onboarding-topbar {
+  background: color-mix(in oklch, var(--onb-bg-2) 84%, transparent);
+  border-bottom-color: var(--onb-line);
+}
+
+:root[data-theme="dark"] .onboarding-logo--image {
+  filter: invert(1) brightness(1.65) contrast(0.86);
+  opacity: 0.9;
+}
+
+:root[data-theme="dark"] .onboarding-progress-bar--full,
+:root[data-theme="dark"] .onboarding-progress-bar {
+  background: oklch(0.86 0.014 100 / 0.08);
 }
 
 .onboarding-progress-bar__fill {
@@ -416,6 +463,15 @@
   background: #fff;
 }
 
+:root[data-theme="dark"] .onboarding-card .onb-field input {
+  box-shadow: var(--onb-shadow-card);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-field input:hover {
+  border-color: oklch(0.86 0.014 100 / 0.24);
+  background: var(--onb-surface-strong);
+}
+
 .onboarding-card .onb-field input:focus,
 .onboarding-card .onb-field input:focus-visible {
   border-color: var(--onb-accent);
@@ -425,6 +481,11 @@
 .onboarding-card .onb-field input.onb-field__input--invalid {
   border-color: rgba(196, 85, 77, 0.42);
   background: #fffafa;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-field input.onb-field__input--invalid {
+  border-color: color-mix(in oklch, var(--onb-warn) 48%, var(--onb-line-strong));
+  background: color-mix(in oklch, var(--onb-warn-soft) 72%, var(--onb-surface));
 }
 
 .onboarding-card .onb-field input.onb-field__input--invalid:focus {
@@ -467,9 +528,18 @@
   min-height: var(--onb-control-height);
 }
 
+:root[data-theme="dark"] .onboarding-card .onb-dropdown__trigger {
+  box-shadow: var(--onb-shadow-card);
+}
+
 .onboarding-card .onb-dropdown__trigger:hover {
   border-color: rgba(28, 28, 25, 0.22);
   background: #fff;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-dropdown__trigger:hover {
+  border-color: oklch(0.86 0.014 100 / 0.24);
+  background: var(--onb-surface-strong);
 }
 
 .onboarding-card .onb-dropdown__trigger--open,
@@ -547,6 +617,10 @@
   margin-top: var(--onb-space-2);
 }
 
+:root[data-theme="dark"] .onboarding-card .onb-dropdown__other-input {
+  box-shadow: var(--onb-shadow-card);
+}
+
 .onboarding-card .onb-dropdown__other-input:focus {
   border-color: var(--onb-accent);
   box-shadow: 0 0 0 3px rgba(var(--onb-accent-rgb), 0.12);
@@ -614,6 +688,10 @@
 
 .onboarding-screen .onb-dropdown__option--selected:hover {
   background: var(--onb-accent-soft);
+}
+
+:root[data-theme="dark"] .onboarding-screen .onb-dropdown__menu {
+  box-shadow: 0 18px 38px oklch(0 0 0 / 0.34);
 }
 
 .onboarding-screen .onb-dropdown__option svg {
@@ -809,6 +887,22 @@
   cursor: not-allowed;
 }
 
+:root[data-theme="dark"] .onboarding-card .onb-button--primary {
+  color: var(--onb-canvas);
+  border-color: var(--onb-primary-bg);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--primary:hover:not(:disabled) {
+  color: var(--onb-canvas);
+  border-color: var(--onb-primary-bg-hover);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--primary:disabled {
+  background: color-mix(in oklch, var(--onb-surface-strong) 88%, var(--onb-bg-2));
+  color: var(--onb-text-soft);
+  border-color: var(--onb-line);
+}
+
 .onboarding-card .onb-button--ghost {
   background: var(--onb-surface);
   border: 1px solid var(--onb-line-strong);
@@ -844,6 +938,18 @@
   color: var(--onb-text);
   border-color: rgba(55, 53, 47, 0.28);
   box-shadow: none;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--google {
+  background: var(--onb-surface);
+  border-color: var(--onb-line-strong);
+  color: var(--onb-text);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--google:hover:not(:disabled) {
+  background: var(--onb-surface-strong);
+  border-color: oklch(0.86 0.014 100 / 0.24);
+  color: var(--onb-text);
 }
 
 .onboarding-card .onb-button--google:active:not(:disabled) {
@@ -945,6 +1051,15 @@
 
 .onboarding-card .onb-actions .onb-button--primary:focus-visible {
   box-shadow: 0 0 0 3px rgba(var(--onb-accent-rgb), 0.14);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-actions .onb-button--primary {
+  color: var(--onb-canvas);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-actions .onb-button--primary:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-actions .onb-button--primary:active:not(:disabled) {
+  color: var(--onb-canvas);
 }
 
 .onboarding-card .onb-actions__back {
@@ -1338,6 +1453,20 @@
   background: transparent;
 }
 
+:root[data-theme="dark"] .onboarding-card .onb-setup-choice__card {
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.035);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-setup-choice__card:hover {
+  border-color: oklch(0.86 0.014 100 / 0.22);
+  background: color-mix(in oklch, var(--onb-surface-strong) 78%, var(--onb-bg-2));
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-setup-choice__card--selected {
+  border-color: color-mix(in oklch, var(--onb-accent) 72%, var(--onb-line-strong));
+  background: color-mix(in oklch, var(--onb-surface-strong) 72%, var(--onb-accent-soft));
+}
+
 .onboarding-card .onb-setup-choice__hint {
   margin: 12px 0 0;
   font-size: 12px;
@@ -1382,6 +1511,25 @@
   border-color: rgba(23, 23, 21, 0.46);
   color: var(--onb-text);
   box-shadow: none;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--google,
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--primary,
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--ghost {
+  background: var(--onb-surface);
+  border-color: var(--onb-line-strong);
+  color: var(--onb-text);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--google:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--primary:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--ghost:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--google:active:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--primary:active:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--ghost:active:not(:disabled) {
+  background: var(--onb-surface-strong);
+  border-color: oklch(0.86 0.014 100 / 0.26);
+  color: var(--onb-text);
 }
 
 .onboarding-card .onb-account__provider {
@@ -1762,6 +1910,14 @@
   background: color-mix(in oklch, var(--onb-blue) 84%, var(--onb-text));
 }
 
+:root[data-theme="dark"] .onboarding-card .onb-confirm-dialog {
+  box-shadow: 0 20px 56px oklch(0 0 0 / 0.38);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-confirm-dialog__actions .onb-button--primary {
+  color: var(--onb-canvas);
+}
+
 @media (max-width: 460px) {
   .onboarding-card .onb-confirm-backdrop {
     padding: var(--onb-space-4);
@@ -1827,6 +1983,16 @@
 .onboarding-card .onb-nudge-row--selected:hover {
   border-color: color-mix(in oklch, var(--onb-warn) 26%, var(--onb-line-strong));
   background: #faf2ef;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-nudge-row--selected {
+  border-color: color-mix(in oklch, var(--onb-warn) 34%, var(--onb-line-strong));
+  background: color-mix(in oklch, var(--onb-warn-soft) 68%, var(--onb-surface));
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-nudge-row--selected:hover {
+  border-color: color-mix(in oklch, var(--onb-warn) 44%, var(--onb-line-strong));
+  background: color-mix(in oklch, var(--onb-warn-soft) 78%, var(--onb-surface-strong));
 }
 
 .onboarding-card button.onb-toggle--extreme.onb-toggle--on .onb-toggle__track {

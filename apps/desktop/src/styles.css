@@ -13362,6 +13362,11 @@ html[data-theme="light"] .da {
   width: auto;
 }
 
+html[data-theme="dark"] .da .window-logo {
+  filter: brightness(0) invert(1);
+  opacity: .92;
+}
+
 .da__chrome {
   display: inline-flex;
   flex: 0 0 auto;
