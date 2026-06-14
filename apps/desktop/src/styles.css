@@ -11383,6 +11383,7 @@ button.flow-cell:focus {
 }
 
 .content--settings .settings-block:has(> h3) {
+  gap: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -11409,16 +11410,28 @@ button.flow-cell:focus {
 }
 
 .content--settings .settings-row {
+  position: relative;
   min-height: 3.25rem;
   padding: 0.8rem 0;
 }
 
 .content--settings .settings-block:has(> h3) > .settings-row {
   padding: 0.72rem 1rem;
+  border-top: 0;
   border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   border-left: 1px solid var(--line);
   background: var(--settings-row-card-bg);
+}
+
+.content--settings .settings-block:has(> h3) > .settings-row:not(:last-child):not(.settings-row--group-end)::after {
+  content: "";
+  position: absolute;
+  right: 1rem;
+  bottom: 0;
+  left: 1rem;
+  height: 1px;
+  background: var(--line);
 }
 
 .content--settings .settings-block:has(> h3) > h3 + .settings-row {
@@ -11427,7 +11440,9 @@ button.flow-cell:focus {
   border-top-right-radius: 14px;
 }
 
-.content--settings .settings-block:has(> h3) > .settings-row:last-child {
+.content--settings .settings-block:has(> h3) > .settings-row:last-child,
+.content--settings .settings-block:has(> h3) > .settings-row--group-end {
+  border-bottom: 1px solid var(--line);
   border-bottom-left-radius: 14px;
   border-bottom-right-radius: 14px;
 }
@@ -11511,10 +11526,9 @@ button.flow-cell:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
 }
 
-.content--settings .settings-section--general .settings-input,
-.content--settings .settings-section--general .settings-select,
-.content--settings .settings-section--general .settings-select-control__trigger,
-.content--settings .settings-section--general .settings-btn {
+.content--settings .settings-input,
+.content--settings .settings-select,
+.content--settings .settings-select-control__trigger {
   min-width: 10rem;
   height: var(--settings-control-height);
   min-height: var(--settings-control-height);
@@ -11529,34 +11543,32 @@ button.flow-cell:focus {
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.content--settings .settings-section--general .settings-select {
+.content--settings .settings-select {
   cursor: pointer;
 }
 
-.content--settings .settings-section--general .settings-input:hover,
-.content--settings .settings-section--general .settings-select:hover,
-.content--settings .settings-section--general .settings-select-control__trigger:hover,
-.content--settings .settings-section--general .settings-btn:hover {
+.content--settings .settings-input:hover,
+.content--settings .settings-select:hover,
+.content--settings .settings-select-control__trigger:hover {
   border-color: color-mix(in srgb, var(--text) 18%, var(--line));
   background: var(--settings-control-bg-hover);
   color: var(--text);
   transform: none;
 }
 
-.content--settings .settings-section--general .settings-input:focus-visible,
-.content--settings .settings-section--general .settings-select:focus-visible,
-.content--settings .settings-section--general .settings-select-control__trigger:focus-visible,
-.content--settings .settings-section--general .settings-btn:focus-visible,
-.content--settings .settings-section--general .settings-mode-option:focus-visible,
-.content--settings .settings-section--general .settings-color-preset:focus-visible,
-.content--settings .settings-section--general .settings-color-more:has(input:focus-visible) {
+.content--settings .settings-input:focus-visible,
+.content--settings .settings-select:focus-visible,
+.content--settings .settings-select-control__trigger:focus-visible,
+.content--settings .settings-mode-option:focus-visible,
+.content--settings .settings-color-preset:focus-visible,
+.content--settings .settings-color-more:has(input:focus-visible) {
   outline: 2px solid var(--settings-focus-ring);
   outline-offset: 2px;
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
 }
 
-.content--settings .settings-section--general .settings-btn {
+.content--settings .settings-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;

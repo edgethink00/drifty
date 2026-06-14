@@ -69,7 +69,7 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByRole("button", { name: /continue on drifty\.so/i })).toBeNull();
     expect(screen.queryByRole("article", { name: /individual plan/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /continue in polar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /set up drifty cloud/i }));
 
     expect(onStartCloudSetup).toHaveBeenCalledWith();
   });

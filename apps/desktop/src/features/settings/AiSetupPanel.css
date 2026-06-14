@@ -38,10 +38,10 @@
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: 3.25rem minmax(0, 1fr) auto 1rem;
-  min-height: 6rem;
-  padding: var(--space-4);
+  gap: 0.85rem;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto 1rem;
+  min-height: 5.1rem;
+  padding: 0.85rem var(--space-4);
   text-align: left;
   width: 100%;
 }
@@ -57,18 +57,18 @@
 
 .ai-setup-brand-mark {
   align-items: center;
-  border-radius: 14px;
+  border-radius: 12px;
   display: inline-flex;
-  height: 3.25rem;
+  height: 2.75rem;
   justify-content: center;
-  width: 3.25rem;
+  width: 2.75rem;
 }
 
 .ai-setup-brand-mark img {
   display: block;
-  height: 2.8rem;
+  height: 2.38rem;
   object-fit: contain;
-  width: 2.8rem;
+  width: 2.38rem;
 }
 
 .ai-setup-brand-mark--cloud {
@@ -80,8 +80,8 @@
 }
 
 .ai-setup-brand-mark--openrouter img {
-  height: 2.45rem;
-  width: 2.45rem;
+  height: 2.08rem;
+  width: 2.08rem;
 }
 
 .ai-setup-brand-mark--ollama {
@@ -89,8 +89,8 @@
 }
 
 .ai-setup-brand-mark--ollama img {
-  height: 2.5rem;
-  width: 2rem;
+  height: 2.12rem;
+  width: 1.7rem;
 }
 
 .ai-setup-choice__copy {
@@ -161,13 +161,13 @@
 
 .ai-setup-choice__panel {
   border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  padding: 0 var(--space-4) var(--space-4);
+  padding: 0 var(--space-4) 0.85rem;
 }
 
 .ai-setup-detail {
   display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
+  gap: 0.85rem;
+  padding-top: 0.85rem;
 }
 
 .ai-setup-detail__summary {
@@ -221,6 +221,19 @@
   margin: 0;
 }
 
+.ai-setup-cloud-route .settings-btn--primary {
+  background: var(--productivity-focus);
+  border-color: var(--productivity-focus);
+  color: var(--canvas);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--productivity-focus) 24%, transparent);
+}
+
+.ai-setup-cloud-route .settings-btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--productivity-focus) 88%, black);
+  border-color: color-mix(in srgb, var(--productivity-focus) 88%, black);
+  color: var(--canvas);
+}
+
 .ai-setup-field {
   display: grid;
   gap: var(--space-2);
@@ -243,7 +256,7 @@
 
 @media (max-width: 760px) {
   .ai-setup-choice__toggle {
-    grid-template-columns: 3rem minmax(0, 1fr) 0.8rem;
+    grid-template-columns: 2.75rem minmax(0, 1fr) 0.8rem;
   }
 
   .ai-setup-choice__badges {
