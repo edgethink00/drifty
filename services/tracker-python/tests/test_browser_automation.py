@@ -103,6 +103,52 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
         self.assertEqual(result.browser_automation_status, "granted")
 
+    def test_browser_metadata_rechecks_address_bar_when_front_fallback_disagrees_with_ax_title(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            side_effect=[
+                "\n".join(
+                    [
+                        "http://127.0.0.1:4173/?v=drifty",
+                        "drifty — AI Time Tracker for Focus & Drift",
+                        "front-fallback",
+                        "Lecture - YouTube - Chrome - Alex",
+                    ]
+                ),
+                "youtube.com/watch?v=lecture\nLecture - YouTube - Chrome - Alex",
+            ],
+        ) as mock_run:
+            result = _browser_metadata("Google Chrome")
+
+        self.assertEqual(result.site_domain, "youtube.com")
+        self.assertEqual(result.site_url, "https://youtube.com/watch?v=lecture")
+        self.assertEqual(result.youtube_video_id, "lecture")
+        self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
+        self.assertEqual(result.browser_automation_status, "granted")
+        self.assertEqual(mock_run.call_count, 2)
+
+    def test_browser_metadata_rechecks_address_bar_when_front_fallback_has_no_ax_title(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            side_effect=[
+                "\n".join(
+                    [
+                        "http://127.0.0.1:4173/?v=drifty",
+                        "drifty — AI Time Tracker for Focus & Drift",
+                        "front-fallback",
+                    ]
+                ),
+                "youtube.com/watch?v=lecture\nLecture - YouTube - Chrome - Alex",
+            ],
+        ) as mock_run:
+            result = _browser_metadata("Google Chrome")
+
+        self.assertEqual(result.site_domain, "youtube.com")
+        self.assertEqual(result.site_url, "https://youtube.com/watch?v=lecture")
+        self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
+        self.assertEqual(result.browser_automation_status, "granted")
+        self.assertEqual(mock_run.call_count, 2)
+
     def test_browser_metadata_ignores_invalid_accessibility_address_value(self) -> None:
         with patch(
             "app.tracker.macos_workspace._run_osascript",

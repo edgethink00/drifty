@@ -14,6 +14,10 @@ BROWSER_AUTOMATION_STATUSES: Final[frozenset[str]] = frozenset(
 
 def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
     classification = classification_payload(row)
+    hide_site_context = should_hide_uncertain_site_context(row)
+    youtube_is_shorts = None
+    if not hide_site_context and row.get("youtube_is_shorts") is not None:
+        youtube_is_shorts = bool(row.get("youtube_is_shorts"))
     serialized: dict[str, SerializedValue] = {
         "id": str(row.get("id", "")),
         "startedAt": row["started_at"],
@@ -22,12 +26,12 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "appName": row["app_name"],
         "bundleId": row.get("bundle_id"),
         "windowTitle": row.get("window_title"),
-        "siteDomain": row.get("site_domain"),
-        "siteTitle": row.get("site_title"),
-        "siteUrl": row.get("site_url"),
-        "youtubeVideoId": row.get("youtube_video_id"),
-        "youtubePlaylistId": row.get("youtube_playlist_id"),
-        "youtubeIsShorts": bool(row.get("youtube_is_shorts")) if row.get("youtube_is_shorts") is not None else None,
+        "siteDomain": None if hide_site_context else row.get("site_domain"),
+        "siteTitle": None if hide_site_context else row.get("site_title"),
+        "siteUrl": None if hide_site_context else row.get("site_url"),
+        "youtubeVideoId": None if hide_site_context else row.get("youtube_video_id"),
+        "youtubePlaylistId": None if hide_site_context else row.get("youtube_playlist_id"),
+        "youtubeIsShorts": youtube_is_shorts,
         "youtubeCategory": row.get("youtube_category"),
         "youtubeChannelId": row.get("youtube_channel_id"),
         "youtubeChannelName": row.get("youtube_channel_name"),
@@ -51,6 +55,29 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
     if classification is not None:
         serialized["classification"] = classification
     return serialized
+
+
+def should_hide_uncertain_site_context(row: Mapping[str, RowValue]) -> bool:
+    if row.get("site_source") != "applescript-front-window":
+        return False
+    window_title = clean_text(row.get("window_title"))
+    site_title = clean_text(row.get("site_title"))
+    if not window_title or not site_title:
+        return True
+    return not titles_match(window_title, site_title)
+
+
+def titles_match(window_title: str, site_title: str) -> bool:
+    window = window_title.lower()
+    site = site_title.lower()
+    return window.startswith(site) or site.startswith(window)
+
+
+def clean_text(value: RowValue) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 def classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedValue] | None:
