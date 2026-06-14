@@ -6225,7 +6225,7 @@ input, textarea { color: inherit; }
   gap: var(--space-3);
   width: 100%;
   background: var(--surface-strong);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line); color: var(--text);
 }
 
 .auth-modal__google:hover {
