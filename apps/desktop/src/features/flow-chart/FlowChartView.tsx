@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import { FLOW_INTERVAL_OPTIONS, logicalMinuteOfDay, type ActivityCategory, type FlowBlock, type FlowIntervalMinutes, type ProductivityLabel } from "@drifty/domain";
 import { PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { FlowHoverCard, FlowLegendHoverCard, buildLegendActivityBreakdown, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
+import { FlowHoverCard, FlowLegendHoverCard, buildLegendActivityBreakdown, moveFlowHoverCardToPointer, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
-import { buildFlowBlockHoverGroups, flowBlockHoverGroupPosition } from "./flowHoverGroups";
+import { buildFlowBlockHoverGroups, flowBlockHoverGroupPosition, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import { cellGroupTitle, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell, normalizeStartOfDayMinutes } from "./flowChartFormat";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
@@ -56,6 +56,8 @@ export function FlowChartView({
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   const [colorMode, setColorMode] = useState<FlowColorMode>("category");
+  const hoveredBlockCardRef = useRef<HTMLDivElement>(null);
+  const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
   const hoveredGroupMinutes = useMemo(
     () => hoveredBlock ? new Set(hoveredBlock.group.blocks.map((block) => block.minuteOfDay)) : null,
     [hoveredBlock],
@@ -96,6 +98,10 @@ export function FlowChartView({
     x: event.clientX,
     y: event.clientY,
   });
+  const showBlockHover = (event: MouseEvent<HTMLButtonElement>, group: FlowBlockHoverGroup) => {
+    moveFlowHoverCardToPointer(hoveredBlockCardRef.current, event.clientX, event.clientY);
+    setHoveredBlock((current) => current?.group === group ? current : { group, x: event.clientX, y: event.clientY });
+  };
   if (blocks.length === 0) return null;
 
   return (
@@ -141,7 +147,7 @@ export function FlowChartView({
                   <span
                     className="flow-chart-legend__parent"
                     onMouseEnter={(event) => showLegendHover(event, productivityLabel(group.productivity), categoryGroupLabel(group.categories), blockMatchesCategories(group.categories))}
-                    onMouseMove={(event) => showLegendHover(event, productivityLabel(group.productivity), categoryGroupLabel(group.categories), blockMatchesCategories(group.categories))}
+                    onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
                     onMouseLeave={() => setHoveredLegend(null)}
                     title={`${productivityLabel(group.productivity)} categories`}
                   >
@@ -154,7 +160,7 @@ export function FlowChartView({
                         className={`flow-chart-legend__dot flow-chart-legend__dot--${category}`}
                         key={category}
                         onMouseEnter={(event) => showLegendHover(event, categoryLabel(category), "Category color", (block) => block.category === category)}
-                        onMouseMove={(event) => showLegendHover(event, categoryLabel(category), "Category color", (block) => block.category === category)}
+                        onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
                         onMouseLeave={() => setHoveredLegend(null)}
                         title={categoryLabel(category)}
                       />
@@ -168,7 +174,7 @@ export function FlowChartView({
                   <span
                     className="flow-chart-legend__parent flow-chart-legend__parent--tone"
                     onMouseEnter={(event) => showLegendHover(event, productivityLabel(group.productivity), "Productivity color", (block) => block.productivity === group.productivity)}
-                    onMouseMove={(event) => showLegendHover(event, productivityLabel(group.productivity), "Productivity color", (block) => block.productivity === group.productivity)}
+                    onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
                     onMouseLeave={() => setHoveredLegend(null)}
                     title={`${productivityLabel(group.productivity)} blocks`}
                   >
@@ -236,8 +242,8 @@ export function FlowChartView({
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellGroupTitle(hoverGroup).replace(/\n/g, ", ")}
-                    onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => setHoveredBlock({ group: hoverGroup, x: event.clientX, y: event.clientY })}
-                    onMouseMove={(event: MouseEvent<HTMLButtonElement>) => setHoveredBlock({ group: hoverGroup, x: event.clientX, y: event.clientY })}
+                    onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => showBlockHover(event, hoverGroup)}
+                    onMouseMove={(event: MouseEvent<HTMLButtonElement>) => moveFlowHoverCardToPointer(hoveredBlockCardRef.current, event.clientX, event.clientY)}
                     onMouseLeave={() => setHoveredBlock(null)}
                   >
                     <span className="flow-cell__mark" aria-hidden="true" />
@@ -249,8 +255,8 @@ export function FlowChartView({
         })}
       </div>
 
-      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} /> : null}
-      {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} /> : null}
+      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={hoveredBlockCardRef} /> : null}
+      {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
     </section>
   );
 }
