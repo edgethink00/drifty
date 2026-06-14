@@ -4,7 +4,19 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 
-const { authMocks, getSession, onAuthStateChange, exchangeCodeForSession, setSession, signInAnonymously, signInWithOAuth, signOut, invoke } = vi.hoisted(() => {
+const {
+  authMocks,
+  getSession,
+  onAuthStateChange,
+  exchangeCodeForSession,
+  setSession,
+  signInAnonymously,
+  signInWithOAuth,
+  signInWithPassword,
+  signUp,
+  signOut,
+  invoke,
+} = vi.hoisted(() => {
   const mocks = {
     authChangeHandler: null as ((event: string, session: Session | null) => void) | null,
   };
@@ -26,6 +38,8 @@ const { authMocks, getSession, onAuthStateChange, exchangeCodeForSession, setSes
     setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
     signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null }),
+    signInWithPassword: vi.fn().mockResolvedValue({ data: {}, error: null }),
+    signUp: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signOut: vi.fn().mockResolvedValue({ error: null }),
     invoke: vi.fn().mockResolvedValue([]),
   };
@@ -71,8 +85,8 @@ vi.mock("../../lib/supabase/client", () => ({
       signInAnonymously,
       signInWithOAuth,
       signOut,
-      signInWithPassword: vi.fn(),
-      signUp: vi.fn(),
+      signInWithPassword,
+      signUp,
     },
   },
   isSupabaseEnabled: () => true,
@@ -128,6 +142,8 @@ describe("AuthContext", () => {
     exchangeCodeForSession.mockResolvedValue({ error: null });
     setSession.mockResolvedValue({ data: { session: null }, error: null });
     signInWithOAuth.mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null });
+    signInWithPassword.mockResolvedValue({ data: {}, error: null });
+    signUp.mockResolvedValue({ data: { session: null }, error: null });
     signOut.mockResolvedValue({ error: null });
     invoke.mockResolvedValue([]);
     authMocks.authChangeHandler = null;
@@ -253,6 +269,57 @@ describe("AuthContext", () => {
     await waitFor(() => {
       expect(authApi?.callbackStatus?.message).toBe("Browser opened. Complete Google sign-in, then choose Open Drifty.");
     });
+  });
+
+  it("rejects short signup passwords before calling Supabase", async () => {
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    const result = await authApi!.signUpWithEmail("person@example.com", "short");
+
+    expect(result.needsEmailConfirmation).toBe(false);
+    expect(result.error?.message).toMatch(/at least 12 characters/i);
+    expect(signUp).not.toHaveBeenCalled();
+  });
+
+  it("normalizes Supabase weak-password signup errors", async () => {
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    const weakPasswordError = Object.assign(new Error("Password should be at least 12 characters"), {
+      code: "weak_password",
+    });
+    signUp.mockResolvedValue({ data: { session: null }, error: weakPasswordError });
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    const result = await authApi!.signUpWithEmail("person@example.com", "long-enough1");
+
+    expect(signUp).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "long-enough1",
+    });
+    expect(result.error?.message).toMatch(/at least 12 characters/i);
+    expect(result.needsEmailConfirmation).toBe(false);
   });
 
   it("returns an error when direct Google OAuth does not return a URL", async () => {
@@ -447,7 +514,7 @@ describe("AuthContext", () => {
     await waitFor(() => {
       expect(authApi?.callbackStatus?.phase).toBe("failed");
     });
-    expect(authApi!.callbackStatus?.message).toBe("Google OAuth callback did not include an authorization code.");
+    expect(authApi!.callbackStatus?.message).toBe("Session token callbacks are no longer accepted. Sign in with email inside Drifty, or start Google sign-in again.");
     expect(setSession).not.toHaveBeenCalledWith({
       access_token: "google-access",
       refresh_token: "google-refresh",
@@ -479,13 +546,13 @@ describe("AuthContext", () => {
     window.removeEventListener("drifty:billing-success", billingSuccessListener);
   });
 
-  it("applies pending Tauri auth callback URLs that were cached before the web listener was ready", async () => {
+  it("applies pending Tauri auth code callback URLs that were cached before the web listener was ready", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();
     getSession.mockResolvedValue({ data: { session } });
-    setSession.mockResolvedValue({ data: { session }, error: null });
+    exchangeCodeForSession.mockResolvedValue({ data: { session }, error: null });
     invoke.mockResolvedValueOnce([
-      "drifty://auth/callback?access_token=pending-access&refresh_token=pending-refresh",
+      "drifty://auth/callback?code=pending-code",
     ]);
 
     render(
@@ -495,10 +562,7 @@ describe("AuthContext", () => {
     );
 
     await waitFor(() => {
-      expect(setSession).toHaveBeenCalledWith({
-        access_token: "pending-access",
-        refresh_token: "pending-refresh",
-      });
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("pending-code");
     });
   });
 
@@ -575,15 +639,15 @@ describe("AuthContext", () => {
     expect(serialized).not.toContain("user-id");
   });
 
-  it("applies Tauri implicit callback sessions from hash tokens", async () => {
+  it("rejects Tauri implicit callback sessions from hash tokens", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
-    const session = createSession();
-    getSession.mockResolvedValue({ data: { session } });
-    setSession.mockResolvedValue({ data: { session }, error: null });
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
 
     render(
       <AuthProvider>
-        <CaptureAuth onReady={() => undefined} />
+        <CaptureAuth onReady={(value) => {
+          latestAuth.current = value;
+        }} />
       </AuthProvider>
     );
 
@@ -599,23 +663,24 @@ describe("AuthContext", () => {
     });
 
     await waitFor(() => {
-      expect(setSession).toHaveBeenCalledWith({
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      });
+      expect(latestAuth.current?.callbackStatus?.phase).toBe("failed");
     });
-    expect(setSession).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("auth_save_session", {
+    expect(latestAuth.current?.callbackStatus?.message).toBe("Session token callbacks are no longer accepted. Sign in with email inside Drifty, or start Google sign-in again.");
+    expect(setSession).not.toHaveBeenCalledWith({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    expect(invoke).not.toHaveBeenCalledWith("auth_save_session", {
       value: JSON.stringify({ accessToken: "access-token", refreshToken: "refresh-token" }),
     });
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
-  it("applies duplicate Tauri implicit callback sessions only once", async () => {
+  it("exchanges duplicate Tauri auth code callbacks only once", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();
     getSession.mockResolvedValue({ data: { session } });
-    setSession.mockResolvedValue({ data: { session }, error: null });
+    exchangeCodeForSession.mockResolvedValue({ data: { session }, error: null });
 
     render(
       <AuthProvider>
@@ -629,18 +694,15 @@ describe("AuthContext", () => {
 
     await act(async () => {
       tauriMocks.emitOpenUrl([
-        "drifty://auth/callback?access_token=access-token&refresh_token=refresh-token",
-        "drifty://auth/callback?access_token=access-token&refresh_token=refresh-token",
+        "drifty://auth/callback?code=auth-code",
+        "drifty://auth/callback?code=auth-code",
       ]);
     });
 
     await waitFor(() => {
-      expect(setSession).toHaveBeenCalledWith({
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      });
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("auth-code");
     });
-    expect(setSession).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
   });
 
   it("clears the saved desktop session when signing out", async () => {
@@ -778,7 +840,7 @@ describe("AuthContext", () => {
 
     expect(authApi).not.toBeNull();
     const auth = authApi!;
-    expect(auth.callbackStatus?.message).toBe("That sign-in link was incomplete or expired. Please sign in again on drifty.so.");
+    expect(auth.callbackStatus?.message).toBe("Session token callbacks are no longer accepted. Sign in with email inside Drifty, or start Google sign-in again.");
     expect(auth.session).toEqual(session);
     expect(auth.status).toBe("authenticated");
 
@@ -793,7 +855,7 @@ describe("AuthContext", () => {
 
     const entries = readAuthDiagnostics();
     const serialized = JSON.stringify(entries);
-    expect(entries.some((entry) => entry.event === "auth.callback.session.error")).toBe(true);
+    expect(entries.some((entry) => entry.event === "auth.callback.error")).toBe(true);
     expect(serialized).not.toContain("stale-access");
     expect(serialized).not.toContain("stale-refresh");
   });
@@ -874,7 +936,7 @@ describe("AuthContext", () => {
     });
 
     expect(authApi).not.toBeNull();
-    expect(authApi!.callbackStatus?.message).toBe("That sign-in link was incomplete or expired. Please sign in again on drifty.so.");
+    expect(authApi!.callbackStatus?.message).toBe("Session token callbacks are no longer accepted. Sign in with email inside Drifty, or start Google sign-in again.");
   });
 
   it("clears callback status on request", async () => {
@@ -938,7 +1000,7 @@ describe("AuthContext", () => {
       expect(authApi?.callbackStatus?.phase).toBe("failed");
     });
     expect(authApi).not.toBeNull();
-    expect(authApi!.callbackStatus?.message).toBe("OAuth callback did not include a sign-in code or session tokens.");
+    expect(authApi!.callbackStatus?.message).toBe("OAuth callback did not include a sign-in code.");
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
     expect(setSession).not.toHaveBeenCalled();
   });

@@ -1,10 +1,9 @@
+mod auth_session_store;
 mod commands;
 mod donut_icon;
 mod tracker;
 mod tray;
 
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
 use commands::{
@@ -31,7 +30,6 @@ use tray::{
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
-const AUTH_SESSION_FILE_NAME: &str = "auth-session.json";
 
 #[derive(Default)]
 struct PendingAuthDeepLinks(Mutex<Vec<String>>);
@@ -45,39 +43,19 @@ fn auth_take_pending_deep_links(state: State<'_, PendingAuthDeepLinks>) -> Vec<S
     std::mem::take(&mut *urls)
 }
 
-fn auth_session_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?;
-    Ok(dir.join(AUTH_SESSION_FILE_NAME))
-}
-
 #[tauri::command]
 fn auth_load_saved_session(app: AppHandle) -> Result<Option<String>, String> {
-    match fs::read_to_string(auth_session_path(&app)?) {
-        Ok(value) => Ok(Some(value)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.to_string()),
-    }
+    auth_session_store::load_saved_session(&app)
 }
 
 #[tauri::command]
-fn auth_save_session(app: AppHandle, value: String) -> Result<(), String> {
-    let path = auth_session_path(&app)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    fs::write(path, value).map_err(|error| error.to_string())
+fn auth_save_session(_app: AppHandle, value: String) -> Result<(), String> {
+    auth_session_store::save_session(&value)
 }
 
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
-    match fs::remove_file(auth_session_path(&app)?) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.to_string()),
-    }
+    auth_session_store::clear_saved_session(&app)
 }
 
 fn remember_auth_deep_links<R: Runtime>(
@@ -106,7 +84,13 @@ fn remember_auth_deep_links<R: Runtime>(
 }
 
 fn is_auth_callback_deep_link(url: &str) -> bool {
-    url.starts_with("drifty://auth/callback") || url.starts_with("drifty://auth/google-callback")
+    let is_callback =
+        url.starts_with("drifty://auth/callback") || url.starts_with("drifty://auth/google-callback");
+    is_callback && !contains_auth_session_token(url)
+}
+
+fn contains_auth_session_token(url: &str) -> bool {
+    url.contains("access_token=") || url.contains("refresh_token=")
 }
 
 fn is_billing_success_deep_link(url: &str) -> bool {
@@ -250,7 +234,7 @@ mod tests {
         assert!(is_auth_callback_deep_link(
             "drifty://auth/callback?code=startup-code"
         ));
-        assert!(is_auth_callback_deep_link(
+        assert!(!is_auth_callback_deep_link(
             "drifty://auth/callback#access_token=access&refresh_token=refresh"
         ));
         assert!(is_auth_callback_deep_link(
