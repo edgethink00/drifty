@@ -347,7 +347,7 @@ describe("App onboarding", () => {
   it("opens the provided welcome-first onboarding for a local unauthenticated user without local completion state", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
-    authState.isEnabled = false;
+    authState.isEnabled = true;
 
     render(<App />);
 
@@ -381,7 +381,7 @@ describe("App onboarding", () => {
     appFeatureSwitches.devOnboardingBypassEnabled = true;
     authState.user = null;
     authState.status = "unauthenticated";
-    authState.isEnabled = false;
+    authState.isEnabled = true;
 
     render(<App />);
 
@@ -412,10 +412,10 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
   });
 
-  it("routes onboarding email continuation to the website handoff", async () => {
+  it("opens the in-app auth modal from onboarding email continuation", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
-    authState.isEnabled = false;
+    authState.isEnabled = true;
 
     render(<App />);
 
@@ -426,12 +426,12 @@ describe("App onboarding", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
 
-    expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("dialog", { name: /sign in to drifty/i })).toBeTruthy();
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
     expect(authState.signInWithEmail).not.toHaveBeenCalled();
     expect(authState.signUpWithEmail).not.toHaveBeenCalled();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
   });
 
   it("starts direct Google OAuth from the onboarding Google button", async () => {

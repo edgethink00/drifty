@@ -25,6 +25,8 @@ import {
   serializeDesktopAuthSession,
   type SaveDesktopSessionOptions,
 } from "./desktopAuthSession";
+import { getOAuthCallbackResultFromUrl } from "./authCallback";
+import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -65,14 +67,6 @@ function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-function getCallbackParam(searchParams: URLSearchParams, hashParams: URLSearchParams, name: string) {
-  return searchParams.get(name) ?? hashParams.get(name);
-}
-
-function getOAuthCallbackErrorMessage(error: string, description: string | null) {
-  return description?.trim() || error;
-}
-
 function getOAuthSessionCallbackErrorMessage(error: string) {
   if (/auth session missing/i.test(error) || /token/i.test(error)) {
     return "That sign-in link was incomplete or expired. Please sign in again on drifty.so.";
@@ -81,60 +75,7 @@ function getOAuthSessionCallbackErrorMessage(error: string) {
   return error;
 }
 
-type OAuthCallbackResult =
-  | { kind: "code"; code: string }
-  | { kind: "session"; accessToken: string; refreshToken: string }
-  | { kind: "error"; message: string }
-  | null;
-
 type TauriInvoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-
-function getOAuthCallbackResultFromUrl(value: string, source: "web" | "tauri"): OAuthCallbackResult {
-  try {
-    const url = new URL(value);
-    const isWebCallback = source === "web" && ["/auth/callback", "/auth/callback/"].includes(url.pathname);
-    const isTauriCallback = source === "tauri" && url.protocol === "drifty:" && url.hostname === "auth" && ["/callback", "/callback/"].includes(url.pathname);
-    const isTauriGoogleCallback = source === "tauri" && url.protocol === "drifty:" && url.hostname === "auth" && ["/google-callback", "/google-callback/"].includes(url.pathname);
-
-    if (!isWebCallback && !isTauriCallback && !isTauriGoogleCallback) {
-      return null;
-    }
-
-    const hashParams = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
-    const error = getCallbackParam(url.searchParams, hashParams, "error");
-    if (error) {
-      return {
-        kind: "error",
-        message: `OAuth callback failed: ${getOAuthCallbackErrorMessage(error, getCallbackParam(url.searchParams, hashParams, "error_description"))}`,
-      };
-    }
-
-    const code = getCallbackParam(url.searchParams, hashParams, "code");
-    if (code) {
-      return { kind: "code", code };
-    }
-
-    if (isTauriGoogleCallback) {
-      return {
-        kind: "error",
-        message: "Google OAuth callback did not include an authorization code.",
-      };
-    }
-
-    const accessToken = getCallbackParam(url.searchParams, hashParams, "access_token");
-    const refreshToken = getCallbackParam(url.searchParams, hashParams, "refresh_token");
-    if (accessToken && refreshToken) {
-      return { kind: "session", accessToken, refreshToken };
-    }
-
-    return {
-      kind: "error",
-      message: "OAuth callback did not include a sign-in code or session tokens.",
-    };
-  } catch {
-    return null;
-  }
-}
 
 function isBillingSuccessDeepLink(value: string): boolean {
   try {
@@ -626,12 +567,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) {
       return { error: new Error("Supabase is not configured"), needsEmailConfirmation: false };
     }
+    const validationError = validateAuthPasswordForSignUp(password);
+    if (validationError) {
+      return { error: validationError, needsEmailConfirmation: false };
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
-    const needsEmailConfirmation = !data.session && !error;
-    return { error, needsEmailConfirmation };
+    const normalizedError = normalizeAuthPasswordError(error);
+    const needsEmailConfirmation = !data.session && !normalizedError;
+    return { error: normalizedError, needsEmailConfirmation };
   }
 
   function clearCallbackStatus() {

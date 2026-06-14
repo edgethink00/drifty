@@ -154,6 +154,9 @@ describe("App auth modal", () => {
       authState.callbackStatus = null;
     });
     authState.signInWithWebsite.mockResolvedValue({ error: null });
+    authState.signInWithGoogle.mockResolvedValue({ error: null });
+    authState.signInWithEmail.mockResolvedValue({ error: null });
+    authState.signUpWithEmail.mockResolvedValue({ error: null, needsEmailConfirmation: false });
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
     fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
@@ -253,21 +256,51 @@ describe("App auth modal", () => {
     await openAuthModalFromAccountMenu();
 
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /continue on drifty\.so/i })).toBeTruthy();
+    expect(screen.getByLabelText(/^email$/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^password$/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeTruthy();
   });
 
-  it("uses Drifty and drifty.so copy in the visible auth modal", async () => {
+  it("uses Drifty copy and direct email auth in the visible auth modal", async () => {
     render(<App />);
 
     await openAuthModalFromAccountMenu();
 
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByText(/use drifty\.so to sign in or create an account/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /continue on drifty\.so/i })).toBeTruthy();
+    expect(screen.getByText(/use your drifty account to sync and publish/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeTruthy();
     expect(screen.getByText(/by continuing, you accept/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: /terms/i }).getAttribute("href")).toBe("https://drifty.so/terms/");
     expect(screen.getByRole("link", { name: /privacy/i }).getAttribute("href")).toBe("https://drifty.so/privacy/");
     expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
+  });
+
+  it("signs in with email directly from the auth modal", async () => {
+    render(<App />);
+    await openAuthModalFromAccountMenu();
+
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: " alex@example.com " } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "correct horse" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() => {
+      expect(authState.signInWithEmail).toHaveBeenCalledWith("alex@example.com", "correct horse");
+    });
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+  });
+
+  it("validates signup password length before calling auth", async () => {
+    render(<App />);
+    await openAuthModalFromAccountMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "alex@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "short" } });
+    fireEvent.click(screen.getByRole("button", { name: /^create account$/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/at least 12 characters/i);
+    expect(authState.signUpWithEmail).not.toHaveBeenCalled();
   });
 
   it("opens feedback from the account menu and sends explicit feedback with selected images", async () => {
@@ -325,7 +358,7 @@ describe("App auth modal", () => {
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     await openAuthModalFromAccountMenu();
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /continue on drifty\.so/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeTruthy();
 
     authState.user = { id: "user-1", email: "alex@example.com" };
     authState.status = "authenticated";
@@ -373,25 +406,25 @@ describe("App auth modal", () => {
     expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 
-  it("replaces a failed callback notice with waiting status when continuing on drifty.so", async () => {
+  it("replaces a failed callback notice with waiting status when starting Google sign-in", async () => {
     authState.callbackStatus = {
       phase: "failed",
       message: "That sign-in link was incomplete or expired. Please sign in again on drifty.so.",
     };
-    authState.signInWithWebsite.mockImplementation(() => {
+    authState.signInWithGoogle.mockImplementation(() => {
       authState.callbackStatus = {
         phase: "waiting",
-        message: "Browser opened. Complete sign-in on drifty.so, then choose Open Drifty.",
+        message: "Browser opened. Complete Google sign-in, then choose Open Drifty.",
       };
       return Promise.resolve({ error: null });
     });
     const { rerender } = render(<App />);
     await openAuthModalFromAccountMenu();
 
-    fireEvent.click(await screen.findByRole("button", { name: /continue on drifty\.so/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /continue with google/i }));
 
     await waitFor(() => {
-      expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+      expect(authState.signInWithGoogle).toHaveBeenCalledTimes(1);
     });
     rerender(<App />);
 
