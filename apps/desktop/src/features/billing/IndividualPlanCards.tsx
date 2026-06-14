@@ -11,9 +11,9 @@ type IndividualPrice = {
   readonly cadence: string;
 };
 
-const INTERVAL_OPTIONS: readonly { readonly id: VisibleBillingInterval; readonly label: string; readonly badge?: string }[] = [
+const INTERVAL_OPTIONS: readonly { readonly id: VisibleBillingInterval; readonly label: string; readonly savings?: string }[] = [
   { id: "monthly", label: "Monthly" },
-  { id: "yearly", label: "Yearly", badge: "Save 20%" },
+  { id: "yearly", label: "Yearly", savings: "Save 20%" },
 ];
 
 const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, IndividualPrice> = {
@@ -91,9 +91,7 @@ export function IndividualPlanCards({
       <span className="individual-plan-card__top">
         <span className="individual-plan-card__topline">
           <span>Individual</span>
-          <small className="individual-plan-card__badge individual-plan-card__badge--popular">
-            {individualIsCurrent ? "Current plan" : "Cloud AI"}
-          </small>
+          <small className="individual-plan-card__badge">{individualIsCurrent ? "Current plan" : "Cloud AI"}</small>
         </span>
         <span className="individual-plan-card__note">
           {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis without managing keys or models."}
@@ -124,8 +122,8 @@ export function IndividualPlanCards({
             aria-checked={selectedInterval === option.id}
             onClick={() => handleIntervalChange(option.id)}
           >
-            {option.badge ? <small className="individual-plan-interval__badge">{option.badge}</small> : null}
             <span>{option.label}</span>
+            {option.savings ? <small className="individual-plan-interval__save">{option.savings}</small> : null}
           </button>
         ))}
       </div>
