@@ -692,12 +692,11 @@ export default function App() {
     if (!baseUrl || !model) return null;
     return { localProvider: { provider: "self_hosted" as const, baseUrl, model } };
   }, [localAiSetup]);
-  const {
-    user,
-    status: authStatus,
-    signInWithWebsite,
-    signInWithGoogle,
-    signInAnonymously,
+    const {
+      user,
+      status: authStatus,
+      signInWithGoogle,
+      signInAnonymously,
     signOut,
     isEnabled: isSupabaseConfigured,
     isAuthRequired,
@@ -2698,7 +2697,7 @@ export default function App() {
     }
 
     if (!user || !hasRequiredAccountAuth) {
-      await signInWithWebsite();
+      setAuthModalOpen(true);
       return;
     }
 
@@ -2723,7 +2722,7 @@ export default function App() {
     }
 
     void refreshBillingEntitlement();
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, signInWithWebsite, user]);
+  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
 
   const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
     void variant;
@@ -3354,7 +3353,12 @@ export default function App() {
   }
 
   if (developerAuthRequiredPreview && !hasRequiredAccountAuth) {
-    return <AuthRequiredGate onSignIn={signInWithWebsite} />;
+    return (
+      <>
+        <AuthRequiredGate onSignIn={() => setAuthModalOpen(true)} />
+        {authModalOpen ? <AuthModal onClose={() => setAuthModalOpen(false)} /> : null}
+      </>
+    );
   }
 
   const dashboardDateNavigator = (
@@ -4321,12 +4325,15 @@ export default function App() {
                       billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                       billingEntitlementError={effectiveBillingEntitlementError}
                       billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                      cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                       cloudStatusLabel={cloudStatusLabel}
                       currentBillingPlan={currentBillingPlan}
+                      isSupabaseConfigured={effectiveIsSupabaseConfigured}
                       localAiSetup={localAiSetup}
                       shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
                       onDialogOpenChange={setAiSetupDialogOpen}
                       onLocalAiSetupChange={setLocalAiSetup}
+                      onRefreshCloudStatus={refreshBillingEntitlement}
                       onStartCloudSetup={handleStartDriftyCloudSetup}
                     />
                   </div>
@@ -4488,7 +4495,10 @@ export default function App() {
           onRequestAccessibility={handleRequestAccessibility}
           onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
           onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
-          onStartCloudTrialWithEmail={() => void signInWithWebsite()}
+          onStartCloudTrialWithEmail={() => {
+            setOnboardingOpen(false);
+            setAuthModalOpen(true);
+          }}
           onComplete={handleOnboardingComplete}
         />
       ) : null}

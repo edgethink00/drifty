@@ -12,6 +12,7 @@ function renderPanel({
   readonly currentBillingPlan?: "free" | "individual";
   readonly initialSetup?: LocalAiSetupState;
 } = {}) {
+  const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
 
   function Harness() {
@@ -23,19 +24,22 @@ function renderPanel({
         billingCheckoutLoadingInterval={null}
         billingEntitlementError={null}
         billingPlansDisabled={false}
+        cloudStatusRefreshing={false}
         cloudStatusLabel="Cloud AI available"
         currentBillingPlan={currentBillingPlan}
+        isSupabaseConfigured={true}
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
+        onRefreshCloudStatus={onRefreshCloudStatus}
         onStartCloudSetup={onStartCloudSetup}
       />
     );
   }
 
   render(<Harness />);
-  return { onStartCloudSetup };
+  return { onRefreshCloudStatus, onStartCloudSetup };
 }
 
 describe("AiSetupPanel", () => {
@@ -68,5 +72,13 @@ describe("AiSetupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /choose individual plan/i }));
 
     expect(onStartCloudSetup).toHaveBeenCalledWith("monthly");
+  });
+
+  it("refreshes Cloud status from the pricing row", () => {
+    const { onRefreshCloudStatus } = renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh drifty cloud/i }));
+
+    expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1);
   });
 });
