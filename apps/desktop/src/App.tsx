@@ -4325,12 +4325,15 @@ export default function App() {
                       billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                       billingEntitlementError={effectiveBillingEntitlementError}
                       billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                      cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                       cloudStatusLabel={cloudStatusLabel}
                       currentBillingPlan={currentBillingPlan}
+                      isSupabaseConfigured={effectiveIsSupabaseConfigured}
                       localAiSetup={localAiSetup}
                       shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
                       onDialogOpenChange={setAiSetupDialogOpen}
                       onLocalAiSetupChange={setLocalAiSetup}
+                      onRefreshCloudStatus={refreshBillingEntitlement}
                       onStartCloudSetup={handleStartDriftyCloudSetup}
                     />
                   </div>
