@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, Ref } from "react";
 import { secondsToLabel, type FlowBlock } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
@@ -30,6 +30,18 @@ export type FlowLegendHoverState = {
   readonly y: number;
 };
 
+const FLOW_HOVER_CARD_OFFSET_PX = 16;
+
+function flowHoverCardPosition(x: number, y: number): CSSProperties {
+  return { left: x + FLOW_HOVER_CARD_OFFSET_PX, top: y + FLOW_HOVER_CARD_OFFSET_PX };
+}
+
+export function moveFlowHoverCardToPointer(card: HTMLDivElement | null, x: number, y: number): void {
+  if (!card) return;
+  card.style.left = `${x + FLOW_HOVER_CARD_OFFSET_PX}px`;
+  card.style.top = `${y + FLOW_HOVER_CARD_OFFSET_PX}px`;
+}
+
 export function buildLegendActivityBreakdown(
   blocks: readonly FlowBlock[],
   matchesBlock: (block: FlowBlock) => boolean,
@@ -57,9 +69,9 @@ export function buildLegendActivityBreakdown(
     .slice(0, 4);
 }
 
-export function FlowLegendHoverCard({ hover, appIcons }: { readonly hover: FlowLegendHoverState; readonly appIcons: Record<string, string | null> }) {
+export function FlowLegendHoverCard({ hover, appIcons, cardRef }: { readonly hover: FlowLegendHoverState; readonly appIcons: Record<string, string | null>; readonly cardRef?: Ref<HTMLDivElement> }) {
   return (
-    <div className="flow-hover-card category-hover-card" style={{ left: hover.x + 16, top: hover.y + 16 }}>
+    <div ref={cardRef} className="flow-hover-card category-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
       <div className="category-hover-card__head">
         <strong>{hover.label}</strong>
         <span>{hover.detailLabel}</span>
@@ -86,9 +98,11 @@ export function FlowLegendHoverCard({ hover, appIcons }: { readonly hover: FlowL
 export function FlowHoverCard({
   hover,
   appIcons,
+  cardRef,
 }: {
   readonly hover: FlowHoverState;
   readonly appIcons: Record<string, string | null>;
+  readonly cardRef?: Ref<HTMLDivElement>;
 }) {
   const { block } = hover.group;
   const iconSrc = appIcons[block.bundleId ?? block.appName] ?? null;
@@ -96,7 +110,7 @@ export function FlowHoverCard({
   const detailLabel = blockDetailLabel(block);
 
   return (
-    <div className="flow-hover-card" style={{ left: hover.x + 16, top: hover.y + 16 }}>
+    <div ref={cardRef} className="flow-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
       <div className="flow-hover-card__top">
         {block.siteDomain ? <SiteFavicon domain={block.siteDomain} size={24} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={displayName} iconSrc={iconSrc} size="sm" />}
         <div>
@@ -122,4 +136,3 @@ function FlowIdentityPill({ color, label }: { readonly color: string; readonly l
     </span>
   );
 }
-

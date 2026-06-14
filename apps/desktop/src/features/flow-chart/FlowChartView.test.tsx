@@ -239,6 +239,43 @@ describe("FlowChartView", () => {
     expect(screen.queryByText("Google Chrome")).toBeNull();
   });
 
+  it("moves the flow hover card with the pointer within the same cell", () => {
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+
+    const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+    fireEvent.mouseEnter(cell, { clientX: 120, clientY: 80 });
+    const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
+
+    expect(hoverCard.style.left).toBe("136px");
+    expect(hoverCard.style.top).toBe("96px");
+
+    fireEvent.mouseMove(cell, { clientX: 320, clientY: 190 });
+
+    expect(hoverCard.style.left).toBe("336px");
+    expect(hoverCard.style.top).toBe("206px");
+  });
+
+  it("moves an active flow hover card while moving through the same hover group", () => {
+    const firstBlock = makeFlowBlock();
+    const nextBlock = makeFlowBlock({
+      id: "flow-block-next",
+      minuteOfDay: 14 * 60 + 3,
+    });
+    render(<FlowChartView blocks={[firstBlock, nextBlock]} appIcons={{}} intervalMinutes={3} />);
+
+    const [firstCell, nextCell] = screen.getAllByRole("button", { name: /time block: 14:00–14:06/i });
+    fireEvent.mouseEnter(firstCell, { clientX: 120, clientY: 80 });
+    const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
+
+    expect(hoverCard.style.left).toBe("136px");
+    expect(hoverCard.style.top).toBe("96px");
+
+    fireEvent.mouseEnter(nextCell, { clientX: 320, clientY: 190 });
+
+    expect(hoverCard.style.left).toBe("336px");
+    expect(hoverCard.style.top).toBe("206px");
+  });
+
   it("shows site favicon labels in category legend hover breakdowns", () => {
     const block: FlowBlock = {
       id: "browser-instagram",
@@ -267,6 +304,21 @@ describe("FlowChartView", () => {
     expect(categoryHover.textContent).toContain("instagram.com");
     expect(categoryHover.textContent).not.toContain("Google Chrome");
     expect(categoryHover.querySelector("img.site-favicon")?.getAttribute("src")).toBe("https://www.google.com/s2/favicons?domain=instagram.com&sz=64");
+  });
+
+  it("moves legend hover cards with the pointer", () => {
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+
+    fireEvent.mouseEnter(screen.getByLabelText("Workspace"), { clientX: 220, clientY: 90 });
+    const categoryHover = document.querySelector(".category-hover-card") as HTMLElement;
+
+    expect(categoryHover.style.left).toBe("236px");
+    expect(categoryHover.style.top).toBe("106px");
+
+    fireEvent.mouseMove(screen.getByLabelText("Workspace"), { clientX: 320, clientY: 190 });
+
+    expect(categoryHover.style.left).toBe("336px");
+    expect(categoryHover.style.top).toBe("206px");
   });
 
   it("shows legend hover breakdowns from productivity labels", () => {
