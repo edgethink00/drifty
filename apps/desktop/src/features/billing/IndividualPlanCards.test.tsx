@@ -15,6 +15,7 @@ describe("IndividualPlanCards", () => {
 
     expect(screen.getByRole("radio", { name: /monthly/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /yearly/i })).toBeTruthy();
+    expect(screen.getByText("Save 20%")).toBeTruthy();
     expect(screen.queryByRole("radio", { name: /quarterly/i })).toBeNull();
     expect(screen.queryByRole("article", { name: /business plan/i })).toBeNull();
     expect(screen.queryByText(/every 3 months|\$4\.33/i)).toBeNull();
