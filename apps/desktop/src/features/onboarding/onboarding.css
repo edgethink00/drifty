@@ -293,7 +293,7 @@
 }
 
 .onboarding-card .onboarding-body--choose_setup .onboarding-viewport {
-  overflow-y: hidden;
+  overflow: visible;
 }
 
 /* ── Step transition (content fade + slide, smooth card height) ── */
