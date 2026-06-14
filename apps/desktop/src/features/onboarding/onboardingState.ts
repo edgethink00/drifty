@@ -41,6 +41,22 @@ export function getUserOnboardingStorageKey(userId: string): string {
   return `drifty:onboarding:v${ONBOARDING_STORAGE_VERSION}:${userId}`;
 }
 
+function readOnboardingStateFromStorageKey(storageKey: string): UserOnboardingState | null {
+  try {
+    return parseUserOnboardingState(window.localStorage.getItem(storageKey));
+  } catch {
+    return null;
+  }
+}
+
+function writeOnboardingStateToStorageKey(storageKey: string, state: UserOnboardingState): void {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    return;
+  }
+}
+
 function parseUserOnboardingState(rawValue: string | null): UserOnboardingState | null {
   if (!rawValue) return null;
   try {
@@ -86,32 +102,28 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
   }
 }
 
-export function readUserOnboardingState(userId: string): UserOnboardingState | null {
+export function readUserOnboardingState(userId: string, fallbackUserIds: readonly string[] = []): UserOnboardingState | null {
   const storageKey = getUserOnboardingStorageKey(userId);
 
-  let state: UserOnboardingState | null = null;
-  try {
-    state = parseUserOnboardingState(window.localStorage.getItem(storageKey));
-  } catch {
-    return null;
-  }
+  const state = readOnboardingStateFromStorageKey(storageKey);
   if (state) return state;
 
   const previousDriftyKey = `drifty:onboarding:v1:${userId}`;
-  let migrated: UserOnboardingState | null = null;
-  try {
-    migrated = parseUserOnboardingState(window.localStorage.getItem(previousDriftyKey));
-  } catch {
-    return null;
+  const migrated = readOnboardingStateFromStorageKey(previousDriftyKey);
+  if (migrated) {
+    writeOnboardingStateToStorageKey(storageKey, migrated);
+    return migrated;
   }
-  if (!migrated) return null;
 
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(migrated));
-  } catch {
-    // best effort migration; fall through and return the parsed value
+  for (const fallbackUserId of fallbackUserIds) {
+    if (fallbackUserId === userId) continue;
+    const fallbackState = readUserOnboardingState(fallbackUserId);
+    if (!fallbackState) continue;
+    writeOnboardingStateToStorageKey(storageKey, fallbackState);
+    return fallbackState;
   }
-  return migrated;
+
+  return null;
 }
 
 export { ONBOARDING_STORAGE_VERSION };

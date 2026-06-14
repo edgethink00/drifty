@@ -137,8 +137,8 @@ function maskApiKey(key: string): string {
 
 type NotificationPermissionState = "unknown" | "checking" | "granted" | "denied" | "unavailable";
 
-export function hasCompletedUserOnboarding(userId: string): boolean {
-  return readUserOnboardingState(userId)?.completed === true;
+export function hasCompletedUserOnboarding(userId: string, fallbackUserIds: readonly string[] = []): boolean {
+  return readUserOnboardingState(userId, fallbackUserIds)?.completed === true;
 }
 
 export function saveUserOnboardingState({
