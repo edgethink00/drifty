@@ -2701,27 +2701,27 @@ export default function App() {
       return;
     }
 
-    if (billingEntitlement?.status === "locked") {
-      setBillingEntitlementError(null);
-      setBillingCheckoutLoadingInterval(billingInterval);
-      try {
-        const checkoutResult = await createIndividualCheckout(billingInterval);
-        if (!checkoutResult.success) {
-          setBillingEntitlementError(checkoutResult.error);
-          return;
-        }
-
-        const { openUrl } = await import("@tauri-apps/plugin-opener");
-        await openUrl(checkoutResult.data.url);
-      } catch (error) {
-        setBillingEntitlementError(toErrorMessage(error));
-      } finally {
-        setBillingCheckoutLoadingInterval(null);
-      }
+    if (billingEntitlement?.status === "active" || billingEntitlement?.status === "trialing") {
+      void refreshBillingEntitlement();
       return;
     }
 
-    void refreshBillingEntitlement();
+    setBillingEntitlementError(null);
+    setBillingCheckoutLoadingInterval(billingInterval);
+    try {
+      const checkoutResult = await createIndividualCheckout(billingInterval);
+      if (!checkoutResult.success) {
+        setBillingEntitlementError(checkoutResult.error);
+        return;
+      }
+
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(checkoutResult.data.url);
+    } catch (error) {
+      setBillingEntitlementError(toErrorMessage(error));
+    } finally {
+      setBillingCheckoutLoadingInterval(null);
+    }
   }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
 
   const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
