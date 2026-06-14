@@ -51,6 +51,9 @@ def accessibility_address_bar_script(app_name: str) -> str:
         property readableCount : 0
         property visitedCount : 0
         property maxVisited : 500
+        property toolbarVisitedCount : 0
+        property toolbarMaxVisited : 120
+        property foundAddress : false
 
         on considerAddressCandidate(addressField)
           tell application "System Events"
@@ -71,12 +74,14 @@ def accessibility_address_bar_script(app_name: str) -> str:
                   set bestLength to length of candidate
                   set bestPriority to candidatePriority
                 end if
+                if candidatePriority is 1 then set foundAddress to true
               end if
             end try
           end tell
         end considerAddressCandidate
 
         on scanElement(theElement)
+          if foundAddress is true then return
           if visitedCount is greater than maxVisited then return
           set visitedCount to visitedCount + 1
           tell application "System Events"
@@ -87,15 +92,41 @@ def accessibility_address_bar_script(app_name: str) -> str:
             if roleText is "AXWebArea" then return
             if roleText is "AXTextField" or roleText is "AXComboBox" then
               my considerAddressCandidate(theElement)
+              if foundAddress is true then return
             end if
             try
               repeat with childElement in UI elements of theElement
                 my scanElement(childElement)
+                if foundAddress is true then exit repeat
                 if visitedCount is greater than maxVisited then exit repeat
               end repeat
             end try
           end tell
         end scanElement
+
+        on scanToolbarFirst(theElement)
+          if foundAddress is true then return
+          if toolbarVisitedCount is greater than toolbarMaxVisited then return
+          set toolbarVisitedCount to toolbarVisitedCount + 1
+          tell application "System Events"
+            set roleText to ""
+            try
+              set roleText to role of theElement
+            end try
+            if roleText is "AXWebArea" then return
+            if roleText is "AXToolbar" then
+              my scanElement(theElement)
+              return
+            end if
+            try
+              repeat with childElement in UI elements of theElement
+                my scanToolbarFirst(childElement)
+                if foundAddress is true then exit repeat
+                if toolbarVisitedCount is greater than toolbarMaxVisited then exit repeat
+              end repeat
+            end try
+          end tell
+        end scanToolbarFirst
 
         tell application "System Events"
           if not (exists process "{app_name}") then return "{AX_NO_PROCESS}"
@@ -107,7 +138,12 @@ def accessibility_address_bar_script(app_name: str) -> str:
             set bestPriority to -1
             set readableCount to 0
             set visitedCount to 0
-            my scanElement(front window)
+            set toolbarVisitedCount to 0
+            set foundAddress to false
+            my scanToolbarFirst(front window)
+            if foundAddress is false then
+              my scanElement(front window)
+            end if
             if readableCount is 0 then return "{AX_NO_ADDRESS_FIELD}"
             return bestValue & linefeed & axTitle
           end tell
