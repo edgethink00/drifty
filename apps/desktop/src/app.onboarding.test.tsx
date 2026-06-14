@@ -465,7 +465,7 @@ describe("App onboarding", () => {
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
   });
 
   it("waits for profile loading to settle before showing onboarding", async () => {
@@ -519,12 +519,12 @@ describe("App onboarding", () => {
     render(<App />);
 
     await advanceToReadyStep({ activity: "Coding" });
-    await screen.findByRole("dialog", { name: /you're ready to start/i });
+    await screen.findByRole("dialog", { name: /you're ready to go/i });
 
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
@@ -542,6 +542,35 @@ describe("App onboarding", () => {
     expect(storedRecord.driftThresholdMinutes).toBeNull();
     expect(typeof storedRecord.completedAt).toBe("string");
     expect(saveOwnProfile).not.toHaveBeenCalled();
+  });
+
+  it("shows the free trial started notice inside Cloud onboarding", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: {
+        plan: "individual",
+        status: "trialing",
+        canUseApp: true,
+        trialEndsAt: "2026-06-20T00:00:00.000Z",
+        currentPeriodEnd: null,
+      },
+    });
+
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+
+    expect(within(readyDialog).getByText(/drifty cloud selected/i)).toBeTruthy();
+    expect(within(readyDialog).getByText(/1-week free trial started/i)).toBeTruthy();
+    expect(within(readyDialog).getByText(/available until jun 20/i)).toBeTruthy();
+
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    });
+    expect(screen.queryByRole("status", { name: /drifty cloud trial started/i })).toBeNull();
   });
 
   it("stores selected drift alarm and extreme nudge preferences from onboarding", async () => {
@@ -577,7 +606,7 @@ describe("App onboarding", () => {
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
@@ -595,7 +624,7 @@ describe("App onboarding", () => {
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
 
     expect(getUserOnboardingStorageKey("user-1")).toBe("drifty:onboarding:v2:user-1");
@@ -638,7 +667,7 @@ describe("App onboarding", () => {
 
       const storageError = await screen.findByRole("alert");
       expect(storageError.textContent).toMatch(/unable to save setup locally/i);
-      expect(screen.getByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
       expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeNull();
       expect(saveOwnProfile).not.toHaveBeenCalled();
     } finally {
@@ -758,7 +787,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();
     expect(screen.getByText(/tracking readiness verified/i)).toBeTruthy();
   });

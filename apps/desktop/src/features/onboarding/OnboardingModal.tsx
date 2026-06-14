@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
+import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import { AccountStep } from "./components/AccountStep";
 import { Dropdown } from "./components/Dropdown";
 import { NudgesStep } from "./components/NudgesStep";
@@ -208,8 +209,10 @@ export function OnboardingModal({
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
+  cloudTrialStartedNotice,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithEmail,
+  onAcknowledgeCloudTrialStartedNotice,
   onComplete,
   __devInitialStep,
 }: {
@@ -223,8 +226,10 @@ export function OnboardingModal({
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
+  cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   onStartCloudTrialWithGoogle: () => void;
   onStartCloudTrialWithEmail: () => void;
+  onAcknowledgeCloudTrialStartedNotice: () => void;
   onComplete: (state: UserOnboardingState) => void;
   /** Dev-only: start on a specific step for visual review / Playwright. */
   __devInitialStep?: OnboardingStep;
@@ -378,7 +383,7 @@ export function OnboardingModal({
       case "nudges":
         return "Set up drift alerts";
       case "ready":
-        return "You're ready to start";
+        return setupChoice === "simple" && accountConnected ? "You're ready to go" : "You're ready to start";
       case "privacy":
         return "What Drifty records";
       case "work_profile":
@@ -388,7 +393,7 @@ export function OnboardingModal({
       case "notifications":
         return "Allow notifications";
     }
-  }, [connectionPhase, isByokSetup, step]);
+  }, [accountConnected, connectionPhase, isByokSetup, setupChoice, step]);
 
   const subtitle = step === "choose_setup"
     ? "Start with Drifty Cloud, run AI locally, or bring your own AI key. You can change this later."
@@ -592,6 +597,9 @@ export function OnboardingModal({
     if (!result.success) {
       setStorageError(result.error);
       return;
+    }
+    if (setupChoice === "simple" && cloudTrialStartedNotice) {
+      onAcknowledgeCloudTrialStartedNotice();
     }
     onComplete(result.state);
   }
@@ -1208,12 +1216,21 @@ export function OnboardingModal({
                   <ul className="onb-summary" aria-label="Setup summary">
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
-                      Drifty AI selected
+                      Drifty Cloud selected
                     </li>
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
                       Account connected
                     </li>
+                    {cloudTrialStartedNotice ? (
+                      <li className="onb-summary__item onb-summary__item--stacked">
+                        <span className="onb-summary__check" aria-hidden="true" />
+                        <span>
+                          <strong>1-week free trial started</strong>
+                          <small>{cloudTrialStartedNotice.detail}</small>
+                        </span>
+                      </li>
+                    ) : null}
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
                       {permissionSummaryLabel}

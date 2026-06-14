@@ -3,8 +3,9 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import driftyLogoUrl from "../../assets/drifty-icon.png";
 import ollamaLogoUrl from "../../assets/ollama-logo.svg";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
+import { formatCloudTrialStartedDetail } from "../billing/CloudTrialStartedNotice";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
-import type { BillingInterval } from "../billing/billingService";
+import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import type { LocalAiSetupState } from "./localAiSetup";
 
 export const AI_SETUP_SECTIONS = [
@@ -27,9 +28,11 @@ type CloudSetupPanelProps = {
   readonly aiServerStatusLabel: string;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
+  readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly cloudStatusRefreshing: boolean;
   readonly cloudStatusLabel: string;
+  readonly cloudTrialEndsAt: string | null;
   readonly currentBillingPlan: BillingPlanId | null;
   readonly isSupabaseConfigured: boolean;
   readonly shouldShowCloudCheckoutPlans: boolean;
@@ -98,9 +101,11 @@ export function CloudSetupPanel({
   aiServerStatusLabel,
   billingCheckoutLoadingInterval,
   billingEntitlementError,
+  billingEntitlementStatus,
   billingPlansDisabled,
   cloudStatusRefreshing,
   cloudStatusLabel,
+  cloudTrialEndsAt,
   currentBillingPlan,
   isSupabaseConfigured,
   shouldShowCloudCheckoutPlans,
@@ -108,6 +113,7 @@ export function CloudSetupPanel({
   onStartCloudSetup,
 }: CloudSetupPanelProps) {
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
+  const isCurrentTrial = isCurrentCloudPlan && billingEntitlementStatus === "trialing";
   const primaryActionLabel = cloudActionLabel({
     billingCheckoutLoadingInterval,
     cloudStatusRefreshing,
@@ -126,8 +132,8 @@ export function CloudSetupPanel({
       </div>
       <div className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
         <div>
-          <strong>{isCurrentCloudPlan ? "Cloud AI is active" : "Continue with Drifty Cloud"}</strong>
-          <p>{isCurrentCloudPlan ? "Refresh the account entitlement if the status looks stale." : "Drifty will open the Polar checkout after account sign-in is confirmed."}</p>
+          <strong>{isCurrentTrial ? "1-week free trial is active" : isCurrentCloudPlan ? "Cloud AI is active" : "Continue with Drifty Cloud"}</strong>
+          <p>{isCurrentTrial ? formatCloudTrialStartedDetail(cloudTrialEndsAt) : isCurrentCloudPlan ? "Refresh the account entitlement if the status looks stale." : "Drifty will open the Polar checkout after account sign-in is confirmed."}</p>
         </div>
         <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handlePrimaryAction()} disabled={primaryActionDisabled}>
           {primaryActionLabel}

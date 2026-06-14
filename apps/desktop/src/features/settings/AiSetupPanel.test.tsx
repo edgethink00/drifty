@@ -7,9 +7,13 @@ import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 
 function renderPanel({
   currentBillingPlan = "individual",
+  billingEntitlementStatus = "active",
+  cloudTrialEndsAt = null,
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
 }: {
   readonly currentBillingPlan?: "free" | "individual";
+  readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
+  readonly cloudTrialEndsAt?: string | null;
   readonly initialSetup?: LocalAiSetupState;
 } = {}) {
   const onRefreshCloudStatus = vi.fn();
@@ -23,9 +27,11 @@ function renderPanel({
         aiServerStatusLabel="Available"
         billingCheckoutLoadingInterval={null}
         billingEntitlementError={null}
+        billingEntitlementStatus={billingEntitlementStatus}
         billingPlansDisabled={false}
         cloudStatusRefreshing={false}
         cloudStatusLabel="Cloud AI available"
+        cloudTrialEndsAt={cloudTrialEndsAt}
         currentBillingPlan={currentBillingPlan}
         isSupabaseConfigured={true}
         localAiSetup={localAiSetup}
@@ -80,5 +86,17 @@ describe("AiSetupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /refresh drifty cloud/i }));
 
     expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows active trial copy in the Cloud row", () => {
+    renderPanel({
+      billingEntitlementStatus: "trialing",
+      cloudTrialEndsAt: "2026-06-20T00:00:00.000Z",
+    });
+
+    const cloudSettings = screen.getByRole("group", { name: /Drifty Cloud settings/i });
+
+    expect(within(cloudSettings).getByText(/1-week free trial is active/i)).toBeTruthy();
+    expect(within(cloudSettings).getByText(/available until jun 20/i)).toBeTruthy();
   });
 });
