@@ -98,3 +98,17 @@ export function cellGroupTitle(group: FlowBlockHoverGroup): string {
   labels.push(`Duration: ${secondsToLabel(group.durationSeconds)}`);
   return labels.join("\n");
 }
+
+export function buildCellGroupAriaLabels(groupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>): Map<number, string> {
+  const labelsByGroup = new Map<FlowBlockHoverGroup, string>();
+  const labelsByMinute = new Map<number, string>();
+  for (const [minute, group] of groupsByCell) {
+    let label = labelsByGroup.get(group);
+    if (label === undefined) {
+      label = cellGroupTitle(group).replace(/\n/g, ", ");
+      labelsByGroup.set(group, label);
+    }
+    labelsByMinute.set(minute, label);
+  }
+  return labelsByMinute;
+}

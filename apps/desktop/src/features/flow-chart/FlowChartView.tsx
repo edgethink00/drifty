@@ -4,8 +4,9 @@ import { FLOW_INTERVAL_OPTIONS, logicalMinuteOfDay, type ActivityCategory, type 
 import { PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { FlowHoverCard, FlowLegendHoverCard, buildLegendActivityBreakdown, moveFlowHoverCardToPointer, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
-import { buildFlowBlockHoverGroups, flowBlockHoverGroupPosition, type FlowBlockHoverGroup } from "./flowHoverGroups";
-import { cellGroupTitle, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell, normalizeStartOfDayMinutes } from "./flowChartFormat";
+import { buildFlowBlockHoverGroups, flowBlockHoverGroupPosition } from "./flowHoverGroups";
+import { buildCellGroupAriaLabels, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell, normalizeStartOfDayMinutes } from "./flowChartFormat";
+import { useFlowChartHoverDelegation } from "./useFlowChartHoverDelegation";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
@@ -56,6 +57,7 @@ export function FlowChartView({
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   const [colorMode, setColorMode] = useState<FlowColorMode>("category");
+  const flowGridRef = useRef<HTMLDivElement>(null);
   const hoveredBlockCardRef = useRef<HTMLDivElement>(null);
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
   const hoveredGroupMinutes = useMemo(
@@ -81,6 +83,8 @@ export function FlowChartView({
     () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes),
     [blocks, boundaryMinutes, intervalMinutes],
   );
+  const cellAriaLabelsByMinute = useMemo(() => buildCellGroupAriaLabels(hoverGroupsByCell), [hoverGroupsByCell]);
+  useFlowChartHoverDelegation({ gridRef: flowGridRef, cardRef: hoveredBlockCardRef, hoverGroupsByCell, setHoveredBlock });
   const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height" | "--flow-row-count", string> = {
     "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
     "--flow-breakdown-cell-min-height": `${(FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
@@ -98,10 +102,6 @@ export function FlowChartView({
     x: event.clientX,
     y: event.clientY,
   });
-  const showBlockHover = (event: MouseEvent<HTMLButtonElement>, group: FlowBlockHoverGroup) => {
-    moveFlowHoverCardToPointer(hoveredBlockCardRef.current, event.clientX, event.clientY);
-    setHoveredBlock((current) => current?.group === group ? current : { group, x: event.clientX, y: event.clientY });
-  };
   if (blocks.length === 0) return null;
 
   return (
@@ -199,7 +199,7 @@ export function FlowChartView({
           );
         })}
       </div>
-      <div className="flow-chart-grid">
+      <div className="flow-chart-grid" ref={flowGridRef}>
         {hoveredBlock ? <FlowHoverGroupHighlights group={hoveredBlock.group} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} /> : null}
         {rowMinuteOffsets.map((minuteOffset) => {
           const isCurrentMinuteRow = minuteOffset === currentMinuteOffset;
@@ -241,10 +241,8 @@ export function FlowChartView({
                     className={`flow-cell flow-cell--${colorMode === "productivity" ? block.productivity : block.category}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
                     key={block.minuteOfDay}
                     type="button"
-                    aria-label={cellGroupTitle(hoverGroup).replace(/\n/g, ", ")}
-                    onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => showBlockHover(event, hoverGroup)}
-                    onMouseMove={(event: MouseEvent<HTMLButtonElement>) => moveFlowHoverCardToPointer(hoveredBlockCardRef.current, event.clientX, event.clientY)}
-                    onMouseLeave={() => setHoveredBlock(null)}
+                    aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
+                    data-flow-minute={block.minuteOfDay}
                   >
                     <span className="flow-cell__mark" aria-hidden="true" />
                   </button>

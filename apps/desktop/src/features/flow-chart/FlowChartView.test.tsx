@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
@@ -48,6 +48,10 @@ function visibleHourLabels(): string[] {
 function cssRule(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return styles.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`))?.[1] ?? "";
+}
+
+function fireNativePointerMove(target: Element, clientX: number, clientY: number): void {
+  fireEvent(target, new MouseEvent("pointermove", { bubbles: true, clientX, clientY }));
 }
 
 type BlockPlacementCase = {
@@ -204,7 +208,7 @@ describe("FlowChartView", () => {
     expect(row.querySelector(".flow-chart-row-label")?.textContent).toBe(":10");
     expect(Array.from(document.querySelectorAll(".flow-chart-row-label"), (label) => label.textContent)).not.toContain(":09");
 
-    fireEvent.mouseEnter(cell, { clientX: 120, clientY: 80 });
+    fireNativePointerMove(cell, 120, 80);
 
     expect(document.querySelector(".flow-hover-card")?.textContent).toContain("14:10–14:20");
   });
@@ -233,29 +237,31 @@ describe("FlowChartView", () => {
     const cell = screen.getByRole("button", { name: /instagram\.com/i });
     expect(cell.getAttribute("aria-label")).not.toContain("Google Chrome");
 
-    fireEvent.mouseEnter(cell, { clientX: 120, clientY: 80 });
+    fireNativePointerMove(cell, 120, 80);
 
     expect(screen.getAllByText("instagram.com").length).toBeGreaterThan(0);
     expect(screen.queryByText("Google Chrome")).toBeNull();
   });
 
-  it("moves the flow hover card with the pointer within the same cell", () => {
+  it("moves the flow hover card with the pointer within the same cell", async () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 
     const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-    fireEvent.mouseEnter(cell, { clientX: 120, clientY: 80 });
+    fireNativePointerMove(cell, 120, 80);
     const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
 
     expect(hoverCard.style.left).toBe("136px");
     expect(hoverCard.style.top).toBe("96px");
 
-    fireEvent.mouseMove(cell, { clientX: 320, clientY: 190 });
+    fireNativePointerMove(cell, 320, 190);
 
-    expect(hoverCard.style.left).toBe("336px");
-    expect(hoverCard.style.top).toBe("206px");
+    await waitFor(() => {
+      expect(hoverCard.style.left).toBe("336px");
+      expect(hoverCard.style.top).toBe("206px");
+    });
   });
 
-  it("moves an active flow hover card while moving through the same hover group", () => {
+  it("moves an active flow hover card while moving through the same hover group", async () => {
     const firstBlock = makeFlowBlock();
     const nextBlock = makeFlowBlock({
       id: "flow-block-next",
@@ -264,16 +270,18 @@ describe("FlowChartView", () => {
     render(<FlowChartView blocks={[firstBlock, nextBlock]} appIcons={{}} intervalMinutes={3} />);
 
     const [firstCell, nextCell] = screen.getAllByRole("button", { name: /time block: 14:00–14:06/i });
-    fireEvent.mouseEnter(firstCell, { clientX: 120, clientY: 80 });
+    fireNativePointerMove(firstCell, 120, 80);
     const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
 
     expect(hoverCard.style.left).toBe("136px");
     expect(hoverCard.style.top).toBe("96px");
 
-    fireEvent.mouseEnter(nextCell, { clientX: 320, clientY: 190 });
+    fireNativePointerMove(nextCell, 320, 190);
 
-    expect(hoverCard.style.left).toBe("336px");
-    expect(hoverCard.style.top).toBe("206px");
+    await waitFor(() => {
+      expect(hoverCard.style.left).toBe("336px");
+      expect(hoverCard.style.top).toBe("206px");
+    });
   });
 
   it("shows site favicon labels in category legend hover breakdowns", () => {
