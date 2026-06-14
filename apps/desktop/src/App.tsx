@@ -2820,7 +2820,6 @@ export default function App() {
     }
 
     if (authStatus === "loading") {
-      setOnboardingOpen(false);
       return;
     }
 
@@ -2836,11 +2835,10 @@ export default function App() {
       }
 
       if (profileReadyUserId !== user.id) {
-        setOnboardingOpen(false);
         return;
       }
 
-      setOnboardingOpen(!hasCompletedUserOnboarding(user.id));
+      setOnboardingOpen(!hasCompletedUserOnboarding(user.id, hasRequiredAccountAuth ? ["local"] : []));
       return;
     }
 
