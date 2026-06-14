@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
+import type { Dispatch, FormEvent, SetStateAction } from "react";
 
-import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
+import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingInterval } from "../billing/billingService";
+import { OpenRouterModelDialog, SelfHostedModelDialog, type AiModelOption } from "./AiSetupModelDialogs";
+import "./AiSetupPanel.css";
+import {
+  AI_SETUP_SECTIONS,
+  AiSetupSectionCard,
+  CloudSetupPanel,
+  OllamaSetupPanel,
+  OpenRouterSetupPanel,
+  type AiSetupSection,
+} from "./AiSetupSectionCards";
 import {
   OPENROUTER_RECOMMENDED_MODELS,
   SELF_HOSTED_RECOMMENDED_MODELS,
@@ -14,14 +24,6 @@ import {
   uniqueOpenRouterModels,
 } from "./localAiSetup";
 import type { LocalAiSetupState } from "./localAiSetup";
-
-const AI_SETUP_SECTIONS = [
-  { id: "cloud", label: "Cloud" },
-  { id: "local", label: "BYOK(OpenRouter)" },
-  { id: "ollama", label: "Local (Ollama)" },
-] as const;
-
-type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -41,12 +43,6 @@ type AiSetupPanelProps = {
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
 };
-
-function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {
-  if (section === "local") return "openrouter_byok";
-  if (section === "ollama") return "self_hosted";
-  return null;
-}
 
 export function AiSetupPanel({
   aiServerStatusLabel,
@@ -80,25 +76,19 @@ export function AiSetupPanel({
     [openRouterFallbackModels, openRouterPrimaryModel],
   );
   const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !isRecommendedOpenRouterModel(model));
-  const openRouterModelOptions = useMemo(
-    () => [
-      ...OPENROUTER_RECOMMENDED_MODELS,
-      ...openRouterCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-    ],
-    [openRouterCustomSelectedModels],
-  );
+  const openRouterModelOptions = useMemo((): readonly AiModelOption[] => [
+    ...OPENROUTER_RECOMMENDED_MODELS,
+    ...openRouterCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
+  ], [openRouterCustomSelectedModels]);
   const openRouterSelectionSummary = openRouterFallbackModels.length > 0
     ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`
     : openRouterPrimaryModel;
   const selfHostedSelectedModel = localAiSetup.selfHostedModel.trim();
   const selfHostedCustomSelectedModels = selfHostedSelectedModel && !isRecommendedSelfHostedModel(selfHostedSelectedModel) ? [selfHostedSelectedModel] : [];
-  const selfHostedModelOptions = useMemo(
-    () => [
-      ...SELF_HOSTED_RECOMMENDED_MODELS,
-      ...selfHostedCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-    ],
-    [selfHostedCustomSelectedModels],
-  );
+  const selfHostedModelOptions = useMemo((): readonly AiModelOption[] => [
+    ...SELF_HOSTED_RECOMMENDED_MODELS,
+    ...selfHostedCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
+  ], [selfHostedCustomSelectedModels]);
   const selfHostedModelSummary = selfHostedSelectedModel || "No model selected";
 
   useEffect(() => {
@@ -163,214 +153,109 @@ export function AiSetupPanel({
   const handleSelfHostedModelChange = (model: string) => {
     const modelId = model.trim();
     if (!modelId) return;
-    onLocalAiSetupChange((current) => ({ ...current, selfHostedModel: modelId }));
+    onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel: modelId }));
   };
 
   const handleAddSelfHostedCustomModel = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const modelId = selfHostedCustomModel.trim();
     if (!modelId) return;
-    onLocalAiSetupChange((current) => ({ ...current, selfHostedModel: modelId }));
+    onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel: modelId }));
     setSelfHostedCustomModel("");
   };
 
-  const sectionPanels = {
-    cloud: (
-      <div className="ai-setup-section-panel__body">
-        <div className="settings-row settings-row--fallback settings-row--cloud-pricing" role="group" aria-label="Drifty Cloud pricing">
-          <div className="settings-row__summary">
-            <div className="lbl">Drifty Cloud</div>
-            <span className="chip" aria-label={`Drifty Cloud status: ${cloudStatusLabel}`}>{aiServerStatusLabel}</span>
-            {billingEntitlementError ? <span className="settings-row__message">{billingEntitlementError}</span> : null}
-          </div>
-          <div className="ctrl settings-row__actions">
-            <IndividualPlanCards
-              currentPlan={currentBillingPlan}
-              disabled={billingPlansDisabled}
-              loadingInterval={billingCheckoutLoadingInterval}
-              mode={shouldShowCloudCheckoutPlans ? "checkout" : "display"}
-              onSelectPlan={isSupabaseConfigured ? (billingInterval) => void onStartCloudSetup(billingInterval) : undefined}
-            />
-            {!isSupabaseConfigured ? (
-              <button type="button" className="settings-btn settings-btn--compact" onClick={() => void onStartCloudSetup()} disabled={billingPlansDisabled}>
-                Configure Supabase
-              </button>
-            ) : null}
-            {isSupabaseConfigured && !shouldShowCloudCheckoutPlans ? (
-              <button type="button" className="settings-btn settings-btn--compact" onClick={() => void onRefreshCloudStatus()} disabled={billingPlansDisabled || cloudStatusRefreshing}>
-                {cloudStatusRefreshing ? "Checking..." : "Refresh Drifty Cloud"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    ),
-    local: (
-      <div className="ai-setup-section-panel__body">
-        <div className="cloud-overview__header">
-          <div>
-            <h3>OpenRouter BYOK</h3>
-          </div>
-          <span className="chip">Saved on this Mac</span>
-        </div>
-        <div className="settings-row settings-row--fallback settings-row--provider-card" role="group" aria-label="OpenRouter BYOK settings">
-          <div>
-            <div className="lbl">OpenRouter BYOK</div>
-          </div>
-          <div className="ctrl settings-row__actions">
-            <button type="button" className="settings-btn settings-btn--primary settings-btn--compact" onClick={() => handleSectionChange("local")}>Selected</button>
-            <input className="settings-input" type="password" autoComplete="off" aria-label="OpenRouter API key" value={localAiSetup.openRouterApiKey} onChange={(event) => onLocalAiSetupChange((current) => ({ ...current, openRouterApiKey: event.target.value }))} placeholder="sk-or-v1-..." />
-            <div className="model-picker-summary">
-              <div className="model-picker-summary__chips">
-                <span className="chip green">Primary: {openRouterPrimaryModel}</span>
-                {openRouterFallbackModels.length > 0 ? <span className="chip gray">{openRouterFallbackModels.length} fallback{openRouterFallbackModels.length === 1 ? "" : "s"}</span> : null}
-              </div>
-              <button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={() => setOpenRouterModelPickerOpen(true)}>Choose models</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    ),
-    ollama: (
-      <div className="ai-setup-section-panel__body">
-        <div className="cloud-overview__header">
-          <div>
-            <h3>Local (Ollama)</h3>
-          </div>
-          <span className="chip">Saved on this Mac</span>
-        </div>
-        <div className="settings-row settings-row--fallback settings-row--provider-card" role="group" aria-label="Self-hosted AI settings">
-          <div>
-            <div className="lbl">Self-hosted local AI</div>
-          </div>
-          <div className="ctrl settings-row__actions">
-            <button type="button" className="settings-btn settings-btn--primary settings-btn--compact" onClick={() => handleSectionChange("ollama")}>Selected</button>
-            <input className="settings-input" aria-label="Self-hosted base URL" value={localAiSetup.selfHostedBaseUrl} onChange={(event) => onLocalAiSetupChange((current) => ({ ...current, selfHostedBaseUrl: event.target.value }))} placeholder="http://localhost:11434/v1" />
-            <div className="model-picker-summary">
-              <div className="model-picker-summary__chips"><span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span></div>
-              <button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={() => setSelfHostedModelPickerOpen(true)}>Choose model</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    ),
-  } satisfies Record<AiSetupSection, ReactNode>;
-
   return (
     <div className="settings-block ai-setup-panel">
-      <div className="cloud-overview__header ai-setup-panel__header">
-        <div>
-          <h3>AI setup</h3>
-        </div>
-        <span className="chip green">Local-first</span>
+      <div className="ai-setup-panel__header">
+        <h3>AI setup</h3>
       </div>
 
-      <div className="ai-setup-section-tabs" role="tablist" aria-label="AI setup sections">
-        {AI_SETUP_SECTIONS.map((section) => {
-          const selected = section.id === activeSection;
-          return (
-            <button
-              key={section.id}
-              id={`ai-setup-tab-${section.id}`}
-              type="button"
-              className={`ai-setup-section-tab${selected ? " is-active" : ""}`}
-              role="tab"
-              aria-selected={selected}
-              aria-controls={`ai-setup-panel-${section.id}`}
-              onClick={() => handleSectionChange(section.id)}
-            >
-              <span>{section.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div
-        id={`ai-setup-panel-${activeSection}`}
-        className="ai-setup-section-panel"
-        role="tabpanel"
-        aria-labelledby={`ai-setup-tab-${activeSection}`}
-      >
-        {sectionPanels[activeSection]}
+      <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "cloud"} badges={[aiServerStatusLabel, isSupabaseConfigured ? "Polar checkout" : "Cloud off"]} onToggle={handleSectionChange}>
+          <CloudSetupPanel
+            aiServerStatusLabel={aiServerStatusLabel}
+            billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+            billingEntitlementError={billingEntitlementError}
+            billingPlansDisabled={billingPlansDisabled}
+            cloudStatusRefreshing={cloudStatusRefreshing}
+            cloudStatusLabel={cloudStatusLabel}
+            currentBillingPlan={currentBillingPlan}
+            isSupabaseConfigured={isSupabaseConfigured}
+            shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+            onRefreshCloudStatus={onRefreshCloudStatus}
+            onStartCloudSetup={onStartCloudSetup}
+          />
+        </AiSetupSectionCard>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", openRouterPrimaryModel]} onToggle={handleSectionChange}>
+          <OpenRouterSetupPanel
+            fallbackCount={openRouterFallbackModels.length}
+            localAiSetup={localAiSetup}
+            primaryModel={openRouterPrimaryModel}
+            onChooseModels={() => setOpenRouterModelPickerOpen(true)}
+            onLocalAiSetupChange={onLocalAiSetupChange}
+          />
+        </AiSetupSectionCard>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} badges={[localAiSetup.provider === "self_hosted" ? "Selected" : "Local", selfHostedSelectedModel || "Choose model"]} onToggle={handleSectionChange}>
+          <OllamaSetupPanel
+            localAiSetup={localAiSetup}
+            modelSummary={selfHostedModelSummary}
+            onChooseModel={() => setSelfHostedModelPickerOpen(true)}
+            onLocalAiSetupChange={onLocalAiSetupChange}
+          />
+        </AiSetupSectionCard>
       </div>
 
       {openRouterModelPickerOpen ? (
-        <div className="auth-modal__overlay" onClick={() => setOpenRouterModelPickerOpen(false)}>
-          <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
-            <div className="auth-modal__header">
-              <h2 id="openrouter-model-picker-title">OpenRouter models</h2>
-              <p>Drifty sends models in priority order. Your API key stays session-only.</p>
-            </div>
-            <div className="model-picker-modal__summary" aria-label="Selected OpenRouter model summary">
-              <span className="chip green">Primary: {openRouterPrimaryModel}</span>
-              <span className="chip gray">{openRouterSelectionSummary}</span>
-            </div>
-            <div className="model-picker-list" role="group" aria-label="OpenRouter model choices">
-              {openRouterModelOptions.map((option) => {
-                const isSelected = openRouterSelectedModels.includes(option.id);
-                const isPrimary = option.id === openRouterPrimaryModel;
-                const badge = "badge" in option ? option.badge : null;
-                return (
-                  <div key={option.id} className="model-picker-choice" data-selected={isSelected ? "true" : "false"}>
-                    <label className="model-picker-choice__select">
-                      <input type="checkbox" aria-label={`Select ${option.id}`} checked={isSelected} onChange={(event) => handleOpenRouterModelToggle(option.id, event.target.checked)} />
-                      <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
-                    </label>
-                    {badge ? <span className="chip green">{badge}</span> : null}
-                    <label className="model-picker-choice__primary">
-                      <input type="radio" name="openrouter-primary-model" aria-label={`Use ${option.id} as primary`} checked={isPrimary} disabled={!isSelected} onChange={() => handleOpenRouterPrimaryModelChange(option.id)} />
-                      <span>Primary</span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-            <form className="model-picker-custom" onSubmit={handleAddOpenRouterCustomModel}>
-              <label htmlFor="openrouter-custom-model">Other model</label>
-              <div>
-                <input id="openrouter-custom-model" className="settings-input" aria-label="Other OpenRouter model" value={openRouterCustomModel} onChange={(event) => setOpenRouterCustomModel(event.target.value)} placeholder="provider/model-name" />
-                <button type="submit" className="settings-btn">Add model</button>
-              </div>
-            </form>
-            <button type="button" className="settings-btn auth-modal__close" onClick={() => setOpenRouterModelPickerOpen(false)}>Close</button>
-          </section>
-        </div>
+        <OpenRouterModelDialog
+          customModel={openRouterCustomModel}
+          fallbackSummary={openRouterSelectionSummary}
+          openRouterPrimaryModel={openRouterPrimaryModel}
+          options={openRouterModelOptions}
+          selectedModels={openRouterSelectedModels}
+          onAddCustomModel={handleAddOpenRouterCustomModel}
+          onClose={() => setOpenRouterModelPickerOpen(false)}
+          onCustomModelChange={setOpenRouterCustomModel}
+          onPrimaryModelChange={handleOpenRouterPrimaryModelChange}
+          onToggleModel={handleOpenRouterModelToggle}
+        />
       ) : null}
 
       {selfHostedModelPickerOpen ? (
-        <div className="auth-modal__overlay" onClick={() => setSelfHostedModelPickerOpen(false)}>
-          <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="self-hosted-model-picker-title" onClick={(event) => event.stopPropagation()}>
-            <div className="auth-modal__header">
-              <h2 id="self-hosted-model-picker-title">Self-hosted model</h2>
-              <p>Pick a common local model or enter the exact model ID returned by your endpoint.</p>
-            </div>
-            <div className="model-picker-modal__summary" aria-label="Selected self-hosted model summary">
-              <span className={selfHostedSelectedModel ? "chip green" : "chip gray"}>{selfHostedModelSummary}</span>
-            </div>
-            <div className="model-picker-list" role="radiogroup" aria-label="Self-hosted model choices">
-              {selfHostedModelOptions.map((option) => {
-                const isSelected = option.id === selfHostedSelectedModel;
-                return (
-                  <div key={option.id} className="model-picker-choice model-picker-choice--single" data-selected={isSelected ? "true" : "false"}>
-                    <label className="model-picker-choice__select">
-                      <input type="radio" name="self-hosted-model" aria-label={`Use ${option.id}`} checked={isSelected} onChange={() => handleSelfHostedModelChange(option.id)} />
-                      <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-            <form className="model-picker-custom" onSubmit={handleAddSelfHostedCustomModel}>
-              <label htmlFor="self-hosted-custom-model">Other model</label>
-              <div>
-                <input id="self-hosted-custom-model" className="settings-input" aria-label="Other self-hosted model" value={selfHostedCustomModel} onChange={(event) => setSelfHostedCustomModel(event.target.value)} placeholder="model-name" />
-                <button type="submit" className="settings-btn">Use model</button>
-              </div>
-            </form>
-            <button type="button" className="settings-btn auth-modal__close" onClick={() => setSelfHostedModelPickerOpen(false)}>Close</button>
-          </section>
-        </div>
+        <SelfHostedModelDialog
+          customModel={selfHostedCustomModel}
+          modelSummary={selfHostedModelSummary}
+          options={selfHostedModelOptions}
+          selectedModel={selfHostedSelectedModel}
+          onAddCustomModel={handleAddSelfHostedCustomModel}
+          onClose={() => setSelfHostedModelPickerOpen(false)}
+          onCustomModelChange={setSelfHostedCustomModel}
+          onModelChange={handleSelfHostedModelChange}
+        />
       ) : null}
     </div>
   );
+}
+
+function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {
+  switch (section) {
+    case "cloud":
+      return null;
+    case "local":
+      return "openrouter_byok";
+    case "ollama":
+      return "self_hosted";
+    default:
+      return assertNever(section);
+  }
+}
+
+class AiSetupSectionError extends Error {
+  constructor(readonly section: string) {
+    super(`Unhandled AI setup section: ${section}`);
+    this.name = "AiSetupSectionError";
+  }
+}
+
+function assertNever(value: never): never {
+  throw new AiSetupSectionError(String(value));
 }

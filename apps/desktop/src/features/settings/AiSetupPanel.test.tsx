@@ -43,38 +43,38 @@ function renderPanel({
 }
 
 describe("AiSetupPanel", () => {
-  it("switches between Cloud, Local, and Local Ollama setup menus", () => {
+  it("switches between Cloud, OpenRouter, and Ollama setup rows", () => {
     renderPanel();
 
-    const sectionTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
-    expect(within(sectionTabs).getByRole("tab", { name: /^Cloud$/i }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("group", { name: /Drifty Cloud pricing/i })).toBeTruthy();
+    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
+    expect(within(sectionChoices).getByRole("button", { name: /^Drifty Cloud setup row$/i }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Self-hosted AI settings/i })).toBeNull();
 
-    fireEvent.click(within(sectionTabs).getByRole("tab", { name: /^BYOK\(OpenRouter\)$/i }));
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter BYOK setup row$/i }));
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
-    expect(screen.queryByRole("group", { name: /Drifty Cloud pricing/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /Drifty Cloud settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Self-hosted AI settings/i })).toBeNull();
 
-    fireEvent.click(within(sectionTabs).getByRole("tab", { name: /^Local \(Ollama\)$/i }));
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Local Ollama setup row$/i }));
     const ollamaSettings = screen.getByRole("group", { name: /Self-hosted AI settings/i });
-    expect(within(ollamaSettings).getByRole("button", { name: /^Selected$/ })).toBeTruthy();
     expect(within(ollamaSettings).getByLabelText(/Self-hosted base URL/i)).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
   });
 
-  it("starts Cloud setup from the Individual plan card without a separate website button", () => {
+  it("starts Cloud setup from the Polar CTA without plan cards", () => {
     const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free" });
 
     expect(screen.queryByRole("button", { name: /continue on drifty\.so/i })).toBeNull();
+    expect(screen.queryByRole("article", { name: /individual plan/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /choose individual plan/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue in polar/i }));
 
-    expect(onStartCloudSetup).toHaveBeenCalledWith("monthly");
+    expect(onStartCloudSetup).toHaveBeenCalledWith();
   });
 
-  it("refreshes Cloud status from the pricing row", () => {
+  it("refreshes Cloud status from the active Cloud row", () => {
     const { onRefreshCloudStatus } = renderPanel();
 
     fireEvent.click(screen.getByRole("button", { name: /refresh drifty cloud/i }));
