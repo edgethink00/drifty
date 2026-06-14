@@ -19,6 +19,7 @@ from app.tracker.browser_automation import (
 )
 
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
+OSASCRIPT_TIMEOUT_SECONDS: Final = 2.0
 
 
 class OnScreenWindowRow(TypedDict):
@@ -71,12 +72,16 @@ _CG_WINDOW_ROWS_SCRIPT: Final[str] = "\n".join(
 
 
 def _run_osascript(script: str) -> str:
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=OSASCRIPT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("osascript timed out") from error
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "osascript failed")
     return result.stdout.strip()

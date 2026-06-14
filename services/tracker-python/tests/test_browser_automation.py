@@ -10,7 +10,12 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app.tracker.accessibility_address_bar import accessibility_address_bar_script
-from app.tracker.macos_workspace import BrowserMetadata, _browser_metadata, _browser_script
+from app.tracker.macos_workspace import (
+    BrowserMetadata,
+    _browser_metadata,
+    _browser_script,
+    _run_osascript,
+)
 
 
 class BrowserAutomationDiagnosticsTests(unittest.TestCase):
@@ -35,6 +40,38 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertIn("property maxVisited : 500", script)
         self.assertIn("property bestPriority : -1", script)
         self.assertNotIn("entire contents", script)
+
+    def test_accessibility_address_bar_script_prioritizes_toolbar_and_stops_on_address_field(self) -> None:
+        script = accessibility_address_bar_script("Google Chrome")
+
+        self.assertIn("property toolbarMaxVisited : 120", script)
+        self.assertIn("property foundAddress : false", script)
+        self.assertIn("on scanToolbarFirst(theElement)", script)
+        self.assertLess(
+            script.index("my scanToolbarFirst(front window)"),
+            script.index("my scanElement(front window)"),
+        )
+        self.assertIn("if foundAddress is true then return", script)
+        self.assertIn("if foundAddress is true then exit repeat", script)
+
+    def test_run_osascript_uses_timeout(self) -> None:
+        with patch("app.tracker.macos_workspace.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "ok\n"
+            mock_run.return_value.stderr = ""
+
+            result = _run_osascript("return \"ok\"")
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(mock_run.call_args.kwargs["timeout"], 2.0)
+
+    def test_run_osascript_reports_timeout_as_runtime_error(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["osascript"], timeout=2.0),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "osascript timed out"):
+                _run_osascript("delay 5")
 
     def test_browser_script_marks_missing_scriptable_window(self) -> None:
         script = _browser_script("Google Chrome")
