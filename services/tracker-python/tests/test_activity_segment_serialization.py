@@ -65,6 +65,67 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         self.assertEqual(segment["browserAutomationStatus"], "empty_result")
         self.assertEqual(segment["browserAutomationError"], "Google Chrome returned an empty browser automation result.")
 
+    def test_fetch_timeline_hides_uncertain_front_fallback_site_context(self) -> None:
+        started_at = "2026-06-13T00:00:00+00:00"
+        with TemporaryDirectory() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": "2026-06-13T00:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": "Google Chrome",
+                    "bundle_id": "com.google.Chrome",
+                    "window_title": "Lecture - YouTube - Chrome - Alex",
+                    "site_domain": "127.0.0.1",
+                    "site_title": "drifty — AI Time Tracker for Focus & Drift",
+                    "site_url": "http://127.0.0.1:4173/?v=drifty",
+                    "browser_name": "Google Chrome",
+                    "site_source": "applescript-front-window",
+                    "platform": "macos",
+                    "source": "accessibility",
+                    "confidence": 0.5,
+                }
+            )
+
+            local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+            segment = database.fetch_timeline(local_day)[0]
+
+        self.assertIsNone(segment["siteDomain"])
+        self.assertIsNone(segment["siteTitle"])
+        self.assertIsNone(segment["siteUrl"])
+        self.assertEqual(segment["windowTitle"], "Lecture - YouTube - Chrome - Alex")
+
+    def test_fetch_timeline_hides_front_fallback_site_context_without_window_title(self) -> None:
+        started_at = "2026-06-13T00:00:00+00:00"
+        with TemporaryDirectory() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": "2026-06-13T00:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": "Google Chrome",
+                    "bundle_id": "com.google.Chrome",
+                    "window_title": None,
+                    "site_domain": "127.0.0.1",
+                    "site_title": "drifty — AI Time Tracker for Focus & Drift",
+                    "site_url": "http://127.0.0.1:4173/?v=drifty",
+                    "browser_name": "Google Chrome",
+                    "site_source": "applescript-front-window",
+                    "platform": "macos",
+                    "source": "nsworkspace",
+                    "confidence": 0.8,
+                }
+            )
+
+            local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+            segment = database.fetch_timeline(local_day)[0]
+
+        self.assertIsNone(segment["siteDomain"])
+        self.assertIsNone(segment["siteTitle"])
+        self.assertIsNone(segment["siteUrl"])
+
 
 if __name__ == "__main__":
     unittest.main()

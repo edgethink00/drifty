@@ -257,6 +257,19 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
     title = parts[1].strip() if len(parts) > 1 else None
     match_state = parts[2].strip() if len(parts) > 2 else None
     ax_window_title = parts[3].strip() if len(parts) > 3 else None
+    if match_state == "front-fallback" and is_chromium_browser_app(app_name):
+        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        if fallback and fallback.site_url:
+            return fallback
+        return BrowserMetadata(
+            browser_name=app_name,
+            ax_window_title=ax_window_title,
+            match_state=match_state,
+            browser_automation_status=fallback.browser_automation_status if fallback else "unavailable",
+            browser_automation_error=fallback.browser_automation_error
+            if fallback
+            else f"{app_name} front fallback did not match the focused window.",
+        )
     video_id, playlist_id, is_shorts = youtube_ids(url)
     return BrowserMetadata(
         browser_name=app_name,
