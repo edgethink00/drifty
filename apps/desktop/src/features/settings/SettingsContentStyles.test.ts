@@ -20,6 +20,26 @@ describe("Settings content styles", () => {
     expect(headingRule).toContain("font-weight: 620;");
   });
 
+  it("uses inset separators inside grouped settings rows", () => {
+    const styles = readFileSync("src/styles.css", "utf8");
+    const rowRule = cssRule(styles, ".content--settings .settings-block:has(> h3) > .settings-row");
+    const separatorRule = cssRule(
+      styles,
+      ".content--settings .settings-block:has(> h3) > .settings-row:not(:last-child):not(.settings-row--group-end)::after",
+    );
+
+    expect(rowRule).toContain("border-right: 1px solid var(--line);");
+    expect(rowRule).toContain("border-top: 0;");
+    expect(rowRule).toContain("border-bottom: 0;");
+    expect(rowRule).toContain("border-left: 1px solid var(--line);");
+    expect(rowRule).not.toContain("border-bottom: 1px solid var(--line);");
+    expect(separatorRule).toContain("left: 1rem;");
+    expect(separatorRule).toContain("right: 1rem;");
+    expect(separatorRule).toContain("background: var(--line);");
+    expect(styles).toContain(".content--settings .settings-block:has(> h3) > .settings-row--group-end");
+    expect(styles).toContain("border-bottom: 1px solid var(--line);");
+  });
+
   it("emphasizes only the top general settings heading", () => {
     const styles = readFileSync("src/styles.css", "utf8");
     const generalHeadingRule = cssRule(
@@ -48,5 +68,40 @@ describe("Settings content styles", () => {
     expect(switchRules.every((rule) => rule.includes("box-shadow: none;"))).toBe(true);
     expect(activeRules.every((rule) => rule.includes("border-color: transparent;"))).toBe(true);
     expect(activeRules.every((rule) => rule.includes("box-shadow: none;"))).toBe(true);
+  });
+
+  it("keeps AI setup provider rows compact", () => {
+    const aiSetupStyles = readFileSync("src/features/settings/AiSetupPanel.css", "utf8");
+    const toggleRule = cssRule(aiSetupStyles, ".ai-setup-choice__toggle");
+    const brandMarkRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark");
+    const brandImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark img");
+
+    expect(toggleRule).toContain("grid-template-columns: 2.75rem minmax(0, 1fr) auto 1rem;");
+    expect(toggleRule).toContain("min-height: 5.1rem;");
+    expect(toggleRule).toContain("padding: 0.85rem var(--space-4);");
+    expect(brandMarkRule).toContain("height: 2.75rem;");
+    expect(brandMarkRule).toContain("width: 2.75rem;");
+    expect(brandImageRule).toContain("height: 2.38rem;");
+    expect(brandImageRule).toContain("width: 2.38rem;");
+  });
+
+  it("uses the focus color for the Cloud setup CTA", () => {
+    const aiSetupStyles = readFileSync("src/features/settings/AiSetupPanel.css", "utf8");
+    const cloudPrimaryRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn--primary");
+
+    expect(cloudPrimaryRule).toContain("background: var(--productivity-focus);");
+    expect(cloudPrimaryRule).toContain("border-color: var(--productivity-focus);");
+    expect(cloudPrimaryRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--productivity-focus) 24%, transparent);");
+  });
+
+  it("keeps the first heading aligned to the active settings section label", () => {
+    const appSource = readFileSync("src/App.tsx", "utf8");
+
+    expect(appSource).toContain('settingsSection === "notifications"');
+    expect(appSource).toContain("<h3>Notifications</h3>");
+    expect(appSource).toContain('settingsSection === "privacy"');
+    expect(appSource).toContain("<h3>Privacy</h3>");
+    expect(appSource).toContain('settingsSection === "data"');
+    expect(appSource).toContain("<h3>Data & Export</h3>");
   });
 });

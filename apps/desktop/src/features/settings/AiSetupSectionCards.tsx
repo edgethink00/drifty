@@ -233,11 +233,11 @@ function cloudActionLabel({
   readonly isCurrentCloudPlan: boolean;
   readonly isSupabaseConfigured: boolean;
 }): string {
-  if (billingCheckoutLoadingInterval !== null) return "Opening Polar...";
+  if (billingCheckoutLoadingInterval !== null) return "Opening checkout...";
   if (cloudStatusRefreshing) return "Checking...";
-  if (!isSupabaseConfigured) return "Configure Supabase";
+  if (!isSupabaseConfigured) return "Set up Drifty Cloud";
   if (isCurrentCloudPlan) return "Refresh Drifty Cloud";
-  return "Continue in Polar";
+  return "Set up Drifty Cloud";
 }
 
 function assertNever(value: never): never {

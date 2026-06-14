@@ -4212,12 +4212,13 @@ export default function App() {
                 {settingsSection === "classification" && (
                   <div className="settings-section settings-section--classification">
                     <div className="settings-block cloud-overview">
-                      <div className="cloud-overview__header">
+                      <h3>Classification</h3>
+                      <div className="settings-row">
                         <div>
-                          <h3>Classification rules</h3>
-                          <p>Create local rules for domains and recorded apps. Rules stay on this Mac and are never synced to Drifty Cloud.</p>
+                          <div className="lbl">Classification rules</div>
+                          <div className="desc">Create local rules for domains and recorded apps. Rules stay on this Mac and are never synced to Drifty Cloud.</div>
                         </div>
-                        <span className="chip green">Local only</span>
+                        <div className="ctrl"><span className="chip green">Local only</span></div>
                       </div>
                       <div className="settings-row settings-row--fallback classification-rule-form">
                         <div>
@@ -4234,7 +4235,7 @@ export default function App() {
                           <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleSaveDomainRule()} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? "Saving..." : "Save Domain rule"}</button>
                         </div>
                       </div>
-                      <div className="settings-row settings-row--fallback classification-rule-form">
+                      <div className="settings-row settings-row--fallback settings-row--group-end classification-rule-form">
                         <div>
                           <div className="lbl">Add App rule</div>
                           <div className="desc">Search app names Drifty has recorded locally, then choose category and productivity.</div>
@@ -4273,12 +4274,13 @@ export default function App() {
                       {classificationRuleApplyResult ? <p className="classification-summary" role="status">{formatClassificationRuleApplyResult(classificationRuleApplyResult)}</p> : null}
                     </div>
                     <div className="settings-block">
-                      <div className="classification-rule-list-head">
+                      <h3>Saved local rules</h3>
+                      <div className="settings-row settings-row--group-end classification-rule-list-head">
                         <div>
-                          <h3>Saved local rules</h3>
-                          <p className="classification-rule-copy">Use the switch to save a rule as off, delete it, or reapply enabled rules to existing activity.</p>
+                          <div className="lbl">Saved local rules</div>
+                          <div className="desc">Use the switch to save a rule as off, delete it, or reapply enabled rules to existing activity.</div>
                         </div>
-                        <div className="settings-row__actions">
+                        <div className="ctrl settings-row__actions">
                           <button type="button" className="settings-btn" onClick={() => void loadClassificationRules()} disabled={classificationRulesLoading}>Refresh</button>
                           <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleApplyClassificationRules()} disabled={classificationRuleApplying || classificationRules.length === 0}>{classificationRuleApplying ? "Applying..." : "Apply rules"}</button>
                         </div>
@@ -4337,7 +4339,7 @@ export default function App() {
                   </div>
                 )}
                 {settingsSection === "notifications" && (
-                  <div className="settings-section"><div className="settings-block"><h3>Alerts</h3>
+                  <div className="settings-section"><div className="settings-block"><h3>Notifications</h3>
                     <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple settings-mode-switch--compact" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span></button>))}</div></div></div>
                     <div className="settings-row"><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
@@ -4346,7 +4348,7 @@ export default function App() {
                 )}
                 {settingsSection === "privacy" && (
                   <div className="settings-section">
-                    <div className="settings-block"><h3>Data</h3>
+                    <div className="settings-block"><h3>Privacy</h3>
                       <div className="settings-row"><div><div className="lbl">Raw tracking history is not published</div><div className="desc">Leaderboard and profile features publish aggregates only. AI classification may send minimized activity fields to configured providers for the request, but Drifty does not store raw tracking history for leaderboard or profile publishing.</div></div><div className="ctrl"><span className="chip green">Privacy first</span></div></div>
                       <div className="settings-row"><div><div className="lbl">Optional cloud features are explicit</div><div className="desc">If you configure Supabase and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total. Raw tracking history is not published there.</div></div><div className="ctrl"><span className="chip">Opt-in only</span></div></div>
                     </div>
@@ -4354,7 +4356,7 @@ export default function App() {
                 )}
                 {settingsSection === "data" && (
                   <div className="settings-section">
-                    <div className="settings-block"><h3>Storage</h3>
+                    <div className="settings-block"><h3>Data & Export</h3>
                       <div className="settings-row"><div><div className="lbl">Database</div></div><div className="ctrl ctrl--value">{status?.databasePath ?? "Unknown"}</div></div>
                       <div className="settings-row"><div><div className="lbl">Sessions logged</div></div><div className="ctrl ctrl--value">{segments.length} today</div></div>
                     </div>
@@ -4366,7 +4368,7 @@ export default function App() {
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && (
                   <div className="settings-section">
                     <div className="settings-block settings-block--dev-preview">
-                      <h3>Dev notifications</h3>
+                      <h3>Dev</h3>
                       {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
                         <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Dev-only local summary after 6:00 PM, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
                       ) : null}
