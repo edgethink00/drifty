@@ -145,6 +145,11 @@ import {
   fetchBillingEntitlement,
   type BillingEntitlement,
 } from "./features/billing/billingService";
+import {
+  CloudTrialStartedNotice,
+  claimCloudTrialStartedNotice,
+  type CloudTrialStartedNoticeModel,
+} from "./features/billing/CloudTrialStartedNotice";
 import { AiSetupPanel } from "./features/settings/AiSetupPanel";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
@@ -666,6 +671,7 @@ export default function App() {
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
+  const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: segments,
@@ -2730,6 +2736,16 @@ export default function App() {
     navigateToTab("settings");
   }, [navigateToTab]);
 
+  const dismissCloudTrialStartedNotice = useCallback(() => {
+    setCloudTrialStartedNotice(null);
+  }, []);
+
+  const openCloudTrialStartedNoticeAiSetup = useCallback(() => {
+    setSettingsSection("aiSetup");
+    navigateToTab("settings");
+    setCloudTrialStartedNotice(null);
+  }, [navigateToTab]);
+
   const handleDismissDashboardAiRecovery = useCallback(() => {
     if (dashboardAiRecoveryKey === null) return;
     setDismissedDashboardAiRecoveryKey(dashboardAiRecoveryKey);
@@ -2766,6 +2782,26 @@ export default function App() {
       cancelled = true;
     };
   }, [shouldCheckBillingEntitlement, user?.id]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) {
+      setCloudTrialStartedNotice(null);
+      return;
+    }
+
+    const notice = claimCloudTrialStartedNotice(userId, billingEntitlement);
+    if (notice) setCloudTrialStartedNotice(notice);
+  }, [billingEntitlement, user?.id]);
+
+  useEffect(() => {
+    function handleBillingSuccess() {
+      void refreshBillingEntitlement();
+    }
+
+    window.addEventListener("drifty:billing-success", handleBillingSuccess);
+    return () => window.removeEventListener("drifty:billing-success", handleBillingSuccess);
+  }, [refreshBillingEntitlement]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
@@ -3545,6 +3581,13 @@ export default function App() {
           <AiConnectionStatusBar status={aiConnectionStatus} />
         </div>
       </div>
+      {cloudTrialStartedNotice && !onboardingOpen ? (
+        <CloudTrialStartedNotice
+          notice={cloudTrialStartedNotice}
+          onDismiss={dismissCloudTrialStartedNotice}
+          onOpenAiSetup={openCloudTrialStartedNoticeAiSetup}
+        />
+      ) : null}
       {/* ── Sidebar ── */}
       {activeTab === "settings" ? (
         <SettingsSidebar
@@ -4322,9 +4365,11 @@ export default function App() {
                       aiServerStatusLabel={aiServerStatusLabel}
                       billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                       billingEntitlementError={effectiveBillingEntitlementError}
+                      billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                       billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
                       cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                       cloudStatusLabel={cloudStatusLabel}
+                      cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
                       currentBillingPlan={currentBillingPlan}
                       isSupabaseConfigured={effectiveIsSupabaseConfigured}
                       localAiSetup={localAiSetup}
@@ -4492,11 +4537,13 @@ export default function App() {
           onCheckAccessibility={handleCheckAccessibility}
           onRequestAccessibility={handleRequestAccessibility}
           onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
+          cloudTrialStartedNotice={cloudTrialStartedNotice}
           onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
           onStartCloudTrialWithEmail={() => {
             setOnboardingOpen(false);
             setAuthModalOpen(true);
           }}
+          onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
           onComplete={handleOnboardingComplete}
         />
       ) : null}

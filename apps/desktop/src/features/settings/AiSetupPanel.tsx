@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
-import type { BillingInterval } from "../billing/billingService";
+import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { OpenRouterModelDialog, SelfHostedModelDialog, type AiModelOption } from "./AiSetupModelDialogs";
 import "./AiSetupPanel.css";
 import {
@@ -31,9 +31,11 @@ type AiSetupPanelProps = {
   readonly aiServerStatusLabel: string;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
+  readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly cloudStatusRefreshing: boolean;
   readonly cloudStatusLabel: string;
+  readonly cloudTrialEndsAt: string | null;
   readonly currentBillingPlan: BillingPlanId | null;
   readonly isSupabaseConfigured: boolean;
   readonly localAiSetup: LocalAiSetupState;
@@ -48,9 +50,11 @@ export function AiSetupPanel({
   aiServerStatusLabel,
   billingCheckoutLoadingInterval,
   billingEntitlementError,
+  billingEntitlementStatus,
   billingPlansDisabled,
   cloudStatusRefreshing,
   cloudStatusLabel,
+  cloudTrialEndsAt,
   currentBillingPlan,
   isSupabaseConfigured,
   localAiSetup,
@@ -176,9 +180,11 @@ export function AiSetupPanel({
             aiServerStatusLabel={aiServerStatusLabel}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
             billingEntitlementError={billingEntitlementError}
+            billingEntitlementStatus={billingEntitlementStatus}
             billingPlansDisabled={billingPlansDisabled}
             cloudStatusRefreshing={cloudStatusRefreshing}
             cloudStatusLabel={cloudStatusLabel}
+            cloudTrialEndsAt={cloudTrialEndsAt}
             currentBillingPlan={currentBillingPlan}
             isSupabaseConfigured={isSupabaseConfigured}
             shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
