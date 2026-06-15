@@ -65,6 +65,7 @@ export function IndividualPlanCards({
   loadingInterval,
   mode = "checkout",
   onBillingIntervalChange,
+  onSelectFreePlan,
   onSelectPlan,
 }: {
   readonly billingInterval?: VisibleBillingInterval;
@@ -73,6 +74,7 @@ export function IndividualPlanCards({
   readonly loadingInterval: BillingInterval | null;
   readonly mode?: "checkout" | "display";
   readonly onBillingIntervalChange?: (interval: VisibleBillingInterval) => void;
+  readonly onSelectFreePlan?: () => void;
   readonly onSelectPlan?: (interval: VisibleBillingInterval) => void;
 }) {
   const [internalBillingInterval, setInternalBillingInterval] = useState<VisibleBillingInterval>("monthly");
@@ -145,7 +147,13 @@ export function IndividualPlanCards({
             </span>
           </span>
           <PlanFeatureList items={FREE_PLAN_FEATURES} />
-          <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
+          {onSelectFreePlan ? (
+            <button type="button" className="individual-plan-card__cta" aria-label="Open AI setup" onClick={onSelectFreePlan}>
+              AI setup
+            </button>
+          ) : (
+            <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
+          )}
         </article>
         {canSelectIndividual ? (
           <button

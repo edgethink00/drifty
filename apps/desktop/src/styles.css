@@ -12431,16 +12431,16 @@ button.flow-cell:focus {
   align-items: center;
   background: color-mix(in srgb, var(--bg-2) 70%, var(--surface));
   border: 0;
-  border-radius: 999px;
+  border-radius: 1.35rem;
   box-sizing: border-box;
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 76%, transparent);
   display: inline-flex;
   gap: 0;
-  height: 3.125rem;
+  height: 2.65625rem;
   justify-self: center;
   margin: 0.35rem 0 1.125rem;
   max-width: max-content;
-  padding: 0.3125rem;
+  padding: 0.25rem;
 }
 
 .individual-plan-interval {
@@ -12448,13 +12448,13 @@ button.flow-cell:focus {
   appearance: none;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 1.05rem;
   box-sizing: border-box;
   color: var(--text);
   cursor: pointer;
   display: inline-flex;
   gap: 0.45rem;
-  height: 2.5rem;
+  height: 2.15625rem;
   justify-content: center;
   min-width: 6.5rem;
   padding: 0 1.35rem;
@@ -12493,7 +12493,7 @@ button.flow-cell:focus {
 .individual-plan-interval__save {
   display: inline-flex;
   align-items: center;
-  color: #1478ff;
+  color: var(--individual-plan-olive);
   font-family: var(--font-sans);
   font-size: 0.86rem;
   font-weight: 660;
@@ -12740,6 +12740,7 @@ button.individual-plan-card:focus-visible {
 
 .individual-plan-card__cta {
   align-items: center;
+  background: color-mix(in srgb, var(--surface) 90%, var(--bg-2));
   border: 1px solid var(--line);
   border-radius: 0.625rem;
   color: var(--text);
@@ -12755,6 +12756,16 @@ button.individual-plan-card:focus-visible {
   padding: 0 1rem;
   white-space: nowrap;
   width: 100%;
+}
+
+button.individual-plan-card__cta {
+  appearance: none;
+  cursor: pointer;
+}
+
+button.individual-plan-card__cta:hover,
+button.individual-plan-card__cta:focus-visible {
+  border-color: color-mix(in srgb, var(--text) 16%, var(--line));
 }
 
 .individual-plan-card--featured .individual-plan-card__cta {
