@@ -1,7 +1,9 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BillingEntitlement } from "./billingService";
 import "./CloudTrialStartedNotice.css";
 
 const CLOUD_TRIAL_STARTED_NOTICE_STORAGE_PREFIX = "drifty:billing:trial-started-notice:v1";
+const CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS = 5_000;
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 export type CloudTrialStartedNoticeModel = {
@@ -48,11 +50,45 @@ export function CloudTrialStartedNotice({
   onDismiss,
   onOpenAiSetup,
 }: CloudTrialStartedNoticeProps) {
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
+  const timeoutIdRef = useRef<number | null>(null);
+  const timerStartedAtRef = useRef(Date.now());
+  const remainingDismissMsRef = useRef(CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS);
+
+  const clearDismissTimer = useCallback(() => {
+    if (timeoutIdRef.current === null) return;
+    window.clearTimeout(timeoutIdRef.current);
+    timeoutIdRef.current = null;
+  }, []);
+
+  const pauseDismissTimer = useCallback(() => {
+    if (isTimerPaused) return;
+
+    clearDismissTimer();
+    remainingDismissMsRef.current = Math.max(0, remainingDismissMsRef.current - (Date.now() - timerStartedAtRef.current));
+    setIsTimerPaused(true);
+  }, [clearDismissTimer, isTimerPaused]);
+
+  const resumeDismissTimer = useCallback(() => {
+    if (!isTimerPaused) return;
+    setIsTimerPaused(false);
+  }, [isTimerPaused]);
+
+  useEffect(() => {
+    if (isTimerPaused) return undefined;
+
+    timerStartedAtRef.current = Date.now();
+    timeoutIdRef.current = window.setTimeout(onDismiss, remainingDismissMsRef.current);
+    return clearDismissTimer;
+  }, [clearDismissTimer, isTimerPaused, onDismiss]);
+
   return (
     <section
-      className="cloud-trial-started-notice"
+      className={isTimerPaused ? "cloud-trial-started-notice is-paused" : "cloud-trial-started-notice"}
       role="status"
       aria-label="Drifty Cloud trial started"
+      onMouseEnter={pauseDismissTimer}
+      onMouseLeave={resumeDismissTimer}
     >
       <span className="cloud-trial-started-notice__signal" aria-hidden="true">
         <span className="cloud-trial-started-notice__signal-dot" />
@@ -81,6 +117,11 @@ export function CloudTrialStartedNotice({
           <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" />
         </svg>
       </button>
+      <span
+        className="cloud-trial-started-notice__timer"
+        role="timer"
+        aria-label="Trial notice closes in 5 seconds"
+      />
     </section>
   );
 }
