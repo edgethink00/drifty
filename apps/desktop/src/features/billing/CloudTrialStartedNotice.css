@@ -16,6 +16,7 @@
   gap: var(--space-3);
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   max-width: min(25.5rem, calc(100vw - var(--space-4) * 2));
+  overflow: hidden;
   padding: var(--space-3);
   position: fixed;
   right: var(--space-4);
@@ -115,6 +116,33 @@
 
 .cloud-trial-started-notice .cloud-trial-started-notice__action {
   white-space: nowrap;
+}
+
+.cloud-trial-started-notice__timer {
+  animation: cloudTrialNoticeTimer 5s linear forwards;
+  background: color-mix(in srgb, var(--cloud-trial-accent) 62%, transparent);
+  bottom: 0;
+  height: 3px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  transform-origin: left center;
+}
+
+.cloud-trial-started-notice.is-paused .cloud-trial-started-notice__timer {
+  animation-play-state: paused;
+}
+
+@keyframes cloudTrialNoticeTimer {
+  from {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+
+  to {
+    opacity: 0.45;
+    transform: scaleX(0);
+  }
 }
 
 @media (max-width: 680px) {
