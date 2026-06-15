@@ -10,11 +10,13 @@ function renderPanel({
   billingEntitlementStatus = "active",
   cloudTrialEndsAt = null,
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
+  userEmail = null,
 }: {
   readonly currentBillingPlan?: "free" | "individual";
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
   readonly cloudTrialEndsAt?: string | null;
   readonly initialSetup?: LocalAiSetupState;
+  readonly userEmail?: string | null;
 } = {}) {
   const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
@@ -36,6 +38,7 @@ function renderPanel({
         isSupabaseConfigured={true}
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
+        userEmail={userEmail}
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
         onRefreshCloudStatus={onRefreshCloudStatus}
@@ -98,5 +101,14 @@ describe("AiSetupPanel", () => {
 
     expect(within(cloudSettings).getByText(/1-week free trial is active/i)).toBeTruthy();
     expect(within(cloudSettings).getByText(/available until jun 20/i)).toBeTruthy();
+  });
+
+  it("shows the signed-in Cloud account with a masked email", () => {
+    renderPanel({ userEmail: "alex@example.com" });
+
+    const cloudSettings = screen.getByRole("group", { name: /Drifty Cloud settings/i });
+
+    expect(within(cloudSettings).getByText("al***@example.com")).toBeTruthy();
+    expect(within(cloudSettings).queryByText("alex@example.com")).toBeNull();
   });
 });

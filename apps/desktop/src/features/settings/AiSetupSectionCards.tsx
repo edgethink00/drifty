@@ -36,6 +36,7 @@ type CloudSetupPanelProps = {
   readonly currentBillingPlan: BillingPlanId | null;
   readonly isSupabaseConfigured: boolean;
   readonly shouldShowCloudCheckoutPlans: boolean;
+  readonly userEmail: string | null;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
 };
@@ -109,11 +110,13 @@ export function CloudSetupPanel({
   currentBillingPlan,
   isSupabaseConfigured,
   shouldShowCloudCheckoutPlans,
+  userEmail,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: CloudSetupPanelProps) {
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
   const isCurrentTrial = isCurrentCloudPlan && billingEntitlementStatus === "trialing";
+  const maskedUserEmail = maskCloudAccountEmail(userEmail);
   const primaryActionLabel = cloudActionLabel({
     billingCheckoutLoadingInterval,
     cloudStatusRefreshing,
@@ -128,6 +131,7 @@ export function CloudSetupPanel({
       <div className="ai-setup-detail__summary">
         <span className="chip green">{aiServerStatusLabel}</span>
         <span>{cloudStatusLabel}</span>
+        {maskedUserEmail ? <span>{maskedUserEmail}</span> : null}
         {billingEntitlementError ? <span className="ai-setup-detail__message">{billingEntitlementError}</span> : null}
       </div>
       <div className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
@@ -241,9 +245,17 @@ function cloudActionLabel({
 }): string {
   if (billingCheckoutLoadingInterval !== null) return "Opening checkout...";
   if (cloudStatusRefreshing) return "Checking...";
-  if (!isSupabaseConfigured) return "Set up Drifty Cloud";
-  if (isCurrentCloudPlan) return "Refresh Drifty Cloud";
-  return "Set up Drifty Cloud";
+  if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Set up Drifty Cloud";
+  return "Refresh Drifty Cloud";
+}
+
+function maskCloudAccountEmail(email: string | null): string | null {
+  const trimmedEmail = email?.trim();
+  if (!trimmedEmail) return null;
+
+  const [localPart, domain, ...extraParts] = trimmedEmail.split("@");
+  if (!localPart || !domain || extraParts.length > 0) return trimmedEmail;
+  return `${localPart.slice(0, Math.min(2, localPart.length))}***@${domain}`;
 }
 
 function assertNever(value: never): never {

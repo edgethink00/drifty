@@ -66,9 +66,9 @@
 
 .ai-setup-brand-mark img {
   display: block;
-  height: 2.38rem;
+  height: 2.02rem;
   object-fit: contain;
-  width: 2.38rem;
+  width: 2.02rem;
 }
 
 .ai-setup-brand-mark--cloud {
@@ -80,8 +80,8 @@
 }
 
 .ai-setup-brand-mark--openrouter img {
-  height: 2.08rem;
-  width: 2.08rem;
+  height: 1.77rem;
+  width: 1.77rem;
 }
 
 .ai-setup-brand-mark--ollama {
@@ -89,8 +89,8 @@
 }
 
 .ai-setup-brand-mark--ollama img {
-  height: 2.12rem;
-  width: 1.7rem;
+  height: 1.8rem;
+  width: 1.45rem;
 }
 
 .ai-setup-choice__copy {

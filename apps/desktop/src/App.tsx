@@ -4376,6 +4376,7 @@ export default function App() {
                       isSupabaseConfigured={effectiveIsSupabaseConfigured}
                       localAiSetup={localAiSetup}
                       shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+                      userEmail={user?.email ?? null}
                       onDialogOpenChange={setAiSetupDialogOpen}
                       onLocalAiSetupChange={setLocalAiSetup}
                       onRefreshCloudStatus={refreshBillingEntitlement}
