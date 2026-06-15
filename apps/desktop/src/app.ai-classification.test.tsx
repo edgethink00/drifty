@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment, ClassificationMetrics, ClassificationQuery } from "@drifty/domain";
-import { todayIsoDate } from "@drifty/domain";
+import { logicalDayIsoDateForDate, todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
@@ -12,6 +12,7 @@ const styles = readFileSync("src/styles.css", "utf8");
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
+const DEFAULT_START_OF_DAY_MINUTES = 4 * 60;
 
 function timelineQueryIncludesDay(query: ClassificationQuery, day: string): boolean {
   if (query.day === day) return true;
@@ -311,6 +312,10 @@ function createUnclassifiedSegments(count: number, day = todayIsoDate()): Activi
     id: `unclassified-${day}-${index}`,
     windowTitle: `Unclassified work ${index}`,
   }));
+}
+
+function currentAutoClassificationDay(): string {
+  return logicalDayIsoDateForDate(new Date(), DEFAULT_START_OF_DAY_MINUTES);
 }
 
 function setRendererFocus(focused: boolean) {
@@ -621,8 +626,11 @@ describe("App AI classification controls", () => {
     expect(styles).toMatch(/\.classification-panel-view__activity-row\s*{[\s\S]*align-items:\s*center;/);
   });
 
-  it("auto-runs one 20-item AI classification batch when the renderer is not focused", async () => {
-    const today = todayIsoDate();
+  it("auto-runs one 20-item AI classification batch for the logical day when the renderer is not focused", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T00:30:00+09:00"));
+    const today = "2026-06-15";
+    window.localStorage.setItem("drifty.general.startOfDayMinutes", "240");
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
     render(<App />);
@@ -642,7 +650,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
 
     expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalledWith(
-      { day: todayIsoDate(), limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD },
+      { day: currentAutoClassificationDay(), limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD },
       AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD,
     );
     expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
@@ -686,7 +694,7 @@ describe("App AI classification controls", () => {
   });
 
   it("waits for a usable Drifty Cloud entitlement before auto-running cloud AI classification", async () => {
-    const today = todayIsoDate();
+    const today = currentAutoClassificationDay();
     const entitlementRequest = createDeferred<{
       success: true;
       data: { plan: "individual"; status: "active"; canUseApp: true; trialEndsAt: null; currentPeriodEnd: null };
@@ -727,7 +735,7 @@ describe("App AI classification controls", () => {
   });
 
   it("auto-runs signed-out AI classification when self-hosted AI is configured locally", async () => {
-    const today = todayIsoDate();
+    const today = currentAutoClassificationDay();
     authState.user = null;
     authState.status = "unauthenticated";
     markOnboardingCompleted("local");
@@ -744,7 +752,7 @@ describe("App AI classification controls", () => {
   });
 
   it("passes OpenRouter fallback models through local AI classification options after dropping Auto", async () => {
-    const today = todayIsoDate();
+    const today = currentAutoClassificationDay();
     setRendererFocus(false);
     window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
       provider: "openrouter_byok",
@@ -786,7 +794,7 @@ describe("App AI classification controls", () => {
       }
       return recordedInteraction ? AI_CLASSIFICATION_FOCUSED_IDLE_MS + 1 : 0;
     });
-    const today = todayIsoDate();
+    const today = currentAutoClassificationDay();
     setRendererFocus(true);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, today));
 

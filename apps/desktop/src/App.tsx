@@ -2623,7 +2623,7 @@ export default function App() {
     if (classificationActionLoading) return;
     if (aiClassificationInFlightRef.current) return;
 
-    const today = todayIsoDate();
+    const today = logicalTodayIsoDate(startOfDayMinutes);
     const isFocused = rendererFocusedRef.current;
     const threshold = isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return;
@@ -2657,7 +2657,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
