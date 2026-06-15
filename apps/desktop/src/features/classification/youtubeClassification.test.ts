@@ -48,4 +48,45 @@ describe("YouTube classification", () => {
       source: "youtube",
     }));
   });
+
+  it("does not classify an entertainment video as music from a recommendation playlist link alone", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteTitle: "지역 공감 월드컵 (with 게스트) - YouTube",
+      siteUrl: "https://www.youtube.com/watch?v=EntQA000001",
+      youtubeVideoId: "EntQA000001",
+      youtubeChannelName: "Sample Entertainment Channel",
+      youtubeTitle: "지역 공감 월드컵 (with 게스트)",
+      youtubeDescription: [
+        "▶같이 보면 좋은 추천 영상",
+        "https://youtu.be/RecoQA00001",
+        "▶'이상형 월드컵' 모아보기",
+        "https://youtube.com/playlist?list=PLQAexamplePlaylist01",
+      ].join("\n"),
+      youtubeKeywords: null,
+      youtubeDurationSeconds: 2396,
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+    }));
+  });
+
+  it("does not classify playlist wording as music without a music-specific URL or music terms", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteTitle: "지역 맛집 플레이리스트 - YouTube",
+      siteUrl: "https://www.youtube.com/watch?v=local-list",
+      youtubeVideoId: "local-list",
+      youtubeTitle: "지역 맛집 플레이리스트",
+      youtubeDescription: "이번 주에 방문할 곳을 모아둔 플리입니다.",
+      youtubeKeywords: ["playlist", "플레이리스트", "플리", "모음"],
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+    }));
+  });
 });
