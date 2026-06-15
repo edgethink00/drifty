@@ -25,6 +25,9 @@ const driftEvent = {
   generatedAt: "2026-05-20T13:16:00.000Z",
   breakOptions: [5, 15, 30, 60],
   focusTargets: [focusTarget],
+  sourceSiteDomain: "youtube.com",
+  sourceAppName: "Google Chrome",
+  sourceIconSrc: null,
 } satisfies DriftAlarmEvent;
 
 describe("driftAlarmBridge validation", () => {

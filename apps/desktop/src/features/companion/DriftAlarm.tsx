@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
+import { AppGlyph } from "../../components/AppGlyph";
+import { SiteFavicon } from "../../components/SiteFavicon";
 import { BreakDurationPicker } from "./BreakDurationPicker";
-import { DismissIcon, DriftSourceGlyph, FlagIcon, SettingsIcon } from "./DriftAlarmIcons";
+import { DismissIcon, FlagIcon, SettingsIcon } from "./DriftAlarmIcons";
 import { DriftAlarmFocusTargetList } from "./DriftAlarmFocusTargets";
 import { buildDefaultDriftAlarmCopy, buildDriftAlarmCopy, type DriftAlarmRenderedCopy } from "./driftAlarmCopy";
 import { DRIFT_ALARM_FOCUS_TARGET_LIMIT, type DriftAlarmAction, type DriftAlarmEvent, type DriftAlarmFocusTarget } from "./driftAlarmEvent";
@@ -167,7 +169,7 @@ export function DriftAlarm({
           ) : (
             <h2 id={titleId}>{copy.title}</h2>
           )}
-          <p className="da__drift" id={descriptionId}>
+          <div className="da__drift" id={descriptionId}>
             {isBreakReturn && breakReturn ? (
               <>
                 <span className="src-tile" aria-hidden="true">
@@ -178,7 +180,11 @@ export function DriftAlarm({
             ) : (
               <>
                 <span className="src-tile src-tile--drift" aria-hidden="true">
-                  <DriftSourceGlyph />
+                  <DriftSourceIcon
+                    appName={event.sourceAppName}
+                    iconSrc={event.sourceIconSrc}
+                    siteDomain={event.sourceSiteDomain}
+                  />
                 </span>
                 <span className="da__drift-copy">
                   <strong>{driftContextLabel}</strong>
@@ -186,7 +192,7 @@ export function DriftAlarm({
                 </span>
               </>
             )}
-          </p>
+          </div>
           {isBreakReturn && breakReturn ? (
             <div className="da__context" aria-label="Break return context">
               <div className="da__context-pills">
@@ -235,6 +241,24 @@ export function DriftAlarm({
   );
 }
 
+
+function DriftSourceIcon({
+  siteDomain,
+  appName,
+  iconSrc,
+}: {
+  siteDomain: string | null;
+  appName: string;
+  iconSrc: string | null;
+}) {
+  if (siteDomain) {
+    return <SiteFavicon domain={siteDomain} fallbackIconSrc={iconSrc} size={20} />;
+  }
+  if (iconSrc) {
+    return <img className="app-icon app-icon--sm" src={iconSrc} alt="" aria-hidden="true" />;
+  }
+  return <AppGlyph appName={appName} iconSrc={null} size="sm" />;
+}
 
 function getDriftAlarmFocusableElements(alarm: HTMLElement): HTMLElement[] {
   return Array.from(alarm.querySelectorAll<HTMLElement>(DRIFT_ALARM_FOCUSABLE_SELECTOR))

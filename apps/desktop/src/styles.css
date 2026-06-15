@@ -13624,6 +13624,14 @@ html[data-theme="dark"] .src-tile--drift {
   width: 1.25rem;
 }
 
+.da__drift .src-tile .site-favicon,
+.da__drift .src-tile .app-icon,
+.da__drift .src-tile .app-glyph {
+  border-radius: inherit;
+  height: 100%;
+  width: 100%;
+}
+
 .da__drift > span:last-child:not(.da__drift-copy) {
   overflow: hidden;
   text-overflow: ellipsis;

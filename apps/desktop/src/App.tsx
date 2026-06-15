@@ -1090,6 +1090,9 @@ export default function App() {
       preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
       generatedAt: new Date().toISOString(),
       focusTargets: recentDriftAlarmFocusTargets,
+      sourceSiteDomain: option.sourceSiteDomain,
+      sourceAppName: option.sourceAppName,
+      sourceIconSrc: option.sourceIconSrc,
       copySettings: driftAlarmCopy,
     }));
   }, [driftAlarmCopy, recentDriftAlarmFocusTargets, showDriftAlarm]);
@@ -2007,6 +2010,10 @@ export default function App() {
     }
     const buildCurrentDriftAlarmEvent = () => {
       const contextLabel = getWatcherContextLabel(segment, category);
+      const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
+      const sourceAppName = segment.appName.trim() || "Unknown app";
+      const sourceIconKey = segment.bundleId?.trim() ?? sourceAppName;
+      const sourceIconSrc = appIconsRef.current[sourceIconKey] ?? appIconsRef.current[sourceAppName] ?? null;
 
       return buildDriftAlarmEvent({
         id: alertKey,
@@ -2015,6 +2022,9 @@ export default function App() {
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
+        sourceSiteDomain,
+        sourceAppName,
+        sourceIconSrc,
         copySettings: driftAlarmCopy,
         sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
       });
@@ -2094,6 +2104,10 @@ export default function App() {
           ? pendingBreakReturnAlarm.focusTargets
           : recentDriftAlarmFocusTargets;
         const breakReturnContextLabel = getWatcherContextLabel(segment, category);
+        const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
+        const breakReturnAppName = segment.appName.trim() || "Unknown app";
+        const breakReturnIconKey = segment.bundleId?.trim() ?? breakReturnAppName;
+        const breakReturnIconSrc = appIconsRef.current[breakReturnIconKey] ?? appIconsRef.current[breakReturnAppName] ?? null;
 
         showDriftAlarm(buildBreakReturnAlarmEvent({
           id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
@@ -2102,6 +2116,9 @@ export default function App() {
           preservedFocusStrikeSeconds: 0,
           generatedAt: new Date().toISOString(),
           focusTargets,
+          sourceSiteDomain: breakReturnSiteDomain,
+          sourceAppName: breakReturnAppName,
+          sourceIconSrc: breakReturnIconSrc,
           copySettings: driftAlarmCopy,
           sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,

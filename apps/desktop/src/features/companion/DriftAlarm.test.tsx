@@ -199,6 +199,48 @@ describe("DriftAlarm", () => {
     expect(onAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 });
   });
 
+  it("renders the current drift source favicon when a site domain is available", () => {
+    const onAction = vi.fn<(action: DriftAlarmAction) => void>();
+    const event = buildDriftAlarmEvent({
+      id: "alarm-site-icon",
+      contextLabel: "sbxh6.com",
+      sourceSiteDomain: "sbxh6.com",
+      sourceAppName: "Google Chrome",
+      sourceIconSrc: null,
+      driftDurationSeconds: 2 * 60,
+      preservedFocusStrikeSeconds: 30 * 60,
+      generatedAt: "2026-05-20T13:16:00.000Z",
+      focusTargets: [],
+    });
+
+    const { container } = render(<DriftAlarm event={event} onAction={onAction} />);
+    const sourceTile = container.querySelector(".da__drift .src-tile");
+    expect(sourceTile).toBeTruthy();
+    expect(sourceTile?.querySelector(".site-favicon")).toBeTruthy();
+  });
+
+  it("renders the current drift source app icon when no site domain is available", () => {
+    const onAction = vi.fn<(action: DriftAlarmAction) => void>();
+    const event = buildDriftAlarmEvent({
+      id: "alarm-app-icon",
+      contextLabel: "Slack",
+      sourceSiteDomain: null,
+      sourceAppName: "Slack",
+      sourceIconSrc: "data:image/png;base64,slack-icon",
+      driftDurationSeconds: 2 * 60,
+      preservedFocusStrikeSeconds: 30 * 60,
+      generatedAt: "2026-05-20T13:16:00.000Z",
+      focusTargets: [],
+    });
+
+    const { container } = render(<DriftAlarm event={event} onAction={onAction} />);
+    const sourceTile = container.querySelector(".da__drift .src-tile");
+    expect(sourceTile).toBeTruthy();
+    const img = sourceTile?.querySelector("img");
+    expect(img).toBeTruthy();
+    expect(img?.getAttribute("src")).toBe("data:image/png;base64,slack-icon");
+  });
+
   it("moves focus into the alarm, traps Tab, cancels on Escape, and restores opener focus", async () => {
     const onAction = vi.fn<(action: DriftAlarmAction) => void>();
     const event = buildDriftAlarmEvent({
