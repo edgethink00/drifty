@@ -509,6 +509,75 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("saves contextless browser activity as system unknown instead of calling cloud AI", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: null,
+      browserAutomationStatus: "denied",
+      browserAutomationError: "Not authorized to send Apple events to Google Chrome.",
+      source: "nsworkspace",
+    });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment]);
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(result.selectedSegments).toBe(1);
+      expect(result.savedRecords).toBe(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(getReusableAiClassifications).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "unknown",
+        productivity: "neutral",
+        source: "system",
+        aiResult: false,
+        reason: expect.stringContaining("denied"),
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("counts contextless browser system skips before threshold AI batches", async () => {
+    const segments = Array.from({ length: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, (_, index) => createUnknownSegment(index, {
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: null,
+      browserAutomationStatus: "unavailable",
+      browserAutomationError: "Google Chrome accessibility address bar fallback found no readable address field.",
+      source: "nsworkspace",
+    }));
+
+    try {
+      const { runAiClassificationForUnknownThreshold, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments(segments);
+      const result = await runAiClassificationForUnknownThreshold({ day: "2026-05-22", limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD);
+
+      expect(result.status).toBe("saved");
+      expect(result.selectedSegments).toBe(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD);
+      expect(result.savedRecords).toBe(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(getReusableAiClassifications).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            segmentId: "segment-0",
+            source: "system",
+            aiResult: false,
+            reason: expect.stringContaining("unavailable"),
+          }),
+        ]),
+      );
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("counts inherited YouTube browse records before threshold reuse summaries", async () => {
     const browse = createYouTubeBrowseSegment(90, "https://www.youtube.com/@drifty/videos");
     const unknownSegments = Array.from({ length: 4 }, (_, index) => createUnknownSegment(index));
