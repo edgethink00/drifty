@@ -126,4 +126,48 @@ export function readUserOnboardingState(userId: string, fallbackUserIds: readonl
   return null;
 }
 
+export function saveUserWorkProfile(userId: string, workProfile: string): UserOnboardingState | null {
+  const normalizedWorkProfile = normalizeWorkProfileSetting(workProfile);
+  if (!normalizedWorkProfile) return null;
+
+  const currentState = readUserOnboardingState(userId);
+  const nextState: UserOnboardingState = {
+    version: ONBOARDING_STORAGE_VERSION,
+    completed: true,
+    displayName: currentState?.displayName ?? "",
+    workType: normalizedWorkProfile,
+    workTypeOther: "",
+    workDomain: null,
+    workDomainOther: "",
+    jobType: normalizedWorkProfile,
+    jobTypeOther: "",
+    driftAlarmEnabled: currentState?.driftAlarmEnabled ?? false,
+    extremeNudgeEnabled: currentState?.extremeNudgeEnabled ?? false,
+    focusGoalHours: currentState?.focusGoalHours ?? null,
+    driftThresholdMinutes: currentState?.driftThresholdMinutes ?? null,
+    purpose: currentState?.purpose ?? null,
+    completedAt: currentState?.completedAt ?? new Date().toISOString(),
+  };
+  writeOnboardingStateToStorageKey(getUserOnboardingStorageKey(userId), nextState);
+  return nextState;
+}
+
+export function summarizeUserWorkProfile(userId: string): string {
+  const state = readUserOnboardingState(userId);
+  if (!state) return "";
+  const workType = normalizeWorkProfileSetting(state.workType === "Other" ? state.workTypeOther : state.workType);
+  const workDomain = normalizeWorkProfileSetting(state.workDomain === "Other" ? state.workDomainOther : state.workDomain);
+  if (workType && workDomain) return `${workType} in ${workDomain}`;
+  return workType ?? workDomain ?? "";
+}
+
+function normalizeWorkProfileSetting(value: string | null | undefined): string | null {
+  const normalized = value
+    ?.replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 180).trim() || null;
+}
+
 export { ONBOARDING_STORAGE_VERSION };

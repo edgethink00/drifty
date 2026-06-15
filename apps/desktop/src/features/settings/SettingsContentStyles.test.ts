@@ -100,8 +100,16 @@ describe("Settings content styles", () => {
     expect(appSource).toContain('settingsSection === "notifications"');
     expect(appSource).toContain("<h3>Notifications</h3>");
     expect(appSource).toContain('settingsSection === "privacy"');
-    expect(appSource).toContain("<h3>Privacy</h3>");
+    expect(appSource).toContain("<PrivacySettingsSection />");
     expect(appSource).toContain('settingsSection === "data"');
     expect(appSource).toContain("<h3>Data & Export</h3>");
+  });
+
+  it("shares one privacy review component between AI setup and Privacy settings", () => {
+    const aiSetupSource = readFileSync("src/features/settings/AiSetupSupportSections.tsx", "utf8");
+    const privacySource = readFileSync("src/features/settings/PrivacySettingsSection.tsx", "utf8");
+
+    expect(aiSetupSource).toContain("<AiPrivacyReview />");
+    expect(privacySource).toContain("<AiPrivacyReview />");
   });
 });
