@@ -3701,7 +3701,6 @@ export default function App() {
             {dashboardAiRecoveryState ? (
               <DashboardAiRecoveryOverlay
                 billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
                 retrying={classificationActionLoading}
                 state={dashboardAiRecoveryState}
                 onClose={handleDismissDashboardAiRecovery}

@@ -7,7 +7,6 @@ import {
 } from "./DashboardAiUnavailableNotice";
 
 type DashboardAiRecoveryOverlayProps = {
-  readonly billingPlansDisabled: boolean;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly retrying: boolean;
   readonly state: DashboardAiUnavailableState;
@@ -19,7 +18,6 @@ type DashboardAiRecoveryOverlayProps = {
 
 export function DashboardAiRecoveryOverlay({
   billingCheckoutLoadingInterval,
-  billingPlansDisabled,
   retrying,
   state,
   onClose,
@@ -41,8 +39,8 @@ export function DashboardAiRecoveryOverlay({
         {isCloudBillingVariant(state.variant) ? (
           <div className="dashboard-ai-recovery__plans">
             <IndividualPlanCards
-              disabled={billingPlansDisabled}
               loadingInterval={billingCheckoutLoadingInterval}
+              onSelectFreePlan={onOpenAiSetup}
               onSelectPlan={onSelectBillingPlan}
             />
           </div>

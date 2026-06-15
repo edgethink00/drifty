@@ -60,4 +60,14 @@ describe("IndividualPlanCards", () => {
 
     expect(onSelectPlan).toHaveBeenCalledWith("monthly");
   });
+
+  it("opens AI setup from the Free plan card when shown with a free-plan handler", () => {
+    const onSelectFreePlan = vi.fn();
+
+    render(<IndividualPlanCards billingInterval="monthly" loadingInterval={null} mode="display" onSelectFreePlan={onSelectFreePlan} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open ai setup/i }));
+
+    expect(onSelectFreePlan).toHaveBeenCalledTimes(1);
+  });
 });
