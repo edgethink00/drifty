@@ -11,6 +11,8 @@ import type { WeekCalendarHoverState } from "./HoverCards";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 
+const ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX = 29;
+
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
   const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
   if (identity.siteDomain) {
@@ -50,6 +52,7 @@ export function WeekDashboard({
   dateNavigator: ReactNode;
 }) {
   const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
+  const [activeWeekEventId, setActiveWeekEventId] = useState<string | null>(null);
   const calendarScrollerRef = useRef<HTMLDivElement>(null);
   const calendarBodyRef = useRef<HTMLDivElement>(null);
   const autoScrollKeyRef = useRef<string | null>(null);
@@ -62,9 +65,7 @@ export function WeekDashboard({
     .sort((left, right) => right.totalSeconds - left.totalSeconds);
   const visibleCategories = activeCategories.slice(0, 5);
   const rankedRows = rows.slice().sort((left, right) => right.totalSeconds - left.totalSeconds || left.day.localeCompare(right.day));
-  const activeDayCount = rows.filter((row) => row.totalSeconds > 0).length;
   const bestDay = rankedRows.find((row) => row.totalSeconds > 0) ?? null;
-  const topCategory = activeCategories[0] ?? null;
   const peakSeconds = Math.max(rankedRows[0]?.totalSeconds ?? 0, 1);
   const summaryPeakSeconds = Math.max(...rows.map((row) => row.focusSeconds), 1);
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
@@ -233,7 +234,7 @@ export function WeekDashboard({
                         height: `${eventHeight}px`,
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 4px)` : "4px",
                         width: event.laneCount > 1 ? "calc(100% - 32px)" : "calc(100% - 8px)",
-                        zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
+                        zIndex: activeWeekEventId === event.id ? ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX : event.laneCount > 1 ? 10 + event.lane : 3,
                         "--event-tone": CATEGORY_COLORS[event.category],
                       };
                       return (
@@ -241,11 +242,23 @@ export function WeekDashboard({
                           aria-label={event.detailTitle.replace(/\n/g, ", ")}
                           className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${event.durationMinutes < 10 ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
                           key={event.id}
+                          tabIndex={0}
                           style={eventStyle}
                           title={event.detailTitle}
-                          onMouseEnter={(pointerEvent: MouseEvent<HTMLElement>) => setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY })}
-                          onMouseMove={(pointerEvent: MouseEvent<HTMLElement>) => setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY })}
-                          onMouseLeave={() => setWeekHover(null)}
+                          onFocus={() => setActiveWeekEventId(event.id)}
+                          onBlur={() => setActiveWeekEventId(null)}
+                          onMouseEnter={(pointerEvent: MouseEvent<HTMLElement>) => {
+                            setActiveWeekEventId(event.id);
+                            setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY });
+                          }}
+                          onMouseMove={(pointerEvent: MouseEvent<HTMLElement>) => {
+                            setActiveWeekEventId(event.id);
+                            setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY });
+                          }}
+                          onMouseLeave={() => {
+                            setActiveWeekEventId(null);
+                            setWeekHover(null);
+                          }}
                         >
                           <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
                           {event.isGroupedCluster ? (
