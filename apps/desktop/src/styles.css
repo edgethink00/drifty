@@ -330,7 +330,7 @@ input, textarea { color: inherit; }
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 64%, transparent);
+  border: 0;
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
   color: var(--window-chrome-icon);
@@ -338,23 +338,21 @@ input, textarea { color: inherit; }
   left: var(--window-nav-offset-x);
   top: calc(var(--window-control-center-y) - 13px);
   z-index: 31;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), outline-color var(--transition-fast), left var(--sidebar-duration) var(--sidebar-ease);
+  transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), left var(--sidebar-duration) var(--sidebar-ease);
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) .window-sidebar-toggle {
-  left: calc(var(--sidebar-expanded-width) - 40px);
+  left: calc(var(--sidebar-expanded-width) - 31.5px);
 }
 
 .window-sidebar-toggle:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
-  border-color: color-mix(in srgb, var(--line-strong) 84%, transparent);
   color: var(--window-chrome-icon-hover);
   transform: none;
 }
 
 .window-sidebar-toggle:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .window-sidebar-toggle svg {
