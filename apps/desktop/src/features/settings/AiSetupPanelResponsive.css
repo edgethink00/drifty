@@ -1,0 +1,46 @@
+@media (max-width: 760px) {
+  .ai-setup-choice__toggle {
+    grid-template-columns: 2.75rem minmax(0, 1fr) 0.8rem;
+  }
+
+  .ai-setup-model-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-setup-cloud-route,
+  .ai-setup-personalization__footer,
+  .ai-setup-support-zone__header,
+  .ai-setup-test-row,
+  .ai-setup-work-profile-panel,
+  .ai-setup-work-profile-selectors,
+  .ai-privacy-review__excluded {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .ai-setup-support-zone__header,
+  .ai-privacy-review__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ai-privacy-review__checklist {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-setup-support-section__toggle {
+    gap: var(--space-2);
+    grid-template-columns: minmax(0, 1fr) 0.8rem;
+  }
+
+  .ai-setup-support-section__toggle > .chip {
+    grid-column: 1 / 2;
+    justify-self: start;
+  }
+
+  .ai-setup-support-section__chevron {
+    grid-column: 2 / 3;
+    grid-row: 1 / 3;
+    margin-top: 0.35rem;
+  }
+}

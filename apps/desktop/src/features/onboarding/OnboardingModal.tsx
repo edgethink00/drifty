@@ -14,6 +14,7 @@ import { NudgesStep } from "./components/NudgesStep";
 import { TypewriterSequence } from "./components/TypewriterSequence";
 import {
   MAIN_ACTIVITY_OPTIONS,
+  MAX_MAIN_ACTIVITY_SELECTIONS,
   WORK_DOMAIN_OPTIONS,
   WORK_TYPE_OPTIONS,
 } from "./constants";
@@ -109,8 +110,6 @@ const PRIVACY_NOT_RECORDED = [
   "Passwords",
   "Message bodies",
 ];
-
-const MAX_MAIN_ACTIVITY_SELECTIONS = 5;
 
 type ConnectionCheckStatus = "pending" | "loading" | "success" | "error";
 type ConnectionPhase = "idle" | "testing" | "success" | "failed";

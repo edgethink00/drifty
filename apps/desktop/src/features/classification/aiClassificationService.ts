@@ -9,10 +9,11 @@ import type {
 } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { readUserOnboardingState, type UserOnboardingState } from "../onboarding/onboardingState";
+import { readUserOnboardingState } from "../onboarding/onboardingState";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
 import { saveLiveClassificationIfRequested } from "./liveAiClassificationPersistence";
+import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -21,7 +22,6 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
-const MAX_WORK_PROFILE_TEXT_LENGTH = 100;
 const AI_CLASSIFICATION_PROMPT_VERSION = "v2-work-profile";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
@@ -1101,32 +1101,6 @@ async function readSignedInUserId(): Promise<string | null> {
   }
 }
 
-function normalizeOnboardingWorkProfile(state: UserOnboardingState | null): string | null {
-  if (!state) return null;
-  const workType = normalizeWorkProfilePart(state.workType, state.workTypeOther);
-  const workDomain = normalizeWorkProfilePart(state.workDomain, state.workDomainOther);
-  if (!workType && !workDomain) return null;
-  if (workType && workDomain) return `${workType} in ${workDomain}`;
-  return workType ?? workDomain;
-}
-
-function normalizeWorkProfilePart(value: string | null, otherValue: string): string | null {
-  const normalizedValue = sanitizeWorkProfileText(value);
-  if (normalizedValue === "Other") {
-    const normalizedOther = sanitizeWorkProfileText(otherValue);
-    return normalizedOther ? `Other: ${normalizedOther}` : null;
-  }
-  return normalizedValue;
-}
-
-function sanitizeWorkProfileText(value: string | null | undefined): string | null {
-  const normalized = value
-    ?.replace(/[\u0000-\u001F\u007F]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) return null;
-  return normalized.slice(0, MAX_WORK_PROFILE_TEXT_LENGTH).trim() || null;
-}
 
 function stripJsonCodeFence(text: string): string {
   const trimmed = text.trim();
