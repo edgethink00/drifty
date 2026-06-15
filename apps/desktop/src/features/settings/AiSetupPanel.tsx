@@ -34,6 +34,7 @@ type AiSetupPanelProps = {
   readonly isSupabaseConfigured: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly shouldShowCloudCheckoutPlans: boolean;
+  readonly userEmail: string | null;
   readonly workProfileUserId: string;
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
@@ -54,6 +55,7 @@ export function AiSetupPanel({
   isSupabaseConfigured,
   localAiSetup,
   shouldShowCloudCheckoutPlans,
+  userEmail,
   workProfileUserId,
   onDialogOpenChange,
   onLocalAiSetupChange,
@@ -125,6 +127,7 @@ export function AiSetupPanel({
             currentBillingPlan={currentBillingPlan}
             isSupabaseConfigured={isSupabaseConfigured}
             shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+            userEmail={userEmail}
             onRefreshCloudStatus={onRefreshCloudStatus}
             onStartCloudSetup={onStartCloudSetup}
           />

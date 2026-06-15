@@ -75,14 +75,20 @@ describe("Settings content styles", () => {
     const toggleRule = cssRule(aiSetupStyles, ".ai-setup-choice__toggle");
     const brandMarkRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark");
     const brandImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark img");
+    const openRouterImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--openrouter img");
+    const ollamaImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--ollama img");
 
     expect(toggleRule).toContain("grid-template-columns: 2.75rem minmax(0, 1fr) auto 1rem;");
     expect(toggleRule).toContain("min-height: 5.1rem;");
     expect(toggleRule).toContain("padding: 0.85rem var(--space-4);");
     expect(brandMarkRule).toContain("height: 2.75rem;");
     expect(brandMarkRule).toContain("width: 2.75rem;");
-    expect(brandImageRule).toContain("height: 2.38rem;");
-    expect(brandImageRule).toContain("width: 2.38rem;");
+    expect(brandImageRule).toContain("height: 2.02rem;");
+    expect(brandImageRule).toContain("width: 2.02rem;");
+    expect(openRouterImageRule).toContain("height: 1.77rem;");
+    expect(openRouterImageRule).toContain("width: 1.77rem;");
+    expect(ollamaImageRule).toContain("height: 1.8rem;");
+    expect(ollamaImageRule).toContain("width: 1.45rem;");
   });
 
   it("uses the focus color for the Cloud setup CTA", () => {
