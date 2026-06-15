@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
-import { OpenRouterModelDialog, SelfHostedModelDialog, type AiModelOption } from "./AiSetupModelDialogs";
+import { saveUserWorkProfile, summarizeUserWorkProfile } from "../onboarding/onboardingState";
+import { OpenRouterModelDialog, SelfHostedModelDialog } from "./AiSetupModelDialogs";
 import "./AiSetupPanel.css";
 import {
   AI_SETUP_SECTIONS,
@@ -13,17 +14,10 @@ import {
   OpenRouterSetupPanel,
   type AiSetupSection,
 } from "./AiSetupSectionCards";
-import {
-  OPENROUTER_RECOMMENDED_MODELS,
-  SELF_HOSTED_RECOMMENDED_MODELS,
-  isForbiddenOpenRouterModel,
-  isRecommendedOpenRouterModel,
-  isRecommendedSelfHostedModel,
-  normalizeOpenRouterFallbackModels,
-  normalizeOpenRouterPrimaryModel,
-  uniqueOpenRouterModels,
-} from "./localAiSetup";
 import type { LocalAiSetupState } from "./localAiSetup";
+import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
+import { AiSetupSupportSections } from "./AiSetupSupportSections";
+import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -41,6 +35,7 @@ type AiSetupPanelProps = {
   readonly localAiSetup: LocalAiSetupState;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
+  readonly workProfileUserId: string;
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
@@ -61,113 +56,55 @@ export function AiSetupPanel({
   localAiSetup,
   shouldShowCloudCheckoutPlans,
   userEmail,
+  workProfileUserId,
   onDialogOpenChange,
   onLocalAiSetupChange,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
   const [activeSection, setActiveSection] = useState<AiSetupSection>("cloud");
-  const [openRouterModelPickerOpen, setOpenRouterModelPickerOpen] = useState(false);
-  const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
-  const [selfHostedModelPickerOpen, setSelfHostedModelPickerOpen] = useState(false);
-  const [selfHostedCustomModel, setSelfHostedCustomModel] = useState("");
-
-  const openRouterPrimaryModel = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
-  const openRouterFallbackModels = useMemo(
-    () => normalizeOpenRouterFallbackModels(openRouterPrimaryModel, localAiSetup.openRouterFallbackModels),
-    [localAiSetup.openRouterFallbackModels, openRouterPrimaryModel],
-  );
-  const openRouterSelectedModels = useMemo(
-    () => uniqueOpenRouterModels([openRouterPrimaryModel, ...openRouterFallbackModels]),
-    [openRouterFallbackModels, openRouterPrimaryModel],
-  );
-  const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !isRecommendedOpenRouterModel(model));
-  const openRouterModelOptions = useMemo((): readonly AiModelOption[] => [
-    ...OPENROUTER_RECOMMENDED_MODELS,
-    ...openRouterCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-  ], [openRouterCustomSelectedModels]);
-  const openRouterSelectionSummary = openRouterFallbackModels.length > 0
-    ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`
-    : openRouterPrimaryModel;
-  const selfHostedSelectedModel = localAiSetup.selfHostedModel.trim();
-  const selfHostedCustomSelectedModels = selfHostedSelectedModel && !isRecommendedSelfHostedModel(selfHostedSelectedModel) ? [selfHostedSelectedModel] : [];
-  const selfHostedModelOptions = useMemo((): readonly AiModelOption[] => [
-    ...SELF_HOSTED_RECOMMENDED_MODELS,
-    ...selfHostedCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-  ], [selfHostedCustomSelectedModels]);
-  const selfHostedModelSummary = selfHostedSelectedModel || "No model selected";
+  const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
+  const [connectionTestRunning, setConnectionTestRunning] = useState(false);
+  const [workProfileDraft, setWorkProfileDraft] = useState(() => summarizeUserWorkProfile(workProfileUserId));
+  const [workProfileMessage, setWorkProfileMessage] = useState<string | null>(null);
+  const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
+  const workProfilePreview = workProfileDraft.trim() || "No work profile saved yet";
 
   useEffect(() => {
-    onDialogOpenChange(openRouterModelPickerOpen || selfHostedModelPickerOpen);
+    onDialogOpenChange(modelPickers.openRouterModelPickerOpen || modelPickers.selfHostedModelPickerOpen);
     return () => onDialogOpenChange(false);
-  }, [onDialogOpenChange, openRouterModelPickerOpen, selfHostedModelPickerOpen]);
+  }, [modelPickers.openRouterModelPickerOpen, modelPickers.selfHostedModelPickerOpen, onDialogOpenChange]);
+
+  useEffect(() => {
+    setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
+    setWorkProfileMessage(null);
+  }, [workProfileUserId]);
 
   const handleSectionChange = (section: AiSetupSection) => {
     setActiveSection(section);
+    setConnectionTestResult(null);
     const provider = providerForSection(section);
     if (provider) onLocalAiSetupChange((current) => ({ ...current, provider }));
   };
 
-  const handleOpenRouterModelToggle = (model: string, selected: boolean) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-
-    onLocalAiSetupChange((current) => {
-      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
-      if (selected) {
-        if (modelId === primaryModel || fallbackModels.includes(modelId)) return current;
-        return { ...current, openRouterFallbackModels: [...fallbackModels, modelId] };
-      }
-
-      if (modelId === primaryModel) {
-        const [nextPrimaryModel, ...nextFallbackModels] = fallbackModels;
-        if (!nextPrimaryModel) return current;
-        return { ...current, openRouterModel: nextPrimaryModel, openRouterFallbackModels: nextFallbackModels };
-      }
-
-      return { ...current, openRouterFallbackModels: fallbackModels.filter((fallbackModel) => fallbackModel !== modelId) };
-    });
+  const handleSaveWorkProfile = () => {
+    const savedState = saveUserWorkProfile(workProfileUserId, workProfileDraft);
+    setWorkProfileMessage(savedState ? "Work profile saved for future AI classification." : "Enter a work profile before saving.");
+    if (savedState) setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
   };
 
-  const handleOpenRouterPrimaryModelChange = (model: string) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-
-    onLocalAiSetupChange((current) => {
-      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
-      const selectedModels = uniqueOpenRouterModels([primaryModel, ...fallbackModels, modelId]);
-      return { ...current, openRouterModel: modelId, openRouterFallbackModels: selectedModels.filter((selectedModel) => selectedModel !== modelId) };
-    });
+  const handleWorkProfileDraftChange = (value: string) => {
+    setWorkProfileDraft(value);
+    setWorkProfileMessage(null);
   };
 
-  const handleAddOpenRouterCustomModel = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const modelId = openRouterCustomModel.trim();
-    if (!modelId || isForbiddenOpenRouterModel(modelId)) return;
-
-    onLocalAiSetupChange((current) => {
-      const primaryModel = normalizeOpenRouterPrimaryModel(current.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(primaryModel, current.openRouterFallbackModels);
-      if (modelId === primaryModel || fallbackModels.includes(modelId)) return current;
-      return { ...current, openRouterFallbackModels: [...fallbackModels, modelId] };
-    });
-    setOpenRouterCustomModel("");
-  };
-
-  const handleSelfHostedModelChange = (model: string) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-    onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel: modelId }));
-  };
-
-  const handleAddSelfHostedCustomModel = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const modelId = selfHostedCustomModel.trim();
-    if (!modelId) return;
-    onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel: modelId }));
-    setSelfHostedCustomModel("");
+  const handleTestConnection = async () => {
+    if (connectionTestRunning) return;
+    setConnectionTestRunning(true);
+    setConnectionTestResult(null);
+    const result = await testLocalAiConnection(localAiSetup);
+    setConnectionTestResult(result);
+    setConnectionTestRunning(false);
   };
 
   return (
@@ -195,50 +132,64 @@ export function AiSetupPanel({
             onStartCloudSetup={onStartCloudSetup}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", openRouterPrimaryModel]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", modelPickers.openRouterPrimaryModel]} onToggle={handleSectionChange}>
           <OpenRouterSetupPanel
-            fallbackCount={openRouterFallbackModels.length}
+            connectionTestMessage={connectionTestResult?.message ?? null}
+            connectionTestRunning={connectionTestRunning}
+            fallbackCount={modelPickers.openRouterFallbackModels.length}
             localAiSetup={localAiSetup}
-            primaryModel={openRouterPrimaryModel}
-            onChooseModels={() => setOpenRouterModelPickerOpen(true)}
+            primaryModel={modelPickers.openRouterPrimaryModel}
+            onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
             onLocalAiSetupChange={onLocalAiSetupChange}
+            onTestConnection={handleTestConnection}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} badges={[localAiSetup.provider === "self_hosted" ? "Selected" : "Local", selfHostedSelectedModel || "Choose model"]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} badges={[localAiSetup.provider === "self_hosted" ? "Selected" : "Local", modelPickers.selfHostedSelectedModel || "Choose model"]} onToggle={handleSectionChange}>
           <OllamaSetupPanel
+            connectionTestMessage={connectionTestResult?.message ?? null}
+            connectionTestRunning={connectionTestRunning}
             localAiSetup={localAiSetup}
-            modelSummary={selfHostedModelSummary}
-            onChooseModel={() => setSelfHostedModelPickerOpen(true)}
+            modelSummary={modelPickers.selfHostedModelSummary}
+            onChooseModel={() => modelPickers.setSelfHostedModelPickerOpen(true)}
             onLocalAiSetupChange={onLocalAiSetupChange}
+            onTestConnection={handleTestConnection}
           />
         </AiSetupSectionCard>
       </div>
 
-      {openRouterModelPickerOpen ? (
+      <AiSetupSupportSections
+        workProfileDraft={workProfileDraft}
+        workProfileMessage={workProfileMessage}
+        workProfilePreview={workProfilePreview}
+        onSaveWorkProfile={handleSaveWorkProfile}
+        onWorkProfileDraftChange={handleWorkProfileDraftChange}
+      />
+
+      {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog
-          customModel={openRouterCustomModel}
-          fallbackSummary={openRouterSelectionSummary}
-          openRouterPrimaryModel={openRouterPrimaryModel}
-          options={openRouterModelOptions}
-          selectedModels={openRouterSelectedModels}
-          onAddCustomModel={handleAddOpenRouterCustomModel}
-          onClose={() => setOpenRouterModelPickerOpen(false)}
-          onCustomModelChange={setOpenRouterCustomModel}
-          onPrimaryModelChange={handleOpenRouterPrimaryModelChange}
-          onToggleModel={handleOpenRouterModelToggle}
+          customModel={modelPickers.openRouterCustomModel}
+          fallbackSummary={modelPickers.openRouterSelectionSummary}
+          openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
+          options={modelPickers.openRouterModelOptions}
+          selectedModels={modelPickers.openRouterSelectedModels}
+          onAddCustomModel={modelPickers.handleAddOpenRouterCustomModel}
+          onClose={() => modelPickers.setOpenRouterModelPickerOpen(false)}
+          onCustomModelChange={modelPickers.setOpenRouterCustomModel}
+          onPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
+          onToggleModel={modelPickers.handleOpenRouterModelToggle}
         />
       ) : null}
 
-      {selfHostedModelPickerOpen ? (
+      {modelPickers.selfHostedModelPickerOpen ? (
         <SelfHostedModelDialog
-          customModel={selfHostedCustomModel}
-          modelSummary={selfHostedModelSummary}
-          options={selfHostedModelOptions}
-          selectedModel={selfHostedSelectedModel}
-          onAddCustomModel={handleAddSelfHostedCustomModel}
-          onClose={() => setSelfHostedModelPickerOpen(false)}
-          onCustomModelChange={setSelfHostedCustomModel}
-          onModelChange={handleSelfHostedModelChange}
+          customModel={modelPickers.selfHostedCustomModel}
+          modelSummary={modelPickers.selfHostedModelSummary}
+          options={modelPickers.selfHostedModelOptions}
+          selectedModel={modelPickers.selfHostedSelectedModel}
+          onAddCustomModel={modelPickers.handleAddSelfHostedCustomModel}
+          onClose={() => modelPickers.setSelfHostedModelPickerOpen(false)}
+          onCustomModelChange={modelPickers.setSelfHostedCustomModel}
+          onModelChange={modelPickers.handleSelfHostedModelChange}
         />
       ) : null}
     </div>

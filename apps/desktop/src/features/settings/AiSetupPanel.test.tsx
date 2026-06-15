@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { AiSetupPanel } from "./AiSetupPanel";
+import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
+
+const { invokeMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn().mockResolvedValue({ status: 200, body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}", latencyMs: 42 }),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+}));
 
 function renderPanel({
   currentBillingPlan = "individual",
@@ -11,12 +20,14 @@ function renderPanel({
   cloudTrialEndsAt = null,
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
   userEmail = null,
+  workProfileUserId = "local",
 }: {
   readonly currentBillingPlan?: "free" | "individual";
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
   readonly cloudTrialEndsAt?: string | null;
   readonly initialSetup?: LocalAiSetupState;
   readonly userEmail?: string | null;
+  readonly workProfileUserId?: string;
 } = {}) {
   const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
@@ -39,6 +50,7 @@ function renderPanel({
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
         userEmail={userEmail}
+        workProfileUserId={workProfileUserId}
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
         onRefreshCloudStatus={onRefreshCloudStatus}
@@ -110,5 +122,79 @@ describe("AiSetupPanel", () => {
 
     expect(within(cloudSettings).getByText("al***@example.com")).toBeTruthy();
     expect(within(cloudSettings).queryByText("alex@example.com")).toBeNull();
+  });
+
+  it("lets users edit the work profile used by AI classification", () => {
+    const storageKey = getUserOnboardingStorageKey("local");
+    window.localStorage.setItem(storageKey, JSON.stringify({
+      version: 2,
+      completed: true,
+      displayName: "",
+      workType: "Software engineering",
+      workTypeOther: "",
+      workDomain: "Product development",
+      workDomainOther: "",
+      jobType: null,
+      jobTypeOther: "",
+      driftAlarmEnabled: false,
+      extremeNudgeEnabled: false,
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: null,
+      completedAt: "2026-06-15T00:00:00.000Z",
+    }));
+
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /Work profile/i }));
+    const workProfile = screen.getByRole("textbox", { name: /work profile/i });
+    if (!(workProfile instanceof HTMLTextAreaElement)) throw new Error("Work profile control should be a textarea.");
+    expect(workProfile.value).toBe("Software engineering in Product development");
+
+    fireEvent.change(workProfile, { target: { value: "iOS app development and launch operations" } });
+    fireEvent.click(screen.getByRole("button", { name: /save work profile/i }));
+
+    const savedState = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}") as Record<string, unknown>;
+    expect(savedState).toMatchObject({
+      workType: "iOS app development and launch operations",
+      workTypeOther: "",
+      workDomain: null,
+      workDomainOther: "",
+    });
+    expect(screen.getByRole("status").textContent).toContain("Work profile saved");
+  });
+
+  it("tests the selected local provider connection without saving secret material", async () => {
+    renderPanel();
+    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
+
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter BYOK setup row$/i }));
+    fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /test openrouter connection/i }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", expect.objectContaining({
+      request: expect.objectContaining({
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKey: "sk-or-v1-test-secret",
+      }),
+    })));
+    expect(await screen.findByText(/connected in 42 ms/i)).toBeTruthy();
+    expect(window.localStorage.getItem("drifty.aiSetup.v1") ?? "").not.toContain("sk-or-v1-test-secret");
+  });
+
+  it("shows the same privacy review inside AI setup", () => {
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
+    expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
+    const appContextCheck = screen.getByRole("checkbox", { name: /App name and basic app context is sent/i });
+    const domainCheck = screen.getByRole("checkbox", { name: /Browser or site domain is sent/i });
+    if (!(appContextCheck instanceof HTMLInputElement) || !(domainCheck instanceof HTMLInputElement)) {
+      throw new Error("Privacy review fields should render as checkboxes.");
+    }
+    expect(appContextCheck.checked).toBe(true);
+    expect(domainCheck.checked).toBe(true);
+    expect(screen.getByText(/Raw timeline rows/i)).toBeTruthy();
   });
 });

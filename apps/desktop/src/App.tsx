@@ -151,6 +151,7 @@ import {
   type CloudTrialStartedNoticeModel,
 } from "./features/billing/CloudTrialStartedNotice";
 import { AiSetupPanel } from "./features/settings/AiSetupPanel";
+import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
@@ -4377,6 +4378,7 @@ export default function App() {
                       localAiSetup={localAiSetup}
                       shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
                       userEmail={user?.email ?? null}
+                      workProfileUserId={user?.id ?? "local"}
                       onDialogOpenChange={setAiSetupDialogOpen}
                       onLocalAiSetupChange={setLocalAiSetup}
                       onRefreshCloudStatus={refreshBillingEntitlement}
@@ -4393,12 +4395,7 @@ export default function App() {
                   </div></div>
                 )}
                 {settingsSection === "privacy" && (
-                  <div className="settings-section">
-                    <div className="settings-block"><h3>Privacy</h3>
-                      <div className="settings-row"><div><div className="lbl">Raw tracking history is not published</div><div className="desc">Leaderboard and profile features publish aggregates only. AI classification may send minimized activity fields to configured providers for the request, but Drifty does not store raw tracking history for leaderboard or profile publishing.</div></div><div className="ctrl"><span className="chip green">Privacy first</span></div></div>
-                      <div className="settings-row"><div><div className="lbl">Optional cloud features are explicit</div><div className="desc">If you configure Supabase and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total. Raw tracking history is not published there.</div></div><div className="ctrl"><span className="chip">Opt-in only</span></div></div>
-                    </div>
-                  </div>
+                  <PrivacySettingsSection />
                 )}
                 {settingsSection === "data" && (
                   <div className="settings-section">

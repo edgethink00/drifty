@@ -42,18 +42,24 @@ type CloudSetupPanelProps = {
 };
 
 type OpenRouterSetupPanelProps = {
+  readonly connectionTestMessage: string | null;
+  readonly connectionTestRunning: boolean;
   readonly fallbackCount: number;
   readonly localAiSetup: LocalAiSetupState;
   readonly primaryModel: string;
   readonly onChooseModels: () => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
+  readonly onTestConnection: () => void | Promise<void>;
 };
 
 type OllamaSetupPanelProps = {
+  readonly connectionTestMessage: string | null;
+  readonly connectionTestRunning: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly modelSummary: string;
   readonly onChooseModel: () => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
+  readonly onTestConnection: () => void | Promise<void>;
 };
 
 export function AiSetupSectionCard({
@@ -148,12 +154,17 @@ export function CloudSetupPanel({
 }
 
 export function OpenRouterSetupPanel({
+  connectionTestMessage,
+  connectionTestRunning,
   fallbackCount,
   localAiSetup,
   primaryModel,
   onChooseModels,
   onLocalAiSetupChange,
+  onTestConnection,
 }: OpenRouterSetupPanelProps) {
+  const testDisabled = connectionTestRunning || !localAiSetup.openRouterApiKey.trim();
+
   return (
     <div className="ai-setup-detail" role="group" aria-label="OpenRouter BYOK settings">
       <label className="ai-setup-field">
@@ -175,17 +186,28 @@ export function OpenRouterSetupPanel({
         </div>
         <button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={onChooseModels}>Choose models</button>
       </div>
+      <ConnectionTestRow
+        buttonLabel={connectionTestRunning ? "Testing..." : "Test connection"}
+        message={connectionTestMessage}
+        providerLabel="OpenRouter"
+        disabled={testDisabled}
+        onTestConnection={onTestConnection}
+      />
     </div>
   );
 }
 
 export function OllamaSetupPanel({
+  connectionTestMessage,
+  connectionTestRunning,
   localAiSetup,
   modelSummary,
   onChooseModel,
   onLocalAiSetupChange,
+  onTestConnection,
 }: OllamaSetupPanelProps) {
   const hasModel = Boolean(localAiSetup.selfHostedModel.trim());
+  const testDisabled = connectionTestRunning || !localAiSetup.selfHostedBaseUrl.trim() || !hasModel;
 
   return (
     <div className="ai-setup-detail" role="group" aria-label="Self-hosted AI settings">
@@ -203,6 +225,45 @@ export function OllamaSetupPanel({
         <div><span className={hasModel ? "chip green" : "chip gray"}>{modelSummary}</span></div>
         <button type="button" className="settings-btn" aria-label="Choose self-hosted model" onClick={onChooseModel}>Choose model</button>
       </div>
+      <ConnectionTestRow
+        buttonLabel={connectionTestRunning ? "Testing..." : "Test connection"}
+        message={connectionTestMessage}
+        providerLabel="Ollama"
+        disabled={testDisabled}
+        onTestConnection={onTestConnection}
+      />
+    </div>
+  );
+}
+
+function ConnectionTestRow({
+  buttonLabel,
+  disabled,
+  message,
+  providerLabel,
+  onTestConnection,
+}: {
+  readonly buttonLabel: string;
+  readonly disabled: boolean;
+  readonly message: string | null;
+  readonly providerLabel: string;
+  readonly onTestConnection: () => void | Promise<void>;
+}) {
+  return (
+    <div className="ai-setup-test-row">
+      <div>
+        <strong>Connection test</strong>
+        <p>{message ?? "Send a minimal chat request through the selected provider before running classification."}</p>
+      </div>
+      <button
+        type="button"
+        className="settings-btn"
+        aria-label={`Test ${providerLabel} connection`}
+        onClick={() => void onTestConnection()}
+        disabled={disabled}
+      >
+        {buttonLabel}
+      </button>
     </div>
   );
 }
