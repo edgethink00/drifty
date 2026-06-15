@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ActivitySegment, ClassificationMetrics, ClassificationQuery } from "@drifty/domain";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ActivitySegment, ClassificationMetrics, ClassificationQuery, CurrentActivitySnapshot } from "@drifty/domain";
 import { logicalDayIsoDateForDate, todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,8 @@ const styles = readFileSync("src/styles.css", "utf8");
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
+const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
+const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const DEFAULT_START_OF_DAY_MINUTES = 4 * 60;
 
 function timelineQueryIncludesDay(query: ClassificationQuery, day: string): boolean {
@@ -49,6 +51,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
     signOut: vi.fn(),
   },
   aiClassificationMocks: {
+    classifyLiveActivityWithAi: vi.fn(),
     getAiClassificationUsageSummary: vi.fn(),
     runAiClassification: vi.fn(),
     runAiClassificationForUnknownThreshold: vi.fn(),
@@ -152,6 +155,7 @@ vi.mock("./features/classification/aiClassificationService", () => {
     toClassificationQueryForDay: (day: string, limit?: number) => (limit ? { day, limit } : { day }),
     getAiClassificationUsageSummary: aiClassificationMocks.getAiClassificationUsageSummary,
     runAiClassification: aiClassificationMocks.runAiClassification,
+    classifyLiveActivityWithAi: aiClassificationMocks.classifyLiveActivityWithAi,
     runAiClassificationForUnknownThreshold: aiClassificationMocks.runAiClassificationForUnknownThreshold,
     runAiClassificationUntilEmpty: aiClassificationMocks.runAiClassificationUntilEmpty,
   };
@@ -378,6 +382,7 @@ describe("App AI classification controls", () => {
         ? executionUsageAfterAvailable ? executionUsageAfter : executionUsageBefore
         : selectedDayUsage,
     ));
+    aiClassificationMocks.classifyLiveActivityWithAi.mockResolvedValue({ kind: "unavailable", reason: "not configured in this test" });
     aiClassificationMocks.runAiClassification.mockImplementation(async () => {
       executionUsageAfterAvailable = true;
       return { status: "saved", selectedSegments: 10, savedRecords: 10, message: "Saved 10 AI classifications.", metrics: selectedDayMetrics } satisfies AiClassificationSummary;
@@ -639,6 +644,213 @@ describe("App AI classification controls", () => {
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
     ));
+  });
+
+  it("waits two minutes before retrying the auto AI classification batch", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    const today = "2026-06-16";
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledTimes(1));
+    aiClassificationMocks.runAiClassificationForUnknownThreshold.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS / 2);
+    });
+    expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS / 2);
+    });
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
+      { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
+      AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+    ));
+  });
+
+  it("runs live AI classification for current unknown drift alarm activity before the batch threshold", async () => {
+    const today = todayIsoDate();
+    const gameSegment: ActivitySegment = {
+      id: "survev-1",
+      startedAt: `${today}T09:00:00.000Z`,
+      endedAt: `${today}T09:05:00.000Z`,
+      durationSeconds: 300,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      platform: "macos",
+      source: "accessibility",
+    };
+    const classifiedGameSegment: ActivitySegment = {
+      ...gameSegment,
+      classification: {
+        category: "game",
+        productivity: "drift",
+        source: "llm",
+        confidence: 0.9,
+        reason: "AI classified live browser game",
+        aiResult: true,
+      },
+    };
+    const gameSnapshot: CurrentActivitySnapshot = {
+      observedAt: `${today}T09:06:00.000Z`,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      source: "accessibility",
+    };
+    let liveClassified = false;
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T09:06:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+    trackerClient.getTimeline.mockImplementation(() => Promise.resolve(liveClassified ? [classifiedGameSegment] : [gameSegment]));
+    trackerClient.getCurrentSnapshot.mockResolvedValue(gameSnapshot);
+    aiClassificationMocks.classifyLiveActivityWithAi.mockImplementation(async () => {
+      liveClassified = true;
+      return {
+        kind: "classified",
+        classification: {
+          segmentId: "survev-1",
+          inputFingerprint: "live-survev",
+          category: "game",
+          productivity: "drift",
+          source: "llm",
+          confidence: 0.9,
+          reason: "AI classified live browser game",
+          model: "gemini-3.1-flash-lite",
+          promptVersion: "v2-work-profile",
+          taxonomyVersion: "v1",
+          aiResult: true,
+          classifiedAt: `${today}T09:06:01.000Z`,
+        },
+      };
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.classifyLiveActivityWithAi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "survev-1",
+        durationSeconds: 360,
+        siteDomain: "survev.io",
+      }),
+      expect.objectContaining({ persistLiveResult: true }),
+    ));
+    expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+  });
+
+  it("backs off unavailable live AI drift alarm classification between polls", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:06:00+09:00"));
+    const today = "2026-06-16";
+    const gameSegment: ActivitySegment = {
+      id: "survev-1",
+      startedAt: `${today}T01:00:00.000Z`,
+      endedAt: `${today}T01:05:00.000Z`,
+      durationSeconds: 300,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      platform: "macos",
+      source: "accessibility",
+    };
+    const gameSnapshot: CurrentActivitySnapshot = {
+      observedAt: `${today}T01:06:00.000Z`,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      source: "accessibility",
+    };
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T01:06:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+    trackerClient.getTimeline.mockResolvedValue([gameSegment]);
+    trackerClient.getCurrentSnapshot.mockResolvedValue(gameSnapshot);
+    aiClassificationMocks.classifyLiveActivityWithAi.mockResolvedValue({ kind: "unavailable", reason: "cloud unavailable" });
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.classifyLiveActivityWithAi).toHaveBeenCalledTimes(1));
+    aiClassificationMocks.classifyLiveActivityWithAi.mockClear();
+    trackerClient.getCurrentSnapshot.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+    expect(aiClassificationMocks.classifyLiveActivityWithAi).not.toHaveBeenCalled();
+  });
+
+  it("polls live drift alarm activity every 15 seconds without a full refresh", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    const today = "2026-06-16";
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T01:00:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+
+    trackerClient.getTimeline.mockClear();
+    trackerClient.getCurrentSnapshot.mockClear();
+    trackerClient.getStatus.mockClear();
+    trackerClient.getTopSites.mockClear();
+    trackerClient.getClassificationMetrics.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS / 2);
+    });
+    expect(trackerClient.getCurrentSnapshot).not.toHaveBeenCalled();
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS / 2);
+    });
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalledTimes(1));
+    expect(trackerClient.getTimeline).toHaveBeenCalledWith(expect.objectContaining({
+      start: `${today}T04:00:00`,
+      end: "2026-06-17T03:59:59",
+    }));
+    expect(trackerClient.getStatus).toHaveBeenCalledTimes(1);
+    expect(trackerClient.getTopSites).not.toHaveBeenCalled();
+    expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
   });
 
   it("does not auto-run a 5-item focused batch while the renderer is still active", async () => {
