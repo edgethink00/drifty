@@ -68,12 +68,21 @@ describe("AiSetupPanel", () => {
     renderPanel();
 
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
-    expect(within(sectionChoices).getByRole("button", { name: /^Drifty Cloud setup row$/i }).getAttribute("aria-expanded")).toBe("true");
+    const cloudRow = within(sectionChoices).getByRole("button", { name: /^Drifty Cloud setup row$/i });
+    const openRouterRow = within(sectionChoices).getByRole("button", { name: /^OpenRouter BYOK setup row$/i });
+    const ollamaRow = within(sectionChoices).getByRole("button", { name: /^Local Ollama setup row$/i });
+
+    expect(cloudRow.getAttribute("aria-expanded")).toBe("true");
+    expect(within(cloudRow).queryByText("Polar checkout")).toBeNull();
+    expect(within(openRouterRow).queryByText("Selected")).toBeNull();
+    expect(within(openRouterRow).queryByText("Key needed")).toBeNull();
+    expect(within(openRouterRow).queryByText("deepseek/deepseek-v4-flash")).toBeNull();
+    expect(within(ollamaRow).queryByText("Choose model")).toBeNull();
     expect(screen.getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Self-hosted AI settings/i })).toBeNull();
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter BYOK setup row$/i }));
+    fireEvent.click(openRouterRow);
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /Drifty Cloud settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Self-hosted AI settings/i })).toBeNull();
@@ -124,17 +133,17 @@ describe("AiSetupPanel", () => {
     expect(within(cloudSettings).queryByText("alex@example.com")).toBeNull();
   });
 
-  it("lets users edit the work profile used by AI classification", () => {
+  it("lets users edit the work profile selections used by AI classification", async () => {
     const storageKey = getUserOnboardingStorageKey("local");
     window.localStorage.setItem(storageKey, JSON.stringify({
       version: 2,
       completed: true,
       displayName: "",
-      workType: "Software engineering",
+      workType: "Coding",
       workTypeOther: "",
       workDomain: "Product development",
       workDomainOther: "",
-      jobType: null,
+      jobType: "Coding, Writing",
       jobTypeOther: "",
       driftAlarmEnabled: false,
       extremeNudgeEnabled: false,
@@ -146,22 +155,38 @@ describe("AiSetupPanel", () => {
 
     renderPanel();
 
-    fireEvent.click(screen.getByRole("button", { name: /Work profile/i }));
-    const workProfile = screen.getByRole("textbox", { name: /work profile/i });
-    if (!(workProfile instanceof HTMLTextAreaElement)) throw new Error("Work profile control should be a textarea.");
-    expect(workProfile.value).toBe("Software engineering in Product development");
+    expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();
+    expect(screen.queryByText(/User work profile:/i)).toBeNull();
+    expect(screen.queryByText(/AI prompt line/i)).toBeNull();
+    expect(screen.queryByText(/^Source$/i)).toBeNull();
 
-    fireEvent.change(workProfile, { target: { value: "iOS app development and launch operations" } });
+    expect(screen.getByRole("button", { name: /remove coding/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /remove writing/i })).toBeTruthy();
+    const addActivity = screen.getByRole("combobox", { name: /add work activity/i });
+    const fieldCombo = screen.getByRole("combobox", { name: /your field/i });
+    expect(screen.getByPlaceholderText("Product development")).toBeTruthy();
+
+    fireEvent.change(addActivity, { target: { value: "Data Analysis" } });
+    expect(screen.getByRole("button", { name: /remove data analysis/i })).toBeTruthy();
+    fireEvent.click(fieldCombo);
+    fireEvent.click(await screen.findByRole("option", { name: "AI" }));
+
+    expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /save work profile/i }));
 
     const savedState = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}") as Record<string, unknown>;
     expect(savedState).toMatchObject({
-      workType: "iOS app development and launch operations",
+      workType: "Coding",
       workTypeOther: "",
-      workDomain: null,
+      jobType: "Coding, Writing, Data Analysis",
+      jobTypeOther: "",
+      workDomain: "AI",
       workDomainOther: "",
     });
     expect(screen.getByRole("status").textContent).toContain("Work profile saved");
+    expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
+    expect(screen.queryByText(/User work profile:/i)).toBeNull();
   });
 
   it("tests the selected local provider connection without saving secret material", async () => {

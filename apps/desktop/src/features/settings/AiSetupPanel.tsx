@@ -3,21 +3,23 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
-import { saveUserWorkProfile, summarizeUserWorkProfile } from "../onboarding/onboardingState";
 import { OpenRouterModelDialog, SelfHostedModelDialog } from "./AiSetupModelDialogs";
 import "./AiSetupPanel.css";
 import {
   AI_SETUP_SECTIONS,
   AiSetupSectionCard,
+  type AiSetupSection,
+} from "./AiSetupSectionCards";
+import {
   CloudSetupPanel,
   OllamaSetupPanel,
   OpenRouterSetupPanel,
-  type AiSetupSection,
-} from "./AiSetupSectionCards";
+} from "./AiSetupProviderPanels";
 import type { LocalAiSetupState } from "./localAiSetup";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
+import { useWorkProfileSettings } from "./useWorkProfileSettings";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -65,37 +67,19 @@ export function AiSetupPanel({
   const [activeSection, setActiveSection] = useState<AiSetupSection>("cloud");
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
-  const [workProfileDraft, setWorkProfileDraft] = useState(() => summarizeUserWorkProfile(workProfileUserId));
-  const [workProfileMessage, setWorkProfileMessage] = useState<string | null>(null);
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
-  const workProfilePreview = workProfileDraft.trim() || "No work profile saved yet";
+  const workProfileSettings = useWorkProfileSettings(workProfileUserId);
 
   useEffect(() => {
     onDialogOpenChange(modelPickers.openRouterModelPickerOpen || modelPickers.selfHostedModelPickerOpen);
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, modelPickers.selfHostedModelPickerOpen, onDialogOpenChange]);
 
-  useEffect(() => {
-    setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
-    setWorkProfileMessage(null);
-  }, [workProfileUserId]);
-
   const handleSectionChange = (section: AiSetupSection) => {
     setActiveSection(section);
     setConnectionTestResult(null);
     const provider = providerForSection(section);
     if (provider) onLocalAiSetupChange((current) => ({ ...current, provider }));
-  };
-
-  const handleSaveWorkProfile = () => {
-    const savedState = saveUserWorkProfile(workProfileUserId, workProfileDraft);
-    setWorkProfileMessage(savedState ? "Work profile saved for future AI classification." : "Enter a work profile before saving.");
-    if (savedState) setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
-  };
-
-  const handleWorkProfileDraftChange = (value: string) => {
-    setWorkProfileDraft(value);
-    setWorkProfileMessage(null);
   };
 
   const handleTestConnection = async () => {
@@ -114,7 +98,7 @@ export function AiSetupPanel({
       </div>
 
       <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "cloud"} badges={[aiServerStatusLabel, isSupabaseConfigured ? "Polar checkout" : "Cloud off"]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "cloud"} onToggle={handleSectionChange}>
           <CloudSetupPanel
             aiServerStatusLabel={aiServerStatusLabel}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
@@ -132,7 +116,7 @@ export function AiSetupPanel({
             onStartCloudSetup={onStartCloudSetup}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", modelPickers.openRouterPrimaryModel]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} onToggle={handleSectionChange}>
           <OpenRouterSetupPanel
             connectionTestMessage={connectionTestResult?.message ?? null}
             connectionTestRunning={connectionTestRunning}
@@ -144,7 +128,7 @@ export function AiSetupPanel({
             onTestConnection={handleTestConnection}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} badges={[localAiSetup.provider === "self_hosted" ? "Selected" : "Local", modelPickers.selfHostedSelectedModel || "Choose model"]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} onToggle={handleSectionChange}>
           <OllamaSetupPanel
             connectionTestMessage={connectionTestResult?.message ?? null}
             connectionTestRunning={connectionTestRunning}
@@ -157,13 +141,21 @@ export function AiSetupPanel({
         </AiSetupSectionCard>
       </div>
 
-      <AiSetupSupportSections
-        workProfileDraft={workProfileDraft}
-        workProfileMessage={workProfileMessage}
-        workProfilePreview={workProfilePreview}
-        onSaveWorkProfile={handleSaveWorkProfile}
-        onWorkProfileDraftChange={handleWorkProfileDraftChange}
-      />
+      <div className="ai-setup-support-zone" aria-label="AI prompt settings">
+        <div className="ai-setup-support-zone__header">
+          <div>
+            <span className="eyebrow">AI prompt settings</span>
+            <strong>Work context and privacy</strong>
+          </div>
+          <p>Shared by Drifty Cloud, OpenRouter, and local AI classification.</p>
+        </div>
+        <AiSetupSupportSections
+          workProfileDraft={workProfileSettings.workProfileDraft}
+          workProfileMessage={workProfileSettings.workProfileMessage}
+          onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
+          onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
+        />
+      </div>
 
       {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog

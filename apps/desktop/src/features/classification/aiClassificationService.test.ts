@@ -321,7 +321,11 @@ describe("runAiClassification cloud contract", () => {
 
   it("sends optional onboarding work profile context to classify-activity", async () => {
     const segment = createUnknownSegment(1);
-    writeOnboardingState("user-1", { workType: "Software Development", workDomain: "AI" });
+    writeOnboardingState("user-1", {
+      jobType: "Coding, Writing",
+      workType: "Coding",
+      workDomain: "AI",
+    });
 
     try {
       const { runAiClassification, invoke } = await importServiceWithSegments([segment], {
@@ -330,7 +334,7 @@ describe("runAiClassification cloud contract", () => {
       await runAiClassification({ day: "2026-05-22" });
 
       const body = invoke.mock.calls[0]?.[1]?.body as Record<string, unknown>;
-      expect(body.workProfile).toBe("Software Development in AI");
+      expect(body.workProfile).toBe("Coding, Writing in AI");
     } finally {
       cleanupServiceMocks();
     }

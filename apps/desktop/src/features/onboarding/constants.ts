@@ -44,6 +44,8 @@ export const MAIN_ACTIVITY_OPTIONS = [
   "Other",
 ] as const;
 
+export const MAX_MAIN_ACTIVITY_SELECTIONS = 5;
+
 export const WORK_DOMAIN_OPTIONS = [
   "Tech",
   "SaaS",
