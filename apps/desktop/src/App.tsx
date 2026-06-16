@@ -57,7 +57,7 @@ import { FlowChartView } from "./features/flow-chart/FlowChartView";
 import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
 import { HistoryView } from "./features/history/HistoryView";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
   LEADERBOARD_PERIODS,
@@ -160,6 +160,7 @@ import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
 import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
+import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
 import {
   resolveDriftAlarmTransientDefer,
   sourceKeyForDriftAlarmCandidate,
@@ -175,7 +176,7 @@ import type { DriftReminderState, WatcherMode, WatcherSnapshot } from "./feature
 import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption } from "./features/dashboard/dashboardPeriods";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
-import { FOCUS_DRIFT_AXIS_TICKS, FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
+import { FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import type { FocusDriftAxisTickStyle, FocusDriftLiveStyle, FocusDriftPoint, FocusDriftSourceSummary } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
 import type { MonthCellStyle } from "./features/dashboard/monthOverview";
@@ -251,6 +252,11 @@ type UpdateCheckMode = "manual" | "automatic";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const AUTO_UPDATE_DISMISS_SUPPRESSION_MS = 48 * 60 * 60 * 1000;
+const APP_REFRESH_INTERVAL_MS = 30_000;
+const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
+const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
+const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 const AUTO_UPDATE_DISMISS_STORAGE_KEY = "drifty.updates.dismissedAutoUpdate.v1";
 
 type DismissedAutoUpdate = {
@@ -301,6 +307,12 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
+
+function shouldRefreshHistoryData(activeTab: TabId, dashPeriod: DashboardPeriod, classificationRange: ClassificationRange): boolean {
+  if (activeTab === "dashboard") return dashPeriod !== "Today";
+  if (activeTab === "classification") return classificationRange === "Week";
+  return activeTab === "history" || activeTab === "trends";
+}
 
 const activityNav: NavItem[] = [
   { id: "classification", label: "Classification", icon: "classification" },
@@ -733,6 +745,9 @@ export default function App() {
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmRequestInFlightRef = useRef(false);
+  const liveDriftAlarmRefreshInFlightRef = useRef(false);
+  const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
+  const liveDriftAlarmAiRetryAfterRef = useRef<Map<string, number>>(new Map());
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date()) => {
@@ -1069,6 +1084,9 @@ export default function App() {
       preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
       generatedAt: new Date().toISOString(),
       focusTargets: recentDriftAlarmFocusTargets,
+      sourceSiteDomain: option.sourceSiteDomain,
+      sourceAppName: option.sourceAppName,
+      sourceIconSrc: option.sourceIconSrc,
       copySettings: driftAlarmCopy,
     }));
   }, [driftAlarmCopy, recentDriftAlarmFocusTargets, showDriftAlarm]);
@@ -1247,11 +1265,18 @@ export default function App() {
     const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
     const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+    const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
 
     try {
-      const archiveTimelineRequest = trackerClient
-        .getTimeline(historyTimelineRange)
-        .then((historyTimeline) => ({ historyTimeline }));
+      const archiveTimelineRequest = shouldLoadHistory
+        ? trackerClient.getTimeline(historyTimelineRange)
+        : Promise.resolve<ActivitySegment[] | null>(null);
+      const historyHourlySummaryRequest = shouldLoadHistory
+        ? trackerClient.getHourlySummary(historySummaryRange)
+        : Promise.resolve<HourBucket[] | null>(null);
+      const historySiteSummaryRequest = shouldLoadHistory
+        ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
+        : Promise.resolve<SiteDuration[] | null>(null);
 
       const statusRequest = trackerClient.getStatus().then((nextStatus) => {
         if (refreshRequestRef.current !== requestId) return nextStatus;
@@ -1267,8 +1292,8 @@ export default function App() {
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
-        trackerClient.getHourlySummary(historySummaryRange),
-        trackerClient.getTopSites({ ...historySummaryRange, limit: 8 }),
+        historyHourlySummaryRequest,
+        historySiteSummaryRequest,
         currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
@@ -1276,15 +1301,14 @@ export default function App() {
       ]);
 
       if (refreshRequestRef.current !== requestId) return false;
-      const { historyTimeline } = archiveTimelines;
 
       setCurrentSnapshot(nextCurrentSnapshot);
       setSegments(timeline);
       setSegmentsLoadedDay(day);
-      setHistorySegments(historyTimeline);
+      if (archiveTimelines !== null) setHistorySegments(archiveTimelines);
       setHourly(buildHourlySummary(timeline));
-      setInsightHourly(historyHourlySummary);
-      setInsightTopSites(historySiteSummary);
+      if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
+      if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
@@ -1302,7 +1326,7 @@ export default function App() {
 
       void (async () => {
         try {
-          const iconSegments = [...timeline, ...historyTimeline];
+          const iconSegments = archiveTimelines === null ? timeline : [...timeline, ...archiveTimelines];
           const uniqueApps = Array.from(
             new Map(iconSegments.map((segment) => [
               segment.bundleId || segment.appName,
@@ -1341,6 +1365,41 @@ export default function App() {
     }
   }
 
+  const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
+    if (liveDriftAlarmRefreshInFlightRef.current) return false;
+    if (shouldBlockLocalTrackerAccess) return false;
+    if (selectedDayRef.current !== day) return false;
+
+    liveDriftAlarmRefreshInFlightRef.current = true;
+    try {
+      const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+      const [timeline, nextCurrentSnapshot, nextStatus] = await Promise.all([
+        trackerClient.getTimeline(selectedDayRange),
+        trackerClient.getCurrentSnapshot().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "unknown error";
+          console.warn("Failed to refresh current activity for drift alarm poll", message);
+          return null;
+        }),
+        trackerClient.getStatus(),
+      ]);
+
+      if (selectedDayRef.current !== day) return false;
+      setStatus(nextStatus);
+      setAccessibilityGranted(nextStatus.accessibilityGranted);
+      setCurrentSnapshot(nextCurrentSnapshot);
+      setSegments(timeline);
+      setSegmentsLoadedDay(day);
+      setHourly(buildHourlySummary(timeline));
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      console.warn("Failed to refresh live drift alarm activity", message);
+      return false;
+    } finally {
+      liveDriftAlarmRefreshInFlightRef.current = false;
+    }
+  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+
   useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
     window.__DRIFTY_BOOTSTRAPPED__ = true;
@@ -1350,7 +1409,7 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     void refresh(selectedDay);
-  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [activeTab, classificationRange, dashPeriod, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1372,9 +1431,21 @@ export default function App() {
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
       void refresh(selectedDay);
-    }, 30000);
+    }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+
+  useEffect(() => {
+    if (shouldBlockLocalTrackerAccess) return undefined;
+    if (!driftAlertsEnabled) return undefined;
+    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return undefined;
+
+    const intervalId = setInterval(() => {
+      if (selectTodayAfterDateRollover()) return;
+      void refreshLiveDriftAlarmActivity(selectedDay);
+    }, DRIFT_ALARM_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -1784,6 +1855,74 @@ export default function App() {
     }
 
     if (!latestDrift) {
+      const liveAiCandidate = systemTransientActivity === null && (localAiClassificationOptions || canUseCloudAiClassification)
+        ? resolveLiveDriftAlarmAiCandidate({
+          segments,
+          currentSnapshot,
+          classificationOptions: selectedDayClassificationOptions,
+          minimumDurationSeconds: driftAlertDelaySeconds,
+        })
+        : null;
+
+      if (liveAiCandidate) {
+        const liveAiCandidateDetail = buildDriftAlarmTrayCandidateDetail(
+          getWatcherContextLabel(liveAiCandidate.segment, "unknown"),
+          liveAiCandidate.segment.durationSeconds,
+        );
+        const liveAiRetryAfterMs = liveDriftAlarmAiRetryAfterRef.current.get(liveAiCandidate.key) ?? 0;
+        if (liveAiRetryAfterMs > Date.now()) {
+          publishDriftAlarmTrayStatus({
+            kind: "suppressed",
+            reason: "ai-unavailable:retry-cooldown",
+            candidateDetail: liveAiCandidateDetail,
+          }, checkedAt);
+          return;
+        }
+
+        publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
+        if (liveDriftAlarmAiRequestInFlightRef.current === null) {
+          liveDriftAlarmAiRequestInFlightRef.current = liveAiCandidate.key;
+          const liveAiOptions = localAiClassificationOptions
+            ? { ...localAiClassificationOptions, persistLiveResult: true }
+            : { persistLiveResult: true };
+          void classifyLiveActivityWithAi(liveAiCandidate.segment, liveAiOptions).then(async (result) => {
+            if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
+            liveDriftAlarmAiRequestInFlightRef.current = null;
+
+            switch (result.kind) {
+              case "classified":
+                if (result.classification.category === "unknown") {
+                  liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS);
+                } else {
+                  liveDriftAlarmAiRetryAfterRef.current.delete(liveAiCandidate.key);
+                }
+                await refresh(selectedDay, { requireCurrentSnapshot: true });
+                return;
+              case "unavailable":
+                liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
+                publishDriftAlarmTrayStatus({
+                  kind: "suppressed",
+                  reason: `ai-unavailable:${result.reason}`,
+                  candidateDetail: liveAiCandidateDetail,
+                }, new Date());
+                await refresh(selectedDay, { requireCurrentSnapshot: true });
+                return;
+              default:
+                assertNever(result);
+            }
+          }).catch((error) => {
+            if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
+            liveDriftAlarmAiRequestInFlightRef.current = null;
+            liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
+            publishDriftAlarmTrayStatus({
+              kind: "error",
+              reason: error instanceof Error ? error.message : "Live AI classification failed",
+            }, new Date());
+          });
+        }
+        return;
+      }
+
       const pendingTransient = pendingDriftAlarmTransientRef.current;
       if (pendingTransient && systemTransientActivity) {
         publishDriftAlarmTrayStatus({
@@ -1871,6 +2010,10 @@ export default function App() {
     }
     const buildCurrentDriftAlarmEvent = () => {
       const contextLabel = getWatcherContextLabel(segment, category);
+      const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
+      const sourceAppName = segment.appName.trim() || "Unknown app";
+      const sourceIconKey = segment.bundleId?.trim() ?? sourceAppName;
+      const sourceIconSrc = appIconsRef.current[sourceIconKey] ?? appIconsRef.current[sourceAppName] ?? null;
 
       return buildDriftAlarmEvent({
         id: alertKey,
@@ -1879,6 +2022,9 @@ export default function App() {
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
+        sourceSiteDomain,
+        sourceAppName,
+        sourceIconSrc,
         copySettings: driftAlarmCopy,
         sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
       });
@@ -1958,6 +2104,10 @@ export default function App() {
           ? pendingBreakReturnAlarm.focusTargets
           : recentDriftAlarmFocusTargets;
         const breakReturnContextLabel = getWatcherContextLabel(segment, category);
+        const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
+        const breakReturnAppName = segment.appName.trim() || "Unknown app";
+        const breakReturnIconKey = segment.bundleId?.trim() ?? breakReturnAppName;
+        const breakReturnIconSrc = appIconsRef.current[breakReturnIconKey] ?? appIconsRef.current[breakReturnAppName] ?? null;
 
         showDriftAlarm(buildBreakReturnAlarmEvent({
           id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
@@ -1966,6 +2116,9 @@ export default function App() {
           preservedFocusStrikeSeconds: 0,
           generatedAt: new Date().toISOString(),
           focusTargets,
+          sourceSiteDomain: breakReturnSiteDomain,
+          sourceAppName: breakReturnAppName,
+          sourceIconSrc: breakReturnIconSrc,
           copySettings: driftAlarmCopy,
           sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,
@@ -2077,7 +2230,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [canUseCloudAiClassification, currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -2611,7 +2764,7 @@ export default function App() {
     if (classificationActionLoading) return;
     if (aiClassificationInFlightRef.current) return;
 
-    const today = todayIsoDate();
+    const today = logicalTodayIsoDate(startOfDayMinutes);
     const isFocused = rendererFocusedRef.current;
     const threshold = isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return;
@@ -2645,13 +2798,13 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
     const intervalId = setInterval(() => {
       void runAutoAiClassificationBatch();
-    }, 30000);
+    }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [runAutoAiClassificationBatch]);
 
@@ -3497,7 +3650,7 @@ export default function App() {
             </div>
             {focusDriftHover ? <FocusDriftHoverCard appIcons={appIcons} hover={focusDriftHover} /> : null}
             <div className="focus-drift__axis" aria-hidden="true">
-              {FOCUS_DRIFT_AXIS_TICKS.map((tick) => (
+              {focusDriftChart.axisTicks.map((tick) => (
                 <span key={tick.id} style={{ "--focus-drift-axis-x": `${tick.x}%` } as FocusDriftAxisTickStyle}>{tick.label}</span>
               ))}
             </div>
@@ -3689,7 +3842,6 @@ export default function App() {
             {dashboardAiRecoveryState ? (
               <DashboardAiRecoveryOverlay
                 billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
                 retrying={classificationActionLoading}
                 state={dashboardAiRecoveryState}
                 onClose={handleDismissDashboardAiRecovery}

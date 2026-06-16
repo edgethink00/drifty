@@ -2,40 +2,39 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { AiPrivacyReview } from "./AiPrivacyReview";
+import { AiSetupWorkProfileSection } from "./AiSetupWorkProfileSection";
+import type { WorkProfileSettings } from "../onboarding/onboardingState";
 
 type AiSetupSupportSectionId = "workProfile" | "privacyReview";
 
 type AiSetupSupportSectionsProps = {
-  readonly workProfileDraft: string;
+  readonly workProfileDraft: WorkProfileSettings;
   readonly workProfileMessage: string | null;
-  readonly workProfilePreview: string;
   readonly onSaveWorkProfile: () => void;
-  readonly onWorkProfileDraftChange: (value: string) => void;
+  readonly onWorkProfileDraftChange: (value: WorkProfileSettings) => void;
 };
 
 export function AiSetupSupportSections({
   workProfileDraft,
   workProfileMessage,
-  workProfilePreview,
   onSaveWorkProfile,
   onWorkProfileDraftChange,
 }: AiSetupSupportSectionsProps) {
-  const [expandedSection, setExpandedSection] = useState<AiSetupSupportSectionId | null>(null);
+  const [expandedSection, setExpandedSection] = useState<AiSetupSupportSectionId | null>("workProfile");
 
   return (
     <div className="ai-setup-support-list" aria-label="Additional AI setup sections">
       <AiSetupSupportSection
         id="workProfile"
-        badge="Used in AI prompts"
+        badge="Work context"
         expanded={expandedSection === "workProfile"}
-        subtitle="Add local work context for ambiguous apps, titles, and domains."
+        subtitle="Role and field from onboarding, editable here."
         title="Work profile"
         onToggle={setExpandedSection}
       >
-        <WorkProfileSection
+        <AiSetupWorkProfileSection
           workProfileDraft={workProfileDraft}
           workProfileMessage={workProfileMessage}
-          workProfilePreview={workProfilePreview}
           onSaveWorkProfile={onSaveWorkProfile}
           onWorkProfileDraftChange={onWorkProfileDraftChange}
         />
@@ -81,6 +80,7 @@ function AiSetupSupportSection({
         id={buttonId}
         type="button"
         className="ai-setup-support-section__toggle"
+        aria-label={title}
         aria-controls={panelId}
         aria-expanded={expanded}
         onClick={() => onToggle(expanded ? null : id)}
@@ -97,43 +97,6 @@ function AiSetupSupportSection({
           {children}
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function WorkProfileSection({
-  workProfileDraft,
-  workProfileMessage,
-  workProfilePreview,
-  onSaveWorkProfile,
-  onWorkProfileDraftChange,
-}: AiSetupSupportSectionsProps) {
-  return (
-    <section className="ai-setup-personalization" aria-label="AI classification personalization">
-      <div className="ai-setup-work-profile-panel">
-        <div className="ai-setup-work-profile-panel__preview">
-          <span>Current AI lens</span>
-          <strong>{workProfilePreview}</strong>
-          <p>Used to judge ambiguous titles, domains, and mixed-purpose apps against your real work.</p>
-        </div>
-        <div className="ai-setup-work-profile-panel__editor">
-          <label className="ai-setup-field ai-setup-field--work-profile">
-            <span>Edit profile</span>
-            <textarea
-              className="settings-input ai-setup-work-profile"
-              aria-label="Work profile"
-              value={workProfileDraft}
-              onChange={(event) => onWorkProfileDraftChange(event.target.value)}
-              placeholder="Example: iOS app development, launch operations, and customer support"
-              rows={2}
-            />
-          </label>
-          <div className="ai-setup-personalization__footer">
-            <p role="status">{workProfileMessage ?? "Saved locally and included only in AI classification requests."}</p>
-            <button type="button" className="settings-btn" onClick={onSaveWorkProfile}>Save work profile</button>
-          </div>
-        </div>
-      </div>
     </section>
   );
 }

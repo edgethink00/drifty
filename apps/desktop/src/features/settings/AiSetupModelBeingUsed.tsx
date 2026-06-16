@@ -43,6 +43,10 @@ export function AiSetupModelBeingUsed({
     onProviderChange(provider);
     if (provider === "openrouter") {
       onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
+      return;
+    }
+    if (driftyRoute === "local") {
+      onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local" }));
     }
   };
 

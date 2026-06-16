@@ -9,11 +9,12 @@ import type {
 } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { readUserOnboardingState, type UserOnboardingState } from "../onboarding/onboardingState";
+import { readUserOnboardingState } from "../onboarding/onboardingState";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
 import { saveLiveClassificationIfRequested } from "./liveAiClassificationPersistence";
 import { toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
+import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -22,10 +23,11 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
-const MAX_WORK_PROFILE_TEXT_LENGTH = 100;
 const AI_CLASSIFICATION_PROMPT_VERSION = "v2-work-profile";
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
+const KNOWN_BROWSER_APP_NAMES = new Set(["arc", "brave browser", "chromium", "firefox", "google chrome", "google chrome canary", "microsoft edge", "safari"]);
+const KNOWN_BROWSER_BUNDLE_IDS = new Set(["com.apple.safari", "com.brave.browser", "com.google.chrome", "com.google.chrome.canary", "com.microsoft.edgemac", "company.thebrowser.browser", "org.chromium.chromium", "org.mozilla.firefox"]);
 
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0, output: 0 },
@@ -417,6 +419,12 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
   try {
     const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
     const payload = await toMinimizedPayload(segment, workProfile);
+    const systemRecord = toSystemSkippedClassificationRecord(segment, payload, new Date().toISOString());
+    if (systemRecord) {
+      await saveLiveClassificationIfRequested(systemRecord, options.persistLiveResult);
+      return unavailableLiveClassification(systemRecord.reason ?? "Skipped AI classification because activity context is unavailable.");
+    }
+
     const reusableRecord = await readReusableAiClassification(payload);
     if (reusableRecord) {
       await saveLiveClassificationIfRequested(reusableRecord, options.persistLiveResult);
@@ -608,11 +616,14 @@ function toDeterministicClassificationRecords(segments: ActivitySegment[], paylo
   const classifiedAt = new Date().toISOString();
 
   return segments.flatMap((segment): ActivityClassificationRecord[] => {
-    const classification = classifyActivityDetailed(segment, { includeAiClassifications: false });
-    if (classification.category === "unknown") return [];
-
     const sourcePayload = payloadById.get(segment.id);
     if (!sourcePayload) return [];
+
+    const classification = classifyActivityDetailed(segment, { includeAiClassifications: false });
+    if (classification.category === "unknown") {
+      const systemRecord = toSystemSkippedClassificationRecord(segment, sourcePayload, classifiedAt);
+      return systemRecord ? [systemRecord] : [];
+    }
 
     return [{
       segmentId: segment.id,
@@ -630,6 +641,65 @@ function toDeterministicClassificationRecords(segments: ActivitySegment[], paylo
       classifiedAt,
     }];
   });
+}
+
+function toSystemSkippedClassificationRecord(
+  segment: ActivitySegment,
+  sourcePayload: MinimizedActivityPayload,
+  classifiedAt: string,
+): ActivityClassificationRecord | null {
+  const reason = skippedAiClassificationReason(segment);
+  if (!reason) return null;
+
+  return {
+    segmentId: segment.id,
+    inputFingerprint: sourcePayload.inputFingerprint,
+    category: "unknown",
+    productivity: "neutral",
+    source: "system",
+    confidence: 1,
+    reason,
+    model: null,
+    promptVersion: null,
+    taxonomyVersion: "v1",
+    aiResult: false,
+    latencyMs: null,
+    classifiedAt,
+  };
+}
+
+function skippedAiClassificationReason(segment: ActivitySegment): string | null {
+  if (normalizeComparableText(segment.appName) === "unavailable") {
+    return "Skipped AI classification because the tracker could not determine the frontmost app.";
+  }
+
+  if (!isBrowserSegment(segment) || hasMeaningfulActivityContext(segment)) return null;
+
+  const status = segment.browserAutomationStatus;
+  if (status && status !== "granted" && status !== "not_applicable") {
+    return `Skipped AI classification because browser context was unavailable (${status}).`;
+  }
+
+  return "Skipped AI classification because the browser activity had no readable site, title, or window context.";
+}
+
+function isBrowserSegment(segment: ActivitySegment): boolean {
+  return Boolean(
+    cleanText(segment.browserName)
+      || KNOWN_BROWSER_APP_NAMES.has(normalizeComparableText(segment.appName))
+      || KNOWN_BROWSER_BUNDLE_IDS.has(normalizeComparableText(segment.bundleId)),
+  );
+}
+
+function hasMeaningfulActivityContext(segment: ActivitySegment): boolean {
+  return Boolean(
+    cleanText(segment.siteDomain)
+      || cleanText(segment.siteTitle)
+      || cleanText(segment.windowTitle)
+      || cleanText(segment.youtubeTitle)
+      || cleanText(segment.youtubeChannelName)
+      || cleanText(segment.youtubeCategory),
+  );
 }
 
 async function saveInheritedYouTubeBrowseClassifications(segments: ActivitySegment[], payload: MinimizedActivityPayload[]): Promise<{ saved: number; segmentIds: Set<string> }> {
@@ -1000,32 +1070,6 @@ async function readSignedInUserId(): Promise<string | null> {
   }
 }
 
-function normalizeOnboardingWorkProfile(state: UserOnboardingState | null): string | null {
-  if (!state) return null;
-  const workType = normalizeWorkProfilePart(state.workType, state.workTypeOther);
-  const workDomain = normalizeWorkProfilePart(state.workDomain, state.workDomainOther);
-  if (!workType && !workDomain) return null;
-  if (workType && workDomain) return `${workType} in ${workDomain}`;
-  return workType ?? workDomain;
-}
-
-function normalizeWorkProfilePart(value: string | null, otherValue: string): string | null {
-  const normalizedValue = sanitizeWorkProfileText(value);
-  if (normalizedValue === "Other") {
-    const normalizedOther = sanitizeWorkProfileText(otherValue);
-    return normalizedOther ? `Other: ${normalizedOther}` : null;
-  }
-  return normalizedValue;
-}
-
-function sanitizeWorkProfileText(value: string | null | undefined): string | null {
-  const normalized = value
-    ?.replace(/[\u0000-\u001F\u007F]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) return null;
-  return normalized.slice(0, MAX_WORK_PROFILE_TEXT_LENGTH).trim() || null;
-}
 
 function stripJsonCodeFence(text: string): string {
   const trimmed = text.trim();
@@ -1105,6 +1149,10 @@ function cleanText(value: string | null | undefined): string | null {
   const trimmed = value?.replace(/\s+/g, " ").trim();
   if (!trimmed) return null;
   return trimmed.length > MAX_TEXT_LENGTH ? trimmed.slice(0, MAX_TEXT_LENGTH) : trimmed;
+}
+
+function normalizeComparableText(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
 }
 
 async function fingerprint(input: string): Promise<string> {

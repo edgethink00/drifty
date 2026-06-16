@@ -1,4 +1,4 @@
-use std::{process::Command, thread, time::Duration};
+use std::{thread, time::Duration};
 
 #[cfg(target_os = "macos")]
 use objc2::rc::autoreleasepool;
@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use tauri::async_runtime;
 use thiserror::Error;
 
+mod browser_tabs;
+
 const DRIFTY_BUNDLE_ID: &str = "so.drifty.mac";
 const GRACEFUL_TERMINATE_WAIT: Duration = Duration::from_millis(800);
 const FORCE_TERMINATE_WAIT: Duration = Duration::from_millis(250);
@@ -20,6 +22,7 @@ pub struct ExtremeNudgeTarget {
     pub app_name: String,
     pub bundle_id: Option<String>,
     pub browser_name: Option<String>,
+    pub site_domain: Option<String>,
     pub site_url: Option<String>,
 }
 
@@ -38,8 +41,8 @@ pub enum ExtremeNudgeOutcomeKind {
 
 #[derive(Debug, Error)]
 enum ExtremeNudgeError {
-    #[error("Chrome-like browser tab closing requires a captured page URL")]
-    MissingBrowserUrl,
+    #[error("Browser tab closing requires a captured page URL or domain")]
+    MissingBrowserTarget,
     #[error("Refusing to terminate protected app bundle {0}")]
     ProtectedBundle(String),
     #[error("App bundle id is required for {0}")]
@@ -70,11 +73,20 @@ fn apply_extreme_nudge(
     if let Some(browser_name) = target
         .browser_name
         .as_deref()
-        .filter(|name| is_chrome_like_browser(name))
+        .filter(|name| browser_tabs::is_supported_browser_tab_target(name))
     {
-        let site_url = normalized_optional_text(target.site_url.as_deref())
-            .ok_or(ExtremeNudgeError::MissingBrowserUrl)?;
-        close_chrome_like_browser_tab(browser_name, &site_url)?;
+        let site_url = normalized_optional_text(target.site_url.as_deref());
+        let site_domain = browser_tabs::normalized_site_domain(target.site_domain.as_deref())
+            .or_else(|| {
+                site_url
+                    .as_deref()
+                    .and_then(browser_tabs::site_domain_from_url)
+            });
+        if site_url.is_none() && site_domain.is_none() {
+            return Err(ExtremeNudgeError::MissingBrowserTarget);
+        }
+
+        browser_tabs::close_browser_tab(browser_name, site_url.as_deref(), site_domain.as_deref())?;
         return Ok(ExtremeNudgeOutcome {
             kind: ExtremeNudgeOutcomeKind::ClosedBrowserTab,
         });
@@ -113,65 +125,6 @@ fn is_protected_bundle_id(bundle_id: &str) -> bool {
             | "com.apple.loginwindow"
             | "com.apple.dock"
     )
-}
-
-fn is_chrome_like_browser(app_name: &str) -> bool {
-    matches!(
-        app_name.trim(),
-        "Google Chrome" | "Microsoft Edge" | "Arc" | "Brave Browser" | "Chromium"
-    )
-}
-
-fn close_chrome_like_browser_tab(
-    browser_name: &str,
-    site_url: &str,
-) -> Result<(), ExtremeNudgeError> {
-    let script = chrome_like_tab_close_script(browser_name, site_url);
-    let output = Command::new("osascript")
-        .args(["-e", &script])
-        .output()
-        .map_err(|error| ExtremeNudgeError::AppleScriptFailed(error.to_string()))?;
-
-    if !output.status.success() {
-        return Err(ExtremeNudgeError::AppleScriptFailed(
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if stdout.trim() == "closed_browser_tab" {
-        return Ok(());
-    }
-
-    Err(ExtremeNudgeError::BrowserTabNotFound(site_url.to_string()))
-}
-
-fn chrome_like_tab_close_script(browser_name: &str, site_url: &str) -> String {
-    let browser_name = applescript_string_literal(browser_name);
-    let site_url = applescript_string_literal(site_url);
-    format!(
-        r#"tell application "{browser_name}"
-  if not (exists front window) then return "not_found"
-  try
-    if URL of active tab of front window is "{site_url}" then
-      close active tab of front window
-      return "closed_browser_tab"
-    end if
-  end try
-  repeat with browserWindow in windows
-    set matchingTabs to (every tab of browserWindow whose URL is "{site_url}")
-    if (count of matchingTabs) > 0 then
-      close item 1 of matchingTabs
-      return "closed_browser_tab"
-    end if
-  end repeat
-  return "not_found"
-end tell"#
-    )
-}
-
-fn applescript_string_literal(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(target_os = "macos")]
@@ -235,36 +188,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn chrome_like_detection_accepts_supported_browsers() {
-        assert!(is_chrome_like_browser("Google Chrome"));
-        assert!(is_chrome_like_browser("Microsoft Edge"));
-        assert!(is_chrome_like_browser("Arc"));
-    }
-
-    #[test]
-    fn chrome_like_detection_rejects_unsupported_browsers() {
-        assert!(!is_chrome_like_browser("Safari"));
-        assert!(!is_chrome_like_browser("Firefox"));
-    }
-
-    #[test]
-    fn tab_close_script_matches_active_tab_before_scanning_windows() {
-        let script =
-            chrome_like_tab_close_script("Google Chrome", "https://youtube.com/watch?v=abc");
-
-        assert!(script.contains("URL of active tab of front window"));
-        assert!(script.contains("close active tab of front window"));
-        assert!(script.contains(
-            "every tab of browserWindow whose URL is \"https://youtube.com/watch?v=abc\""
+    fn browser_tab_detection_accepts_supported_browsers() {
+        assert!(browser_tabs::is_supported_browser_tab_target(
+            "Google Chrome"
         ));
+        assert!(browser_tabs::is_supported_browser_tab_target(
+            "Microsoft Edge"
+        ));
+        assert!(browser_tabs::is_supported_browser_tab_target("Arc"));
+        assert!(browser_tabs::is_supported_browser_tab_target("Safari"));
+        assert!(browser_tabs::is_supported_browser_tab_target("Firefox"));
     }
 
     #[test]
-    fn applescript_string_literal_escapes_quotes_and_backslashes() {
-        assert_eq!(
-            applescript_string_literal(r#"https://example.test/watch?q="a\b""#),
-            r#"https://example.test/watch?q=\"a\\b\""#
-        );
+    fn browser_tab_detection_rejects_unsupported_browsers() {
+        assert!(!browser_tabs::is_supported_browser_tab_target("Preview"));
     }
 
     #[test]

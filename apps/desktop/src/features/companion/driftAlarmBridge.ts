@@ -96,6 +96,9 @@ export function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
     && typeof candidate.generatedAt === "string"
     && isBreakOptions(candidate.breakOptions)
     && isFocusTargets(candidate.focusTargets)
+    && isNullableString(candidate.sourceSiteDomain)
+    && typeof candidate.sourceAppName === "string"
+    && isNullableString(candidate.sourceIconSrc)
     && (candidate.copy === undefined || isDriftAlarmRenderedCopy(candidate.copy))
     && (candidate.sourceSegmentId === undefined || isNullableString(candidate.sourceSegmentId))
     && isDriftAlarmModePayload(candidate)

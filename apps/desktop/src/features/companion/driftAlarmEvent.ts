@@ -36,6 +36,9 @@ type DriftAlarmEventBase = {
   readonly generatedAt: string;
   readonly breakOptions: readonly number[];
   readonly focusTargets: readonly DriftAlarmFocusTarget[];
+  readonly sourceSiteDomain: string | null;
+  readonly sourceAppName: string;
+  readonly sourceIconSrc: string | null;
   readonly copy?: DriftAlarmRenderedCopy;
   readonly sourceSegmentId?: string | null;
 };
@@ -53,6 +56,9 @@ type DriftAlarmEventInput = {
   readonly generatedAt: string;
   readonly breakOptions?: readonly number[];
   readonly focusTargets?: readonly DriftAlarmFocusTarget[];
+  readonly sourceSiteDomain?: string | null;
+  readonly sourceAppName?: string;
+  readonly sourceIconSrc?: string | null;
   readonly copySettings?: DriftAlarmCopySettingsValue;
   readonly sourceSegmentId?: string | null;
 };
@@ -77,6 +83,9 @@ export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEve
     preservedFocusStrikeLabel: formatFocusStrike(input.preservedFocusStrikeSeconds),
     breakOptions: normalizeBreakOptions(input.breakOptions),
     focusTargets,
+    sourceSiteDomain: input.sourceSiteDomain?.trim() ?? null,
+    sourceAppName: input.sourceAppName?.trim() || "Unknown app",
+    sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
       mode: "drift",
       contextLabel: input.contextLabel,
@@ -105,6 +114,9 @@ export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): D
     preservedFocusStrikeLabel: formatFocusStrike(input.preservedFocusStrikeSeconds),
     breakOptions,
     focusTargets,
+    sourceSiteDomain: input.sourceSiteDomain?.trim() ?? null,
+    sourceAppName: input.sourceAppName?.trim() || "Unknown app",
+    sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
       mode: "break_return",
       breakDurationLabel: breakReturn.breakDurationLabel,

@@ -59,6 +59,9 @@ function event(overrides: Partial<DriftAlarmEvent> = {}): DriftAlarmEvent {
         iconSrc: null,
       },
     ],
+    sourceSiteDomain: "youtube.com",
+    sourceAppName: "Google Chrome",
+    sourceIconSrc: null,
   } satisfies DriftAlarmEvent;
 
   if (overrides.mode === "break_return") {

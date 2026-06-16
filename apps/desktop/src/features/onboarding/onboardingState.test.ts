@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { getUserOnboardingStorageKey, readUserOnboardingState } from "./onboardingState";
+import {
+  getUserOnboardingStorageKey,
+  readUserOnboardingState,
+  readUserWorkProfileSettings,
+  saveUserWorkProfileSettings,
+  summarizeUserWorkProfile,
+} from "./onboardingState";
 
 function storeCompletedOnboarding(userId: string, displayName: string) {
   window.localStorage.setItem(
@@ -38,5 +44,24 @@ describe("onboardingState", () => {
     expect(state?.completed).toBe(true);
     expect(state?.displayName).toBe("Local Alex");
     expect(window.localStorage.getItem(getUserOnboardingStorageKey("cloud-user-1"))).toBeTruthy();
+  });
+
+  it("preserves multiple work activities for AI work profile settings", () => {
+    const savedState = saveUserWorkProfileSettings("local", {
+      workActivities: ["Coding", "Writing"],
+      workActivityOther: "",
+      workDomain: "AI",
+      workDomainOther: "",
+    });
+
+    expect(savedState).toMatchObject({
+      workType: "Coding",
+      workTypeOther: "",
+      jobType: "Coding, Writing",
+      jobTypeOther: "",
+      workDomain: "AI",
+    });
+    expect(readUserWorkProfileSettings("local").workActivities).toEqual(["Coding", "Writing"]);
+    expect(summarizeUserWorkProfile("local")).toBe("Coding, Writing in AI");
   });
 });

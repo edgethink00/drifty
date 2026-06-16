@@ -6,6 +6,18 @@ function cssRule(styles: string, selector: string): string {
   return styles.match(new RegExp(`${escapedSelector}\\s*\\{[\\s\\S]*?\\n\\}`))?.[0] ?? "";
 }
 
+function readAiSetupStyles(): string {
+  return [
+    "src/features/settings/AiSetupPanel.css",
+    "src/features/settings/AiSetupProviderRows.css",
+    "src/features/settings/AiSetupProviderDetails.css",
+    "src/features/settings/AiSetupSupportSections.css",
+    "src/features/settings/AiSetupWorkProfileSection.css",
+    "src/features/settings/AiSetupPrivacyReview.css",
+    "src/features/settings/AiSetupPanelResponsive.css",
+  ].map((path) => readFileSync(path, "utf8")).join("\n");
+}
+
 describe("Settings content styles", () => {
   it("presents direct settings block headings outside the grouped rows", () => {
     const styles = readFileSync("src/styles.css", "utf8");
@@ -71,14 +83,14 @@ describe("Settings content styles", () => {
   });
 
   it("keeps AI setup provider rows compact", () => {
-    const aiSetupStyles = readFileSync("src/features/settings/AiSetupPanel.css", "utf8");
+    const aiSetupStyles = readAiSetupStyles();
     const toggleRule = cssRule(aiSetupStyles, ".ai-setup-choice__toggle");
     const brandMarkRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark");
     const brandImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark img");
     const driftyRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--drifty");
     const openRouterImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--openrouter img");
 
-    expect(toggleRule).toContain("grid-template-columns: 2rem minmax(0, 1fr) auto 0.78rem;");
+    expect(toggleRule).toContain("grid-template-columns: 2rem minmax(0, 1fr) 0.78rem;");
     expect(toggleRule).toContain("min-height: 3.7rem;");
     expect(toggleRule).toContain("padding: 0.58rem var(--space-3);");
     expect(brandMarkRule).toContain("height: 2rem;");
@@ -91,12 +103,21 @@ describe("Settings content styles", () => {
   });
 
   it("uses the focus color for the Cloud setup CTA", () => {
-    const aiSetupStyles = readFileSync("src/features/settings/AiSetupPanel.css", "utf8");
+    const aiSetupStyles = readAiSetupStyles();
     const cloudPrimaryRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn--primary");
 
     expect(cloudPrimaryRule).toContain("background: var(--productivity-focus);");
     expect(cloudPrimaryRule).toContain("border-color: var(--productivity-focus);");
     expect(cloudPrimaryRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--productivity-focus) 24%, transparent);");
+  });
+
+  it("separates AI providers from shared prompt settings", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const supportZoneRule = cssRule(aiSetupStyles, ".ai-setup-support-zone");
+
+    expect(supportZoneRule).toContain("border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);");
+    expect(supportZoneRule).toContain("margin-top: clamp(1.35rem, 3vw, 2.25rem);");
+    expect(supportZoneRule).toContain("padding-top: clamp(1.1rem, 2.4vw, 1.8rem);");
   });
 
   it("keeps the first heading aligned to the active settings section label", () => {

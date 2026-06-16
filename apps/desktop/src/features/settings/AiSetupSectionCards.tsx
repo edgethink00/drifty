@@ -13,7 +13,6 @@ export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
 type AiSetupSectionCardProps = {
   readonly section: (typeof AI_SETUP_SECTIONS)[number];
   readonly expanded: boolean;
-  readonly badges: readonly string[];
   readonly children: ReactNode;
   readonly onToggle: (section: AiSetupSection) => void;
 };
@@ -21,7 +20,6 @@ type AiSetupSectionCardProps = {
 export function AiSetupSectionCard({
   section,
   expanded,
-  badges,
   children,
   onToggle,
 }: AiSetupSectionCardProps) {
@@ -43,11 +41,6 @@ export function AiSetupSectionCard({
         <span className="ai-setup-choice__copy">
           <span className="ai-setup-choice__title">{section.title}</span>
           <span className="ai-setup-choice__subtitle">{section.subtitle}</span>
-        </span>
-        <span className="ai-setup-choice__badges" aria-hidden="true">
-          {badges.map((badge) => (
-            <span key={badge} className="ai-setup-choice__badge">{badge}</span>
-          ))}
         </span>
         <span className="ai-setup-choice__chevron" aria-hidden="true" />
       </button>

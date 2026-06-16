@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
-import { saveUserWorkProfile, summarizeUserWorkProfile } from "../onboarding/onboardingState";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
 import "./AiSetupPanel.css";
 import {
@@ -15,11 +14,11 @@ import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
 import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
-import type { ManagedLocalAiModel } from "./managedLocalAiClient";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
+import { useWorkProfileSettings } from "./useWorkProfileSettings";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -68,38 +67,20 @@ export function AiSetupPanel({
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
   const [driftyRoute, setDriftyRoute] = useState<DriftyRoute>(() => localAiSetup.provider === "managed_local" ? "local" : "cloud");
-  const [workProfileDraft, setWorkProfileDraft] = useState(() => summarizeUserWorkProfile(workProfileUserId));
-  const [workProfileMessage, setWorkProfileMessage] = useState<string | null>(null);
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   const managedLocalAi = useManagedLocalAiSetup(activeSection === "drifty", onLocalAiSetupChange);
-  const workProfilePreview = workProfileDraft.trim() || "No work profile saved yet";
+  const workProfileSettings = useWorkProfileSettings(workProfileUserId);
 
   useEffect(() => {
     onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
 
-  useEffect(() => {
-    setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
-    setWorkProfileMessage(null);
-  }, [workProfileUserId]);
-
   const handleSectionChange = (section: AiSetupSection) => {
     setActiveSection(section);
     setConnectionTestResult(null);
     const provider = providerForSection(section);
     if (provider) onLocalAiSetupChange((current) => ({ ...current, provider }));
-  };
-
-  const handleSaveWorkProfile = () => {
-    const savedState = saveUserWorkProfile(workProfileUserId, workProfileDraft);
-    setWorkProfileMessage(savedState ? "Work profile saved for future AI classification." : "Enter a work profile before saving.");
-    if (savedState) setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
-  };
-
-  const handleWorkProfileDraftChange = (value: string) => {
-    setWorkProfileDraft(value);
-    setWorkProfileMessage(null);
   };
 
   const handleTestConnection = async () => {
@@ -133,7 +114,7 @@ export function AiSetupPanel({
       <h4 className="ai-setup-provider-heading">Configure providers</h4>
 
       <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} badges={driftySectionBadges(localAiSetup, managedLocalAi.status?.state ?? null, managedLocalAi.catalog, aiServerStatusLabel, driftyRoute)} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} onToggle={handleSectionChange}>
           <DriftySetupPanel
             actionModelId={managedLocalAi.actionModelId}
             aiServerStatusLabel={aiServerStatusLabel}
@@ -164,7 +145,7 @@ export function AiSetupPanel({
             onTestConnection={handleTestConnection}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", modelPickers.openRouterPrimaryModel]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} onToggle={handleSectionChange}>
           <OpenRouterSetupPanel
             connectionTestMessage={connectionTestResult?.message ?? null}
             connectionTestRunning={connectionTestRunning}
@@ -178,13 +159,21 @@ export function AiSetupPanel({
         </AiSetupSectionCard>
       </div>
 
-      <AiSetupSupportSections
-        workProfileDraft={workProfileDraft}
-        workProfileMessage={workProfileMessage}
-        workProfilePreview={workProfilePreview}
-        onSaveWorkProfile={handleSaveWorkProfile}
-        onWorkProfileDraftChange={handleWorkProfileDraftChange}
-      />
+      <div className="ai-setup-support-zone" aria-label="AI prompt settings">
+        <div className="ai-setup-support-zone__header">
+          <div>
+            <span className="eyebrow">AI prompt settings</span>
+            <strong>Work context and privacy</strong>
+          </div>
+          <p>Shared by Drifty Cloud, OpenRouter, and local AI classification.</p>
+        </div>
+        <AiSetupSupportSections
+          workProfileDraft={workProfileSettings.workProfileDraft}
+          workProfileMessage={workProfileSettings.workProfileMessage}
+          onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
+          onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
+        />
+      </div>
 
       {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog
@@ -225,22 +214,6 @@ function sectionForProvider(provider: LocalAiSetupState["provider"]): AiSetupSec
     default:
       return assertNever(provider);
   }
-}
-
-function driftySectionBadges(
-  localAiSetup: LocalAiSetupState,
-  managedState: "not_installed" | "installing" | "installed" | "running" | "error" | null,
-  catalog: readonly ManagedLocalAiModel[],
-  cloudStatus: string,
-  driftyRoute: DriftyRoute,
-): readonly string[] {
-  const modeBadge = driftyRoute === "local" ? "Local selected" : "Cloud";
-  const managedBadge = managedState === "running" ? "Running" : managedState === "installed" ? "Downloaded" : "Download";
-  return [cloudStatus, modeBadge, managedBadge, selectedManagedModelLabel(catalog, localAiSetup.managedLocalModelId)];
-}
-
-function selectedManagedModelLabel(catalog: readonly ManagedLocalAiModel[], modelId: string): string {
-  return catalog.find((model) => model.id === modelId)?.label ?? "Local model";
 }
 
 class AiSetupSectionError extends Error {
