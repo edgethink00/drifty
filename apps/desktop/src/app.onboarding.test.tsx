@@ -584,18 +584,22 @@ describe("App onboarding", () => {
     await clickEnabledNext();
     await screen.findByRole("dialog", { name: /set up drift alerts/i });
 
+    const driftAlarmToggle = screen.getByRole("button", { name: "Drift alarm" });
     const extremeNudgeToggle = screen.getByRole("button", { name: "Extreme nudge" });
     fireEvent.click(extremeNudgeToggle);
     const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
     expect(confirmDialog.textContent).toContain("close the distracting browser tab or quit the distracting app");
+    expect(driftAlarmToggle.getAttribute("aria-pressed")).toBe("false");
     expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /keep off/i }));
     expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
+    expect(driftAlarmToggle.getAttribute("aria-pressed")).toBe("false");
     expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(extremeNudgeToggle);
     fireEvent.click(await screen.findByRole("button", { name: /allow closing/i }));
     expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
+    expect(driftAlarmToggle.getAttribute("aria-pressed")).toBe("true");
     expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("true");
     expect(screen.queryByText(/can close distracting tabs or apps/i)).toBeNull();
     await clickEnabledAction(/^continue$/i);
@@ -611,9 +615,9 @@ describe("App onboarding", () => {
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
     const storedRecord = JSON.parse(storedValue ?? "{}") as Record<string, unknown>;
-    expect(storedRecord.driftAlarmEnabled).toBe(false);
+    expect(storedRecord.driftAlarmEnabled).toBe(true);
     expect(storedRecord.extremeNudgeEnabled).toBe(true);
-    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("0");
+    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1");
     expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1");
   });
 

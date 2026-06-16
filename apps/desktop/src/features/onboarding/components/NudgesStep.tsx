@@ -23,7 +23,14 @@ export function NudgesStep({
     setExtremeConfirmOpen(true);
   }
 
+  function handleDriftAlarmToggle() {
+    const nextEnabled = !driftAlarmEnabled;
+    onDriftAlarmChange(nextEnabled);
+    if (!nextEnabled && extremeNudgeEnabled) onExtremeNudgeChange(false);
+  }
+
   function confirmExtremeNudge() {
+    if (!driftAlarmEnabled) onDriftAlarmChange(true);
     onExtremeNudgeChange(true);
     setExtremeConfirmOpen(false);
   }
@@ -41,7 +48,7 @@ export function NudgesStep({
             <NudgeToggle
               enabled={driftAlarmEnabled}
               label="Drift alarm"
-              onToggle={() => onDriftAlarmChange(!driftAlarmEnabled)}
+              onToggle={handleDriftAlarmToggle}
             />
           </div>
         </li>
