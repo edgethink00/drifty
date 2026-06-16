@@ -166,7 +166,7 @@
   border-radius: 8px;
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: auto minmax(12rem, 1fr) minmax(13rem, 0.72fr) minmax(12rem, auto);
+  grid-template-columns: auto minmax(13rem, 1fr) minmax(12rem, 0.68fr) minmax(8.8rem, auto);
   min-width: 0;
   padding: var(--space-2) var(--space-3);
 }
@@ -248,17 +248,56 @@
 }
 
 .ai-managed-model__actions {
-  display: grid;
-  gap: 0.38rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  min-width: 12rem;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.36rem;
+  justify-content: flex-end;
+  min-width: 8.8rem;
 }
 
 .ai-managed-model__actions .settings-btn {
   height: 2rem;
   min-height: 2rem;
   min-width: 0;
-  padding-inline: 0.6rem;
+  padding-inline: 0.68rem;
+}
+
+.ai-managed-model__primary-action {
+  gap: 0.42rem;
+}
+
+.ai-managed-model__primary-action svg,
+.ai-managed-model__delete-action svg {
+  color: currentColor;
+  fill: none;
+  flex: 0 0 auto;
+  height: 0.92rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 0.92rem;
+}
+
+.ai-managed-model__delete-action {
+  color: var(--warn);
+  padding-inline: 0;
+  width: 2rem;
+}
+
+.ai-managed-model__delete-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 74%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 28%, var(--line));
+  color: var(--warn);
+}
+
+.ai-managed-model__action-note {
+  color: var(--warn);
+  flex-basis: 100%;
+  font-size: var(--type-caption-size);
+  line-height: 1.25;
+  text-align: right;
   width: 100%;
 }
 

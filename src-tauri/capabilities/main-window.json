@@ -16,6 +16,7 @@
     "autostart:allow-is-enabled",
     "opener:allow-open-url",
     "opener:allow-default-urls",
+    "opener:allow-reveal-item-in-dir",
     "deep-link:allow-get-current",
     "allow-accessibility-get-status",
     "allow-accessibility-request-access",

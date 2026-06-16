@@ -6,7 +6,7 @@
 @import "./AiSetupPanelResponsive.css";
 
 .ai-setup-panel {
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .ai-setup-panel__header {
@@ -19,7 +19,78 @@
 }
 
 .content--settings .ai-setup-panel {
-  gap: var(--space-4);
+  gap: var(--space-3);
+}
+
+.ai-setup-panel-tabs {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-2) 38%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.16rem;
+  margin: 0 0 var(--space-1);
+  min-width: 0;
+  padding: 0.16rem;
+  width: fit-content;
+}
+
+.ai-setup-panel-tab {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  font-weight: 650;
+  gap: 0.42rem;
+  min-height: 2.08rem;
+  padding: 0 0.7rem;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.ai-setup-panel-tab svg {
+  color: currentColor;
+  fill: none;
+  height: 1rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.85;
+  width: 1rem;
+}
+
+.ai-setup-panel-tab:hover {
+  background: color-mix(in srgb, var(--bg-2) 48%, transparent);
+  color: var(--text);
+}
+
+.ai-setup-panel-tab:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 2px;
+}
+
+.ai-setup-panel-tab.is-active {
+  background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));
+  border-color: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+}
+
+.ai-setup-tab-panel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 .ai-setup-current-model {
@@ -36,8 +107,8 @@
 .ai-setup-provider-heading {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.96rem;
-  font-weight: 720;
+  font-size: 0.94rem;
+  font-weight: 650;
   letter-spacing: 0;
   line-height: 1.15;
   margin: 0;

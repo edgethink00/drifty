@@ -1,124 +1,22 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AiSetupPanel } from "./AiSetupPanel";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
-import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
-
-const { invokeMock } = vi.hoisted(() => {
-  const managedCatalog = [
-    { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", recommended: false },
-    { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", recommended: true },
-    { id: "drifty-gemma-4-12b-local", tier: "gemma", label: "Gemma 4 12B", detail: "Mid-sized Gemma 4 local model.", downloadSize: "~8.0 GB", diskRequired: "16 GB free", minimumMemory: "24 GB RAM", recommended: false },
-    { id: "drifty-qwen3-6-27b-smart", tier: "smart", label: "Qwen 3.6 27B", detail: "Stronger local model.", downloadSize: "~15 GB", diskRequired: "30 GB free", minimumMemory: "36 GB RAM", recommended: false },
-  ];
-  const managedStatus = {
-    state: "not_installed",
-    selectedModelId: null,
-    baseUrl: null,
-    model: null,
-    message: "Choose a local model and Drifty will download it inside the app.",
-    artifactDir: null,
-  };
-
-  function modelIdFromArgs(args: unknown): string {
-    if (!args || typeof args !== "object" || !("modelId" in args) || typeof args.modelId !== "string") return "";
-    return args.modelId;
-  }
-
-  return {
-    invokeMock: vi.fn((command: string, args?: unknown) => {
-      switch (command) {
-        case "managed_ai_catalog":
-          return Promise.resolve(managedCatalog);
-        case "managed_ai_status":
-          return Promise.resolve(managedStatus);
-        case "managed_ai_install": {
-          const modelId = modelIdFromArgs(args);
-          return Promise.resolve({
-            ...managedStatus,
-            state: "installed",
-            selectedModelId: modelId,
-            baseUrl: "http://127.0.0.1:39217/v1",
-            model: "drifty-qwen3.5-4b-local",
-            message: "Model metadata is staged.",
-          });
-        }
-        case "managed_ai_start":
-          return Promise.resolve({ ...managedStatus, state: "error", message: "Runtime assets are not installed yet." });
-        case "managed_ai_delete":
-          return Promise.resolve({ ...managedStatus, state: "not_installed", message: "Choose a local model and Drifty will download it inside the app." });
-        case "ai_classification_openai_chat":
-          return Promise.resolve({ status: 200, body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}", latencyMs: 42 });
-        default:
-          return Promise.resolve({});
-      }
-    }),
-  };
-});
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
-}));
-
-function renderPanel({
-  currentBillingPlan = "individual",
-  billingEntitlementStatus = "active",
-  cloudTrialEndsAt = null,
-  initialSetup = DEFAULT_LOCAL_AI_SETUP,
-  userEmail = null,
-  workProfileUserId = "local",
-}: {
-  readonly currentBillingPlan?: "free" | "individual";
-  readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
-  readonly cloudTrialEndsAt?: string | null;
-  readonly initialSetup?: LocalAiSetupState;
-  readonly userEmail?: string | null;
-  readonly workProfileUserId?: string;
-} = {}) {
-  const onRefreshCloudStatus = vi.fn();
-  const onStartCloudSetup = vi.fn();
-
-  function Harness() {
-    const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
-
-    return (
-      <AiSetupPanel
-        aiServerStatusLabel="Available"
-        billingCheckoutLoadingInterval={null}
-        billingEntitlementError={null}
-        billingEntitlementStatus={billingEntitlementStatus}
-        billingPlansDisabled={false}
-        cloudStatusRefreshing={false}
-        cloudStatusLabel="Cloud AI available"
-        cloudTrialEndsAt={cloudTrialEndsAt}
-        currentBillingPlan={currentBillingPlan}
-        isSupabaseConfigured={true}
-        localAiSetup={localAiSetup}
-        shouldShowCloudCheckoutPlans={false}
-        userEmail={userEmail}
-        workProfileUserId={workProfileUserId}
-        onDialogOpenChange={vi.fn()}
-        onLocalAiSetupChange={setLocalAiSetup}
-        onRefreshCloudStatus={onRefreshCloudStatus}
-        onStartCloudSetup={onStartCloudSetup}
-      />
-    );
-  }
-
-  render(<Harness />);
-  return { onRefreshCloudStatus, onStartCloudSetup };
-}
+import { invokeMock, renderPanel, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 
 describe("AiSetupPanel", () => {
   beforeEach(() => {
     invokeMock.mockClear();
+    revealItemInDirMock.mockClear();
   });
 
   it("switches between Drifty and OpenRouter setup rows", async () => {
     renderPanel();
 
+    const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
+    expect(within(setupTabs).getByRole("tab", { name: /^Providers$/i }).getAttribute("aria-selected")).toBe("true");
+    expect(within(setupTabs).getByRole("tab", { name: /^Profile & info$/i }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
     expect(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }).getAttribute("aria-expanded")).toBe("true");
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
@@ -173,10 +71,16 @@ describe("AiSetupPanel", () => {
 
     const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
     const qwenDefault = within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i });
+    expect(within(qwenDefault).queryByRole("button", { name: /delete qwen 3\.5 4b managed local model/i })).toBeNull();
+    expect(within(qwenDefault).queryByRole("button", { name: /^Start$/i })).toBeNull();
     fireEvent.click(within(qwenDefault).getByRole("button", { name: /^Download$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
-    const deleteButton = within(qwenDefault).getByRole("button", { name: /^Delete$/i });
+    const showInFinderButton = within(qwenDefault).getByRole("button", { name: /^Show in Finder$/i });
+    fireEvent.click(showInFinderButton);
+    await waitFor(() => expect(revealItemInDirMock).toHaveBeenCalledWith("/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-4b-default"));
+    expect(within(qwenDefault).queryByRole("button", { name: /^Start$/i })).toBeNull();
+    const deleteButton = within(qwenDefault).getByRole("button", { name: /delete qwen 3\.5 4b managed local model/i });
     if (!(deleteButton instanceof HTMLButtonElement)) throw new Error("Delete control should be a button.");
     await waitFor(() => expect(deleteButton.disabled).toBe(false));
     fireEvent.click(deleteButton);
@@ -246,7 +150,9 @@ describe("AiSetupPanel", () => {
 
     renderPanel();
 
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
     expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByRole("region", { name: /^Model being used$/i })).toBeNull();
     expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
     expect(screen.queryByText(/AI prompt line/i)).toBeNull();
@@ -301,6 +207,7 @@ describe("AiSetupPanel", () => {
   it("shows the same privacy review inside AI setup", () => {
     renderPanel();
 
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
     expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();

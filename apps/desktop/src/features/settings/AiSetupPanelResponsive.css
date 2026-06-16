@@ -23,8 +23,12 @@
 
   .ai-managed-model__actions {
     grid-column: 1 / -1;
-    grid-template-columns: 1fr;
+    justify-content: stretch;
     min-width: 0;
+  }
+
+  .ai-managed-model__primary-action {
+    flex: 1 1 auto;
   }
 
   .ai-managed-model__facts {

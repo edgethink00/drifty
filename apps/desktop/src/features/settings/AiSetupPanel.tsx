@@ -16,6 +16,7 @@ import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
+import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
@@ -64,6 +65,7 @@ export function AiSetupPanel({
   onStartCloudSetup,
 }: AiSetupPanelProps) {
   const [activeSection, setActiveSection] = useState<AiSetupSection>(() => sectionForProvider(localAiSetup.provider));
+  const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
   const [driftyRoute, setDriftyRoute] = useState<DriftyRoute>(() => localAiSetup.provider === "managed_local" ? "local" : "cloud");
@@ -98,82 +100,90 @@ export function AiSetupPanel({
         <h3>AI setup</h3>
       </div>
 
-      <AiSetupModelBeingUsed
-        catalog={managedLocalAi.catalog}
-        driftyRoute={driftyRoute}
-        localAiSetup={localAiSetup}
-        openRouterModelOptions={modelPickers.openRouterModelOptions}
-        openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
-        selectedProvider={activeSection}
-        onDriftyRouteChange={setDriftyRoute}
-        onLocalAiSetupChange={onLocalAiSetupChange}
-        onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
-        onProviderChange={handleSectionChange}
-      />
+      <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} />
 
-      <h4 className="ai-setup-provider-heading">Configure providers</h4>
-
-      <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} onToggle={handleSectionChange}>
-          <DriftySetupPanel
-            actionModelId={managedLocalAi.actionModelId}
-            aiServerStatusLabel={aiServerStatusLabel}
-            billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-            billingEntitlementError={billingEntitlementError}
-            billingEntitlementStatus={billingEntitlementStatus}
-            billingPlansDisabled={billingPlansDisabled}
+      {activePanelTab === "providers" ? (
+        <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label="Providers">
+          <AiSetupModelBeingUsed
             catalog={managedLocalAi.catalog}
-            cloudStatusRefreshing={cloudStatusRefreshing}
-            cloudStatusLabel={cloudStatusLabel}
-            cloudTrialEndsAt={cloudTrialEndsAt}
-            connectionTestMessage={connectionTestResult?.message ?? null}
-            connectionTestRunning={connectionTestRunning}
-            currentBillingPlan={currentBillingPlan}
-            isSupabaseConfigured={isSupabaseConfigured}
-            loading={managedLocalAi.loading}
+            driftyRoute={driftyRoute}
             localAiSetup={localAiSetup}
-            selectedRoute={driftyRoute}
-            shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
-            status={managedLocalAi.status}
-            userEmail={userEmail}
-            onDeleteModel={managedLocalAi.deleteModel}
-            onInstallModel={managedLocalAi.installModel}
+            openRouterModelOptions={modelPickers.openRouterModelOptions}
+            openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
+            selectedProvider={activeSection}
+            onDriftyRouteChange={setDriftyRoute}
             onLocalAiSetupChange={onLocalAiSetupChange}
-            onRefreshCloudStatus={onRefreshCloudStatus}
-            onStartCloudSetup={onStartCloudSetup}
-            onStartModel={managedLocalAi.startModel}
-            onTestConnection={handleTestConnection}
+            onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
+            onProviderChange={handleSectionChange}
           />
-        </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} onToggle={handleSectionChange}>
-          <OpenRouterSetupPanel
-            connectionTestMessage={connectionTestResult?.message ?? null}
-            connectionTestRunning={connectionTestRunning}
-            fallbackCount={modelPickers.openRouterFallbackModels.length}
-            localAiSetup={localAiSetup}
-            primaryModel={modelPickers.openRouterPrimaryModel}
-            onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
-            onLocalAiSetupChange={onLocalAiSetupChange}
-            onTestConnection={handleTestConnection}
-          />
-        </AiSetupSectionCard>
-      </div>
 
-      <div className="ai-setup-support-zone" aria-label="AI prompt settings">
-        <div className="ai-setup-support-zone__header">
-          <div>
-            <span className="eyebrow">AI prompt settings</span>
-            <strong>Work context and privacy</strong>
+          <h4 className="ai-setup-provider-heading">Configure providers</h4>
+
+          <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
+            <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} onToggle={handleSectionChange}>
+              <DriftySetupPanel
+                actionModelId={managedLocalAi.actionModelId}
+                aiServerStatusLabel={aiServerStatusLabel}
+                billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+                billingEntitlementError={billingEntitlementError}
+                billingEntitlementStatus={billingEntitlementStatus}
+                billingPlansDisabled={billingPlansDisabled}
+                catalog={managedLocalAi.catalog}
+                cloudStatusRefreshing={cloudStatusRefreshing}
+                cloudStatusLabel={cloudStatusLabel}
+                cloudTrialEndsAt={cloudTrialEndsAt}
+                connectionTestMessage={connectionTestResult?.message ?? null}
+                connectionTestRunning={connectionTestRunning}
+                currentBillingPlan={currentBillingPlan}
+                isSupabaseConfigured={isSupabaseConfigured}
+                loading={managedLocalAi.loading}
+                localAiSetup={localAiSetup}
+                selectedRoute={driftyRoute}
+                shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+                status={managedLocalAi.status}
+                userEmail={userEmail}
+                onDeleteModel={managedLocalAi.deleteModel}
+                onInstallModel={managedLocalAi.installModel}
+                onLocalAiSetupChange={onLocalAiSetupChange}
+                onRefreshCloudStatus={onRefreshCloudStatus}
+                onStartCloudSetup={onStartCloudSetup}
+                onStartModel={managedLocalAi.startModel}
+                onTestConnection={handleTestConnection}
+              />
+            </AiSetupSectionCard>
+            <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} onToggle={handleSectionChange}>
+              <OpenRouterSetupPanel
+                connectionTestMessage={connectionTestResult?.message ?? null}
+                connectionTestRunning={connectionTestRunning}
+                fallbackCount={modelPickers.openRouterFallbackModels.length}
+                localAiSetup={localAiSetup}
+                primaryModel={modelPickers.openRouterPrimaryModel}
+                onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
+                onLocalAiSetupChange={onLocalAiSetupChange}
+                onTestConnection={handleTestConnection}
+              />
+            </AiSetupSectionCard>
           </div>
-          <p>Shared by Drifty Cloud, OpenRouter, and local AI classification.</p>
-        </div>
-        <AiSetupSupportSections
-          workProfileDraft={workProfileSettings.workProfileDraft}
-          workProfileMessage={workProfileSettings.workProfileMessage}
-          onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
-          onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
-        />
-      </div>
+        </section>
+      ) : (
+        <section id="ai-setup-panel-tab-profile" className="ai-setup-tab-panel" role="tabpanel" aria-label="Profile and information">
+          <div className="ai-setup-support-zone" aria-label="AI prompt settings">
+            <div className="ai-setup-support-zone__header">
+              <div>
+                <span className="eyebrow">AI prompt settings</span>
+                <strong>Work context and privacy</strong>
+              </div>
+              <p>Shared by Drifty Cloud, OpenRouter, and local AI classification.</p>
+            </div>
+            <AiSetupSupportSections
+              workProfileDraft={workProfileSettings.workProfileDraft}
+              workProfileMessage={workProfileSettings.workProfileMessage}
+              onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
+              onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
+            />
+          </div>
+        </section>
+      )}
 
       {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog

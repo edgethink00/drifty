@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { AiSetupConnectionTestRow } from "./AiSetupConnectionTestRow";
@@ -81,7 +82,6 @@ function ManagedLocalAiModelRow({
   onDeleteModel,
   onInstallModel,
   onLocalAiSetupChange,
-  onStartModel,
 }: {
   readonly actionModelId: string | null;
   readonly localAiSetup: LocalAiSetupState;
@@ -92,11 +92,26 @@ function ManagedLocalAiModelRow({
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onStartModel: (modelId: string) => void | Promise<void>;
 }) {
+  const [finderOpening, setFinderOpening] = useState(false);
+  const [finderError, setFinderError] = useState<string | null>(null);
   const isSelected = localAiSetup.provider === "managed_local" && localAiSetup.managedLocalModelId === model.id;
   const hasCurrentRuntime = isSelected && (status?.state === "installed" || status?.state === "running");
   const actionRunning = actionModelId === model.id;
-  const deleteDisabled = actionRunning || !hasCurrentRuntime;
-  const startDisabled = actionRunning || !hasCurrentRuntime || status?.state === "running";
+  const showInFinderDisabled = actionRunning || finderOpening || !status?.artifactDir;
+
+  const handleShowInFinder = async () => {
+    if (!status?.artifactDir || finderOpening) return;
+    setFinderError(null);
+    setFinderOpening(true);
+    try {
+      const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+      await revealItemInDir(status.artifactDir);
+    } catch (error) {
+      setFinderError(messageFromFinderError(error));
+    } finally {
+      setFinderOpening(false);
+    }
+  };
 
   return (
     <article className={`ai-managed-model${isSelected ? " is-selected" : ""}`} aria-label={`${model.label} managed local model`}>
@@ -122,18 +137,78 @@ function ManagedLocalAiModelRow({
         <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
       </dl>
       <div className="ai-managed-model__actions">
-        <button type="button" className="settings-btn" disabled={actionRunning || hasCurrentRuntime} onClick={() => void onInstallModel(model.id)}>
-          {actionRunning ? "Downloading..." : hasCurrentRuntime ? "Downloaded" : "Download"}
-        </button>
-        <button type="button" className="settings-btn" disabled={deleteDisabled} onClick={() => void onDeleteModel(model.id)}>
-          Delete
-        </button>
-        <button type="button" className="settings-btn" disabled={startDisabled} onClick={() => void onStartModel(model.id)}>
-          {status?.state === "running" && isSelected ? "Running" : "Start"}
-        </button>
+        {hasCurrentRuntime ? (
+          <>
+            <button
+              type="button"
+              className="settings-btn ai-managed-model__primary-action"
+              disabled={showInFinderDisabled}
+              onClick={() => void handleShowInFinder()}
+            >
+              <ManagedModelActionIcon icon="finder" />
+              <span>{finderOpening ? "Opening..." : "Show in Finder"}</span>
+            </button>
+            <button
+              type="button"
+              className="settings-btn ai-managed-model__delete-action"
+              aria-label={`Delete ${model.label} managed local model`}
+              disabled={actionRunning}
+              title="Delete model"
+              onClick={() => void onDeleteModel(model.id)}
+            >
+              <ManagedModelActionIcon icon="delete" />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="settings-btn ai-managed-model__primary-action"
+            disabled={actionRunning}
+            onClick={() => void onInstallModel(model.id)}
+          >
+            <ManagedModelActionIcon icon="download" />
+            <span>{actionRunning ? "Downloading..." : "Download"}</span>
+          </button>
+        )}
+        {finderError ? <span className="ai-managed-model__action-note" role="status">{finderError}</span> : null}
       </div>
     </article>
   );
+}
+
+function ManagedModelActionIcon({ icon }: { readonly icon: "download" | "finder" | "delete" }) {
+  switch (icon) {
+    case "download":
+      return (
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M10 3.5v8" />
+          <path d="M6.8 8.6 10 11.8l3.2-3.2" />
+          <path d="M4.5 14.5h11" />
+        </svg>
+      );
+    case "finder":
+      return (
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M4.2 5.4h4.2l1.3 1.4h6.1v7.8H4.2z" />
+          <path d="M4.2 8.2h11.6" />
+        </svg>
+      );
+    case "delete":
+      return (
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M6.2 7.3h7.6" />
+          <path d="M8.2 7.3V5.5h3.6v1.8" />
+          <path d="M7.1 9.2v5.1M10 9.2v5.1M12.9 9.2v5.1" />
+          <path d="M6.8 7.3 7.5 16h5l0.7-8.7" />
+        </svg>
+      );
+    default:
+      return assertNever(icon);
+  }
+}
+
+function messageFromFinderError(error: unknown): string {
+  return error instanceof Error && error.message ? `Finder unavailable: ${error.message}` : "Finder unavailable.";
 }
 
 function managedStatusLabel(status: ManagedLocalAiStatus | null, loading: boolean): string {

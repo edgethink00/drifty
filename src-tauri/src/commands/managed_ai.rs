@@ -75,7 +75,7 @@ pub fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiSt
 
 fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    fs::create_dir_all(root.join("models").join(spec.id))?;
+    fs::create_dir_all(model_dir(root, spec.id))?;
     fs::create_dir_all(root.join("runtime"))?;
     let status = status_for_spec(
         ManagedAiInstallState::Installed,
@@ -90,7 +90,7 @@ fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus,
 fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
     let runtime_path = root.join("runtime").join("llama-server");
-    let model_path = root.join("models").join(spec.id);
+    let model_path = model_dir(root, spec.id);
     let state = if runtime_path.exists() && model_path.exists() {
         ManagedAiInstallState::Running
     } else {
@@ -108,11 +108,11 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
 
 fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    let model_path = root.join("models").join(spec.id);
+    let model_path = model_dir(root, spec.id);
     if model_path.exists() {
         fs::remove_dir_all(model_path)?;
     }
-    let status = default_status(root);
+    let status = default_status();
     write_status(root, &status)?;
     Ok(status)
 }
@@ -123,22 +123,24 @@ fn status_for_spec(
     root: &Path,
     message: &str,
 ) -> ManagedAiStatus {
+    let model_dir = model_dir(root, spec.id);
     ManagedAiStatus {
         state,
         selected_model_id: Some(spec.id.to_string()),
         base_url: Some(MANAGED_BASE_URL.to_string()),
         model: Some(spec.runtime_model.to_string()),
         message: message.to_string(),
-        artifact_dir: Some(root.to_string_lossy().into_owned()),
+        artifact_dir: Some(model_dir.to_string_lossy().into_owned()),
     }
 }
 
 fn read_status(root: &Path) -> Result<ManagedAiStatus, ManagedAiError> {
     let status_path = root.join(STATUS_FILE_NAME);
     if !status_path.exists() {
-        return Ok(default_status(root));
+        return Ok(default_status());
     }
-    Ok(serde_json::from_str(&fs::read_to_string(status_path)?)?)
+    let status = serde_json::from_str(&fs::read_to_string(status_path)?)?;
+    Ok(normalize_status_artifact_dir(root, status))
 }
 
 fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), ManagedAiError> {
@@ -150,15 +152,28 @@ fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), ManagedAiEr
     Ok(())
 }
 
-fn default_status(root: &Path) -> ManagedAiStatus {
+fn default_status() -> ManagedAiStatus {
     ManagedAiStatus {
         state: ManagedAiInstallState::NotInstalled,
         selected_model_id: None,
         base_url: None,
         model: None,
         message: "Choose a local model and Drifty will download it inside the app.".to_string(),
-        artifact_dir: Some(root.to_string_lossy().into_owned()),
+        artifact_dir: None,
     }
+}
+
+fn normalize_status_artifact_dir(root: &Path, mut status: ManagedAiStatus) -> ManagedAiStatus {
+    if let Some(model_id) = status.selected_model_id.as_deref() {
+        status.artifact_dir = Some(model_dir(root, model_id).to_string_lossy().into_owned());
+    } else {
+        status.artifact_dir = None;
+    }
+    status
+}
+
+fn model_dir(root: &Path, model_id: &str) -> PathBuf {
+    root.join("models").join(model_id)
 }
 
 fn require_model(model_id: &str) -> Result<ManagedAiModelSpec, ManagedAiError> {
@@ -204,6 +219,8 @@ mod tests {
         let root = tempfile::tempdir().expect("create temp root");
         let status =
             install_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("install model");
+        let model_dir = root.path().join("models/drifty-qwen3-5-4b-default");
+        let expected_artifact_dir = model_dir.to_string_lossy().into_owned();
 
         assert!(matches!(status.state, ManagedAiInstallState::Installed));
         assert_eq!(
@@ -211,10 +228,11 @@ mod tests {
             Some("drifty-qwen3-5-4b-default")
         );
         assert_eq!(status.model.as_deref(), Some("drifty-qwen3.5-4b-local"));
-        assert!(root
-            .path()
-            .join("models/drifty-qwen3-5-4b-default")
-            .exists());
+        assert_eq!(
+            status.artifact_dir.as_deref(),
+            Some(expected_artifact_dir.as_str())
+        );
+        assert!(model_dir.exists());
     }
 
     #[test]
