@@ -4,19 +4,21 @@ import type { Dispatch, SetStateAction } from "react";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { saveUserWorkProfile, summarizeUserWorkProfile } from "../onboarding/onboardingState";
-import { OpenRouterModelDialog, SelfHostedModelDialog } from "./AiSetupModelDialogs";
+import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
 import "./AiSetupPanel.css";
 import {
   AI_SETUP_SECTIONS,
   AiSetupSectionCard,
-  CloudSetupPanel,
-  OllamaSetupPanel,
-  OpenRouterSetupPanel,
   type AiSetupSection,
 } from "./AiSetupSectionCards";
+import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
+import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
+import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
+import type { ManagedLocalAiModel } from "./managedLocalAiClient";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
+import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
@@ -62,18 +64,20 @@ export function AiSetupPanel({
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
-  const [activeSection, setActiveSection] = useState<AiSetupSection>("cloud");
+  const [activeSection, setActiveSection] = useState<AiSetupSection>(() => sectionForProvider(localAiSetup.provider));
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
+  const [driftyRoute, setDriftyRoute] = useState<DriftyRoute>(() => localAiSetup.provider === "managed_local" ? "local" : "cloud");
   const [workProfileDraft, setWorkProfileDraft] = useState(() => summarizeUserWorkProfile(workProfileUserId));
   const [workProfileMessage, setWorkProfileMessage] = useState<string | null>(null);
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
+  const managedLocalAi = useManagedLocalAiSetup(activeSection === "drifty", onLocalAiSetupChange);
   const workProfilePreview = workProfileDraft.trim() || "No work profile saved yet";
 
   useEffect(() => {
-    onDialogOpenChange(modelPickers.openRouterModelPickerOpen || modelPickers.selfHostedModelPickerOpen);
+    onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
     return () => onDialogOpenChange(false);
-  }, [modelPickers.openRouterModelPickerOpen, modelPickers.selfHostedModelPickerOpen, onDialogOpenChange]);
+  }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
 
   useEffect(() => {
     setWorkProfileDraft(summarizeUserWorkProfile(workProfileUserId));
@@ -113,26 +117,54 @@ export function AiSetupPanel({
         <h3>AI setup</h3>
       </div>
 
+      <AiSetupModelBeingUsed
+        catalog={managedLocalAi.catalog}
+        driftyRoute={driftyRoute}
+        localAiSetup={localAiSetup}
+        openRouterModelOptions={modelPickers.openRouterModelOptions}
+        openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
+        selectedProvider={activeSection}
+        onDriftyRouteChange={setDriftyRoute}
+        onLocalAiSetupChange={onLocalAiSetupChange}
+        onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
+        onProviderChange={handleSectionChange}
+      />
+
+      <h4 className="ai-setup-provider-heading">Configure providers</h4>
+
       <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "cloud"} badges={[aiServerStatusLabel, isSupabaseConfigured ? "Polar checkout" : "Cloud off"]} onToggle={handleSectionChange}>
-          <CloudSetupPanel
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} badges={driftySectionBadges(localAiSetup, managedLocalAi.status?.state ?? null, managedLocalAi.catalog, aiServerStatusLabel, driftyRoute)} onToggle={handleSectionChange}>
+          <DriftySetupPanel
+            actionModelId={managedLocalAi.actionModelId}
             aiServerStatusLabel={aiServerStatusLabel}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
             billingEntitlementError={billingEntitlementError}
             billingEntitlementStatus={billingEntitlementStatus}
             billingPlansDisabled={billingPlansDisabled}
+            catalog={managedLocalAi.catalog}
             cloudStatusRefreshing={cloudStatusRefreshing}
             cloudStatusLabel={cloudStatusLabel}
             cloudTrialEndsAt={cloudTrialEndsAt}
+            connectionTestMessage={connectionTestResult?.message ?? null}
+            connectionTestRunning={connectionTestRunning}
             currentBillingPlan={currentBillingPlan}
             isSupabaseConfigured={isSupabaseConfigured}
+            loading={managedLocalAi.loading}
+            localAiSetup={localAiSetup}
+            selectedRoute={driftyRoute}
             shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+            status={managedLocalAi.status}
             userEmail={userEmail}
+            onDeleteModel={managedLocalAi.deleteModel}
+            onInstallModel={managedLocalAi.installModel}
+            onLocalAiSetupChange={onLocalAiSetupChange}
             onRefreshCloudStatus={onRefreshCloudStatus}
             onStartCloudSetup={onStartCloudSetup}
+            onStartModel={managedLocalAi.startModel}
+            onTestConnection={handleTestConnection}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", modelPickers.openRouterPrimaryModel]} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} badges={[localAiSetup.provider === "openrouter_byok" ? "Selected" : "BYOK", localAiSetup.openRouterApiKey.trim() ? "Key ready" : "Key needed", modelPickers.openRouterPrimaryModel]} onToggle={handleSectionChange}>
           <OpenRouterSetupPanel
             connectionTestMessage={connectionTestResult?.message ?? null}
             connectionTestRunning={connectionTestRunning}
@@ -140,17 +172,6 @@ export function AiSetupPanel({
             localAiSetup={localAiSetup}
             primaryModel={modelPickers.openRouterPrimaryModel}
             onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
-            onLocalAiSetupChange={onLocalAiSetupChange}
-            onTestConnection={handleTestConnection}
-          />
-        </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} badges={[localAiSetup.provider === "self_hosted" ? "Selected" : "Local", modelPickers.selfHostedSelectedModel || "Choose model"]} onToggle={handleSectionChange}>
-          <OllamaSetupPanel
-            connectionTestMessage={connectionTestResult?.message ?? null}
-            connectionTestRunning={connectionTestRunning}
-            localAiSetup={localAiSetup}
-            modelSummary={modelPickers.selfHostedModelSummary}
-            onChooseModel={() => modelPickers.setSelfHostedModelPickerOpen(true)}
             onLocalAiSetupChange={onLocalAiSetupChange}
             onTestConnection={handleTestConnection}
           />
@@ -179,34 +200,47 @@ export function AiSetupPanel({
           onToggleModel={modelPickers.handleOpenRouterModelToggle}
         />
       ) : null}
-
-      {modelPickers.selfHostedModelPickerOpen ? (
-        <SelfHostedModelDialog
-          customModel={modelPickers.selfHostedCustomModel}
-          modelSummary={modelPickers.selfHostedModelSummary}
-          options={modelPickers.selfHostedModelOptions}
-          selectedModel={modelPickers.selfHostedSelectedModel}
-          onAddCustomModel={modelPickers.handleAddSelfHostedCustomModel}
-          onClose={() => modelPickers.setSelfHostedModelPickerOpen(false)}
-          onCustomModelChange={modelPickers.setSelfHostedCustomModel}
-          onModelChange={modelPickers.handleSelfHostedModelChange}
-        />
-      ) : null}
     </div>
   );
 }
 
 function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {
   switch (section) {
-    case "cloud":
+    case "drifty":
       return null;
-    case "local":
+    case "openrouter":
       return "openrouter_byok";
-    case "ollama":
-      return "self_hosted";
     default:
       return assertNever(section);
   }
+}
+
+function sectionForProvider(provider: LocalAiSetupState["provider"]): AiSetupSection {
+  switch (provider) {
+    case "managed_local":
+    case "self_hosted":
+      return "drifty";
+    case "openrouter_byok":
+      return "openrouter";
+    default:
+      return assertNever(provider);
+  }
+}
+
+function driftySectionBadges(
+  localAiSetup: LocalAiSetupState,
+  managedState: "not_installed" | "installing" | "installed" | "running" | "error" | null,
+  catalog: readonly ManagedLocalAiModel[],
+  cloudStatus: string,
+  driftyRoute: DriftyRoute,
+): readonly string[] {
+  const modeBadge = driftyRoute === "local" ? "Local selected" : "Cloud";
+  const managedBadge = managedState === "running" ? "Running" : managedState === "installed" ? "Downloaded" : "Download";
+  return [cloudStatus, modeBadge, managedBadge, selectedManagedModelLabel(catalog, localAiSetup.managedLocalModelId)];
+}
+
+function selectedManagedModelLabel(catalog: readonly ManagedLocalAiModel[], modelId: string): string {
+  return catalog.find((model) => model.id === modelId)?.label ?? "Local model";
 }
 
 class AiSetupSectionError extends Error {

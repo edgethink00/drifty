@@ -1,7 +1,10 @@
-export type LocalAiProvider = "openrouter_byok" | "self_hosted";
+export type LocalAiProvider = "managed_local" | "openrouter_byok" | "self_hosted";
 
 export type LocalAiSetupState = {
   provider: LocalAiProvider;
+  managedLocalModelId: string;
+  managedLocalBaseUrl: string;
+  managedLocalModel: string;
   openRouterApiKey: string;
   openRouterModel: string;
   openRouterFallbackModels: string[];
@@ -12,9 +15,13 @@ export type LocalAiSetupState = {
 export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiKey">;
 
 export const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
+export const DEFAULT_MANAGED_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 
 export const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
-  provider: "openrouter_byok",
+  provider: "managed_local",
+  managedLocalModelId: DEFAULT_MANAGED_LOCAL_MODEL_ID,
+  managedLocalBaseUrl: "",
+  managedLocalModel: "",
   openRouterApiKey: "",
   openRouterModel: "deepseek/deepseek-v4-flash",
   openRouterFallbackModels: [],
@@ -32,13 +39,6 @@ export const OPENROUTER_RECOMMENDED_MODELS = [
   { id: "qwen/qwen3.6-35b-a3b", label: "Qwen 3.6 35B A3B", detail: "Efficient Qwen 3.6 MoE route" },
   { id: "qwen/qwen3.6-27b", label: "Qwen 3.6 27B", detail: "Compact Qwen 3.6 route" },
   { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash Free", detail: "Free route when available" },
-] as const;
-
-export const SELF_HOSTED_RECOMMENDED_MODELS = [
-  { id: "llama3.1:8b", label: "Llama 3.1 8B", detail: "Common Ollama local model" },
-  { id: "llama3.2", label: "Llama 3.2", detail: "Compact local model" },
-  { id: "qwen3:8b", label: "Qwen 3 8B", detail: "Qwen local model" },
-  { id: "qwen2.5-coder:7b", label: "Qwen 2.5 Coder 7B", detail: "Local coding-oriented model" },
 ] as const;
 
 export function isForbiddenOpenRouterModel(model: string): boolean {
@@ -70,14 +70,13 @@ export function isRecommendedOpenRouterModel(model: string): boolean {
   return OPENROUTER_RECOMMENDED_MODELS.some((option) => option.id === model);
 }
 
-export function isRecommendedSelfHostedModel(model: string): boolean {
-  return SELF_HOSTED_RECOMMENDED_MODELS.some((option) => option.id === model);
-}
-
 export function toPersistedLocalAiSetup(setup: LocalAiSetupState): PersistedLocalAiSetupState {
   const openRouterModel = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
   return {
     provider: setup.provider,
+    managedLocalModelId: normalizeManagedLocalModelId(setup.managedLocalModelId),
+    managedLocalBaseUrl: setup.managedLocalBaseUrl.trim(),
+    managedLocalModel: setup.managedLocalModel.trim(),
     openRouterModel,
     openRouterFallbackModels: normalizeOpenRouterFallbackModels(openRouterModel, setup.openRouterFallbackModels),
     selfHostedBaseUrl: setup.selfHostedBaseUrl,
@@ -93,9 +92,12 @@ export function resolveInitialLocalAiSetup(): LocalAiSetupState {
     const parsedValue: unknown = JSON.parse(savedValue);
     if (!parsedValue || typeof parsedValue !== "object") return DEFAULT_LOCAL_AI_SETUP;
     const record = parsedValue as Record<string, unknown>;
-    const provider: LocalAiProvider = record.provider === "self_hosted" ? "self_hosted" : "openrouter_byok";
+    const provider = parseLocalAiProvider(record.provider);
     return {
       provider,
+      managedLocalModelId: normalizeManagedLocalModelId(typeof record.managedLocalModelId === "string" ? record.managedLocalModelId : ""),
+      managedLocalBaseUrl: typeof record.managedLocalBaseUrl === "string" ? record.managedLocalBaseUrl.trim() : "",
+      managedLocalModel: typeof record.managedLocalModel === "string" ? record.managedLocalModel.trim() : "",
       openRouterApiKey: "",
       openRouterModel: normalizeOpenRouterPrimaryModel(typeof record.openRouterModel === "string" ? record.openRouterModel : ""),
       openRouterFallbackModels: Array.isArray(record.openRouterFallbackModels) ? normalizeOpenRouterFallbackModels(
@@ -107,5 +109,21 @@ export function resolveInitialLocalAiSetup(): LocalAiSetupState {
     };
   } catch {
     return DEFAULT_LOCAL_AI_SETUP;
+  }
+}
+
+export function normalizeManagedLocalModelId(modelId: string): string {
+  const trimmedModelId = modelId.trim();
+  return trimmedModelId || DEFAULT_MANAGED_LOCAL_MODEL_ID;
+}
+
+function parseLocalAiProvider(value: unknown): LocalAiProvider {
+  switch (value) {
+    case "managed_local":
+    case "openrouter_byok":
+    case "self_hosted":
+      return value;
+    default:
+      return DEFAULT_LOCAL_AI_SETUP.provider;
   }
 }

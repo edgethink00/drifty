@@ -38,26 +38,36 @@ export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<A
 }
 
 function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unknown> | null {
-  if (setup.provider === "openrouter_byok") {
-    const apiKey = setup.openRouterApiKey.trim();
-    if (!apiKey) return null;
-    const model = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
-    const fallbackModels = normalizeOpenRouterFallbackModels(model, setup.openRouterFallbackModels);
-    const models = [model, ...fallbackModels];
-    return {
-      baseUrl: "https://openrouter.ai/api/v1",
-      apiKey,
-      ...(models.length === 1 ? { model } : { models }),
-      messages: testMessages(),
-      headers: {
-        "HTTP-Referer": "https://drifty.so",
-        "X-OpenRouter-Title": "Drifty",
-      },
-    };
+  switch (setup.provider) {
+    case "managed_local":
+      return openAiCompatibleConnectionRequest(setup.managedLocalBaseUrl, setup.managedLocalModel);
+    case "openrouter_byok": {
+      const apiKey = setup.openRouterApiKey.trim();
+      if (!apiKey) return null;
+      const model = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
+      const fallbackModels = normalizeOpenRouterFallbackModels(model, setup.openRouterFallbackModels);
+      const models = [model, ...fallbackModels];
+      return {
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKey,
+        ...(models.length === 1 ? { model } : { models }),
+        messages: testMessages(),
+        headers: {
+          "HTTP-Referer": "https://drifty.so",
+          "X-OpenRouter-Title": "Drifty",
+        },
+      };
+    }
+    case "self_hosted":
+      return openAiCompatibleConnectionRequest(setup.selfHostedBaseUrl, setup.selfHostedModel);
+    default:
+      return assertNever(setup.provider);
   }
+}
 
-  const baseUrl = setup.selfHostedBaseUrl.trim();
-  const model = setup.selfHostedModel.trim();
+function openAiCompatibleConnectionRequest(baseUrlValue: string, modelValue: string): Record<string, unknown> | null {
+  const baseUrl = baseUrlValue.trim();
+  const model = modelValue.trim();
   if (!baseUrl || !model) return null;
   return {
     baseUrl,
@@ -65,6 +75,17 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
     messages: testMessages(),
     headers: {},
   };
+}
+
+class AiConnectionTestError extends Error {
+  constructor(readonly provider: string) {
+    super(`Unhandled AI connection provider: ${provider}`);
+    this.name = "AiConnectionTestError";
+  }
+}
+
+function assertNever(value: never): never {
+  throw new AiConnectionTestError(String(value));
 }
 
 function testMessages(): readonly Record<string, string>[] {
