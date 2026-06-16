@@ -41,7 +41,7 @@ pub enum ExtremeNudgeOutcomeKind {
 
 #[derive(Debug, Error)]
 enum ExtremeNudgeError {
-    #[error("Chrome-like browser tab closing requires a captured page URL or domain")]
+    #[error("Browser tab closing requires a captured page URL or domain")]
     MissingBrowserTarget,
     #[error("Refusing to terminate protected app bundle {0}")]
     ProtectedBundle(String),
@@ -73,7 +73,7 @@ fn apply_extreme_nudge(
     if let Some(browser_name) = target
         .browser_name
         .as_deref()
-        .filter(|name| is_chrome_like_browser(name))
+        .filter(|name| browser_tabs::is_supported_browser_tab_target(name))
     {
         let site_url = normalized_optional_text(target.site_url.as_deref());
         let site_domain = browser_tabs::normalized_site_domain(target.site_domain.as_deref())
@@ -86,11 +86,7 @@ fn apply_extreme_nudge(
             return Err(ExtremeNudgeError::MissingBrowserTarget);
         }
 
-        browser_tabs::close_chrome_like_browser_tab(
-            browser_name,
-            site_url.as_deref(),
-            site_domain.as_deref(),
-        )?;
+        browser_tabs::close_browser_tab(browser_name, site_url.as_deref(), site_domain.as_deref())?;
         return Ok(ExtremeNudgeOutcome {
             kind: ExtremeNudgeOutcomeKind::ClosedBrowserTab,
         });
@@ -128,13 +124,6 @@ fn is_protected_bundle_id(bundle_id: &str) -> bool {
             | "com.apple.SystemSettings"
             | "com.apple.loginwindow"
             | "com.apple.dock"
-    )
-}
-
-fn is_chrome_like_browser(app_name: &str) -> bool {
-    matches!(
-        app_name.trim(),
-        "Google Chrome" | "Microsoft Edge" | "Arc" | "Brave Browser" | "Chromium"
     )
 }
 
@@ -199,16 +188,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn chrome_like_detection_accepts_supported_browsers() {
-        assert!(is_chrome_like_browser("Google Chrome"));
-        assert!(is_chrome_like_browser("Microsoft Edge"));
-        assert!(is_chrome_like_browser("Arc"));
+    fn browser_tab_detection_accepts_supported_browsers() {
+        assert!(browser_tabs::is_supported_browser_tab_target(
+            "Google Chrome"
+        ));
+        assert!(browser_tabs::is_supported_browser_tab_target(
+            "Microsoft Edge"
+        ));
+        assert!(browser_tabs::is_supported_browser_tab_target("Arc"));
+        assert!(browser_tabs::is_supported_browser_tab_target("Safari"));
+        assert!(browser_tabs::is_supported_browser_tab_target("Firefox"));
     }
 
     #[test]
-    fn chrome_like_detection_rejects_unsupported_browsers() {
-        assert!(!is_chrome_like_browser("Safari"));
-        assert!(!is_chrome_like_browser("Firefox"));
+    fn browser_tab_detection_rejects_unsupported_browsers() {
+        assert!(!browser_tabs::is_supported_browser_tab_target("Preview"));
     }
 
     #[test]
