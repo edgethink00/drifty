@@ -6281,7 +6281,7 @@ input, textarea { color: inherit; }
   grid-template-columns: 33px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  padding: 9.6px 8px;
+  padding: 7.5px 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface-strong);
@@ -6309,9 +6309,8 @@ input, textarea { color: inherit; }
   object-fit: cover;
 }
 
-.account-trigger__copy { min-width: 0; display: grid; gap: 1px; }
-.account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.account-trigger__copy span { color: var(--text-soft); font-size: 11px; }
+.account-trigger__copy { min-width: 0; display: grid; }
+.account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.2; }
 .account-trigger__chevrons {
   display: grid;
   width: 16px;
