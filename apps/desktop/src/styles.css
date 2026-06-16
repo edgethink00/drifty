@@ -4360,6 +4360,7 @@ input, textarea { color: inherit; }
 .settings-row .desc { font-family: var(--font-mono); font-size: var(--type-setting-desc-size); color: var(--text-soft); margin-top: 2px; }
 .settings-row .ctrl { flex-shrink: 0; }
 .settings-row .ctrl--value { font-family: var(--font-mono); font-size: var(--type-setting-value-size); }
+.settings-row--disabled { opacity: 0.64; }
 
 .settings-build-code {
   color: var(--text-soft);
@@ -4641,6 +4642,7 @@ input, textarea { color: inherit; }
 }
 
 .toggle.on { background: var(--accent); border-color: var(--accent); }
+.toggle:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .toggle::after {
   content: '';
