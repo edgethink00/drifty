@@ -238,30 +238,7 @@ def get_top_sites(payload: dict):
     if payload.get("day"):
         return response(True, db.fetch_top_sites(payload["day"], payload.get("limit", 10)))
     start, end = day_bounds(payload)
-    rows = [db._serialize_row(row) for row in db.timeline(start=start, end=end)]
-    site_map: dict[str, dict] = {}
-    for item in rows:
-        domain = item.get("siteDomain")
-        if not domain:
-            continue
-        entry = site_map.setdefault(
-            domain,
-            {
-                "siteDomain": domain,
-                "totalSeconds": 0,
-                "browserName": item.get("browserName"),
-                "siteTitle": item.get("siteTitle"),
-                "visits": 0,
-            },
-        )
-        entry["totalSeconds"] += item["durationSeconds"]
-        entry["visits"] += 1
-    return response(
-        True,
-        sorted(site_map.values(), key=lambda item: item["totalSeconds"], reverse=True)[
-            : payload.get("limit", 10)
-        ],
-    )
+    return response(True, db.top_sites(start, end, payload.get("limit", 10)))
 
 
 def get_unclassified_segments(payload: dict):

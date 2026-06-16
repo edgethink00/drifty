@@ -307,6 +307,12 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
 
+function shouldRefreshHistoryData(activeTab: TabId, dashPeriod: DashboardPeriod, classificationRange: ClassificationRange): boolean {
+  if (activeTab === "dashboard") return dashPeriod !== "Today";
+  if (activeTab === "classification") return classificationRange === "Week";
+  return activeTab === "history" || activeTab === "trends";
+}
+
 const activityNav: NavItem[] = [
   { id: "classification", label: "Classification", icon: "classification" },
   { id: "trends", label: "Trends", icon: "trends" },
@@ -1271,11 +1277,18 @@ export default function App() {
     const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
     const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+    const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
 
     try {
-      const archiveTimelineRequest = trackerClient
-        .getTimeline(historyTimelineRange)
-        .then((historyTimeline) => ({ historyTimeline }));
+      const archiveTimelineRequest = shouldLoadHistory
+        ? trackerClient.getTimeline(historyTimelineRange)
+        : Promise.resolve<ActivitySegment[] | null>(null);
+      const historyHourlySummaryRequest = shouldLoadHistory
+        ? trackerClient.getHourlySummary(historySummaryRange)
+        : Promise.resolve<HourBucket[] | null>(null);
+      const historySiteSummaryRequest = shouldLoadHistory
+        ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
+        : Promise.resolve<SiteDuration[] | null>(null);
 
       const statusRequest = trackerClient.getStatus().then((nextStatus) => {
         if (refreshRequestRef.current !== requestId) return nextStatus;
@@ -1291,8 +1304,8 @@ export default function App() {
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
-        trackerClient.getHourlySummary(historySummaryRange),
-        trackerClient.getTopSites({ ...historySummaryRange, limit: 8 }),
+        historyHourlySummaryRequest,
+        historySiteSummaryRequest,
         currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
@@ -1300,15 +1313,14 @@ export default function App() {
       ]);
 
       if (refreshRequestRef.current !== requestId) return false;
-      const { historyTimeline } = archiveTimelines;
 
       setCurrentSnapshot(nextCurrentSnapshot);
       setSegments(timeline);
       setSegmentsLoadedDay(day);
-      setHistorySegments(historyTimeline);
+      if (archiveTimelines !== null) setHistorySegments(archiveTimelines);
       setHourly(buildHourlySummary(timeline));
-      setInsightHourly(historyHourlySummary);
-      setInsightTopSites(historySiteSummary);
+      if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
+      if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
@@ -1326,7 +1338,7 @@ export default function App() {
 
       void (async () => {
         try {
-          const iconSegments = [...timeline, ...historyTimeline];
+          const iconSegments = archiveTimelines === null ? timeline : [...timeline, ...archiveTimelines];
           const uniqueApps = Array.from(
             new Map(iconSegments.map((segment) => [
               segment.bundleId || segment.appName,
@@ -1409,7 +1421,7 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     void refresh(selectedDay);
-  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [activeTab, classificationRange, dashPeriod, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1433,7 +1445,7 @@ export default function App() {
       void refresh(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;

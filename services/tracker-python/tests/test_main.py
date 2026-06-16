@@ -87,6 +87,22 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.get_timeline({"start": "2026-04-01T00:00:00", "end": "2026-04-07T23:59:59"})
         mock_db.timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
 
+    def test_get_top_sites_uses_range_aggregate(self) -> None:
+        mock_db = MagicMock()
+        mock_db.top_sites.return_value = []
+        mock_db.timeline.side_effect = AssertionError("range top sites should aggregate in SQL")
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_top_sites({
+                "start": "2026-04-01T00:00:00",
+                "end": "2026-04-07T23:59:59",
+                "limit": 8,
+            })
+
+        self.assertTrue(result["ok"])
+        mock_db.top_sites.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59", 8)
+        mock_db.timeline.assert_not_called()
+
     def test_get_reusable_ai_classifications_returns_json_serializable_mapping(self) -> None:
         mock_db = MagicMock()
         mock_db.get_reusable_ai_classifications.return_value = {
