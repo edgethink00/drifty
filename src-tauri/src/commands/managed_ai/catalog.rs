@@ -1,0 +1,87 @@
+use serde::Serialize;
+
+#[derive(Clone, Copy)]
+pub(super) struct ManagedAiModelSpec {
+    pub(super) id: &'static str,
+    pub(super) tier: &'static str,
+    pub(super) label: &'static str,
+    pub(super) detail: &'static str,
+    pub(super) download_size: &'static str,
+    pub(super) disk_required: &'static str,
+    pub(super) minimum_memory: &'static str,
+    pub(super) runtime_model: &'static str,
+    pub(super) recommended: bool,
+}
+
+pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
+    ManagedAiModelSpec {
+        id: "drifty-qwen3-5-2b-economy",
+        tier: "economy",
+        label: "Qwen 3.5 2B",
+        detail: "Small managed local model for quick classification checks.",
+        download_size: "~1.4 GB",
+        disk_required: "3 GB free",
+        minimum_memory: "8 GB RAM",
+        runtime_model: "drifty-qwen3.5-2b-local",
+        recommended: false,
+    },
+    ManagedAiModelSpec {
+        id: "drifty-qwen3-5-4b-default",
+        tier: "default",
+        label: "Qwen 3.5 4B",
+        detail: "Recommended balance for on-device Drifty classification.",
+        download_size: "~2.8 GB",
+        disk_required: "6 GB free",
+        minimum_memory: "16 GB RAM",
+        runtime_model: "drifty-qwen3.5-4b-local",
+        recommended: true,
+    },
+    ManagedAiModelSpec {
+        id: "drifty-gemma-4-12b-local",
+        tier: "gemma",
+        label: "Gemma 4 12B",
+        detail: "Mid-sized Gemma 4 option for private local classification.",
+        download_size: "~8.0 GB",
+        disk_required: "16 GB free",
+        minimum_memory: "24 GB RAM",
+        runtime_model: "drifty-gemma4-12b-local",
+        recommended: false,
+    },
+    ManagedAiModelSpec {
+        id: "drifty-qwen3-6-27b-smart",
+        tier: "smart",
+        label: "Qwen 3.6 27B",
+        detail: "Smaller Qwen 3.6 option for stronger local reasoning.",
+        download_size: "~15 GB",
+        disk_required: "30 GB free",
+        minimum_memory: "36 GB RAM",
+        runtime_model: "drifty-qwen3.6-27b-local",
+        recommended: false,
+    },
+];
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedAiCatalogModel {
+    pub(super) id: String,
+    pub(super) tier: String,
+    pub(super) label: String,
+    pub(super) detail: String,
+    pub(super) download_size: String,
+    pub(super) disk_required: String,
+    pub(super) minimum_memory: String,
+    pub(super) recommended: bool,
+}
+
+pub(super) fn catalog_model(spec: ManagedAiModelSpec) -> ManagedAiCatalogModel {
+    ManagedAiCatalogModel {
+        id: spec.id.to_string(),
+        tier: spec.tier.to_string(),
+        label: spec.label.to_string(),
+        detail: spec.detail.to_string(),
+        download_size: spec.download_size.to_string(),
+        disk_required: spec.disk_required.to_string(),
+        minimum_memory: spec.minimum_memory.to_string(),
+        recommended: spec.recommended,
+    }
+}

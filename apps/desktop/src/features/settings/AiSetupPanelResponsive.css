@@ -1,10 +1,39 @@
 @media (max-width: 760px) {
   .ai-setup-choice__toggle {
-    grid-template-columns: 2.75rem minmax(0, 1fr) 0.8rem;
+    grid-template-columns: 2rem minmax(0, 1fr) 0.78rem;
   }
 
   .ai-setup-model-row {
     grid-template-columns: 1fr;
+  }
+
+  .ai-setup-current-model__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-setup-current-model__slash {
+    justify-self: center;
+  }
+
+  .ai-managed-model {
+    align-items: stretch;
+    gap: var(--space-3);
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ai-managed-model__actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .ai-managed-model__facts {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .ai-managed-model__facts dd {
+    text-align: left;
   }
 
   .ai-setup-cloud-route,

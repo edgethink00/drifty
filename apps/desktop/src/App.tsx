@@ -186,7 +186,8 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
-import { LOCAL_AI_SETUP_STORAGE_KEY, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
+import { localAiProviderConfigFromSetup } from "./features/settings/localAiClassificationOptions";
+import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
@@ -307,6 +308,12 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
+
+function shouldRefreshHistoryData(activeTab: TabId, dashPeriod: DashboardPeriod, classificationRange: ClassificationRange): boolean {
+  if (activeTab === "dashboard") return dashPeriod !== "Today";
+  if (activeTab === "classification") return classificationRange === "Week";
+  return activeTab === "history" || activeTab === "trends";
+}
 
 const activityNav: NavItem[] = [
   { id: "classification", label: "Classification", icon: "classification" },
@@ -692,20 +699,7 @@ export default function App() {
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
-  const localAiClassificationOptions = useMemo(() => {
-    if (localAiSetup.provider === "openrouter_byok") {
-      const apiKey = localAiSetup.openRouterApiKey.trim();
-      if (!apiKey) return null;
-      const model = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(model, localAiSetup.openRouterFallbackModels);
-      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model, fallbackModels } };
-    }
-
-    const baseUrl = localAiSetup.selfHostedBaseUrl.trim();
-    const model = localAiSetup.selfHostedModel.trim();
-    if (!baseUrl || !model) return null;
-    return { localProvider: { provider: "self_hosted" as const, baseUrl, model } };
-  }, [localAiSetup]);
+  const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
     const {
       user,
       status: authStatus,
@@ -1272,11 +1266,18 @@ export default function App() {
     const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
     const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+    const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
 
     try {
-      const archiveTimelineRequest = trackerClient
-        .getTimeline(historyTimelineRange)
-        .then((historyTimeline) => ({ historyTimeline }));
+      const archiveTimelineRequest = shouldLoadHistory
+        ? trackerClient.getTimeline(historyTimelineRange)
+        : Promise.resolve<ActivitySegment[] | null>(null);
+      const historyHourlySummaryRequest = shouldLoadHistory
+        ? trackerClient.getHourlySummary(historySummaryRange)
+        : Promise.resolve<HourBucket[] | null>(null);
+      const historySiteSummaryRequest = shouldLoadHistory
+        ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
+        : Promise.resolve<SiteDuration[] | null>(null);
 
       const statusRequest = trackerClient.getStatus().then((nextStatus) => {
         if (refreshRequestRef.current !== requestId) return nextStatus;
@@ -1292,8 +1293,8 @@ export default function App() {
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
-        trackerClient.getHourlySummary(historySummaryRange),
-        trackerClient.getTopSites({ ...historySummaryRange, limit: 8 }),
+        historyHourlySummaryRequest,
+        historySiteSummaryRequest,
         currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
@@ -1301,15 +1302,14 @@ export default function App() {
       ]);
 
       if (refreshRequestRef.current !== requestId) return false;
-      const { historyTimeline } = archiveTimelines;
 
       setCurrentSnapshot(nextCurrentSnapshot);
       setSegments(timeline);
       setSegmentsLoadedDay(day);
-      setHistorySegments(historyTimeline);
+      if (archiveTimelines !== null) setHistorySegments(archiveTimelines);
       setHourly(buildHourlySummary(timeline));
-      setInsightHourly(historyHourlySummary);
-      setInsightTopSites(historySiteSummary);
+      if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
+      if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
@@ -1327,7 +1327,7 @@ export default function App() {
 
       void (async () => {
         try {
-          const iconSegments = [...timeline, ...historyTimeline];
+          const iconSegments = archiveTimelines === null ? timeline : [...timeline, ...archiveTimelines];
           const uniqueApps = Array.from(
             new Map(iconSegments.map((segment) => [
               segment.bundleId || segment.appName,
@@ -1410,7 +1410,7 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     void refresh(selectedDay);
-  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [activeTab, classificationRange, dashPeriod, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1434,7 +1434,7 @@ export default function App() {
       void refresh(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;

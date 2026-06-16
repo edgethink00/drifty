@@ -2,9 +2,10 @@ import os
 import sys
 import time
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import MagicMock
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
@@ -179,6 +180,13 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["appName"], "Finder")
 
+    def test_activity_segments_has_range_query_indexes(self) -> None:
+        with self.database.connect() as conn:
+            indexes = {row["name"] for row in conn.execute("PRAGMA index_list(activity_segments)")}
+
+        self.assertIn("idx_activity_segments_started_at", indexes)
+        self.assertIn("idx_activity_segments_ended_at", indexes)
+
     def test_hourly_summary_groups_by_hour(self) -> None:
         started_at = "2026-04-06T09:00:00+00:00"
         self.database.insert_segment(
@@ -200,6 +208,51 @@ class TrackerDatabaseTests(unittest.TestCase):
         summary = self.database.fetch_hourly_summary(local_day)
         self.assertEqual(summary[0]["hourLabel"], local_hour)
         self.assertEqual(summary[0]["durationSeconds"], 1800)
+
+    def test_hourly_summary_range_aggregates_without_loading_timeline(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:30:00+00:00",
+                "duration_seconds": 1800,
+                "app_name": "Code",
+                "bundle_id": None,
+                "window_title": "main.tsx",
+                "platform": "macos",
+                "source": "nsworkspace",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:30:00+00:00",
+                "ended_at": "2026-04-06T09:45:00+00:00",
+                "duration_seconds": 900,
+                "app_name": "Safari",
+                "bundle_id": None,
+                "window_title": "Docs",
+                "platform": "macos",
+                "source": "nsworkspace",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+        self.database.timeline = MagicMock(side_effect=AssertionError("range summary should aggregate in SQL"))
+
+        summary = self.database.hourly_summary("2026-04-06T00:00:00", "2026-04-06T23:59:59")
+
+        local_hour = datetime.fromisoformat("2026-04-06T09:00:00+00:00").astimezone().strftime("%H:00")
+        self.assertEqual(summary, [
+            {
+                "hour": f"localT{local_hour}",
+                "totalSeconds": 2700,
+                "appBreakdown": [
+                    {"appName": "Code", "totalSeconds": 1800},
+                    {"appName": "Safari", "totalSeconds": 900},
+                ],
+            }
+        ])
 
     def test_last_event_at_reads_latest_end(self) -> None:
         self.database.insert_segment(
@@ -242,6 +295,49 @@ class TrackerDatabaseTests(unittest.TestCase):
         sites = self.database.fetch_top_sites(local_day)
         self.assertEqual(sites[0]["siteDomain"], "tauri.app")
         self.assertEqual(sites[0]["totalSeconds"], 300)
+
+    def test_fetch_top_sites_uses_started_local_day(self) -> None:
+        local_midnight = datetime.fromisoformat("2026-04-06T00:00:00").astimezone()
+        self.database.insert_segment(
+            {
+                "started_at": (local_midnight - timedelta(minutes=5)).isoformat(),
+                "ended_at": (local_midnight + timedelta(minutes=5)).isoformat(),
+                "duration_seconds": 600,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "window_title": "Previous day bridge",
+                "site_domain": "previous.example",
+                "site_title": "Previous day bridge",
+                "browser_name": "Safari",
+                "site_source": "applescript",
+                "platform": "macos",
+                "source": "accessibility",
+                "confidence": 1.0,
+                "raw_context_json": "{}",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": (local_midnight + timedelta(hours=9)).isoformat(),
+                "ended_at": (local_midnight + timedelta(hours=9, minutes=10)).isoformat(),
+                "duration_seconds": 600,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "window_title": "Current day",
+                "site_domain": "current.example",
+                "site_title": "Current day",
+                "browser_name": "Safari",
+                "site_source": "applescript",
+                "platform": "macos",
+                "source": "accessibility",
+                "confidence": 1.0,
+                "raw_context_json": "{}",
+            }
+        )
+
+        sites = self.database.fetch_top_sites("2026-04-06")
+
+        self.assertEqual([site["siteDomain"] for site in sites], ["current.example"])
 
     def test_browser_url_and_youtube_ids_are_persisted(self) -> None:
         self.database.record_snapshot(
