@@ -102,6 +102,43 @@ describe("Settings content styles", () => {
     expect(openRouterImageRule).toContain("width: 1.28rem;");
   });
 
+  it("presents AI setup internal tabs as compact pill controls", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const tabListRule = cssRule(aiSetupStyles, ".ai-setup-panel-tabs");
+    const tabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab");
+    const activeTabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab.is-active");
+    const tabPanelRule = cssRule(aiSetupStyles, ".ai-setup-tab-panel");
+
+    expect(tabListRule).toContain("background: color-mix(in srgb, var(--bg-2) 38%, transparent);");
+    expect(tabListRule).toContain("gap: 0.16rem;");
+    expect(tabListRule).toContain("padding: 0.16rem;");
+    expect(tabListRule).toContain("width: fit-content;");
+    expect(tabRule).toContain("border: 1px solid transparent;");
+    expect(tabRule).toContain("border-radius: 9px;");
+    expect(tabRule).toContain("font-size: 0.84rem;");
+    expect(tabRule).toContain("min-height: 2.08rem;");
+    expect(activeTabRule).toContain("background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));");
+    expect(activeTabRule).toContain("color: var(--text);");
+    expect(tabPanelRule).toContain("gap: var(--space-3);");
+  });
+
+  it("keeps managed local model actions concise", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const modelRule = cssRule(aiSetupStyles, ".ai-managed-model");
+    const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
+    const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
+    const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__delete-action");
+    const mobilePrimaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
+
+    expect(modelRule).toContain("grid-template-columns: auto minmax(13rem, 1fr) minmax(12rem, 0.68fr) minmax(8.8rem, auto);");
+    expect(actionsRule).toContain("display: flex;");
+    expect(actionsRule).toContain("justify-content: flex-end;");
+    expect(actionsRule).toContain("min-width: 8.8rem;");
+    expect(primaryActionRule).toContain("gap: 0.42rem;");
+    expect(deleteActionRule).toContain("width: 2rem;");
+    expect(mobilePrimaryActionRule).toContain("gap: 0.42rem;");
+  });
+
   it("uses the focus color for the Cloud setup CTA", () => {
     const aiSetupStyles = readAiSetupStyles();
     const cloudPrimaryRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn--primary");
@@ -114,10 +151,19 @@ describe("Settings content styles", () => {
   it("separates AI providers from shared prompt settings", () => {
     const aiSetupStyles = readAiSetupStyles();
     const supportZoneRule = cssRule(aiSetupStyles, ".ai-setup-support-zone");
+    const supportHeaderTitleRule = cssRule(aiSetupStyles, ".ai-setup-support-zone__header strong");
+    const supportToggleRule = cssRule(aiSetupStyles, ".ai-setup-support-section__toggle");
+    const supportTitleRule = cssRule(aiSetupStyles, ".ai-setup-support-section__copy strong");
 
-    expect(supportZoneRule).toContain("border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);");
-    expect(supportZoneRule).toContain("margin-top: clamp(1.35rem, 3vw, 2.25rem);");
-    expect(supportZoneRule).toContain("padding-top: clamp(1.1rem, 2.4vw, 1.8rem);");
+    expect(supportZoneRule).toContain("border-top: 0;");
+    expect(supportZoneRule).toContain("margin-top: 0;");
+    expect(supportZoneRule).toContain("padding-top: 0;");
+    expect(supportHeaderTitleRule).toContain("font-size: 0.94rem;");
+    expect(supportHeaderTitleRule).toContain("font-weight: 650;");
+    expect(supportToggleRule).toContain("min-height: 3.55rem;");
+    expect(supportToggleRule).toContain("padding: 0.72rem var(--space-3);");
+    expect(supportTitleRule).toContain("font-size: var(--type-setting-label-size);");
+    expect(supportTitleRule).toContain("font-weight: 650;");
   });
 
   it("keeps the first heading aligned to the active settings section label", () => {

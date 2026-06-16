@@ -35,6 +35,11 @@
   min-width: 0;
 }
 
+.ai-setup-work-profile-selectors:has(.ai-setup-activity-tags):not(:has(.ai-setup-activity-other))
+  .ai-setup-work-profile-selector:nth-child(2) {
+  align-content: space-between;
+}
+
 .ai-setup-work-profile-selector > span {
   color: var(--text-muted);
   font-family: var(--font-mono);
