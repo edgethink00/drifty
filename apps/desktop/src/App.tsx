@@ -176,7 +176,7 @@ import type { DriftReminderState, WatcherMode, WatcherSnapshot } from "./feature
 import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption } from "./features/dashboard/dashboardPeriods";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
-import { FOCUS_DRIFT_AXIS_TICKS, FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
+import { FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import type { FocusDriftAxisTickStyle, FocusDriftLiveStyle, FocusDriftPoint, FocusDriftSourceSummary } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
 import type { MonthCellStyle } from "./features/dashboard/monthOverview";
@@ -3650,7 +3650,7 @@ export default function App() {
             </div>
             {focusDriftHover ? <FocusDriftHoverCard appIcons={appIcons} hover={focusDriftHover} /> : null}
             <div className="focus-drift__axis" aria-hidden="true">
-              {FOCUS_DRIFT_AXIS_TICKS.map((tick) => (
+              {focusDriftChart.axisTicks.map((tick) => (
                 <span key={tick.id} style={{ "--focus-drift-axis-x": `${tick.x}%` } as FocusDriftAxisTickStyle}>{tick.label}</span>
               ))}
             </div>
