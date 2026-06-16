@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-managed-ai-delete"
+description = "Enables the managed_ai_delete command without any pre-configured scope."
+commands.allow = ["managed_ai_delete"]
+
+[[permission]]
+identifier = "deny-managed-ai-delete"
+description = "Denies the managed_ai_delete command without any pre-configured scope."
+commands.deny = ["managed_ai_delete"]

@@ -185,7 +185,8 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
-import { LOCAL_AI_SETUP_STORAGE_KEY, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
+import { localAiProviderConfigFromSetup } from "./features/settings/localAiClassificationOptions";
+import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
@@ -697,20 +698,7 @@ export default function App() {
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
-  const localAiClassificationOptions = useMemo(() => {
-    if (localAiSetup.provider === "openrouter_byok") {
-      const apiKey = localAiSetup.openRouterApiKey.trim();
-      if (!apiKey) return null;
-      const model = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(model, localAiSetup.openRouterFallbackModels);
-      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model, fallbackModels } };
-    }
-
-    const baseUrl = localAiSetup.selfHostedBaseUrl.trim();
-    const model = localAiSetup.selfHostedModel.trim();
-    if (!baseUrl || !model) return null;
-    return { localProvider: { provider: "self_hosted" as const, baseUrl, model } };
-  }, [localAiSetup]);
+  const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
     const {
       user,
       status: authStatus,

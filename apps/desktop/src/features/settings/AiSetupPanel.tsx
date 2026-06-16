@@ -3,21 +3,20 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
-import { OpenRouterModelDialog, SelfHostedModelDialog } from "./AiSetupModelDialogs";
+import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
 import "./AiSetupPanel.css";
 import {
   AI_SETUP_SECTIONS,
   AiSetupSectionCard,
   type AiSetupSection,
 } from "./AiSetupSectionCards";
-import {
-  CloudSetupPanel,
-  OllamaSetupPanel,
-  OpenRouterSetupPanel,
-} from "./AiSetupProviderPanels";
+import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
+import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
+import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
+import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
 
@@ -64,16 +63,18 @@ export function AiSetupPanel({
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
-  const [activeSection, setActiveSection] = useState<AiSetupSection>("cloud");
+  const [activeSection, setActiveSection] = useState<AiSetupSection>(() => sectionForProvider(localAiSetup.provider));
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
+  const [driftyRoute, setDriftyRoute] = useState<DriftyRoute>(() => localAiSetup.provider === "managed_local" ? "local" : "cloud");
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
+  const managedLocalAi = useManagedLocalAiSetup(activeSection === "drifty", onLocalAiSetupChange);
   const workProfileSettings = useWorkProfileSettings(workProfileUserId);
 
   useEffect(() => {
-    onDialogOpenChange(modelPickers.openRouterModelPickerOpen || modelPickers.selfHostedModelPickerOpen);
+    onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
     return () => onDialogOpenChange(false);
-  }, [modelPickers.openRouterModelPickerOpen, modelPickers.selfHostedModelPickerOpen, onDialogOpenChange]);
+  }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
 
   const handleSectionChange = (section: AiSetupSection) => {
     setActiveSection(section);
@@ -97,26 +98,54 @@ export function AiSetupPanel({
         <h3>AI setup</h3>
       </div>
 
+      <AiSetupModelBeingUsed
+        catalog={managedLocalAi.catalog}
+        driftyRoute={driftyRoute}
+        localAiSetup={localAiSetup}
+        openRouterModelOptions={modelPickers.openRouterModelOptions}
+        openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
+        selectedProvider={activeSection}
+        onDriftyRouteChange={setDriftyRoute}
+        onLocalAiSetupChange={onLocalAiSetupChange}
+        onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
+        onProviderChange={handleSectionChange}
+      />
+
+      <h4 className="ai-setup-provider-heading">Configure providers</h4>
+
       <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "cloud"} onToggle={handleSectionChange}>
-          <CloudSetupPanel
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} onToggle={handleSectionChange}>
+          <DriftySetupPanel
+            actionModelId={managedLocalAi.actionModelId}
             aiServerStatusLabel={aiServerStatusLabel}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
             billingEntitlementError={billingEntitlementError}
             billingEntitlementStatus={billingEntitlementStatus}
             billingPlansDisabled={billingPlansDisabled}
+            catalog={managedLocalAi.catalog}
             cloudStatusRefreshing={cloudStatusRefreshing}
             cloudStatusLabel={cloudStatusLabel}
             cloudTrialEndsAt={cloudTrialEndsAt}
+            connectionTestMessage={connectionTestResult?.message ?? null}
+            connectionTestRunning={connectionTestRunning}
             currentBillingPlan={currentBillingPlan}
             isSupabaseConfigured={isSupabaseConfigured}
+            loading={managedLocalAi.loading}
+            localAiSetup={localAiSetup}
+            selectedRoute={driftyRoute}
             shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+            status={managedLocalAi.status}
             userEmail={userEmail}
+            onDeleteModel={managedLocalAi.deleteModel}
+            onInstallModel={managedLocalAi.installModel}
+            onLocalAiSetupChange={onLocalAiSetupChange}
             onRefreshCloudStatus={onRefreshCloudStatus}
             onStartCloudSetup={onStartCloudSetup}
+            onStartModel={managedLocalAi.startModel}
+            onTestConnection={handleTestConnection}
           />
         </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "local"} onToggle={handleSectionChange}>
+        <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} onToggle={handleSectionChange}>
           <OpenRouterSetupPanel
             connectionTestMessage={connectionTestResult?.message ?? null}
             connectionTestRunning={connectionTestRunning}
@@ -124,17 +153,6 @@ export function AiSetupPanel({
             localAiSetup={localAiSetup}
             primaryModel={modelPickers.openRouterPrimaryModel}
             onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
-            onLocalAiSetupChange={onLocalAiSetupChange}
-            onTestConnection={handleTestConnection}
-          />
-        </AiSetupSectionCard>
-        <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={activeSection === "ollama"} onToggle={handleSectionChange}>
-          <OllamaSetupPanel
-            connectionTestMessage={connectionTestResult?.message ?? null}
-            connectionTestRunning={connectionTestRunning}
-            localAiSetup={localAiSetup}
-            modelSummary={modelPickers.selfHostedModelSummary}
-            onChooseModel={() => modelPickers.setSelfHostedModelPickerOpen(true)}
             onLocalAiSetupChange={onLocalAiSetupChange}
             onTestConnection={handleTestConnection}
           />
@@ -171,33 +189,30 @@ export function AiSetupPanel({
           onToggleModel={modelPickers.handleOpenRouterModelToggle}
         />
       ) : null}
-
-      {modelPickers.selfHostedModelPickerOpen ? (
-        <SelfHostedModelDialog
-          customModel={modelPickers.selfHostedCustomModel}
-          modelSummary={modelPickers.selfHostedModelSummary}
-          options={modelPickers.selfHostedModelOptions}
-          selectedModel={modelPickers.selfHostedSelectedModel}
-          onAddCustomModel={modelPickers.handleAddSelfHostedCustomModel}
-          onClose={() => modelPickers.setSelfHostedModelPickerOpen(false)}
-          onCustomModelChange={modelPickers.setSelfHostedCustomModel}
-          onModelChange={modelPickers.handleSelfHostedModelChange}
-        />
-      ) : null}
     </div>
   );
 }
 
 function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {
   switch (section) {
-    case "cloud":
+    case "drifty":
       return null;
-    case "local":
+    case "openrouter":
       return "openrouter_byok";
-    case "ollama":
-      return "self_hosted";
     default:
       return assertNever(section);
+  }
+}
+
+function sectionForProvider(provider: LocalAiSetupState["provider"]): AiSetupSection {
+  switch (provider) {
+    case "managed_local":
+    case "self_hosted":
+      return "drifty";
+    case "openrouter_byok":
+      return "openrouter";
+    default:
+      return assertNever(provider);
   }
 }
 

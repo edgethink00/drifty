@@ -1,6 +1,6 @@
 .ai-setup-choices {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .ai-setup-choice {
@@ -25,10 +25,10 @@
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 0.85rem;
-  grid-template-columns: 2.75rem minmax(0, 1fr) 1rem;
-  min-height: 5.1rem;
-  padding: 0.85rem var(--space-4);
+  gap: 0.62rem;
+  grid-template-columns: 2rem minmax(0, 1fr) 0.78rem;
+  min-height: 3.7rem;
+  padding: 0.58rem var(--space-3);
   text-align: left;
   width: 100%;
 }
@@ -44,21 +44,21 @@
 
 .ai-setup-brand-mark {
   align-items: center;
-  border-radius: 12px;
+  border-radius: 8px;
   display: inline-flex;
-  height: 2.75rem;
+  height: 2rem;
   justify-content: center;
-  width: 2.75rem;
+  width: 2rem;
 }
 
 .ai-setup-brand-mark img {
   display: block;
-  height: 2.02rem;
+  height: 1.45rem;
   object-fit: contain;
-  width: 2.02rem;
+  width: 1.45rem;
 }
 
-.ai-setup-brand-mark--cloud {
+.ai-setup-brand-mark--drifty {
   background: color-mix(in srgb, #7bea56 24%, var(--surface));
 }
 
@@ -67,17 +67,8 @@
 }
 
 .ai-setup-brand-mark--openrouter img {
-  height: 1.77rem;
-  width: 1.77rem;
-}
-
-.ai-setup-brand-mark--ollama {
-  background: color-mix(in srgb, #eef2f7 72%, var(--surface));
-}
-
-.ai-setup-brand-mark--ollama img {
-  height: 1.8rem;
-  width: 1.45rem;
+  height: 1.28rem;
+  width: 1.28rem;
 }
 
 .ai-setup-choice__copy {
@@ -89,8 +80,8 @@
 .ai-setup-choice__title {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 1.06rem;
-  font-weight: 720;
+  font-size: 0.88rem;
+  font-weight: 690;
   letter-spacing: 0;
   line-height: 1.1;
   overflow: hidden;
@@ -100,7 +91,7 @@
 
 .ai-setup-choice__subtitle {
   color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
+  font-size: 0.72rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -123,5 +114,5 @@
 
 .ai-setup-choice__panel {
   border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  padding: 0 var(--space-4) 0.85rem;
+  padding: 0 var(--space-4) 0.72rem;
 }

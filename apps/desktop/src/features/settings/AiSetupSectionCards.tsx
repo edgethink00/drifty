@@ -1,13 +1,11 @@
 import type { ReactNode } from "react";
 
 import driftyLogoUrl from "../../assets/drifty-icon.png";
-import ollamaLogoUrl from "../../assets/ollama-logo.svg";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 
 export const AI_SETUP_SECTIONS = [
-  { id: "cloud", title: "Drifty Cloud", subtitle: "Hosted classification through Drifty billing" },
-  { id: "local", title: "OpenRouter BYOK", subtitle: "Use your own OpenRouter key and model routing" },
-  { id: "ollama", title: "Local Ollama", subtitle: "Point Drifty at a local OpenAI-compatible endpoint" },
+  { id: "drifty", title: "Drifty", subtitle: "Use Drifty Cloud or a managed local model" },
+  { id: "openrouter", title: "OpenRouter", subtitle: "Use your own key and model routing" },
 ] as const;
 
 export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
@@ -57,22 +55,16 @@ export function AiSetupSectionCard({
 
 function BrandMark({ section }: { readonly section: AiSetupSection }) {
   switch (section) {
-    case "cloud":
+    case "drifty":
       return (
-        <span className="ai-setup-brand-mark ai-setup-brand-mark--cloud" aria-hidden="true">
+        <span className="ai-setup-brand-mark ai-setup-brand-mark--drifty" aria-hidden="true">
           <img src={driftyLogoUrl} alt="" />
         </span>
       );
-    case "local":
+    case "openrouter":
       return (
         <span className="ai-setup-brand-mark ai-setup-brand-mark--openrouter" aria-hidden="true">
           <img src={openRouterLogoUrl} alt="" />
-        </span>
-      );
-    case "ollama":
-      return (
-        <span className="ai-setup-brand-mark ai-setup-brand-mark--ollama" aria-hidden="true">
-          <img src={ollamaLogoUrl} alt="" />
         </span>
       );
     default:
