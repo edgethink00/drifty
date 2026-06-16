@@ -154,7 +154,7 @@ describe("App settings sidebar", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /settings/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /app setting/i }));
 
     expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: /dashboard views/i })).toBeNull();
