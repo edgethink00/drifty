@@ -58,6 +58,7 @@ import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
 import { HistoryView } from "./features/history/HistoryView";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
   LEADERBOARD_PERIODS,
@@ -253,57 +254,11 @@ type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 type UpdateCheckMode = "manual" | "automatic";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
-const AUTO_UPDATE_DISMISS_SUPPRESSION_MS = 48 * 60 * 60 * 1000;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
-const AUTO_UPDATE_DISMISS_STORAGE_KEY = "drifty.updates.dismissedAutoUpdate.v1";
-
-type DismissedAutoUpdate = {
-  readonly version: string;
-  readonly dismissedAtMs: number;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readDismissedAutoUpdate(): DismissedAutoUpdate | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const savedValue = window.localStorage.getItem(AUTO_UPDATE_DISMISS_STORAGE_KEY);
-    if (!savedValue) return null;
-    const parsedValue: unknown = JSON.parse(savedValue);
-    if (!isRecord(parsedValue)) return null;
-    const version = parsedValue["version"];
-    const dismissedAtMs = parsedValue["dismissedAtMs"];
-    if (typeof version !== "string" || typeof dismissedAtMs !== "number") return null;
-    if (!Number.isFinite(dismissedAtMs)) return null;
-    return { version, dismissedAtMs };
-  } catch (error) {
-    if (error instanceof Error) return null;
-    throw error;
-  }
-}
-
-function isAutomaticUpdateDismissed(version: string, nowMs: number): boolean {
-  const dismissedUpdate = readDismissedAutoUpdate();
-  if (!dismissedUpdate) return false;
-  if (dismissedUpdate.version !== version) return false;
-  return nowMs - dismissedUpdate.dismissedAtMs < AUTO_UPDATE_DISMISS_SUPPRESSION_MS;
-}
-
-function persistDismissedAutoUpdate(version: string, dismissedAtMs: number) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(AUTO_UPDATE_DISMISS_STORAGE_KEY, JSON.stringify({ version, dismissedAtMs }));
-  } catch (error) {
-    if (error instanceof Error) return;
-    throw error;
-  }
-}
 
 const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
@@ -570,10 +525,8 @@ export default function App() {
     try {
       const nextUpdate = await check();
       if (nextUpdate) {
-        if (isManualCheck || !isAutomaticUpdateDismissed(nextUpdate.version, Date.now())) {
-          setAvailableUpdate(nextUpdate);
-          setAvailableUpdateSource(mode);
-        }
+        setAvailableUpdate(nextUpdate);
+        setAvailableUpdateSource(mode);
         return;
       }
       if (isManualCheck) {
@@ -617,12 +570,9 @@ export default function App() {
   }, [handleCheckForUpdates, openSettingsTab]);
 
   const dismissAvailableUpdate = useCallback(() => {
-    if (availableUpdate && availableUpdateSource === "automatic") {
-      persistDismissedAutoUpdate(availableUpdate.version, Date.now());
-    }
     setAvailableUpdate(null);
     setAvailableUpdateSource(null);
-  }, [availableUpdate, availableUpdateSource]);
+  }, []);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -2350,7 +2300,8 @@ export default function App() {
     || isProfileEditorOpen
     || cmdOpen,
   );
-  const visibleUpdate = updateDialogBlocked ? null : availableUpdate;
+  const visibleUpdate = updateDialogBlocked || availableUpdateSource !== "manual" ? null : availableUpdate;
+  const titlebarUpdate = updateDialogBlocked || visibleUpdate ? null : availableUpdate;
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
   const selectedDayProductivityTotals = useMemo(
     () => buildProductivityDurations(segments, selectedDayClassificationOptions),
@@ -3727,6 +3678,13 @@ export default function App() {
         <div className="window-chrome-actions">
           <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
           <AiConnectionStatusBar status={aiConnectionStatus} />
+          {titlebarUpdate ? (
+            <TopbarUpdateButton
+              isInstalling={updaterInstalling}
+              onInstall={() => void handleInstallUpdate()}
+              version={titlebarUpdate.version}
+            />
+          ) : null}
         </div>
       </div>
       {cloudTrialStartedNotice && !onboardingOpen ? (
@@ -4735,12 +4693,6 @@ export default function App() {
             {visibleUpdate.date ? <p className="capture-recency">Published {new Date(visibleUpdate.date).toLocaleString()}</p> : null}
             <p className="profile-modal__bio">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
             {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
-            {availableUpdateSource === "automatic" ? (
-              <label className="update-dialog-checkbox">
-                <input className="drifty-checkbox" type="checkbox" aria-label="Auto-check updates on launch" checked={autoUpdateChecksEnabled} onChange={(event) => setAutoUpdateChecksEnabled(event.target.checked)} />
-                <span className="update-dialog-checkbox__label">Auto-check updates on launch</span>
-              </label>
-            ) : null}
             <div className="profile-editor-modal__actions">
               <button type="button" className="ghost-button" onClick={dismissAvailableUpdate} disabled={updaterInstalling}>Not now</button>
               <button type="button" className="settings-btn" onClick={() => void handleInstallUpdate()} disabled={updaterChecking || updaterInstalling}>{updaterInstalling ? "Installing..." : "Install and restart"}</button>
