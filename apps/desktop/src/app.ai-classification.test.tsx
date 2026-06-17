@@ -811,6 +811,80 @@ describe("App AI classification controls", () => {
     expect(aiClassificationMocks.classifyLiveActivityWithAi).not.toHaveBeenCalled();
   });
 
+  it("uses recent poll timeline segments for live drift alarm detection", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:06:00+09:00"));
+    const today = "2026-06-16";
+    const focusSegment: ActivitySegment = {
+      id: "focus-before-game",
+      startedAt: `${today}T00:45:00.000Z`,
+      endedAt: `${today}T00:55:00.000Z`,
+      durationSeconds: 600,
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "App.tsx",
+      platform: "macos",
+      source: "accessibility",
+    };
+    const gameSegment: ActivitySegment = {
+      id: "survev-poll",
+      startedAt: `${today}T01:04:00.000Z`,
+      endedAt: `${today}T01:05:00.000Z`,
+      durationSeconds: 60,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      platform: "macos",
+      source: "accessibility",
+    };
+    const gameSnapshot: CurrentActivitySnapshot = {
+      observedAt: `${today}T01:06:15.000Z`,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      source: "accessibility",
+    };
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T01:06:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
+      query.start === `${today}T04:00:00` ? [focusSegment] : [gameSegment],
+    ));
+    trackerClient.getCurrentSnapshot.mockImplementation(async () => ({ ...gameSnapshot }));
+    aiClassificationMocks.classifyLiveActivityWithAi.mockResolvedValue({ kind: "unavailable", reason: "cloud unavailable" });
+
+    render(<App />);
+
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalledWith({ start: `${today}T04:00:00`, end: "2026-06-17T03:59:59" }));
+    expect(aiClassificationMocks.classifyLiveActivityWithAi).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(aiClassificationMocks.classifyLiveActivityWithAi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "survev-poll",
+        durationSeconds: 135,
+        siteDomain: "survev.io",
+      }),
+      expect.objectContaining({ persistLiveResult: true }),
+    ));
+  });
+
   it("polls live drift alarm activity every 15 seconds without a full refresh", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
@@ -845,10 +919,14 @@ describe("App AI classification controls", () => {
     });
     await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalledTimes(1));
     expect(trackerClient.getTimeline).toHaveBeenCalledWith(expect.objectContaining({
+      start: "2026-06-16T09:30:15",
+      end: "2026-06-16T10:00:15",
+    }));
+    expect(trackerClient.getTimeline).not.toHaveBeenCalledWith(expect.objectContaining({
       start: `${today}T04:00:00`,
       end: "2026-06-17T03:59:59",
     }));
-    expect(trackerClient.getStatus).toHaveBeenCalledTimes(1);
+    expect(trackerClient.getStatus).not.toHaveBeenCalled();
     expect(trackerClient.getTopSites).not.toHaveBeenCalled();
     expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
   });
