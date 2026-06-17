@@ -7589,6 +7589,9 @@ input, textarea { color: inherit; }
 .flow-chart-legend__dot {
   width: 0.546rem;
   height: 0.546rem;
+  display: inline-block;
+  flex: 0 0 0.546rem;
+  aspect-ratio: 1;
   border-radius: 999px;
 }
 
@@ -7606,6 +7609,9 @@ input, textarea { color: inherit; }
 .flow-chart-legend__tone-dot {
   width: 0.546rem;
   height: 0.546rem;
+  display: inline-block;
+  flex: 0 0 0.546rem;
+  aspect-ratio: 1;
   border-radius: 999px;
   background: var(--flow-legend-tone);
 }
@@ -7615,8 +7621,7 @@ input, textarea { color: inherit; }
   padding: 1.78px;
 }
 
-.flow-interval-control button,
-.flow-color-mode-control button {
+.flow-interval-control button {
   padding: 1.78px var(--space-2);
   font-size: 0.58rem;
 }
@@ -7624,6 +7629,13 @@ input, textarea { color: inherit; }
 .flow-color-mode-control {
   flex: 0 0 auto;
   padding: 1.78px;
+}
+
+.flow-color-mode-control button {
+  min-height: 1.08rem;
+  padding: 0.14rem 0.48rem;
+  font-size: 0.54rem;
+  letter-spacing: 0.08em;
 }
 
 .flow-chart-hours,

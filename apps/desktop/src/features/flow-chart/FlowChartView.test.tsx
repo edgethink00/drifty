@@ -69,7 +69,35 @@ const blockPlacementCases: BlockPlacementCase[] = [
 
 describe("FlowChartView", () => {
   it("keeps category legend dots at the JEO-10 enlarged marker size", () => {
-    expect(styles).toMatch(/\.flow-chart-legend__dot\s*{\s*width:\s*0\.546rem;\s*height:\s*0\.546rem;/);
+    const categoryDotRule = cssRule(".flow-chart-legend__dot");
+    const toneDotRule = cssRule(".flow-chart-legend__tone-dot");
+
+    expect(categoryDotRule).toContain("width: 0.546rem;");
+    expect(categoryDotRule).toContain("height: 0.546rem;");
+    expect(categoryDotRule).toContain("display: inline-block;");
+    expect(categoryDotRule).toContain("flex: 0 0 0.546rem;");
+    expect(categoryDotRule).toContain("aspect-ratio: 1;");
+    expect(toneDotRule).toContain("width: 0.546rem;");
+    expect(toneDotRule).toContain("height: 0.546rem;");
+    expect(toneDotRule).toContain("display: inline-block;");
+    expect(toneDotRule).toContain("flex: 0 0 0.546rem;");
+    expect(toneDotRule).toContain("aspect-ratio: 1;");
+  });
+
+  it("keeps interval controls compact without flattening the color mode toggle", () => {
+    const intervalControlRule = cssRule(".flow-interval-control");
+    const intervalButtonRule = cssRule(".flow-interval-control button");
+    const colorModeControlRule = cssRule(".flow-color-mode-control");
+    const colorModeButtonRule = cssRule(".flow-color-mode-control button");
+
+    expect(intervalControlRule).toContain("padding: 1.78px;");
+    expect(intervalButtonRule).toContain("padding: 1.78px var(--space-2);");
+    expect(intervalButtonRule).toContain("font-size: 0.58rem;");
+    expect(colorModeControlRule).toContain("padding: 1.78px;");
+    expect(colorModeButtonRule).toContain("min-height: 1.08rem;");
+    expect(colorModeButtonRule).toContain("padding: 0.14rem 0.48rem;");
+    expect(colorModeButtonRule).toContain("font-size: 0.54rem;");
+    expect(colorModeButtonRule).toContain("letter-spacing: 0.08em;");
   });
 
   it("tightens only the flow chart shell spacing while preserving cell scale", () => {
