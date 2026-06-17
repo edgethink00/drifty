@@ -2,8 +2,9 @@ use std::path::{Path, PathBuf};
 
 use super::{
     install_model_at_root_with_downloader, managed_ai_catalog, model_dir, read_status,
-    require_model, start_model_at_root, status_for_spec, write_status, ManagedAiDownloadProgress,
-    ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE,
+    require_model, runtime, start_model_at_root, status_for_spec, write_status,
+    ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
+    MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 #[test]
@@ -93,6 +94,29 @@ fn start_requires_runtime_assets() {
 }
 
 #[test]
+fn start_spawns_runtime_for_downloaded_model() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+    let args_path = root.path().join("runtime-args.txt");
+    write_fake_runtime(root.path(), &args_path).expect("write fake runtime");
+
+    let status =
+        start_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("start status");
+    runtime::stop_runtime_for_tests();
+
+    assert!(matches!(
+        status.state,
+        ManagedAiInstallState::Starting | ManagedAiInstallState::Running
+    ));
+    let args = std::fs::read_to_string(args_path).expect("read runtime args");
+    assert!(args.contains("--host\n127.0.0.1"));
+    assert!(args.contains("--port\n39217"));
+    assert!(args.contains("--alias\ndrifty-qwen3.5-4b-local"));
+    assert!(args.contains("Qwen3.5-4B-Q4_K_M.gguf"));
+}
+
+#[test]
 fn read_status_downgrades_stale_installed_empty_model_dir() {
     let root = tempfile::tempdir().expect("create temp root");
     let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
@@ -113,6 +137,51 @@ fn read_status_downgrades_stale_installed_empty_model_dir() {
     assert_eq!(status.message, MANAGED_ASSETS_MISSING_MESSAGE);
 }
 
+#[test]
+fn read_status_downgrades_stale_running_without_runtime_process() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
+    let stale_status = status_for_spec(
+        ManagedAiInstallState::Running,
+        spec,
+        Some(artifact_dir),
+        "Managed local AI runtime is running.",
+    );
+    write_status(root.path(), &stale_status).expect("write stale status");
+
+    let status = read_status(root.path()).expect("read normalized status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert_eq!(status.message, "Managed local AI runtime is not running.");
+}
+
+#[test]
+#[ignore]
+fn qa_starts_real_runtime_from_existing_managed_ai_root() {
+    let root = std::env::var("DRIFTY_MANAGED_AI_QA_ROOT")
+        .map(PathBuf::from)
+        .expect("set DRIFTY_MANAGED_AI_QA_ROOT to the app managed-ai directory");
+    let started = start_model_at_root(&root, "drifty-qwen3-5-2b-economy").expect("start runtime");
+
+    assert!(matches!(
+        started.state,
+        ManagedAiInstallState::Starting | ManagedAiInstallState::Running
+    ));
+
+    let mut status = started;
+    for _ in 0..60 {
+        if matches!(status.state, ManagedAiInstallState::Running) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        status = read_status(&root).expect("read runtime status");
+    }
+    runtime::stop_runtime_for_tests();
+
+    assert!(matches!(status.state, ManagedAiInstallState::Running));
+}
+
 fn fake_download(
     root: &Path,
     spec: ManagedAiModelSpec,
@@ -122,6 +191,30 @@ fn fake_download(
     std::fs::create_dir_all(&artifact_dir)?;
     std::fs::write(artifact_dir.join(spec.file_name), b"gguf")?;
     Ok(artifact_dir)
+}
+
+fn write_fake_runtime(root: &Path, args_path: &Path) -> Result<(), ManagedAiError> {
+    let runtime_dir = root.join("runtime");
+    std::fs::create_dir_all(&runtime_dir)?;
+    let runtime_path = runtime_dir.join("llama-server");
+    let args_path = shell_quote(args_path);
+    std::fs::write(
+        &runtime_path,
+        format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {args_path}\nwhile true; do sleep 5; done\n"),
+    )?;
+    let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(0o755);
+    }
+    std::fs::set_permissions(runtime_path, permissions)?;
+    Ok(())
+}
+
+fn shell_quote(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn progress_reporting_download(

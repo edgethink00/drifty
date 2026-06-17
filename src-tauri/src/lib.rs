@@ -11,13 +11,13 @@ use commands::{
     drift_alarm_action, drift_alarm_current, drift_alarm_dismiss, drift_alarm_hide,
     drift_alarm_show, extreme_nudge_apply, focus_target_activate_browser_tab,
     focus_target_open_app, managed_ai_catalog, managed_ai_delete, managed_ai_install,
-    managed_ai_start, managed_ai_status, setup_drift_alarm_window, setup_watcher_window,
-    system_open_settings_pane, tracker_apply_classification_rules,
-    tracker_delete_activity_segments, tracker_delete_classification_rule, tracker_get_app_icons,
-    tracker_get_classification_metrics, tracker_get_classification_rules,
-    tracker_get_current_snapshot, tracker_get_hourly_summary, tracker_get_raw_events,
-    tracker_get_reusable_ai_classifications, tracker_get_status, tracker_get_timeline,
-    tracker_get_top_sites, tracker_get_unclassified_segments,
+    managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
+    setup_drift_alarm_window, setup_watcher_window, system_open_settings_pane,
+    tracker_apply_classification_rules, tracker_delete_activity_segments,
+    tracker_delete_classification_rule, tracker_get_app_icons, tracker_get_classification_metrics,
+    tracker_get_classification_rules, tracker_get_current_snapshot, tracker_get_hourly_summary,
+    tracker_get_raw_events, tracker_get_reusable_ai_classifications, tracker_get_status,
+    tracker_get_timeline, tracker_get_top_sites, tracker_get_unclassified_segments,
     tracker_refresh_non_ai_classifications, tracker_save_classification_rule,
     tracker_save_classifications, tracker_search_classification_rule_candidates, tracker_start,
     tracker_stop, watcher_peek_dismiss, watcher_peek_end_of_day_review_action, watcher_peek_hide,
@@ -126,6 +126,9 @@ pub fn run() {
                 .on_event(|app, event| match event {
                     tauri::RunEvent::Opened { urls } => {
                         let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
+                    }
+                    tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
+                        managed_ai_stop_runtime_for_app_exit();
                     }
                     tauri::RunEvent::WindowEvent {
                         label,

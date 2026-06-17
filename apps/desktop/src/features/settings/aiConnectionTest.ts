@@ -33,9 +33,15 @@ export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<A
   } catch (error) {
     return {
       kind: "error",
-      message: error instanceof Error ? error.message : "Connection test failed.",
+      message: messageFromConnectionError(error),
     };
   }
+}
+
+function messageFromConnectionError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return "Connection test failed.";
 }
 
 function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unknown> | null {
