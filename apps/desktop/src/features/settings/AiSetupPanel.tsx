@@ -66,13 +66,17 @@ export function AiSetupPanel({
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
-  const [activeSection, setActiveSection] = useState<AiSetupSection>(() => sectionForProvider(localAiSetup.provider));
+  // Which provider is the active one (drives the "Model being used" selector).
+  const [selectedSection, setSelectedSection] = useState<AiSetupSection>(() => sectionForProvider(localAiSetup.provider));
+  // Which provider panel is expanded. Defaults to the active provider — Drifty on
+  // a fresh install, or OpenRouter once the user has switched their primary to it.
+  const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
   const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
   const [driftyRoute, setDriftyRoute] = useState<DriftyRoute>(() => localAiSetup.provider === "managed_local" ? "local" : "cloud");
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
-  const managedLocalAi = useManagedLocalAiSetup(activeSection === "drifty", onLocalAiSetupChange);
+  const managedLocalAi = useManagedLocalAiSetup(expandedSection === "drifty", onLocalAiSetupChange);
   const workProfileSettings = useWorkProfileSettings(workProfileUserId);
 
   useEffect(() => {
@@ -80,11 +84,29 @@ export function AiSetupPanel({
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
 
-  const handleSectionChange = (section: AiSetupSection) => {
-    setActiveSection(section);
-    setConnectionTestResult(null);
+  const selectProvider = (section: AiSetupSection) => {
     const provider = providerForSection(section);
     if (provider) onLocalAiSetupChange((current) => ({ ...current, provider }));
+  };
+
+  // Picking a provider/model in the dropdown selects it and reveals its panel.
+  const handleProviderChange = (section: AiSetupSection) => {
+    setConnectionTestResult(null);
+    setSelectedSection(section);
+    setExpandedSection(section);
+    selectProvider(section);
+  };
+
+  // Clicking a provider bar expands it (and selects it); clicking the already
+  // expanded one collapses it.
+  const handleToggleSection = (section: AiSetupSection) => {
+    setConnectionTestResult(null);
+    const willExpand = expandedSection !== section;
+    setExpandedSection(willExpand ? section : null);
+    if (willExpand) {
+      setSelectedSection(section);
+      selectProvider(section);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -118,19 +140,19 @@ export function AiSetupPanel({
             managedLocalStatus={managedLocalAi.status}
             openRouterModelOptions={modelPickers.openRouterModelOptions}
             openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
-            selectedProvider={activeSection}
+            selectedProvider={selectedSection}
             onDriftyRouteChange={setDriftyRoute}
             onInstallModel={managedLocalAi.installModel}
             onLocalAiSetupChange={onLocalAiSetupChange}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
-            onProviderChange={handleSectionChange}
+            onProviderChange={handleProviderChange}
             onTestConnection={handleTestConnection}
           />
 
           <h4 className="ai-setup-provider-heading">Configure providers</h4>
 
           <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
-            <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={activeSection === "drifty"} onToggle={handleSectionChange}>
+            <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={expandedSection === "drifty"} onToggle={handleToggleSection}>
               <DriftySetupPanel
                 actionModelId={managedLocalAi.actionModelId}
                 aiServerStatusLabel={aiServerStatusLabel}
@@ -158,7 +180,7 @@ export function AiSetupPanel({
                 onStartModel={managedLocalAi.startModel}
               />
             </AiSetupSectionCard>
-            <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} onToggle={handleSectionChange}>
+            <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
                 fallbackCount={modelPickers.openRouterFallbackModels.length}
                 localAiSetup={localAiSetup}

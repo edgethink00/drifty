@@ -70,6 +70,24 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
   });
 
+  it("collapses the expanded provider when its bar is clicked again", () => {
+    renderPanel();
+
+    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
+    const driftyRow = within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i });
+    // Drifty is expanded by default on a fresh (managed local) setup.
+    expect(driftyRow.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
+
+    fireEvent.click(driftyRow);
+    expect(driftyRow.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
+
+    fireEvent.click(driftyRow);
+    expect(driftyRow.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
+  });
+
   it("allows an installed managed local model in the global model picker", async () => {
     renderPanel();
 
