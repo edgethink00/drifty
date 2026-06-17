@@ -11583,11 +11583,47 @@ button.flow-cell:focus {
   line-height: 1.15;
 }
 
-.content--settings .settings-section--general .settings-block:first-child > h3 {
+/* Every settings section emphasizes its first heading as the page title,
+   matching the General section the rest of Settings is modeled on. */
+.content--settings .settings-section .settings-block:first-child > h3 {
   margin-bottom: 0.78rem;
   color: var(--text);
   font-size: 1.18rem;
   font-weight: 700;
+}
+
+/* AI setup: drop the outer settings-block box so the section reads like General
+   (a soft title above clean content rather than a card nested inside a card). */
+.content--settings .settings-section--ai-setup .ai-setup-panel {
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.content--settings .settings-section--ai-setup .ai-setup-panel__header h3 {
+  margin-bottom: 0.78rem;
+  padding-left: 0.5rem;
+  color: var(--text);
+  font-size: 1.18rem;
+  font-weight: 700;
+}
+
+/* Sub-section titles inside AI setup adopt the General soft "title above card" look. */
+.content--settings .settings-section--ai-setup .ai-setup-provider-heading {
+  padding-left: 0.5rem;
+}
+
+.content--settings .settings-section--ai-setup .ai-setup-provider-heading,
+.content--settings .settings-section--ai-setup .ai-setup-current-model h4,
+.content--settings .settings-section--ai-setup .ai-setup-support-zone__header strong {
+  color: var(--text-soft);
+  font-size: 0.94rem;
+  font-weight: 620;
+  letter-spacing: 0;
 }
 
 .content--settings .settings-row {

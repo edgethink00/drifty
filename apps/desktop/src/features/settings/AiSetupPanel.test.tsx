@@ -48,13 +48,10 @@ describe("AiSetupPanel", () => {
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();
     expect(within(driftySettings).queryByLabelText(/Drifty Cloud selected/i)).toBeNull();
     expect(within(driftySettings).queryByLabelText(/Managed local model selected/i)).toBeNull();
-    const gemmaSelector = within(localSettings).getByLabelText(/Select Gemma 3 12B managed local model/i);
-    if (!(gemmaSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
-    expect(gemmaSelector.checked).toBe(false);
-    const qwenDefaultSelector = within(localSettings).getByLabelText(/Select Qwen 3\.5 4B managed local model/i);
-    if (!(qwenDefaultSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
-    expect(qwenDefaultSelector.checked).toBe(false);
-    expect(qwenDefaultSelector.disabled).toBe(true);
+    // Per-model radio selectors were removed; the active model is chosen from the
+    // "Model being used" dropdown, so the cards carry no select input.
+    expect(within(localSettings).queryByLabelText(/Select Gemma 3 12B managed local model/i)).toBeNull();
+    expect(within(localSettings).queryByLabelText(/Select Qwen 3\.5 4B managed local model/i)).toBeNull();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Custom local endpoint settings/i })).toBeNull();
     expect(screen.queryByText(/Custom local endpoint/i)).toBeNull();
@@ -72,6 +69,24 @@ describe("AiSetupPanel", () => {
     expect(providerSelect.textContent).toContain("Drifty");
     expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
+  });
+
+  it("collapses the expanded provider when its bar is clicked again", () => {
+    renderPanel();
+
+    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
+    const driftyRow = within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i });
+    // Drifty is expanded by default on a fresh (managed local) setup.
+    expect(driftyRow.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
+
+    fireEvent.click(driftyRow);
+    expect(driftyRow.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
+
+    fireEvent.click(driftyRow);
+    expect(driftyRow.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
   });
 
   it("allows an installed managed local model in the global model picker", async () => {
@@ -193,7 +208,7 @@ describe("AiSetupPanel", () => {
 
     fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
     fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test-secret" } });
-    fireEvent.click(screen.getByRole("button", { name: /test openrouter connection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /test ai connection/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", expect.objectContaining({
       request: expect.objectContaining({

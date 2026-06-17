@@ -4,17 +4,17 @@
 }
 
 .ai-setup-choice {
-  background: color-mix(in srgb, var(--surface) 94%, var(--bg-2));
-  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
-  border-radius: 12px;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 4%, transparent);
+  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: none;
   min-width: 0;
   overflow: hidden;
 }
 
 .ai-setup-choice.is-expanded {
-  border-color: color-mix(in srgb, var(--text) 14%, var(--line));
-  box-shadow: 0 18px 42px color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: var(--line-strong, color-mix(in srgb, var(--text) 14%, var(--line)));
+  box-shadow: none;
 }
 
 .ai-setup-choice__toggle {
@@ -113,6 +113,5 @@
 }
 
 .ai-setup-choice__panel {
-  border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   padding: 0 var(--space-4) 0.72rem;
 }

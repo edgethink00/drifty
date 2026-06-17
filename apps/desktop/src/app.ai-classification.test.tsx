@@ -1145,8 +1145,8 @@ describe("App AI classification controls", () => {
     fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^AI setup$/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /^OpenRouter setup row$/i }));
-    fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test" } });
+    // OpenRouter is expanded by default because it is the saved provider.
+    fireEvent.change(await screen.findByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test" } });
 
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },

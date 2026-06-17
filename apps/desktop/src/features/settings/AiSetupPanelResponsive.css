@@ -16,15 +16,23 @@
   }
 
   .ai-managed-model {
-    align-items: stretch;
-    gap: var(--space-3);
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "copy"
+      "meta"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-managed-model__meta {
+    justify-items: start;
+  }
+
+  .ai-managed-model__badges {
+    justify-content: flex-start;
   }
 
   .ai-managed-model__actions {
-    grid-column: 1 / -1;
     justify-content: stretch;
-    min-width: 0;
   }
 
   .ai-managed-model__primary-action {
@@ -32,7 +40,10 @@
   }
 
   .ai-managed-model__facts {
-    grid-column: 1 / -1;
+    justify-items: start;
+  }
+
+  .ai-managed-model__facts > div {
     justify-content: flex-start;
   }
 
@@ -43,7 +54,6 @@
   .ai-setup-cloud-route,
   .ai-setup-personalization__footer,
   .ai-setup-support-zone__header,
-  .ai-setup-test-row,
   .ai-setup-work-profile-panel,
   .ai-setup-work-profile-selectors,
   .ai-privacy-review__excluded {

@@ -46,24 +46,31 @@ export function CloudSetupPanel({
   });
   const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
   const handlePrimaryAction = isCurrentCloudPlan ? onRefreshCloudStatus : () => onStartCloudSetup();
+  const statusHeadline = isCurrentTrial
+    ? "1-week free trial is active"
+    : isCurrentCloudPlan
+      ? "Cloud AI is active"
+      : [aiServerStatusLabel, cloudStatusLabel].filter(Boolean).join(" · ");
+  const statusDetail = isCurrentTrial
+    ? formatCloudTrialStartedDetail(cloudTrialEndsAt)
+    : isCurrentCloudPlan
+      ? "Refresh the account entitlement if the status looks stale."
+      : null;
 
   return (
     <div className="ai-setup-detail ai-setup-detail--cloud" role="group" aria-label="Drifty Cloud settings">
-      <div className="ai-setup-detail__summary">
-        <span className="chip green">{aiServerStatusLabel}</span>
-        <span>{cloudStatusLabel}</span>
-        {maskedUserEmail ? <span>{maskedUserEmail}</span> : null}
-        {billingEntitlementError ? <span className="ai-setup-detail__message">{billingEntitlementError}</span> : null}
-      </div>
-      <div className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
-        <div>
-          <strong>{isCurrentTrial ? "1-week free trial is active" : isCurrentCloudPlan ? "Cloud AI is active" : "Continue with Drifty Cloud"}</strong>
-          <p>{isCurrentTrial ? formatCloudTrialStartedDetail(cloudTrialEndsAt) : isCurrentCloudPlan ? "Refresh the account entitlement if the status looks stale." : "Drifty will open the Polar checkout after account sign-in is confirmed."}</p>
+      <article className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
+        <div className="ai-setup-cloud-route__copy">
+          <strong>Drifty Cloud</strong>
+          <p>{statusHeadline}</p>
+          {statusDetail ? <p className="ai-setup-cloud-route__detail">{statusDetail}</p> : null}
+          {maskedUserEmail ? <p className="ai-setup-cloud-route__account">{maskedUserEmail}</p> : null}
+          {billingEntitlementError ? <p className="ai-setup-detail__message">{billingEntitlementError}</p> : null}
         </div>
         <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handlePrimaryAction()} disabled={primaryActionDisabled}>
           {primaryActionLabel}
         </button>
-      </div>
+      </article>
     </div>
   );
 }

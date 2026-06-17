@@ -52,15 +52,21 @@ describe("Settings content styles", () => {
     expect(styles).toContain("border-bottom: 1px solid var(--line);");
   });
 
-  it("emphasizes only the top general settings heading", () => {
+  it("emphasizes the top heading of every settings section", () => {
     const styles = readFileSync("src/styles.css", "utf8");
-    const generalHeadingRule = cssRule(
+    const sectionHeadingRule = cssRule(
       styles,
-      ".content--settings .settings-section--general .settings-block:first-child > h3",
+      ".content--settings .settings-section .settings-block:first-child > h3",
+    );
+    const aiSetupHeadingRule = cssRule(
+      styles,
+      ".content--settings .settings-section--ai-setup .ai-setup-panel__header h3",
     );
 
-    expect(generalHeadingRule).toContain("font-size: 1.18rem;");
-    expect(generalHeadingRule).toContain("font-weight: 700;");
+    expect(sectionHeadingRule).toContain("font-size: 1.18rem;");
+    expect(sectionHeadingRule).toContain("font-weight: 700;");
+    expect(aiSetupHeadingRule).toContain("font-size: 1.18rem;");
+    expect(aiSetupHeadingRule).toContain("font-weight: 700;");
   });
 
   it("keeps settings segmented controls outline-free like AI setup tabs", () => {
@@ -115,28 +121,42 @@ describe("Settings content styles", () => {
     expect(tabListRule).toContain("width: fit-content;");
     expect(tabRule).toContain("border: 1px solid transparent;");
     expect(tabRule).toContain("border-radius: 9px;");
-    expect(tabRule).toContain("font-size: 0.84rem;");
-    expect(tabRule).toContain("min-height: 2.08rem;");
+    expect(tabRule).toContain("font-size: 0.76rem;");
+    expect(tabRule).toContain("min-height: 1.66rem;");
     expect(activeTabRule).toContain("background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));");
     expect(activeTabRule).toContain("color: var(--text);");
     expect(tabPanelRule).toContain("gap: var(--space-4);");
   });
 
-  it("keeps managed local model actions concise", () => {
+  it("places managed local model specs on the right with actions under the copy", () => {
     const aiSetupStyles = readAiSetupStyles();
     const modelRule = cssRule(aiSetupStyles, ".ai-managed-model");
+    const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
     const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__delete-action");
-    const mobilePrimaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
 
-    expect(modelRule).toContain("grid-template-columns: auto minmax(13rem, 1fr) minmax(12rem, 0.68fr) minmax(8.8rem, auto);");
+    // Copy + actions stack on the left; tier and specs span the right; no divider.
+    expect(modelRule).toContain('"copy meta"');
+    expect(modelRule).toContain('"actions meta"');
+    expect(metaRule).toContain("justify-items: end;");
     expect(actionsRule).toContain("display: flex;");
-    expect(actionsRule).toContain("justify-content: flex-end;");
-    expect(actionsRule).toContain("min-width: 8.8rem;");
+    expect(actionsRule).not.toContain("border-top:");
+    expect(actionsRule).not.toContain("min-width: 8.8rem;");
     expect(primaryActionRule).toContain("gap: 0.42rem;");
     expect(deleteActionRule).toContain("width: 2rem;");
-    expect(mobilePrimaryActionRule).toContain("gap: 0.42rem;");
+  });
+
+  it("flattens the managed local section so model cards are not boxed twice", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const statusRule = cssRule(aiSetupStyles, ".ai-managed-status");
+    const routeRule = cssRule(aiSetupStyles, ".ai-setup-route-option");
+
+    expect(statusRule).toContain("background: transparent;");
+    expect(statusRule).toContain("border: 0;");
+    expect(routeRule).toContain("background: transparent;");
+    expect(routeRule).toContain("border: 0;");
+    expect(aiSetupStyles).not.toContain(".ai-setup-route-option.is-selected");
   });
 
   it("uses the focus color for the Cloud setup CTA", () => {

@@ -7,17 +7,23 @@
 }
 
 .ai-setup-support-zone__header {
-  align-items: end;
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
+  align-items: start;
+  display: grid;
+  gap: 0.2rem;
   min-width: 0;
+  padding-left: 0.5rem;
 }
 
 .ai-setup-support-zone__header > div {
   display: grid;
   gap: var(--space-1);
   min-width: 0;
+}
+
+/* Drop the redundant eyebrow so this header matches the single soft-title
+   pattern used across the rest of Settings. */
+.ai-setup-support-zone__header .eyebrow {
+  display: none;
 }
 
 .ai-setup-support-zone__header strong {
@@ -38,27 +44,21 @@
 }
 
 .ai-setup-support-list {
-  background: color-mix(in srgb, var(--surface) 94%, var(--bg-2));
-  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  border-radius: 10px;
   display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ai-setup-support-section {
+  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
+  border: 1px solid var(--line);
+  border-radius: 14px;
   min-width: 0;
   overflow: hidden;
 }
 
-.ai-setup-support-section {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  min-width: 0;
-}
-
-.ai-setup-support-section + .ai-setup-support-section {
-  border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-}
-
 .ai-setup-support-section.is-expanded {
-  background: color-mix(in srgb, var(--bg-2) 36%, var(--surface));
+  border-color: var(--line-strong, color-mix(in srgb, var(--text) 14%, var(--line)));
 }
 
 .ai-setup-support-section__toggle {

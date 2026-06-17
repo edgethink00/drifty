@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
-import { AiSetupConnectionTestRow } from "./AiSetupConnectionTestRow";
 import { ManagedModelActionIcon } from "./ManagedModelActionIcon";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
@@ -9,8 +8,6 @@ import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAi
 export type ManagedLocalAiPanelProps = {
   readonly actionModelId: string | null;
   readonly catalog: readonly ManagedLocalAiModel[];
-  readonly connectionTestMessage: string | null;
-  readonly connectionTestRunning: boolean;
   readonly loading: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly status: ManagedLocalAiStatus | null;
@@ -18,14 +15,11 @@ export type ManagedLocalAiPanelProps = {
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onStartModel: (modelId: string) => void | Promise<void>;
-  readonly onTestConnection: () => void | Promise<void>;
 };
 
 export function ManagedLocalAiPanel({
   actionModelId,
   catalog,
-  connectionTestMessage,
-  connectionTestRunning,
   loading,
   localAiSetup,
   status,
@@ -33,19 +27,10 @@ export function ManagedLocalAiPanel({
   onInstallModel,
   onLocalAiSetupChange,
   onStartModel,
-  onTestConnection,
 }: ManagedLocalAiPanelProps) {
-  const managedConnectionReady = Boolean(localAiSetup.managedLocalBaseUrl.trim() && localAiSetup.managedLocalModel.trim());
-  const managedLocalSelected = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "local";
-  const managedMessage = managedLocalSelected ? connectionTestMessage : null;
-
   return (
     <div className="ai-setup-detail ai-setup-detail--local" role="group" aria-label="Local AI settings">
       <div className="ai-managed-status">
-        <div>
-          <span className="chip green">Managed Local AI</span>
-          <span className="chip gray">{managedStatusLabel(status, loading)}</span>
-        </div>
         <p>{loading ? "Checking managed runtime..." : status?.message ?? "Choose a local model and Drifty will download it inside the app."}</p>
       </div>
 
@@ -64,14 +49,6 @@ export function ManagedLocalAiPanel({
           />
         ))}
       </div>
-
-      <AiSetupConnectionTestRow
-        buttonLabel={connectionTestRunning && managedLocalSelected ? "Testing..." : "Managed runtime test"}
-        disabled={connectionTestRunning || !managedLocalSelected || !managedConnectionReady}
-        message={managedMessage}
-        providerLabel="Managed Local AI"
-        onTestConnection={onTestConnection}
-      />
     </div>
   );
 }
@@ -83,7 +60,6 @@ function ManagedLocalAiModelRow({
   status,
   onDeleteModel,
   onInstallModel,
-  onLocalAiSetupChange,
 }: {
   readonly actionModelId: string | null;
   readonly localAiSetup: LocalAiSetupState;
@@ -122,28 +98,20 @@ function ManagedLocalAiModelRow({
 
   return (
     <article className={`ai-managed-model${isSelected ? " is-selected" : ""}`} aria-label={`${model.label} managed local model`}>
-      <input
-        className="ai-managed-model__selector"
-        type="radio"
-        name="managed-local-model"
-        checked={isSelected}
-        disabled={!selectable}
-        aria-label={`Select ${model.label} managed local model`}
-        onChange={() => onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local", managedLocalModelId: model.id }))}
-      />
       <div className="ai-managed-model__copy">
-        <div>
-          <span className="ai-managed-model__tier">{model.tier}</span>
-          {model.recommended ? <span className="chip green">Recommended</span> : null}
-        </div>
         <strong>{model.label}</strong>
         <p>{model.detail}</p>
       </div>
-      <dl className="ai-managed-model__facts">
-        <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
-        <div><dt>Disk</dt><dd>{model.diskRequired}</dd></div>
-        <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
-      </dl>
+      <div className="ai-managed-model__meta">
+        <div className="ai-managed-model__badges">
+          <span className="ai-managed-model__tier">{model.tier}</span>
+          {model.recommended ? <span className="chip green">Recommended</span> : null}
+        </div>
+        <dl className="ai-managed-model__facts">
+          <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
+          <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
+        </dl>
+      </div>
       <div className="ai-managed-model__actions">
         {hasCurrentRuntime ? (
           <>
@@ -196,34 +164,4 @@ function managedDownloadButtonLabel(isBusy: boolean, isError: boolean, percent: 
   if (isBusy) return percent === null ? "Downloading..." : `Downloading ${percent.toFixed(0)}%`;
   if (isError) return "Retry";
   return "Download";
-}
-
-function managedStatusLabel(status: ManagedLocalAiStatus | null, loading: boolean): string {
-  if (loading) return "Checking";
-  const state = status?.state ?? "not_installed";
-  switch (state) {
-    case "running":
-      return "Running";
-    case "installed":
-      return "Downloaded";
-    case "installing":
-      return "Downloading";
-    case "error":
-      return "Needs runtime";
-    case "not_installed":
-      return "Download";
-    default:
-      return assertNever(state);
-  }
-}
-
-class ManagedLocalAiPanelError extends Error {
-  constructor(readonly state: string) {
-    super(`Unhandled managed local AI state: ${state}`);
-    this.name = "ManagedLocalAiPanelError";
-  }
-}
-
-function assertNever(value: never): never {
-  throw new ManagedLocalAiPanelError(String(value));
 }

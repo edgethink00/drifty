@@ -9,21 +9,20 @@
   gap: var(--space-2);
 }
 
+/* Cloud / local routes read as sections of the expanded provider card rather
+   than nested bordered boxes. Selection is shown with a subtle tint, not a box. */
+/* Cloud / local routes are plain sections of the expanded provider card. The
+   active model is shown by its own radio + the "Model being used" selector, so
+   the route itself needs no box or highlight. */
 .ai-setup-route-option {
   align-items: start;
-  background: color-mix(in srgb, var(--surface) 86%, var(--bg-2));
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  padding: var(--space-3);
-}
-
-.ai-setup-route-option.is-selected {
-  border-color: color-mix(in srgb, var(--productivity-focus) 34%, var(--line));
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--productivity-focus) 7%, transparent);
+  padding: var(--space-2) 0;
 }
 
 .ai-setup-local-divider {
@@ -54,6 +53,10 @@
   font-size: var(--type-setting-desc-size);
 }
 
+.ai-setup-detail__status {
+  color: var(--text-soft);
+}
+
 .ai-setup-detail__message {
   color: #9f3d2d;
   font-family: var(--font-mono);
@@ -72,13 +75,28 @@
 }
 
 .ai-setup-cloud-route {
-  align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  align-items: start;
+  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
+  border: 1px solid var(--line);
+  border-radius: 10px;
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  justify-items: start;
   min-width: 0;
-  padding-top: var(--space-2);
+  padding: var(--space-3);
+}
+
+.ai-setup-cloud-route__copy {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.ai-setup-cloud-route__detail,
+.ai-setup-cloud-route__account {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  margin: 0;
 }
 
 .ai-setup-cloud-route strong {
@@ -130,19 +148,12 @@
 }
 
 .ai-managed-status {
-  background: color-mix(in srgb, var(--bg-2) 42%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
   display: grid;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
-}
-
-.ai-managed-status > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  padding: 0;
 }
 
 .ai-managed-status p,
@@ -160,15 +171,19 @@
 }
 
 .ai-managed-model {
-  align-items: center;
+  align-items: start;
   background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  border-radius: 8px;
+  border-radius: 10px;
+  column-gap: var(--space-3);
   display: grid;
-  gap: var(--space-2);
-  grid-template-columns: auto minmax(13rem, 1fr) minmax(12rem, 0.68fr) minmax(8.8rem, auto);
+  grid-template-areas:
+    "copy meta"
+    "actions meta";
+  grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  row-gap: 0.6rem;
 }
 
 .ai-managed-model.is-selected {
@@ -176,24 +191,11 @@
   box-shadow: 0 6px 14px color-mix(in srgb, var(--productivity-focus) 8%, transparent);
 }
 
-.ai-managed-model__selector {
-  accent-color: var(--productivity-focus);
-  height: 1rem;
-  margin: 0.15rem 0 0;
-  width: 1rem;
-}
-
 .ai-managed-model__copy {
   display: grid;
-  gap: 0.32rem;
+  gap: 0.28rem;
+  grid-area: copy;
   min-width: 0;
-}
-
-.ai-managed-model__copy > div {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 .ai-managed-model__tier {
@@ -214,12 +216,27 @@
   overflow-wrap: anywhere;
 }
 
-.ai-managed-model__facts {
+.ai-managed-model__meta {
+  align-self: start;
+  display: grid;
+  gap: 0.5rem;
+  grid-area: meta;
+  justify-items: end;
+  min-width: 0;
+}
+
+.ai-managed-model__badges {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem var(--space-3);
+  gap: var(--space-2);
   justify-content: flex-end;
+}
+
+.ai-managed-model__facts {
+  display: grid;
+  gap: 0.22rem;
+  justify-items: end;
   margin: 0;
   min-width: 0;
 }
@@ -227,7 +244,8 @@
 .ai-managed-model__facts > div {
   align-items: baseline;
   display: flex;
-  gap: 0.42rem;
+  gap: 0.5rem;
+  justify-content: flex-end;
   white-space: nowrap;
 }
 
@@ -249,11 +267,12 @@
 
 .ai-managed-model__actions {
   align-items: center;
+  align-self: end;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.36rem;
-  justify-content: flex-end;
-  min-width: 8.8rem;
+  gap: 0.4rem;
+  grid-area: actions;
+  justify-content: flex-start;
 }
 
 .ai-managed-model__actions .settings-btn {
@@ -309,34 +328,6 @@
   flex-basis: 100%;
   font-size: var(--type-caption-size);
   line-height: 1.25;
-  text-align: right;
+  text-align: left;
   width: 100%;
-}
-
-.ai-setup-test-row {
-  align-items: center;
-  background: color-mix(in srgb, var(--bg-2) 44%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 10px;
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  padding: var(--space-3);
-}
-
-.ai-setup-test-row strong {
-  color: var(--text);
-  display: block;
-  font-size: var(--type-setting-label-size);
-  font-weight: 650;
-  letter-spacing: 0;
-  margin-bottom: 0.2rem;
-}
-
-.ai-setup-test-row p {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.42;
-  margin: 0;
 }
