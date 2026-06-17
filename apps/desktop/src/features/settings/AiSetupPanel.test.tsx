@@ -47,13 +47,10 @@ describe("AiSetupPanel", () => {
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();
     expect(within(driftySettings).queryByLabelText(/Drifty Cloud selected/i)).toBeNull();
     expect(within(driftySettings).queryByLabelText(/Managed local model selected/i)).toBeNull();
-    const gemmaSelector = within(localSettings).getByLabelText(/Select Gemma 3 12B managed local model/i);
-    if (!(gemmaSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
-    expect(gemmaSelector.checked).toBe(false);
-    const qwenDefaultSelector = within(localSettings).getByLabelText(/Select Qwen 3\.5 4B managed local model/i);
-    if (!(qwenDefaultSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
-    expect(qwenDefaultSelector.checked).toBe(false);
-    expect(qwenDefaultSelector.disabled).toBe(true);
+    // Per-model radio selectors were removed; the active model is chosen from the
+    // "Model being used" dropdown, so the cards carry no select input.
+    expect(within(localSettings).queryByLabelText(/Select Gemma 3 12B managed local model/i)).toBeNull();
+    expect(within(localSettings).queryByLabelText(/Select Qwen 3\.5 4B managed local model/i)).toBeNull();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Custom local endpoint settings/i })).toBeNull();
     expect(screen.queryByText(/Custom local endpoint/i)).toBeNull();

@@ -50,13 +50,12 @@ export function CloudSetupPanel({
   return (
     <div className="ai-setup-detail ai-setup-detail--cloud" role="group" aria-label="Drifty Cloud settings">
       <div className="ai-setup-detail__summary">
-        <span className="chip green">{aiServerStatusLabel}</span>
-        <span>{cloudStatusLabel}</span>
+        <span className="ai-setup-detail__status">{[aiServerStatusLabel, cloudStatusLabel].filter(Boolean).join(" · ")}</span>
         {maskedUserEmail ? <span>{maskedUserEmail}</span> : null}
         {billingEntitlementError ? <span className="ai-setup-detail__message">{billingEntitlementError}</span> : null}
       </div>
       <div className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
-        <div>
+        <div className="ai-setup-cloud-route__copy">
           <strong>{isCurrentTrial ? "1-week free trial is active" : isCurrentCloudPlan ? "Cloud AI is active" : "Continue with Drifty Cloud"}</strong>
           <p>{isCurrentTrial ? formatCloudTrialStartedDetail(cloudTrialEndsAt) : isCurrentCloudPlan ? "Refresh the account entitlement if the status looks stale." : "Drifty will open the Polar checkout after account sign-in is confirmed."}</p>
         </div>

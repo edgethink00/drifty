@@ -15,12 +15,15 @@
     justify-self: center;
   }
 
-  .ai-managed-model__head {
-    grid-template-columns: auto minmax(0, 1fr);
+  .ai-managed-model {
+    grid-template-areas:
+      "copy"
+      "meta"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .ai-managed-model__meta {
-    grid-column: 1 / -1;
     justify-items: start;
   }
 

@@ -121,8 +121,8 @@ describe("Settings content styles", () => {
     expect(tabListRule).toContain("width: fit-content;");
     expect(tabRule).toContain("border: 1px solid transparent;");
     expect(tabRule).toContain("border-radius: 9px;");
-    expect(tabRule).toContain("font-size: 0.84rem;");
-    expect(tabRule).toContain("min-height: 2.08rem;");
+    expect(tabRule).toContain("font-size: 0.76rem;");
+    expect(tabRule).toContain("min-height: 1.66rem;");
     expect(activeTabRule).toContain("background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));");
     expect(activeTabRule).toContain("color: var(--text);");
     expect(tabPanelRule).toContain("gap: var(--space-4);");
@@ -137,8 +137,8 @@ describe("Settings content styles", () => {
     const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__delete-action");
 
     // Copy + actions stack on the left; tier and specs span the right; no divider.
-    expect(modelRule).toContain('"selector copy meta"');
-    expect(modelRule).toContain('"selector actions meta"');
+    expect(modelRule).toContain('"copy meta"');
+    expect(modelRule).toContain('"actions meta"');
     expect(metaRule).toContain("justify-items: end;");
     expect(actionsRule).toContain("display: flex;");
     expect(actionsRule).not.toContain("border-top:");
