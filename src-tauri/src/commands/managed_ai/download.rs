@@ -1,23 +1,30 @@
 use std::fs::{self, File};
-use std::io;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use super::{ManagedAiError, ManagedAiModelSpec};
+use super::{ManagedAiDownloadProgress, ManagedAiError, ManagedAiModelSpec};
 
+const DOWNLOAD_BUFFER_SIZE: usize = 64 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = "Drifty managed local AI downloader";
 
 pub(super) fn download_model_artifact(
     root: &Path,
     spec: ManagedAiModelSpec,
+    progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
 ) -> Result<PathBuf, ManagedAiError> {
     let staging_dir = root.join("downloads").join(spec.id);
     let artifact_dir = root.join("models").join(spec.id);
     reset_dir(&staging_dir)?;
 
     let staged_file = staging_dir.join(spec.file_name);
-    let bytes_written = download_to_path(spec.download_url, &staged_file)?;
+    let bytes_written = download_to_path(
+        spec.download_url,
+        spec.expected_size_bytes,
+        &staged_file,
+        progress,
+    )?;
     verify_download_size(spec, bytes_written, &staged_file)?;
 
     if artifact_dir.exists() {
@@ -36,14 +43,35 @@ fn reset_dir(path: &Path) -> Result<(), ManagedAiError> {
     Ok(())
 }
 
-fn download_to_path(url: &str, path: &Path) -> Result<u64, ManagedAiError> {
+fn download_to_path(
+    url: &str,
+    total_bytes: u64,
+    path: &Path,
+    progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<u64, ManagedAiError> {
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .user_agent(USER_AGENT)
         .build()?;
     let mut response = client.get(url).send()?.error_for_status()?;
     let mut file = File::create(path)?;
-    let bytes_written = io::copy(&mut response, &mut file)?;
+    let mut bytes_written = 0_u64;
+    let mut buffer = [0_u8; DOWNLOAD_BUFFER_SIZE];
+    loop {
+        let bytes_read = response.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..bytes_read])?;
+        let chunk_size = u64::try_from(bytes_read).map_err(|_| {
+            ManagedAiError::DownloadFailed("download chunk size overflowed".to_string())
+        })?;
+        bytes_written = bytes_written.saturating_add(chunk_size);
+        progress(ManagedAiDownloadProgress::from_counts(
+            bytes_written,
+            total_bytes,
+        ))?;
+    }
     file.sync_all()?;
     Ok(bytes_written)
 }

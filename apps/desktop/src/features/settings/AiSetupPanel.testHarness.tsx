@@ -4,22 +4,25 @@ import { vi } from "vitest";
 
 import { AiSetupPanel } from "./AiSetupPanel";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
+import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
 
-const { invokeMock, revealItemInDirMock } = vi.hoisted(() => {
+const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock } = vi.hoisted(() => {
   const managedCatalog = [
     { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", recommended: false },
     { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", recommended: true },
     { id: "drifty-gemma-4-12b-local", tier: "gemma", label: "Gemma 3 12B", detail: "Mid-sized Gemma 3 local model.", downloadSize: "~8.0 GB", diskRequired: "16 GB free", minimumMemory: "24 GB RAM", recommended: false },
     { id: "drifty-qwen3-6-27b-smart", tier: "smart", label: "Qwen 3.6 27B", detail: "Stronger local model.", downloadSize: "~15 GB", diskRequired: "30 GB free", minimumMemory: "36 GB RAM", recommended: false },
   ] as const;
-  const managedStatus = {
+  const defaultManagedStatus: ManagedLocalAiStatus = {
     state: "not_installed",
     selectedModelId: null,
     baseUrl: null,
     model: null,
     message: "Choose a local model and Drifty will download it inside the app.",
     artifactDir: null,
-  } as const;
+    progress: null,
+  };
+  let managedStatus: ManagedLocalAiStatus = defaultManagedStatus;
 
   function modelIdFromArgs(args: unknown): string {
     if (!args || typeof args !== "object" || !("modelId" in args) || typeof args.modelId !== "string") return "";
@@ -43,6 +46,7 @@ const { invokeMock, revealItemInDirMock } = vi.hoisted(() => {
             model: "drifty-qwen3.5-4b-local",
             message: "Managed local model downloaded.",
             artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
+            progress: null,
           });
         }
         case "managed_ai_start":
@@ -55,11 +59,17 @@ const { invokeMock, revealItemInDirMock } = vi.hoisted(() => {
           return Promise.resolve({});
       }
     }),
+    resetManagedStatusMock: () => {
+      managedStatus = defaultManagedStatus;
+    },
     revealItemInDirMock: vi.fn().mockResolvedValue(undefined),
+    setManagedStatusMock: (nextStatus: ManagedLocalAiStatus) => {
+      managedStatus = nextStatus;
+    },
   };
 });
 
-export { invokeMock, revealItemInDirMock };
+export { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock };
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,

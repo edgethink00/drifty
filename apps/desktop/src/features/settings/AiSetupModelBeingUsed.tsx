@@ -153,19 +153,27 @@ function driftyModelOptions(
     ...catalog.map((model) => {
       const selectable = isSelectableManagedModel(model.id, status);
       if (selectable) return { value: model.id, label: model.label };
+      const installing = status?.selectedModelId === model.id && status.state === "installing";
+      const failed = status?.selectedModelId === model.id && status.state === "error";
       return {
         value: model.id,
         label: model.label,
         disabled: true,
-        actionLabel: actionModelId === model.id ? "Downloading..." : "Download",
+        actionLabel: modelActionLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null),
         actionAriaLabel: `Download ${model.label} managed local model`,
-        actionDisabled: Boolean(actionModelId),
+        actionDisabled: Boolean(actionModelId) || status?.state === "installing",
         onAction: (modelId: string) => {
           void onInstallModel(modelId);
         },
       };
     }),
   ];
+}
+
+function modelActionLabel(isBusy: boolean, failed: boolean, percent: number | null): string {
+  if (isBusy) return percent === null ? "Downloading..." : `Downloading ${percent.toFixed(0)}%`;
+  if (failed) return "Retry";
+  return "Download";
 }
 
 function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
