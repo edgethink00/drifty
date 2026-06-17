@@ -105,6 +105,12 @@ vi.mock("./lib/api/trackerClient", () => ({
   trackerClient: {
     getStatus: trackerGetStatus,
     getTimeline: vi.fn().mockResolvedValue([]),
+    getLiveTail: vi.fn().mockResolvedValue({
+      running: false,
+      trackerMode: "tracking",
+      lastEventAt: null,
+      segments: [],
+    }),
     getCurrentSnapshot: vi.fn().mockResolvedValue(null),
     getHourlySummary: trackerGetHourlySummary,
     getTopSites: vi.fn().mockResolvedValue([]),

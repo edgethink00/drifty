@@ -49,6 +49,7 @@ const { accessibilityClient, authState, billingMocks, processMocks, trackerClien
     trackerClient: {
       getStatus: vi.fn(),
       getTimeline: vi.fn(),
+      getLiveTail: vi.fn(),
       getCurrentSnapshot: vi.fn(),
       getHourlySummary: vi.fn(),
       getTopSites: vi.fn(),
@@ -135,6 +136,12 @@ describe("App settings sidebar", () => {
       trackerMode: "unavailable",
     });
     trackerClient.getTimeline.mockResolvedValue([]);
+    trackerClient.getLiveTail.mockResolvedValue({
+      running: false,
+      trackerMode: "tracking",
+      lastEventAt: null,
+      segments: [],
+    });
     trackerClient.getCurrentSnapshot.mockResolvedValue(null);
     trackerClient.getHourlySummary.mockResolvedValue([]);
     trackerClient.getTopSites.mockResolvedValue([]);

@@ -14,6 +14,16 @@ pub struct DayQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LiveTailQuery {
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub after_segment_id: Option<String>,
+    pub after_ended_at: Option<String>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RawEventsQuery {
     pub day: Option<String>,
     pub start: Option<String>,
@@ -129,6 +139,29 @@ pub async fn tracker_get_timeline(
     async_runtime::spawn_blocking(move || {
         controller
             .get_timeline(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_live_tail(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: LiveTailQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_live_tail(
+                &app,
+                query.start,
+                query.end,
+                query.after_segment_id,
+                query.after_ended_at,
+                query.limit,
+            )
             .map_err(|error| error.to_string())
     })
     .await

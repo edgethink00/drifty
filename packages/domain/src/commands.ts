@@ -5,6 +5,7 @@ export type TrackerCommand =
   | "tracker_start"
   | "tracker_stop"
   | "tracker_get_timeline"
+  | "tracker_get_live_tail"
   | "tracker_get_current_snapshot"
   | "tracker_get_hourly_summary"
   | "tracker_get_raw_events"
@@ -33,6 +34,12 @@ export interface DateRangeQuery {
 }
 
 export type TimelineQuery = DayQuery | DateRangeQuery;
+
+export interface LiveTailQuery extends Partial<DateRangeQuery> {
+  afterSegmentId?: string | null;
+  afterEndedAt?: string | null;
+  limit?: number;
+}
 
 export type RawEventsQuery = (DayQuery | DateRangeQuery) & {
   limit?: number;
@@ -142,11 +149,19 @@ export interface DriftAlarmTrayStatus {
 
 export type AppIconMap = Record<string, string | null>;
 
+export interface TrackerLiveTail {
+  running: boolean;
+  trackerMode?: string | null;
+  lastEventAt?: string | null;
+  segments: ActivitySegment[];
+}
+
 export interface TrackerApi {
   getStatus(): Promise<TrackerStatus>;
   start(): Promise<TrackerStatus>;
   stop(): Promise<TrackerStatus>;
   getTimeline(query: TimelineQuery): Promise<ActivitySegment[]>;
+  getLiveTail(query: LiveTailQuery): Promise<TrackerLiveTail>;
   getCurrentSnapshot(): Promise<CurrentActivitySnapshot | null>;
   getHourlySummary(query: TimelineQuery): Promise<HourBucket[]>;
   getRawEvents(query: RawEventsQuery): Promise<ActivitySegment[]>;

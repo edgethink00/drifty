@@ -25,6 +25,7 @@
     "allow-tracker-start",
     "allow-tracker-stop",
     "allow-tracker-get-timeline",
+    "allow-tracker-get-live-tail",
     "allow-tracker-get-current-snapshot",
     "allow-tracker-get-hourly-summary",
     "allow-tracker-get-raw-events",
