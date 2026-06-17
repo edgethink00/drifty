@@ -1,0 +1,133 @@
+import { classifyActivityDetailed, type ActivityClassificationRecord, type ActivitySegment } from "@drifty/domain";
+import { describe, expect, it } from "vitest";
+import {
+  BUILT_IN_HEURISTIC_TAXONOMY_VERSION,
+  materializeBuiltInHeuristicClassifications,
+} from "./heuristicClassificationMaterialization";
+
+const CLASSIFIED_AT = "2026-06-18T00:00:00.000Z";
+
+function segment(overrides: Partial<ActivitySegment>): ActivitySegment {
+  return {
+    id: "segment-1",
+    startedAt: "2026-06-18T00:00:00.000Z",
+    endedAt: "2026-06-18T00:05:00.000Z",
+    durationSeconds: 300,
+    appName: "Unknown",
+    bundleId: null,
+    windowTitle: null,
+    browserName: null,
+    siteDomain: null,
+    siteTitle: null,
+    siteUrl: null,
+    platform: "macos",
+    source: "nsworkspace",
+    classification: null,
+    ...overrides,
+  };
+}
+
+function storedClassification(
+  source: ActivityClassificationRecord["source"],
+  overrides: Partial<NonNullable<ActivitySegment["classification"]>> = {},
+): NonNullable<ActivitySegment["classification"]> {
+  return {
+    category: "workspace",
+    productivity: "focus",
+    source,
+    confidence: 0.9,
+    reason: "Stored test classification",
+    model: null,
+    promptVersion: null,
+    taxonomyVersion: "v1",
+    inputFingerprint: "stored:test",
+    classifiedAt: CLASSIFIED_AT,
+    aiResult: source === "llm",
+    stale: false,
+    ...overrides,
+  };
+}
+
+describe("materializeBuiltInHeuristicClassifications", () => {
+  it("stores app domain and youtube built-in heuristic results when no authoritative row exists", () => {
+    const appSegment = segment({ id: "app", appName: "Xcode", bundleId: "com.apple.dt.xcode" });
+    const domainSegment = segment({
+      id: "domain",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "developer.mozilla.org",
+      siteTitle: "MDN",
+    });
+    const youtubeSegment = segment({
+      id: "youtube",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteUrl: "https://www.youtube.com/watch?v=abc",
+      youtubeVideoId: "abc",
+      youtubeCategory: "Education",
+    });
+    const unknownSegment = segment({ id: "unknown", appName: "Made Up App" });
+
+    const result = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      classificationOptions: { rules: [] },
+      segments: [appSegment, domainSegment, youtubeSegment, unknownSegment],
+    });
+
+    expect(result.classifications).toEqual([
+      expect.objectContaining({ segmentId: "app", source: "app-db", category: "workspace", productivity: "focus" }),
+      expect.objectContaining({ segmentId: "domain", source: "domain-db", category: "learning", productivity: "focus" }),
+      expect.objectContaining({ segmentId: "youtube", source: "youtube", category: "learning", productivity: "focus" }),
+    ]);
+    expect(result.classifications.every((record) => record.taxonomyVersion === BUILT_IN_HEURISTIC_TAXONOMY_VERSION)).toBe(true);
+    expect(result.segments.find((item) => item.id === "app")?.classification?.source).toBe("app-db");
+    expect(result.segments.find((item) => item.id === "unknown")?.classification).toBeNull();
+  });
+
+  it("does not overwrite manual AI or persisted custom rule classifications", () => {
+    const segments = [
+      segment({ id: "manual", appName: "Xcode", classification: storedClassification("manual") }),
+      segment({ id: "ai", appName: "Xcode", classification: storedClassification("llm") }),
+      segment({ id: "custom-rule", appName: "Xcode", classification: storedClassification("rule", { classificationRuleId: "rule-1" }) }),
+      segment({ id: "stamped-rule", appName: "Xcode", classification: storedClassification("rule", { classificationRuleId: null }) }),
+    ];
+
+    const result = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      classificationOptions: { rules: [] },
+      segments,
+    });
+
+    expect(result.classifications).toEqual([
+      expect.objectContaining({ segmentId: "stamped-rule", source: "app-db" }),
+    ]);
+    expect(result.segments.find((item) => item.id === "manual")?.classification?.source).toBe("manual");
+    expect(result.segments.find((item) => item.id === "ai")?.classification?.source).toBe("llm");
+    expect(result.segments.find((item) => item.id === "custom-rule")?.classification?.source).toBe("rule");
+  });
+
+  it("reuses stored built-in sources without falling back to generic stored classification", () => {
+    const persistedDomainSegment = segment({
+      id: "persisted-domain",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "developer.mozilla.org",
+      classification: storedClassification("domain-db", {
+        category: "learning",
+        productivity: "focus",
+        taxonomyVersion: BUILT_IN_HEURISTIC_TAXONOMY_VERSION,
+      }),
+    });
+
+    const classification = classifyActivityDetailed(persistedDomainSegment);
+    const result = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      segments: [persistedDomainSegment],
+    });
+
+    expect(classification).toMatchObject({ source: "domain-db", category: "learning", productivity: "focus" });
+    expect(result.classifications).toEqual([]);
+    expect(result.segments[0]).toBe(persistedDomainSegment);
+  });
+});
