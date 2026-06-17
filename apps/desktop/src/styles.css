@@ -418,12 +418,15 @@ input, textarea { color: inherit; }
   --ai-connection-bg: color-mix(in srgb, var(--surface-strong) 72%, transparent);
   --ai-connection-line: color-mix(in srgb, var(--line-strong) 72%, transparent);
   align-items: center;
+  appearance: none;
   align-self: center;
   background: var(--ai-connection-bg);
   border: 1px solid var(--ai-connection-line);
   border-radius: 999px;
   color: var(--window-chrome-icon);
+  cursor: pointer;
   display: inline-grid;
+  font: inherit;
   gap: 6px;
   grid-template-columns: 7px auto minmax(0, auto);
   height: 22px;
@@ -432,10 +435,25 @@ input, textarea { color: inherit; }
   padding: 0 9px;
 }
 
+.ai-connection-status:hover {
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--ai-connection-dot) 14%, transparent);
+}
+
+.ai-connection-status:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ai-connection-dot) 48%, transparent);
+  outline-offset: 2px;
+}
+
 .ai-connection-status[data-tone="ok"] {
   --ai-connection-dot: var(--productivity-focus);
   --ai-connection-bg: color-mix(in srgb, var(--productivity-focus-soft) 52%, transparent);
   --ai-connection-line: color-mix(in srgb, var(--productivity-focus) 22%, transparent);
+}
+
+.ai-connection-status[data-tone="warning"] {
+  --ai-connection-dot: var(--warning, #b7791f);
+  --ai-connection-bg: color-mix(in srgb, var(--ai-connection-dot) 13%, var(--surface-strong));
+  --ai-connection-line: color-mix(in srgb, var(--ai-connection-dot) 30%, transparent);
 }
 
 .ai-connection-status[data-tone="error"] {
@@ -471,6 +489,7 @@ input, textarea { color: inherit; }
   color: var(--text-soft);
 }
 
+.ai-connection-status[data-tone="warning"] .ai-connection-status__provider,
 .ai-connection-status[data-tone="error"] .ai-connection-status__provider {
   color: var(--ai-connection-dot);
   font-weight: 650;

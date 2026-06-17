@@ -227,7 +227,7 @@ describe("AiSetupPanel", () => {
   });
 
   it("tests the selected local provider connection without saving secret material", async () => {
-    renderPanel();
+    const { onLocalAiConnectionTestResult } = renderPanel();
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
 
     fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
@@ -241,6 +241,13 @@ describe("AiSetupPanel", () => {
       }),
     })));
     expect(await screen.findByText(/connected in 42 ms/i)).toBeTruthy();
+    expect(onLocalAiConnectionTestResult).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openrouter_byok",
+      openRouterApiKey: "sk-or-v1-test-secret",
+    }), {
+      kind: "success",
+      message: "Connected in 42 ms.",
+    });
     expect(window.localStorage.getItem("drifty.aiSetup.v1") ?? "").not.toContain("sk-or-v1-test-secret");
   });
 
