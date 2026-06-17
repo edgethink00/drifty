@@ -31,7 +31,7 @@ describe("AiSetupPanel", () => {
     expect(modelSelect.textContent).toContain("Drifty Cloud");
 
     fireEvent.click(modelSelect);
-    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 3 12B$/i });
     if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
     expect(gemmaOption.disabled).toBe(true);
     expect(modelBeingUsed.textContent).not.toMatch(/download required/i);
@@ -43,11 +43,11 @@ describe("AiSetupPanel", () => {
     const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
     expect(within(driftySettings).getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i })).toBeTruthy();
-    expect(within(localSettings).getByRole("article", { name: /Gemma 4 12B managed local model/i })).toBeTruthy();
+    expect(within(localSettings).getByRole("article", { name: /Gemma 3 12B managed local model/i })).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();
     expect(within(driftySettings).queryByLabelText(/Drifty Cloud selected/i)).toBeNull();
     expect(within(driftySettings).queryByLabelText(/Managed local model selected/i)).toBeNull();
-    const gemmaSelector = within(localSettings).getByLabelText(/Select Gemma 4 12B managed local model/i);
+    const gemmaSelector = within(localSettings).getByLabelText(/Select Gemma 3 12B managed local model/i);
     if (!(gemmaSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
     expect(gemmaSelector.checked).toBe(false);
     const qwenDefaultSelector = within(localSettings).getByLabelText(/Select Qwen 3\.5 4B managed local model/i);
@@ -97,11 +97,11 @@ describe("AiSetupPanel", () => {
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
-    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 3 12B$/i });
     if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
     expect(gemmaOption.disabled).toBe(true);
 
-    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Gemma 4 12B managed local model$/i }));
+    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Gemma 3 12B managed local model$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
   });
