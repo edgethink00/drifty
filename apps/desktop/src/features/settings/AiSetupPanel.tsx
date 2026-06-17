@@ -110,6 +110,9 @@ export function AiSetupPanel({
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
+            connectionTestMessage={connectionTestResult?.message ?? null}
+            connectionTestRunning={connectionTestRunning}
+            connectionTestDisabled={connectionTestRunning || !isActiveProviderTestable(localAiSetup)}
             driftyRoute={driftyRoute}
             localAiSetup={localAiSetup}
             managedLocalStatus={managedLocalAi.status}
@@ -121,6 +124,7 @@ export function AiSetupPanel({
             onLocalAiSetupChange={onLocalAiSetupChange}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleSectionChange}
+            onTestConnection={handleTestConnection}
           />
 
           <h4 className="ai-setup-provider-heading">Configure providers</h4>
@@ -138,8 +142,6 @@ export function AiSetupPanel({
                 cloudStatusRefreshing={cloudStatusRefreshing}
                 cloudStatusLabel={cloudStatusLabel}
                 cloudTrialEndsAt={cloudTrialEndsAt}
-                connectionTestMessage={connectionTestResult?.message ?? null}
-                connectionTestRunning={connectionTestRunning}
                 currentBillingPlan={currentBillingPlan}
                 isSupabaseConfigured={isSupabaseConfigured}
                 loading={managedLocalAi.loading}
@@ -154,19 +156,15 @@ export function AiSetupPanel({
                 onRefreshCloudStatus={onRefreshCloudStatus}
                 onStartCloudSetup={onStartCloudSetup}
                 onStartModel={managedLocalAi.startModel}
-                onTestConnection={handleTestConnection}
               />
             </AiSetupSectionCard>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={activeSection === "openrouter"} onToggle={handleSectionChange}>
               <OpenRouterSetupPanel
-                connectionTestMessage={connectionTestResult?.message ?? null}
-                connectionTestRunning={connectionTestRunning}
                 fallbackCount={modelPickers.openRouterFallbackModels.length}
                 localAiSetup={localAiSetup}
                 primaryModel={modelPickers.openRouterPrimaryModel}
                 onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
                 onLocalAiSetupChange={onLocalAiSetupChange}
-                onTestConnection={handleTestConnection}
               />
             </AiSetupSectionCard>
           </div>
@@ -207,6 +205,18 @@ export function AiSetupPanel({
       ) : null}
     </div>
   );
+}
+
+function isActiveProviderTestable(setup: LocalAiSetupState): boolean {
+  switch (setup.provider) {
+    case "openrouter_byok":
+      return Boolean(setup.openRouterApiKey.trim());
+    case "managed_local":
+    case "self_hosted":
+      return Boolean(setup.managedLocalBaseUrl.trim() && setup.managedLocalModel.trim());
+    default:
+      return false;
+  }
 }
 
 function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {

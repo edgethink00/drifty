@@ -7,8 +7,6 @@ import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAi
 export type ManagedLocalAiPanelProps = {
   readonly actionModelId: string | null;
   readonly catalog: readonly ManagedLocalAiModel[];
-  readonly connectionTestMessage: string | null;
-  readonly connectionTestRunning: boolean;
   readonly loading: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly status: ManagedLocalAiStatus | null;
@@ -16,14 +14,11 @@ export type ManagedLocalAiPanelProps = {
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onStartModel: (modelId: string) => void | Promise<void>;
-  readonly onTestConnection: () => void | Promise<void>;
 };
 
 export function ManagedLocalAiPanel({
   actionModelId,
   catalog,
-  connectionTestMessage,
-  connectionTestRunning,
   loading,
   localAiSetup,
   status,
@@ -31,24 +26,11 @@ export function ManagedLocalAiPanel({
   onInstallModel,
   onLocalAiSetupChange,
   onStartModel,
-  onTestConnection,
 }: ManagedLocalAiPanelProps) {
-  const managedConnectionReady = Boolean(localAiSetup.managedLocalBaseUrl.trim() && localAiSetup.managedLocalModel.trim());
-  const managedMessage = localAiSetup.provider === "managed_local" ? connectionTestMessage : null;
-
   return (
     <div className="ai-setup-detail ai-setup-detail--local" role="group" aria-label="Local AI settings">
       <div className="ai-managed-status">
-        <p>{loading ? "Checking managed runtime..." : managedMessage ?? status?.message ?? "Choose a local model and Drifty will download it inside the app."}</p>
-        <button
-          type="button"
-          className="settings-btn"
-          aria-label="Test Managed Local AI connection"
-          disabled={connectionTestRunning || !managedConnectionReady}
-          onClick={() => void onTestConnection()}
-        >
-          {connectionTestRunning && localAiSetup.provider === "managed_local" ? "Testing..." : "Test runtime"}
-        </button>
+        <p>{loading ? "Checking managed runtime..." : status?.message ?? "Choose a local model and Drifty will download it inside the app."}</p>
       </div>
 
       <div className="ai-managed-model-list" aria-label="Managed local model choices">

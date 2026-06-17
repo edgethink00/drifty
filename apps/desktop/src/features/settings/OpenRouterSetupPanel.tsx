@@ -1,31 +1,22 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import { AiSetupConnectionTestRow } from "./AiSetupConnectionTestRow";
 import type { LocalAiSetupState } from "./localAiSetup";
 
 type OpenRouterSetupPanelProps = {
-  readonly connectionTestMessage: string | null;
-  readonly connectionTestRunning: boolean;
   readonly fallbackCount: number;
   readonly localAiSetup: LocalAiSetupState;
   readonly primaryModel: string;
   readonly onChooseModels: () => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
-  readonly onTestConnection: () => void | Promise<void>;
 };
 
 export function OpenRouterSetupPanel({
-  connectionTestMessage,
-  connectionTestRunning,
   fallbackCount,
   localAiSetup,
   primaryModel,
   onChooseModels,
   onLocalAiSetupChange,
-  onTestConnection,
 }: OpenRouterSetupPanelProps) {
-  const testDisabled = connectionTestRunning || !localAiSetup.openRouterApiKey.trim();
-
   return (
     <div className="ai-setup-detail" role="group" aria-label="OpenRouter BYOK settings">
       <label className="ai-setup-field">
@@ -47,13 +38,6 @@ export function OpenRouterSetupPanel({
         </div>
         <button type="button" className="settings-btn" aria-label="Choose OpenRouter models" onClick={onChooseModels}>Choose models</button>
       </div>
-      <AiSetupConnectionTestRow
-        buttonLabel={connectionTestRunning ? "Testing..." : "Test connection"}
-        message={connectionTestMessage}
-        providerLabel="OpenRouter"
-        disabled={testDisabled}
-        onTestConnection={onTestConnection}
-      />
     </div>
   );
 }

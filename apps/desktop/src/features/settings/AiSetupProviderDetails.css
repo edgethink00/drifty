@@ -137,18 +137,12 @@
 }
 
 .ai-managed-status {
-  align-items: center;
   background: transparent;
   border: 0;
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
+  display: grid;
+  gap: var(--space-2);
   min-width: 0;
   padding: 0;
-}
-
-.ai-managed-status > .settings-btn {
-  flex: 0 0 auto;
 }
 
 .ai-managed-status p,
@@ -313,32 +307,4 @@
   line-height: 1.25;
   text-align: left;
   width: 100%;
-}
-
-.ai-setup-test-row {
-  align-items: center;
-  background: color-mix(in srgb, var(--bg-2) 44%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 10px;
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  padding: var(--space-3);
-}
-
-.ai-setup-test-row strong {
-  color: var(--text);
-  display: block;
-  font-size: var(--type-setting-label-size);
-  font-weight: 650;
-  letter-spacing: 0;
-  margin-bottom: 0.2rem;
-}
-
-.ai-setup-test-row p {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.42;
-  margin: 0;
 }

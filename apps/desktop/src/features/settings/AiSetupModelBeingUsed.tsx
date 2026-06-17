@@ -24,11 +24,15 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
   readonly actionModelId: string | null;
+  readonly connectionTestMessage: string | null;
+  readonly connectionTestRunning: boolean;
+  readonly connectionTestDisabled: boolean;
   readonly onDriftyRouteChange: (route: DriftyRoute) => void;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onOpenRouterPrimaryModelChange: (modelId: string) => void;
   readonly onProviderChange: (provider: AiSetupSection) => void;
+  readonly onTestConnection: () => void | Promise<void>;
 };
 
 export function AiSetupModelBeingUsed({
@@ -40,11 +44,15 @@ export function AiSetupModelBeingUsed({
   openRouterPrimaryModel,
   selectedProvider,
   actionModelId,
+  connectionTestMessage,
+  connectionTestRunning,
+  connectionTestDisabled,
   onDriftyRouteChange,
   onInstallModel,
   onLocalAiSetupChange,
   onOpenRouterPrimaryModelChange,
   onProviderChange,
+  onTestConnection,
 }: AiSetupModelBeingUsedProps) {
   const selectedManagedModelReady = isSelectableManagedModel(localAiSetup.managedLocalModelId, managedLocalStatus);
   const selectedModelValue = selectedProvider === "openrouter"
@@ -94,7 +102,18 @@ export function AiSetupModelBeingUsed({
 
   return (
     <section className="ai-setup-current-model" aria-label="Model being used">
-      <h4>Model being used</h4>
+      <div className="ai-setup-current-model__head">
+        <h4>Model being used</h4>
+        <button
+          type="button"
+          className="settings-btn ai-setup-current-model__test"
+          aria-label="Test AI connection"
+          disabled={connectionTestDisabled}
+          onClick={() => void onTestConnection()}
+        >
+          {connectionTestRunning ? "Testing..." : "Test connection"}
+        </button>
+      </div>
       <div className="ai-setup-current-model__controls">
         <SettingsSelect
           ariaLabel="AI provider"
@@ -112,6 +131,7 @@ export function AiSetupModelBeingUsed({
           onChange={handleModelChange}
         />
       </div>
+      {connectionTestMessage ? <p className="ai-setup-current-model__status" role="status">{connectionTestMessage}</p> : null}
     </section>
   );
 }

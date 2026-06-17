@@ -103,6 +103,25 @@
   padding: var(--space-3) 1rem;
 }
 
+.ai-setup-current-model__head {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.ai-setup-current-model__test {
+  flex: 0 0 auto;
+}
+
+.ai-setup-current-model__status {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+  margin: 0;
+}
+
 .ai-setup-current-model h4,
 .ai-setup-provider-heading {
   color: var(--text);

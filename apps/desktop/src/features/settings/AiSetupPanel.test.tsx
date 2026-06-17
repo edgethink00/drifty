@@ -229,7 +229,7 @@ describe("AiSetupPanel", () => {
 
     fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
     fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test-secret" } });
-    fireEvent.click(screen.getByRole("button", { name: /test openrouter connection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /test ai connection/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", expect.objectContaining({
       request: expect.objectContaining({
