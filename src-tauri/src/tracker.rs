@@ -96,6 +96,22 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_timeline", build_period_payload(day, start, end))
     }
 
+    pub fn get_live_tail(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+        after_segment_id: Option<String>,
+        after_ended_at: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_live_tail",
+            build_live_tail_payload(start, end, after_segment_id, after_ended_at, limit),
+        )
+    }
+
     pub fn get_current_snapshot(&self, app: &AppHandle) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "get_current_snapshot", json!({}))
     }
@@ -396,6 +412,28 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
     Value::Object(payload)
 }
 
+fn build_live_tail_payload(
+    start: Option<String>,
+    end: Option<String>,
+    after_segment_id: Option<String>,
+    after_ended_at: Option<String>,
+    limit: Option<u32>,
+) -> Value {
+    let mut payload = build_period_payload(None, start, end);
+
+    if let Some(payload_object) = payload.as_object_mut() {
+        if let Some(after_segment_id) = after_segment_id {
+            payload_object.insert("afterSegmentId".into(), json!(after_segment_id));
+        }
+        if let Some(after_ended_at) = after_ended_at {
+            payload_object.insert("afterEndedAt".into(), json!(after_ended_at));
+        }
+        payload_object.insert("limit".into(), json!(limit.unwrap_or(8)));
+    }
+
+    payload
+}
+
 fn build_delete_activity_segments_payload(ids: &[String]) -> Value {
     json!({ "ids": ids })
 }
@@ -673,6 +711,28 @@ mod tests {
         let payload = build_delete_activity_segments_payload(&["42".into(), "43".into()]);
 
         assert_eq!(payload, json!({ "ids": ["42", "43"] }));
+    }
+
+    #[test]
+    fn live_tail_payload_preserves_range_cursor_and_default_limit() {
+        let payload = build_live_tail_payload(
+            Some("2026-04-06T00:00:00".into()),
+            Some("2026-04-06T23:59:59".into()),
+            Some("42".into()),
+            Some("2026-04-06T09:05:00+00:00".into()),
+            None,
+        );
+
+        assert_eq!(
+            payload,
+            json!({
+                "start": "2026-04-06T00:00:00",
+                "end": "2026-04-06T23:59:59",
+                "afterSegmentId": "42",
+                "afterEndedAt": "2026-04-06T09:05:00+00:00",
+                "limit": 8
+            })
+        );
     }
 
     #[test]

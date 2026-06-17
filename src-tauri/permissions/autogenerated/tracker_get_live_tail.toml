@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-live-tail"
+description = "Enables the tracker_get_live_tail command without any pre-configured scope."
+commands.allow = ["tracker_get_live_tail"]
+
+[[permission]]
+identifier = "deny-tracker-get-live-tail"
+description = "Denies the tracker_get_live_tail command without any pre-configured scope."
+commands.deny = ["tracker_get_live_tail"]

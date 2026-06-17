@@ -18,6 +18,7 @@ if str(PACKAGE_ROOT) not in sys.path:
 
 from app.permissions.accessibility import accessibility_granted
 from app.storage.db import TrackerDatabase
+from app.storage.live_tail import fetch_live_tail
 from app.tracker.idle import seconds_since_last_input
 from app.tracker.macos_workspace import current_snapshot
 from app.tracker.power_state import PowerStateSample, current_power_state
@@ -205,6 +206,31 @@ def get_timeline(payload: dict):
     start, end = day_bounds(payload)
     items = [db._serialize_row(row) for row in db.timeline(start, end)]
     return response(True, items)
+
+
+def get_live_tail(payload: dict):
+    safe_payload = payload if isinstance(payload, dict) else {}
+    db = database()
+    start, end = day_bounds(safe_payload)
+    running = is_running()
+    tracker_mode = db.get_meta("tracker_mode") if running else None
+    segments = fetch_live_tail(
+        db,
+        start,
+        end,
+        safe_payload.get("afterSegmentId"),
+        safe_payload.get("afterEndedAt"),
+        safe_payload.get("limit", 8),
+    )
+    return response(
+        True,
+        {
+            "running": running,
+            "trackerMode": tracker_mode or ("tracking" if running else "idle"),
+            "lastEventAt": db.get_meta("last_event_at"),
+            "segments": segments,
+        },
+    )
 
 
 def get_hourly_summary(payload: dict):
@@ -420,6 +446,7 @@ COMMANDS = {
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
     "get_timeline": get_timeline,
+    "get_live_tail": get_live_tail,
     "get_current_snapshot": lambda payload: get_current_snapshot(),
     "get_hourly_summary": get_hourly_summary,
     "get_raw_events": get_raw_events,

@@ -260,6 +260,7 @@ type UpdateCheckMode = "manual" | "automatic";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const APP_REFRESH_INTERVAL_MS = 30_000;
+const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
@@ -318,7 +319,47 @@ function getDriftAlarmPollTimelineRange(day: string, startOfDayMinutes: number):
   };
 }
 
-function mergeDriftAlarmSegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
+type LiveTailCursor = {
+  readonly afterSegmentId: string | null;
+  readonly afterEndedAt: string | null;
+};
+
+function activitySegmentEndedAtMs(segment: ActivitySegment): number {
+  const endedAtMs = new Date(segment.endedAt).getTime();
+  return Number.isFinite(endedAtMs) ? endedAtMs : Number.NEGATIVE_INFINITY;
+}
+
+function latestActivitySegmentCursor(segments: readonly ActivitySegment[]): LiveTailCursor {
+  let latestSegment: ActivitySegment | null = null;
+  let latestEndedAtMs = Number.NEGATIVE_INFINITY;
+
+  for (const segment of segments) {
+    const endedAtMs = activitySegmentEndedAtMs(segment);
+    if (endedAtMs > latestEndedAtMs) {
+      latestSegment = segment;
+      latestEndedAtMs = endedAtMs;
+      continue;
+    }
+    if (endedAtMs !== latestEndedAtMs || latestSegment === null) continue;
+
+    const latestId = Number(latestSegment.id);
+    const segmentId = Number(segment.id);
+    if (Number.isFinite(segmentId) && (!Number.isFinite(latestId) || segmentId > latestId)) {
+      latestSegment = segment;
+    }
+  }
+
+  if (!latestSegment && segments.length > 0) {
+    latestSegment = segments[segments.length - 1] ?? null;
+  }
+
+  return {
+    afterSegmentId: latestSegment?.id ?? null,
+    afterEndedAt: latestSegment?.endedAt ?? null,
+  };
+}
+
+function mergeActivitySegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
   if (liveSegments.length === 0) return [...baseSegments];
 
   const segmentsById = new Map<string, ActivitySegment>();
@@ -327,23 +368,32 @@ function mergeDriftAlarmSegments(baseSegments: readonly ActivitySegment[], liveS
   }
   for (const segment of liveSegments) {
     const existing = segmentsById.get(segment.id) ?? null;
-    segmentsById.set(segment.id, existing ? selectDriftAlarmSegment(existing, segment) : segment);
+    segmentsById.set(segment.id, existing ? selectActivitySegment(existing, segment) : segment);
   }
 
   return Array.from(segmentsById.values());
 }
 
-function selectDriftAlarmSegment(existing: ActivitySegment, incoming: ActivitySegment): ActivitySegment {
-  const existingEndedAtMs = new Date(existing.endedAt).getTime();
-  const incomingEndedAtMs = new Date(incoming.endedAt).getTime();
+function mergeDriftAlarmSegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
+  return mergeActivitySegments(baseSegments, liveSegments);
+}
+
+function selectActivitySegment(existing: ActivitySegment, incoming: ActivitySegment): ActivitySegment {
+  const existingEndedAtMs = activitySegmentEndedAtMs(existing);
+  const incomingEndedAtMs = activitySegmentEndedAtMs(incoming);
 
   if (Number.isFinite(existingEndedAtMs) && Number.isFinite(incomingEndedAtMs)) {
-    if (incomingEndedAtMs > existingEndedAtMs) return incoming;
+    if (incomingEndedAtMs > existingEndedAtMs) return preserveClassification(incoming, existing);
     if (incomingEndedAtMs < existingEndedAtMs) return existing;
   }
 
   if (existing.classification && !incoming.classification) return existing;
   return incoming;
+}
+
+function preserveClassification(segment: ActivitySegment, fallbackSegment: ActivitySegment): ActivitySegment {
+  if (segment.classification || !fallbackSegment.classification) return segment;
+  return { ...segment, classification: fallbackSegment.classification };
 }
 
 type DriftAlarmEvaluationInput = {
@@ -878,6 +928,7 @@ export default function App() {
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
+  const focusedLiveTailRefreshInFlightRef = useRef(false);
   const rendererFocusedRef = useRef(rendererFocused);
   const selectedDayRef = useRef(selectedDay);
   const lastRendererInteractionAtRef = useRef(Date.now());
@@ -1599,6 +1650,50 @@ export default function App() {
     }
   }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
+  const refreshFocusedLiveTail = useCallback(async (day: string): Promise<boolean> => {
+    if (focusedLiveTailRefreshInFlightRef.current) return false;
+    if (shouldBlockLocalTrackerAccess) return false;
+    if (selectedDayRef.current !== day) return false;
+
+    focusedLiveTailRefreshInFlightRef.current = true;
+    try {
+      const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+      const cursor = latestActivitySegmentCursor(segmentsRef.current);
+      const liveTail = await trackerClient.getLiveTail({
+        ...selectedDayRange,
+        ...cursor,
+        limit: FOCUSED_LIVE_TAIL_LIMIT,
+      });
+
+      if (selectedDayRef.current !== day) return false;
+
+      setStatus((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          running: liveTail.running,
+          trackerMode: liveTail.trackerMode ?? current.trackerMode,
+          lastEventAt: liveTail.lastEventAt ?? current.lastEventAt,
+        };
+      });
+
+      if (liveTail.segments.length > 0) {
+        const mergedSegments = mergeActivitySegments(segmentsRef.current, liveTail.segments);
+        segmentsRef.current = mergedSegments;
+        setSegments(mergedSegments);
+        setHistorySegments((current) => current.length > 0 ? mergeActivitySegments(current, liveTail.segments) : current);
+        setHourly(buildHourlySummary(mergedSegments));
+      }
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      console.warn("Failed to refresh focused live tracker tail", message);
+      return false;
+    } finally {
+      focusedLiveTailRefreshInFlightRef.current = false;
+    }
+  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+
   useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
     window.__DRIFTY_BOOTSTRAPPED__ = true;
@@ -1635,10 +1730,14 @@ export default function App() {
     if (shouldBlockLocalTrackerAccess) return undefined;
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
+      if (rendererFocusedRef.current) {
+        void refreshFocusedLiveTail(selectedDay);
+        return;
+      }
       void refresh(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [activeTab, classificationRange, dashPeriod, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, refreshFocusedLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;

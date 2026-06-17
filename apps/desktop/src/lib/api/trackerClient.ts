@@ -12,11 +12,13 @@ import type {
   ClassificationRuleInput,
   DriftAlarmTrayStatus,
   CurrentActivitySnapshot,
+  LiveTailQuery,
   ProductivityShareMix,
   RawEventsQuery,
   SiteDuration,
   TimelineQuery,
   TrackerApi,
+  TrackerLiveTail,
   TrackerStatus,
 } from "@drifty/domain";
 import { previewAppIcons, previewHourlySummary, previewStatus, previewTimeline, previewTopSites, shouldUsePreviewData } from "./previewData";
@@ -108,6 +110,40 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return previewTimeline(query);
     const result = await safeInvoke<ActivitySegment[]>("tracker_get_timeline", { query });
     return result ?? [];
+  },
+  async getLiveTail(query: LiveTailQuery) {
+    if (shouldUsePreviewData()) {
+      const status = previewStatus();
+      const timelineQuery: TimelineQuery = query.start && query.end
+        ? { start: query.start, end: query.end }
+        : { day: new Date().toISOString().slice(0, 10) };
+      const afterEndedAtMs = query.afterEndedAt ? new Date(query.afterEndedAt).getTime() : Number.NEGATIVE_INFINITY;
+      const afterSegmentId = query.afterSegmentId ? Number(query.afterSegmentId) : null;
+      const limit = query.limit ?? 8;
+      const segments = previewTimeline(timelineQuery)
+        .filter((segment) => {
+          const endedAtMs = new Date(segment.endedAt).getTime();
+          const segmentId = Number(segment.id);
+          return (
+            (Number.isFinite(endedAtMs) && endedAtMs > afterEndedAtMs) ||
+            (afterSegmentId !== null && Number.isFinite(segmentId) && segmentId > afterSegmentId)
+          );
+        })
+        .slice(-limit);
+      return {
+        running: Boolean(status.running ?? status.isRunning),
+        trackerMode: status.trackerMode ?? null,
+        lastEventAt: status.lastEventAt ?? null,
+        segments,
+      };
+    }
+    const result = await safeInvoke<TrackerLiveTail>("tracker_get_live_tail", { query });
+    return result ?? {
+      running: false,
+      trackerMode: "unavailable",
+      lastEventAt: null,
+      segments: [],
+    };
   },
   async getCurrentSnapshot() {
     return await safeInvoke<CurrentActivitySnapshot>("tracker_get_current_snapshot");

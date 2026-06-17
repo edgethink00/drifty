@@ -10,6 +10,8 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app import main as tracker_main
+from app.storage.db import TrackerDatabase
+from app.storage.live_tail import fetch_live_tail
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.power_state import PowerStateSample
 
@@ -86,6 +88,74 @@ class TrackerMainTests(unittest.TestCase):
         with patch.object(tracker_main, "database", return_value=mock_db):
             tracker_main.get_timeline({"start": "2026-04-01T00:00:00", "end": "2026-04-07T23:59:59"})
         mock_db.timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
+
+    def test_get_live_tail_reads_database_tail_without_snapshot_capture(self) -> None:
+        mock_db = MagicMock()
+        mock_db.get_meta.side_effect = lambda key, default=None: {
+            "tracker_mode": "tracking",
+            "last_event_at": "2026-04-06T09:10:00+00:00",
+        }.get(key, default)
+
+        with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+            tracker_main, "fetch_live_tail", return_value=[{"id": "42"}]
+        ) as fetch, patch.object(tracker_main, "is_running", return_value=True), patch.object(
+            tracker_main, "current_snapshot"
+        ) as snapshot:
+            result = tracker_main.get_live_tail({
+                "start": "2026-04-06T00:00:00",
+                "end": "2026-04-06T23:59:59",
+                "afterSegmentId": "42",
+                "afterEndedAt": "2026-04-06T09:05:00+00:00",
+                "limit": 8,
+            })
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["data"]["running"])
+        self.assertEqual(result["data"]["trackerMode"], "tracking")
+        self.assertEqual(result["data"]["lastEventAt"], "2026-04-06T09:10:00+00:00")
+        self.assertEqual(result["data"]["segments"], [{"id": "42"}])
+        fetch.assert_called_once_with(
+            mock_db,
+            "2026-04-06T00:00:00",
+            "2026-04-06T23:59:59",
+            "42",
+            "2026-04-06T09:05:00+00:00",
+            8,
+        )
+        snapshot.assert_not_called()
+
+    def test_fetch_live_tail_returns_updated_cursor_segment(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
+            with db.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO activity_segments(
+                      started_at, ended_at, duration_seconds, app_name, platform, source
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("2026-04-06T09:00:00+00:00", "2026-04-06T09:05:00+00:00", 300, "Mail", "macos", "accessibility"),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO activity_segments(
+                      started_at, ended_at, duration_seconds, app_name, platform, source
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("2026-04-06T09:05:00+00:00", "2026-04-06T09:10:00+00:00", 300, "Drifty", "macos", "accessibility"),
+                )
+
+            rows = fetch_live_tail(
+                db,
+                "2026-04-06T00:00:00+00:00",
+                "2026-04-06T23:59:59+00:00",
+                "2",
+                "2026-04-06T09:09:00+00:00",
+                8,
+            )
+
+        self.assertEqual([row["id"] for row in rows], ["2"])
+        self.assertEqual(rows[0]["appName"], "Drifty")
 
     def test_get_top_sites_uses_range_aggregate(self) -> None:
         mock_db = MagicMock()

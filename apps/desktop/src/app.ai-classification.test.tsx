@@ -12,6 +12,7 @@ const styles = readFileSync("src/styles.css", "utf8");
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
+const APP_REFRESH_INTERVAL_MS = 30_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const DEFAULT_START_OF_DAY_MINUTES = 4 * 60;
@@ -64,6 +65,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
   trackerClient: {
     getStatus: vi.fn(),
     getTimeline: vi.fn(),
+    getLiveTail: vi.fn(),
     getCurrentSnapshot: vi.fn(),
     getHourlySummary: vi.fn(),
     getTopSites: vi.fn(),
@@ -366,6 +368,12 @@ describe("App AI classification controls", () => {
       const today = todayIsoDate();
       const queryDay = query.day ?? query.start?.slice(0, 10) ?? null;
       return Promise.resolve(queryDay && queryDay !== today ? [createSegmentForDay(queryDay)] : []);
+    });
+    trackerClient.getLiveTail.mockResolvedValue({
+      running: false,
+      trackerMode: "tracking",
+      lastEventAt: null,
+      segments: [],
     });
     trackerClient.getCurrentSnapshot.mockResolvedValue(null);
     trackerClient.getHourlySummary.mockResolvedValue([]);
@@ -940,6 +948,76 @@ describe("App AI classification controls", () => {
       end: "2026-06-17T03:59:59",
     }));
     expect(trackerClient.getStatus).not.toHaveBeenCalled();
+    expect(trackerClient.getTopSites).not.toHaveBeenCalled();
+    expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
+  });
+
+  it("uses lightweight live tail instead of full refresh while the renderer is focused", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    const today = "2026-06-16";
+    setRendererFocus(true);
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T01:00:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+    trackerClient.getTimeline.mockResolvedValue([{
+      id: "42",
+      startedAt: `${today}T00:50:00.000Z`,
+      endedAt: `${today}T01:00:00.000Z`,
+      durationSeconds: 600,
+      appName: "Drifty",
+      bundleId: "so.drifty.mac",
+      windowTitle: "Dashboard",
+      platform: "macos",
+      source: "accessibility",
+    }]);
+    trackerClient.getLiveTail.mockResolvedValue({
+      running: true,
+      trackerMode: "tracking",
+      lastEventAt: `${today}T01:00:30.000Z`,
+      segments: [{
+        id: "42",
+        startedAt: `${today}T00:50:00.000Z`,
+        endedAt: `${today}T01:00:30.000Z`,
+        durationSeconds: 630,
+        appName: "Drifty",
+        bundleId: "so.drifty.mac",
+        windowTitle: "Dashboard",
+        platform: "macos",
+        source: "accessibility",
+      }],
+    });
+
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+
+    trackerClient.getTimeline.mockClear();
+    trackerClient.getStatus.mockClear();
+    trackerClient.getCurrentSnapshot.mockClear();
+    trackerClient.getHourlySummary.mockClear();
+    trackerClient.getTopSites.mockClear();
+    trackerClient.getClassificationMetrics.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(APP_REFRESH_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(trackerClient.getLiveTail).toHaveBeenCalledWith({
+      start: `${today}T04:00:00`,
+      end: "2026-06-17T03:59:59",
+      afterSegmentId: "42",
+      afterEndedAt: `${today}T01:00:00.000Z`,
+      limit: 8,
+    }));
+    expect(trackerClient.getStatus).not.toHaveBeenCalled();
+    expect(trackerClient.getCurrentSnapshot).not.toHaveBeenCalled();
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
+    expect(trackerClient.getHourlySummary).not.toHaveBeenCalled();
     expect(trackerClient.getTopSites).not.toHaveBeenCalled();
     expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
   });

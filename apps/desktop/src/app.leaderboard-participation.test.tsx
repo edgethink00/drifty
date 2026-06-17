@@ -82,6 +82,12 @@ vi.mock("./lib/api/trackerClient", () => ({
       message: "Tracker not available in this environment",
     }),
     getTimeline,
+    getLiveTail: vi.fn().mockResolvedValue({
+      running: false,
+      trackerMode: "tracking",
+      lastEventAt: null,
+      segments: [],
+    }),
     getHourlySummary: vi.fn().mockResolvedValue([]),
     getTopSites: vi.fn().mockResolvedValue([]),
     getAppIcons: vi.fn().mockResolvedValue({}),
