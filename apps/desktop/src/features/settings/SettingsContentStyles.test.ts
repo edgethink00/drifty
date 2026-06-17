@@ -128,21 +128,22 @@ describe("Settings content styles", () => {
     expect(tabPanelRule).toContain("gap: var(--space-4);");
   });
 
-  it("keeps managed local model actions concise", () => {
+  it("stacks managed local model specs to the right with actions below", () => {
     const aiSetupStyles = readAiSetupStyles();
-    const modelRule = cssRule(aiSetupStyles, ".ai-managed-model");
+    const headRule = cssRule(aiSetupStyles, ".ai-managed-model__head");
+    const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
     const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__delete-action");
-    const mobilePrimaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
 
-    expect(modelRule).toContain("grid-template-columns: auto minmax(13rem, 1fr) minmax(12rem, 0.68fr) minmax(8.8rem, auto);");
+    // Name/description on the left, tier + specs on the right, actions on their own row.
+    expect(headRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto;");
+    expect(metaRule).toContain("justify-items: end;");
     expect(actionsRule).toContain("display: flex;");
-    expect(actionsRule).toContain("justify-content: flex-end;");
-    expect(actionsRule).toContain("min-width: 8.8rem;");
+    expect(actionsRule).toContain("border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);");
+    expect(actionsRule).not.toContain("min-width: 8.8rem;");
     expect(primaryActionRule).toContain("gap: 0.42rem;");
     expect(deleteActionRule).toContain("width: 2rem;");
-    expect(mobilePrimaryActionRule).toContain("gap: 0.42rem;");
   });
 
   it("uses the focus color for the Cloud setup CTA", () => {

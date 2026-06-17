@@ -116,28 +116,32 @@ function ManagedLocalAiModelRow({
 
   return (
     <article className={`ai-managed-model${isSelected ? " is-selected" : ""}`} aria-label={`${model.label} managed local model`}>
-      <input
-        className="ai-managed-model__selector"
-        type="radio"
-        name="managed-local-model"
-        checked={isSelected}
-        disabled={!selectable}
-        aria-label={`Select ${model.label} managed local model`}
-        onChange={() => onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", managedLocalModelId: model.id }))}
-      />
-      <div className="ai-managed-model__copy">
-        <div>
-          <span className="ai-managed-model__tier">{model.tier}</span>
-          {model.recommended ? <span className="chip green">Recommended</span> : null}
+      <div className="ai-managed-model__head">
+        <input
+          className="ai-managed-model__selector"
+          type="radio"
+          name="managed-local-model"
+          checked={isSelected}
+          disabled={!selectable}
+          aria-label={`Select ${model.label} managed local model`}
+          onChange={() => onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", managedLocalModelId: model.id }))}
+        />
+        <div className="ai-managed-model__copy">
+          <strong>{model.label}</strong>
+          <p>{model.detail}</p>
         </div>
-        <strong>{model.label}</strong>
-        <p>{model.detail}</p>
+        <div className="ai-managed-model__meta">
+          <div className="ai-managed-model__badges">
+            <span className="ai-managed-model__tier">{model.tier}</span>
+            {model.recommended ? <span className="chip green">Recommended</span> : null}
+          </div>
+          <dl className="ai-managed-model__facts">
+            <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
+            <div><dt>Disk</dt><dd>{model.diskRequired}</dd></div>
+            <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
+          </dl>
+        </div>
       </div>
-      <dl className="ai-managed-model__facts">
-        <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
-        <div><dt>Disk</dt><dd>{model.diskRequired}</dd></div>
-        <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
-      </dl>
       <div className="ai-managed-model__actions">
         {hasCurrentRuntime ? (
           <>

@@ -15,16 +15,21 @@
     justify-self: center;
   }
 
-  .ai-managed-model {
-    align-items: stretch;
-    gap: var(--space-3);
+  .ai-managed-model__head {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .ai-managed-model__actions {
+  .ai-managed-model__meta {
     grid-column: 1 / -1;
+    justify-items: start;
+  }
+
+  .ai-managed-model__badges {
+    justify-content: flex-start;
+  }
+
+  .ai-managed-model__actions {
     justify-content: stretch;
-    min-width: 0;
   }
 
   .ai-managed-model__primary-action {
@@ -32,7 +37,10 @@
   }
 
   .ai-managed-model__facts {
-    grid-column: 1 / -1;
+    justify-items: start;
+  }
+
+  .ai-managed-model__facts > div {
     justify-content: flex-start;
   }
 
