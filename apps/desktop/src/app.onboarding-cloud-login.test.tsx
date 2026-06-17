@@ -230,8 +230,9 @@ describe("App onboarding cloud login", () => {
     const { rerender } = render(<App />);
 
     await advanceToAccountStep();
-    await clickButton(/continue with email/i);
-    expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+    await clickButton(/continue with google/i);
+    expect(authState.signInWithGoogle).toHaveBeenCalledTimes(1);
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
 
     fetchOwnProfile.mockReturnValueOnce(profileResult.promise);
     authState.user = { id: "cloud-user-1", email: "cloud@example.com" };
@@ -252,7 +253,5 @@ describe("App onboarding cloud login", () => {
     });
 
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    await clickEnabledAction(/^next$/i);
-    expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
   });
 });

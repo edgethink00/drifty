@@ -148,4 +148,17 @@ describe("buildFocusDriftChart", () => {
     expect(chart.currentX).toBe(expectedCurrentX);
     expect(livePoint.x).toBe(expectedCurrentX);
   });
+
+  it("labels live windows with clock time when the day starts after midnight", () => {
+    const currentMinuteOfDay = 12 * 60 + 45;
+    const startOfDayMinutes = 4 * 60;
+
+    const chart = buildFocusDriftChart([makeFocusSegment()], "2026-06-13", undefined, currentMinuteOfDay, startOfDayMinutes);
+    const livePoint = chart.points.find((point) => point.bucketStartMinute === 8 * 60 + 30);
+    if (!livePoint) throw new Error("Expected live bucket point to exist");
+
+    expect(chart.currentTimeLabel).toBe("12:45 PM");
+    expect(livePoint.label).toBe("12:30");
+    expect(chart.axisTicks.map((tick) => tick.label)).toEqual(["04:00", "07:00", "10:00", "13:00", "16:00", "19:00", "22:00", "01:00", "04:00"]);
+  });
 });

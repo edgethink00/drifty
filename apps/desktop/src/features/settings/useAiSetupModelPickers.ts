@@ -4,10 +4,8 @@ import type { Dispatch, FormEvent, SetStateAction } from "react";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import {
   OPENROUTER_RECOMMENDED_MODELS,
-  SELF_HOSTED_RECOMMENDED_MODELS,
   isForbiddenOpenRouterModel,
   isRecommendedOpenRouterModel,
-  isRecommendedSelfHostedModel,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   uniqueOpenRouterModels,
@@ -20,8 +18,6 @@ export function useAiSetupModelPickers(
 ) {
   const [openRouterModelPickerOpen, setOpenRouterModelPickerOpen] = useState(false);
   const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
-  const [selfHostedModelPickerOpen, setSelfHostedModelPickerOpen] = useState(false);
-  const [selfHostedCustomModel, setSelfHostedCustomModel] = useState("");
 
   const openRouterPrimaryModel = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
   const openRouterFallbackModels = useMemo(
@@ -40,13 +36,6 @@ export function useAiSetupModelPickers(
   const openRouterSelectionSummary = openRouterFallbackModels.length > 0
     ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`
     : openRouterPrimaryModel;
-  const selfHostedSelectedModel = localAiSetup.selfHostedModel.trim();
-  const selfHostedCustomSelectedModels = selfHostedSelectedModel && !isRecommendedSelfHostedModel(selfHostedSelectedModel) ? [selfHostedSelectedModel] : [];
-  const selfHostedModelOptions = useMemo((): readonly AiModelOption[] => [
-    ...SELF_HOSTED_RECOMMENDED_MODELS,
-    ...selfHostedCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
-  ], [selfHostedCustomSelectedModels]);
-  const selfHostedModelSummary = selfHostedSelectedModel || "No model selected";
 
   const handleOpenRouterModelToggle = (model: string, selected: boolean) => {
     const modelId = model.trim();
@@ -96,26 +85,10 @@ export function useAiSetupModelPickers(
     setOpenRouterCustomModel("");
   };
 
-  const handleSelfHostedModelChange = (model: string) => {
-    const modelId = model.trim();
-    if (!modelId) return;
-    onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel: modelId }));
-  };
-
-  const handleAddSelfHostedCustomModel = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const modelId = selfHostedCustomModel.trim();
-    if (!modelId) return;
-    onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel: modelId }));
-    setSelfHostedCustomModel("");
-  };
-
   return {
     handleAddOpenRouterCustomModel,
-    handleAddSelfHostedCustomModel,
     handleOpenRouterModelToggle,
     handleOpenRouterPrimaryModelChange,
-    handleSelfHostedModelChange,
     openRouterCustomModel,
     openRouterFallbackModels,
     openRouterModelOptions,
@@ -123,14 +96,7 @@ export function useAiSetupModelPickers(
     openRouterPrimaryModel,
     openRouterSelectedModels,
     openRouterSelectionSummary,
-    selfHostedCustomModel,
-    selfHostedModelOptions,
-    selfHostedModelPickerOpen,
-    selfHostedModelSummary,
-    selfHostedSelectedModel,
     setOpenRouterCustomModel,
     setOpenRouterModelPickerOpen,
-    setSelfHostedCustomModel,
-    setSelfHostedModelPickerOpen,
   };
 }

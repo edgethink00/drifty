@@ -66,7 +66,25 @@ export function aiConnectionStatusLabel(
 ): string {
   if (hasAccount && cloudLoading) return "AI checking";
   if (hasAccount && entitlement?.status !== "locked") return "Drifty Cloud AI";
-  if (localAiSetup.provider === "openrouter_byok") return localAiSetup.openRouterApiKey.trim() ? "OpenRouter AI" : "AI not connected";
-  const hasSelfHostedConnection = Boolean(localAiSetup.selfHostedBaseUrl.trim() && localAiSetup.selfHostedModel.trim());
-  return hasSelfHostedConnection ? "Self-hosted AI" : "AI not connected";
+  switch (localAiSetup.provider) {
+    case "managed_local":
+      return localAiSetup.managedLocalBaseUrl.trim() && localAiSetup.managedLocalModel.trim() ? "Managed Local AI" : "AI not connected";
+    case "openrouter_byok":
+      return localAiSetup.openRouterApiKey.trim() ? "OpenRouter AI" : "AI not connected";
+    case "self_hosted":
+      return localAiSetup.selfHostedBaseUrl.trim() && localAiSetup.selfHostedModel.trim() ? "Local AI" : "AI not connected";
+    default:
+      return assertNever(localAiSetup.provider);
+  }
+}
+
+class AiConnectionStatusLabelError extends Error {
+  constructor(readonly provider: string) {
+    super(`Unhandled AI connection provider: ${provider}`);
+    this.name = "AiConnectionStatusLabelError";
+  }
+}
+
+function assertNever(value: never): never {
+  throw new AiConnectionStatusLabelError(String(value));
 }

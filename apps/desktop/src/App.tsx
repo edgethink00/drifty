@@ -57,7 +57,7 @@ import { FlowChartView } from "./features/flow-chart/FlowChartView";
 import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
 import { HistoryView } from "./features/history/HistoryView";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
@@ -73,12 +73,14 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
+import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
 import { SettingsBuildInfoRow } from "./features/settings/SettingsBuildInfoRow";
+import { StartupSettingsRow } from "./features/settings/StartupSettingsRow";
 import { CategoryColorControls, ClassificationPicker, ThemeColorControls, type AppThemeColorKey, type ColorOption } from "./features/settings/SettingsColorControls";
 import { SettingsSelect } from "./features/settings/SettingsSelect";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
@@ -161,6 +163,7 @@ import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
 import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
+import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
 import {
   resolveDriftAlarmTransientDefer,
   sourceKeyForDriftAlarmCandidate,
@@ -176,7 +179,7 @@ import type { DriftReminderState, WatcherMode, WatcherSnapshot } from "./feature
 import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption } from "./features/dashboard/dashboardPeriods";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
-import { FOCUS_DRIFT_AXIS_TICKS, FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
+import { FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import type { FocusDriftAxisTickStyle, FocusDriftLiveStyle, FocusDriftPoint, FocusDriftSourceSummary } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
 import type { MonthCellStyle } from "./features/dashboard/monthOverview";
@@ -185,7 +188,8 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
-import { LOCAL_AI_SETUP_STORAGE_KEY, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
+import { localAiProviderConfigFromSetup } from "./features/settings/localAiClassificationOptions";
+import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
@@ -250,11 +254,22 @@ type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 type UpdateCheckMode = "manual" | "automatic";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
+const APP_REFRESH_INTERVAL_MS = 30_000;
+const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
+const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
+const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 
 const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
+
+function shouldRefreshHistoryData(activeTab: TabId, dashPeriod: DashboardPeriod, classificationRange: ClassificationRange): boolean {
+  if (activeTab === "dashboard") return dashPeriod !== "Today";
+  if (activeTab === "classification") return classificationRange === "Week";
+  return activeTab === "history" || activeTab === "trends";
+}
 
 const activityNav: NavItem[] = [
   { id: "classification", label: "Classification", icon: "classification" },
@@ -411,7 +426,7 @@ export default function App() {
   const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
   const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
-  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(resolveInitialExtremeNudgeEnabled);
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
     const enabled = resolveInitialDriftAlertsEnabled();
@@ -635,20 +650,7 @@ export default function App() {
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
-  const localAiClassificationOptions = useMemo(() => {
-    if (localAiSetup.provider === "openrouter_byok") {
-      const apiKey = localAiSetup.openRouterApiKey.trim();
-      if (!apiKey) return null;
-      const model = normalizeOpenRouterPrimaryModel(localAiSetup.openRouterModel);
-      const fallbackModels = normalizeOpenRouterFallbackModels(model, localAiSetup.openRouterFallbackModels);
-      return { localProvider: { provider: "openrouter_byok" as const, apiKey, model, fallbackModels } };
-    }
-
-    const baseUrl = localAiSetup.selfHostedBaseUrl.trim();
-    const model = localAiSetup.selfHostedModel.trim();
-    if (!baseUrl || !model) return null;
-    return { localProvider: { provider: "self_hosted" as const, baseUrl, model } };
-  }, [localAiSetup]);
+  const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
     const {
       user,
       status: authStatus,
@@ -695,6 +697,9 @@ export default function App() {
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmRequestInFlightRef = useRef(false);
+  const liveDriftAlarmRefreshInFlightRef = useRef(false);
+  const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
+  const liveDriftAlarmAiRetryAfterRef = useRef<Map<string, number>>(new Map());
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date()) => {
@@ -1031,6 +1036,9 @@ export default function App() {
       preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
       generatedAt: new Date().toISOString(),
       focusTargets: recentDriftAlarmFocusTargets,
+      sourceSiteDomain: option.sourceSiteDomain,
+      sourceAppName: option.sourceAppName,
+      sourceIconSrc: option.sourceIconSrc,
       copySettings: driftAlarmCopy,
     }));
   }, [driftAlarmCopy, recentDriftAlarmFocusTargets, showDriftAlarm]);
@@ -1209,11 +1217,18 @@ export default function App() {
     const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
     const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+    const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
 
     try {
-      const archiveTimelineRequest = trackerClient
-        .getTimeline(historyTimelineRange)
-        .then((historyTimeline) => ({ historyTimeline }));
+      const archiveTimelineRequest = shouldLoadHistory
+        ? trackerClient.getTimeline(historyTimelineRange)
+        : Promise.resolve<ActivitySegment[] | null>(null);
+      const historyHourlySummaryRequest = shouldLoadHistory
+        ? trackerClient.getHourlySummary(historySummaryRange)
+        : Promise.resolve<HourBucket[] | null>(null);
+      const historySiteSummaryRequest = shouldLoadHistory
+        ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
+        : Promise.resolve<SiteDuration[] | null>(null);
 
       const statusRequest = trackerClient.getStatus().then((nextStatus) => {
         if (refreshRequestRef.current !== requestId) return nextStatus;
@@ -1229,8 +1244,8 @@ export default function App() {
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
-        trackerClient.getHourlySummary(historySummaryRange),
-        trackerClient.getTopSites({ ...historySummaryRange, limit: 8 }),
+        historyHourlySummaryRequest,
+        historySiteSummaryRequest,
         currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
@@ -1238,15 +1253,14 @@ export default function App() {
       ]);
 
       if (refreshRequestRef.current !== requestId) return false;
-      const { historyTimeline } = archiveTimelines;
 
       setCurrentSnapshot(nextCurrentSnapshot);
       setSegments(timeline);
       setSegmentsLoadedDay(day);
-      setHistorySegments(historyTimeline);
+      if (archiveTimelines !== null) setHistorySegments(archiveTimelines);
       setHourly(buildHourlySummary(timeline));
-      setInsightHourly(historyHourlySummary);
-      setInsightTopSites(historySiteSummary);
+      if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
+      if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
@@ -1264,7 +1278,7 @@ export default function App() {
 
       void (async () => {
         try {
-          const iconSegments = [...timeline, ...historyTimeline];
+          const iconSegments = archiveTimelines === null ? timeline : [...timeline, ...archiveTimelines];
           const uniqueApps = Array.from(
             new Map(iconSegments.map((segment) => [
               segment.bundleId || segment.appName,
@@ -1303,6 +1317,41 @@ export default function App() {
     }
   }
 
+  const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
+    if (liveDriftAlarmRefreshInFlightRef.current) return false;
+    if (shouldBlockLocalTrackerAccess) return false;
+    if (selectedDayRef.current !== day) return false;
+
+    liveDriftAlarmRefreshInFlightRef.current = true;
+    try {
+      const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+      const [timeline, nextCurrentSnapshot, nextStatus] = await Promise.all([
+        trackerClient.getTimeline(selectedDayRange),
+        trackerClient.getCurrentSnapshot().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "unknown error";
+          console.warn("Failed to refresh current activity for drift alarm poll", message);
+          return null;
+        }),
+        trackerClient.getStatus(),
+      ]);
+
+      if (selectedDayRef.current !== day) return false;
+      setStatus(nextStatus);
+      setAccessibilityGranted(nextStatus.accessibilityGranted);
+      setCurrentSnapshot(nextCurrentSnapshot);
+      setSegments(timeline);
+      setSegmentsLoadedDay(day);
+      setHourly(buildHourlySummary(timeline));
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      console.warn("Failed to refresh live drift alarm activity", message);
+      return false;
+    } finally {
+      liveDriftAlarmRefreshInFlightRef.current = false;
+    }
+  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+
   useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
     window.__DRIFTY_BOOTSTRAPPED__ = true;
@@ -1312,7 +1361,7 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     void refresh(selectedDay);
-  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [activeTab, classificationRange, dashPeriod, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1334,9 +1383,21 @@ export default function App() {
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
       void refresh(selectedDay);
-    }, 30000);
+    }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+
+  useEffect(() => {
+    if (shouldBlockLocalTrackerAccess) return undefined;
+    if (!driftAlertsEnabled) return undefined;
+    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return undefined;
+
+    const intervalId = setInterval(() => {
+      if (selectTodayAfterDateRollover()) return;
+      void refreshLiveDriftAlarmActivity(selectedDay);
+    }, DRIFT_ALARM_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -1410,6 +1471,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, driftAlertsEnabled ? "1" : "0");
   }, [driftAlertsEnabled]);
+
+  useEffect(() => {
+    if (!driftAlertsEnabled && extremeNudgeEnabled) setExtremeNudgeEnabled(false);
+  }, [driftAlertsEnabled, extremeNudgeEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(DRIFT_ALERT_DELAY_STORAGE_KEY, String(driftAlertDelaySeconds));
@@ -1574,7 +1639,7 @@ export default function App() {
 
     void listen("tray-open-settings", openSettingsTab).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -1582,7 +1647,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, [openSettingsTab]);
 
@@ -1594,7 +1659,7 @@ export default function App() {
 
     void listen("tray-check-for-updates", handleTrayCheckForUpdates).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -1602,7 +1667,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, [handleTrayCheckForUpdates]);
 
@@ -1614,7 +1679,7 @@ export default function App() {
 
     void listen("tray-toggle-theme", toggleTheme).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -1622,7 +1687,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, [toggleTheme]);
 
@@ -1633,7 +1698,7 @@ export default function App() {
     void listenToNativeEndOfDayReviewAction(handleEndOfDayReviewAction).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1642,7 +1707,7 @@ export default function App() {
     void listenToNativeWatcherResponse(handleWatcherResponse).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1651,7 +1716,7 @@ export default function App() {
     void listenToNativeWatcherDismissed(dismissWatcherPeek).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1660,7 +1725,7 @@ export default function App() {
     void listenToNativeDriftAlarmAction(handleDriftAlarmAction).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1669,7 +1734,7 @@ export default function App() {
     void listenToNativeDriftAlarmDismissed(handleDriftAlarmDismissed).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1677,7 +1742,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisteners.forEach((unlisten) => unlisten());
+      unlisteners.forEach(cleanupTauriEventListener);
     };
   }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
@@ -1746,6 +1811,74 @@ export default function App() {
     }
 
     if (!latestDrift) {
+      const liveAiCandidate = systemTransientActivity === null && (localAiClassificationOptions || canUseCloudAiClassification)
+        ? resolveLiveDriftAlarmAiCandidate({
+          segments,
+          currentSnapshot,
+          classificationOptions: selectedDayClassificationOptions,
+          minimumDurationSeconds: driftAlertDelaySeconds,
+        })
+        : null;
+
+      if (liveAiCandidate) {
+        const liveAiCandidateDetail = buildDriftAlarmTrayCandidateDetail(
+          getWatcherContextLabel(liveAiCandidate.segment, "unknown"),
+          liveAiCandidate.segment.durationSeconds,
+        );
+        const liveAiRetryAfterMs = liveDriftAlarmAiRetryAfterRef.current.get(liveAiCandidate.key) ?? 0;
+        if (liveAiRetryAfterMs > Date.now()) {
+          publishDriftAlarmTrayStatus({
+            kind: "suppressed",
+            reason: "ai-unavailable:retry-cooldown",
+            candidateDetail: liveAiCandidateDetail,
+          }, checkedAt);
+          return;
+        }
+
+        publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
+        if (liveDriftAlarmAiRequestInFlightRef.current === null) {
+          liveDriftAlarmAiRequestInFlightRef.current = liveAiCandidate.key;
+          const liveAiOptions = localAiClassificationOptions
+            ? { ...localAiClassificationOptions, persistLiveResult: true }
+            : { persistLiveResult: true };
+          void classifyLiveActivityWithAi(liveAiCandidate.segment, liveAiOptions).then(async (result) => {
+            if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
+            liveDriftAlarmAiRequestInFlightRef.current = null;
+
+            switch (result.kind) {
+              case "classified":
+                if (result.classification.category === "unknown") {
+                  liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS);
+                } else {
+                  liveDriftAlarmAiRetryAfterRef.current.delete(liveAiCandidate.key);
+                }
+                await refresh(selectedDay, { requireCurrentSnapshot: true });
+                return;
+              case "unavailable":
+                liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
+                publishDriftAlarmTrayStatus({
+                  kind: "suppressed",
+                  reason: `ai-unavailable:${result.reason}`,
+                  candidateDetail: liveAiCandidateDetail,
+                }, new Date());
+                await refresh(selectedDay, { requireCurrentSnapshot: true });
+                return;
+              default:
+                assertNever(result);
+            }
+          }).catch((error) => {
+            if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
+            liveDriftAlarmAiRequestInFlightRef.current = null;
+            liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
+            publishDriftAlarmTrayStatus({
+              kind: "error",
+              reason: error instanceof Error ? error.message : "Live AI classification failed",
+            }, new Date());
+          });
+        }
+        return;
+      }
+
       const pendingTransient = pendingDriftAlarmTransientRef.current;
       if (pendingTransient && systemTransientActivity) {
         publishDriftAlarmTrayStatus({
@@ -1833,6 +1966,10 @@ export default function App() {
     }
     const buildCurrentDriftAlarmEvent = () => {
       const contextLabel = getWatcherContextLabel(segment, category);
+      const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
+      const sourceAppName = segment.appName.trim() || "Unknown app";
+      const sourceIconKey = segment.bundleId?.trim() ?? sourceAppName;
+      const sourceIconSrc = appIconsRef.current[sourceIconKey] ?? appIconsRef.current[sourceAppName] ?? null;
 
       return buildDriftAlarmEvent({
         id: alertKey,
@@ -1841,6 +1978,9 @@ export default function App() {
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets: recentDriftAlarmFocusTargets,
+        sourceSiteDomain,
+        sourceAppName,
+        sourceIconSrc,
         copySettings: driftAlarmCopy,
         sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
       });
@@ -1920,6 +2060,10 @@ export default function App() {
           ? pendingBreakReturnAlarm.focusTargets
           : recentDriftAlarmFocusTargets;
         const breakReturnContextLabel = getWatcherContextLabel(segment, category);
+        const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
+        const breakReturnAppName = segment.appName.trim() || "Unknown app";
+        const breakReturnIconKey = segment.bundleId?.trim() ?? breakReturnAppName;
+        const breakReturnIconSrc = appIconsRef.current[breakReturnIconKey] ?? appIconsRef.current[breakReturnAppName] ?? null;
 
         showDriftAlarm(buildBreakReturnAlarmEvent({
           id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
@@ -1928,6 +2072,9 @@ export default function App() {
           preservedFocusStrikeSeconds: 0,
           generatedAt: new Date().toISOString(),
           focusTargets,
+          sourceSiteDomain: breakReturnSiteDomain,
+          sourceAppName: breakReturnAppName,
+          sourceIconSrc: breakReturnIconSrc,
           copySettings: driftAlarmCopy,
           sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,
@@ -2039,7 +2186,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [canUseCloudAiClassification, currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -2574,7 +2721,7 @@ export default function App() {
     if (classificationActionLoading) return;
     if (aiClassificationInFlightRef.current) return;
 
-    const today = todayIsoDate();
+    const today = logicalTodayIsoDate(startOfDayMinutes);
     const isFocused = rendererFocusedRef.current;
     const threshold = isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return;
@@ -2608,13 +2755,13 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
     const intervalId = setInterval(() => {
       void runAutoAiClassificationBatch();
-    }, 30000);
+    }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [runAutoAiClassificationBatch]);
 
@@ -3460,7 +3607,7 @@ export default function App() {
             </div>
             {focusDriftHover ? <FocusDriftHoverCard appIcons={appIcons} hover={focusDriftHover} /> : null}
             <div className="focus-drift__axis" aria-hidden="true">
-              {FOCUS_DRIFT_AXIS_TICKS.map((tick) => (
+              {focusDriftChart.axisTicks.map((tick) => (
                 <span key={tick.id} style={{ "--focus-drift-axis-x": `${tick.x}%` } as FocusDriftAxisTickStyle}>{tick.label}</span>
               ))}
             </div>
@@ -3659,7 +3806,6 @@ export default function App() {
             {dashboardAiRecoveryState ? (
               <DashboardAiRecoveryOverlay
                 billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
                 retrying={classificationActionLoading}
                 state={dashboardAiRecoveryState}
                 onClose={handleDismissDashboardAiRecovery}
@@ -4183,6 +4329,9 @@ export default function App() {
                       <div className="settings-row"><label><div className="lbl">Start of week</div><div className="desc">Choose the first day shown for weekly views.</div></label><div className="ctrl"><SettingsSelect ariaLabel="Start of week" value={startOfWeek} options={START_OF_WEEK_OPTIONS} onChange={handleStartOfWeekChange} /></div></div>
                       <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
                     </div>
+                    <div className="settings-block"><h3>Startup</h3>
+                      <StartupSettingsRow />
+                    </div>
                     <div className="settings-block"><h3>Updates</h3>
                       <div className="settings-row"><label htmlFor="automatic-update-checks"><div className="lbl">Automatic update checks</div><div className="desc">Check for signed updates shortly after Drifty opens.</div></label><div className="ctrl"><input id="automatic-update-checks" className="drifty-checkbox" type="checkbox" aria-label="Automatically check for updates on launch" checked={autoUpdateChecksEnabled} onChange={(event) => setAutoUpdateChecksEnabled(event.target.checked)} /></div></div>
                       <div className="settings-row"><div><div className="lbl">Manual update check</div><div className="desc">Drifty checks GitHub Releases for signed update metadata before showing an available download.</div>{updaterMessage ? <p className="capture-recency" role="status">{updaterMessage}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleCheckForUpdates()} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? "Checking..." : "Check for Updates"}</button></div></div>
@@ -4346,9 +4495,9 @@ export default function App() {
                 )}
                 {settingsSection === "notifications" && (
                   <div className="settings-section"><div className="settings-block"><h3>Notifications</h3>
-                    <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={setDriftAlertsEnabled} ariaLabel="Toggle drift alerts" /></div></div>
+                    <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={(enabled) => { setDriftAlertsEnabled(enabled); if (!enabled) setExtremeNudgeEnabled(false); }} ariaLabel="Toggle drift alerts" /></div></div>
                     <div className="settings-row"><div><div className="lbl">Drift alert timing</div></div><div className="ctrl"><div className="settings-mode-switch settings-mode-switch--triple settings-mode-switch--compact" role="radiogroup" aria-label="Drift alert timing">{DRIFT_ALERT_DELAY_OPTIONS.map((option) => (<button key={option.value} type="button" className={`settings-mode-option${driftAlertDelaySeconds === option.value ? " is-active" : ""}`} role="radio" aria-checked={driftAlertDelaySeconds === option.value} onClick={() => setDriftAlertDelaySeconds(option.value)}><span>{option.label}</span></button>))}</div></div></div>
-                    <div className="settings-row"><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm.</div></div><div className="ctrl"><Toggle checked={extremeNudgeEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
+                    <div className={`settings-row${driftAlertsEnabled ? "" : " settings-row--disabled"}`}><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">{driftAlertsEnabled ? "Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm." : "Turn on Drift alerts before enabling Extreme nudge."}</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled && extremeNudgeEnabled} disabled={!driftAlertsEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
                     <DriftAlarmCopySettings value={driftAlarmCopy} onChange={setDriftAlarmCopy} />
                   </div></div>
                 )}

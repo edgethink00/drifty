@@ -45,6 +45,9 @@ const focusEvent: DriftAlarmEvent = {
   generatedAt: "2026-06-12T09:08:00.000Z",
   breakOptions: [5, 15, 30, 60],
   focusTargets: [],
+  sourceSiteDomain: "youtube.com",
+  sourceAppName: "Google Chrome",
+  sourceIconSrc: null,
   sourceSegmentId: "youtube-drift",
   breakReturn: null,
 };

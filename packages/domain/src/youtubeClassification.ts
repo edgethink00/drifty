@@ -6,17 +6,14 @@ const YOUTUBE_MUSIC_METADATA_CATEGORIES = new Set(["", "entertainment", "people 
 
 const YOUTUBE_MUSIC_METADATA_HINTS = [
   "music",
-  "playlist",
   "song",
   "songs",
   "ballad",
   "lyrics",
   "ost",
-  "플레이리스트",
   "노래",
   "음악",
   "발라드",
-  "플리",
 ] as const;
 
 const YOUTUBE_OFFICIAL_CATEGORY_CLASSIFICATIONS: Readonly<Record<string, ActivityClassification>> = {

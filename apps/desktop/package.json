@@ -1,6 +1,6 @@
 {
   "name": "@drifty/desktop",
-  "version": "0.2.6",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,10 +11,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@drifty/charts": "0.2.6",
-    "@drifty/domain": "0.2.6",
+    "@drifty/charts": "1.0.2",
+    "@drifty/domain": "1.0.2",
     "@supabase/supabase-js": "^2.105.0",
     "@tauri-apps/api": "^2.0.1",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.4",

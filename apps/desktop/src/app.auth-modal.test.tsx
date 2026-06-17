@@ -414,7 +414,7 @@ describe("App auth modal", () => {
     authState.signInWithGoogle.mockImplementation(() => {
       authState.callbackStatus = {
         phase: "waiting",
-        message: "Browser opened. Complete Google sign-in, then choose Open Drifty.",
+        message: "Browser opened.",
       };
       return Promise.resolve({ error: null });
     });

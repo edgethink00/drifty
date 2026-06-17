@@ -44,6 +44,8 @@ describe("AccountMenu", () => {
     const chevrons = container.querySelector(".account-trigger__chevrons");
     const chevronMarks = container.querySelectorAll(".account-trigger__chevron-mark");
 
+    expect(trigger.querySelector(".account-trigger__copy")?.textContent).toBe("Account");
+
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(chevrons?.getAttribute("aria-hidden")).toBe("true");
     expect(chevronMarks).toHaveLength(2);
@@ -52,5 +54,20 @@ describe("AccountMenu", () => {
 
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll(".account-trigger__chevron-mark")).toHaveLength(2);
+    expect(screen.getByRole("menuitem", { name: /^AI Setting$/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^App Setting$/ })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /^Drifty Cloud$/ })).toBeNull();
+  });
+
+  it("routes the account menu app and AI setting actions separately", () => {
+    const { handlers } = renderAccountMenu();
+    fireEvent.click(screen.getByRole("button", { name: /account ai not connected/i }));
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^AI Setting$/ }));
+    expect(handlers.onUpgrade).toHaveBeenCalledTimes(1);
+    expect(handlers.onSettings).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^App Setting$/ }));
+    expect(handlers.onSettings).toHaveBeenCalledTimes(1);
   });
 });

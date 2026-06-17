@@ -205,6 +205,9 @@ function buildPreviewEvent(sectionKey: AlarmPreviewSectionKey, copySettings: Dri
         preservedFocusStrikeSeconds: 30 * 60,
         generatedAt: PREVIEW_GENERATED_AT,
         focusTargets: [PREVIEW_FOCUS_TARGET],
+        sourceSiteDomain: "youtube.com",
+        sourceAppName: "Google Chrome",
+        sourceIconSrc: null,
         copySettings,
       });
     case "breakReturn":

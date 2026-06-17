@@ -27,6 +27,7 @@ import {
 } from "./desktopAuthSession";
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
+import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -453,7 +454,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isActive) {
           unlistenDeepLink = nextUnlistenDeepLink;
         } else {
-          nextUnlistenDeepLink();
+          cleanupTauriEventListener(nextUnlistenDeepLink);
         }
       }
 
@@ -520,7 +521,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isActive = false;
-      unlistenDeepLink?.();
+      cleanupTauriEventListener(unlistenDeepLink);
       if (pendingDeepLinkInterval !== null) {
         window.clearInterval(pendingDeepLinkInterval);
       }
@@ -603,7 +604,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await openUrl(DESKTOP_LOGIN_URL);
         setCallbackStatus({
           phase: "waiting",
-          message: "Browser opened. Complete sign-in on drifty.so, then choose Open Drifty.",
+          message: "Browser opened.",
         });
       } catch (error) {
         const openError = error instanceof Error
@@ -672,7 +673,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await openUrl(data.url);
         setCallbackStatus({
           phase: "waiting",
-          message: "Browser opened. Complete Google sign-in, then choose Open Drifty.",
+          message: "Browser opened.",
         });
       } catch (error) {
         const openError = error instanceof Error

@@ -1,4 +1,4 @@
-import { categorizeActivity, logicalDayStartMs, logicalMinuteOfDay } from "@drifty/domain";
+import { categorizeActivity, logicalDayStartMs, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
@@ -8,7 +8,6 @@ import {
   FOCUS_DRIFT_BUCKET_COUNT,
   FOCUS_DRIFT_BUCKET_MINUTES,
   FOCUS_DRIFT_CHART_BOUNDS,
-  FOCUS_DRIFT_CLIP_BOUNDS,
   FOCUS_DRIFT_MINUTES_PER_DAY,
   buildSmoothPath,
   scaleFocusDriftY,
@@ -87,17 +86,22 @@ export type FocusDriftChart = {
   isLive: boolean;
   currentX: number | null;
   currentTimeLabel: string | null;
+  axisTicks: FocusDriftAxisTick[];
 };
 
-export const FOCUS_DRIFT_AXIS_TICKS: FocusDriftAxisTick[] = Array.from({ length: 9 }, (_, index) => {
-  const hour = index * 3;
+export function buildFocusDriftAxisTicks(startOfDayMinutes = 0): FocusDriftAxisTick[] {
   const chartWidth = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
-  return {
-    id: `focus-drift-axis-${hour}`,
-    label: `${hour.toString().padStart(2, "0")}:00`,
-    x: FOCUS_DRIFT_CHART_BOUNDS.left + (hour / 24) * chartWidth,
-  };
-});
+  return Array.from({ length: 9 }, (_, index) => {
+    const logicalMinute = index * 3 * 60;
+    return {
+      id: `focus-drift-axis-${logicalMinute}`,
+      label: formatFocusDriftBucketLabel(logicalMinute, startOfDayMinutes),
+      x: FOCUS_DRIFT_CHART_BOUNDS.left + (logicalMinute / FOCUS_DRIFT_MINUTES_PER_DAY) * chartWidth,
+    };
+  });
+}
+
+export const FOCUS_DRIFT_AXIS_TICKS: FocusDriftAxisTick[] = buildFocusDriftAxisTicks();
 
 export const FOCUS_DRIFT_Y_AXIS_TICKS = [
   { label: "100%", y: scaleFocusDriftY(100) },
@@ -136,7 +140,7 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     : Math.floor(boundedCurrentMinute / FOCUS_DRIFT_BUCKET_MINUTES) * FOCUS_DRIFT_BUCKET_MINUTES;
   const chartWidth = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
   const currentX = boundedCurrentMinute === null ? null : FOCUS_DRIFT_CHART_BOUNDS.left + (boundedCurrentMinute / FOCUS_DRIFT_MINUTES_PER_DAY) * chartWidth;
-  const currentTimeLabel = boundedCurrentMinute === null ? null : formatQuarterHourLabel(boundedCurrentMinute);
+  const currentTimeLabel = boundedCurrentMinute === null ? null : formatQuarterHourLabel(clockMinuteForLogicalMinute(boundedCurrentMinute, startOfDayMinutes));
   const isLive = currentX !== null && currentBucketStartMinute !== null;
 
   for (const segment of segments) {
@@ -177,7 +181,7 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     return {
       id: `${day}-${entry.bucketStartMinute}`,
       day,
-      label: formatFocusDriftBucketLabel(entry.bucketStartMinute),
+      label: formatFocusDriftBucketLabel(entry.bucketStartMinute, startOfDayMinutes),
       unit: "window" as const,
       bucketStartMinute: entry.bucketStartMinute,
       isFuture,
@@ -219,13 +223,22 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     isLive,
     currentX,
     currentTimeLabel,
+    axisTicks: buildFocusDriftAxisTicks(startOfDayMinutes),
   };
 }
 
-export function formatFocusDriftBucketLabel(bucketStartMinute: number): string {
-  const hour = Math.floor(bucketStartMinute / 60);
-  const minute = bucketStartMinute % 60;
+export function formatFocusDriftBucketLabel(bucketStartMinute: number, startOfDayMinutes = 0): string {
+  const clockMinute = clockMinuteForLogicalMinute(bucketStartMinute, startOfDayMinutes);
+  const hour = Math.floor(clockMinute / 60);
+  const minute = clockMinute % 60;
   return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+}
+
+function clockMinuteForLogicalMinute(logicalMinute: number, startOfDayMinutes: number): number {
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const roundedMinute = Math.round(logicalMinute);
+  if (boundaryMinutes === 0 && roundedMinute === FOCUS_DRIFT_MINUTES_PER_DAY) return FOCUS_DRIFT_MINUTES_PER_DAY;
+  return ((roundedMinute + boundaryMinutes) % FOCUS_DRIFT_MINUTES_PER_DAY + FOCUS_DRIFT_MINUTES_PER_DAY) % FOCUS_DRIFT_MINUTES_PER_DAY;
 }
 
 export function addFocusDriftSourceOverlap(

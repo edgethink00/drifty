@@ -58,6 +58,12 @@ class TrackerDatabase:
                   raw_context_json TEXT
                 );
 
+                CREATE INDEX IF NOT EXISTS idx_activity_segments_started_at
+                ON activity_segments(datetime(started_at));
+
+                CREATE INDEX IF NOT EXISTS idx_activity_segments_ended_at
+                ON activity_segments(datetime(ended_at));
+
                 CREATE TABLE IF NOT EXISTS tracker_meta (
                   key TEXT PRIMARY KEY,
                   value TEXT NOT NULL
@@ -514,24 +520,25 @@ class TrackerDatabase:
         return list(buckets.values())
 
     def fetch_top_sites(self, day: str, limit: int = 10) -> list[dict[str, Any]]:
-        site_map: dict[str, dict[str, Any]] = {}
-        for item in self.fetch_timeline(day):
-            domain = item.get("siteDomain")
-            if not domain:
-                continue
-            entry = site_map.setdefault(
-                domain,
-                {
-                    "siteDomain": domain,
-                    "totalSeconds": 0,
-                    "browserName": item.get("browserName"),
-                    "siteTitle": item.get("siteTitle"),
-                    "visits": 0,
-                },
-            )
-            entry["totalSeconds"] += item["durationSeconds"]
-            entry["visits"] += 1
-        return sorted(site_map.values(), key=lambda item: item["totalSeconds"], reverse=True)[:limit]
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    site_domain,
+                    SUM(duration_seconds) AS total_seconds,
+                    COUNT(*) AS visits,
+                    MAX(NULLIF(browser_name, '')) AS browser_name,
+                    MAX(NULLIF(site_title, '')) AS site_title
+                FROM activity_segments
+                WHERE NULLIF(site_domain, '') IS NOT NULL
+                  AND date(datetime(started_at, 'localtime')) = ?
+                GROUP BY site_domain
+                ORDER BY total_seconds DESC, visits DESC, site_domain ASC
+                LIMIT ?
+                """,
+                (day, limit),
+            ).fetchall()
+        return self._serialize_top_site_rows(rows)
 
     def fetch_last_event_at(self) -> str | None:
         with self.connect() as conn:
@@ -1160,18 +1167,75 @@ class TrackerDatabase:
         return [dict(row) for row in rows]
 
     def hourly_summary(self, start: str | None = None, end: str | None = None):
+        query = """
+            SELECT
+                strftime('%H:00', datetime(started_at, 'localtime')) AS hour_label,
+                app_name,
+                SUM(duration_seconds) AS total_seconds
+            FROM activity_segments
+            WHERE 1=1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end)
+        query += """
+            GROUP BY hour_label, app_name
+            ORDER BY hour_label ASC, total_seconds DESC, app_name ASC
+        """
+
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+
         buckets: dict[str, dict[str, Any]] = {}
-        for row in self.timeline(start=start, end=end):
-            hour_label = self._local_hour(row["started_at"])
+        for row in rows:
+            hour_label = row["hour_label"]
             bucket = buckets.setdefault(
                 hour_label,
                 {"hour": f"localT{hour_label}", "totalSeconds": 0, "appBreakdown": []},
             )
-            bucket["totalSeconds"] += row["duration_seconds"]
+            total_seconds = int(row["total_seconds"] or 0)
+            bucket["totalSeconds"] += total_seconds
             bucket["appBreakdown"].append(
-                {"appName": row["app_name"], "totalSeconds": row["duration_seconds"]}
+                {"appName": row["app_name"], "totalSeconds": total_seconds}
             )
         return list(buckets.values())
+
+    def top_sites(self, start: str | None = None, end: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                site_domain,
+                SUM(duration_seconds) AS total_seconds,
+                COUNT(*) AS visits,
+                MAX(NULLIF(browser_name, '')) AS browser_name,
+                MAX(NULLIF(site_title, '')) AS site_title
+            FROM activity_segments
+            WHERE NULLIF(site_domain, '') IS NOT NULL
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end)
+        query += """
+            GROUP BY site_domain
+            ORDER BY total_seconds DESC, visits DESC, site_domain ASC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+
+        return self._serialize_top_site_rows(rows)
+
+    @staticmethod
+    def _serialize_top_site_rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+        return [
+            {
+                "siteDomain": row["site_domain"],
+                "totalSeconds": int(row["total_seconds"] or 0),
+                "browserName": row["browser_name"],
+                "siteTitle": row["site_title"],
+                "visits": int(row["visits"] or 0),
+            }
+            for row in rows
+        ]
 
     @staticmethod
     def _serialize_rule(row: sqlite3.Row) -> dict[str, Any]:

@@ -98,22 +98,22 @@ export function AccountMenu({
     >
       {userEmail ? <div className="account-popover__email" title={userEmail}>{userEmail}</div> : null}
       <button type="button" className="account-menu-item" onClick={onUpgrade} role="menuitem">
-        <span className="account-menu-icon">↑</span>
-        <span>Drifty Cloud</span>
+        <span className="account-menu-icon" aria-hidden="true">✦</span>
+        <span>AI Setting</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
-        <span className="account-menu-icon">⚙</span>
-        <span>Settings</span>
+        <span className="account-menu-icon" aria-hidden="true">⚙</span>
+        <span>App Setting</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onFeedback} role="menuitem">
-        <span className="account-menu-icon">✉</span>
+        <span className="account-menu-icon" aria-hidden="true">✉</span>
         <span>Send feedback</span>
       </button>
       {isSignedIn ? (
         <>
           <div className="account-menu-separator" />
           <button type="button" className="account-menu-item account-menu-item--danger" onClick={onSignOut} role="menuitem">
-            <span className="account-menu-icon">↪</span>
+            <span className="account-menu-icon" aria-hidden="true">↪</span>
             <span>Log out</span>
           </button>
         </>
@@ -121,7 +121,7 @@ export function AccountMenu({
         <>
           <div className="account-menu-separator" />
           <button type="button" className="account-menu-item" onClick={onSignIn} role="menuitem">
-            <span className="account-menu-icon">↗</span>
+            <span className="account-menu-icon" aria-hidden="true">↗</span>
             <span>Sign in</span>
           </button>
         </>
@@ -133,11 +133,18 @@ export function AccountMenu({
   return (
     <div className="account-menu-shell">
       {popover}
-      <button ref={triggerRef} type="button" className="account-trigger" onClick={onToggle} aria-expanded={isOpen} aria-haspopup="menu">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="account-trigger"
+        onClick={onToggle}
+        aria-label={`${displayName} ${accountStatusLabel}`}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
         <span className="account-avatar">{trimmedUserAvatarUrl ? <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" /> : displayName.charAt(0).toUpperCase()}</span>
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
-          <span>{accountStatusLabel}</span>
         </span>
         <span className="account-trigger__chevrons" aria-hidden="true">
           <span className="account-trigger__chevron-mark account-trigger__chevron-mark--up" />

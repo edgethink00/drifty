@@ -1,87 +1,131 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
-import { AiSetupPanel } from "./AiSetupPanel";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
-import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
-
-const { invokeMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn().mockResolvedValue({ status: 200, body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}", latencyMs: 42 }),
-}));
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
-}));
-
-function renderPanel({
-  currentBillingPlan = "individual",
-  billingEntitlementStatus = "active",
-  cloudTrialEndsAt = null,
-  initialSetup = DEFAULT_LOCAL_AI_SETUP,
-  userEmail = null,
-  workProfileUserId = "local",
-}: {
-  readonly currentBillingPlan?: "free" | "individual";
-  readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
-  readonly cloudTrialEndsAt?: string | null;
-  readonly initialSetup?: LocalAiSetupState;
-  readonly userEmail?: string | null;
-  readonly workProfileUserId?: string;
-} = {}) {
-  const onRefreshCloudStatus = vi.fn();
-  const onStartCloudSetup = vi.fn();
-
-  function Harness() {
-    const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
-
-    return (
-      <AiSetupPanel
-        aiServerStatusLabel="Available"
-        billingCheckoutLoadingInterval={null}
-        billingEntitlementError={null}
-        billingEntitlementStatus={billingEntitlementStatus}
-        billingPlansDisabled={false}
-        cloudStatusRefreshing={false}
-        cloudStatusLabel="Cloud AI available"
-        cloudTrialEndsAt={cloudTrialEndsAt}
-        currentBillingPlan={currentBillingPlan}
-        isSupabaseConfigured={true}
-        localAiSetup={localAiSetup}
-        shouldShowCloudCheckoutPlans={false}
-        userEmail={userEmail}
-        workProfileUserId={workProfileUserId}
-        onDialogOpenChange={vi.fn()}
-        onLocalAiSetupChange={setLocalAiSetup}
-        onRefreshCloudStatus={onRefreshCloudStatus}
-        onStartCloudSetup={onStartCloudSetup}
-      />
-    );
-  }
-
-  render(<Harness />);
-  return { onRefreshCloudStatus, onStartCloudSetup };
-}
+import { invokeMock, renderPanel, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 
 describe("AiSetupPanel", () => {
-  it("switches between Cloud, OpenRouter, and Ollama setup rows", () => {
+  beforeEach(() => {
+    invokeMock.mockClear();
+    revealItemInDirMock.mockClear();
+  });
+
+  it("switches between Drifty and OpenRouter setup rows", async () => {
     renderPanel();
 
+    const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
+    expect(within(setupTabs).getByRole("tab", { name: /^Providers$/i }).getAttribute("aria-selected")).toBe("true");
+    expect(within(setupTabs).getByRole("tab", { name: /^Profile & info$/i }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
-    expect(within(sectionChoices).getByRole("button", { name: /^Drifty Cloud setup row$/i }).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
-    expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /Self-hosted AI settings/i })).toBeNull();
+    expect(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }).getAttribute("aria-expanded")).toBe("true");
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    const providerSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i });
+    const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
+    expect(providerSelect.textContent).toContain("Drifty");
+    expect(modelSelect.textContent).toContain("Drifty Cloud");
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter BYOK setup row$/i }));
+    const driftySettings = await screen.findByRole("group", { name: /^Drifty settings$/i });
+    chooseOption(modelBeingUsed, /^AI model$/i, /^Drifty Cloud$/i);
+    expect(providerSelect.textContent).toContain("Drifty");
+    expect(modelSelect.textContent).toContain("Drifty Cloud");
+
+    fireEvent.click(modelSelect);
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
+    if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
+    expect(gemmaOption.disabled).toBe(true);
+    expect(modelBeingUsed.textContent).not.toMatch(/download required/i);
+    fireEvent.click(gemmaOption);
+    expect(providerSelect.textContent).toContain("Drifty");
+    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    fireEvent.click(modelSelect);
+
+    const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
+    expect(within(driftySettings).getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
+    expect(within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i })).toBeTruthy();
+    expect(within(localSettings).getByRole("article", { name: /Gemma 4 12B managed local model/i })).toBeTruthy();
+    expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();
+    expect(within(driftySettings).queryByLabelText(/Drifty Cloud selected/i)).toBeNull();
+    expect(within(driftySettings).queryByLabelText(/Managed local model selected/i)).toBeNull();
+    const gemmaSelector = within(localSettings).getByLabelText(/Select Gemma 4 12B managed local model/i);
+    if (!(gemmaSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
+    expect(gemmaSelector.checked).toBe(false);
+    const qwenDefaultSelector = within(localSettings).getByLabelText(/Select Qwen 3\.5 4B managed local model/i);
+    if (!(qwenDefaultSelector instanceof HTMLInputElement)) throw new Error("Managed local model selector should be a radio input.");
+    expect(qwenDefaultSelector.checked).toBe(false);
+    expect(qwenDefaultSelector.disabled).toBe(true);
+    expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /Custom local endpoint settings/i })).toBeNull();
+    expect(screen.queryByText(/Custom local endpoint/i)).toBeNull();
+
+    chooseOption(modelBeingUsed, /^AI provider$/i, /^OpenRouter$/i);
+    expect(providerSelect.textContent).toContain("OpenRouter");
+    expect(modelSelect.textContent).toContain("DeepSeek V4 Flash");
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
-    expect(screen.queryByRole("group", { name: /Drifty Cloud settings/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /Self-hosted AI settings/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Local Ollama setup row$/i }));
-    const ollamaSettings = screen.getByRole("group", { name: /Self-hosted AI settings/i });
-    expect(within(ollamaSettings).getByLabelText(/Self-hosted base URL/i)).toBeTruthy();
+    chooseOption(modelBeingUsed, /^AI model$/i, /^Qwen 3\.6 Plus$/i);
+    expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
+
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }));
+    expect(providerSelect.textContent).toContain("Drifty");
+    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
+  });
+
+  it("allows an installed managed local model in the global model picker", async () => {
+    renderPanel();
+
+    const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
+    const qwenDefault = within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i });
+    fireEvent.click(within(qwenDefault).getByRole("button", { name: /^Download$/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
+    fireEvent.click(modelSelect);
+    const qwenOption = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i });
+    if (!(qwenOption instanceof HTMLButtonElement)) throw new Error("Installed managed model option should be a button.");
+    expect(qwenOption.disabled).toBe(false);
+    fireEvent.click(qwenOption);
+
+    expect(modelSelect.textContent).toContain("Qwen 3.5 4B");
+  });
+
+  it("downloads a disabled managed local model from the global model picker action", async () => {
+    renderPanel();
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
+    if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
+    expect(gemmaOption.disabled).toBe(true);
+
+    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Gemma 4 12B managed local model$/i }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
+  });
+
+  it("installs and deletes the selected managed local model from the Drifty row", async () => {
+    renderPanel();
+
+    const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
+    const qwenDefault = within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i });
+    expect(within(qwenDefault).queryByRole("button", { name: /delete qwen 3\.5 4b managed local model/i })).toBeNull();
+    expect(within(qwenDefault).queryByRole("button", { name: /^Start$/i })).toBeNull();
+    fireEvent.click(within(qwenDefault).getByRole("button", { name: /^Download$/i }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+    const showInFinderButton = within(qwenDefault).getByRole("button", { name: /^Show in Finder$/i });
+    fireEvent.click(showInFinderButton);
+    await waitFor(() => expect(revealItemInDirMock).toHaveBeenCalledWith("/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-4b-default"));
+    expect(within(qwenDefault).queryByRole("button", { name: /^Start$/i })).toBeNull();
+    const deleteButton = within(qwenDefault).getByRole("button", { name: /delete qwen 3\.5 4b managed local model/i });
+    if (!(deleteButton instanceof HTMLButtonElement)) throw new Error("Delete control should be a button.");
+    await waitFor(() => expect(deleteButton.disabled).toBe(false));
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_delete", { modelId: "drifty-qwen3-5-4b-default" }));
   });
 
   it("starts Cloud setup from the Polar CTA without plan cards", () => {
@@ -124,17 +168,17 @@ describe("AiSetupPanel", () => {
     expect(within(cloudSettings).queryByText("alex@example.com")).toBeNull();
   });
 
-  it("lets users edit the work profile used by AI classification", () => {
+  it("lets users edit the work profile selections used by AI classification", async () => {
     const storageKey = getUserOnboardingStorageKey("local");
     window.localStorage.setItem(storageKey, JSON.stringify({
       version: 2,
       completed: true,
       displayName: "",
-      workType: "Software engineering",
+      workType: "Coding",
       workTypeOther: "",
       workDomain: "Product development",
       workDomainOther: "",
-      jobType: null,
+      jobType: "Coding, Writing",
       jobTypeOther: "",
       driftAlarmEnabled: false,
       extremeNudgeEnabled: false,
@@ -146,29 +190,47 @@ describe("AiSetupPanel", () => {
 
     renderPanel();
 
-    fireEvent.click(screen.getByRole("button", { name: /Work profile/i }));
-    const workProfile = screen.getByRole("textbox", { name: /work profile/i });
-    if (!(workProfile instanceof HTMLTextAreaElement)) throw new Error("Work profile control should be a textarea.");
-    expect(workProfile.value).toBe("Software engineering in Product development");
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByRole("region", { name: /^Model being used$/i })).toBeNull();
+    expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();
+    expect(screen.queryByText(/User work profile:/i)).toBeNull();
+    expect(screen.queryByText(/AI prompt line/i)).toBeNull();
+    expect(screen.queryByText(/^Source$/i)).toBeNull();
 
-    fireEvent.change(workProfile, { target: { value: "iOS app development and launch operations" } });
+    expect(screen.getByRole("button", { name: /remove coding/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /remove writing/i })).toBeTruthy();
+    const addActivity = screen.getByRole("combobox", { name: /add work activity/i });
+    const fieldCombo = screen.getByRole("combobox", { name: /your field/i });
+    expect(screen.getByPlaceholderText("Product development")).toBeTruthy();
+
+    fireEvent.change(addActivity, { target: { value: "Data Analysis" } });
+    expect(screen.getByRole("button", { name: /remove data analysis/i })).toBeTruthy();
+    fireEvent.click(fieldCombo);
+    fireEvent.click(await screen.findByRole("option", { name: "AI" }));
+
+    expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /save work profile/i }));
 
     const savedState = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}") as Record<string, unknown>;
     expect(savedState).toMatchObject({
-      workType: "iOS app development and launch operations",
+      workType: "Coding",
       workTypeOther: "",
-      workDomain: null,
+      jobType: "Coding, Writing, Data Analysis",
+      jobTypeOther: "",
+      workDomain: "AI",
       workDomainOther: "",
     });
     expect(screen.getByRole("status").textContent).toContain("Work profile saved");
+    expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
+    expect(screen.queryByText(/User work profile:/i)).toBeNull();
   });
 
   it("tests the selected local provider connection without saving secret material", async () => {
     renderPanel();
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter BYOK setup row$/i }));
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
     fireEvent.change(screen.getByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test-secret" } });
     fireEvent.click(screen.getByRole("button", { name: /test openrouter connection/i }));
 
@@ -185,6 +247,7 @@ describe("AiSetupPanel", () => {
   it("shows the same privacy review inside AI setup", () => {
     renderPanel();
 
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
     expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
@@ -198,3 +261,8 @@ describe("AiSetupPanel", () => {
     expect(screen.getByText(/Raw timeline rows/i)).toBeTruthy();
   });
 });
+
+function chooseOption(container: HTMLElement, comboName: RegExp, optionName: RegExp): void {
+  fireEvent.click(within(container).getByRole("combobox", { name: comboName }));
+  fireEvent.click(within(container).getByRole("option", { name: optionName }));
+}
