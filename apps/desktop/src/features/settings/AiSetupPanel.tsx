@@ -70,10 +70,17 @@ export function AiSetupPanel({
   const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
   const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
   const [connectionTestRunning, setConnectionTestRunning] = useState(false);
-  const [driftyRoute, setDriftyRoute] = useState<DriftyRoute>(() => localAiSetup.provider === "managed_local" ? "local" : "cloud");
+  const driftyRoute = localAiSetup.driftyRoute;
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   const managedLocalAi = useManagedLocalAiSetup(activeSection === "drifty", onLocalAiSetupChange);
   const workProfileSettings = useWorkProfileSettings(workProfileUserId);
+  const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
+  const cloudSubscribeActionLabel = isCurrentCloudPlan
+    ? null
+    : billingCheckoutLoadingInterval === null
+      ? "Subscribe"
+      : "Opening...";
+  const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
 
   useEffect(() => {
     onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
@@ -85,6 +92,13 @@ export function AiSetupPanel({
     setConnectionTestResult(null);
     const provider = providerForSection(section);
     if (provider) onLocalAiSetupChange((current) => ({ ...current, provider }));
+    if (section === "drifty") onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local" }));
+  };
+
+  const handleDriftyRouteChange = (route: DriftyRoute) => {
+    setActiveSection("drifty");
+    setConnectionTestResult(null);
+    onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: route }));
   };
 
   const handleTestConnection = async () => {
@@ -116,11 +130,14 @@ export function AiSetupPanel({
             openRouterModelOptions={modelPickers.openRouterModelOptions}
             openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
             selectedProvider={activeSection}
-            onDriftyRouteChange={setDriftyRoute}
+            cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
+            cloudSubscribeActionLabel={cloudSubscribeActionLabel}
+            onDriftyRouteChange={handleDriftyRouteChange}
             onInstallModel={managedLocalAi.installModel}
             onLocalAiSetupChange={onLocalAiSetupChange}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleSectionChange}
+            onStartCloudSetup={onStartCloudSetup}
           />
 
           <h4 className="ai-setup-provider-heading">Configure providers</h4>

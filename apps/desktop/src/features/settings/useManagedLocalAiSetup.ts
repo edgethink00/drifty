@@ -43,6 +43,7 @@ export function useManagedLocalAiSetup(
     onLocalAiSetupChange((current) => ({
       ...current,
       provider: options.activateProvider ? "managed_local" : current.provider,
+      driftyRoute: options.activateProvider ? "local" : current.driftyRoute,
       managedLocalModelId: normalizeManagedLocalModelId(nextStatus.selectedModelId ?? current.managedLocalModelId),
       managedLocalBaseUrl: nextStatus.baseUrl ?? current.managedLocalBaseUrl,
       managedLocalModel: nextStatus.model ?? current.managedLocalModel,

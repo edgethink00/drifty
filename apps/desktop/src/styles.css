@@ -5066,6 +5066,14 @@ input, textarea { color: inherit; }
   transform: translateX(0);
 }
 
+@media (hover: none), (max-width: 760px) {
+  .settings-select-control__option-row.has-action .settings-select-control__option-action {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+}
+
 .settings-select-control__option-action:hover {
   background: color-mix(in srgb, var(--surface-strong) 92%, var(--bg-2));
   border-color: color-mix(in srgb, var(--text) 24%, var(--line));

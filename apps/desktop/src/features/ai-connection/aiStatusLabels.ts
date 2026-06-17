@@ -1,6 +1,6 @@
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationUsageSummary } from "../classification/aiClassificationService";
-import type { LocalAiSetupState } from "../settings/localAiSetup";
+import { isManagedLocalAiRoute, type LocalAiSetupState } from "../settings/localAiSetup";
 
 export function formatAiErrorDetail(usage: AiClassificationUsageSummary): string {
   const parts = [
@@ -68,6 +68,7 @@ export function aiConnectionStatusLabel(
   if (hasAccount && entitlement?.status !== "locked") return "Drifty Cloud AI";
   switch (localAiSetup.provider) {
     case "managed_local":
+      if (!isManagedLocalAiRoute(localAiSetup)) return "AI not connected";
       return localAiSetup.managedLocalBaseUrl.trim() && localAiSetup.managedLocalModel.trim() ? "Managed Local AI" : "AI not connected";
     case "openrouter_byok":
       return localAiSetup.openRouterApiKey.trim() ? "OpenRouter AI" : "AI not connected";

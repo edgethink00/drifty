@@ -23,12 +23,12 @@ describe("AiSetupPanel", () => {
     const providerSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i });
     const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
 
     const driftySettings = await screen.findByRole("group", { name: /^Drifty settings$/i });
-    chooseOption(modelBeingUsed, /^AI model$/i, /^Drifty Cloud$/i);
+    chooseOption(modelBeingUsed, /^AI model$/i, /^Drifty Individual \(Cloud\)$/i);
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
 
     fireEvent.click(modelSelect);
     const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 3 12B$/i });
@@ -37,7 +37,7 @@ describe("AiSetupPanel", () => {
     expect(modelBeingUsed.textContent).not.toMatch(/download required/i);
     fireEvent.click(gemmaOption);
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
     fireEvent.click(modelSelect);
 
     const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
@@ -104,6 +104,28 @@ describe("AiSetupPanel", () => {
     fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Gemma 3 12B managed local model$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
+  });
+
+  it("shows a subscription action on the Drifty cloud model option for non-subscribers", () => {
+    const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free" });
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+    const cloudOption = within(modelBeingUsed).getByRole("option", { name: /^Drifty Individual \(Cloud\)$/i });
+    expect(cloudOption.querySelector(".settings-select-control__icon")).toBeNull();
+
+    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Subscribe to Drifty Individual Cloud$/i }));
+
+    expect(onStartCloudSetup).toHaveBeenCalledWith();
+  });
+
+  it("does not show a subscription action on the active Drifty cloud plan", () => {
+    renderPanel();
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+
+    expect(within(modelBeingUsed).queryByRole("button", { name: /^Subscribe to Drifty Individual Cloud$/i })).toBeNull();
   });
 
   it("installs and deletes the selected managed local model from the Drifty row", async () => {
