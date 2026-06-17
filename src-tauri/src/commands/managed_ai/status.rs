@@ -1,0 +1,135 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use super::{
+    require_model, status_artifact_dir, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
+    MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL,
+};
+
+const STATUS_FILE_NAME: &str = "status.json";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedAiDownloadProgress {
+    pub(super) percent: u8,
+    pub(super) downloaded_bytes: u64,
+    pub(super) total_bytes: u64,
+}
+
+impl ManagedAiDownloadProgress {
+    pub(super) fn from_counts(downloaded_bytes: u64, total_bytes: u64) -> Self {
+        let percent = if total_bytes > 0 {
+            let bounded = downloaded_bytes.saturating_mul(100) / total_bytes;
+            match u8::try_from(bounded.min(100)) {
+                Ok(value) => value,
+                Err(_) => 100,
+            }
+        } else {
+            0
+        };
+        Self {
+            percent,
+            downloaded_bytes,
+            total_bytes,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedAiStatus {
+    pub(super) state: ManagedAiInstallState,
+    pub(super) selected_model_id: Option<String>,
+    pub(super) base_url: Option<String>,
+    pub(super) model: Option<String>,
+    pub(super) message: String,
+    pub(super) artifact_dir: Option<String>,
+    pub(super) progress: Option<ManagedAiDownloadProgress>,
+}
+
+pub(super) fn status_for_spec(
+    state: ManagedAiInstallState,
+    spec: ManagedAiModelSpec,
+    artifact_dir: Option<PathBuf>,
+    message: &str,
+) -> ManagedAiStatus {
+    ManagedAiStatus {
+        state,
+        selected_model_id: Some(spec.id.to_string()),
+        base_url: Some(MANAGED_BASE_URL.to_string()),
+        model: Some(spec.runtime_model.to_string()),
+        message: message.to_string(),
+        artifact_dir: artifact_dir.map(|path| path.to_string_lossy().into_owned()),
+        progress: None,
+    }
+}
+
+pub(super) fn status_for_download_progress(
+    spec: ManagedAiModelSpec,
+    progress: ManagedAiDownloadProgress,
+) -> ManagedAiStatus {
+    ManagedAiStatus {
+        state: ManagedAiInstallState::Installing,
+        selected_model_id: Some(spec.id.to_string()),
+        base_url: Some(MANAGED_BASE_URL.to_string()),
+        model: Some(spec.runtime_model.to_string()),
+        message: format!("Downloading managed local model... ({}%)", progress.percent),
+        artifact_dir: None,
+        progress: Some(progress),
+    }
+}
+
+pub(super) fn read_status(root: &Path) -> Result<ManagedAiStatus, ManagedAiError> {
+    let status_path = root.join(STATUS_FILE_NAME);
+    if !status_path.exists() {
+        return Ok(default_status());
+    }
+    let status = serde_json::from_str(&fs::read_to_string(status_path)?)?;
+    normalize_status_artifact_dir(root, status)
+}
+
+pub(super) fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), ManagedAiError> {
+    fs::create_dir_all(root)?;
+    let status_path = root.join(STATUS_FILE_NAME);
+    let temp_path = root.join(format!("{STATUS_FILE_NAME}.tmp"));
+    fs::write(&temp_path, serde_json::to_vec_pretty(status)?)?;
+    fs::rename(temp_path, status_path)?;
+    Ok(())
+}
+
+pub(super) fn default_status() -> ManagedAiStatus {
+    ManagedAiStatus {
+        state: ManagedAiInstallState::NotInstalled,
+        selected_model_id: None,
+        base_url: None,
+        model: None,
+        message: "Choose a local model and Drifty will download it inside the app.".to_string(),
+        artifact_dir: None,
+        progress: None,
+    }
+}
+
+fn normalize_status_artifact_dir(
+    root: &Path,
+    mut status: ManagedAiStatus,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    if let Some(model_id) = status.selected_model_id.as_deref() {
+        let spec = require_model(model_id)?;
+        let artifact_dir = status_artifact_dir(root, spec)?;
+        status.artifact_dir = artifact_dir.map(|path| path.to_string_lossy().into_owned());
+        if status.artifact_dir.is_none()
+            && matches!(
+                status.state,
+                ManagedAiInstallState::Installed | ManagedAiInstallState::Running
+            )
+        {
+            status.state = ManagedAiInstallState::Error;
+            status.message = MANAGED_ASSETS_MISSING_MESSAGE.to_string();
+        }
+    } else {
+        status.artifact_dir = None;
+    }
+    Ok(status)
+}

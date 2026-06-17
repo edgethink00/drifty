@@ -200,7 +200,7 @@ import type { AiConnectionTestResult } from "./features/settings/aiConnectionTes
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
-import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
+import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { EmptyState } from "./components/EmptyState";
 import { Toggle } from "./components/Toggle";
@@ -261,6 +261,7 @@ type UpdateCheckMode = "manual" | "automatic";
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
+const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
@@ -303,6 +304,60 @@ function loadAiClassificationUsage(day: string): Promise<AiClassificationUsageSu
 function isRendererFocused(): boolean {
   return document.visibilityState === "visible" && document.hasFocus();
 }
+
+function getDriftAlarmPollTimelineRange(day: string, startOfDayMinutes: number): { start: string; end: string } {
+  const nowMs = Date.now();
+  const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
+  const logicalDayStartMs = new Date(selectedDayRange.start).getTime();
+  const lowerBoundMs = Number.isFinite(logicalDayStartMs) ? logicalDayStartMs : nowMs - DRIFT_ALARM_TIMELINE_LOOKBACK_MS;
+  const startMs = Math.min(nowMs, Math.max(nowMs - DRIFT_ALARM_TIMELINE_LOOKBACK_MS, lowerBoundMs));
+
+  return {
+    start: formatLocalDateTime(startMs),
+    end: formatLocalDateTime(nowMs),
+  };
+}
+
+function mergeDriftAlarmSegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
+  if (liveSegments.length === 0) return [...baseSegments];
+
+  const segmentsById = new Map<string, ActivitySegment>();
+  for (const segment of baseSegments) {
+    segmentsById.set(segment.id, segment);
+  }
+  for (const segment of liveSegments) {
+    const existing = segmentsById.get(segment.id) ?? null;
+    segmentsById.set(segment.id, existing ? selectDriftAlarmSegment(existing, segment) : segment);
+  }
+
+  return Array.from(segmentsById.values());
+}
+
+function selectDriftAlarmSegment(existing: ActivitySegment, incoming: ActivitySegment): ActivitySegment {
+  const existingEndedAtMs = new Date(existing.endedAt).getTime();
+  const incomingEndedAtMs = new Date(incoming.endedAt).getTime();
+
+  if (Number.isFinite(existingEndedAtMs) && Number.isFinite(incomingEndedAtMs)) {
+    if (incomingEndedAtMs > existingEndedAtMs) return incoming;
+    if (incomingEndedAtMs < existingEndedAtMs) return existing;
+  }
+
+  if (existing.classification && !incoming.classification) return existing;
+  return incoming;
+}
+
+type DriftAlarmEvaluationInput = {
+  readonly checkedAt?: Date;
+  readonly snapshot: CurrentActivitySnapshot | null;
+  readonly liveSegments: readonly ActivitySegment[];
+  readonly updateRendererState?: boolean;
+};
+
+type DriftAlarmEvaluator = (input: DriftAlarmEvaluationInput) => void;
+
+type DriftAlarmTrayPublishOptions = {
+  readonly updateRendererState?: boolean;
+};
 
 /* ── SVG Icons ── */
 function NavIcon({ type }: { type: NavIconType }) {
@@ -698,9 +753,30 @@ export default function App() {
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const canUseCloudAiClassification = isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const aiClassificationProviderKey = localAiClassificationOptions
+    ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
+    : canUseCloudAiClassification
+      ? "cloud"
+      : "disabled";
+  const aiConnectionStatus = resolveAiConnectionStatus({
+    canUseCloudAi: canUseCloudAiClassification,
+    localProviderStatus: localAiProviderStatus,
+    localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
+    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
+    classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
+    cloudIssueKind: billingEntitlementError ? aiConnectionIssueKindFromMessage(billingEntitlementError) : null,
+  });
+  const previousAiClassificationProviderKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const previousAiClassificationProviderKey = previousAiClassificationProviderKeyRef.current;
+    setClassificationSummary((current) => {
+      if (previousAiClassificationProviderKey === null) return current;
+      if (previousAiClassificationProviderKey === aiClassificationProviderKey) return current;
+      return current?.status === "error" ? null : current;
+    });
+    previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
     setObservedAiClassificationFailure(false);
-  }, [canUseCloudAiClassification, localAiClassificationOptions]);
+  }, [aiClassificationProviderKey]);
   const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
     const fingerprint = localAiSetupFingerprint(testedSetup);
     if (!fingerprint) {
@@ -752,6 +828,7 @@ export default function App() {
   }, [localAiConnectionFingerprint, localAiSetup.provider]);
   const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
+  const historyRefreshRequestRef = useRef(0);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const leaderboardRefreshRequestRef = useRef(0);
   const autoSelectedLatestDayRef = useRef(false);
@@ -778,17 +855,29 @@ export default function App() {
   const liveDriftAlarmAiRetryAfterRef = useRef<Map<string, number>>(new Map());
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
-  const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date()) => {
-    setDriftAlarmTrayStatus(buildDriftAlarmTrayStatus({
+  const evaluateDriftAlarmRef = useRef<DriftAlarmEvaluator | null>(null);
+  const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
+    const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
       checkedAt,
       result,
-    }));
+    });
+
+    if (options?.updateRendererState === false) {
+      const client = trackerClient as Partial<typeof trackerClient>;
+      if (typeof client.updateTrayDriftAlarmStatus === "function") {
+        void client.updateTrayDriftAlarmStatus(nextStatus).catch(() => undefined);
+      }
+      return;
+    }
+
+    setDriftAlarmTrayStatus(nextStatus);
   }, [driftAlertsEnabled]);
   const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
+  const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
   const rendererFocusedRef = useRef(rendererFocused);
   const selectedDayRef = useRef(selectedDay);
   const lastRendererInteractionAtRef = useRef(Date.now());
@@ -1271,6 +1360,7 @@ export default function App() {
 
     if (shouldBlockLocalTrackerAccess) {
       refreshRequestRef.current += 1;
+      historyRefreshRequestRef.current += 1;
       setLoading(false);
       setError(null);
       return false;
@@ -1278,26 +1368,34 @@ export default function App() {
 
     const requestId = refreshRequestRef.current + 1;
     refreshRequestRef.current = requestId;
+    historyRefreshRequestRef.current += 1;
     if (isRequiredCurrentSnapshotRefresh) requiredCurrentSnapshotRefreshInFlightRef.current = true;
     setLoading(true);
     setError(null);
 
+    const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
     const historyStartDay = shiftIsoDate(day, -89);
     const historySummaryRange = getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
     const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
-    const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
+    const historyTimelineStartDay = shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay;
+    const historyTimelineEndDay = shouldLoadDashboardWeekHistory
+      ? selectedWeekRange.endDay
+      : day > selectedWeekRange.endDay
+        ? day
+        : selectedWeekRange.endDay;
+    const historyTimelineRange = getLogicalDayRange(historyTimelineStartDay, historyTimelineEndDay, startOfDayMinutes);
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
     const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
+    const shouldLoadHistorySummaries = shouldLoadHistory && !shouldLoadDashboardWeekHistory;
 
     try {
       const archiveTimelineRequest = shouldLoadHistory
         ? trackerClient.getTimeline(historyTimelineRange)
         : Promise.resolve<ActivitySegment[] | null>(null);
-      const historyHourlySummaryRequest = shouldLoadHistory
+      const historyHourlySummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getHourlySummary(historySummaryRange)
         : Promise.resolve<HourBucket[] | null>(null);
-      const historySiteSummaryRequest = shouldLoadHistory
+      const historySiteSummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
         : Promise.resolve<SiteDuration[] | null>(null);
 
@@ -1326,6 +1424,7 @@ export default function App() {
       if (refreshRequestRef.current !== requestId) return false;
 
       setCurrentSnapshot(nextCurrentSnapshot);
+      liveDriftAlarmSegmentsRef.current = [];
       setSegments(timeline);
       setSegmentsLoadedDay(day);
       if (archiveTimelines !== null) setHistorySegments(archiveTimelines);
@@ -1388,6 +1487,83 @@ export default function App() {
     }
   }
 
+  async function refreshHistoryData(day = selectedDay): Promise<boolean> {
+    if (shouldBlockLocalTrackerAccess) {
+      historyRefreshRequestRef.current += 1;
+      return false;
+    }
+
+    const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
+    if (!shouldLoadHistory) {
+      historyRefreshRequestRef.current += 1;
+      return false;
+    }
+
+    const requestId = historyRefreshRequestRef.current + 1;
+    historyRefreshRequestRef.current = requestId;
+    setError(null);
+
+    const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
+    const historyStartDay = shiftIsoDate(day, -89);
+    const historySummaryRange = getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
+    const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
+    const historyTimelineStartDay = shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay;
+    const historyTimelineEndDay = shouldLoadDashboardWeekHistory
+      ? selectedWeekRange.endDay
+      : day > selectedWeekRange.endDay
+        ? day
+        : selectedWeekRange.endDay;
+    const historyTimelineRange = getLogicalDayRange(historyTimelineStartDay, historyTimelineEndDay, startOfDayMinutes);
+    const shouldLoadHistorySummaries = !shouldLoadDashboardWeekHistory;
+
+    try {
+      const [archiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
+        trackerClient.getTimeline(historyTimelineRange),
+        shouldLoadHistorySummaries
+          ? trackerClient.getHourlySummary(historySummaryRange)
+          : Promise.resolve<HourBucket[] | null>(null),
+        shouldLoadHistorySummaries
+          ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
+          : Promise.resolve<SiteDuration[] | null>(null),
+      ]);
+
+      if (historyRefreshRequestRef.current !== requestId) return false;
+
+      setHistorySegments(archiveTimelines);
+      if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
+      if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
+
+      void (async () => {
+        try {
+          const uniqueApps = Array.from(
+            new Map(archiveTimelines.map((segment) => [
+              segment.bundleId || segment.appName,
+              { appName: segment.appName, bundleId: segment.bundleId ?? null },
+            ])).values(),
+          );
+          if (uniqueApps.length === 0) return;
+          const rawIconMap = await trackerClient.getAppIcons(uniqueApps);
+          if (historyRefreshRequestRef.current !== requestId) return;
+          const iconMap = uniqueApps.reduce<AppIconMap>((acc, item) => {
+            const identityKey = item.bundleId || item.appName;
+            const nextIcon = rawIconMap[identityKey] ?? null;
+            acc[identityKey] = acc[identityKey] ?? nextIcon;
+            acc[item.appName] = acc[item.appName] ?? nextIcon;
+            return acc;
+          }, {});
+          setAppIcons((current) => ({ ...current, ...iconMap }));
+        } catch {
+          if (historyRefreshRequestRef.current !== requestId) return;
+        }
+      })();
+      return true;
+    } catch (nextError) {
+      if (historyRefreshRequestRef.current !== requestId) return false;
+      setError(toErrorMessage(nextError));
+      return false;
+    }
+  }
+
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;
     if (shouldBlockLocalTrackerAccess) return false;
@@ -1395,24 +1571,24 @@ export default function App() {
 
     liveDriftAlarmRefreshInFlightRef.current = true;
     try {
-      const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
-      const [timeline, nextCurrentSnapshot, nextStatus] = await Promise.all([
-        trackerClient.getTimeline(selectedDayRange),
+      const timelineRange = getDriftAlarmPollTimelineRange(day, startOfDayMinutes);
+      const [liveTimeline, nextCurrentSnapshot] = await Promise.all([
+        trackerClient.getTimeline(timelineRange),
         trackerClient.getCurrentSnapshot().catch((error: unknown) => {
           const message = error instanceof Error ? error.message : "unknown error";
           console.warn("Failed to refresh current activity for drift alarm poll", message);
           return null;
         }),
-        trackerClient.getStatus(),
       ]);
 
       if (selectedDayRef.current !== day) return false;
-      setStatus(nextStatus);
-      setAccessibilityGranted(nextStatus.accessibilityGranted);
-      setCurrentSnapshot(nextCurrentSnapshot);
-      setSegments(timeline);
-      setSegmentsLoadedDay(day);
-      setHourly(buildHourlySummary(timeline));
+      liveDriftAlarmSegmentsRef.current = liveTimeline;
+      evaluateDriftAlarmRef.current?.({
+        checkedAt: new Date(),
+        snapshot: nextCurrentSnapshot,
+        liveSegments: liveTimeline,
+        updateRendererState: false,
+      });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
@@ -1432,7 +1608,13 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     void refresh(selectedDay);
-  }, [activeTab, classificationRange, dashPeriod, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+
+  useEffect(() => {
+    if (shouldBlockLocalTrackerAccess) return;
+    if (!hasLoadedOnce) return;
+    void refreshHistoryData(selectedDay);
+  }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1817,8 +1999,14 @@ export default function App() {
     };
   }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
-  useEffect(() => {
-    const checkedAt = new Date();
+  const evaluateDriftAlarm = useCallback((input: DriftAlarmEvaluationInput) => {
+    const checkedAt = input.checkedAt ?? new Date();
+    const shouldUpdateRendererState = input.updateRendererState !== false;
+    const alarmSnapshot = input.snapshot;
+    const liveSegments = input.liveSegments;
+    const publishEvaluationDriftAlarmTrayStatus = (result: DriftAlarmTrayResult, statusCheckedAt: Date | null = checkedAt) => {
+      publishDriftAlarmTrayStatus(result, statusCheckedAt, { updateRendererState: shouldUpdateRendererState });
+    };
     const clearPendingTransientRefresh = () => {
       if (!pendingDriftAlarmTransientRefreshRef.current) return;
       window.clearTimeout(pendingDriftAlarmTransientRefreshRef.current);
@@ -1836,32 +2024,39 @@ export default function App() {
       }, Math.max(0, delayMs));
     };
     if (!driftAlertsEnabled) {
-      publishDriftAlarmTrayStatus({ kind: "disabled" }, null);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "disabled" }, null);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
     if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) {
-      publishDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
     if (!status?.running) {
-      publishDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
 
-    const systemTransientActivity = currentSnapshot?.systemTransientActivity ?? null;
+    const systemTransientActivity = alarmSnapshot?.systemTransientActivity ?? null;
+    const driftAlarmSegments = liveSegments.length > 0
+      ? mergeDriftAlarmSegments(segments, liveSegments)
+      : segments;
+    const driftAlarmClassificationOptions = {
+      ...selectedDayClassificationOptions,
+      fallbackCandidates: driftAlarmSegments,
+    } satisfies ClassificationOptions;
     const driftCandidates = buildDriftAlarmCandidates({
-      segments,
-      currentSnapshot,
-      classificationOptions: selectedDayClassificationOptions,
+      segments: driftAlarmSegments,
+      currentSnapshot: alarmSnapshot,
+      classificationOptions: driftAlarmClassificationOptions,
       minimumDurationSeconds: driftAlertDelaySeconds,
     });
     const liveDrift = driftCandidates[0] ?? null;
@@ -1869,11 +2064,11 @@ export default function App() {
       lastEligibleDriftCandidateRef.current = liveDrift;
     }
     const latestDrift = liveDrift ?? (systemTransientActivity ? lastEligibleDriftCandidateRef.current : null);
-    const activeSnooze = driftAlarmSnoozeRef.current;
+    const activeSnooze = driftAlarmSnooze ?? driftAlarmSnoozeRef.current;
     if (activeSnooze !== null) {
       pendingDriftAlarmGateRef.current = null;
       clearPendingTransientDriftAlarm();
-      publishDriftAlarmTrayStatus({
+      publishEvaluationDriftAlarmTrayStatus({
         kind: "snoozed",
         detail: `Until ${formatTimeLabel(new Date(activeSnooze.untilMs))}`,
       }, checkedAt);
@@ -1884,9 +2079,9 @@ export default function App() {
     if (!latestDrift) {
       const liveAiCandidate = systemTransientActivity === null && (localAiClassificationOptions || canUseCloudAiClassification)
         ? resolveLiveDriftAlarmAiCandidate({
-          segments,
-          currentSnapshot,
-          classificationOptions: selectedDayClassificationOptions,
+          segments: driftAlarmSegments,
+          currentSnapshot: alarmSnapshot,
+          classificationOptions: driftAlarmClassificationOptions,
           minimumDurationSeconds: driftAlertDelaySeconds,
         })
         : null;
@@ -1898,7 +2093,7 @@ export default function App() {
         );
         const liveAiRetryAfterMs = liveDriftAlarmAiRetryAfterRef.current.get(liveAiCandidate.key) ?? 0;
         if (liveAiRetryAfterMs > Date.now()) {
-          publishDriftAlarmTrayStatus({
+          publishEvaluationDriftAlarmTrayStatus({
             kind: "suppressed",
             reason: "ai-unavailable:retry-cooldown",
             candidateDetail: liveAiCandidateDetail,
@@ -1906,7 +2101,7 @@ export default function App() {
           return;
         }
 
-        publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
+        publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
         if (liveDriftAlarmAiRequestInFlightRef.current === null) {
           liveDriftAlarmAiRequestInFlightRef.current = liveAiCandidate.key;
           const liveAiOptions = localAiClassificationOptions
@@ -1927,7 +2122,7 @@ export default function App() {
                 return;
               case "unavailable":
                 liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
-                publishDriftAlarmTrayStatus({
+                publishEvaluationDriftAlarmTrayStatus({
                   kind: "suppressed",
                   reason: `ai-unavailable:${result.reason}`,
                   candidateDetail: liveAiCandidateDetail,
@@ -1941,7 +2136,7 @@ export default function App() {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
             liveDriftAlarmAiRequestInFlightRef.current = null;
             liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
-            publishDriftAlarmTrayStatus({
+            publishEvaluationDriftAlarmTrayStatus({
               kind: "error",
               reason: error instanceof Error ? error.message : "Live AI classification failed",
             }, new Date());
@@ -1952,7 +2147,7 @@ export default function App() {
 
       const pendingTransient = pendingDriftAlarmTransientRef.current;
       if (pendingTransient && systemTransientActivity) {
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
           reason: pendingTransient.systemTransientActivity,
           candidateDetail: pendingTransient.candidateDetail,
@@ -1960,7 +2155,7 @@ export default function App() {
         scheduleTransientRefresh(Math.max(1_000, pendingTransient.readyAtMs - Date.now()));
         return;
       }
-      publishDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
@@ -1994,7 +2189,7 @@ export default function App() {
       case "defer":
         pendingDriftAlarmGateRef.current = null;
         pendingDriftAlarmTransientRef.current = transientDecision.pending;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
           reason: transientDecision.pending.systemTransientActivity,
           candidateDetail,
@@ -2004,7 +2199,7 @@ export default function App() {
       case "await_delay":
         pendingDriftAlarmGateRef.current = null;
         pendingDriftAlarmTransientRef.current = transientDecision.pending;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
           reason: transientDecision.pending.systemTransientActivity,
           candidateDetail,
@@ -2016,7 +2211,7 @@ export default function App() {
         pendingDriftAlarmTransientRef.current = null;
         clearPendingTransientRefresh();
         lastDriftAlertSegmentRef.current = alertKey;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: "system-transient-defer-expired",
           candidateDetail,
@@ -2060,7 +2255,7 @@ export default function App() {
       showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
     const markCurrentDriftAlarmDelivered = () => {
-      publishDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
     const showFallbackDriftAlarm = (notify: boolean) => {
       showCurrentDriftAlarm();
@@ -2105,14 +2300,14 @@ export default function App() {
         return "current-snapshot-unavailable";
       }
 
-      setCurrentSnapshot(freshSnapshot);
+      if (shouldUpdateRendererState) setCurrentSnapshot(freshSnapshot);
       if (freshSnapshot?.systemTransientActivity) return "system-transient-active";
 
       const freshCandidate = resolveFreshDriftAlarmCandidate({
         candidate: latestDrift,
-        segments,
+        segments: driftAlarmSegments,
         currentSnapshot: freshSnapshot,
-        classificationOptions: selectedDayClassificationOptions,
+        classificationOptions: driftAlarmClassificationOptions,
         minimumDurationSeconds: driftAlertDelaySeconds,
       });
       return freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
@@ -2182,7 +2377,7 @@ export default function App() {
         if (driftAlarmEventRef.current?.id === alertKey) {
           showCurrentDriftAlarm();
         }
-        publishDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
+        publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
         return;
       }
 
@@ -2200,7 +2395,7 @@ export default function App() {
       if (driftAlarmEventRef.current?.id === alertKey) {
         showCurrentDriftAlarm();
       }
-      publishDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
       return;
     }
 
@@ -2210,7 +2405,7 @@ export default function App() {
     }
 
     pendingDriftAlarmGateRef.current = alertKey;
-    publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
+    publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
     void evaluateYouTubeDriftAlarmGate({
       segment,
       category,
@@ -2221,7 +2416,7 @@ export default function App() {
       if (gateResult.kind === "suppress") {
         pendingDriftAlarmGateRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: gateResult.reason,
           candidateDetail,
@@ -2236,7 +2431,7 @@ export default function App() {
       if (finalGateResult === "system-transient-active") return;
 
       if (finalGateResult !== "confirmed") {
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: finalGateResult,
           candidateDetail,
@@ -2252,12 +2447,23 @@ export default function App() {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
       pendingDriftAlarmGateRef.current = null;
       lastDriftAlertSegmentRef.current = alertKey;
-      publishDriftAlarmTrayStatus({
+      publishEvaluationDriftAlarmTrayStatus({
         kind: "error",
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [canUseCloudAiClassification, currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+
+  useEffect(() => {
+    evaluateDriftAlarmRef.current = evaluateDriftAlarm;
+  }, [evaluateDriftAlarm]);
+
+  useEffect(() => {
+    evaluateDriftAlarm({
+      snapshot: currentSnapshot,
+      liveSegments: liveDriftAlarmSegmentsRef.current,
+    });
+  }, [currentSnapshot, evaluateDriftAlarm]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -3500,10 +3706,35 @@ export default function App() {
       segments,
       historySegments,
       leaderboardSegments,
+      ai: {
+        route: localAiClassificationOptions ? "local" : canUseCloudAiClassification ? "cloud" : "disabled",
+        connectionStatus: aiConnectionStatus,
+        cloud: {
+          isSupabaseConfigured,
+          hasRequiredAccountAuth,
+          canUseCloudAiClassification,
+          entitlement: billingEntitlement,
+          entitlementLoading: billingEntitlementLoading,
+          entitlementError: billingEntitlementError,
+        },
+        local: {
+          providerLabel: localAiConnectionProviderLabel,
+          providerStatus: localAiProviderStatus,
+        },
+        classification: {
+          actionLoading: classificationActionLoading,
+          summary: classificationSummary,
+          observedFailure: observedAiClassificationFailure,
+        },
+        usage: {
+          day: aiClassificationUsageDay,
+          summary: aiClassificationUsage,
+        },
+      },
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, driftAlarmTrayStatus, error, historySegments, leaderboardSegments, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, driftAlarmTrayStatus, error, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -3586,15 +3817,6 @@ export default function App() {
         ? "free"
         : null;
   const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
-  const aiConnectionStatus = resolveAiConnectionStatus({
-    canUseCloudAi: canUseCloudAiClassification,
-    localProviderStatus: localAiProviderStatus,
-    localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
-    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
-    classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
-    cloudIssueKind: billingEntitlementError ? aiConnectionIssueKindFromMessage(billingEntitlementError) : null,
-  });
-
   return (
     <div className={isSidebarVisuallyCollapsed ? "app-shell app-shell--sidebar-collapsed" : "app-shell"}>
       <div className="window-chrome">

@@ -193,4 +193,10 @@
   .ai-setup-current-model__slash {
     justify-self: center;
   }
+
+  .ai-setup-select-control--model .settings-select-control__menu {
+    left: 0;
+    right: auto;
+    width: min(100%, calc(100vw - 2rem));
+  }
 }

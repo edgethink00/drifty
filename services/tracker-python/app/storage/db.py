@@ -4,12 +4,13 @@ import json
 import sqlite3
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from app.storage.activity_segment_serialization import json_list, serialize_activity_row
+from app.storage.timestamps import parse_iso_datetime
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
@@ -477,7 +478,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _normalize_range_bound(value: str) -> str:
-        parsed = datetime.fromisoformat(value)
+        parsed = parse_iso_datetime(value)
         if parsed.tzinfo is None:
             parsed = parsed.astimezone()
         return parsed.astimezone(timezone.utc).isoformat()
@@ -501,7 +502,8 @@ class TrackerDatabase:
         return query
 
     def fetch_timeline(self, day: str, limit: int | None = None) -> list[dict[str, Any]]:
-        rows = self.timeline(limit=limit)
+        start, end = self._local_day_bounds(day)
+        rows = self.timeline(start=start, end=end, limit=limit)
         filtered = [row for row in rows if self._local_day(row["started_at"]) == day]
         return [self._serialize_row(row) for row in filtered]
 
@@ -1306,11 +1308,17 @@ class TrackerDatabase:
 
     @staticmethod
     def _local_day(value: str) -> str:
-        return datetime.fromisoformat(value).astimezone().date().isoformat()
+        return parse_iso_datetime(value).astimezone().date().isoformat()
+
+    @staticmethod
+    def _local_day_bounds(day: str) -> tuple[str, str]:
+        start = datetime.fromisoformat(f"{day}T00:00:00")
+        end = start + timedelta(days=1, seconds=-1)
+        return start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")
 
     @staticmethod
     def _local_hour(value: str) -> str:
-        return datetime.fromisoformat(value).astimezone().strftime("%H:00")
+        return parse_iso_datetime(value).astimezone().strftime("%H:00")
 
     @staticmethod
     def _within_merge_gap(previous_end: str, next_observed_at: str, max_merge_gap_seconds: int | None) -> bool:
@@ -1322,7 +1330,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _timestamp_seconds(value: str) -> float:
-        parsed = datetime.fromisoformat(value)
+        parsed = parse_iso_datetime(value)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.timestamp()

@@ -286,6 +286,18 @@
   gap: 0.42rem;
 }
 
+.ai-managed-model__primary-action.is-retry {
+  background: color-mix(in srgb, var(--warn-soft) 70%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 34%, var(--line));
+  color: var(--warn);
+}
+
+.ai-managed-model__primary-action.is-retry:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 46%, var(--line));
+  color: var(--warn);
+}
+
 .ai-managed-model__primary-action svg,
 .ai-managed-model__delete-action svg {
   color: currentColor;

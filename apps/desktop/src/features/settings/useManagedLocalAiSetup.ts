@@ -5,6 +5,7 @@ import {
   deleteManagedLocalAiModel,
   fallbackManagedLocalAiStatus,
   getManagedLocalAiStatus,
+  installingManagedLocalAiStatus,
   installManagedLocalAiModel,
   listManagedLocalAiModels,
   MANAGED_LOCAL_AI_FALLBACK_CATALOG,
@@ -17,6 +18,9 @@ import { normalizeManagedLocalModelId, type LocalAiSetupState } from "./localAiS
 type ManagedLocalAiAction = (modelId: string) => Promise<ManagedLocalAiStatus>;
 type SyncManagedSetupOptions = {
   readonly activateProvider: boolean;
+};
+type RunActionOptions = {
+  readonly optimisticInstalling: boolean;
 };
 
 export type UseManagedLocalAiSetupResult = {
@@ -43,6 +47,7 @@ export function useManagedLocalAiSetup(
     onLocalAiSetupChange((current) => ({
       ...current,
       provider: options.activateProvider ? "managed_local" : current.provider,
+      driftyRoute: options.activateProvider ? "local" : current.driftyRoute,
       managedLocalModelId: normalizeManagedLocalModelId(nextStatus.selectedModelId ?? current.managedLocalModelId),
       managedLocalBaseUrl: nextStatus.baseUrl ?? current.managedLocalBaseUrl,
       managedLocalModel: nextStatus.model ?? current.managedLocalModel,
@@ -67,14 +72,36 @@ export function useManagedLocalAiSetup(
     }
   }, [syncManagedSetup]);
 
+  const refreshStatusOnly = useCallback(async () => {
+    try {
+      const nextStatus = await getManagedLocalAiStatus();
+      setStatus(nextStatus);
+      syncManagedSetup(nextStatus, { activateProvider: false });
+    } catch (error) {
+      if (error instanceof Error) return;
+      throw error;
+    }
+  }, [syncManagedSetup]);
+
   useEffect(() => {
     if (!enabled) return;
     void refresh();
   }, [enabled, refresh]);
 
-  const runAction = useCallback(async (modelId: string, action: ManagedLocalAiAction) => {
-    if (actionModelId) return;
+  useEffect(() => {
+    if (!enabled || status?.state !== "installing") return;
+    const intervalId = window.setInterval(() => {
+      void refreshStatusOnly();
+    }, 500);
+    return () => window.clearInterval(intervalId);
+  }, [enabled, refreshStatusOnly, status?.state]);
+
+  const runAction = useCallback(async (modelId: string, action: ManagedLocalAiAction, options: RunActionOptions) => {
+    if (actionModelId || status?.state === "installing") return;
     setActionModelId(modelId);
+    if (options.optimisticInstalling) {
+      setStatus(installingManagedLocalAiStatus(modelId));
+    }
     try {
       const nextStatus = await action(modelId);
       setStatus(nextStatus);
@@ -84,17 +111,17 @@ export function useManagedLocalAiSetup(
     } finally {
       setActionModelId(null);
     }
-  }, [actionModelId, syncManagedSetup]);
+  }, [actionModelId, status?.state, syncManagedSetup]);
 
   return {
     actionModelId,
     catalog,
     loading,
     status,
-    deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel),
-    installModel: (modelId) => runAction(modelId, installManagedLocalAiModel),
+    deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel, { optimisticInstalling: false }),
+    installModel: (modelId) => runAction(modelId, installManagedLocalAiModel, { optimisticInstalling: true }),
     refresh,
-    startModel: (modelId) => runAction(modelId, startManagedLocalAi),
+    startModel: (modelId) => runAction(modelId, startManagedLocalAi, { optimisticInstalling: false }),
   };
 }
 

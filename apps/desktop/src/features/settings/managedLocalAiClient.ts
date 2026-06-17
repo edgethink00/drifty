@@ -13,6 +13,12 @@ export type ManagedLocalAiModel = {
   readonly recommended: boolean;
 };
 
+export type ManagedLocalAiDownloadProgress = {
+  readonly percent: number;
+  readonly downloadedBytes: number;
+  readonly totalBytes: number;
+};
+
 export type ManagedLocalAiStatus = {
   readonly state: ManagedLocalAiInstallState;
   readonly selectedModelId: string | null;
@@ -20,6 +26,7 @@ export type ManagedLocalAiStatus = {
   readonly model: string | null;
   readonly message: string;
   readonly artifactDir: string | null;
+  readonly progress: ManagedLocalAiDownloadProgress | null;
 };
 
 export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
@@ -87,7 +94,19 @@ export async function deleteManagedLocalAiModel(modelId: string): Promise<Manage
 }
 
 export function fallbackManagedLocalAiStatus(message: string): ManagedLocalAiStatus {
-  return { state: "error", selectedModelId: null, baseUrl: null, model: null, message, artifactDir: null };
+  return { state: "error", selectedModelId: null, baseUrl: null, model: null, message, artifactDir: null, progress: null };
+}
+
+export function installingManagedLocalAiStatus(modelId: string): ManagedLocalAiStatus {
+  return {
+    state: "installing",
+    selectedModelId: modelId,
+    baseUrl: null,
+    model: null,
+    message: "Downloading managed local model...",
+    artifactDir: null,
+    progress: null,
+  };
 }
 
 function parseManagedModel(value: unknown): ManagedLocalAiModel[] {
@@ -115,6 +134,20 @@ function parseManagedStatus(value: unknown): ManagedLocalAiStatus {
     model: nullableString(value.model),
     message: stringValue(value.message) || "Managed local AI status updated.",
     artifactDir: nullableString(value.artifactDir),
+    progress: parseProgress(value.progress),
+  };
+}
+
+function parseProgress(value: unknown): ManagedLocalAiDownloadProgress | null {
+  if (!isRecord(value)) return null;
+  const percent = typeof value.percent === "number" && Number.isFinite(value.percent) ? value.percent : 0;
+  const downloadedBytes = typeof value.downloadedBytes === "number" && Number.isFinite(value.downloadedBytes) ? value.downloadedBytes : 0;
+  const totalBytes = typeof value.totalBytes === "number" && Number.isFinite(value.totalBytes) ? value.totalBytes : 0;
+  if (totalBytes <= 0 && downloadedBytes <= 0) return null;
+  return {
+    percent: Math.min(Math.max(percent, 0), 100),
+    downloadedBytes: Math.max(downloadedBytes, 0),
+    totalBytes: Math.max(totalBytes, 0),
   };
 }
 

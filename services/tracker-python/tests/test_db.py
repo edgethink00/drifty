@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
@@ -179,6 +179,34 @@ class TrackerDatabaseTests(unittest.TestCase):
         events = self.database.fetch_timeline(local_day)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["appName"], "Finder")
+
+    def test_fetch_timeline_day_uses_bounded_range_query(self) -> None:
+        started_at = "2026-04-06T09:00:00+00:00"
+        self.database.insert_segment(
+            {
+                "started_at": started_at,
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Finder",
+                "bundle_id": "com.apple.finder",
+                "window_title": None,
+                "platform": "macos",
+                "source": "nsworkspace",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+        local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+
+        with patch.object(self.database, "timeline", wraps=self.database.timeline) as timeline_spy:
+            events = self.database.fetch_timeline(local_day)
+
+        self.assertEqual(len(events), 1)
+        timeline_spy.assert_called_once_with(
+            start=f"{local_day}T00:00:00",
+            end=f"{local_day}T23:59:59",
+            limit=None,
+        )
 
     def test_activity_segments_has_range_query_indexes(self) -> None:
         with self.database.connect() as conn:
@@ -450,6 +478,27 @@ class TrackerDatabaseTests(unittest.TestCase):
         rows = self.database.timeline(start="2026-04-07T00:00:00+00:00", end="2026-04-09T00:00:00+00:00")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["app_name"], "Code")
+
+    def test_timeline_accepts_utc_z_range_bounds(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-06-16T19:09:00+00:00",
+                "ended_at": "2026-06-16T19:20:00+00:00",
+                "duration_seconds": 660,
+                "app_name": "Google Chrome",
+                "bundle_id": "com.google.Chrome",
+                "window_title": None,
+                "platform": "macos",
+                "source": "nsworkspace",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+
+        rows = self.database.timeline(start="2026-06-16T19:08:56.900Z", end="2026-06-16T19:30:00.000Z")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["app_name"], "Google Chrome")
 
     def test_timeline_range_filters_treat_naive_bounds_as_local_time(self) -> None:
         previous_tz = os.environ.get("TZ")

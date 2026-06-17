@@ -2,11 +2,12 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
-import { invokeMock, renderPanel, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 
 describe("AiSetupPanel", () => {
   beforeEach(() => {
     invokeMock.mockClear();
+    resetManagedStatusMock();
     revealItemInDirMock.mockClear();
   });
 
@@ -23,12 +24,12 @@ describe("AiSetupPanel", () => {
     const providerSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i });
     const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
 
     const driftySettings = await screen.findByRole("group", { name: /^Drifty settings$/i });
-    chooseOption(modelBeingUsed, /^AI model$/i, /^Drifty Cloud$/i);
+    chooseOption(modelBeingUsed, /^AI model$/i, /^Drifty Individual \(Cloud\)$/i);
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
 
     fireEvent.click(modelSelect);
     const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 3 12B$/i });
@@ -37,7 +38,7 @@ describe("AiSetupPanel", () => {
     expect(modelBeingUsed.textContent).not.toMatch(/download required/i);
     fireEvent.click(gemmaOption);
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Cloud");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
     fireEvent.click(modelSelect);
 
     const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
@@ -141,46 +142,6 @@ describe("AiSetupPanel", () => {
     fireEvent.click(deleteButton);
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_delete", { modelId: "drifty-qwen3-5-4b-default" }));
-  });
-
-  it("starts Cloud setup from the Polar CTA without plan cards", () => {
-    const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free" });
-
-    expect(screen.queryByRole("button", { name: /continue on drifty\.so/i })).toBeNull();
-    expect(screen.queryByRole("article", { name: /individual plan/i })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /set up drifty cloud/i }));
-
-    expect(onStartCloudSetup).toHaveBeenCalledWith();
-  });
-
-  it("refreshes Cloud status from the active Cloud row", () => {
-    const { onRefreshCloudStatus } = renderPanel();
-
-    fireEvent.click(screen.getByRole("button", { name: /refresh drifty cloud/i }));
-
-    expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows active trial copy in the Cloud row", () => {
-    renderPanel({
-      billingEntitlementStatus: "trialing",
-      cloudTrialEndsAt: "2026-06-20T00:00:00.000Z",
-    });
-
-    const cloudSettings = screen.getByRole("group", { name: /Drifty Cloud settings/i });
-
-    expect(within(cloudSettings).getByText(/1-week free trial is active/i)).toBeTruthy();
-    expect(within(cloudSettings).getByText(/available until jun 20/i)).toBeTruthy();
-  });
-
-  it("shows the signed-in Cloud account with a masked email", () => {
-    renderPanel({ userEmail: "alex@example.com" });
-
-    const cloudSettings = screen.getByRole("group", { name: /Drifty Cloud settings/i });
-
-    expect(within(cloudSettings).getByText("al***@example.com")).toBeTruthy();
-    expect(within(cloudSettings).queryByText("alex@example.com")).toBeNull();
   });
 
   it("lets users edit the work profile selections used by AI classification", async () => {
