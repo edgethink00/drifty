@@ -1,4 +1,7 @@
 import type { ActivitySegment, CurrentActivitySnapshot, DriftAlarmTrayStatus, TrackerStatus } from "@drifty/domain";
+import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
+import type { BillingEntitlement } from "../billing/billingService";
+import type { AiClassificationSummary, AiClassificationUsageSummary } from "../classification/aiClassificationService";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./settingsStorage";
 
 type BrowserCaptureDiagnosticsSource = "today" | "history" | "leaderboard";
@@ -47,7 +50,34 @@ type BuildDebugLogPayloadInput = {
   readonly segments: readonly ActivitySegment[];
   readonly historySegments: readonly ActivitySegment[];
   readonly leaderboardSegments: readonly ActivitySegment[];
+  readonly ai: AiDebugLogInput;
   readonly error: string | null;
+};
+
+export type AiDebugLogInput = {
+  readonly route: "cloud" | "local" | "disabled";
+  readonly connectionStatus: AiConnectionStatus;
+  readonly cloud: {
+    readonly isSupabaseConfigured: boolean;
+    readonly hasRequiredAccountAuth: boolean;
+    readonly canUseCloudAiClassification: boolean;
+    readonly entitlement: BillingEntitlement | null;
+    readonly entitlementLoading: boolean;
+    readonly entitlementError: string | null;
+  };
+  readonly local: {
+    readonly providerLabel: "BYOK AI" | "Local AI";
+    readonly providerStatus: LocalAiProviderStatus;
+  };
+  readonly classification: {
+    readonly actionLoading: boolean;
+    readonly summary: AiClassificationSummary | null;
+    readonly observedFailure: boolean;
+  };
+  readonly usage: {
+    readonly day: string | null;
+    readonly summary: AiClassificationUsageSummary | null;
+  };
 };
 
 const SUPPORTED_BROWSER_NAMES = [
@@ -98,12 +128,58 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
       },
     },
     driftAlarm: input.driftAlarm,
+    ai: buildAiDebugSummary(input.ai),
     counts: {
       todaySegments: input.segments.length,
       historySegments: input.historySegments.length,
       leaderboardSegments: input.leaderboardSegments.length,
     },
     error: input.error,
+  };
+}
+
+function buildAiDebugSummary(input: AiDebugLogInput) {
+  return {
+    route: input.route,
+    connection: input.connectionStatus,
+    cloud: {
+      isSupabaseConfigured: input.cloud.isSupabaseConfigured,
+      hasRequiredAccountAuth: input.cloud.hasRequiredAccountAuth,
+      canUseCloudAiClassification: input.cloud.canUseCloudAiClassification,
+      entitlementLoading: input.cloud.entitlementLoading,
+      entitlementError: input.cloud.entitlementError,
+      entitlement: input.cloud.entitlement
+        ? {
+            plan: input.cloud.entitlement.plan,
+            status: input.cloud.entitlement.status,
+            canUseApp: input.cloud.entitlement.canUseApp,
+            lockedReason: input.cloud.entitlement.lockedReason ?? null,
+            trialEndsAt: input.cloud.entitlement.trialEndsAt,
+            currentPeriodEnd: input.cloud.entitlement.currentPeriodEnd,
+          }
+        : null,
+    },
+    local: {
+      providerLabel: input.local.providerLabel,
+      providerStatus: input.local.providerStatus,
+    },
+    classification: {
+      actionLoading: input.classification.actionLoading,
+      observedFailure: input.classification.observedFailure,
+      summary: input.classification.summary
+        ? {
+            status: input.classification.summary.status,
+            selectedSegments: input.classification.summary.selectedSegments,
+            savedRecords: input.classification.summary.savedRecords,
+            message: input.classification.summary.message,
+            metrics: input.classification.summary.metrics ?? null,
+          }
+        : null,
+    },
+    usage: {
+      day: input.usage.day,
+      summary: input.usage.summary,
+    },
   };
 }
 

@@ -745,6 +745,14 @@ export default function App() {
     : canUseCloudAiClassification
       ? "cloud"
       : "disabled";
+  const aiConnectionStatus = resolveAiConnectionStatus({
+    canUseCloudAi: canUseCloudAiClassification,
+    localProviderStatus: localAiProviderStatus,
+    localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
+    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
+    classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
+    cloudIssueKind: billingEntitlementError ? aiConnectionIssueKindFromMessage(billingEntitlementError) : null,
+  });
   const previousAiClassificationProviderKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const previousAiClassificationProviderKey = previousAiClassificationProviderKeyRef.current;
@@ -3652,10 +3660,35 @@ export default function App() {
       segments,
       historySegments,
       leaderboardSegments,
+      ai: {
+        route: localAiClassificationOptions ? "local" : canUseCloudAiClassification ? "cloud" : "disabled",
+        connectionStatus: aiConnectionStatus,
+        cloud: {
+          isSupabaseConfigured,
+          hasRequiredAccountAuth,
+          canUseCloudAiClassification,
+          entitlement: billingEntitlement,
+          entitlementLoading: billingEntitlementLoading,
+          entitlementError: billingEntitlementError,
+        },
+        local: {
+          providerLabel: localAiConnectionProviderLabel,
+          providerStatus: localAiProviderStatus,
+        },
+        classification: {
+          actionLoading: classificationActionLoading,
+          summary: classificationSummary,
+          observedFailure: observedAiClassificationFailure,
+        },
+        usage: {
+          day: aiClassificationUsageDay,
+          summary: aiClassificationUsage,
+        },
+      },
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, appThemeColorOverrides, categoryColorOverrides, driftAlarmTrayStatus, error, historySegments, leaderboardSegments, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, driftAlarmTrayStatus, error, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -3738,15 +3771,6 @@ export default function App() {
         ? "free"
         : null;
   const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
-  const aiConnectionStatus = resolveAiConnectionStatus({
-    canUseCloudAi: canUseCloudAiClassification,
-    localProviderStatus: localAiProviderStatus,
-    localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
-    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
-    classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
-    cloudIssueKind: billingEntitlementError ? aiConnectionIssueKindFromMessage(billingEntitlementError) : null,
-  });
-
   return (
     <div className={isSidebarVisuallyCollapsed ? "app-shell app-shell--sidebar-collapsed" : "app-shell"}>
       <div className="window-chrome">
