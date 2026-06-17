@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.storage.activity_segment_serialization import json_list, serialize_activity_row
+from app.storage.timestamps import parse_iso_datetime
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
@@ -477,7 +478,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _normalize_range_bound(value: str) -> str:
-        parsed = datetime.fromisoformat(value)
+        parsed = parse_iso_datetime(value)
         if parsed.tzinfo is None:
             parsed = parsed.astimezone()
         return parsed.astimezone(timezone.utc).isoformat()
@@ -1307,7 +1308,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _local_day(value: str) -> str:
-        return datetime.fromisoformat(value).astimezone().date().isoformat()
+        return parse_iso_datetime(value).astimezone().date().isoformat()
 
     @staticmethod
     def _local_day_bounds(day: str) -> tuple[str, str]:
@@ -1317,7 +1318,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _local_hour(value: str) -> str:
-        return datetime.fromisoformat(value).astimezone().strftime("%H:00")
+        return parse_iso_datetime(value).astimezone().strftime("%H:00")
 
     @staticmethod
     def _within_merge_gap(previous_end: str, next_observed_at: str, max_merge_gap_seconds: int | None) -> bool:
@@ -1329,7 +1330,7 @@ class TrackerDatabase:
 
     @staticmethod
     def _timestamp_seconds(value: str) -> float:
-        parsed = datetime.fromisoformat(value)
+        parsed = parse_iso_datetime(value)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.timestamp()

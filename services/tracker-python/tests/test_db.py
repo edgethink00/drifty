@@ -479,6 +479,27 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["app_name"], "Code")
 
+    def test_timeline_accepts_utc_z_range_bounds(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-06-16T19:09:00+00:00",
+                "ended_at": "2026-06-16T19:20:00+00:00",
+                "duration_seconds": 660,
+                "app_name": "Google Chrome",
+                "bundle_id": "com.google.Chrome",
+                "window_title": None,
+                "platform": "macos",
+                "source": "nsworkspace",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+
+        rows = self.database.timeline(start="2026-06-16T19:08:56.900Z", end="2026-06-16T19:30:00.000Z")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["app_name"], "Google Chrome")
+
     def test_timeline_range_filters_treat_naive_bounds_as_local_time(self) -> None:
         previous_tz = os.environ.get("TZ")
         os.environ["TZ"] = "Asia/Seoul"
