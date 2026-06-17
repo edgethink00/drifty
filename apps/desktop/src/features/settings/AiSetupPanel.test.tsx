@@ -106,6 +106,7 @@ describe("AiSetupPanel", () => {
     fireEvent.click(qwenOption);
 
     expect(modelSelect.textContent).toContain("Qwen 3.5 4B");
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" }));
   });
 
   it("downloads a disabled managed local model from the global model picker action", async () => {

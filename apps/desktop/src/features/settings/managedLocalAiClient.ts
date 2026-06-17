@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type ManagedLocalAiInstallState = "not_installed" | "installing" | "installed" | "running" | "error";
+export type ManagedLocalAiInstallState = "not_installed" | "installing" | "installed" | "starting" | "running" | "error";
 
 export type ManagedLocalAiModel = {
   readonly id: string;
@@ -159,6 +159,7 @@ function parseState(value: unknown): ManagedLocalAiInstallState {
   switch (value) {
     case "installing":
     case "installed":
+    case "starting":
     case "running":
     case "error":
     case "not_installed":

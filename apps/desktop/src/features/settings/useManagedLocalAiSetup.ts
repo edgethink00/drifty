@@ -20,6 +20,7 @@ type SyncManagedSetupOptions = {
   readonly activateProvider: boolean;
 };
 type RunActionOptions = {
+  readonly activateProvider: boolean;
   readonly optimisticInstalling: boolean;
 };
 
@@ -89,7 +90,7 @@ export function useManagedLocalAiSetup(
   }, [enabled, refresh]);
 
   useEffect(() => {
-    if (!enabled || status?.state !== "installing") return;
+    if (!enabled || (status?.state !== "installing" && status?.state !== "starting")) return;
     const intervalId = window.setInterval(() => {
       void refreshStatusOnly();
     }, 500);
@@ -97,7 +98,7 @@ export function useManagedLocalAiSetup(
   }, [enabled, refreshStatusOnly, status?.state]);
 
   const runAction = useCallback(async (modelId: string, action: ManagedLocalAiAction, options: RunActionOptions) => {
-    if (actionModelId || status?.state === "installing") return;
+    if (actionModelId || status?.state === "installing" || status?.state === "starting") return;
     setActionModelId(modelId);
     if (options.optimisticInstalling) {
       setStatus(installingManagedLocalAiStatus(modelId));
@@ -105,7 +106,7 @@ export function useManagedLocalAiSetup(
     try {
       const nextStatus = await action(modelId);
       setStatus(nextStatus);
-      syncManagedSetup(nextStatus, { activateProvider: true });
+      syncManagedSetup(nextStatus, { activateProvider: options.activateProvider });
     } catch (error) {
       setStatus(fallbackManagedLocalAiStatus(messageFromError(error)));
     } finally {
@@ -118,10 +119,10 @@ export function useManagedLocalAiSetup(
     catalog,
     loading,
     status,
-    deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel, { optimisticInstalling: false }),
-    installModel: (modelId) => runAction(modelId, installManagedLocalAiModel, { optimisticInstalling: true }),
+    deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel, { activateProvider: false, optimisticInstalling: false }),
+    installModel: (modelId) => runAction(modelId, installManagedLocalAiModel, { activateProvider: false, optimisticInstalling: true }),
     refresh,
-    startModel: (modelId) => runAction(modelId, startManagedLocalAi, { optimisticInstalling: false }),
+    startModel: (modelId) => runAction(modelId, startManagedLocalAi, { activateProvider: true, optimisticInstalling: false }),
   };
 }
 

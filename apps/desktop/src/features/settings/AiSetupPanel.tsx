@@ -163,6 +163,7 @@ export function AiSetupPanel({
             onLocalAiSetupChange={onLocalAiSetupChange}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleProviderChange}
+            onStartModel={managedLocalAi.startModel}
             onStartCloudSetup={onStartCloudSetup}
             onTestConnection={handleTestConnection}
           />

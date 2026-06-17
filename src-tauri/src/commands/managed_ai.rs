@@ -7,6 +7,7 @@ use thiserror::Error;
 
 mod catalog;
 mod download;
+mod runtime;
 mod status;
 #[cfg(test)]
 mod tests;
@@ -28,6 +29,7 @@ pub enum ManagedAiInstallState {
     NotInstalled,
     Installing,
     Installed,
+    Starting,
     Running,
     Error,
 }
@@ -46,6 +48,10 @@ enum ManagedAiError {
     Http(#[from] reqwest::Error),
     #[error("Managed local model download failed: {0}")]
     DownloadFailed(String),
+    #[error("Managed local AI runtime is missing: {0}")]
+    RuntimeMissing(String),
+    #[error("Managed local AI runtime failed: {0}")]
+    RuntimeFailed(String),
 }
 
 #[tauri::command]
@@ -82,6 +88,10 @@ pub fn managed_ai_start(app: AppHandle, model_id: String) -> Result<ManagedAiSta
 pub fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
     delete_model_at_root(&root, model_id.trim()).map_err(error_message)
+}
+
+pub(crate) fn managed_ai_stop_runtime_for_app_exit() {
+    let _ = runtime::stop_runtime();
 }
 
 fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
@@ -136,27 +146,34 @@ fn install_model_at_root_with_downloader(
 
 fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    let runtime_path = root.join("runtime").join("llama-server");
     let artifact_dir = status_artifact_dir(root, spec)?;
-    let state = if runtime_path.exists() && artifact_dir.is_some() {
-        ManagedAiInstallState::Running
-    } else {
-        ManagedAiInstallState::Error
+    let Some(artifact_dir) = artifact_dir else {
+        let status = status_for_spec(
+            ManagedAiInstallState::Error,
+            spec,
+            None,
+            MANAGED_ASSETS_MISSING_MESSAGE,
+        );
+        write_status(root, &status)?;
+        return Ok(status);
     };
-    let message = match state {
-        ManagedAiInstallState::Running => "Managed local AI runtime is running.",
-        ManagedAiInstallState::Error => "Runtime assets are not installed yet. Download from the Drifty managed manifest before starting local AI.",
-        ManagedAiInstallState::Installed
-        | ManagedAiInstallState::Installing
-        | ManagedAiInstallState::NotInstalled => "Managed local AI runtime is not running.",
+
+    let status = match runtime::start_runtime(root, spec, &artifact_dir) {
+        Ok(status) => status,
+        Err(error) => status_for_spec(
+            ManagedAiInstallState::Error,
+            spec,
+            Some(artifact_dir),
+            &error_message(error),
+        ),
     };
-    let status = status_for_spec(state, spec, artifact_dir, message);
     write_status(root, &status)?;
     Ok(status)
 }
 
 fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
+    runtime::stop_runtime_for_model(spec.id)?;
     let model_path = model_dir(root, spec.id);
     if model_path.exists() {
         fs::remove_dir_all(model_path)?;
