@@ -9,21 +9,24 @@
   gap: var(--space-2);
 }
 
+/* Cloud / local routes read as sections of the expanded provider card rather
+   than nested bordered boxes. Selection is shown with a subtle tint, not a box. */
 .ai-setup-route-option {
   align-items: start;
-  background: color-mix(in srgb, var(--surface) 86%, var(--bg-2));
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  padding: var(--space-3);
+  padding: var(--space-2) 0;
 }
 
 .ai-setup-route-option.is-selected {
-  border-color: color-mix(in srgb, var(--productivity-focus) 34%, var(--line));
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--productivity-focus) 7%, transparent);
+  background: color-mix(in srgb, var(--productivity-focus) 5%, transparent);
+  box-shadow: none;
+  padding: var(--space-2) var(--space-3);
 }
 
 .ai-setup-local-divider {

@@ -52,15 +52,21 @@ describe("Settings content styles", () => {
     expect(styles).toContain("border-bottom: 1px solid var(--line);");
   });
 
-  it("emphasizes only the top general settings heading", () => {
+  it("emphasizes the top heading of every settings section", () => {
     const styles = readFileSync("src/styles.css", "utf8");
-    const generalHeadingRule = cssRule(
+    const sectionHeadingRule = cssRule(
       styles,
-      ".content--settings .settings-section--general .settings-block:first-child > h3",
+      ".content--settings .settings-section .settings-block:first-child > h3",
+    );
+    const aiSetupHeadingRule = cssRule(
+      styles,
+      ".content--settings .settings-section--ai-setup .ai-setup-panel__header h3",
     );
 
-    expect(generalHeadingRule).toContain("font-size: 1.18rem;");
-    expect(generalHeadingRule).toContain("font-weight: 700;");
+    expect(sectionHeadingRule).toContain("font-size: 1.18rem;");
+    expect(sectionHeadingRule).toContain("font-weight: 700;");
+    expect(aiSetupHeadingRule).toContain("font-size: 1.18rem;");
+    expect(aiSetupHeadingRule).toContain("font-weight: 700;");
   });
 
   it("keeps settings segmented controls outline-free like AI setup tabs", () => {
