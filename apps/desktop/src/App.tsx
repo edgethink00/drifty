@@ -1647,6 +1647,8 @@ export default function App() {
 
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
+      // Keep this heavy snapshot poll out of the focused renderer path; alarms resume on the normal cadence once Drifty loses focus.
+      if (rendererFocusedRef.current) return;
       void refreshLiveDriftAlarmActivity(selectedDay);
     }, DRIFT_ALARM_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
@@ -2107,6 +2109,13 @@ export default function App() {
           const liveAiOptions = localAiClassificationOptions
             ? { ...localAiClassificationOptions, persistLiveResult: true }
             : { persistLiveResult: true };
+          const refreshAfterLiveAiClassification = async () => {
+            if (shouldUpdateRendererState) {
+              await refresh(selectedDay, { requireCurrentSnapshot: true });
+              return;
+            }
+            void refreshLiveDriftAlarmActivity(selectedDay);
+          };
           void classifyLiveActivityWithAi(liveAiCandidate.segment, liveAiOptions).then(async (result) => {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
             liveDriftAlarmAiRequestInFlightRef.current = null;
@@ -2118,7 +2127,7 @@ export default function App() {
                 } else {
                   liveDriftAlarmAiRetryAfterRef.current.delete(liveAiCandidate.key);
                 }
-                await refresh(selectedDay, { requireCurrentSnapshot: true });
+                await refreshAfterLiveAiClassification();
                 return;
               case "unavailable":
                 liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
@@ -2127,7 +2136,7 @@ export default function App() {
                   reason: `ai-unavailable:${result.reason}`,
                   candidateDetail: liveAiCandidateDetail,
                 }, new Date());
-                await refresh(selectedDay, { requireCurrentSnapshot: true });
+                if (shouldUpdateRendererState) await refresh(selectedDay, { requireCurrentSnapshot: true });
                 return;
               default:
                 assertNever(result);
@@ -2452,7 +2461,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
