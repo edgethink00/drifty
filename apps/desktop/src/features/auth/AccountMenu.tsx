@@ -103,7 +103,7 @@ export function AccountMenu({
       </button>
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon" aria-hidden="true">⚙</span>
-        <span>App Setting</span>
+        <span>Settings</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onFeedback} role="menuitem">
         <span className="account-menu-icon" aria-hidden="true">✉</span>

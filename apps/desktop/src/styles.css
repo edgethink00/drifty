@@ -6459,7 +6459,7 @@ input, textarea { color: inherit; }
 .account-menu-item:hover { background: var(--bg-2); transform: none; }
 .account-menu-item:disabled { opacity: .42; }
 .account-menu-item--danger { color: var(--warn); }
-.account-menu-icon { width: 17px; text-align: center; color: currentColor; font-size: 14px; line-height: 1; }
+.account-menu-icon { width: 19px; text-align: center; color: currentColor; font-size: 16px; line-height: 1; }
 .account-menu-separator { height: 1px; background: var(--line); margin: 6px 4px; }
 
 /* Page wrapper (each page in App.tsx uses `<div class="page">`) */
