@@ -23,6 +23,7 @@ const {
   openSystemSettingsPane,
   billingMocks,
   appFeatureSwitches,
+  startupSettingsClient,
 } = vi.hoisted(() => ({
   authState: {
     user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string } | null,
@@ -64,6 +65,10 @@ const {
   appFeatureSwitches: {
     devOnboardingBypassEnabled: false,
   },
+  startupSettingsClient: {
+    isAvailable: vi.fn(),
+    setOpenAtLoginEnabled: vi.fn(),
+  },
 }));
 
 vi.mock("./features/auth/AuthContext", () => ({
@@ -95,6 +100,10 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 
 vi.mock("./lib/api/systemSettingsClient", () => ({
   openSystemSettingsPane,
+}));
+
+vi.mock("./lib/api/startupSettingsClient", () => ({
+  startupSettingsClient,
 }));
 
 vi.mock("./lib/api/accessibilityClient", () => ({
@@ -270,6 +279,8 @@ describe("App onboarding", () => {
     requestPermission.mockResolvedValue("granted");
     accessibilityGetStatus.mockResolvedValue({ granted: false });
     accessibilityRequestAccess.mockResolvedValue({ granted: false });
+    startupSettingsClient.isAvailable.mockReturnValue(false);
+    startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue(true);
     trackerGetHourlySummary.mockResolvedValue([]);
     openSystemSettingsPane.mockResolvedValue(true);
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
@@ -619,6 +630,38 @@ describe("App onboarding", () => {
     expect(storedRecord.extremeNudgeEnabled).toBe(true);
     expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1");
     expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1");
+  });
+
+  it("enables login startup by default when onboarding completes in the Mac app", async () => {
+    startupSettingsClient.isAvailable.mockReturnValue(true);
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
+
+    expect(startupToggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
+    });
+  });
+
+  it("honors the opt-out login startup choice from onboarding", async () => {
+    startupSettingsClient.isAvailable.mockReturnValue(true);
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
+    fireEvent.click(startupToggle);
+    expect(startupToggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(false);
+    });
   });
 
   it("stores onboarding completion under the v2 drifty key and ignores the legacy keys", async () => {
