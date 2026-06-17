@@ -7585,16 +7585,18 @@ input, textarea { color: inherit; }
 
 .flow-interval-control {
   flex: 0 0 auto;
+  padding: 1.78px;
 }
 
 .flow-interval-control button,
 .flow-color-mode-control button {
-  padding: 3px var(--space-2);
+  padding: 1.78px var(--space-2);
   font-size: 0.58rem;
 }
 
 .flow-color-mode-control {
   flex: 0 0 auto;
+  padding: 1.78px;
 }
 
 .flow-chart-hours,
