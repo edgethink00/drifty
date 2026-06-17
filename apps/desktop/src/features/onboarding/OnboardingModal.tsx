@@ -11,7 +11,9 @@ import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedN
 import { AccountStep } from "./components/AccountStep";
 import { Dropdown } from "./components/Dropdown";
 import { NudgesStep } from "./components/NudgesStep";
+import { StartupLoginPreference } from "./components/StartupLoginPreference";
 import { TypewriterSequence } from "./components/TypewriterSequence";
+import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
 import {
   MAIN_ACTIVITY_OPTIONS,
   MAX_MAIN_ACTIVITY_SELECTIONS,
@@ -259,6 +261,7 @@ export function OnboardingModal({
   const [jobTypeOther] = useState("");
   const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(false);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(false);
+  const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(true);
 
   const [step, setStep] = useState<OnboardingStep>(__devInitialStep ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -573,6 +576,14 @@ export function OnboardingModal({
   async function completeOnboarding() {
     setStorageError(null);
     setSetupError(null);
+    if (startupSettingsClient.isAvailable()) {
+      try {
+        await startupSettingsClient.setOpenAtLoginEnabled(openAtLoginEnabled);
+      } catch (error) {
+        setSetupError(error instanceof Error ? error.message : "Unable to update start at login.");
+        return;
+      }
+    }
     try {
       await onStartTracking();
     } catch (error) {
@@ -1240,24 +1251,10 @@ export function OnboardingModal({
                     </li>
                   </ul>
                 )}
-                <div className="onb-setup-card__actions">
-                  {setupChoice === "local_ai" || setupChoice === "byok" ? (
-                    <button
-                      type="button"
-                      className="onb-button onb-button--ghost"
-                      onClick={() => setStep("connect_server")}
-                    >
-                      Change connection
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="onb-button onb-button--ghost"
-                    onClick={() => void handleRequestAccessibilityClick()}
-                  >
-                    Open settings
-                  </button>
-                </div>
+                <StartupLoginPreference
+                  enabled={openAtLoginEnabled}
+                  onChange={setOpenAtLoginEnabled}
+                />
                 <p className="onb-account__helper">You can pause Drifty any time from the menu bar.</p>
               </>
             ) : null}
