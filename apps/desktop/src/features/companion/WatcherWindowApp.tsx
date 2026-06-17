@@ -10,6 +10,7 @@ import {
   triggerNativeEndOfDayReviewAction,
   type WatcherWindowEvent,
 } from "./watcherBridge";
+import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 
 const WATCHER_THEME_STORAGE_KEY = "drifty.theme";
 const WATCHER_DEFAULT_THEME = "light";
@@ -36,7 +37,7 @@ export function WatcherWindowApp() {
       setEvent(nextEvent);
     }).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten?.();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -44,7 +45,7 @@ export function WatcherWindowApp() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, []);
 
