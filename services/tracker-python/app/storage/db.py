@@ -4,7 +4,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -501,7 +501,8 @@ class TrackerDatabase:
         return query
 
     def fetch_timeline(self, day: str, limit: int | None = None) -> list[dict[str, Any]]:
-        rows = self.timeline(limit=limit)
+        start, end = self._local_day_bounds(day)
+        rows = self.timeline(start=start, end=end, limit=limit)
         filtered = [row for row in rows if self._local_day(row["started_at"]) == day]
         return [self._serialize_row(row) for row in filtered]
 
@@ -1307,6 +1308,12 @@ class TrackerDatabase:
     @staticmethod
     def _local_day(value: str) -> str:
         return datetime.fromisoformat(value).astimezone().date().isoformat()
+
+    @staticmethod
+    def _local_day_bounds(day: str) -> tuple[str, str]:
+        start = datetime.fromisoformat(f"{day}T00:00:00")
+        end = start + timedelta(days=1, seconds=-1)
+        return start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")
 
     @staticmethod
     def _local_hour(value: str) -> str:

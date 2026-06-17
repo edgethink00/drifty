@@ -1295,22 +1295,29 @@ export default function App() {
     setLoading(true);
     setError(null);
 
+    const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
     const historyStartDay = shiftIsoDate(day, -89);
     const historySummaryRange = getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
     const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineEndDay = day > selectedWeekRange.endDay ? day : selectedWeekRange.endDay;
-    const historyTimelineRange = getLogicalDayRange(historyStartDay, historyTimelineEndDay, startOfDayMinutes);
+    const historyTimelineStartDay = shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay;
+    const historyTimelineEndDay = shouldLoadDashboardWeekHistory
+      ? selectedWeekRange.endDay
+      : day > selectedWeekRange.endDay
+        ? day
+        : selectedWeekRange.endDay;
+    const historyTimelineRange = getLogicalDayRange(historyTimelineStartDay, historyTimelineEndDay, startOfDayMinutes);
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
     const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
+    const shouldLoadHistorySummaries = shouldLoadHistory && !shouldLoadDashboardWeekHistory;
 
     try {
       const archiveTimelineRequest = shouldLoadHistory
         ? trackerClient.getTimeline(historyTimelineRange)
         : Promise.resolve<ActivitySegment[] | null>(null);
-      const historyHourlySummaryRequest = shouldLoadHistory
+      const historyHourlySummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getHourlySummary(historySummaryRange)
         : Promise.resolve<HourBucket[] | null>(null);
-      const historySiteSummaryRequest = shouldLoadHistory
+      const historySiteSummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
         : Promise.resolve<SiteDuration[] | null>(null);
 

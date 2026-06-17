@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
@@ -179,6 +179,34 @@ class TrackerDatabaseTests(unittest.TestCase):
         events = self.database.fetch_timeline(local_day)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["appName"], "Finder")
+
+    def test_fetch_timeline_day_uses_bounded_range_query(self) -> None:
+        started_at = "2026-04-06T09:00:00+00:00"
+        self.database.insert_segment(
+            {
+                "started_at": started_at,
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Finder",
+                "bundle_id": "com.apple.finder",
+                "window_title": None,
+                "platform": "macos",
+                "source": "nsworkspace",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+        local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+
+        with patch.object(self.database, "timeline", wraps=self.database.timeline) as timeline_spy:
+            events = self.database.fetch_timeline(local_day)
+
+        self.assertEqual(len(events), 1)
+        timeline_spy.assert_called_once_with(
+            start=f"{local_day}T00:00:00",
+            end=f"{local_day}T23:59:59",
+            limit=None,
+        )
 
     def test_activity_segments_has_range_query_indexes(self) -> None:
         with self.database.connect() as conn:
