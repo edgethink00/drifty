@@ -94,7 +94,8 @@ function ManagedLocalAiModelRow({
 }) {
   const [finderOpening, setFinderOpening] = useState(false);
   const [finderError, setFinderError] = useState<string | null>(null);
-  const isSelected = localAiSetup.provider === "managed_local" && localAiSetup.managedLocalModelId === model.id;
+  const selectable = isSelectableManagedModel(model.id, status);
+  const isSelected = selectable && localAiSetup.provider === "managed_local" && localAiSetup.managedLocalModelId === model.id;
   const hasCurrentRuntime = isSelected && (status?.state === "installed" || status?.state === "running");
   const actionRunning = actionModelId === model.id;
   const showInFinderDisabled = actionRunning || finderOpening || !status?.artifactDir;
@@ -120,6 +121,7 @@ function ManagedLocalAiModelRow({
         type="radio"
         name="managed-local-model"
         checked={isSelected}
+        disabled={!selectable}
         aria-label={`Select ${model.label} managed local model`}
         onChange={() => onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", managedLocalModelId: model.id }))}
       />
@@ -174,6 +176,10 @@ function ManagedLocalAiModelRow({
       </div>
     </article>
   );
+}
+
+function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
+  return status?.selectedModelId === modelId && (status.state === "installed" || status.state === "running");
 }
 
 function ManagedModelActionIcon({ icon }: { readonly icon: "download" | "finder" | "delete" }) {

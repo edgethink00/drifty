@@ -30,7 +30,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.16rem;
-  margin: 0 0 var(--space-1);
+  margin: 0 0 var(--space-4);
   min-width: 0;
   padding: 0.16rem;
   width: fit-content;
@@ -89,7 +89,7 @@
 
 .ai-setup-tab-panel {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-width: 0;
 }
 
@@ -124,43 +124,24 @@
 
 .ai-setup-select-control {
   min-width: 0;
-  position: relative;
-}
-
-.ai-setup-select-control::after {
-  border-bottom: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-  color: var(--text-muted);
-  content: "";
-  height: 0.42rem;
-  pointer-events: none;
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-64%) rotate(45deg);
-  width: 0.42rem;
-}
-
-.ai-setup-select-control select {
-  appearance: none;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
-  border-radius: 8px;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 650;
-  height: 2.28rem;
-  line-height: 1.1;
-  min-width: 0;
-  padding: 0 2.45rem 0 var(--space-3);
-  text-overflow: ellipsis;
   width: 100%;
 }
 
-.ai-setup-select-control select:focus-visible {
-  outline: 2px solid var(--settings-focus-ring);
-  outline-offset: 2px;
+.ai-setup-select-control .settings-select-control__trigger {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 650;
+  min-height: 2.28rem;
+}
+
+.ai-setup-select-control .settings-select-control__menu {
+  width: max(100%, 15rem);
+}
+
+.ai-setup-select-control--model .settings-select-control__menu {
+  width: max(100%, 18rem);
 }
 
 .ai-setup-current-model__slash {

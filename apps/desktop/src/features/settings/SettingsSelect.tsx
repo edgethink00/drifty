@@ -5,6 +5,12 @@ export type SettingsSelectOption<TValue extends string> = {
   readonly value: TValue;
   readonly label: string;
   readonly accentColor?: string;
+  readonly disabled?: boolean;
+  readonly iconSrc?: string;
+  readonly actionLabel?: string;
+  readonly actionAriaLabel?: string;
+  readonly actionDisabled?: boolean;
+  readonly onAction?: (value: TValue) => void;
 };
 
 type SettingsSelectProps<TValue extends string> = {
@@ -36,7 +42,7 @@ export function SettingsSelect<TValue extends string>({
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
   const [isOpen, setIsOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const [activeIndex, setActiveIndex] = useState(() => activeIndexForOptions(options, selectedIndex));
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -52,8 +58,8 @@ export function SettingsSelect<TValue extends string>({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) setActiveIndex(selectedIndex);
-  }, [isOpen, selectedIndex]);
+    if (!isOpen) setActiveIndex(activeIndexForOptions(options, selectedIndex));
+  }, [isOpen, options, selectedIndex]);
 
   if (!selectedOption) return null;
 
@@ -62,22 +68,18 @@ export function SettingsSelect<TValue extends string>({
   const optionId = (optionValue: TValue) => `${controlId}-option-${optionValue}`;
 
   function openMenu() {
-    setActiveIndex(selectedIndex);
+    setActiveIndex(activeIndexForOptions(options, selectedIndex));
     setIsOpen(true);
   }
 
   function chooseOption(option: SettingsSelectOption<TValue>) {
+    if (option.disabled) return;
     if (option.value !== value) onChange(option.value);
     setIsOpen(false);
   }
 
   function moveActiveIndex(direction: 1 | -1) {
-    setActiveIndex((current) => {
-      const next = current + direction;
-      if (next < 0) return options.length - 1;
-      if (next >= options.length) return 0;
-      return next;
-    });
+    setActiveIndex((current) => nextEnabledIndex(options, current, direction));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -96,12 +98,12 @@ export function SettingsSelect<TValue extends string>({
         break;
       case "Home":
         event.preventDefault();
-        setActiveIndex(0);
+        setActiveIndex(firstEnabledIndex(options));
         setIsOpen(true);
         break;
       case "End":
         event.preventDefault();
-        setActiveIndex(options.length - 1);
+        setActiveIndex(lastEnabledIndex(options));
         setIsOpen(true);
         break;
       case "Enter":
@@ -140,7 +142,7 @@ export function SettingsSelect<TValue extends string>({
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
       >
         <span className="settings-select-control__value">
-          <span className="settings-select-control__dot" aria-hidden="true" />
+          <OptionIcon option={selectedOption} />
           <span>{selectedOption.label}</span>
         </span>
         <span className="settings-select-control__chevron" aria-hidden="true" />
@@ -150,27 +152,92 @@ export function SettingsSelect<TValue extends string>({
           {options.map((option, index) => {
             const isSelected = option.value === value;
             const isActive = index === activeIndex;
+            const optionDisabled = option.disabled === true;
             return (
-              <button
+              <div
                 key={option.value}
-                id={optionId(option.value)}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                className={`settings-select-control__option${isSelected ? " is-selected" : ""}${isActive ? " is-active" : ""}`}
-                data-has-accent={option.accentColor ? "true" : undefined}
-                style={optionStyle(option.accentColor)}
-                onClick={() => chooseOption(option)}
-                onMouseEnter={() => setActiveIndex(index)}
+                className={`settings-select-control__option-row${option.onAction ? " has-action" : ""}`}
+                data-disabled={optionDisabled ? "true" : undefined}
               >
-                <span className="settings-select-control__dot" aria-hidden="true" />
-                <span className="settings-select-control__option-label">{option.label}</span>
-                <span className="settings-select-control__check" aria-hidden="true" />
-              </button>
+                <button
+                  id={optionId(option.value)}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-disabled={optionDisabled}
+                  className={`settings-select-control__option${isSelected ? " is-selected" : ""}${isActive ? " is-active" : ""}${optionDisabled ? " is-disabled" : ""}`}
+                  data-has-accent={option.accentColor ? "true" : undefined}
+                  disabled={optionDisabled}
+                  style={optionStyle(option.accentColor)}
+                  onClick={() => chooseOption(option)}
+                  onMouseEnter={() => {
+                    if (!optionDisabled) setActiveIndex(index);
+                  }}
+                >
+                  <OptionIcon option={option} />
+                  <span className="settings-select-control__option-label">{option.label}</span>
+                  <span className="settings-select-control__check" aria-hidden="true" />
+                </button>
+                {option.onAction ? (
+                  <button
+                    type="button"
+                    className="settings-select-control__option-action"
+                    aria-label={option.actionAriaLabel ?? option.actionLabel}
+                    disabled={option.actionDisabled}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      option.onAction?.(option.value);
+                    }}
+                  >
+                    {option.actionLabel}
+                  </button>
+                ) : null}
+              </div>
             );
           })}
         </div>
       ) : null}
     </div>
   );
+}
+
+function OptionIcon<TValue extends string>({ option }: { readonly option: SettingsSelectOption<TValue> }) {
+  if (option.iconSrc) {
+    return <img className="settings-select-control__icon" src={option.iconSrc} alt="" aria-hidden="true" />;
+  }
+  return <span className="settings-select-control__dot" aria-hidden="true" />;
+}
+
+function activeIndexForOptions<TValue extends string>(
+  options: readonly SettingsSelectOption<TValue>[],
+  selectedIndex: number,
+): number {
+  const selectedOption = options[selectedIndex];
+  if (selectedOption && !selectedOption.disabled) return selectedIndex;
+  return firstEnabledIndex(options);
+}
+
+function firstEnabledIndex<TValue extends string>(options: readonly SettingsSelectOption<TValue>[]): number {
+  const index = options.findIndex((option) => !option.disabled);
+  return index >= 0 ? index : 0;
+}
+
+function lastEnabledIndex<TValue extends string>(options: readonly SettingsSelectOption<TValue>[]): number {
+  for (let index = options.length - 1; index >= 0; index -= 1) {
+    if (!options[index]?.disabled) return index;
+  }
+  return 0;
+}
+
+function nextEnabledIndex<TValue extends string>(
+  options: readonly SettingsSelectOption<TValue>[],
+  currentIndex: number,
+  direction: 1 | -1,
+): number {
+  if (options.length === 0) return currentIndex;
+  for (let step = 1; step <= options.length; step += 1) {
+    const nextIndex = (currentIndex + (direction * step) + options.length) % options.length;
+    if (!options[nextIndex]?.disabled) return nextIndex;
+  }
+  return currentIndex;
 }
