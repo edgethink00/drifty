@@ -86,6 +86,7 @@ export function renderPanel({
 } = {}) {
   const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
+  const onLocalAiConnectionTestResult = vi.fn();
 
   function Harness() {
     const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
@@ -107,6 +108,7 @@ export function renderPanel({
         userEmail={userEmail}
         workProfileUserId={workProfileUserId}
         onDialogOpenChange={vi.fn()}
+        onLocalAiConnectionTestResult={onLocalAiConnectionTestResult}
         onLocalAiSetupChange={setLocalAiSetup}
         onRefreshCloudStatus={onRefreshCloudStatus}
         onStartCloudSetup={onStartCloudSetup}
@@ -115,5 +117,5 @@ export function renderPanel({
   }
 
   render(<Harness />);
-  return { onRefreshCloudStatus, onStartCloudSetup };
+  return { onLocalAiConnectionTestResult, onRefreshCloudStatus, onStartCloudSetup };
 }

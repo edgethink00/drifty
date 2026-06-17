@@ -1,4 +1,6 @@
-export type AiConnectionTone = "ok" | "error" | "neutral";
+import type { AiConnectionIssueKind } from "./aiConnectionHealth";
+
+export type AiConnectionTone = "ok" | "warning" | "error" | "neutral";
 
 export type AiConnectionStatus = {
   readonly tone: AiConnectionTone;
@@ -8,18 +10,24 @@ export type AiConnectionStatus = {
 
 export type AiConnectionStatusInput = {
   readonly canUseCloudAi: boolean;
-  readonly hasLocalAiProvider: boolean;
+  readonly localProviderStatus: LocalAiProviderStatus;
   readonly localProviderLabel: "BYOK AI" | "Local AI" | null;
   readonly classificationRunning: boolean;
-  readonly classificationError: string | null;
-  readonly cloudError: string | null;
+  readonly classificationIssueKind: AiConnectionIssueKind | null;
+  readonly cloudIssueKind: AiConnectionIssueKind | null;
 };
 
+export type LocalAiProviderStatus =
+  | { readonly kind: "unconfigured" }
+  | { readonly kind: "test_needed" }
+  | { readonly kind: "connected" }
+  | { readonly kind: "failed"; readonly issueKind: AiConnectionIssueKind };
+
 export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiConnectionStatus {
-  if (input.classificationError) {
+  if (input.classificationIssueKind) {
     return {
-      tone: "error",
-      label: "Issue",
+      tone: toneForIssueKind(input.classificationIssueKind),
+      label: labelForIssueKind(input.classificationIssueKind),
       providerLabel: input.localProviderLabel ?? "Cloud AI",
     };
   }
@@ -32,12 +40,29 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
     };
   }
 
-  if (input.hasLocalAiProvider) {
-    return {
-      tone: "ok",
-      label: "Connected",
-      providerLabel: input.localProviderLabel ?? "Local AI",
-    };
+  switch (input.localProviderStatus.kind) {
+    case "connected":
+      return {
+        tone: "ok",
+        label: "Connected",
+        providerLabel: input.localProviderLabel ?? "Local AI",
+      };
+    case "failed":
+      return {
+        tone: toneForIssueKind(input.localProviderStatus.issueKind),
+        label: labelForIssueKind(input.localProviderStatus.issueKind),
+        providerLabel: input.localProviderLabel ?? "Local AI",
+      };
+    case "test_needed":
+      return {
+        tone: "neutral",
+        label: "Test needed",
+        providerLabel: input.localProviderLabel ?? "Local AI",
+      };
+    case "unconfigured":
+      break;
+    default:
+      return assertNever(input.localProviderStatus);
   }
 
   if (input.canUseCloudAi) {
@@ -48,10 +73,10 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
     };
   }
 
-  if (input.cloudError) {
+  if (input.cloudIssueKind) {
     return {
-      tone: "error",
-      label: "Issue",
+      tone: toneForIssueKind(input.cloudIssueKind),
+      label: labelForIssueKind(input.cloudIssueKind),
       providerLabel: "Cloud AI",
     };
   }
@@ -63,12 +88,57 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
   };
 }
 
-export function AiConnectionStatusBar({ status }: { readonly status: AiConnectionStatus }) {
+export function AiConnectionStatusBar({
+  status,
+  onOpenSettings,
+}: {
+  readonly status: AiConnectionStatus;
+  readonly onOpenSettings: () => void;
+}) {
   return (
-    <div className="ai-connection-status" role="group" aria-label="AI connection" data-tone={status.tone}>
+    <button
+      type="button"
+      className="ai-connection-status"
+      aria-label={`AI connection: ${status.label}, ${status.providerLabel}. Open AI settings`}
+      data-tone={status.tone}
+      onClick={onOpenSettings}
+    >
       <span className="ai-connection-status__dot" aria-hidden="true" />
       <span className="ai-connection-status__label">{status.label}</span>
       <span className="ai-connection-status__provider">{status.providerLabel}</span>
-    </div>
+    </button>
   );
+}
+
+function toneForIssueKind(issueKind: AiConnectionIssueKind): AiConnectionTone {
+  switch (issueKind) {
+    case "network":
+      return "warning";
+    case "provider":
+      return "error";
+    default:
+      return assertNever(issueKind);
+  }
+}
+
+function labelForIssueKind(issueKind: AiConnectionIssueKind): string {
+  switch (issueKind) {
+    case "network":
+      return "Network issue";
+    case "provider":
+      return "Issue";
+    default:
+      return assertNever(issueKind);
+  }
+}
+
+class AiConnectionStatusError extends Error {
+  constructor(readonly value: string) {
+    super(`Unhandled AI connection status: ${value}`);
+    this.name = "AiConnectionStatusError";
+  }
+}
+
+function assertNever(value: never): never {
+  throw new AiConnectionStatusError(String(value));
 }
