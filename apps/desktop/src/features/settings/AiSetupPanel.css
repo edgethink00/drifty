@@ -93,6 +93,11 @@
   min-width: 0;
 }
 
+/* Give the "Model being used" card more breathing room before the provider list. */
+.ai-setup-tab-panel > .ai-setup-provider-heading {
+  margin-top: var(--space-4);
+}
+
 .ai-setup-current-model {
   background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
   border: 1px solid var(--line);
