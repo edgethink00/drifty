@@ -670,7 +670,7 @@ export function classifyActivityDetailed(segment: ActivitySegment, options?: Cla
   // snapshot. Rows with a rule id come from user rules and stay authoritative.
   const stampedHeuristic = storedUsable?.source === "rule" && !storedUsable.classificationRuleId;
   if (storedUsable && !stampedHeuristic) {
-    const source: ClassificationSource = storedUsable.source === "llm" || storedUsable.source === "rule" ? storedUsable.source : "stored";
+    const source: ClassificationSource = storedUsable.source === "llm" || storedUsable.source === "rule" || storedUsable.source === "app-db" || storedUsable.source === "domain-db" || storedUsable.source === "youtube" ? storedUsable.source : "stored";
     return detail(
       { category: storedUsable.category, productivity: storedUsable.productivity },
       surface,

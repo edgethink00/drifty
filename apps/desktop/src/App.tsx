@@ -64,6 +64,7 @@ import {
   type LocalAiConnectionCheck,
 } from "./features/ai-connection/aiConnectionHealth";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence } from "./features/classification/heuristicClassificationMaterialization";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
@@ -761,6 +762,10 @@ export default function App() {
     }),
     [classificationRules, segments, showAiClassificationImpact],
   );
+  const materializeBuiltInHeuristicTimeline = useCallback((sourceSegments: ActivitySegment[]) => materializeBuiltInHeuristicClassifications({
+    classificationOptions: { fallbackCandidates: sourceSegments, includeAiClassifications: false, rules: classificationRules },
+    segments: sourceSegments,
+  }), [classificationRules]);
   const recentDriftAlarmFocusTargets = useMemo(
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
@@ -1474,24 +1479,31 @@ export default function App() {
 
       if (refreshRequestRef.current !== requestId) return false;
 
+      const materializedTimeline = materializeBuiltInHeuristicTimeline(timeline);
+      const materializedArchiveTimelines = archiveTimelines === null ? null : materializeBuiltInHeuristicTimeline(archiveTimelines);
+
       setCurrentSnapshot(nextCurrentSnapshot);
       liveDriftAlarmSegmentsRef.current = [];
-      setSegments(timeline);
+      setSegments(materializedTimeline.segments);
       setSegmentsLoadedDay(day);
-      if (archiveTimelines !== null) setHistorySegments(archiveTimelines);
-      setHourly(buildHourlySummary(timeline));
+      if (materializedArchiveTimelines !== null) setHistorySegments(materializedArchiveTimelines.segments);
+      setHourly(buildHourlySummary(materializedTimeline.segments));
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
       setAppIcons({});
+      scheduleBuiltInHeuristicClassificationPersistence([
+        ...materializedTimeline.classifications,
+        ...(materializedArchiveTimelines?.classifications ?? []),
+      ]);
 
       void (async () => {
         try {
           const hourlySummary = await trackerClient.getHourlySummary(selectedDayRange);
           if (refreshRequestRef.current !== requestId) return;
-          setHourly(hourlySummary.length > 0 ? hourlySummary : buildHourlySummary(timeline));
+          setHourly(hourlySummary.length > 0 ? hourlySummary : buildHourlySummary(materializedTimeline.segments));
         } catch {
           if (refreshRequestRef.current !== requestId) return;
         }
@@ -1499,7 +1511,9 @@ export default function App() {
 
       void (async () => {
         try {
-          const iconSegments = archiveTimelines === null ? timeline : [...timeline, ...archiveTimelines];
+          const iconSegments = materializedArchiveTimelines === null
+            ? materializedTimeline.segments
+            : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments];
           const uniqueApps = Array.from(
             new Map(iconSegments.map((segment) => [
               segment.bundleId || segment.appName,
@@ -1580,14 +1594,17 @@ export default function App() {
 
       if (historyRefreshRequestRef.current !== requestId) return false;
 
-      setHistorySegments(archiveTimelines);
+      const materializedArchiveTimelines = materializeBuiltInHeuristicTimeline(archiveTimelines);
+
+      setHistorySegments(materializedArchiveTimelines.segments);
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
+      scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
 
       void (async () => {
         try {
           const uniqueApps = Array.from(
-            new Map(archiveTimelines.map((segment) => [
+            new Map(materializedArchiveTimelines.segments.map((segment) => [
               segment.bundleId || segment.appName,
               { appName: segment.appName, bundleId: segment.bundleId ?? null },
             ])).values(),

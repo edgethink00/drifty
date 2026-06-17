@@ -22,7 +22,7 @@ export interface ActivityClassification {
   productivity: ProductivityLabel;
 }
 
-export type StoredClassificationSource = "llm" | "manual" | "rule" | "fallback" | "system" | "unknown";
+export type StoredClassificationSource = "llm" | "manual" | "rule" | "fallback" | "system" | "unknown" | "app-db" | "domain-db" | "youtube";
 
 export interface StoredActivityClassification extends ActivityClassification {
   source: StoredClassificationSource;
