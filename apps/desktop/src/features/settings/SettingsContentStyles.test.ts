@@ -128,22 +128,35 @@ describe("Settings content styles", () => {
     expect(tabPanelRule).toContain("gap: var(--space-4);");
   });
 
-  it("stacks managed local model specs to the right with actions below", () => {
+  it("places managed local model specs on the right with actions under the copy", () => {
     const aiSetupStyles = readAiSetupStyles();
-    const headRule = cssRule(aiSetupStyles, ".ai-managed-model__head");
+    const modelRule = cssRule(aiSetupStyles, ".ai-managed-model");
     const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
     const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__delete-action");
 
-    // Name/description on the left, tier + specs on the right, actions on their own row.
-    expect(headRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto;");
+    // Copy + actions stack on the left; tier and specs span the right; no divider.
+    expect(modelRule).toContain('"selector copy meta"');
+    expect(modelRule).toContain('"selector actions meta"');
     expect(metaRule).toContain("justify-items: end;");
     expect(actionsRule).toContain("display: flex;");
-    expect(actionsRule).toContain("border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);");
+    expect(actionsRule).not.toContain("border-top:");
     expect(actionsRule).not.toContain("min-width: 8.8rem;");
     expect(primaryActionRule).toContain("gap: 0.42rem;");
     expect(deleteActionRule).toContain("width: 2rem;");
+  });
+
+  it("flattens the managed local section so model cards are not boxed twice", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const statusRule = cssRule(aiSetupStyles, ".ai-managed-status");
+    const routeRule = cssRule(aiSetupStyles, ".ai-setup-route-option");
+
+    expect(statusRule).toContain("background: transparent;");
+    expect(statusRule).toContain("border: 0;");
+    expect(routeRule).toContain("background: transparent;");
+    expect(routeRule).toContain("border: 0;");
+    expect(aiSetupStyles).not.toContain(".ai-setup-route-option.is-selected");
   });
 
   it("uses the focus color for the Cloud setup CTA", () => {

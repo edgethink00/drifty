@@ -11,22 +11,18 @@
 
 /* Cloud / local routes read as sections of the expanded provider card rather
    than nested bordered boxes. Selection is shown with a subtle tint, not a box. */
+/* Cloud / local routes are plain sections of the expanded provider card. The
+   active model is shown by its own radio + the "Model being used" selector, so
+   the route itself needs no box or highlight. */
 .ai-setup-route-option {
   align-items: start;
   background: transparent;
   border: 0;
-  border-radius: 10px;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   padding: var(--space-2) 0;
-}
-
-.ai-setup-route-option.is-selected {
-  background: color-mix(in srgb, var(--productivity-focus) 5%, transparent);
-  box-shadow: none;
-  padding: var(--space-2) var(--space-3);
 }
 
 .ai-setup-local-divider {
@@ -133,13 +129,12 @@
 }
 
 .ai-managed-status {
-  background: color-mix(in srgb, var(--bg-2) 42%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
   display: grid;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: 0;
 }
 
 .ai-managed-status > div {
@@ -163,13 +158,19 @@
 }
 
 .ai-managed-model {
+  align-items: start;
   background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 10px;
+  column-gap: var(--space-3);
   display: grid;
-  gap: var(--space-3);
+  grid-template-areas:
+    "selector copy meta"
+    "selector actions meta";
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-width: 0;
   padding: var(--space-3);
+  row-gap: 0.6rem;
 }
 
 .ai-managed-model.is-selected {
@@ -177,16 +178,9 @@
   box-shadow: 0 6px 14px color-mix(in srgb, var(--productivity-focus) 8%, transparent);
 }
 
-.ai-managed-model__head {
-  align-items: start;
-  display: grid;
-  gap: var(--space-2) var(--space-3);
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  min-width: 0;
-}
-
 .ai-managed-model__selector {
   accent-color: var(--productivity-focus);
+  grid-area: selector;
   height: 1rem;
   margin: 0.18rem 0 0;
   width: 1rem;
@@ -195,6 +189,7 @@
 .ai-managed-model__copy {
   display: grid;
   gap: 0.28rem;
+  grid-area: copy;
   min-width: 0;
 }
 
@@ -217,8 +212,10 @@
 }
 
 .ai-managed-model__meta {
+  align-self: start;
   display: grid;
   gap: 0.5rem;
+  grid-area: meta;
   justify-items: end;
   min-width: 0;
 }
@@ -265,12 +262,12 @@
 
 .ai-managed-model__actions {
   align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  align-self: end;
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  grid-area: actions;
   justify-content: flex-start;
-  padding-top: var(--space-3);
 }
 
 .ai-managed-model__actions .settings-btn {
