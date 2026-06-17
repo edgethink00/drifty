@@ -27,6 +27,7 @@ import {
 } from "./desktopAuthSession";
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
+import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -453,7 +454,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isActive) {
           unlistenDeepLink = nextUnlistenDeepLink;
         } else {
-          nextUnlistenDeepLink();
+          cleanupTauriEventListener(nextUnlistenDeepLink);
         }
       }
 
@@ -520,7 +521,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isActive = false;
-      unlistenDeepLink?.();
+      cleanupTauriEventListener(unlistenDeepLink);
       if (pendingDeepLinkInterval !== null) {
         window.clearInterval(pendingDeepLinkInterval);
       }

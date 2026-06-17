@@ -72,6 +72,7 @@ import {
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
+import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import { AuthModal } from "./features/auth/AuthModal";
@@ -1688,7 +1689,7 @@ export default function App() {
 
     void listen("tray-open-settings", openSettingsTab).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -1696,7 +1697,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, [openSettingsTab]);
 
@@ -1708,7 +1709,7 @@ export default function App() {
 
     void listen("tray-check-for-updates", handleTrayCheckForUpdates).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -1716,7 +1717,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, [handleTrayCheckForUpdates]);
 
@@ -1728,7 +1729,7 @@ export default function App() {
 
     void listen("tray-toggle-theme", toggleTheme).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -1736,7 +1737,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      cleanupTauriEventListener(unlisten);
     };
   }, [toggleTheme]);
 
@@ -1747,7 +1748,7 @@ export default function App() {
     void listenToNativeEndOfDayReviewAction(handleEndOfDayReviewAction).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1756,7 +1757,7 @@ export default function App() {
     void listenToNativeWatcherResponse(handleWatcherResponse).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1765,7 +1766,7 @@ export default function App() {
     void listenToNativeWatcherDismissed(dismissWatcherPeek).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1774,7 +1775,7 @@ export default function App() {
     void listenToNativeDriftAlarmAction(handleDriftAlarmAction).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1783,7 +1784,7 @@ export default function App() {
     void listenToNativeDriftAlarmDismissed(handleDriftAlarmDismissed).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
-        unlisten();
+        cleanupTauriEventListener(unlisten);
         return;
       }
       unlisteners.push(unlisten);
@@ -1791,7 +1792,7 @@ export default function App() {
 
     return () => {
       disposed = true;
-      unlisteners.forEach((unlisten) => unlisten());
+      unlisteners.forEach(cleanupTauriEventListener);
     };
   }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 

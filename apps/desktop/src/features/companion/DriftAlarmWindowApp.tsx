@@ -6,6 +6,7 @@ import {
   listenToNativeDriftAlarmShow,
   triggerNativeDriftAlarmAction,
 } from "./driftAlarmBridge";
+import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 
 const DRIFT_ALARM_THEME_STORAGE_KEY = "drifty.theme";
 const DRIFT_ALARM_DEFAULT_THEME = "light";
@@ -34,7 +35,7 @@ export function DriftAlarmWindowApp() {
       });
 
       if (disposed) {
-        unlisten?.();
+        cleanupTauriEventListener(unlisten);
         return;
       }
 
@@ -47,7 +48,7 @@ export function DriftAlarmWindowApp() {
 
     return () => {
       disposed = true;
-      unlisteners.forEach((unlisten) => unlisten());
+      unlisteners.forEach(cleanupTauriEventListener);
     };
   }, []);
 
