@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    require_model, status_artifact_dir, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
-    MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL,
+    require_model, runtime, status_artifact_dir, ManagedAiError, ManagedAiInstallState,
+    ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL,
 };
 
 const STATUS_FILE_NAME: &str = "status.json";
@@ -118,15 +118,25 @@ fn normalize_status_artifact_dir(
     if let Some(model_id) = status.selected_model_id.as_deref() {
         let spec = require_model(model_id)?;
         let artifact_dir = status_artifact_dir(root, spec)?;
-        status.artifact_dir = artifact_dir.map(|path| path.to_string_lossy().into_owned());
+        status.artifact_dir = artifact_dir
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned());
         if status.artifact_dir.is_none()
             && matches!(
                 status.state,
-                ManagedAiInstallState::Installed | ManagedAiInstallState::Running
+                ManagedAiInstallState::Installed
+                    | ManagedAiInstallState::Starting
+                    | ManagedAiInstallState::Running
             )
         {
             status.state = ManagedAiInstallState::Error;
             status.message = MANAGED_ASSETS_MISSING_MESSAGE.to_string();
+        }
+        if matches!(
+            status.state,
+            ManagedAiInstallState::Starting | ManagedAiInstallState::Running
+        ) {
+            status = runtime::normalize_runtime_status(spec, artifact_dir, status)?;
         }
     } else {
         status.artifact_dir = None;

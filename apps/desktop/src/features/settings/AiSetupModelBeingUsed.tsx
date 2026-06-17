@@ -35,6 +35,7 @@ type AiSetupModelBeingUsedProps = {
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onOpenRouterPrimaryModelChange: (modelId: string) => void;
   readonly onProviderChange: (provider: AiSetupSection) => void;
+  readonly onStartModel: (modelId: string) => void | Promise<void>;
   readonly onTestConnection: () => void | Promise<void>;
   readonly onStartCloudSetup: () => void | Promise<void>;
 };
@@ -58,6 +59,7 @@ export function AiSetupModelBeingUsed({
   onLocalAiSetupChange,
   onOpenRouterPrimaryModelChange,
   onProviderChange,
+  onStartModel,
   onTestConnection,
   onStartCloudSetup,
 }: AiSetupModelBeingUsedProps) {
@@ -101,6 +103,7 @@ export function AiSetupModelBeingUsed({
         onDriftyRouteChange("local");
         onProviderChange("drifty");
         onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local", managedLocalModelId: modelId }));
+        void onStartModel(modelId);
         return;
       case "openrouter":
         onProviderChange("openrouter");
@@ -183,7 +186,7 @@ function driftyModelOptions(
         disabled: true,
         actionLabel: modelActionLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null),
         actionAriaLabel: `Download ${model.label} managed local model`,
-        actionDisabled: Boolean(actionModelId) || status?.state === "installing",
+        actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
         onAction: (modelId: string) => {
           void onInstallModel(modelId);
         },
@@ -202,6 +205,7 @@ function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus 
   if (status?.selectedModelId !== modelId) return false;
   switch (status.state) {
     case "installed":
+    case "starting":
     case "running":
       return true;
     case "installing":

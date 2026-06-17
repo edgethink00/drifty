@@ -74,11 +74,12 @@ function ManagedLocalAiModelRow({
   const [finderError, setFinderError] = useState<string | null>(null);
   const selectable = isSelectableManagedModel(model.id, status);
   const isSelected = selectable && localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "local" && localAiSetup.managedLocalModelId === model.id;
-  const hasCurrentRuntime = isSelected && (status?.state === "installed" || status?.state === "running");
+  const hasCurrentRuntime = status?.selectedModelId === model.id && (status.state === "installed" || status.state === "starting" || status.state === "running");
   const installingThisModel = status?.selectedModelId === model.id && status.state === "installing";
+  const startingThisModel = status?.selectedModelId === model.id && status.state === "starting";
   const errorThisModel = status?.selectedModelId === model.id && status.state === "error";
-  const busyThisModel = actionModelId === model.id || installingThisModel;
-  const anyManagedActionRunning = Boolean(actionModelId) || status?.state === "installing";
+  const busyThisModel = actionModelId === model.id || installingThisModel || startingThisModel;
+  const anyManagedActionRunning = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
   const downloadProgress = installingThisModel ? status.progress : null;
   const showInFinderDisabled = busyThisModel || finderOpening || !status?.artifactDir;
 
@@ -153,7 +154,7 @@ function ManagedLocalAiModelRow({
 }
 
 function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
-  return status?.selectedModelId === modelId && (status.state === "installed" || status.state === "running");
+  return status?.selectedModelId === modelId && (status.state === "installed" || status.state === "starting" || status.state === "running");
 }
 
 function messageFromFinderError(error: unknown): string {

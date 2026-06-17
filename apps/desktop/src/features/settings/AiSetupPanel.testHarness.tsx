@@ -38,7 +38,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
           return Promise.resolve(managedStatus);
         case "managed_ai_install": {
           const modelId = modelIdFromArgs(args);
-          return Promise.resolve({
+          managedStatus = {
             ...managedStatus,
             state: "installed",
             selectedModelId: modelId,
@@ -47,10 +47,23 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             message: "Managed local model downloaded.",
             artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
             progress: null,
-          });
+          };
+          return Promise.resolve(managedStatus);
         }
-        case "managed_ai_start":
-          return Promise.resolve({ ...managedStatus, state: "error", message: "Runtime assets are not installed yet." });
+        case "managed_ai_start": {
+          const modelId = modelIdFromArgs(args);
+          managedStatus = {
+            ...managedStatus,
+            state: "running",
+            selectedModelId: modelId,
+            baseUrl: "http://127.0.0.1:39217/v1",
+            model: "drifty-qwen3.5-4b-local",
+            message: "Managed local AI runtime is running.",
+            artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
+            progress: null,
+          };
+          return Promise.resolve(managedStatus);
+        }
         case "managed_ai_delete":
           return Promise.resolve({ ...managedStatus, state: "not_installed", message: managedStatus.message });
         case "ai_classification_openai_chat":
