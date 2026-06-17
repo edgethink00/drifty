@@ -15,6 +15,9 @@ import {
 import { normalizeManagedLocalModelId, type LocalAiSetupState } from "./localAiSetup";
 
 type ManagedLocalAiAction = (modelId: string) => Promise<ManagedLocalAiStatus>;
+type SyncManagedSetupOptions = {
+  readonly activateProvider: boolean;
+};
 
 export type UseManagedLocalAiSetupResult = {
   readonly actionModelId: string | null;
@@ -36,10 +39,10 @@ export function useManagedLocalAiSetup(
   const [loading, setLoading] = useState(false);
   const [actionModelId, setActionModelId] = useState<string | null>(null);
 
-  const syncManagedSetup = useCallback((nextStatus: ManagedLocalAiStatus) => {
+  const syncManagedSetup = useCallback((nextStatus: ManagedLocalAiStatus, options: SyncManagedSetupOptions) => {
     onLocalAiSetupChange((current) => ({
       ...current,
-      provider: "managed_local",
+      provider: options.activateProvider ? "managed_local" : current.provider,
       managedLocalModelId: normalizeManagedLocalModelId(nextStatus.selectedModelId ?? current.managedLocalModelId),
       managedLocalBaseUrl: nextStatus.baseUrl ?? current.managedLocalBaseUrl,
       managedLocalModel: nextStatus.model ?? current.managedLocalModel,
@@ -55,7 +58,7 @@ export function useManagedLocalAiSetup(
       ]);
       setCatalog(nextCatalog.length > 0 ? nextCatalog : MANAGED_LOCAL_AI_FALLBACK_CATALOG);
       setStatus(nextStatus);
-      syncManagedSetup(nextStatus);
+      syncManagedSetup(nextStatus, { activateProvider: false });
     } catch (error) {
       setCatalog(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
       setStatus(fallbackManagedLocalAiStatus(messageFromError(error)));
@@ -75,7 +78,7 @@ export function useManagedLocalAiSetup(
     try {
       const nextStatus = await action(modelId);
       setStatus(nextStatus);
-      syncManagedSetup(nextStatus);
+      syncManagedSetup(nextStatus, { activateProvider: true });
     } catch (error) {
       setStatus(fallbackManagedLocalAiStatus(messageFromError(error)));
     } finally {
