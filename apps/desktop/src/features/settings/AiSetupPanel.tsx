@@ -39,6 +39,7 @@ type AiSetupPanelProps = {
   readonly userEmail: string | null;
   readonly workProfileUserId: string;
   readonly onDialogOpenChange: (open: boolean) => void;
+  readonly onLocalAiConnectionTestResult: (setup: LocalAiSetupState, result: AiConnectionTestResult) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
@@ -60,6 +61,7 @@ export function AiSetupPanel({
   userEmail,
   workProfileUserId,
   onDialogOpenChange,
+  onLocalAiConnectionTestResult,
   onLocalAiSetupChange,
   onRefreshCloudStatus,
   onStartCloudSetup,
@@ -91,6 +93,7 @@ export function AiSetupPanel({
     setConnectionTestResult(null);
     const result = await testLocalAiConnection(localAiSetup);
     setConnectionTestResult(result);
+    onLocalAiConnectionTestResult(localAiSetup, result);
     setConnectionTestRunning(false);
   };
 

@@ -56,7 +56,13 @@ import {
 import { FlowChartView } from "./features/flow-chart/FlowChartView";
 import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
 import { HistoryView } from "./features/history/HistoryView";
-import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import { AiConnectionStatusBar, resolveAiConnectionStatus, type LocalAiProviderStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import {
+  aiConnectionIssueKindFromMessage,
+  localAiProviderLabel,
+  localAiSetupFingerprint,
+  type LocalAiConnectionCheck,
+} from "./features/ai-connection/aiConnectionHealth";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
@@ -190,6 +196,7 @@ import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./
 import { localAiProviderConfigFromSetup } from "./features/settings/localAiClassificationOptions";
 import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
+import type { AiConnectionTestResult } from "./features/settings/aiConnectionTest";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
@@ -440,6 +447,7 @@ export default function App() {
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
   const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(resolveInitialLocalAiSetup);
+  const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
   const [classificationRules, setClassificationRules] = useState<ClassificationRule[]>([]);
   const [classificationRulesLoading, setClassificationRulesLoading] = useState(false);
   const [classificationRulesError, setClassificationRulesError] = useState<string | null>(null);
@@ -496,6 +504,11 @@ export default function App() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const openSettingsTab = useCallback(() => {
     setSettingsSection("general");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
+  const openAiSetupSettings = useCallback(() => {
+    setSettingsSection("aiSetup");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -648,6 +661,23 @@ export default function App() {
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
+  const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
+  const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
+  const localAiProviderStatus = useMemo<LocalAiProviderStatus>(() => {
+    if (!localAiConnectionFingerprint) return { kind: "unconfigured" };
+    if (
+      !localAiConnectionCheck
+      || localAiConnectionCheck.provider !== localAiSetup.provider
+      || localAiConnectionCheck.fingerprint !== localAiConnectionFingerprint
+    ) {
+      return { kind: "test_needed" };
+    }
+    if (localAiConnectionCheck.status === "connected") return { kind: "connected" };
+    return {
+      kind: "failed",
+      issueKind: localAiConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(localAiConnectionCheck.message),
+    };
+  }, [localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup.provider]);
     const {
       user,
       status: authStatus,
@@ -671,6 +701,55 @@ export default function App() {
   useEffect(() => {
     setObservedAiClassificationFailure(false);
   }, [canUseCloudAiClassification, localAiClassificationOptions]);
+  const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
+    const fingerprint = localAiSetupFingerprint(testedSetup);
+    if (!fingerprint) {
+      setLocalAiConnectionCheck(null);
+      return;
+    }
+    setLocalAiConnectionCheck({
+      provider: testedSetup.provider,
+      fingerprint,
+      status: result.kind === "success" ? "connected" : "failed",
+      issueKind: result.kind === "success" ? null : aiConnectionIssueKindFromMessage(result.message),
+      message: result.message,
+      checkedAt: Date.now(),
+    });
+  }, []);
+  const recordLocalAiClassificationSummary = useCallback((summary: AiClassificationSummary) => {
+    if (!localAiConnectionFingerprint) return;
+    if (summary.status === "error") {
+      setLocalAiConnectionCheck({
+        provider: localAiSetup.provider,
+        fingerprint: localAiConnectionFingerprint,
+        status: "failed",
+        issueKind: aiConnectionIssueKindFromMessage(summary.message),
+        message: summary.message,
+        checkedAt: Date.now(),
+      });
+      return;
+    }
+    if (summary.status !== "saved") return;
+    setLocalAiConnectionCheck({
+      provider: localAiSetup.provider,
+      fingerprint: localAiConnectionFingerprint,
+      status: "connected",
+      issueKind: null,
+      message: summary.message,
+      checkedAt: Date.now(),
+    });
+  }, [localAiConnectionFingerprint, localAiSetup.provider]);
+  const recordLocalAiClassificationError = useCallback((message: string) => {
+    if (!localAiConnectionFingerprint) return;
+    setLocalAiConnectionCheck({
+      provider: localAiSetup.provider,
+      fingerprint: localAiConnectionFingerprint,
+      status: "failed",
+      issueKind: aiConnectionIssueKindFromMessage(message),
+      message,
+      checkedAt: Date.now(),
+    });
+  }, [localAiConnectionFingerprint, localAiSetup.provider]);
   const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
@@ -2690,6 +2769,7 @@ export default function App() {
       const summary = localAiClassificationOptions
         ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
         : await runAiClassificationForUnknownThreshold(query, threshold);
+      if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       if (selectedDayRef.current === today) {
         setObservedAiClassificationFailure(summary.status === "error");
       }
@@ -2706,14 +2786,16 @@ export default function App() {
       }
       if (summary.savedRecords > 0) await refreshLeaderboardData();
     } catch (nextError) {
+      const message = toErrorMessage(nextError);
+      if (localAiClassificationOptions) recordLocalAiClassificationError(message);
       if (selectedDayRef.current === today) {
-        setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });
+        setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
         setObservedAiClassificationFailure(true);
       }
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -3033,6 +3115,7 @@ export default function App() {
       const summary = localAiClassificationOptions
         ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
         : await runAiClassification(toClassificationQueryForDay(selectedDay));
+      if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       setClassificationSummary(summary);
       setObservedAiClassificationFailure(summary.status === "error");
       if (summary.metrics) setClassificationMetrics(summary.metrics);
@@ -3043,7 +3126,9 @@ export default function App() {
       }
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
     } catch (nextError) {
-      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });
+      const message = toErrorMessage(nextError);
+      if (localAiClassificationOptions) recordLocalAiClassificationError(message);
+      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
       setObservedAiClassificationFailure(true);
     } finally {
       aiClassificationInFlightRef.current = false;
@@ -3069,6 +3154,7 @@ export default function App() {
       const summary = localAiClassificationOptions
         ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, localAiClassificationOptions)
         : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
+      if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       setClassificationSummary({
         ...summary,
         message: `${summary.message} Target: ${formatDayLabel(targetDay)}.`,
@@ -3082,7 +3168,9 @@ export default function App() {
       }
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
     } catch (nextError) {
-      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });
+      const message = toErrorMessage(nextError);
+      if (localAiClassificationOptions) recordLocalAiClassificationError(message);
+      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
       setObservedAiClassificationFailure(true);
     } finally {
       aiClassificationInFlightRef.current = false;
@@ -3498,14 +3586,13 @@ export default function App() {
         ? "free"
         : null;
   const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
-  const localAiConnectionProviderLabel = localAiSetup.provider === "openrouter_byok" ? "BYOK AI" : "Local AI";
   const aiConnectionStatus = resolveAiConnectionStatus({
     canUseCloudAi: canUseCloudAiClassification,
-    hasLocalAiProvider: Boolean(localAiClassificationOptions),
-    localProviderLabel: localAiClassificationOptions ? localAiConnectionProviderLabel : null,
+    localProviderStatus: localAiProviderStatus,
+    localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
     classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
-    classificationError: classificationSummary?.status === "error" ? classificationSummary.message : null,
-    cloudError: billingEntitlementError,
+    classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
+    cloudIssueKind: billingEntitlementError ? aiConnectionIssueKindFromMessage(billingEntitlementError) : null,
   });
 
   return (
@@ -3534,7 +3621,7 @@ export default function App() {
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
           <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
-          <AiConnectionStatusBar status={aiConnectionStatus} />
+          <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
           {titlebarUpdate ? (
             <TopbarUpdateButton
               isInstalling={updaterInstalling}
@@ -4344,6 +4431,7 @@ export default function App() {
                       userEmail={user?.email ?? null}
                       workProfileUserId={user?.id ?? "local"}
                       onDialogOpenChange={setAiSetupDialogOpen}
+                      onLocalAiConnectionTestResult={recordLocalAiConnectionTestResult}
                       onLocalAiSetupChange={setLocalAiSetup}
                       onRefreshCloudStatus={refreshBillingEntitlement}
                       onStartCloudSetup={handleStartDriftyCloudSetup}
