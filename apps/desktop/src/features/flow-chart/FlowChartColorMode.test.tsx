@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
@@ -48,10 +48,11 @@ describe("FlowChartView color mode", () => {
     expect(cell.classList.contains("flow-cell--workspace")).toBe(true);
   });
 
-  it("shows readable identity chips before the hover detail and avoids repeated site pills", () => {
+  it("shows readable identity chips before the hover detail and avoids repeated site pills", async () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /^workspace.*focus/i }), { clientX: 120, clientY: 80 });
+    fireEvent(screen.getByRole("button", { name: /^workspace.*focus/i }), new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
+    await waitFor(() => expect(document.querySelector(".flow-hover-card")).toBeTruthy());
     const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
     const identityRow = hoverCard.querySelector(".flow-hover-card__identity-row") as HTMLElement;
     const detail = hoverCard.querySelector(".flow-hover-card__detail") as HTMLElement;
