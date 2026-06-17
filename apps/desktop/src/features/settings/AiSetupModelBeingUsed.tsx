@@ -1,21 +1,31 @@
 import type { Dispatch, SetStateAction } from "react";
 
+import driftyLogoUrl from "../../assets/drifty-icon.png";
+import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import type { DriftyRoute } from "./DriftySetupPanel";
+import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import type { LocalAiSetupState } from "./localAiSetup";
-import type { ManagedLocalAiModel } from "./managedLocalAiClient";
+import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 
 const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
+const PROVIDER_OPTIONS = [
+  { value: "drifty", label: "Drifty", iconSrc: driftyLogoUrl },
+  { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
+] satisfies readonly SettingsSelectOption<AiSetupSection>[];
 
 type AiSetupModelBeingUsedProps = {
   readonly catalog: readonly ManagedLocalAiModel[];
   readonly driftyRoute: DriftyRoute;
   readonly localAiSetup: LocalAiSetupState;
+  readonly managedLocalStatus: ManagedLocalAiStatus | null;
   readonly openRouterModelOptions: readonly AiModelOption[];
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
+  readonly actionModelId: string | null;
   readonly onDriftyRouteChange: (route: DriftyRoute) => void;
+  readonly onInstallModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onOpenRouterPrimaryModelChange: (modelId: string) => void;
   readonly onProviderChange: (provider: AiSetupSection) => void;
@@ -25,19 +35,28 @@ export function AiSetupModelBeingUsed({
   catalog,
   driftyRoute,
   localAiSetup,
+  managedLocalStatus,
   openRouterModelOptions,
   openRouterPrimaryModel,
   selectedProvider,
+  actionModelId,
   onDriftyRouteChange,
+  onInstallModel,
   onLocalAiSetupChange,
   onOpenRouterPrimaryModelChange,
   onProviderChange,
 }: AiSetupModelBeingUsedProps) {
+  const selectedManagedModelReady = isSelectableManagedModel(localAiSetup.managedLocalModelId, managedLocalStatus);
   const selectedModelValue = selectedProvider === "openrouter"
     ? openRouterPrimaryModel
     : driftyRoute === "cloud"
       ? DRIFTY_CLOUD_MODEL_ID
-      : localAiSetup.managedLocalModelId;
+      : selectedManagedModelReady
+        ? localAiSetup.managedLocalModelId
+        : DRIFTY_CLOUD_MODEL_ID;
+  const modelOptions = selectedProvider === "drifty"
+    ? driftyModelOptions(catalog, managedLocalStatus, actionModelId, onInstallModel)
+    : openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
 
   const handleProviderChange = (provider: AiSetupSection) => {
     onProviderChange(provider);
@@ -58,6 +77,7 @@ export function AiSetupModelBeingUsed({
           onProviderChange("drifty");
           return;
         }
+        if (!isSelectableManagedModel(modelId, managedLocalStatus)) return;
         onDriftyRouteChange("local");
         onProviderChange("drifty");
         onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", managedLocalModelId: modelId }));
@@ -76,36 +96,65 @@ export function AiSetupModelBeingUsed({
     <section className="ai-setup-current-model" aria-label="Model being used">
       <h4>Model being used</h4>
       <div className="ai-setup-current-model__controls">
-        <label className="ai-setup-select-control">
-          <span className="sr-only">AI provider</span>
-          <select aria-label="AI provider" value={selectedProvider} onChange={(event) => handleProviderChange(providerFromValue(event.target.value))}>
-            <option value="drifty">Drifty</option>
-            <option value="openrouter">OpenRouter</option>
-          </select>
-        </label>
+        <SettingsSelect
+          ariaLabel="AI provider"
+          className="ai-setup-select-control"
+          value={selectedProvider}
+          options={PROVIDER_OPTIONS}
+          onChange={handleProviderChange}
+        />
         <span className="ai-setup-current-model__slash" aria-hidden="true">/</span>
-        <label className="ai-setup-select-control ai-setup-select-control--model">
-          <span className="sr-only">AI model</span>
-          <select aria-label="AI model" value={selectedModelValue} onChange={(event) => handleModelChange(event.target.value)}>
-            {selectedProvider === "drifty" ? (
-              <>
-                <option value={DRIFTY_CLOUD_MODEL_ID}>Drifty Cloud</option>
-                {catalog.map((model) => (
-                  <option key={model.id} value={model.id}>{model.label}</option>
-                ))}
-              </>
-            ) : openRouterModelOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-        </label>
+        <SettingsSelect
+          ariaLabel="AI model"
+          className="ai-setup-select-control ai-setup-select-control--model"
+          value={selectedModelValue}
+          options={modelOptions}
+          onChange={handleModelChange}
+        />
       </div>
     </section>
   );
 }
 
-function providerFromValue(value: string): AiSetupSection {
-  return value === "openrouter" ? "openrouter" : "drifty";
+function driftyModelOptions(
+  catalog: readonly ManagedLocalAiModel[],
+  status: ManagedLocalAiStatus | null,
+  actionModelId: string | null,
+  onInstallModel: (modelId: string) => void | Promise<void>,
+): readonly SettingsSelectOption<string>[] {
+  return [
+    { value: DRIFTY_CLOUD_MODEL_ID, label: "Drifty Cloud", iconSrc: driftyLogoUrl },
+    ...catalog.map((model) => {
+      const selectable = isSelectableManagedModel(model.id, status);
+      if (selectable) return { value: model.id, label: model.label };
+      return {
+        value: model.id,
+        label: model.label,
+        disabled: true,
+        actionLabel: actionModelId === model.id ? "Downloading..." : "Download",
+        actionAriaLabel: `Download ${model.label} managed local model`,
+        actionDisabled: Boolean(actionModelId),
+        onAction: (modelId: string) => {
+          void onInstallModel(modelId);
+        },
+      };
+    }),
+  ];
+}
+
+function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
+  if (status?.selectedModelId !== modelId) return false;
+  switch (status.state) {
+    case "installed":
+    case "running":
+      return true;
+    case "installing":
+    case "error":
+    case "not_installed":
+      return false;
+    default:
+      return assertNever(status.state);
+  }
 }
 
 class AiSetupModelProviderError extends Error {

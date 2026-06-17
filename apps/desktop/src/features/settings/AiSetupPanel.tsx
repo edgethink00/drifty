@@ -105,13 +105,16 @@ export function AiSetupPanel({
       {activePanelTab === "providers" ? (
         <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label="Providers">
           <AiSetupModelBeingUsed
+            actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
             driftyRoute={driftyRoute}
             localAiSetup={localAiSetup}
+            managedLocalStatus={managedLocalAi.status}
             openRouterModelOptions={modelPickers.openRouterModelOptions}
             openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
             selectedProvider={activeSection}
             onDriftyRouteChange={setDriftyRoute}
+            onInstallModel={managedLocalAi.installModel}
             onLocalAiSetupChange={onLocalAiSetupChange}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleSectionChange}
