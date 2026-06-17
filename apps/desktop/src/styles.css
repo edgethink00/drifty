@@ -16316,6 +16316,12 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   opacity: 0.82;
 }
 
+@media (max-width: 520px) {
+  .focus-drift__axis-tick--dense {
+    display: none;
+  }
+}
+
 /* Corrected Drifty prototype parity: Insights chart panel exact inset */
 .insight-chart-panel.editorial-panel {
   margin-top: var(--space-1);
