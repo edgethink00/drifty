@@ -200,7 +200,7 @@ describe("AuthContext", () => {
     expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://drifty.so/auth/login/");
     expect(invoke).not.toHaveBeenCalledWith("auth_exit_for_browser_sign_in");
     await waitFor(() => {
-      expect(authApi?.callbackStatus?.message).toBe("Browser opened. Complete sign-in on drifty.so, then choose Open Drifty.");
+      expect(authApi?.callbackStatus?.message).toBe("Browser opened.");
     });
   });
 
@@ -226,7 +226,7 @@ describe("AuthContext", () => {
 
     expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://drifty.so/auth/login/");
     await waitFor(() => {
-      expect(authApi?.callbackStatus?.message).toBe("Browser opened. Complete sign-in on drifty.so, then choose Open Drifty.");
+      expect(authApi?.callbackStatus?.message).toBe("Browser opened.");
     });
   });
 
@@ -267,7 +267,7 @@ describe("AuthContext", () => {
     expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://accounts.google.com/oauth");
     expect(tauriMocks.openUrl).not.toHaveBeenCalledWith("https://drifty.so/auth/login/");
     await waitFor(() => {
-      expect(authApi?.callbackStatus?.message).toBe("Browser opened. Complete Google sign-in, then choose Open Drifty.");
+      expect(authApi?.callbackStatus?.message).toBe("Browser opened.");
     });
   });
 
@@ -850,7 +850,7 @@ describe("AuthContext", () => {
 
     expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://drifty.so/auth/login/");
     await waitFor(() => {
-      expect(authApi?.callbackStatus?.message).toBe("Browser opened. Complete sign-in on drifty.so, then choose Open Drifty.");
+      expect(authApi?.callbackStatus?.message).toBe("Browser opened.");
     });
 
     const entries = readAuthDiagnostics();

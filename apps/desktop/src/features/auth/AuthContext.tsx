@@ -604,7 +604,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await openUrl(DESKTOP_LOGIN_URL);
         setCallbackStatus({
           phase: "waiting",
-          message: "Browser opened. Complete sign-in on drifty.so, then choose Open Drifty.",
+          message: "Browser opened.",
         });
       } catch (error) {
         const openError = error instanceof Error
@@ -673,7 +673,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await openUrl(data.url);
         setCallbackStatus({
           phase: "waiting",
-          message: "Browser opened. Complete Google sign-in, then choose Open Drifty.",
+          message: "Browser opened.",
         });
       } catch (error) {
         const openError = error instanceof Error
