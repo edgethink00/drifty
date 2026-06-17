@@ -1,4 +1,4 @@
-import type { LocalAiProvider, LocalAiSetupState } from "../settings/localAiSetup";
+import { isManagedLocalAiRoute, type LocalAiProvider, type LocalAiSetupState } from "../settings/localAiSetup";
 
 export type AiConnectionIssueKind = "network" | "provider";
 
@@ -43,6 +43,7 @@ export function localAiProviderLabel(setup: LocalAiSetupState): "BYOK AI" | "Loc
 export function localAiSetupFingerprint(setup: LocalAiSetupState): string | null {
   switch (setup.provider) {
     case "managed_local": {
+      if (!isManagedLocalAiRoute(setup)) return null;
       const baseUrl = setup.managedLocalBaseUrl.trim();
       const model = setup.managedLocalModel.trim();
       const modelId = setup.managedLocalModelId.trim();

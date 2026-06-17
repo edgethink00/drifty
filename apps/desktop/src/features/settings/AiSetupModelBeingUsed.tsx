@@ -10,6 +10,7 @@ import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 
 const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
+const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Individual (Cloud)";
 const PROVIDER_OPTIONS = [
   { value: "drifty", label: "Drifty", iconSrc: driftyLogoUrl },
   { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
@@ -24,11 +25,14 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
   readonly actionModelId: string | null;
+  readonly cloudSubscribeActionDisabled: boolean;
+  readonly cloudSubscribeActionLabel: string | null;
   readonly onDriftyRouteChange: (route: DriftyRoute) => void;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onOpenRouterPrimaryModelChange: (modelId: string) => void;
   readonly onProviderChange: (provider: AiSetupSection) => void;
+  readonly onStartCloudSetup: () => void | Promise<void>;
 };
 
 export function AiSetupModelBeingUsed({
@@ -40,22 +44,30 @@ export function AiSetupModelBeingUsed({
   openRouterPrimaryModel,
   selectedProvider,
   actionModelId,
+  cloudSubscribeActionDisabled,
+  cloudSubscribeActionLabel,
   onDriftyRouteChange,
   onInstallModel,
   onLocalAiSetupChange,
   onOpenRouterPrimaryModelChange,
   onProviderChange,
+  onStartCloudSetup,
 }: AiSetupModelBeingUsedProps) {
-  const selectedManagedModelReady = isSelectableManagedModel(localAiSetup.managedLocalModelId, managedLocalStatus);
   const selectedModelValue = selectedProvider === "openrouter"
     ? openRouterPrimaryModel
     : driftyRoute === "cloud"
       ? DRIFTY_CLOUD_MODEL_ID
-      : selectedManagedModelReady
-        ? localAiSetup.managedLocalModelId
-        : DRIFTY_CLOUD_MODEL_ID;
+      : localAiSetup.managedLocalModelId;
   const modelOptions = selectedProvider === "drifty"
-    ? driftyModelOptions(catalog, managedLocalStatus, actionModelId, onInstallModel)
+    ? driftyModelOptions(
+      catalog,
+      managedLocalStatus,
+      actionModelId,
+      cloudSubscribeActionDisabled,
+      cloudSubscribeActionLabel,
+      onInstallModel,
+      onStartCloudSetup,
+    )
     : openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
 
   const handleProviderChange = (provider: AiSetupSection) => {
@@ -65,7 +77,7 @@ export function AiSetupModelBeingUsed({
       return;
     }
     if (driftyRoute === "local") {
-      onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local" }));
+      onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local" }));
     }
   };
 
@@ -80,7 +92,7 @@ export function AiSetupModelBeingUsed({
         if (!isSelectableManagedModel(modelId, managedLocalStatus)) return;
         onDriftyRouteChange("local");
         onProviderChange("drifty");
-        onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", managedLocalModelId: modelId }));
+        onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local", managedLocalModelId: modelId }));
         return;
       case "openrouter":
         onProviderChange("openrouter");
@@ -120,10 +132,24 @@ function driftyModelOptions(
   catalog: readonly ManagedLocalAiModel[],
   status: ManagedLocalAiStatus | null,
   actionModelId: string | null,
+  cloudSubscribeActionDisabled: boolean,
+  cloudSubscribeActionLabel: string | null,
   onInstallModel: (modelId: string) => void | Promise<void>,
+  onStartCloudSetup: () => void | Promise<void>,
 ): readonly SettingsSelectOption<string>[] {
   return [
-    { value: DRIFTY_CLOUD_MODEL_ID, label: "Drifty Cloud", iconSrc: driftyLogoUrl },
+    {
+      value: DRIFTY_CLOUD_MODEL_ID,
+      label: DRIFTY_CLOUD_MODEL_LABEL,
+      actionLabel: cloudSubscribeActionLabel ?? undefined,
+      actionAriaLabel: cloudSubscribeActionLabel ? "Subscribe to Drifty Individual Cloud" : undefined,
+      actionDisabled: cloudSubscribeActionDisabled,
+      onAction: cloudSubscribeActionLabel
+        ? () => {
+          void onStartCloudSetup();
+        }
+        : undefined,
+    },
     ...catalog.map((model) => {
       const selectable = isSelectableManagedModel(model.id, status);
       if (selectable) return { value: model.id, label: model.label };

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import {
+  isManagedLocalAiRoute,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   type LocalAiSetupState,
@@ -40,6 +41,7 @@ export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<A
 function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unknown> | null {
   switch (setup.provider) {
     case "managed_local":
+      if (!isManagedLocalAiRoute(setup)) return null;
       return openAiCompatibleConnectionRequest(setup.managedLocalBaseUrl, setup.managedLocalModel);
     case "openrouter_byok": {
       const apiKey = setup.openRouterApiKey.trim();

@@ -1,5 +1,6 @@
 import type { LocalAiProviderConfig } from "../classification/localAiProviderRequest";
 import {
+  isManagedLocalAiRoute,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   type LocalAiSetupState,
@@ -12,6 +13,7 @@ export type LocalAiClassificationOptions = {
 export function localAiProviderConfigFromSetup(setup: LocalAiSetupState): LocalAiClassificationOptions | null {
   switch (setup.provider) {
     case "managed_local": {
+      if (!isManagedLocalAiRoute(setup)) return null;
       const baseUrl = setup.managedLocalBaseUrl.trim();
       const model = setup.managedLocalModel.trim();
       const modelId = setup.managedLocalModelId.trim();

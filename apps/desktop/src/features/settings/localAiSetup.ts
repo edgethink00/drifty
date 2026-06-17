@@ -1,7 +1,9 @@
 export type LocalAiProvider = "managed_local" | "openrouter_byok" | "self_hosted";
+export type DriftyAiRoute = "cloud" | "local";
 
 export type LocalAiSetupState = {
   provider: LocalAiProvider;
+  driftyRoute: DriftyAiRoute;
   managedLocalModelId: string;
   managedLocalBaseUrl: string;
   managedLocalModel: string;
@@ -16,9 +18,11 @@ export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiK
 
 export const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
 export const DEFAULT_MANAGED_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
+export const DEFAULT_DRIFTY_ROUTE: DriftyAiRoute = "cloud";
 
 export const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   provider: "managed_local",
+  driftyRoute: DEFAULT_DRIFTY_ROUTE,
   managedLocalModelId: DEFAULT_MANAGED_LOCAL_MODEL_ID,
   managedLocalBaseUrl: "",
   managedLocalModel: "",
@@ -74,6 +78,7 @@ export function toPersistedLocalAiSetup(setup: LocalAiSetupState): PersistedLoca
   const openRouterModel = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
   return {
     provider: setup.provider,
+    driftyRoute: parseDriftyAiRoute(setup.driftyRoute),
     managedLocalModelId: normalizeManagedLocalModelId(setup.managedLocalModelId),
     managedLocalBaseUrl: setup.managedLocalBaseUrl.trim(),
     managedLocalModel: setup.managedLocalModel.trim(),
@@ -93,8 +98,10 @@ export function resolveInitialLocalAiSetup(): LocalAiSetupState {
     if (!parsedValue || typeof parsedValue !== "object") return DEFAULT_LOCAL_AI_SETUP;
     const record = parsedValue as Record<string, unknown>;
     const provider = parseLocalAiProvider(record.provider);
+    const legacyDriftyRoute = legacyDriftyRouteForPersistedSetup(provider, record);
     return {
       provider,
+      driftyRoute: parseDriftyAiRoute(record.driftyRoute, legacyDriftyRoute),
       managedLocalModelId: normalizeManagedLocalModelId(typeof record.managedLocalModelId === "string" ? record.managedLocalModelId : ""),
       managedLocalBaseUrl: typeof record.managedLocalBaseUrl === "string" ? record.managedLocalBaseUrl.trim() : "",
       managedLocalModel: typeof record.managedLocalModel === "string" ? record.managedLocalModel.trim() : "",
@@ -117,6 +124,10 @@ export function normalizeManagedLocalModelId(modelId: string): string {
   return trimmedModelId || DEFAULT_MANAGED_LOCAL_MODEL_ID;
 }
 
+export function isManagedLocalAiRoute(setup: LocalAiSetupState): boolean {
+  return setup.provider === "managed_local" && setup.driftyRoute === "local";
+}
+
 function parseLocalAiProvider(value: unknown): LocalAiProvider {
   switch (value) {
     case "managed_local":
@@ -126,4 +137,21 @@ function parseLocalAiProvider(value: unknown): LocalAiProvider {
     default:
       return DEFAULT_LOCAL_AI_SETUP.provider;
   }
+}
+
+function parseDriftyAiRoute(value: unknown, fallbackRoute: DriftyAiRoute = DEFAULT_DRIFTY_ROUTE): DriftyAiRoute {
+  switch (value) {
+    case "cloud":
+    case "local":
+      return value;
+    default:
+      return fallbackRoute;
+  }
+}
+
+function legacyDriftyRouteForPersistedSetup(provider: LocalAiProvider, record: Record<string, unknown>): DriftyAiRoute {
+  if (provider !== "managed_local") return DEFAULT_DRIFTY_ROUTE;
+  const managedLocalBaseUrl = typeof record.managedLocalBaseUrl === "string" ? record.managedLocalBaseUrl.trim() : "";
+  const managedLocalModel = typeof record.managedLocalModel === "string" ? record.managedLocalModel.trim() : "";
+  return managedLocalBaseUrl && managedLocalModel ? "local" : DEFAULT_DRIFTY_ROUTE;
 }

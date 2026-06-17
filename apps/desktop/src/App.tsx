@@ -698,9 +698,22 @@ export default function App() {
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const canUseCloudAiClassification = isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const aiClassificationProviderKey = localAiClassificationOptions
+    ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
+    : canUseCloudAiClassification
+      ? "cloud"
+      : "disabled";
+  const previousAiClassificationProviderKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const previousAiClassificationProviderKey = previousAiClassificationProviderKeyRef.current;
+    setClassificationSummary((current) => {
+      if (previousAiClassificationProviderKey === null) return current;
+      if (previousAiClassificationProviderKey === aiClassificationProviderKey) return current;
+      return current?.status === "error" ? null : current;
+    });
+    previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
     setObservedAiClassificationFailure(false);
-  }, [canUseCloudAiClassification, localAiClassificationOptions]);
+  }, [aiClassificationProviderKey]);
   const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
     const fingerprint = localAiSetupFingerprint(testedSetup);
     if (!fingerprint) {

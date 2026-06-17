@@ -35,7 +35,8 @@ export function ManagedLocalAiPanel({
   onTestConnection,
 }: ManagedLocalAiPanelProps) {
   const managedConnectionReady = Boolean(localAiSetup.managedLocalBaseUrl.trim() && localAiSetup.managedLocalModel.trim());
-  const managedMessage = localAiSetup.provider === "managed_local" ? connectionTestMessage : null;
+  const managedLocalSelected = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "local";
+  const managedMessage = managedLocalSelected ? connectionTestMessage : null;
 
   return (
     <div className="ai-setup-detail ai-setup-detail--local" role="group" aria-label="Local AI settings">
@@ -64,8 +65,8 @@ export function ManagedLocalAiPanel({
       </div>
 
       <AiSetupConnectionTestRow
-        buttonLabel={connectionTestRunning && localAiSetup.provider === "managed_local" ? "Testing..." : "Managed runtime test"}
-        disabled={connectionTestRunning || !managedConnectionReady}
+        buttonLabel={connectionTestRunning && managedLocalSelected ? "Testing..." : "Managed runtime test"}
+        disabled={connectionTestRunning || !managedLocalSelected || !managedConnectionReady}
         message={managedMessage}
         providerLabel="Managed Local AI"
         onTestConnection={onTestConnection}
@@ -95,7 +96,7 @@ function ManagedLocalAiModelRow({
   const [finderOpening, setFinderOpening] = useState(false);
   const [finderError, setFinderError] = useState<string | null>(null);
   const selectable = isSelectableManagedModel(model.id, status);
-  const isSelected = selectable && localAiSetup.provider === "managed_local" && localAiSetup.managedLocalModelId === model.id;
+  const isSelected = selectable && localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "local" && localAiSetup.managedLocalModelId === model.id;
   const hasCurrentRuntime = isSelected && (status?.state === "installed" || status?.state === "running");
   const actionRunning = actionModelId === model.id;
   const showInFinderDisabled = actionRunning || finderOpening || !status?.artifactDir;
@@ -123,7 +124,7 @@ function ManagedLocalAiModelRow({
         checked={isSelected}
         disabled={!selectable}
         aria-label={`Select ${model.label} managed local model`}
-        onChange={() => onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", managedLocalModelId: model.id }))}
+        onChange={() => onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local", managedLocalModelId: model.id }))}
       />
       <div className="ai-managed-model__copy">
         <div>
