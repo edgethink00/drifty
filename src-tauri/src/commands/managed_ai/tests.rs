@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use super::{
     install_model_at_root_with_downloader, managed_ai_catalog, model_dir, read_status,
-    require_model, start_model_at_root, status_for_spec, write_status, ManagedAiError,
-    ManagedAiInstallState, ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE,
+    require_model, start_model_at_root, status_for_spec, write_status, ManagedAiDownloadProgress,
+    ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 #[test]
@@ -64,6 +64,26 @@ fn install_returns_error_status_when_download_fails() {
 }
 
 #[test]
+fn install_records_downloader_reported_progress_before_marking_installed() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let status = install_model_at_root_with_downloader(
+        root.path(),
+        "drifty-qwen3-5-4b-default",
+        progress_reporting_download,
+    )
+    .expect("install model");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert!(status.progress.is_none());
+    let saved_status = read_status(root.path()).expect("read final status");
+    assert!(matches!(
+        saved_status.state,
+        ManagedAiInstallState::Installed
+    ));
+    assert!(saved_status.progress.is_none());
+}
+
+#[test]
 fn start_requires_runtime_assets() {
     let root = tempfile::tempdir().expect("create temp root");
     let status =
@@ -93,14 +113,52 @@ fn read_status_downgrades_stale_installed_empty_model_dir() {
     assert_eq!(status.message, MANAGED_ASSETS_MISSING_MESSAGE);
 }
 
-fn fake_download(root: &Path, spec: ManagedAiModelSpec) -> Result<PathBuf, ManagedAiError> {
+fn fake_download(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    _progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
     let artifact_dir = model_dir(root, spec.id);
     std::fs::create_dir_all(&artifact_dir)?;
     std::fs::write(artifact_dir.join(spec.file_name), b"gguf")?;
     Ok(artifact_dir)
 }
 
-fn failing_download(_root: &Path, _spec: ManagedAiModelSpec) -> Result<PathBuf, ManagedAiError> {
+fn progress_reporting_download(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
+    progress(ManagedAiDownloadProgress::from_counts(
+        spec.expected_size_bytes / 2,
+        spec.expected_size_bytes,
+    ))?;
+    let progress_status = read_status(root).expect("read in-progress status");
+    assert!(matches!(
+        progress_status.state,
+        ManagedAiInstallState::Installing
+    ));
+    assert_eq!(progress_status.selected_model_id.as_deref(), Some(spec.id));
+    assert_eq!(
+        progress_status.progress.as_ref().map(|item| item.percent),
+        Some(50)
+    );
+    assert_eq!(
+        progress_status
+            .progress
+            .as_ref()
+            .map(|item| item.downloaded_bytes),
+        Some(spec.expected_size_bytes / 2)
+    );
+
+    fake_download(root, spec, progress)
+}
+
+fn failing_download(
+    _root: &Path,
+    _spec: ManagedAiModelSpec,
+    _progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
     Err(ManagedAiError::DownloadFailed(
         "network unavailable".to_string(),
     ))

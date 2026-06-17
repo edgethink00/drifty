@@ -7,13 +7,17 @@ use thiserror::Error;
 
 mod catalog;
 mod download;
+mod status;
 #[cfg(test)]
 mod tests;
 
 use catalog::{catalog_model, ManagedAiCatalogModel, ManagedAiModelSpec, MANAGED_MODELS};
 use download::download_model_artifact;
+use status::{
+    default_status, read_status, status_for_download_progress, status_for_spec, write_status,
+};
+pub use status::{ManagedAiDownloadProgress, ManagedAiStatus};
 
-const STATUS_FILE_NAME: &str = "status.json";
 const MANAGED_BASE_URL: &str = "http://127.0.0.1:39217/v1";
 const MANAGED_ASSETS_MISSING_MESSAGE: &str =
     "Managed local model files are missing. Download again when model assets are available.";
@@ -26,17 +30,6 @@ pub enum ManagedAiInstallState {
     Installed,
     Running,
     Error,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ManagedAiStatus {
-    state: ManagedAiInstallState,
-    selected_model_id: Option<String>,
-    base_url: Option<String>,
-    model: Option<String>,
-    message: String,
-    artifact_dir: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -98,7 +91,11 @@ fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus,
 fn install_model_at_root_with_downloader(
     root: &Path,
     model_id: &str,
-    downloader: impl FnOnce(&Path, ManagedAiModelSpec) -> Result<PathBuf, ManagedAiError>,
+    downloader: impl FnOnce(
+        &Path,
+        ManagedAiModelSpec,
+        &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+    ) -> Result<PathBuf, ManagedAiError>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
     let installing = status_for_spec(
@@ -109,7 +106,12 @@ fn install_model_at_root_with_downloader(
     );
     write_status(root, &installing)?;
 
-    let artifact_dir = match downloader(root, spec) {
+    let mut report_progress = |progress: ManagedAiDownloadProgress| {
+        let status = status_for_download_progress(spec, progress);
+        write_status(root, &status)
+    };
+
+    let artifact_dir = match downloader(root, spec, &mut report_progress) {
         Ok(path) => path,
         Err(error) => {
             let status = status_for_spec(
@@ -161,74 +163,6 @@ fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, 
     }
     let status = default_status();
     write_status(root, &status)?;
-    Ok(status)
-}
-
-fn status_for_spec(
-    state: ManagedAiInstallState,
-    spec: ManagedAiModelSpec,
-    artifact_dir: Option<PathBuf>,
-    message: &str,
-) -> ManagedAiStatus {
-    ManagedAiStatus {
-        state,
-        selected_model_id: Some(spec.id.to_string()),
-        base_url: Some(MANAGED_BASE_URL.to_string()),
-        model: Some(spec.runtime_model.to_string()),
-        message: message.to_string(),
-        artifact_dir: artifact_dir.map(|path| path.to_string_lossy().into_owned()),
-    }
-}
-
-fn read_status(root: &Path) -> Result<ManagedAiStatus, ManagedAiError> {
-    let status_path = root.join(STATUS_FILE_NAME);
-    if !status_path.exists() {
-        return Ok(default_status());
-    }
-    let status = serde_json::from_str(&fs::read_to_string(status_path)?)?;
-    normalize_status_artifact_dir(root, status)
-}
-
-fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), ManagedAiError> {
-    fs::create_dir_all(root)?;
-    fs::write(
-        root.join(STATUS_FILE_NAME),
-        serde_json::to_vec_pretty(status)?,
-    )?;
-    Ok(())
-}
-
-fn default_status() -> ManagedAiStatus {
-    ManagedAiStatus {
-        state: ManagedAiInstallState::NotInstalled,
-        selected_model_id: None,
-        base_url: None,
-        model: None,
-        message: "Choose a local model and Drifty will download it inside the app.".to_string(),
-        artifact_dir: None,
-    }
-}
-
-fn normalize_status_artifact_dir(
-    root: &Path,
-    mut status: ManagedAiStatus,
-) -> Result<ManagedAiStatus, ManagedAiError> {
-    if let Some(model_id) = status.selected_model_id.as_deref() {
-        let spec = require_model(model_id)?;
-        let artifact_dir = status_artifact_dir(root, spec)?;
-        status.artifact_dir = artifact_dir.map(|path| path.to_string_lossy().into_owned());
-        if status.artifact_dir.is_none()
-            && matches!(
-                status.state,
-                ManagedAiInstallState::Installed | ManagedAiInstallState::Running
-            )
-        {
-            status.state = ManagedAiInstallState::Error;
-            status.message = MANAGED_ASSETS_MISSING_MESSAGE.to_string();
-        }
-    } else {
-        status.artifact_dir = None;
-    }
     Ok(status)
 }
 
