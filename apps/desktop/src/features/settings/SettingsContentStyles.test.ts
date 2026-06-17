@@ -119,7 +119,7 @@ describe("Settings content styles", () => {
     expect(tabRule).toContain("min-height: 2.08rem;");
     expect(activeTabRule).toContain("background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));");
     expect(activeTabRule).toContain("color: var(--text);");
-    expect(tabPanelRule).toContain("gap: var(--space-3);");
+    expect(tabPanelRule).toContain("gap: var(--space-4);");
   });
 
   it("keeps managed local model actions concise", () => {
