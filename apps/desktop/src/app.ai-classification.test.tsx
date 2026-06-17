@@ -73,6 +73,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
     start: vi.fn(),
     stop: vi.fn(),
     updateTrayProductivityIcon: vi.fn(),
+    updateTrayDriftAlarmStatus: vi.fn(),
   },
 }));
 
@@ -375,6 +376,7 @@ describe("App AI classification controls", () => {
     trackerClient.start.mockResolvedValue({ running: true, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.stop.mockResolvedValue({ running: false, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.updateTrayProductivityIcon.mockResolvedValue(undefined);
+    trackerClient.updateTrayDriftAlarmStatus.mockResolvedValue(undefined);
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
     aiClassificationMocks.getAiClassificationUsageSummary.mockImplementation((day: string) => Promise.resolve(
@@ -929,6 +931,91 @@ describe("App AI classification controls", () => {
     expect(trackerClient.getStatus).not.toHaveBeenCalled();
     expect(trackerClient.getTopSites).not.toHaveBeenCalled();
     expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
+  });
+
+  it("keeps 15-second drift alarm polling out of the live tracker sidebar state", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    const today = "2026-06-16";
+    const focusSegment: ActivitySegment = {
+      id: "sidebar-focus-before-poll",
+      startedAt: `${today}T00:50:00.000Z`,
+      endedAt: `${today}T01:00:00.000Z`,
+      durationSeconds: 600,
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "App.tsx",
+      platform: "macos",
+      source: "accessibility",
+    };
+    const chromeSegment: ActivitySegment = {
+      id: "sidebar-poll-chrome",
+      startedAt: `${today}T01:00:00.000Z`,
+      endedAt: `${today}T01:00:15.000Z`,
+      durationSeconds: 15,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "Docs",
+      browserName: "Google Chrome",
+      siteDomain: "docs.example.com",
+      siteTitle: "Docs",
+      siteUrl: "https://docs.example.com/",
+      platform: "macos",
+      source: "accessibility",
+    };
+    const focusSnapshot: CurrentActivitySnapshot = {
+      observedAt: `${today}T01:00:00.000Z`,
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "App.tsx",
+      source: "accessibility",
+    };
+    const chromeSnapshot: CurrentActivitySnapshot = {
+      observedAt: `${today}T01:00:15.000Z`,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "Docs",
+      browserName: "Google Chrome",
+      siteDomain: "docs.example.com",
+      siteTitle: "Docs",
+      siteUrl: "https://docs.example.com/",
+      source: "accessibility",
+    };
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T01:00:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
+      query.start === `${today}T04:00:00` ? [focusSegment] : [chromeSegment],
+    ));
+    trackerClient.getCurrentSnapshot
+      .mockResolvedValueOnce(focusSnapshot)
+      .mockResolvedValue(chromeSnapshot);
+
+    const { container } = render(<App />);
+
+    const livePill = container.querySelector(".live-pill");
+    if (!(livePill instanceof HTMLElement)) {
+      throw new Error("Expected live tracker sidebar pill to render.");
+    }
+
+    await waitFor(() => expect(within(livePill).getByText("Visual Studio Code")).toBeTruthy());
+    trackerClient.getCurrentSnapshot.mockClear();
+    trackerClient.updateTrayDriftAlarmStatus.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trackerClient.updateTrayDriftAlarmStatus).toHaveBeenCalled());
+    expect(within(livePill).getByText("Visual Studio Code")).toBeTruthy();
+    expect(within(livePill).queryByText("Google Chrome")).toBeNull();
+    expect(within(livePill).queryByText("docs.example.com")).toBeNull();
   });
 
   it("does not auto-run a 5-item focused batch while the renderer is still active", async () => {

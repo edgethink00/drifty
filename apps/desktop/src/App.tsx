@@ -346,6 +346,19 @@ function selectDriftAlarmSegment(existing: ActivitySegment, incoming: ActivitySe
   return incoming;
 }
 
+type DriftAlarmEvaluationInput = {
+  readonly checkedAt?: Date;
+  readonly snapshot: CurrentActivitySnapshot | null;
+  readonly liveSegments: readonly ActivitySegment[];
+  readonly updateRendererState?: boolean;
+};
+
+type DriftAlarmEvaluator = (input: DriftAlarmEvaluationInput) => void;
+
+type DriftAlarmTrayPublishOptions = {
+  readonly updateRendererState?: boolean;
+};
+
 /* ── SVG Icons ── */
 function NavIcon({ type }: { type: NavIconType }) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, width: 18, height: 18 };
@@ -842,12 +855,23 @@ export default function App() {
   const liveDriftAlarmAiRetryAfterRef = useRef<Map<string, number>>(new Map());
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
-  const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date()) => {
-    setDriftAlarmTrayStatus(buildDriftAlarmTrayStatus({
+  const evaluateDriftAlarmRef = useRef<DriftAlarmEvaluator | null>(null);
+  const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
+    const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
       checkedAt,
       result,
-    }));
+    });
+
+    if (options?.updateRendererState === false) {
+      const client = trackerClient as Partial<typeof trackerClient>;
+      if (typeof client.updateTrayDriftAlarmStatus === "function") {
+        void client.updateTrayDriftAlarmStatus(nextStatus).catch(() => undefined);
+      }
+      return;
+    }
+
+    setDriftAlarmTrayStatus(nextStatus);
   }, [driftAlertsEnabled]);
   const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
@@ -1559,7 +1583,12 @@ export default function App() {
 
       if (selectedDayRef.current !== day) return false;
       liveDriftAlarmSegmentsRef.current = liveTimeline;
-      setCurrentSnapshot(nextCurrentSnapshot);
+      evaluateDriftAlarmRef.current?.({
+        checkedAt: new Date(),
+        snapshot: nextCurrentSnapshot,
+        liveSegments: liveTimeline,
+        updateRendererState: false,
+      });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
@@ -1970,8 +1999,14 @@ export default function App() {
     };
   }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
-  useEffect(() => {
-    const checkedAt = new Date();
+  const evaluateDriftAlarm = useCallback((input: DriftAlarmEvaluationInput) => {
+    const checkedAt = input.checkedAt ?? new Date();
+    const shouldUpdateRendererState = input.updateRendererState !== false;
+    const alarmSnapshot = input.snapshot;
+    const liveSegments = input.liveSegments;
+    const publishEvaluationDriftAlarmTrayStatus = (result: DriftAlarmTrayResult, statusCheckedAt: Date | null = checkedAt) => {
+      publishDriftAlarmTrayStatus(result, statusCheckedAt, { updateRendererState: shouldUpdateRendererState });
+    };
     const clearPendingTransientRefresh = () => {
       if (!pendingDriftAlarmTransientRefreshRef.current) return;
       window.clearTimeout(pendingDriftAlarmTransientRefreshRef.current);
@@ -1989,30 +2024,30 @@ export default function App() {
       }, Math.max(0, delayMs));
     };
     if (!driftAlertsEnabled) {
-      publishDriftAlarmTrayStatus({ kind: "disabled" }, null);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "disabled" }, null);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
     if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) {
-      publishDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
     if (!status?.running) {
-      publishDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
 
-    const systemTransientActivity = currentSnapshot?.systemTransientActivity ?? null;
-    const driftAlarmSegments = liveDriftAlarmSegmentsRef.current.length > 0
-      ? mergeDriftAlarmSegments(segments, liveDriftAlarmSegmentsRef.current)
+    const systemTransientActivity = alarmSnapshot?.systemTransientActivity ?? null;
+    const driftAlarmSegments = liveSegments.length > 0
+      ? mergeDriftAlarmSegments(segments, liveSegments)
       : segments;
     const driftAlarmClassificationOptions = {
       ...selectedDayClassificationOptions,
@@ -2020,7 +2055,7 @@ export default function App() {
     } satisfies ClassificationOptions;
     const driftCandidates = buildDriftAlarmCandidates({
       segments: driftAlarmSegments,
-      currentSnapshot,
+      currentSnapshot: alarmSnapshot,
       classificationOptions: driftAlarmClassificationOptions,
       minimumDurationSeconds: driftAlertDelaySeconds,
     });
@@ -2029,11 +2064,11 @@ export default function App() {
       lastEligibleDriftCandidateRef.current = liveDrift;
     }
     const latestDrift = liveDrift ?? (systemTransientActivity ? lastEligibleDriftCandidateRef.current : null);
-    const activeSnooze = driftAlarmSnoozeRef.current;
+    const activeSnooze = driftAlarmSnooze ?? driftAlarmSnoozeRef.current;
     if (activeSnooze !== null) {
       pendingDriftAlarmGateRef.current = null;
       clearPendingTransientDriftAlarm();
-      publishDriftAlarmTrayStatus({
+      publishEvaluationDriftAlarmTrayStatus({
         kind: "snoozed",
         detail: `Until ${formatTimeLabel(new Date(activeSnooze.untilMs))}`,
       }, checkedAt);
@@ -2045,7 +2080,7 @@ export default function App() {
       const liveAiCandidate = systemTransientActivity === null && (localAiClassificationOptions || canUseCloudAiClassification)
         ? resolveLiveDriftAlarmAiCandidate({
           segments: driftAlarmSegments,
-          currentSnapshot,
+          currentSnapshot: alarmSnapshot,
           classificationOptions: driftAlarmClassificationOptions,
           minimumDurationSeconds: driftAlertDelaySeconds,
         })
@@ -2058,7 +2093,7 @@ export default function App() {
         );
         const liveAiRetryAfterMs = liveDriftAlarmAiRetryAfterRef.current.get(liveAiCandidate.key) ?? 0;
         if (liveAiRetryAfterMs > Date.now()) {
-          publishDriftAlarmTrayStatus({
+          publishEvaluationDriftAlarmTrayStatus({
             kind: "suppressed",
             reason: "ai-unavailable:retry-cooldown",
             candidateDetail: liveAiCandidateDetail,
@@ -2066,7 +2101,7 @@ export default function App() {
           return;
         }
 
-        publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
+        publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
         if (liveDriftAlarmAiRequestInFlightRef.current === null) {
           liveDriftAlarmAiRequestInFlightRef.current = liveAiCandidate.key;
           const liveAiOptions = localAiClassificationOptions
@@ -2087,7 +2122,7 @@ export default function App() {
                 return;
               case "unavailable":
                 liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
-                publishDriftAlarmTrayStatus({
+                publishEvaluationDriftAlarmTrayStatus({
                   kind: "suppressed",
                   reason: `ai-unavailable:${result.reason}`,
                   candidateDetail: liveAiCandidateDetail,
@@ -2101,7 +2136,7 @@ export default function App() {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
             liveDriftAlarmAiRequestInFlightRef.current = null;
             liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
-            publishDriftAlarmTrayStatus({
+            publishEvaluationDriftAlarmTrayStatus({
               kind: "error",
               reason: error instanceof Error ? error.message : "Live AI classification failed",
             }, new Date());
@@ -2112,7 +2147,7 @@ export default function App() {
 
       const pendingTransient = pendingDriftAlarmTransientRef.current;
       if (pendingTransient && systemTransientActivity) {
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
           reason: pendingTransient.systemTransientActivity,
           candidateDetail: pendingTransient.candidateDetail,
@@ -2120,7 +2155,7 @@ export default function App() {
         scheduleTransientRefresh(Math.max(1_000, pendingTransient.readyAtMs - Date.now()));
         return;
       }
-      publishDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
@@ -2154,7 +2189,7 @@ export default function App() {
       case "defer":
         pendingDriftAlarmGateRef.current = null;
         pendingDriftAlarmTransientRef.current = transientDecision.pending;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
           reason: transientDecision.pending.systemTransientActivity,
           candidateDetail,
@@ -2164,7 +2199,7 @@ export default function App() {
       case "await_delay":
         pendingDriftAlarmGateRef.current = null;
         pendingDriftAlarmTransientRef.current = transientDecision.pending;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
           reason: transientDecision.pending.systemTransientActivity,
           candidateDetail,
@@ -2176,7 +2211,7 @@ export default function App() {
         pendingDriftAlarmTransientRef.current = null;
         clearPendingTransientRefresh();
         lastDriftAlertSegmentRef.current = alertKey;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: "system-transient-defer-expired",
           candidateDetail,
@@ -2220,7 +2255,7 @@ export default function App() {
       showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
     const markCurrentDriftAlarmDelivered = () => {
-      publishDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
     const showFallbackDriftAlarm = (notify: boolean) => {
       showCurrentDriftAlarm();
@@ -2265,7 +2300,7 @@ export default function App() {
         return "current-snapshot-unavailable";
       }
 
-      setCurrentSnapshot(freshSnapshot);
+      if (shouldUpdateRendererState) setCurrentSnapshot(freshSnapshot);
       if (freshSnapshot?.systemTransientActivity) return "system-transient-active";
 
       const freshCandidate = resolveFreshDriftAlarmCandidate({
@@ -2342,7 +2377,7 @@ export default function App() {
         if (driftAlarmEventRef.current?.id === alertKey) {
           showCurrentDriftAlarm();
         }
-        publishDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
+        publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
         return;
       }
 
@@ -2360,7 +2395,7 @@ export default function App() {
       if (driftAlarmEventRef.current?.id === alertKey) {
         showCurrentDriftAlarm();
       }
-      publishDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
+      publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
       return;
     }
 
@@ -2370,7 +2405,7 @@ export default function App() {
     }
 
     pendingDriftAlarmGateRef.current = alertKey;
-    publishDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
+    publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
     void evaluateYouTubeDriftAlarmGate({
       segment,
       category,
@@ -2381,7 +2416,7 @@ export default function App() {
       if (gateResult.kind === "suppress") {
         pendingDriftAlarmGateRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: gateResult.reason,
           candidateDetail,
@@ -2396,7 +2431,7 @@ export default function App() {
       if (finalGateResult === "system-transient-active") return;
 
       if (finalGateResult !== "confirmed") {
-        publishDriftAlarmTrayStatus({
+        publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: finalGateResult,
           candidateDetail,
@@ -2412,12 +2447,23 @@ export default function App() {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
       pendingDriftAlarmGateRef.current = null;
       lastDriftAlertSegmentRef.current = alertKey;
-      publishDriftAlarmTrayStatus({
+      publishEvaluationDriftAlarmTrayStatus({
         kind: "error",
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [canUseCloudAiClassification, currentSnapshot, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+
+  useEffect(() => {
+    evaluateDriftAlarmRef.current = evaluateDriftAlarm;
+  }, [evaluateDriftAlarm]);
+
+  useEffect(() => {
+    evaluateDriftAlarm({
+      snapshot: currentSnapshot,
+      liveSegments: liveDriftAlarmSegmentsRef.current,
+    });
+  }, [currentSnapshot, evaluateDriftAlarm]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
