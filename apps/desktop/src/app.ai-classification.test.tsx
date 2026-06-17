@@ -805,6 +805,11 @@ describe("App AI classification controls", () => {
     aiClassificationMocks.classifyLiveActivityWithAi.mockClear();
     trackerClient.getCurrentSnapshot.mockClear();
 
+    act(() => {
+      setRendererFocus(false);
+      window.dispatchEvent(new Event("blur"));
+    });
+
     await act(async () => {
       await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
     });
@@ -873,6 +878,11 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalledWith({ start: `${today}T04:00:00`, end: "2026-06-17T03:59:59" }));
     expect(aiClassificationMocks.classifyLiveActivityWithAi).not.toHaveBeenCalled();
 
+    act(() => {
+      setRendererFocus(false);
+      window.dispatchEvent(new Event("blur"));
+    });
+
     await act(async () => {
       await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
     });
@@ -892,6 +902,7 @@ describe("App AI classification controls", () => {
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     const today = "2026-06-16";
     window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    setRendererFocus(false);
     trackerClient.getStatus.mockResolvedValue({
       running: true,
       accessibilityGranted: true,
@@ -919,7 +930,7 @@ describe("App AI classification controls", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS / 2);
     });
-    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
     expect(trackerClient.getTimeline).toHaveBeenCalledWith(expect.objectContaining({
       start: "2026-06-16T09:30:15",
       end: "2026-06-16T10:00:15",
@@ -931,6 +942,38 @@ describe("App AI classification controls", () => {
     expect(trackerClient.getStatus).not.toHaveBeenCalled();
     expect(trackerClient.getTopSites).not.toHaveBeenCalled();
     expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
+  });
+
+  it("skips 15-second live drift alarm polling while the renderer is focused", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    setRendererFocus(true);
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: "2026-06-16T01:00:00.000Z",
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+
+    trackerClient.getTimeline.mockClear();
+    trackerClient.getCurrentSnapshot.mockClear();
+    trackerClient.getStatus.mockClear();
+    trackerClient.updateTrayDriftAlarmStatus.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
+    });
+
+    expect(trackerClient.getCurrentSnapshot).not.toHaveBeenCalled();
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
+    expect(trackerClient.getStatus).not.toHaveBeenCalled();
+    expect(trackerClient.updateTrayDriftAlarmStatus).not.toHaveBeenCalled();
   });
 
   it("keeps 15-second drift alarm polling out of the live tracker sidebar state", async () => {
@@ -947,6 +990,13 @@ describe("App AI classification controls", () => {
       windowTitle: "App.tsx",
       platform: "macos",
       source: "accessibility",
+      classification: {
+        category: "workspace",
+        productivity: "focus",
+        source: "manual",
+        confidence: 0.9,
+        reason: "test focused editor state",
+      },
     };
     const chromeSegment: ActivitySegment = {
       id: "sidebar-poll-chrome",
@@ -962,6 +1012,13 @@ describe("App AI classification controls", () => {
       siteUrl: "https://docs.example.com/",
       platform: "macos",
       source: "accessibility",
+      classification: {
+        category: "communication",
+        productivity: "drift",
+        source: "manual",
+        confidence: 0.9,
+        reason: "test drift alarm poll state",
+      },
     };
     const focusSnapshot: CurrentActivitySnapshot = {
       observedAt: `${today}T01:00:00.000Z`,
@@ -989,12 +1046,13 @@ describe("App AI classification controls", () => {
       databasePath: "/tmp/drifty.sqlite3",
       trackerMode: "tracking",
     });
-    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => Promise.resolve(
-      query.start === `${today}T04:00:00` ? [focusSegment] : [chromeSegment],
-    ));
-    trackerClient.getCurrentSnapshot
-      .mockResolvedValueOnce(focusSnapshot)
-      .mockResolvedValue(chromeSnapshot);
+    let livePollStarted = false;
+    trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => {
+      if (query.start === `${today}T04:00:00`) return Promise.resolve([focusSegment]);
+      livePollStarted = true;
+      return Promise.resolve([chromeSegment]);
+    });
+    trackerClient.getCurrentSnapshot.mockImplementation(async () => (livePollStarted ? chromeSnapshot : focusSnapshot));
 
     const { container } = render(<App />);
 
@@ -1007,11 +1065,16 @@ describe("App AI classification controls", () => {
     trackerClient.getCurrentSnapshot.mockClear();
     trackerClient.updateTrayDriftAlarmStatus.mockClear();
 
+    act(() => {
+      setRendererFocus(false);
+      window.dispatchEvent(new Event("blur"));
+    });
+
     await act(async () => {
       await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
     });
 
-    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
     await waitFor(() => expect(trackerClient.updateTrayDriftAlarmStatus).toHaveBeenCalled());
     expect(within(livePill).getByText("Visual Studio Code")).toBeTruthy();
     expect(within(livePill).queryByText("Google Chrome")).toBeNull();
