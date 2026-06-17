@@ -101,9 +101,9 @@ export function AiSetupModelBeingUsed({
   };
 
   return (
-    <section className="ai-setup-current-model" aria-label="Model being used">
-      <div className="ai-setup-current-model__head">
-        <h4>Model being used</h4>
+    <section className="ai-setup-model-zone" aria-label="Model being used">
+      <div className="ai-setup-model-zone__head">
+        <h4 className="ai-setup-provider-heading">Model being used</h4>
         <button
           type="button"
           className="settings-btn ai-setup-current-model__test"
@@ -114,24 +114,26 @@ export function AiSetupModelBeingUsed({
           {connectionTestRunning ? "Testing..." : "Test connection"}
         </button>
       </div>
-      <div className="ai-setup-current-model__controls">
-        <SettingsSelect
-          ariaLabel="AI provider"
-          className="ai-setup-select-control"
-          value={selectedProvider}
-          options={PROVIDER_OPTIONS}
-          onChange={handleProviderChange}
-        />
-        <span className="ai-setup-current-model__slash" aria-hidden="true">/</span>
-        <SettingsSelect
-          ariaLabel="AI model"
-          className="ai-setup-select-control ai-setup-select-control--model"
-          value={selectedModelValue}
-          options={modelOptions}
-          onChange={handleModelChange}
-        />
+      <div className="ai-setup-current-model">
+        <div className="ai-setup-current-model__controls">
+          <SettingsSelect
+            ariaLabel="AI provider"
+            className="ai-setup-select-control"
+            value={selectedProvider}
+            options={PROVIDER_OPTIONS}
+            onChange={handleProviderChange}
+          />
+          <span className="ai-setup-current-model__slash" aria-hidden="true">/</span>
+          <SettingsSelect
+            ariaLabel="AI model"
+            className="ai-setup-select-control ai-setup-select-control--model"
+            value={selectedModelValue}
+            options={modelOptions}
+            onChange={handleModelChange}
+          />
+        </div>
+        {connectionTestMessage ? <p className="ai-setup-current-model__status" role="status">{connectionTestMessage}</p> : null}
       </div>
-      {connectionTestMessage ? <p className="ai-setup-current-model__status" role="status">{connectionTestMessage}</p> : null}
     </section>
   );
 }

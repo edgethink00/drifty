@@ -103,7 +103,13 @@
   padding: var(--space-3) 1rem;
 }
 
-.ai-setup-current-model__head {
+.ai-setup-model-zone {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ai-setup-model-zone__head {
   align-items: center;
   display: flex;
   gap: var(--space-3);
