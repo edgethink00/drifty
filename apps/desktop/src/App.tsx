@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ChangeEvent, FocusEvent, MouseEvent, ReactNode, RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, ReactNode, RefObject } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -185,8 +185,7 @@ import type { DriftReminderState, WatcherMode, WatcherSnapshot } from "./feature
 import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption } from "./features/dashboard/dashboardPeriods";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
-import { FOCUS_DRIFT_CHART_BOUNDS, FOCUS_DRIFT_CLIP_BOUNDS, FOCUS_DRIFT_GRID_PATH, FOCUS_DRIFT_Y_AXIS_TICKS, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
-import type { FocusDriftAxisTickStyle, FocusDriftLiveStyle, FocusDriftPoint, FocusDriftSourceSummary } from "./features/dashboard/focusDriftChart";
+import { buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
 import type { MonthCellStyle } from "./features/dashboard/monthOverview";
 import { buildWeekCalendarEvents, buildWeekDayRows } from "./features/dashboard/weekCalendar";
@@ -204,7 +203,6 @@ import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { EmptyState } from "./components/EmptyState";
-import { MetricTile } from "./components/MetricTile";
 import { Toggle } from "./components/Toggle";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
@@ -212,8 +210,8 @@ import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./feat
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
 import { FlowCompactSplitChart } from "./features/dashboard/CompactCharts";
 import { HistoryCalendarPanel } from "./features/dashboard/HistoryCalendarPanel";
-import { FocusDriftHoverCard, formatFocusDriftHoverLabel } from "./features/dashboard/FocusDriftHoverCard";
-import type { FocusDriftHoverKind, FocusDriftHoverState, TimelineHoverState } from "./features/dashboard/HoverCards";
+import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
+import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { WeekDashboard } from "./features/dashboard/WeekDashboard";
 import { BreakRecoveryCard } from "./features/insights/BreakRecoveryCard";
 import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./features/insights/InsightCards";
@@ -641,7 +639,6 @@ export default function App() {
   const [observedAiClassificationFailure, setObservedAiClassificationFailure] = useState(false);
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
-  const [focusDriftHover, setFocusDriftHover] = useState<FocusDriftHoverState | null>(null);
   const [selectedLeaderboardRow, setSelectedLeaderboardRow] = useState<LeaderboardRow | null>(null);
   const [selectedPublicProfile, setSelectedPublicProfile] = useState<PublicProfile | null>(null);
   const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
@@ -920,11 +917,6 @@ export default function App() {
     setAppRuleTargetValue(candidate.targetValue);
     if (candidate.category) setAppRuleCategory(candidate.category);
     if (candidate.productivity) setAppRuleProductivity(candidate.productivity);
-  }
-
-  function updateFocusDriftKeyboardHover(kind: FocusDriftHoverKind, point: FocusDriftPoint, event: FocusEvent<SVGCircleElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    setFocusDriftHover({ point, kind, x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
   }
 
   function selectDay(day: string | ((currentDay: string) => string)) {
@@ -2626,40 +2618,6 @@ export default function App() {
     () => buildFocusDriftChart(segments, selectedDay, selectedDayClassificationOptions, currentMinuteOfDay, startOfDayMinutes),
     [currentMinuteOfDay, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes],
   );
-  const focusDriftLiveStyle = focusDriftChart.currentX !== null
-    ? { "--focus-drift-now-x": `${focusDriftChart.currentX}%` } as FocusDriftLiveStyle
-    : undefined;
-  const focusDriftHoverPoints = focusDriftChart.points.filter((point) => point.totalSeconds > 0 && !point.isFuture);
-  function updateFocusDriftLineHover(event: MouseEvent<SVGRectElement>) {
-    const svgRect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
-    if (!svgRect || focusDriftHoverPoints.length === 0) return;
-
-    const chartX = ((event.clientX - svgRect.left) / svgRect.width) * 100;
-    const chartY = ((event.clientY - svgRect.top) / svgRect.height) * 100;
-    const firstPoint = focusDriftHoverPoints[0];
-    const lastPoint = focusDriftHoverPoints[focusDriftHoverPoints.length - 1];
-    const hoverX = Math.min(Math.max(chartX, firstPoint.x), lastPoint.x);
-
-    const rightIndex = focusDriftHoverPoints.findIndex((point) => point.x >= hoverX);
-    const nextPoint = focusDriftHoverPoints[rightIndex] ?? lastPoint;
-    const previousPoint = focusDriftHoverPoints[Math.max(0, rightIndex - 1)] ?? firstPoint;
-    const span = Math.max(nextPoint.x - previousPoint.x, 0.0001);
-    const ratio = Math.min(Math.max((hoverX - previousPoint.x) / span, 0), 1);
-    const focusY = previousPoint.focusY + (nextPoint.focusY - previousPoint.focusY) * ratio;
-    const driftY = previousPoint.driftY + (nextPoint.driftY - previousPoint.driftY) * ratio;
-    const focusDistance = Math.abs(chartY - focusY);
-    const driftDistance = Math.abs(chartY - driftY);
-    const kind: FocusDriftHoverKind = focusDistance <= driftDistance ? "focus" : "drift";
-    const distance = Math.min(focusDistance, driftDistance);
-    const nearestPoint = Math.abs(previousPoint.x - hoverX) <= Math.abs(nextPoint.x - hoverX) ? previousPoint : nextPoint;
-
-    if (distance > 24) {
-      setFocusDriftHover(null);
-      return;
-    }
-
-    setFocusDriftHover({ point: nearestPoint, kind, x: event.clientX, y: event.clientY });
-  }
   const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
   const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
   const localRollingFocusSeconds = useMemo(
@@ -3599,119 +3557,18 @@ export default function App() {
   );
 
   const focusDriftSection = (
-    <>
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel">
-        <div className="insight-panel-head">
-          <span className="label-mono">Focus vs drift &middot; 30m windows</span>
-          <div className="insight-panel-head__legend">
-            <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />Focus</span>
-            <span className="chip warn"><span className="sw" style={{ background: "var(--productivity-drift)" }} />Drift</span>
-          </div>
-        </div>
-        {focusDriftChart.hasData ? (
-          <div
-            className={`focus-drift${focusDriftChart.isLive ? " focus-drift--live" : ""}`}
-            aria-label={focusDriftChart.isLive && focusDriftChart.currentTimeLabel ? `Focus versus drift by 30-minute windows, in progress through ${focusDriftChart.currentTimeLabel}. Future windows are pending.` : "Focus versus drift by 30-minute windows"}
-          >
-            <div className="focus-drift__plot" style={focusDriftLiveStyle}>
-              <svg
-                className="focus-drift__svg"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                role="group"
-                aria-label={focusDriftChart.isLive && focusDriftChart.currentTimeLabel ? `Focus and drift curves in progress through ${focusDriftChart.currentTimeLabel}` : "Focus and drift curves"}
-              >
-                <defs>
-                  <clipPath id="focus-drift-chart-bounds" clipPathUnits="userSpaceOnUse">
-                    <rect x={FOCUS_DRIFT_CLIP_BOUNDS.left} y={FOCUS_DRIFT_CLIP_BOUNDS.top} width={FOCUS_DRIFT_CLIP_BOUNDS.right - FOCUS_DRIFT_CLIP_BOUNDS.left} height={FOCUS_DRIFT_CLIP_BOUNDS.bottom - FOCUS_DRIFT_CLIP_BOUNDS.top} />
-                  </clipPath>
-                </defs>
-                <path className="focus-drift__grid" d={FOCUS_DRIFT_GRID_PATH} />
-                {focusDriftChart.currentX !== null ? (
-                  <rect
-                    className="focus-drift__future-region"
-                    x={focusDriftChart.currentX}
-                    y={FOCUS_DRIFT_CHART_BOUNDS.top}
-                    width={FOCUS_DRIFT_CHART_BOUNDS.right - focusDriftChart.currentX}
-                    height={FOCUS_DRIFT_CHART_BOUNDS.bottom - FOCUS_DRIFT_CHART_BOUNDS.top}
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <g clipPath="url(#focus-drift-chart-bounds)">
-                  <path className="focus-drift__area" d={focusDriftChart.focusAreaPath} />
-                  <path className="focus-drift__line focus-drift__line--focus" d={focusDriftChart.focusPath} />
-                  <path className="focus-drift__line focus-drift__line--drift" d={focusDriftChart.driftPath} />
-                </g>
-                <rect
-                  className="focus-drift__line-target"
-                  x={FOCUS_DRIFT_CHART_BOUNDS.left}
-                  y={FOCUS_DRIFT_CHART_BOUNDS.top}
-                  width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left}
-                  height={100 - FOCUS_DRIFT_CHART_BOUNDS.top}
-                  aria-label="Focus and drift curve hover target"
-                  onMouseEnter={updateFocusDriftLineHover}
-                  onMouseMove={updateFocusDriftLineHover}
-                  onMouseLeave={() => setFocusDriftHover(null)}
-                />
-                {focusDriftChart.points.filter((point) => point.totalSeconds > 0 && !point.isFuture).map((point) => (
-                  <g key={point.id}>
-                    <circle
-                      className="focus-drift__target focus-drift__target--focus"
-                      cx={point.x}
-                      cy={point.focusY}
-                      r="3"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={formatFocusDriftHoverLabel(point, "focus")}
-                      onMouseEnter={(event: MouseEvent<SVGCircleElement>) => setFocusDriftHover({ point, kind: "focus", x: event.clientX, y: event.clientY })}
-                      onMouseMove={(event: MouseEvent<SVGCircleElement>) => setFocusDriftHover({ point, kind: "focus", x: event.clientX, y: event.clientY })}
-                      onMouseLeave={() => setFocusDriftHover(null)}
-                      onFocus={(event: FocusEvent<SVGCircleElement>) => updateFocusDriftKeyboardHover("focus", point, event)}
-                      onBlur={() => setFocusDriftHover(null)}
-                    />
-                    <circle
-                      className="focus-drift__target focus-drift__target--drift"
-                      cx={point.x}
-                      cy={point.driftY}
-                      r="3"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={formatFocusDriftHoverLabel(point, "drift")}
-                      onMouseEnter={(event: MouseEvent<SVGCircleElement>) => setFocusDriftHover({ point, kind: "drift", x: event.clientX, y: event.clientY })}
-                      onMouseMove={(event: MouseEvent<SVGCircleElement>) => setFocusDriftHover({ point, kind: "drift", x: event.clientX, y: event.clientY })}
-                      onMouseLeave={() => setFocusDriftHover(null)}
-                      onFocus={(event: FocusEvent<SVGCircleElement>) => updateFocusDriftKeyboardHover("drift", point, event)}
-                      onBlur={() => setFocusDriftHover(null)}
-                    />
-                  </g>
-                ))}
-              </svg>
-              {focusDriftChart.currentX !== null ? <div className="focus-drift__now-marker" aria-hidden="true" /> : null}
-              <div className="focus-drift__scale" aria-hidden="true">
-                {FOCUS_DRIFT_Y_AXIS_TICKS.map((tick) => (
-                  <span key={tick.label} style={{ "--focus-drift-scale-y": `${tick.y}%` } as CSSProperties}>{tick.label}</span>
-                ))}
-              </div>
-            </div>
-            {focusDriftHover ? <FocusDriftHoverCard appIcons={appIcons} hover={focusDriftHover} /> : null}
-            <div className="focus-drift__axis" aria-hidden="true">
-              {focusDriftChart.axisTicks.map((tick) => (
-                <span key={tick.id} style={{ "--focus-drift-axis-x": `${tick.x}%` } as FocusDriftAxisTickStyle}>{tick.label}</span>
-              ))}
-            </div>
-          </div>
-        ) : <EmptyState title="No focus pattern yet" detail="Focus and drift curves appear after tracked category data is available." />}
-      </section>
-
-      <div className="kpi-row kpi-row--insights insight-summary" aria-label="Insight summary">
-        <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label="Tracked" value={formatDuration(totalSeconds)} detail={`${activeHourCount}h active`} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label="Sessions" value={String(dashboardSegments.length)} detail={averageSessionMinutes > 0 ? `${averageSessionMinutes}m avg` : "No sessions"} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--peak" label="Peak" value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatCompactDurationFromSeconds(peakTrackedSeconds) : "No peak"} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--apps" label="Apps" value={String(uniqueAppsCount)} detail={topAppLabel} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--focus" label="Focus" value={`${focusDriftChart.focusConsistency}%`} detail="share" />
-        {focusDriftChart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label="Drift" value={focusDriftChart.peakDriftPoint.label} detail="peak" /> : null}
-      </div>
-    </>
+    <FocusDriftSection
+      activeHourCount={activeHourCount}
+      appIcons={appIcons}
+      averageSessionMinutes={averageSessionMinutes}
+      chart={focusDriftChart}
+      peakTrackedSeconds={peakTrackedSeconds}
+      peakWindowLabel={peakWindowLabel}
+      sessionCount={dashboardSegments.length}
+      topAppLabel={topAppLabel}
+      totalSeconds={totalSeconds}
+      uniqueAppsCount={uniqueAppsCount}
+    />
   );
 
   const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;

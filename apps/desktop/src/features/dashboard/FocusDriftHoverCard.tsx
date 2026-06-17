@@ -4,7 +4,7 @@ import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/form
 import type { AppIconMap } from "@drifty/domain";
 import type { FocusDriftPoint, FocusDriftSourceSummary } from "./focusDriftChart";
 import { formatSharePercent, getViewportSafeHoverPosition } from "./HoverCards";
-import type { FixedHoverPosition, FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
+import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
 import { useLayoutEffect, useRef, useState } from "react";
 
 type FocusDriftHoverCardProps = {
@@ -16,6 +16,11 @@ type FocusDriftMetric = {
   readonly kind: FocusDriftHoverKind;
   readonly value: string;
   readonly share: string;
+};
+
+type HoverCardSize = {
+  readonly width: number;
+  readonly height: number;
 };
 
 const HOVER_KIND_LABELS: Record<FocusDriftHoverKind, string> = {
@@ -31,6 +36,7 @@ const SOURCE_KIND_LABELS: Record<FocusDriftHoverKind, string> = {
 export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProps) {
   const { point } = hover;
   const cardRef = useRef<HTMLDivElement>(null);
+  const [cardSize, setCardSize] = useState<HoverCardSize>({ width: 0, height: 0 });
   const focusPercent = formatSharePercent(point.focusScore);
   const driftPercent = formatSharePercent(point.driftScore);
   const focusDuration = formatDuration(point.focusSeconds);
@@ -38,27 +44,35 @@ export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProp
   const isFocusHeavy = point.focusScore >= point.driftScore;
   const verdict = isFocusHeavy ? "Focus-heavy" : "Drift-heavy";
   const metrics = buildFocusDriftMetrics(focusDuration, driftDuration, focusPercent, driftPercent);
-  const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
+  const position = getViewportSafeHoverPosition(hover.x, hover.y, cardSize.width, cardSize.height);
 
   useLayoutEffect(() => {
-    function updatePosition() {
-      const bounds = cardRef.current?.getBoundingClientRect();
-      const nextPosition = getViewportSafeHoverPosition(hover.x, hover.y, bounds?.width ?? 0, bounds?.height ?? 0);
-      setPosition((currentPosition) => (
-        currentPosition.left === nextPosition.left && currentPosition.top === nextPosition.top ? currentPosition : nextPosition
+    const card = cardRef.current;
+    if (!card) return undefined;
+    const currentCard = card;
+
+    function updateCardSize() {
+      const bounds = currentCard.getBoundingClientRect();
+      setCardSize((currentSize) => (
+        currentSize.width === bounds.width && currentSize.height === bounds.height
+          ? currentSize
+          : { width: bounds.width, height: bounds.height }
       ));
     }
 
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    return () => window.removeEventListener("resize", updatePosition);
+    updateCardSize();
+    const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(updateCardSize) : null;
+    resizeObserver?.observe(currentCard);
+    window.addEventListener("resize", updateCardSize);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateCardSize);
+    };
   }, [
     driftDuration,
     driftPercent,
     focusDuration,
     focusPercent,
-    hover.x,
-    hover.y,
     point.id,
     point.label,
     point.topDriftSource?.captures,
