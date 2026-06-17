@@ -29,9 +29,34 @@ describe("Supabase client", () => {
           detectSessionInUrl: false,
           flowType: "pkce",
           storageKey: "drifty.desktop.auth",
+          lock: expect.any(Function),
         },
       },
     );
+  });
+
+  it("serializes desktop auth operations without browser Web Locks", async () => {
+    const { desktopAuthLock } = await import("./client");
+    const events: string[] = [];
+    const firstGate = createGate();
+
+    const firstLock = desktopAuthLock("lock:drifty.desktop.auth", 5000, async () => {
+      events.push("first:start");
+      await firstGate.promise;
+      events.push("first:end");
+      return "first";
+    });
+    const secondLock = desktopAuthLock("lock:drifty.desktop.auth", 5000, async () => {
+      events.push("second:start");
+      return "second";
+    });
+
+    await flushAuthLockQueue();
+    expect(events).toEqual(["first:start"]);
+
+    firstGate.release();
+    await expect(Promise.all([firstLock, secondLock])).resolves.toEqual(["first", "second"]);
+    expect(events).toEqual(["first:start", "first:end", "second:start"]);
   });
 
 
@@ -79,3 +104,23 @@ describe("Supabase client", () => {
     expect(authModePolicy.allowsAnonymousAuth).toBe(true);
   });
 });
+
+function createGate() {
+  let resolveGate: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolveGate = resolve;
+  });
+
+  return {
+    promise,
+    release: () => {
+      if (!resolveGate) throw new Error("Gate was not initialized.");
+      resolveGate();
+    },
+  };
+}
+
+async function flushAuthLockQueue(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
