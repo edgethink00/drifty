@@ -220,6 +220,7 @@ import { HistoryCalendarPanel } from "./features/dashboard/HistoryCalendarPanel"
 import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { WeekDashboard } from "./features/dashboard/WeekDashboard";
+import { resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardRefreshInputs } from "./features/dashboard/dashboardRefreshPolicy";
 import { BreakRecoveryCard } from "./features/insights/BreakRecoveryCard";
 import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./features/insights/InsightCards";
 import { EditProfileModal, ProfileModal, buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl } from "./features/profile/ProfileModals";
@@ -285,12 +286,6 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
-
-function shouldRefreshHistoryData(activeTab: TabId, dashPeriod: DashboardPeriod, classificationRange: ClassificationRange): boolean {
-  if (activeTab === "dashboard") return dashPeriod !== "Today";
-  if (activeTab === "classification") return classificationRange === "Week";
-  return activeTab === "history" || activeTab === "trends";
-}
 
 function scheduleIdleWork(callback: () => void): () => void {
   if (typeof window.requestIdleCallback === "function" && typeof window.cancelIdleCallback === "function") {
@@ -919,9 +914,10 @@ export default function App() {
   const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
+  const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const dashboardWeekPrefetchRequestRef = useRef(0);
-  const dashboardWeekHistoryCacheRef = useRef<DashboardWeekHistoryLoad | null>(null);
+  const dashboardWeekHistoryCacheRef = useRef<Map<string, DashboardWeekHistoryLoad>>(new Map());
   const dashboardWeekHistoryInFlightRef = useRef<{ key: string; promise: Promise<DashboardWeekHistoryLoad> } | null>(null);
   const dashboardWeekHistoryCacheGenerationRef = useRef(0);
   const leaderboardRefreshRequestRef = useRef(0);
@@ -952,8 +948,8 @@ export default function App() {
   const evaluateDriftAlarmRef = useRef<DriftAlarmEvaluator | null>(null);
   const loadDashboardWeekHistory = useCallback((historyTimelineRange: { start: string; end: string }): Promise<DashboardWeekHistoryLoad> => {
     const key = `${historyTimelineRange.start}:${historyTimelineRange.end}`;
-    const cached = dashboardWeekHistoryCacheRef.current;
-    if (cached?.key === key && Date.now() - cached.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) {
+    const cached = dashboardWeekHistoryCacheRef.current.get(key);
+    if (cached && Date.now() - cached.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) {
       return Promise.resolve(cached);
     }
 
@@ -968,7 +964,7 @@ export default function App() {
         materialized: materializeBuiltInHeuristicTimeline(archiveTimelines),
       };
       if (dashboardWeekHistoryCacheGenerationRef.current === generation) {
-        dashboardWeekHistoryCacheRef.current = nextLoad;
+        dashboardWeekHistoryCacheRef.current.set(key, nextLoad);
       }
       return nextLoad;
     }).finally(() => {
@@ -1480,8 +1476,9 @@ export default function App() {
     setWatcherPeriodicMaxMinutes(Math.max(nextValue, watcherPeriodicMinMinutes));
   }, [watcherPeriodicMinMinutes]);
 
-  async function refresh(day = selectedDay, options: { requireCurrentSnapshot?: boolean } = {}): Promise<boolean> {
+  async function refresh(day = selectedDay, options: { requireCurrentSnapshot?: boolean; foreground?: boolean } = {}): Promise<boolean> {
     const isRequiredCurrentSnapshotRefresh = options.requireCurrentSnapshot === true;
+    const isForegroundRefresh = options.foreground !== false || isRequiredCurrentSnapshotRefresh;
     if (!isRequiredCurrentSnapshotRefresh && requiredCurrentSnapshotRefreshInFlightRef.current) return false;
 
     if (shouldBlockLocalTrackerAccess) {
@@ -1496,10 +1493,11 @@ export default function App() {
     refreshRequestRef.current = requestId;
     historyRefreshRequestRef.current += 1;
     if (isRequiredCurrentSnapshotRefresh) requiredCurrentSnapshotRefreshInFlightRef.current = true;
-    setLoading(true);
+    if (isForegroundRefresh) setLoading(true);
     setError(null);
 
-    const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
+    const shouldLoadHistory = isForegroundRefresh && shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
+    const shouldLoadDashboardWeekHistory = shouldLoadHistory && activeTab === "dashboard" && dashPeriod === "Week";
     const shouldLoadTrendsHistory = activeTab === "trends";
     const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
     const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(day, -89);
@@ -1519,7 +1517,6 @@ export default function App() {
         startOfDayMinutes,
       );
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
-    const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
     const shouldLoadHistorySummaries = shouldLoadHistory && !shouldLoadDashboardWeekHistory;
 
     try {
@@ -1535,16 +1532,20 @@ export default function App() {
         ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
         : Promise.resolve<SiteDuration[] | null>(null);
 
-      const statusRequest = trackerClient.getStatus().then((nextStatus) => {
-        if (refreshRequestRef.current !== requestId) return nextStatus;
-        setStatus(nextStatus);
-        setAccessibilityGranted(nextStatus.accessibilityGranted);
-        return nextStatus;
-      });
+      const statusRequest = isForegroundRefresh
+        ? trackerClient.getStatus().then((nextStatus) => {
+          if (refreshRequestRef.current !== requestId) return nextStatus;
+          setStatus(nextStatus);
+          setAccessibilityGranted(nextStatus.accessibilityGranted);
+          return nextStatus;
+        })
+        : Promise.resolve(status);
 
-      const currentSnapshotRequest = isRequiredCurrentSnapshotRefresh
-        ? trackerClient.getCurrentSnapshot()
-        : trackerClient.getCurrentSnapshot().catch(() => null);
+      const currentSnapshotRequest = isForegroundRefresh
+        ? isRequiredCurrentSnapshotRefresh
+          ? trackerClient.getCurrentSnapshot()
+          : trackerClient.getCurrentSnapshot().catch(() => null)
+        : Promise.resolve(currentSnapshot);
 
       const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
@@ -1562,7 +1563,7 @@ export default function App() {
       const materializedTimeline = materializeBuiltInHeuristicTimeline(timeline);
       const materializedArchiveTimelines = archiveTimelines;
 
-      setCurrentSnapshot(nextCurrentSnapshot);
+      if (isForegroundRefresh) setCurrentSnapshot(nextCurrentSnapshot);
       liveDriftAlarmSegmentsRef.current = [];
       setSegments(materializedTimeline.segments);
       setSegmentsLoadedDay(day);
@@ -1700,8 +1701,8 @@ export default function App() {
     const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
     const historyTimelineRange = getLogicalDayRange(shiftIsoDate(selectedWeekRange.startDay, -7), selectedWeekRange.endDay, startOfDayMinutes);
     const prefetchKey = `${historyTimelineRange.start}:${historyTimelineRange.end}`;
-    const cachedWeekHistory = dashboardWeekHistoryCacheRef.current;
-    if (cachedWeekHistory?.key === prefetchKey && Date.now() - cachedWeekHistory.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) return false;
+    const cachedWeekHistory = dashboardWeekHistoryCacheRef.current.get(prefetchKey);
+    if (cachedWeekHistory && Date.now() - cachedWeekHistory.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) return false;
     if (dashboardWeekHistoryInFlightRef.current?.key === prefetchKey) return false;
 
     const requestId = dashboardWeekPrefetchRequestRef.current + 1;
@@ -1808,18 +1809,28 @@ export default function App() {
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
-    void refresh(selectedDay);
-  }, [selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+    const nextInputs: DashboardRefreshInputs = { selectedDay, startOfDayMinutes, startOfWeek };
+    const refreshMode = resolveDashboardRefreshMode({
+      hasLoadedOnce,
+      nextInputs,
+      previousInputs: dashboardRefreshInputsRef.current,
+    });
+    dashboardRefreshInputsRef.current = nextInputs;
+    if (refreshMode === "skip") return;
+    void refresh(selectedDay, { foreground: refreshMode === "foreground" });
+  }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
-    if (shouldBlockLocalTrackerAccess) return;
-    if (!hasLoadedOnce) return;
-    void refreshHistoryData(selectedDay);
-  }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, shouldBlockLocalTrackerAccess, trendsRange]);
+    if (shouldBlockLocalTrackerAccess) return undefined;
+    if (!hasLoadedOnce) return undefined;
+    return scheduleIdleWork(() => {
+      void refreshHistoryData(selectedDay);
+    });
+  }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek, trendsRange]);
 
   useEffect(() => {
     dashboardWeekHistoryCacheGenerationRef.current += 1;
-    dashboardWeekHistoryCacheRef.current = null;
+    dashboardWeekHistoryCacheRef.current.clear();
     dashboardWeekHistoryInFlightRef.current = null;
   }, [classificationRules, startOfDayMinutes, startOfWeek]);
 
