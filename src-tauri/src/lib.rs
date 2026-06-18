@@ -1,3 +1,4 @@
+mod app_icons;
 mod auth_session_store;
 mod commands;
 mod donut_icon;
