@@ -153,7 +153,6 @@ export function WeekDashboard({
             </div>
             <div className="week-v2-summary__meta">
               <span>{focusDeltaPercent !== null ? `${focusDeltaPercent >= 0 ? "▲" : "▼"} ${Math.abs(focusDeltaPercent)}% vs last week` : "No prior week"}</span>
-              <span>Best {isPreviewSurface ? "Wed 13" : bestDay ? `${bestDay.dayName} ${bestDay.dayNumber}` : "—"}</span>
               <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
               <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
             </div>
