@@ -15,6 +15,7 @@ export interface AttentionRhythmCell {
 }
 
 type AttentionRhythmVisibility = {
+  readonly startDay?: string;
   readonly visibleThroughDay?: string;
 };
 
@@ -38,7 +39,20 @@ function buildRhythmTotals(): RhythmTotals {
   };
 }
 
+function weekdayIndexForDay(day?: string): number | null {
+  if (!day) return null;
+  const date = new Date(`${day}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return weekdayOrderIndex(date);
+}
+
+function orderedWeekdayIndexes(startDay?: string): readonly number[] {
+  const startIndex = weekdayIndexForDay(startDay) ?? 0;
+  return Array.from({ length: WEEKDAY_COUNT }, (_, offset) => (startIndex + offset) % WEEKDAY_COUNT);
+}
+
 function visibleThroughDay(visibility?: AttentionRhythmVisibility): string | null {
+  if (weekdayIndexForDay(visibility?.startDay) !== null) return null;
   const day = visibility?.visibleThroughDay;
   if (!day) return null;
   return Number.isNaN(new Date(`${day}T12:00:00`).getTime()) ? null : day;
@@ -135,7 +149,7 @@ export function buildAttentionRhythm(
   const maxFocus = maxGridValue(totals.focus);
   const maxDrift = maxGridValue(totals.drift);
   const cells: AttentionRhythmCell[] = [];
-  for (let weekdayIndex = 0; weekdayIndex < WEEKDAY_COUNT; weekdayIndex += 1) {
+  for (const weekdayIndex of orderedWeekdayIndexes(visibility?.startDay)) {
     for (let hour = 0; hour < HOURS_PER_DAY; hour += 1) {
       cells.push(buildCell(totals, weekdayIndex, hour, maxFocus, maxDrift));
     }

@@ -54,6 +54,21 @@ describe("insight weekly builders", () => {
     expect(weekly[6]).toMatchObject({ weekday: "Sun", isActive: false, focusSeconds: 0, driftSeconds: 0 });
   });
 
+  it("orders weekly builders from the rolling insight start day", () => {
+    const segments = [
+      segmentOnDay("saturday-focus", "2026-06-06", "workspace", "focus"),
+      segmentOnDay("friday-drift", "2026-06-12", "entertainment", "drift"),
+    ];
+
+    const weekly = buildWeeklyBreakdown(segments, undefined, { startDay: "2026-06-06" });
+    const cells = buildAttentionRhythm(segments, undefined, { startDay: "2026-06-06" });
+
+    expect(weekly.map((day) => day.weekday)).toEqual(["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]);
+    expect(weekly[0]).toMatchObject({ weekday: "Sat", weekdayIndex: 5, isActive: true, focusSeconds: 3600 });
+    expect(weekly[6]).toMatchObject({ weekday: "Fri", weekdayIndex: 4, isActive: true, driftSeconds: 3600 });
+    expect(cells.filter((cell) => cell.hour === 0).map((cell) => cell.weekdayIndex)).toEqual([5, 6, 0, 1, 2, 3, 4]);
+  });
+
   it("keeps historical weekend attention rhythm cells in a partial current-week insight window", () => {
     const segments = [
       segmentOnDay("friday-focus", "2026-06-12", "workspace", "focus"),

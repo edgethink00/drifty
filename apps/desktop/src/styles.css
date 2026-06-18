@@ -8594,6 +8594,50 @@ button.flow-cell:focus {
   margin-bottom: 0;
 }
 
+.trends-range-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.trends-range-controls .day-nav {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .trends-range-controls {
+    align-items: stretch;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .trends-range-controls .settings-mode-switch,
+  .trends-range-controls .day-nav {
+    width: 100%;
+  }
+
+  .trends-range-controls .settings-mode-option {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 0.56rem;
+  }
+
+  .trends-range-controls .day-nav {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .trends-range-controls .day-nav__current {
+    min-width: 0;
+    padding-inline: 0.35rem;
+  }
+
+  .trends-range-controls .day-nav__current strong {
+    white-space: normal;
+  }
+}
+
 .insight-chart-panel,
 .insight-section {
   min-width: 0;

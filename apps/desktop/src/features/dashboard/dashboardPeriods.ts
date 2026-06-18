@@ -8,6 +8,20 @@ export type DashboardPeriod = "Today" | "Week" | "Month";
 
 export type ClassificationRange = "Day" | "Week";
 
+export const INSIGHT_RANGE_OPTIONS = [
+  { range: "Week", label: "Week", context: "Weekly window", days: 7 },
+  { range: "Month", label: "Month", context: "Monthly window", days: 30 },
+  { range: "90Day", label: "90 days", context: "90-day window", days: 90 },
+] as const;
+
+export type InsightRange = (typeof INSIGHT_RANGE_OPTIONS)[number]["range"];
+
+const INSIGHT_RANGE_DAYS: Readonly<Record<InsightRange, number>> = {
+  Week: 7,
+  Month: 30,
+  "90Day": 90,
+};
+
 export type DashboardPeriodOption = {
   period: DashboardPeriod;
   label: string;
@@ -62,14 +76,18 @@ export function getSafeClassificationNavigationDay(
   return targetWeekRange.startDay <= todayDay && todayDay <= targetWeekRange.endDay ? todayDay : targetDay;
 }
 
-export function getInsightPeriodRange(selectedDay: string, startOfDayMinutes = 0) {
-  const days = 90;
+export function getInsightPeriodRange(selectedDay: string, range: InsightRange = "Week", startOfDayMinutes = 0) {
+  const days = INSIGHT_RANGE_DAYS[range];
   const startDay = shiftIsoDate(selectedDay, -(days - 1));
   return {
     startDay,
     endDay: selectedDay,
     ...getLogicalDayRange(startDay, selectedDay, startOfDayMinutes),
   };
+}
+
+export function shiftInsightPeriodDay(day: string, range: InsightRange, direction: -1 | 1): string {
+  return shiftIsoDate(day, INSIGHT_RANGE_DAYS[range] * direction);
 }
 
 export function formatDashboardPeriodLabel(period: DashboardPeriod, startDay: string, endDay: string): string {
