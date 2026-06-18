@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -63,6 +63,7 @@ import {
   localAiSetupFingerprint,
   type LocalAiConnectionCheck,
 } from "./features/ai-connection/aiConnectionHealth";
+import { collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence } from "./features/classification/heuristicClassificationMaterialization";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
@@ -1493,7 +1494,6 @@ export default function App() {
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
-      setAppIcons({});
       scheduleBuiltInHeuristicClassificationPersistence([
         ...materializedTimeline.classifications,
         ...(materializedArchiveTimelines?.classifications ?? []),
@@ -1514,26 +1514,13 @@ export default function App() {
           const iconSegments = materializedArchiveTimelines === null
             ? materializedTimeline.segments
             : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments];
-          const uniqueApps = Array.from(
-            new Map(iconSegments.map((segment) => [
-              segment.bundleId || segment.appName,
-              { appName: segment.appName, bundleId: segment.bundleId ?? null },
-            ])).values(),
-          );
-          if (uniqueApps.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(uniqueApps);
+          const missingIconRequests = collectMissingAppIconRequests(iconSegments, appIconsRef.current);
+          if (missingIconRequests.length === 0) return;
+          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
           if (refreshRequestRef.current !== requestId) return;
-          const iconMap = uniqueApps.reduce<AppIconMap>((acc, item) => {
-            const identityKey = item.bundleId || item.appName;
-            const nextIcon = rawIconMap[identityKey] ?? null;
-            acc[identityKey] = acc[identityKey] ?? nextIcon;
-            acc[item.appName] = acc[item.appName] ?? nextIcon;
-            return acc;
-          }, {});
-          setAppIcons(iconMap);
+          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
         } catch {
           if (refreshRequestRef.current !== requestId) return;
-          setAppIcons({});
         }
       })();
       return true;
@@ -1603,23 +1590,11 @@ export default function App() {
 
       void (async () => {
         try {
-          const uniqueApps = Array.from(
-            new Map(materializedArchiveTimelines.segments.map((segment) => [
-              segment.bundleId || segment.appName,
-              { appName: segment.appName, bundleId: segment.bundleId ?? null },
-            ])).values(),
-          );
-          if (uniqueApps.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(uniqueApps);
+          const missingIconRequests = collectMissingAppIconRequests(materializedArchiveTimelines.segments, appIconsRef.current);
+          if (missingIconRequests.length === 0) return;
+          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
           if (historyRefreshRequestRef.current !== requestId) return;
-          const iconMap = uniqueApps.reduce<AppIconMap>((acc, item) => {
-            const identityKey = item.bundleId || item.appName;
-            const nextIcon = rawIconMap[identityKey] ?? null;
-            acc[identityKey] = acc[identityKey] ?? nextIcon;
-            acc[item.appName] = acc[item.appName] ?? nextIcon;
-            return acc;
-          }, {});
-          setAppIcons((current) => ({ ...current, ...iconMap }));
+          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
         } catch {
           if (historyRefreshRequestRef.current !== requestId) return;
         }
