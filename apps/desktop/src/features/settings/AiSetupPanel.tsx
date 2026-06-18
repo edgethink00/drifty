@@ -15,6 +15,8 @@ import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
+import { testCloudAiConnection } from "./cloudAiConnectionTest";
+import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
@@ -128,9 +130,10 @@ export function AiSetupPanel({
     if (connectionTestRunning) return;
     setConnectionTestRunning(true);
     setConnectionTestResult(null);
-    const result = await testLocalAiConnection(localAiSetup);
+    const isCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
+    const result = isCloudRoute ? await testCloudAiConnection() : await testLocalAiConnection(localAiSetup);
     setConnectionTestResult(result);
-    onLocalAiConnectionTestResult(localAiSetup, result);
+    if (!isCloudRoute) onLocalAiConnectionTestResult(localAiSetup, result);
     setConnectionTestRunning(false);
   };
 
@@ -244,50 +247,4 @@ export function AiSetupPanel({
       ) : null}
     </div>
   );
-}
-
-function isActiveProviderTestable(setup: LocalAiSetupState): boolean {
-  switch (setup.provider) {
-    case "openrouter_byok":
-      return Boolean(setup.openRouterApiKey.trim());
-    case "managed_local":
-    case "self_hosted":
-      return Boolean(setup.managedLocalBaseUrl.trim() && setup.managedLocalModel.trim());
-    default:
-      return false;
-  }
-}
-
-function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {
-  switch (section) {
-    case "drifty":
-      return null;
-    case "openrouter":
-      return "openrouter_byok";
-    default:
-      return assertNever(section);
-  }
-}
-
-function sectionForProvider(provider: LocalAiSetupState["provider"]): AiSetupSection {
-  switch (provider) {
-    case "managed_local":
-    case "self_hosted":
-      return "drifty";
-    case "openrouter_byok":
-      return "openrouter";
-    default:
-      return assertNever(provider);
-  }
-}
-
-class AiSetupSectionError extends Error {
-  constructor(readonly section: string) {
-    super(`Unhandled AI setup section: ${section}`);
-    this.name = "AiSetupSectionError";
-  }
-}
-
-function assertNever(value: never): never {
-  throw new AiSetupSectionError(String(value));
 }
