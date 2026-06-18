@@ -1075,9 +1075,13 @@ async function readSignedInUserId(): Promise<string | null> {
 
 
 function stripJsonCodeFence(text: string): string {
-  const trimmed = text.trim();
+  const trimmed = stripLeadingReasoningBlock(text.trim());
   const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   return match?.[1]?.trim() ?? trimmed;
+}
+
+function stripLeadingReasoningBlock(text: string): string {
+  return text.replace(/^<think>[\s\S]*?<\/think>\s*/i, "").trim();
 }
 
 async function requireCloudAiClassification(): Promise<AiClassificationSummary | null> {

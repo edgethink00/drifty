@@ -113,6 +113,9 @@ fn start_spawns_runtime_for_downloaded_model() {
     assert!(args.contains("--host\n127.0.0.1"));
     assert!(args.contains("--port\n39217"));
     assert!(args.contains("--alias\ndrifty-qwen3.5-4b-local"));
+    assert!(args.contains("--reasoning\noff"));
+    assert!(args.contains("--reasoning-format\nnone"));
+    assert!(args.contains("--reasoning-budget\n0"));
     assert!(args.contains("Qwen3.5-4B-Q4_K_M.gguf"));
 }
 

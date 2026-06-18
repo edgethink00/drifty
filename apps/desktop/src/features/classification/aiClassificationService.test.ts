@@ -862,7 +862,7 @@ describe("runAiClassification cloud contract", () => {
           body: JSON.stringify({
             choices: [{
               message: {
-                content: JSON.stringify({
+                content: `<think>\n\n</think>\n\n${JSON.stringify({
                   results: [{
                     id: segment.id,
                     category: "workspace",
@@ -870,7 +870,7 @@ describe("runAiClassification cloud contract", () => {
                     confidence: 0.82,
                     reason: "Local work context",
                   }],
-                }),
+                })}`,
               },
             }],
             usage: { prompt_tokens: 120, completion_tokens: 24 },
@@ -892,6 +892,9 @@ describe("runAiClassification cloud contract", () => {
         request: expect.objectContaining({
           baseUrl: "http://127.0.0.1:39217/v1",
           model: "drifty-qwen3.5-4b-local",
+          maxTokens: 1024,
+          reasoningFormat: "none",
+          chatTemplateKwargs: { enable_thinking: false },
         }),
       });
       expect(nativeInvoke).toHaveBeenNthCalledWith(2, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
@@ -899,6 +902,9 @@ describe("runAiClassification cloud contract", () => {
         request: expect.objectContaining({
           baseUrl: "http://127.0.0.1:39217/v1",
           model: "drifty-qwen3.5-4b-local",
+          maxTokens: 1024,
+          reasoningFormat: "none",
+          chatTemplateKwargs: { enable_thinking: false },
         }),
       });
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
