@@ -9,7 +9,6 @@ import {
   installManagedLocalAiModel,
   listManagedLocalAiModels,
   MANAGED_LOCAL_AI_FALLBACK_CATALOG,
-  startManagedLocalAi,
   type ManagedLocalAiModel,
   type ManagedLocalAiStatus,
 } from "./managedLocalAiClient";
@@ -32,7 +31,6 @@ export type UseManagedLocalAiSetupResult = {
   readonly deleteModel: (modelId: string) => Promise<void>;
   readonly installModel: (modelId: string) => Promise<void>;
   readonly refresh: () => Promise<void>;
-  readonly startModel: (modelId: string) => Promise<void>;
 };
 
 export function useManagedLocalAiSetup(
@@ -122,7 +120,6 @@ export function useManagedLocalAiSetup(
     deleteModel: (modelId) => runAction(modelId, deleteManagedLocalAiModel, { activateProvider: false, optimisticInstalling: false }),
     installModel: (modelId) => runAction(modelId, installManagedLocalAiModel, { activateProvider: false, optimisticInstalling: true }),
     refresh,
-    startModel: (modelId) => runAction(modelId, startManagedLocalAi, { activateProvider: true, optimisticInstalling: false }),
   };
 }
 

@@ -840,6 +840,78 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("starts and retries managed local classification when the selected endpoint is down", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke
+        .mockRejectedValueOnce("error sending request for url (http://127.0.0.1:39217/v1/chat/completions)")
+        .mockResolvedValueOnce({
+          state: "running",
+          selectedModelId: "drifty-qwen3-5-4b-default",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          message: "Managed local AI runtime is running.",
+          artifactDir: null,
+          progress: null,
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  results: [{
+                    id: segment.id,
+                    category: "workspace",
+                    productivity: "focus",
+                    confidence: 0.82,
+                    reason: "Local work context",
+                  }],
+                }),
+              },
+            }],
+            usage: { prompt_tokens: 120, completion_tokens: 24 },
+          }),
+          latencyMs: 88,
+        });
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "managed_local",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          modelId: "drifty-qwen3-5-4b-default",
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenNthCalledWith(1, "ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+        }),
+      });
+      expect(nativeInvoke).toHaveBeenNthCalledWith(2, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
+      expect(nativeInvoke).toHaveBeenNthCalledWith(3, "ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+        }),
+      });
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        aiResult: true,
+        model: "drifty-qwen3.5-4b-local",
+        latencyMs: 88,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("reuses cached fingerprint classifications before Supabase and saves a copied AI record for the current segment", async () => {
     const segment = createUnknownSegment(1);
 

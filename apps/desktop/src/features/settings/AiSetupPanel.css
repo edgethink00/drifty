@@ -106,6 +106,19 @@
   gap: var(--space-2);
   min-width: 0;
   padding: var(--space-3) 1rem;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.ai-setup-current-model.is-error {
+  background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 24%, var(--line));
+}
+
+.ai-setup-current-model.is-success {
+  border-color: color-mix(in srgb, var(--productivity-focus) 22%, var(--line));
 }
 
 .ai-setup-model-zone {
@@ -131,6 +144,14 @@
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
   margin: 0;
+}
+
+.ai-setup-current-model.is-error .ai-setup-current-model__status {
+  color: var(--warn);
+}
+
+.ai-setup-current-model.is-success .ai-setup-current-model__status {
+  color: var(--productivity-focus);
 }
 
 .ai-setup-current-model h4,

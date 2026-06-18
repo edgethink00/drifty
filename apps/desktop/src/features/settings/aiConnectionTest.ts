@@ -1,17 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
-
+import {
+  invokeOpenAiChatWithManagedLocalRetry,
+  type NativeOpenAiChatResponse,
+} from "../classification/managedLocalAiChat";
+import type { LocalAiProviderConfig } from "../classification/localAiProviderRequest";
 import {
   isManagedLocalAiRoute,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   type LocalAiSetupState,
 } from "./localAiSetup";
-
-type NativeOpenAiChatResponse = {
-  readonly status: number;
-  readonly body: string;
-  readonly latencyMs: number;
-};
 
 export type AiConnectionTestResult =
   | { readonly kind: "success"; readonly message: string }
@@ -22,20 +19,31 @@ export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<A
   if (!request) return { kind: "error", message: "Complete the selected provider settings before testing." };
 
   try {
-    const response = await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request });
-    if (response.status < 200 || response.status >= 300) {
-      return { kind: "error", message: `Provider returned HTTP ${response.status}.` };
+    const response = await invokeOpenAiChatWithManagedLocalRetry(request, managedLocalProviderFromSetup(setup));
+    const status = typeof response.status === "number" ? response.status : 0;
+    if (status < 200 || status >= 300) {
+      return { kind: "error", message: `Provider returned HTTP ${status || "unknown"}.` };
     }
-    if (!hasAssistantContent(response.body)) {
+    if (!hasAssistantContent(typeof response.body === "string" ? response.body : "")) {
       return { kind: "error", message: "Provider responded, but no assistant message was returned." };
     }
-    return { kind: "success", message: `Connected in ${response.latencyMs} ms.` };
+    const latencyMs = typeof response.latencyMs === "number" && Number.isFinite(response.latencyMs) ? response.latencyMs : 0;
+    return { kind: "success", message: `Connected in ${latencyMs} ms.` };
   } catch (error) {
     return {
       kind: "error",
       message: messageFromConnectionError(error),
     };
   }
+}
+
+function managedLocalProviderFromSetup(setup: LocalAiSetupState): Extract<LocalAiProviderConfig, { readonly provider: "managed_local" }> | null {
+  if (setup.provider !== "managed_local" || !isManagedLocalAiRoute(setup)) return null;
+  const baseUrl = setup.managedLocalBaseUrl.trim();
+  const model = setup.managedLocalModel.trim();
+  const modelId = setup.managedLocalModelId.trim();
+  if (!baseUrl || !model || !modelId) return null;
+  return { provider: "managed_local", baseUrl, model, modelId };
 }
 
 function messageFromConnectionError(error: unknown): string {

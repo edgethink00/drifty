@@ -314,15 +314,19 @@
   width: 0.92rem;
 }
 
-.ai-managed-model__delete-action {
+.ai-managed-model__actions .settings-btn.ai-managed-model__delete-action {
+  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-radius: 999px;
   color: var(--warn);
+  min-width: 2rem;
   padding-inline: 0;
   width: 2rem;
 }
 
-.ai-managed-model__delete-action:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn-soft) 74%, var(--surface));
-  border-color: color-mix(in srgb, var(--warn) 28%, var(--line));
+.ai-managed-model__actions .settings-btn.ai-managed-model__delete-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
   color: var(--warn);
 }
 

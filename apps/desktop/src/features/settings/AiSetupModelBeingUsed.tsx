@@ -25,6 +25,7 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
   readonly actionModelId: string | null;
+  readonly connectionTestKind: "success" | "error" | null;
   readonly connectionTestMessage: string | null;
   readonly connectionTestRunning: boolean;
   readonly connectionTestDisabled: boolean;
@@ -35,7 +36,6 @@ type AiSetupModelBeingUsedProps = {
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onOpenRouterPrimaryModelChange: (modelId: string) => void;
   readonly onProviderChange: (provider: AiSetupSection) => void;
-  readonly onStartModel: (modelId: string) => void | Promise<void>;
   readonly onTestConnection: () => void | Promise<void>;
   readonly onStartCloudSetup: () => void | Promise<void>;
 };
@@ -49,6 +49,7 @@ export function AiSetupModelBeingUsed({
   openRouterPrimaryModel,
   selectedProvider,
   actionModelId,
+  connectionTestKind,
   connectionTestMessage,
   connectionTestRunning,
   connectionTestDisabled,
@@ -59,7 +60,6 @@ export function AiSetupModelBeingUsed({
   onLocalAiSetupChange,
   onOpenRouterPrimaryModelChange,
   onProviderChange,
-  onStartModel,
   onTestConnection,
   onStartCloudSetup,
 }: AiSetupModelBeingUsedProps) {
@@ -103,7 +103,6 @@ export function AiSetupModelBeingUsed({
         onDriftyRouteChange("local");
         onProviderChange("drifty");
         onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local", managedLocalModelId: modelId }));
-        void onStartModel(modelId);
         return;
       case "openrouter":
         onProviderChange("openrouter");
@@ -129,7 +128,7 @@ export function AiSetupModelBeingUsed({
           {connectionTestRunning ? "Testing..." : "Test connection"}
         </button>
       </div>
-      <div className="ai-setup-current-model">
+      <div className={`ai-setup-current-model${connectionTestKind ? ` is-${connectionTestKind}` : ""}`}>
         <div className="ai-setup-current-model__controls">
           <SettingsSelect
             ariaLabel="AI provider"
@@ -147,7 +146,11 @@ export function AiSetupModelBeingUsed({
             onChange={handleModelChange}
           />
         </div>
-        {connectionTestMessage ? <p className="ai-setup-current-model__status" role="status">{connectionTestMessage}</p> : null}
+        {connectionTestMessage ? (
+          <p className="ai-setup-current-model__status" role={connectionTestKind === "error" ? "alert" : "status"}>
+            {connectionTestMessage}
+          </p>
+        ) : null}
       </div>
     </section>
   );
