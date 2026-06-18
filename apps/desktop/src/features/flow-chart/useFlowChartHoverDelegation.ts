@@ -4,7 +4,7 @@ import { moveFlowHoverCardToPointer, type FlowHoverState } from "./FlowChartHove
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 
 type FlowChartHoverDelegationArgs = {
-  readonly gridRef: RefObject<HTMLDivElement | null>;
+  readonly gridElement: HTMLDivElement | null;
   readonly cardRef: RefObject<HTMLDivElement | null>;
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly setHoveredBlock: Dispatch<SetStateAction<FlowHoverState | null>>;
@@ -30,7 +30,7 @@ function minuteFromCell(cell: HTMLButtonElement): number | null {
 }
 
 export function useFlowChartHoverDelegation({
-  gridRef,
+  gridElement,
   cardRef,
   hoverGroupsByCell,
   setHoveredBlock,
@@ -43,11 +43,16 @@ export function useFlowChartHoverDelegation({
   useEffect(() => {
     hoverGroupsRef.current = hoverGroupsByCell;
     activeGroupRef.current = null;
-  }, [hoverGroupsByCell]);
+    latestPointerRef.current = null;
+    setHoveredBlock(null);
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+  }, [hoverGroupsByCell, setHoveredBlock]);
 
   useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return undefined;
+    if (!gridElement) return undefined;
 
     const clearHover = () => {
       if (activeGroupRef.current === null) return;
@@ -66,7 +71,7 @@ export function useFlowChartHoverDelegation({
       frameRef.current = window.requestAnimationFrame(flushPointerMove);
     };
     const handlePointerMove = (event: PointerEvent) => {
-      const cell = hoverCellFromTarget(event.target, grid);
+      const cell = hoverCellFromTarget(event.target, gridElement);
       if (!cell) {
         clearHover();
         return;
@@ -84,12 +89,16 @@ export function useFlowChartHoverDelegation({
       setHoveredBlock({ group, ...position });
     };
 
-    grid.addEventListener("pointermove", handlePointerMove, { passive: true });
-    grid.addEventListener("pointerleave", clearHover);
+    gridElement.addEventListener("pointermove", handlePointerMove, { passive: true });
+    gridElement.addEventListener("pointerleave", clearHover);
     return () => {
-      grid.removeEventListener("pointermove", handlePointerMove);
-      grid.removeEventListener("pointerleave", clearHover);
-      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      gridElement.removeEventListener("pointermove", handlePointerMove);
+      gridElement.removeEventListener("pointerleave", clearHover);
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+      latestPointerRef.current = null;
     };
-  }, [cardRef, gridRef, setHoveredBlock]);
+  }, [cardRef, gridElement, setHoveredBlock]);
 }

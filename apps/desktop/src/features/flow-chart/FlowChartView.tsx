@@ -57,7 +57,7 @@ export function FlowChartView({
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   const [colorMode, setColorMode] = useState<FlowColorMode>("category");
-  const flowGridRef = useRef<HTMLDivElement>(null);
+  const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
   const hoveredBlockCardRef = useRef<HTMLDivElement>(null);
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
   const hoveredGroupMinutes = useMemo(
@@ -84,7 +84,7 @@ export function FlowChartView({
     [blocks, boundaryMinutes, intervalMinutes],
   );
   const cellAriaLabelsByMinute = useMemo(() => buildCellGroupAriaLabels(hoverGroupsByCell), [hoverGroupsByCell]);
-  useFlowChartHoverDelegation({ gridRef: flowGridRef, cardRef: hoveredBlockCardRef, hoverGroupsByCell, setHoveredBlock });
+  useFlowChartHoverDelegation({ gridElement: flowGridElement, cardRef: hoveredBlockCardRef, hoverGroupsByCell, setHoveredBlock });
   const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height" | "--flow-row-count", string> = {
     "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
     "--flow-breakdown-cell-min-height": `${(FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
@@ -199,7 +199,7 @@ export function FlowChartView({
           );
         })}
       </div>
-      <div className="flow-chart-grid" ref={flowGridRef}>
+      <div className="flow-chart-grid" ref={setFlowGridElement}>
         {hoveredBlock ? <FlowHoverGroupHighlights group={hoveredBlock.group} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} /> : null}
         {rowMinuteOffsets.map((minuteOffset) => {
           const isCurrentMinuteRow = minuteOffset === currentMinuteOffset;
