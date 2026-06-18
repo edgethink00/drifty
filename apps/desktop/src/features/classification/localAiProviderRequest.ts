@@ -1,6 +1,8 @@
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
+export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 1024;
+export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
 
 export type MinimizedActivityPayload = {
   readonly segmentId: string;
@@ -30,6 +32,14 @@ export type LocalAiProviderRequest = {
   readonly request: Record<string, unknown>;
 };
 
+type OpenAiCompatibleRequestOptions = {
+  readonly maxTokens?: number;
+  readonly reasoningFormat?: "none";
+  readonly chatTemplateKwargs?: {
+    readonly enable_thinking: false;
+  };
+};
+
 export function toLocalProviderRequest(
   provider: LocalAiProviderConfig,
   payload: readonly MinimizedActivityPayload[],
@@ -37,6 +47,13 @@ export function toLocalProviderRequest(
 ): LocalAiProviderRequest | null {
   switch (provider.provider) {
     case "managed_local":
+      return openAiCompatibleProviderRequest(
+        provider.baseUrl,
+        provider.model,
+        payload,
+        workProfile,
+        managedLocalRuntimeRequestOptions(MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS),
+      );
     case "self_hosted":
       return openAiCompatibleProviderRequest(provider.baseUrl, provider.model, payload, workProfile);
     case "openrouter_byok": {
@@ -64,11 +81,20 @@ export function toLocalProviderRequest(
   }
 }
 
+export function managedLocalRuntimeRequestOptions(maxTokens: number): OpenAiCompatibleRequestOptions {
+  return {
+    maxTokens,
+    reasoningFormat: "none",
+    chatTemplateKwargs: { enable_thinking: false },
+  };
+}
+
 function openAiCompatibleProviderRequest(
   baseUrlValue: string,
   modelValue: string,
   payload: readonly MinimizedActivityPayload[],
   workProfile: string | null,
+  options: OpenAiCompatibleRequestOptions = {},
 ): LocalAiProviderRequest | null {
   const baseUrl = baseUrlValue.trim();
   const model = modelValue.trim();
@@ -78,6 +104,7 @@ function openAiCompatibleProviderRequest(
     request: {
       baseUrl,
       model,
+      ...options,
       messages: [{ role: "user", content: buildClassificationPrompt(payload, workProfile) }],
     },
   };

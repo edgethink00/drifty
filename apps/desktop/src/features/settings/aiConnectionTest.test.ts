@@ -65,6 +65,9 @@ describe("testLocalAiConnection", () => {
       request: expect.objectContaining({
         baseUrl: "http://127.0.0.1:39217/v1",
         model: "drifty-qwen3.5-4b-local",
+        maxTokens: 64,
+        reasoningFormat: "none",
+        chatTemplateKwargs: { enable_thinking: false },
       }),
     });
     expect(invokeMock).toHaveBeenNthCalledWith(2, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
@@ -72,6 +75,9 @@ describe("testLocalAiConnection", () => {
       request: expect.objectContaining({
         baseUrl: "http://127.0.0.1:39217/v1",
         model: "drifty-qwen3.5-4b-local",
+        maxTokens: 64,
+        reasoningFormat: "none",
+        chatTemplateKwargs: { enable_thinking: false },
       }),
     });
   });

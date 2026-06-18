@@ -1,8 +1,12 @@
 import {
+  MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS,
+  managedLocalRuntimeRequestOptions,
+  type LocalAiProviderConfig,
+} from "../classification/localAiProviderRequest";
+import {
   invokeOpenAiChatWithManagedLocalRetry,
   type NativeOpenAiChatResponse,
 } from "../classification/managedLocalAiChat";
-import type { LocalAiProviderConfig } from "../classification/localAiProviderRequest";
 import {
   isManagedLocalAiRoute,
   normalizeOpenRouterFallbackModels,
@@ -56,7 +60,11 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
   switch (setup.provider) {
     case "managed_local":
       if (!isManagedLocalAiRoute(setup)) return null;
-      return openAiCompatibleConnectionRequest(setup.managedLocalBaseUrl, setup.managedLocalModel);
+      return openAiCompatibleConnectionRequest(
+        setup.managedLocalBaseUrl,
+        setup.managedLocalModel,
+        managedLocalRuntimeRequestOptions(MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS),
+      );
     case "openrouter_byok": {
       const apiKey = setup.openRouterApiKey.trim();
       if (!apiKey) return null;
@@ -81,13 +89,18 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
   }
 }
 
-function openAiCompatibleConnectionRequest(baseUrlValue: string, modelValue: string): Record<string, unknown> | null {
+function openAiCompatibleConnectionRequest(
+  baseUrlValue: string,
+  modelValue: string,
+  options: Record<string, unknown> = {},
+): Record<string, unknown> | null {
   const baseUrl = baseUrlValue.trim();
   const model = modelValue.trim();
   if (!baseUrl || !model) return null;
   return {
     baseUrl,
     model,
+    ...options,
     messages: testMessages(),
     headers: {},
   };
