@@ -309,7 +309,7 @@ export function WeeklyCategoryRow({
                             className="wt-seg"
                             style={{ height: `${segment.heightPct}%`, background: segment.color }}
                             key={segment.key}
-                            onMouseEnter={(event: MouseEvent<HTMLDivElement>) => showWeeklySegmentHover(segment, index, column.totalSeconds, event.clientX, event.clientY)}
+                            onMouseEnter={(event: MouseEvent<HTMLDivElement>) => showWeeklySegmentHover(segment, column.weekdayIndex, column.totalSeconds, event.clientX, event.clientY)}
                             onMouseMove={(event: MouseEvent<HTMLDivElement>) => moveSegmentHover(event.clientX, event.clientY)}
                             onMouseLeave={() => setHoveredSegment(null)}
                           />
@@ -475,6 +475,12 @@ export function AttentionRhythmCard({
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const hasData = cells.some((cell) => cell.intensity > 0);
   const totalSeconds = segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
+  const weekdayLabels = useMemo(() => {
+    const labels = cells
+      .filter((cell) => cell.hour === 0)
+      .map((cell) => WEEKLY_BREAKDOWN_WEEKDAYS[cell.weekdayIndex] ?? "");
+    return labels.length > 0 ? labels : WEEKLY_BREAKDOWN_WEEKDAYS;
+  }, [cells]);
 
   function showCellHover(cell: AttentionRhythmCell, x: number, y: number) {
     if (cell.intensity <= 0 || cell.state === "neutral") return;
@@ -522,14 +528,15 @@ export function AttentionRhythmCard({
           </div>
           <div className="productivity-rhythm-card__body">
             <div className="productivity-rhythm-card__weekdays" aria-hidden="true">
-              {WEEKLY_BREAKDOWN_WEEKDAYS.map((weekday) => <span className="productivity-rhythm-card__weekday" key={weekday}>{weekday}</span>)}
+              {weekdayLabels.map((weekday, index) => <span className="productivity-rhythm-card__weekday" key={`${weekday}-${index}`}>{weekday}</span>)}
             </div>
             <div className="productivity-rhythm-card__board">
-              {cells.map((cell) => {
+              {cells.map((cell, index) => {
                 const variant = cell.state === "neutral" ? "neutral" : `${cell.state}-${cell.intensity}`;
                 const parts: string[] = [];
+                const weekdayPosition = Math.floor(index / 24);
                 if (cell.hour !== 23) parts.push("inset -1px 0 0 var(--attention-rhythm-divider)");
-                if (cell.weekdayIndex !== 6) parts.push("inset 0 -1px 0 var(--attention-rhythm-divider)");
+                if (weekdayPosition < weekdayLabels.length - 1) parts.push("inset 0 -1px 0 var(--attention-rhythm-divider)");
                 return (
                   <span
                     key={`${cell.weekdayIndex}-${cell.hour}`}
@@ -775,7 +782,7 @@ export function ProductivityAnalysisSection({
           <span className="label-mono insight-section__label">{label}</span>
           <h2>{heading}</h2>
         </div>
-        <span className="drift-analysis__badge">Local 90d signal</span>
+        <span className="drift-analysis__badge">Weekly signal</span>
       </div>
       {report.totalSeconds > 0 ? (
         <div className="drift-analysis__layout">

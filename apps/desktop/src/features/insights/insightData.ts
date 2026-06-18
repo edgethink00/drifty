@@ -42,6 +42,7 @@ export type ProductivityInsightReport = {
 export const WEEKLY_BREAKDOWN_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 export interface WeeklyBreakdownDay {
+  weekdayIndex: number;
   weekday: string;
   isActive: boolean;
   focusSeconds: number;
@@ -51,10 +52,24 @@ export interface WeeklyBreakdownDay {
 }
 
 export type InsightWeekVisibility = {
+  readonly startDay?: string;
   readonly visibleThroughDay?: string;
 };
 
+function weekdayIndexForDay(day?: string): number | null {
+  if (!day) return null;
+  const date = new Date(`${day}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return weekdayOrderIndex(date);
+}
+
+function orderedWeekdayIndexes(startDay?: string): readonly number[] {
+  const startIndex = weekdayIndexForDay(startDay) ?? 0;
+  return Array.from({ length: WEEKLY_BREAKDOWN_WEEKDAYS.length }, (_, offset) => (startIndex + offset) % WEEKLY_BREAKDOWN_WEEKDAYS.length);
+}
+
 function hiddenWeekdayIndexes(visibility?: InsightWeekVisibility): ReadonlySet<number> {
+  if (weekdayIndexForDay(visibility?.startDay) !== null) return new Set<number>();
   if (!visibility?.visibleThroughDay) return new Set<number>();
   const visibleThroughDate = new Date(`${visibility.visibleThroughDay}T12:00:00`);
   if (Number.isNaN(visibleThroughDate.getTime())) return new Set<number>();
@@ -78,6 +93,7 @@ export function buildWeeklyBreakdown(
   const categories = Array.from({ length: 7 }, () => new Map<ActivityCategory, number>());
   const dates = Array.from({ length: 7 }, () => new Set<string>());
   const hidden = hiddenWeekdayIndexes(visibility);
+  const weekdayIndexes = orderedWeekdayIndexes(visibility?.startDay);
 
   for (const segment of segments) {
     const started = new Date(segment.startedAt);
@@ -93,12 +109,13 @@ export function buildWeeklyBreakdown(
     dates[index].add(localDateKey(started));
   }
 
-  return WEEKLY_BREAKDOWN_WEEKDAYS.map((weekday, index) => {
+  return weekdayIndexes.map((index) => {
     const occurrences = Math.max(dates[index].size, 1);
     const categorySeconds: Partial<Record<ActivityCategory, number>> = {};
     for (const [category, seconds] of categories[index]) categorySeconds[category] = seconds / occurrences;
     return {
-      weekday,
+      weekdayIndex: index,
+      weekday: WEEKLY_BREAKDOWN_WEEKDAYS[index] ?? "",
       isActive: dates[index].size > 0,
       focusSeconds: focus[index] / occurrences,
       neutralSeconds: neutral[index] / occurrences,
@@ -203,6 +220,7 @@ export function formatInsightSourceValue(item: InsightSourceItem): string {
 export type WeeklyChartMode = "productivity" | "category";
 
 export interface WeeklyChartColumn {
+  weekdayIndex: number;
   weekday: string;
   off: boolean;
   totalSeconds: number;
@@ -273,6 +291,7 @@ export function buildWeeklyChartView(
     const total = dayTotals[index];
     const off = total <= 0;
     return {
+      weekdayIndex: day.weekdayIndex,
       weekday: day.weekday,
       off,
       totalSeconds: total,

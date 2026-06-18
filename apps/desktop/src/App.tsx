@@ -184,15 +184,15 @@ import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildM
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_MODE_STORAGE_KEY, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PEEK_STORAGE_KEY, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MAX_STORAGE_KEY, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_STORAGE_KEY, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, normalizeWatcherPeriodicMinutes, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek, resolveInitialWatcherMode, resolveInitialWatcherPeekEnabled, resolveInitialWatcherPeriodicMinutes } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherMode, WatcherSnapshot } from "./features/companion/watcherData";
-import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay } from "./features/dashboard/dashboardPeriods";
-import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption } from "./features/dashboard/dashboardPeriods";
+import { INSIGHT_RANGE_OPTIONS, formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
+import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
 import { buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
 import type { MonthCellStyle } from "./features/dashboard/monthOverview";
 import { buildWeekCalendarEvents, buildWeekDayRows } from "./features/dashboard/weekCalendar";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./features/dashboard/weekCalendar";
-import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
+import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
 import { localAiProviderConfigFromSetup } from "./features/settings/localAiClassificationOptions";
@@ -520,6 +520,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
   const [classificationRange, setClassificationRange] = useState<ClassificationRange>("Day");
+  const [trendsRange, setTrendsRange] = useState<InsightRange>("Week");
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<string | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
@@ -1431,16 +1432,24 @@ export default function App() {
     setError(null);
 
     const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
-    const historyStartDay = shiftIsoDate(day, -89);
-    const historySummaryRange = getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
+    const shouldLoadTrendsHistory = activeTab === "trends";
+    const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
+    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(day, -89);
+    const historySummaryRange = trendsHistoryRange
+      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
+      : getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
     const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineStartDay = shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay;
-    const historyTimelineEndDay = shouldLoadDashboardWeekHistory
-      ? selectedWeekRange.endDay
-      : day > selectedWeekRange.endDay
-        ? day
-        : selectedWeekRange.endDay;
-    const historyTimelineRange = getLogicalDayRange(historyTimelineStartDay, historyTimelineEndDay, startOfDayMinutes);
+    const historyTimelineRange = trendsHistoryRange
+      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
+      : getLogicalDayRange(
+        shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay,
+        shouldLoadDashboardWeekHistory
+          ? selectedWeekRange.endDay
+          : day > selectedWeekRange.endDay
+            ? day
+            : selectedWeekRange.endDay,
+        startOfDayMinutes,
+      );
     const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
     const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
     const shouldLoadHistorySummaries = shouldLoadHistory && !shouldLoadDashboardWeekHistory;
@@ -1556,16 +1565,24 @@ export default function App() {
     setError(null);
 
     const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
-    const historyStartDay = shiftIsoDate(day, -89);
-    const historySummaryRange = getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
+    const shouldLoadTrendsHistory = activeTab === "trends";
+    const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
+    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(day, -89);
+    const historySummaryRange = trendsHistoryRange
+      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
+      : getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
     const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineStartDay = shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay;
-    const historyTimelineEndDay = shouldLoadDashboardWeekHistory
-      ? selectedWeekRange.endDay
-      : day > selectedWeekRange.endDay
-        ? day
-        : selectedWeekRange.endDay;
-    const historyTimelineRange = getLogicalDayRange(historyTimelineStartDay, historyTimelineEndDay, startOfDayMinutes);
+    const historyTimelineRange = trendsHistoryRange
+      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
+      : getLogicalDayRange(
+        shouldLoadDashboardWeekHistory ? shiftIsoDate(selectedWeekRange.startDay, -7) : historyStartDay,
+        shouldLoadDashboardWeekHistory
+          ? selectedWeekRange.endDay
+          : day > selectedWeekRange.endDay
+            ? day
+            : selectedWeekRange.endDay,
+        startOfDayMinutes,
+      );
     const shouldLoadHistorySummaries = !shouldLoadDashboardWeekHistory;
 
     try {
@@ -1701,7 +1718,7 @@ export default function App() {
     if (shouldBlockLocalTrackerAccess) return;
     if (!hasLoadedOnce) return;
     void refreshHistoryData(selectedDay);
-  }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -1729,7 +1746,7 @@ export default function App() {
       void refresh(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [activeTab, classificationRange, dashPeriod, refreshFocusedLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, classificationRange, dashPeriod, refreshFocusedLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -2618,10 +2635,14 @@ export default function App() {
     () => buildDailyTotals(dashboardSegments, dashboardRange.startDay, dashboardRange.endDay, startOfDayMinutes).filter((day) => day.totalSeconds > 0).length,
     [dashboardRange.endDay, dashboardRange.startDay, dashboardSegments, startOfDayMinutes],
   );
-  const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
+  const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
   const insightSegments = useMemo(
     () => filterSegmentsForRange(historySegments, insightRange.start, insightRange.end),
     [historySegments, insightRange.end, insightRange.start],
+  );
+  const insightWeekVisibility = useMemo(
+    () => trendsRange === "Week" ? { startDay: insightRange.startDay } : undefined,
+    [insightRange.startDay, trendsRange],
   );
   const insightClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: insightSegments, includeAiClassifications: showAiClassificationImpact }),
@@ -2786,10 +2807,12 @@ export default function App() {
   const canShiftDashboardForward = dashPeriod === "Week"
     ? getDashboardPeriodRange(nextDashboardDay, dashPeriod, startOfDayMinutes, startOfWeek).startDay <= todayDay
     : nextDashboardDay <= todayDay;
-  const nextInsightDay = shiftDashboardPeriodDay(selectedDay, "Week", 1);
+  const nextInsightDay = shiftInsightPeriodDay(selectedDay, trendsRange, 1);
   const canShiftInsightForward = nextInsightDay <= todayDay;
   const dashboardDateContext = dashPeriod === "Week" ? "Selected week" : selectedDayContext;
   const dashboardDateLabel = dashPeriod === "Week" ? formatDateRangeLabel(dashboardRange.startDay, dashboardRange.endDay) : selectedDayLabel;
+  const activeInsightRangeOption = INSIGHT_RANGE_OPTIONS.find((option) => option.range === trendsRange);
+  const insightDateContext = activeInsightRangeOption?.context ?? "Weekly window";
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
@@ -2836,12 +2859,12 @@ export default function App() {
   const insightProductivityTotals = useMemo(() => buildProductivityDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
   const activeInsightProductivityTotals = useMemo(() => insightProductivityTotals.filter((entry) => entry.totalSeconds > 0), [insightProductivityTotals]);
   const weeklyBreakdown = useMemo(
-    () => buildWeeklyBreakdown(insightSegments, insightClassificationOptions, { visibleThroughDay: insightRange.endDay }),
-    [insightClassificationOptions, insightRange.endDay, insightSegments],
+    () => buildWeeklyBreakdown(insightSegments, insightClassificationOptions, insightWeekVisibility),
+    [insightClassificationOptions, insightSegments, insightWeekVisibility],
   );
   const attentionRhythm = useMemo(
-    () => buildAttentionRhythm(insightSegments, insightClassificationOptions, { visibleThroughDay: insightRange.endDay }),
-    [insightClassificationOptions, insightRange.endDay, insightSegments],
+    () => buildAttentionRhythm(insightSegments, insightClassificationOptions, insightWeekVisibility),
+    [insightClassificationOptions, insightSegments, insightWeekVisibility],
   );
   const driftSourceLists = useMemo(
     () => buildInsightSourceLists(insightSegments, "drift", insightClassificationOptions),
@@ -4481,19 +4504,35 @@ export default function App() {
                 <div className="eyebrow">Trends</div>
                 <h1>Patterns and trends</h1>
               </div>
-              <DateNavigator
-                ariaLabel="Insight window selector"
-                context="90-day window"
-                label={insightDateLabel}
-                todayLabel="Latest"
-                isTodayDisabled={isTodaySelected}
-                isNextDisabled={!canShiftInsightForward}
-                onPrevious={() => selectDay((p) => shiftDashboardPeriodDay(p, "Week", -1))}
-                onNext={() => { if (canShiftInsightForward) selectDay((p) => shiftDashboardPeriodDay(p, "Week", 1)); }}
-                onToday={() => selectDay(todayIsoDate())}
-                previousLabel="Show previous insight window"
-                nextLabel="Show next insight window"
-              />
+              <div className="classification-range-controls trends-range-controls">
+                <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Trends range">
+                  {INSIGHT_RANGE_OPTIONS.map((option) => (
+                    <button
+                      key={option.range}
+                      type="button"
+                      className={`settings-mode-option${trendsRange === option.range ? " is-active" : ""}`}
+                      role="radio"
+                      aria-checked={trendsRange === option.range}
+                      onClick={() => setTrendsRange(option.range)}
+                    >
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <DateNavigator
+                  ariaLabel="Insight window selector"
+                  context={insightDateContext}
+                  label={insightDateLabel}
+                  todayLabel="Latest"
+                  isTodayDisabled={isTodaySelected}
+                  isNextDisabled={!canShiftInsightForward}
+                  onPrevious={() => selectDay((p) => shiftInsightPeriodDay(p, trendsRange, -1))}
+                  onNext={() => { if (canShiftInsightForward) selectDay((p) => shiftInsightPeriodDay(p, trendsRange, 1)); }}
+                  onToday={() => selectDay(todayIsoDate())}
+                  previousLabel="Show previous insight window"
+                  nextLabel="Show next insight window"
+                />
+              </div>
             </div>
 
             <WeeklyCategoryRow
