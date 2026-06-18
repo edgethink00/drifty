@@ -1,11 +1,10 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { buildWeekCalendarEvents } from "./weekCalendar";
-import type { WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
+import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { logicalMinuteOfDay } from "@drifty/domain";
-import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
+import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekCalendarHoverCard } from "./HoverCards";
 import type { WeekCalendarHoverState } from "./HoverCards";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -24,28 +23,26 @@ export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: Wee
 
 export function WeekDashboard({
   rows,
-  segments,
+  calendarEvents,
   appIcons,
   startDay,
   endDay,
   categoryEntries,
   productivityEntries,
   totalSeconds,
-  classificationOptions,
   focusDeltaPercent,
   isPreviewSurface = false,
   startOfDayMinutes,
   dateNavigator,
 }: {
   rows: WeekDayRow[];
-  segments: ActivitySegment[];
+  calendarEvents: Map<string, WeekCalendarEvent[]>;
   appIcons: AppIconMap;
   startDay: string;
   endDay: string;
   categoryEntries: CategoryDuration[];
   productivityEntries: ProductivityDuration[];
   totalSeconds: number;
-  classificationOptions: ClassificationOptions;
   focusDeltaPercent: number | null;
   isPreviewSurface?: boolean;
   startOfDayMinutes: number;
@@ -74,10 +71,6 @@ export function WeekDashboard({
   const calendarHourHeight = 56;
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
-  const calendarEvents = useMemo(
-    () => buildWeekCalendarEvents(segments, startDay, endDay, calendarStartHour, calendarEndHour, classificationOptions, startOfDayMinutes),
-    [calendarEndHour, calendarStartHour, classificationOptions, endDay, segments, startDay, startOfDayMinutes],
-  );
   const minCalendarMinute = calendarStartHour * 60;
   const maxCalendarMinute = calendarEndHour * 60;
   const isCurrentCalendarWeek = startDay <= todayDay && todayDay <= endDay;
