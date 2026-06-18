@@ -111,6 +111,11 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke<ActivitySegment[]>("tracker_get_timeline", { query });
     return result ?? [];
   },
+  async getDashboardWeekTimeline(query) {
+    if (shouldUsePreviewData()) return previewTimeline(query);
+    const result = await safeInvoke<ActivitySegment[]>("tracker_get_dashboard_week_timeline", { query });
+    return result ?? [];
+  },
   async getLiveTail(query: LiveTailQuery) {
     if (shouldUsePreviewData()) {
       const status = previewStatus();

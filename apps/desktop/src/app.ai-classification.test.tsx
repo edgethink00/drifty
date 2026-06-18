@@ -66,6 +66,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
   trackerClient: {
     getStatus: vi.fn(),
     getTimeline: vi.fn(),
+    getDashboardWeekTimeline: vi.fn().mockResolvedValue([]),
     getLiveTail: vi.fn(),
     getCurrentSnapshot: vi.fn(),
     getHourlySummary: vi.fn(),

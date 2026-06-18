@@ -89,6 +89,21 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.get_timeline({"start": "2026-04-01T00:00:00", "end": "2026-04-07T23:59:59"})
         mock_db.timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
 
+    def test_get_dashboard_week_timeline_uses_compact_range_filter(self) -> None:
+        mock_db = MagicMock()
+        mock_db.dashboard_week_timeline.return_value = []
+        mock_db.timeline.side_effect = AssertionError("dashboard week should use compact timeline")
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_dashboard_week_timeline({
+                "start": "2026-04-01T00:00:00",
+                "end": "2026-04-07T23:59:59",
+            })
+
+        self.assertTrue(result["ok"])
+        mock_db.dashboard_week_timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
+        mock_db.timeline.assert_not_called()
+
     def test_get_live_tail_reads_database_tail_without_snapshot_capture(self) -> None:
         mock_db = MagicMock()
         mock_db.get_meta.side_effect = lambda key, default=None: {

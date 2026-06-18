@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from app.storage.activity_segment_serialization import json_list, serialize_activity_row
+from app.storage.activity_segment_serialization import (
+    json_list,
+    serialize_activity_row,
+    serialize_dashboard_week_activity_row,
+)
 from app.storage.timestamps import parse_iso_datetime
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
@@ -1112,6 +1116,51 @@ class TrackerDatabase:
         with self.connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [dict(row) for row in rows]
+
+    def dashboard_week_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                activity_segments.id,
+                activity_segments.started_at,
+                activity_segments.ended_at,
+                activity_segments.duration_seconds,
+                activity_segments.app_name,
+                activity_segments.bundle_id,
+                activity_segments.window_title,
+                activity_segments.browser_name,
+                activity_segments.site_domain,
+                activity_segments.site_title,
+                activity_segments.site_url,
+                activity_segments.youtube_video_id,
+                activity_segments.youtube_playlist_id,
+                activity_segments.youtube_is_shorts,
+                activity_segments.site_source,
+                activity_segments.platform,
+                activity_segments.source,
+                activity_segments.confidence,
+                youtube_video_metadata.category AS youtube_category,
+                youtube_video_metadata.channel_name AS youtube_channel_name,
+                youtube_video_metadata.title AS youtube_title,
+                activity_classifications.category AS classification_category,
+                activity_classifications.productivity AS classification_productivity,
+                activity_classifications.source AS classification_source,
+                activity_classifications.confidence AS classification_confidence,
+                activity_classifications.ai_result AS classification_ai_result,
+                activity_classifications.stale AS classification_stale,
+                activity_classifications.classification_rule_id AS classification_rule_id
+            FROM activity_segments
+            LEFT JOIN youtube_video_metadata
+              ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
+            LEFT JOIN activity_classifications
+              ON activity_classifications.segment_id = activity_segments.id
+            WHERE 1=1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end, "activity_segments")
+        query += " ORDER BY activity_segments.started_at ASC"
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [serialize_dashboard_week_activity_row(dict(row)) for row in rows]
 
     def raw_events(
         self,

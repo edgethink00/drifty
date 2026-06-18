@@ -65,7 +65,7 @@ import {
 } from "./features/ai-connection/aiConnectionHealth";
 import { collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
-import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence } from "./features/classification/heuristicClassificationMaterialization";
+import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
@@ -265,6 +265,12 @@ type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 
 type UpdateCheckMode = "manual" | "automatic";
 
+type DashboardWeekHistoryLoad = {
+  readonly key: string;
+  readonly loadedAtMs: number;
+  readonly materialized: BuiltInHeuristicClassificationMaterialization;
+};
+
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
@@ -273,6 +279,7 @@ const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
+const DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS = APP_REFRESH_INTERVAL_MS;
 
 const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
@@ -914,7 +921,9 @@ export default function App() {
   const historyRefreshRequestRef = useRef(0);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const dashboardWeekPrefetchRequestRef = useRef(0);
-  const prefetchedDashboardWeekKeyRef = useRef<string | null>(null);
+  const dashboardWeekHistoryCacheRef = useRef<DashboardWeekHistoryLoad | null>(null);
+  const dashboardWeekHistoryInFlightRef = useRef<{ key: string; promise: Promise<DashboardWeekHistoryLoad> } | null>(null);
+  const dashboardWeekHistoryCacheGenerationRef = useRef(0);
   const leaderboardRefreshRequestRef = useRef(0);
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
@@ -941,6 +950,37 @@ export default function App() {
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const evaluateDriftAlarmRef = useRef<DriftAlarmEvaluator | null>(null);
+  const loadDashboardWeekHistory = useCallback((historyTimelineRange: { start: string; end: string }): Promise<DashboardWeekHistoryLoad> => {
+    const key = `${historyTimelineRange.start}:${historyTimelineRange.end}`;
+    const cached = dashboardWeekHistoryCacheRef.current;
+    if (cached?.key === key && Date.now() - cached.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = dashboardWeekHistoryInFlightRef.current;
+    if (inFlight?.key === key) return inFlight.promise;
+
+    const generation = dashboardWeekHistoryCacheGenerationRef.current;
+    const promise = trackerClient.getDashboardWeekTimeline(historyTimelineRange).then((archiveTimelines) => {
+      const nextLoad: DashboardWeekHistoryLoad = {
+        key,
+        loadedAtMs: Date.now(),
+        materialized: materializeBuiltInHeuristicTimeline(archiveTimelines),
+      };
+      if (dashboardWeekHistoryCacheGenerationRef.current === generation) {
+        dashboardWeekHistoryCacheRef.current = nextLoad;
+      }
+      return nextLoad;
+    }).finally(() => {
+      const current = dashboardWeekHistoryInFlightRef.current;
+      if (current?.key === key && dashboardWeekHistoryCacheGenerationRef.current === generation) {
+        dashboardWeekHistoryInFlightRef.current = null;
+      }
+    });
+
+    dashboardWeekHistoryInFlightRef.current = { key, promise };
+    return promise;
+  }, [materializeBuiltInHeuristicTimeline]);
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
     const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
@@ -1483,9 +1523,11 @@ export default function App() {
     const shouldLoadHistorySummaries = shouldLoadHistory && !shouldLoadDashboardWeekHistory;
 
     try {
-      const archiveTimelineRequest = shouldLoadHistory
-        ? trackerClient.getTimeline(historyTimelineRange)
-        : Promise.resolve<ActivitySegment[] | null>(null);
+      const archiveTimelineRequest: Promise<BuiltInHeuristicClassificationMaterialization | null> = shouldLoadHistory
+        ? shouldLoadDashboardWeekHistory
+          ? loadDashboardWeekHistory(historyTimelineRange).then((load) => load.materialized)
+          : trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline))
+        : Promise.resolve(null);
       const historyHourlySummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getHourlySummary(historySummaryRange)
         : Promise.resolve<HourBucket[] | null>(null);
@@ -1518,7 +1560,7 @@ export default function App() {
       if (refreshRequestRef.current !== requestId) return false;
 
       const materializedTimeline = materializeBuiltInHeuristicTimeline(timeline);
-      const materializedArchiveTimelines = archiveTimelines === null ? null : materializeBuiltInHeuristicTimeline(archiveTimelines);
+      const materializedArchiveTimelines = archiveTimelines;
 
       setCurrentSnapshot(nextCurrentSnapshot);
       liveDriftAlarmSegmentsRef.current = [];
@@ -1614,8 +1656,10 @@ export default function App() {
     const shouldLoadHistorySummaries = !shouldLoadDashboardWeekHistory;
 
     try {
-      const [archiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
-        trackerClient.getTimeline(historyTimelineRange),
+      const [materializedArchiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
+        shouldLoadDashboardWeekHistory
+          ? loadDashboardWeekHistory(historyTimelineRange).then((load) => load.materialized)
+          : trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline)),
         shouldLoadHistorySummaries
           ? trackerClient.getHourlySummary(historySummaryRange)
           : Promise.resolve<HourBucket[] | null>(null),
@@ -1625,8 +1669,6 @@ export default function App() {
       ]);
 
       if (historyRefreshRequestRef.current !== requestId) return false;
-
-      const materializedArchiveTimelines = materializeBuiltInHeuristicTimeline(archiveTimelines);
 
       setHistorySegments(materializedArchiveTimelines.segments);
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
@@ -1658,27 +1700,26 @@ export default function App() {
     const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
     const historyTimelineRange = getLogicalDayRange(shiftIsoDate(selectedWeekRange.startDay, -7), selectedWeekRange.endDay, startOfDayMinutes);
     const prefetchKey = `${historyTimelineRange.start}:${historyTimelineRange.end}`;
-    if (prefetchedDashboardWeekKeyRef.current === prefetchKey) return false;
+    const cachedWeekHistory = dashboardWeekHistoryCacheRef.current;
+    if (cachedWeekHistory?.key === prefetchKey && Date.now() - cachedWeekHistory.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) return false;
+    if (dashboardWeekHistoryInFlightRef.current?.key === prefetchKey) return false;
 
     const requestId = dashboardWeekPrefetchRequestRef.current + 1;
     dashboardWeekPrefetchRequestRef.current = requestId;
-    prefetchedDashboardWeekKeyRef.current = prefetchKey;
 
     try {
-      const archiveTimelines = await trackerClient.getTimeline(historyTimelineRange);
+      const { materialized: materializedArchiveTimelines } = await loadDashboardWeekHistory(historyTimelineRange);
       if (dashboardWeekPrefetchRequestRef.current !== requestId) return false;
 
-      const materializedArchiveTimelines = materializeBuiltInHeuristicTimeline(archiveTimelines);
       setHistorySegments(materializedArchiveTimelines.segments);
       scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
       return true;
     } catch (error) {
-      if (dashboardWeekPrefetchRequestRef.current === requestId) prefetchedDashboardWeekKeyRef.current = null;
       const message = error instanceof Error ? error.message : "unknown error";
       console.warn("Failed to prefetch dashboard week history", message);
       return false;
     }
-  }, [materializeBuiltInHeuristicTimeline, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [loadDashboardWeekHistory, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
 
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;
@@ -1777,7 +1818,9 @@ export default function App() {
   }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
-    prefetchedDashboardWeekKeyRef.current = null;
+    dashboardWeekHistoryCacheGenerationRef.current += 1;
+    dashboardWeekHistoryCacheRef.current = null;
+    dashboardWeekHistoryInFlightRef.current = null;
   }, [classificationRules, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {

@@ -146,6 +146,22 @@ pub async fn tracker_get_timeline(
 }
 
 #[tauri::command]
+pub async fn tracker_get_dashboard_week_timeline(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_dashboard_week_timeline(&app, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_get_live_tail(
     app: AppHandle,
     controller: State<'_, TrackerController>,

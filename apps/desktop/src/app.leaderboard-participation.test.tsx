@@ -82,6 +82,7 @@ vi.mock("./lib/api/trackerClient", () => ({
       message: "Tracker not available in this environment",
     }),
     getTimeline,
+    getDashboardWeekTimeline: vi.fn().mockResolvedValue([]),
     getLiveTail: vi.fn().mockResolvedValue({
       running: false,
       trackerMode: "tracking",
