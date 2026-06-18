@@ -1,14 +1,23 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+
+const { testCloudAiConnectionMock } = vi.hoisted(() => ({
+  testCloudAiConnectionMock: vi.fn(),
+}));
+
+vi.mock("./cloudAiConnectionTest", () => ({
+  testCloudAiConnection: testCloudAiConnectionMock,
+}));
 
 describe("AiSetupPanel", () => {
   beforeEach(() => {
     invokeMock.mockClear();
     resetManagedStatusMock();
     revealItemInDirMock.mockClear();
+    testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
   });
 
   it("switches between Drifty and OpenRouter setup rows", async () => {
@@ -226,6 +235,32 @@ describe("AiSetupPanel", () => {
       message: "Connected in 42 ms.",
     });
     expect(window.localStorage.getItem("drifty.aiSetup.v1") ?? "").not.toContain("sk-or-v1-test-secret");
+  });
+
+  it("tests Drifty Cloud instead of stale managed local settings when Cloud is selected", async () => {
+    const { onLocalAiConnectionTestResult } = renderPanel({
+      initialSetup: {
+        provider: "managed_local",
+        driftyRoute: "cloud",
+        managedLocalModelId: "drifty-qwen3-5-4b-default",
+        managedLocalBaseUrl: "http://127.0.0.1:39217/v1",
+        managedLocalModel: "drifty-qwen3.5-4b-local",
+        openRouterApiKey: "",
+        openRouterModel: "deepseek/deepseek-v4-flash",
+        openRouterFallbackModels: [],
+        selfHostedBaseUrl: "http://localhost:11434/v1",
+        selfHostedModel: "",
+      },
+    });
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    expect(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Drifty Individual (Cloud)");
+    fireEvent.click(screen.getByRole("button", { name: /test ai connection/i }));
+
+    expect(await screen.findByText(/Cloud AI connected via Google in 42 ms/i)).toBeTruthy();
+    expect(testCloudAiConnectionMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).not.toHaveBeenCalledWith("ai_classification_openai_chat", expect.anything());
+    expect(onLocalAiConnectionTestResult).not.toHaveBeenCalled();
   });
 
   it("shows the same privacy review inside AI setup", () => {
