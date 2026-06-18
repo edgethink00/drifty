@@ -2,6 +2,7 @@ import type { ActivitySegment, CurrentActivitySnapshot, DriftAlarmTrayStatus, Tr
 import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "../classification/aiClassificationService";
+import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./settingsStorage";
 
 type BrowserCaptureDiagnosticsSource = "today" | "history" | "leaderboard";
@@ -47,6 +48,7 @@ type BuildDebugLogPayloadInput = {
   readonly accessibilityGranted: boolean;
   readonly currentSnapshot: CurrentActivitySnapshot | null;
   readonly driftAlarm: DriftAlarmTrayStatus;
+  readonly driftAlarmDebugEvents: readonly DriftAlarmDebugEvent[];
   readonly segments: readonly ActivitySegment[];
   readonly historySegments: readonly ActivitySegment[];
   readonly leaderboardSegments: readonly ActivitySegment[];
@@ -127,7 +129,10 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
         leaderboard: buildBrowserCaptureDiagnostics("leaderboard", input.leaderboardSegments),
       },
     },
-    driftAlarm: input.driftAlarm,
+    driftAlarm: {
+      ...input.driftAlarm,
+      recentDebugEvents: input.driftAlarmDebugEvents,
+    },
     ai: buildAiDebugSummary(input.ai),
     counts: {
       todaySegments: input.segments.length,

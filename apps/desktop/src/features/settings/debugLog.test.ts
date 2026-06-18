@@ -1,5 +1,6 @@
 import type { ActivitySegment, DriftAlarmTrayStatus } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
+import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
 import type { AiDebugLogInput } from "./debugLog";
 import { buildDebugLogPayload } from "./debugLog";
 
@@ -56,6 +57,37 @@ const baseAiDebug: AiDebugLogInput = {
   },
 };
 
+const driftAlarmDebugEvent: DriftAlarmDebugEvent = {
+  id: "2026-06-13T15:05:00.000Z:fresh_candidate_result:test",
+  recordedAt: "2026-06-13T15:05:00.000Z",
+  kind: "fresh_candidate_result",
+  alertKey: "segment-1:2026-06-13T15:05:00+00:00",
+  result: "current-window-changed",
+  reason: null,
+  message: null,
+  segment: null,
+  currentSnapshot: {
+    observedAt: "2026-06-13T15:05:00.000Z",
+    appName: "Google Chrome",
+    bundleId: "com.google.Chrome",
+    browserName: "Google Chrome",
+    siteDomain: "youtube.com",
+    youtubeVideoId: "video-1",
+    hasSiteContext: true,
+    siteSource: "applescript",
+    captureConfidence: 0.95,
+    browserAutomationStatus: "granted",
+    hasBrowserAutomationError: false,
+    systemTransientActivity: null,
+    source: "accessibility",
+  },
+  candidate: null,
+  ai: null,
+  delivery: null,
+  trayResult: null,
+  evaluation: null,
+};
+
 describe("buildDebugLogPayload", () => {
   it("keeps browser fallback diagnostics concise", () => {
     const unavailableSegment = segment({
@@ -94,6 +126,7 @@ describe("buildDebugLogPayload", () => {
       accessibilityGranted: true,
       currentSnapshot: null,
       driftAlarm,
+      driftAlarmDebugEvents: [],
       segments: [unavailableSegment, emptyResultSegment, grantedSegment, accessibilitySegment],
       historySegments: [],
       leaderboardSegments: [],
@@ -127,6 +160,7 @@ describe("buildDebugLogPayload", () => {
       accessibilityGranted: true,
       currentSnapshot: null,
       driftAlarm,
+      driftAlarmDebugEvents: [],
       segments: [],
       historySegments: [],
       leaderboardSegments: [],
@@ -236,5 +270,28 @@ describe("buildDebugLogPayload", () => {
     });
     expect(payload.ai).not.toHaveProperty("providerPayload");
     expect(payload.ai).not.toHaveProperty("apiKey");
+  });
+
+  it("includes recent drift alarm decision diagnostics", () => {
+    const payload = buildDebugLogPayload({
+      selectedDay: "2026-06-13",
+      startOfDayMinutes: 240,
+      startOfWeek: "monday",
+      theme: "light",
+      categoryColorOverrides: {},
+      appThemeColorOverrides: {},
+      status: null,
+      accessibilityGranted: true,
+      currentSnapshot: null,
+      driftAlarm,
+      driftAlarmDebugEvents: [driftAlarmDebugEvent],
+      segments: [],
+      historySegments: [],
+      leaderboardSegments: [],
+      ai: baseAiDebug,
+      error: null,
+    });
+
+    expect(payload.driftAlarm.recentDebugEvents).toEqual([driftAlarmDebugEvent]);
   });
 });

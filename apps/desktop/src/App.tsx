@@ -169,6 +169,7 @@ import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, Timel
 import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
+import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
 import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
@@ -983,6 +984,10 @@ export default function App() {
       checkedAt,
       result,
     });
+    recordDriftAlarmDebugEvent({
+      kind: "tray_status_published",
+      trayResult: summarizeDriftAlarmTrayResult(result),
+    });
 
     if (options?.updateRendererState === false) {
       const client = trackerClient as Partial<typeof trackerClient>;
@@ -1283,10 +1288,23 @@ export default function App() {
   }, []);
 
   const showDriftAlarm = useCallback((event: DriftAlarmEvent) => {
+    const delivery = summarizeDriftAlarmEvent(event);
     const currentEvent = driftAlarmEventRef.current;
-    if (currentEvent?.id === event.id && !hasDriftAlarmFocusTargetIconUpgrade(currentEvent, event)) return;
+    if (currentEvent?.id === event.id && !hasDriftAlarmFocusTargetIconUpgrade(currentEvent, event)) {
+      recordDriftAlarmDebugEvent({
+        kind: "native_show_duplicate",
+        alertKey: event.id,
+        delivery,
+      });
+      return;
+    }
     if (driftAlarmRequestInFlightRef.current) {
       pendingDriftAlarmEventRef.current = event;
+      recordDriftAlarmDebugEvent({
+        kind: "native_show_queued",
+        alertKey: event.id,
+        delivery,
+      });
       return;
     }
 
@@ -1295,11 +1313,33 @@ export default function App() {
 
     if (!isTauriRuntime()) {
       setDriftAlarmEvent(event);
+      recordDriftAlarmDebugEvent({
+        kind: "renderer_show_non_tauri",
+        alertKey: event.id,
+        delivery,
+      });
       return;
     }
 
     driftAlarmRequestInFlightRef.current = true;
-    void showNativeDriftAlarm(event).catch(() => {
+    recordDriftAlarmDebugEvent({
+      kind: "native_show_requested",
+      alertKey: event.id,
+      delivery,
+    });
+    void showNativeDriftAlarm(event).then(() => {
+      recordDriftAlarmDebugEvent({
+        kind: "native_show_succeeded",
+        alertKey: event.id,
+        delivery,
+      });
+    }).catch((error: unknown) => {
+      recordDriftAlarmDebugEvent({
+        kind: "native_show_failed",
+        alertKey: event.id,
+        message: toErrorMessage(error),
+        delivery,
+      });
       if (driftAlarmEventRef.current?.id === event.id) clearDriftAlarmEvent();
     }).finally(() => {
       driftAlarmRequestInFlightRef.current = false;
@@ -2240,6 +2280,15 @@ export default function App() {
     const shouldUpdateRendererState = input.updateRendererState !== false;
     const alarmSnapshot = input.snapshot;
     const liveSegments = input.liveSegments;
+    const evaluationToday = logicalTodayIsoDate(startOfDayMinutes);
+    const evaluation = buildDriftAlarmDebugEvaluationSummary({
+      selectedDay,
+      today: evaluationToday,
+      currentSnapshot: alarmSnapshot,
+      liveSegmentCount: liveSegments.length,
+      storedSegmentCount: segments.length,
+      minimumDurationSeconds: driftAlertDelaySeconds,
+    });
     const publishEvaluationDriftAlarmTrayStatus = (result: DriftAlarmTrayResult, statusCheckedAt: Date | null = checkedAt) => {
       publishDriftAlarmTrayStatus(result, statusCheckedAt, { updateRendererState: shouldUpdateRendererState });
     };
@@ -2260,13 +2309,23 @@ export default function App() {
       }, Math.max(0, delayMs));
     };
     if (!driftAlertsEnabled) {
+      recordDriftAlarmDebugEvent({
+        kind: "evaluation_skipped",
+        reason: "disabled",
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({ kind: "disabled" }, null);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
-    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) {
+    if (selectedDay !== evaluationToday) {
+      recordDriftAlarmDebugEvent({
+        kind: "evaluation_skipped",
+        reason: "not_today",
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
@@ -2274,6 +2333,11 @@ export default function App() {
       return;
     }
     if (!status?.running) {
+      recordDriftAlarmDebugEvent({
+        kind: "evaluation_skipped",
+        reason: "tracker_paused",
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
@@ -2300,8 +2364,24 @@ export default function App() {
       lastEligibleDriftCandidateRef.current = liveDrift;
     }
     const latestDrift = liveDrift ?? (systemTransientActivity ? lastEligibleDriftCandidateRef.current : null);
+    if (latestDrift) {
+      recordDriftAlarmDebugEvent({
+        kind: "candidate_detected",
+        alertKey: latestDrift.alertKey,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        currentSnapshot: summarizeDriftAlarmSnapshot(alarmSnapshot),
+        evaluation,
+      });
+    }
     const activeSnooze = driftAlarmSnooze ?? driftAlarmSnoozeRef.current;
     if (activeSnooze !== null) {
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_suppressed",
+        alertKey: latestDrift?.alertKey ?? null,
+        reason: "snoozed",
+        candidate: latestDrift ? summarizeDriftAlarmCandidate(latestDrift) : null,
+        evaluation,
+      });
       pendingDriftAlarmGateRef.current = null;
       clearPendingTransientDriftAlarm();
       publishEvaluationDriftAlarmTrayStatus({
@@ -2323,12 +2403,26 @@ export default function App() {
         : null;
 
       if (liveAiCandidate) {
+        recordDriftAlarmDebugEvent({
+          kind: "live_ai_candidate_detected",
+          alertKey: liveAiCandidate.key,
+          segment: summarizeDriftAlarmSegment(liveAiCandidate.segment, liveAiCandidate.sourceSegmentId),
+          currentSnapshot: summarizeDriftAlarmSnapshot(alarmSnapshot),
+          evaluation,
+        });
         const liveAiCandidateDetail = buildDriftAlarmTrayCandidateDetail(
           getWatcherContextLabel(liveAiCandidate.segment, "unknown"),
           liveAiCandidate.segment.durationSeconds,
         );
         const liveAiRetryAfterMs = liveDriftAlarmAiRetryAfterRef.current.get(liveAiCandidate.key) ?? 0;
         if (liveAiRetryAfterMs > Date.now()) {
+          recordDriftAlarmDebugEvent({
+            kind: "delivery_suppressed",
+            alertKey: liveAiCandidate.key,
+            reason: "ai-unavailable:retry-cooldown",
+            segment: summarizeDriftAlarmSegment(liveAiCandidate.segment, liveAiCandidate.sourceSegmentId),
+            evaluation,
+          });
           publishEvaluationDriftAlarmTrayStatus({
             kind: "suppressed",
             reason: "ai-unavailable:retry-cooldown",
@@ -2340,6 +2434,12 @@ export default function App() {
         publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail: liveAiCandidateDetail }, checkedAt);
         if (liveDriftAlarmAiRequestInFlightRef.current === null) {
           liveDriftAlarmAiRequestInFlightRef.current = liveAiCandidate.key;
+          recordDriftAlarmDebugEvent({
+            kind: "live_ai_request_started",
+            alertKey: liveAiCandidate.key,
+            segment: summarizeDriftAlarmSegment(liveAiCandidate.segment, liveAiCandidate.sourceSegmentId),
+            evaluation,
+          });
           const liveAiOptions = localAiClassificationOptions
             ? { ...localAiClassificationOptions, persistLiveResult: true }
             : { persistLiveResult: true };
@@ -2353,6 +2453,13 @@ export default function App() {
           void classifyLiveActivityWithAi(liveAiCandidate.segment, liveAiOptions).then(async (result) => {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
             liveDriftAlarmAiRequestInFlightRef.current = null;
+            recordDriftAlarmDebugEvent({
+              kind: "live_ai_result",
+              alertKey: liveAiCandidate.key,
+              segment: summarizeDriftAlarmSegment(liveAiCandidate.segment, liveAiCandidate.sourceSegmentId),
+              ai: summarizeLiveAiClassificationResult(result),
+              evaluation,
+            });
 
             switch (result.kind) {
               case "classified":
@@ -2379,6 +2486,23 @@ export default function App() {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
             liveDriftAlarmAiRequestInFlightRef.current = null;
             liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
+            recordDriftAlarmDebugEvent({
+              kind: "live_ai_error",
+              alertKey: liveAiCandidate.key,
+              message: toErrorMessage(error),
+              segment: summarizeDriftAlarmSegment(liveAiCandidate.segment, liveAiCandidate.sourceSegmentId),
+              ai: {
+                resultKind: "error",
+                category: null,
+                productivity: null,
+                confidence: null,
+                source: null,
+                model: null,
+                promptVersion: null,
+                reason: toErrorMessage(error),
+              },
+              evaluation,
+            });
             publishEvaluationDriftAlarmTrayStatus({
               kind: "error",
               reason: error instanceof Error ? error.message : "Live AI classification failed",
@@ -2398,6 +2522,11 @@ export default function App() {
         scheduleTransientRefresh(Math.max(1_000, pendingTransient.readyAtMs - Date.now()));
         return;
       }
+      recordDriftAlarmDebugEvent({
+        kind: "candidate_missing",
+        currentSnapshot: summarizeDriftAlarmSnapshot(alarmSnapshot),
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
@@ -2498,16 +2627,51 @@ export default function App() {
       showDriftAlarm(buildCurrentDriftAlarmEvent());
     };
     const markCurrentDriftAlarmDelivered = () => {
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_delivered",
+        alertKey,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
     const showFallbackDriftAlarm = (notify: boolean) => {
       showCurrentDriftAlarm();
       markCurrentDriftAlarmDelivered();
-      if (notify) void sendDriftNotification(segment, driftAlarmCopy);
+      if (notify) {
+        recordDriftAlarmDebugEvent({
+          kind: "native_notification_requested",
+          alertKey,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+        void sendDriftNotification(segment, driftAlarmCopy).catch((error: unknown) => {
+          recordDriftAlarmDebugEvent({
+            kind: "native_notification_failed",
+            alertKey,
+            message: toErrorMessage(error),
+            candidate: summarizeDriftAlarmCandidate(latestDrift),
+            evaluation,
+          });
+        });
+      }
     };
     const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
       lastDriftAlertSegmentRef.current = alertKey;
+      recordDriftAlarmDebugEvent({
+        kind: "extreme_nudge_started",
+        alertKey,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
       void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then((applied) => {
+        recordDriftAlarmDebugEvent({
+          kind: "extreme_nudge_result",
+          alertKey,
+          result: applied ? "applied" : "not_applied",
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
         if (!applied) {
           if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
           return;
@@ -2522,6 +2686,13 @@ export default function App() {
         }
       }).catch((error) => {
         console.warn("Failed to apply extreme nudge", error);
+        recordDriftAlarmDebugEvent({
+          kind: "extreme_nudge_error",
+          alertKey,
+          message: toErrorMessage(error),
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
         if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
       });
     };
@@ -2540,11 +2711,31 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : "unknown error";
         console.warn("Failed to refresh current activity before drift alarm", message);
+        recordDriftAlarmDebugEvent({
+          kind: "fresh_candidate_result",
+          alertKey,
+          result: "current-snapshot-unavailable",
+          message,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          currentSnapshot: null,
+          evaluation,
+        });
         return "current-snapshot-unavailable";
       }
 
       if (shouldUpdateRendererState) setCurrentSnapshot(freshSnapshot);
-      if (freshSnapshot?.systemTransientActivity) return "system-transient-active";
+      if (freshSnapshot?.systemTransientActivity) {
+        recordDriftAlarmDebugEvent({
+          kind: "fresh_candidate_result",
+          alertKey,
+          result: "system-transient-active",
+          reason: freshSnapshot.systemTransientActivity,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          currentSnapshot: summarizeDriftAlarmSnapshot(freshSnapshot),
+          evaluation,
+        });
+        return "system-transient-active";
+      }
 
       const freshCandidate = resolveFreshDriftAlarmCandidate({
         candidate: latestDrift,
@@ -2553,10 +2744,25 @@ export default function App() {
         classificationOptions: driftAlarmClassificationOptions,
         minimumDurationSeconds: driftAlertDelaySeconds,
       });
-      return freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
+      const result = freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
+      recordDriftAlarmDebugEvent({
+        kind: "fresh_candidate_result",
+        alertKey,
+        result,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        currentSnapshot: summarizeDriftAlarmSnapshot(freshSnapshot),
+        evaluation,
+      });
+      return result;
     };
 
     const deliverCurrentDriftAlarm = () => {
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_started",
+        alertKey,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
       const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
       if (pendingBreakReturnAlarm) {
         const outcome = resolveBreakRecoveryOutcome({
@@ -2620,6 +2826,13 @@ export default function App() {
         if (driftAlarmEventRef.current?.id === alertKey) {
           showCurrentDriftAlarm();
         }
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_suppressed",
+          alertKey,
+          reason: "already_delivered",
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
         publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
         return;
       }
@@ -2631,23 +2844,59 @@ export default function App() {
       }
       showCurrentDriftAlarm();
       markCurrentDriftAlarmDelivered();
-      void sendDriftNotification(segment, driftAlarmCopy);
+      recordDriftAlarmDebugEvent({
+        kind: "native_notification_requested",
+        alertKey,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
+      void sendDriftNotification(segment, driftAlarmCopy).catch((error: unknown) => {
+        recordDriftAlarmDebugEvent({
+          kind: "native_notification_failed",
+          alertKey,
+          message: toErrorMessage(error),
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+      });
     };
 
     if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
       if (driftAlarmEventRef.current?.id === alertKey) {
         showCurrentDriftAlarm();
       }
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_suppressed",
+        alertKey,
+        reason: "already_delivered",
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
       return;
     }
 
-    if (pendingDriftAlarmGateRef.current === alertKey) return;
+    if (pendingDriftAlarmGateRef.current === alertKey) {
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_suppressed",
+        alertKey,
+        reason: "youtube-gate-in-flight",
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
+      return;
+    }
     if (pendingDriftAlarmGateRef.current !== null && pendingDriftAlarmGateRef.current !== alertKey) {
       pendingDriftAlarmGateRef.current = null;
     }
 
     pendingDriftAlarmGateRef.current = alertKey;
+    recordDriftAlarmDebugEvent({
+      kind: "youtube_gate_started",
+      alertKey,
+      candidate: summarizeDriftAlarmCandidate(latestDrift),
+      evaluation,
+    });
     publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
     void evaluateYouTubeDriftAlarmGate({
       segment,
@@ -2655,10 +2904,25 @@ export default function App() {
       aiOptions: localAiClassificationOptions,
     }).then(async (gateResult) => {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      recordDriftAlarmDebugEvent({
+        kind: "youtube_gate_result",
+        alertKey,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        ai: summarizeYouTubeDriftAlarmGateResult(gateResult),
+        evaluation,
+      });
 
       if (gateResult.kind === "suppress") {
         pendingDriftAlarmGateRef.current = null;
         lastDriftAlertSegmentRef.current = alertKey;
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_suppressed",
+          alertKey,
+          reason: gateResult.reason,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          ai: summarizeYouTubeDriftAlarmGateResult(gateResult),
+          evaluation,
+        });
         publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: gateResult.reason,
@@ -2671,9 +2935,25 @@ export default function App() {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
       pendingDriftAlarmGateRef.current = null;
 
-      if (finalGateResult === "system-transient-active") return;
+      if (finalGateResult === "system-transient-active") {
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_suppressed",
+          alertKey,
+          reason: finalGateResult,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+        return;
+      }
 
       if (finalGateResult !== "confirmed") {
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_suppressed",
+          alertKey,
+          reason: finalGateResult,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
         publishEvaluationDriftAlarmTrayStatus({
           kind: "suppressed",
           reason: finalGateResult,
@@ -2690,6 +2970,23 @@ export default function App() {
       if (pendingDriftAlarmGateRef.current !== alertKey) return;
       pendingDriftAlarmGateRef.current = null;
       lastDriftAlertSegmentRef.current = alertKey;
+      recordDriftAlarmDebugEvent({
+        kind: "youtube_gate_error",
+        alertKey,
+        message: toErrorMessage(error),
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        ai: {
+          resultKind: "error",
+          category: null,
+          productivity: null,
+          confidence: null,
+          source: null,
+          model: null,
+          promptVersion: null,
+          reason: toErrorMessage(error),
+        },
+        evaluation,
+      });
       publishEvaluationDriftAlarmTrayStatus({
         kind: "error",
         reason: error instanceof Error ? error.message : "AI gate failed",
@@ -4011,6 +4308,7 @@ export default function App() {
       accessibilityGranted,
       currentSnapshot: snapshotForDebug,
       driftAlarm: driftAlarmTrayStatus,
+      driftAlarmDebugEvents: readRecentDriftAlarmDebugEvents(),
       segments,
       historySegments,
       leaderboardSegments,
