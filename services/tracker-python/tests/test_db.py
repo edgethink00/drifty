@@ -601,6 +601,83 @@ class TrackerDatabaseTests(unittest.TestCase):
         fresh = self.database.fetch_timeline("2026-04-06")[0]
         self.assertFalse(fresh["classification"]["reusedAiResult"])
 
+    def test_dashboard_week_timeline_omits_verbose_fields_without_full_timeline(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:00+00:00",
+                app_name="Safari",
+                bundle_id="com.apple.Safari",
+                window_title="Long private lecture title",
+                source="accessibility",
+                browser_name="Safari",
+                site_domain="youtube.com",
+                site_title="Lecture",
+                site_url="https://www.youtube.com/watch?v=lecture123",
+                youtube_video_id="lecture123",
+                youtube_is_shorts=False,
+                site_source="applescript",
+                browser_automation_status="denied",
+                browser_automation_error="browser automation diagnostic should not be in dashboard week payload",
+            ),
+            5,
+        )
+        self.database.save_youtube_metadata(
+            YouTubeVideoMetadata(
+                video_id="lecture123",
+                category="Education",
+                channel_id="channel-1",
+                channel_name="MIT OpenCourseWare",
+                title="MIT Lecture",
+                description="Large transcript-like description should stay out of dashboard week payload.",
+                keywords=["lecture", "cs", "large-keywords"],
+                duration_seconds=1200,
+                view_count=12345,
+                is_live=False,
+                is_unlisted=True,
+                publish_date="2026-04-06",
+                upload_date="2026-04-05",
+            )
+        )
+        segment = self.database.fetch_timeline("2026-04-06")[0]
+        self.database.save_classifications([
+            {
+                "segmentId": segment["id"],
+                "category": "learning",
+                "productivity": "focus",
+                "source": "llm",
+                "confidence": 0.91,
+                "reason": "Verbose classification reason should stay out of dashboard week payload",
+                "model": "gemini-3.1-flash-lite",
+                "promptVersion": "v1",
+                "taxonomyVersion": "v1",
+                "inputFingerprint": "fp-dashboard-week",
+                "aiResult": True,
+            }
+        ])
+        self.database.timeline = MagicMock(side_effect=AssertionError("dashboard week should use compact SQL"))
+
+        rows = self.database.dashboard_week_timeline(
+            "2026-04-06T00:00:00",
+            "2026-04-06T23:59:59",
+        )
+
+        self.assertEqual(len(rows), 1)
+        compact = rows[0]
+        self.assertEqual(compact["appName"], "Safari")
+        self.assertEqual(compact["siteDomain"], "youtube.com")
+        self.assertEqual(compact["siteTitle"], "Lecture")
+        self.assertEqual(compact["youtubeCategory"], "Education")
+        self.assertEqual(compact["youtubeTitle"], "MIT Lecture")
+        self.assertEqual(compact["classification"]["category"], "learning")
+        self.assertEqual(compact["classification"]["productivity"], "focus")
+        self.assertEqual(compact["classification"]["source"], "llm")
+        self.assertNotIn("windowTitle", compact)
+        self.assertNotIn("browserAutomationError", compact)
+        self.assertNotIn("youtubeDescription", compact)
+        self.assertNotIn("youtubeKeywords", compact)
+        self.assertNotIn("model", compact["classification"])
+        self.assertNotIn("reason", compact["classification"])
+
     def test_refresh_non_ai_classifications_preserves_ai_results(self) -> None:
         self.database.insert_segment(
             {

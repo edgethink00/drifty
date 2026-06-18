@@ -208,6 +208,12 @@ def get_timeline(payload: dict):
     return response(True, items)
 
 
+def get_dashboard_week_timeline(payload: dict):
+    db = database()
+    start, end = day_bounds(payload)
+    return response(True, db.dashboard_week_timeline(start, end))
+
+
 def get_live_tail(payload: dict):
     safe_payload = payload if isinstance(payload, dict) else {}
     db = database()
@@ -446,6 +452,7 @@ COMMANDS = {
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
     "get_timeline": get_timeline,
+    "get_dashboard_week_timeline": get_dashboard_week_timeline,
     "get_live_tail": get_live_tail,
     "get_current_snapshot": lambda payload: get_current_snapshot(),
     "get_hourly_summary": get_hourly_summary,

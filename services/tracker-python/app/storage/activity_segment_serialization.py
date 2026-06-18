@@ -57,6 +57,42 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
     return serialized
 
 
+def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
+    classification = dashboard_week_classification_payload(row)
+    hide_site_context = should_hide_uncertain_site_context(row)
+    serialized: dict[str, SerializedValue] = {
+        "id": str(row.get("id", "")),
+        "startedAt": row["started_at"],
+        "endedAt": row["ended_at"],
+        "durationSeconds": row["duration_seconds"],
+        "appName": row["app_name"],
+        "platform": row.get("platform", "macos"),
+        "source": row.get("source", "unknown"),
+    }
+    optional_fields: dict[str, RowValue] = {
+        "bundleId": row.get("bundle_id"),
+        "browserName": row.get("browser_name"),
+        "siteDomain": None if hide_site_context else row.get("site_domain"),
+        "siteTitle": None if hide_site_context else row.get("site_title"),
+        "siteUrl": None if hide_site_context else row.get("site_url"),
+        "youtubeVideoId": None if hide_site_context else row.get("youtube_video_id"),
+        "youtubePlaylistId": None if hide_site_context else row.get("youtube_playlist_id"),
+        "youtubeCategory": row.get("youtube_category"),
+        "youtubeChannelName": row.get("youtube_channel_name"),
+        "youtubeTitle": row.get("youtube_title"),
+    }
+    for key, value in optional_fields.items():
+        if value is not None and value != "":
+            serialized[key] = value
+    if not hide_site_context and row.get("youtube_is_shorts") is not None:
+        serialized["youtubeIsShorts"] = bool(row.get("youtube_is_shorts"))
+    if row.get("confidence") is not None:
+        serialized["confidence"] = row.get("confidence")
+    if classification is not None:
+        serialized["classification"] = classification
+    return serialized
+
+
 def should_hide_uncertain_site_context(row: Mapping[str, RowValue]) -> bool:
     if row.get("site_source") != "applescript-front-window":
         return False
@@ -103,6 +139,23 @@ def classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         and row.get("classification_request_id") is None
         and row.get("classification_latency_ms") is None,
     }
+
+
+def dashboard_week_classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedValue] | None:
+    if not row.get("classification_category"):
+        return None
+
+    classification: dict[str, SerializedValue] = {
+        "category": row.get("classification_category"),
+        "productivity": row.get("classification_productivity"),
+        "source": row.get("classification_source") or "unknown",
+        "confidence": row.get("classification_confidence") or 0,
+        "aiResult": bool(row.get("classification_ai_result")),
+        "stale": bool(row.get("classification_stale")),
+    }
+    if row.get("classification_rule_id"):
+        classification["classificationRuleId"] = row.get("classification_rule_id")
+    return classification
 
 
 def browser_automation_status(row: Mapping[str, RowValue]) -> str | None:

@@ -88,6 +88,19 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_timeline", build_period_payload(day, start, end))
     }
 
+    pub fn get_dashboard_week_timeline(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_dashboard_week_timeline",
+            build_dashboard_week_timeline_payload(start, end),
+        )
+    }
+
     pub fn get_live_tail(
         &self,
         app: &AppHandle,
@@ -404,6 +417,10 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
     Value::Object(payload)
 }
 
+fn build_dashboard_week_timeline_payload(start: Option<String>, end: Option<String>) -> Value {
+    build_period_payload(None, start, end)
+}
+
 fn build_live_tail_payload(
     start: Option<String>,
     end: Option<String>,
@@ -589,6 +606,22 @@ mod tests {
                 "afterSegmentId": "42",
                 "afterEndedAt": "2026-04-06T09:05:00+00:00",
                 "limit": 8
+            })
+        );
+    }
+
+    #[test]
+    fn dashboard_week_timeline_payload_preserves_range() {
+        let payload = build_dashboard_week_timeline_payload(
+            Some("2026-04-01T00:00:00".into()),
+            Some("2026-04-07T23:59:59".into()),
+        );
+
+        assert_eq!(
+            payload,
+            json!({
+                "start": "2026-04-01T00:00:00",
+                "end": "2026-04-07T23:59:59",
             })
         );
     }

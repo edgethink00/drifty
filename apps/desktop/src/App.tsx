@@ -1484,7 +1484,9 @@ export default function App() {
 
     try {
       const archiveTimelineRequest = shouldLoadHistory
-        ? trackerClient.getTimeline(historyTimelineRange)
+        ? shouldLoadDashboardWeekHistory
+          ? trackerClient.getDashboardWeekTimeline(historyTimelineRange)
+          : trackerClient.getTimeline(historyTimelineRange)
         : Promise.resolve<ActivitySegment[] | null>(null);
       const historyHourlySummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getHourlySummary(historySummaryRange)
@@ -1615,7 +1617,9 @@ export default function App() {
 
     try {
       const [archiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
-        trackerClient.getTimeline(historyTimelineRange),
+        shouldLoadDashboardWeekHistory
+          ? trackerClient.getDashboardWeekTimeline(historyTimelineRange)
+          : trackerClient.getTimeline(historyTimelineRange),
         shouldLoadHistorySummaries
           ? trackerClient.getHourlySummary(historySummaryRange)
           : Promise.resolve<HourBucket[] | null>(null),
@@ -1665,7 +1669,7 @@ export default function App() {
     prefetchedDashboardWeekKeyRef.current = prefetchKey;
 
     try {
-      const archiveTimelines = await trackerClient.getTimeline(historyTimelineRange);
+      const archiveTimelines = await trackerClient.getDashboardWeekTimeline(historyTimelineRange);
       if (dashboardWeekPrefetchRequestRef.current !== requestId) return false;
 
       const materializedArchiveTimelines = materializeBuiltInHeuristicTimeline(archiveTimelines);

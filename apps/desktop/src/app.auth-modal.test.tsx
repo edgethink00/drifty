@@ -47,6 +47,7 @@ const {
       message: "Tracker not available in this environment",
     }),
     getTimeline: vi.fn().mockResolvedValue([]),
+    getDashboardWeekTimeline: vi.fn().mockResolvedValue([]),
     getLiveTail: vi.fn().mockResolvedValue({
       running: false,
       trackerMode: "tracking",

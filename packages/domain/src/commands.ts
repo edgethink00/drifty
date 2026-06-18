@@ -5,6 +5,7 @@ export type TrackerCommand =
   | "tracker_start"
   | "tracker_stop"
   | "tracker_get_timeline"
+  | "tracker_get_dashboard_week_timeline"
   | "tracker_get_live_tail"
   | "tracker_get_current_snapshot"
   | "tracker_get_hourly_summary"
@@ -161,6 +162,7 @@ export interface TrackerApi {
   start(): Promise<TrackerStatus>;
   stop(): Promise<TrackerStatus>;
   getTimeline(query: TimelineQuery): Promise<ActivitySegment[]>;
+  getDashboardWeekTimeline(query: DateRangeQuery): Promise<ActivitySegment[]>;
   getLiveTail(query: LiveTailQuery): Promise<TrackerLiveTail>;
   getCurrentSnapshot(): Promise<CurrentActivitySnapshot | null>;
   getHourlySummary(query: TimelineQuery): Promise<HourBucket[]>;
