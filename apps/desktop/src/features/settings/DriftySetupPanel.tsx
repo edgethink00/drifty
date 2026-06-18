@@ -11,7 +11,6 @@ export function DriftySetupPanel({
   catalog,
   localAiSetup,
   selectedRoute,
-  onLocalAiSetupChange,
   ...panelProps
 }: DriftySetupPanelProps) {
   return (
@@ -23,7 +22,7 @@ export function DriftySetupPanel({
       <div className="ai-setup-local-divider"><span>or use local model</span></div>
 
       <section className={`ai-setup-route-option ai-setup-route-option--local${selectedRoute === "local" ? " is-selected" : ""}`} aria-label="Managed local model option">
-        <ManagedLocalAiPanel {...panelProps} catalog={catalog} localAiSetup={localAiSetup} onLocalAiSetupChange={onLocalAiSetupChange} />
+        <ManagedLocalAiPanel {...panelProps} catalog={catalog} localAiSetup={localAiSetup} />
       </section>
     </div>
   );

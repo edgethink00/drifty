@@ -134,7 +134,7 @@ describe("Settings content styles", () => {
     const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
-    const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__delete-action");
+    const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__actions .settings-btn.ai-managed-model__delete-action");
 
     // Copy + actions stack on the left; tier and specs span the right; no divider.
     expect(modelRule).toContain('"copy meta"');
@@ -144,7 +144,21 @@ describe("Settings content styles", () => {
     expect(actionsRule).not.toContain("border-top:");
     expect(actionsRule).not.toContain("min-width: 8.8rem;");
     expect(primaryActionRule).toContain("gap: 0.42rem;");
+    expect(deleteActionRule).toContain("background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));");
+    expect(deleteActionRule).toContain("border-radius: 999px;");
+    expect(deleteActionRule).toContain("min-width: 2rem;");
     expect(deleteActionRule).toContain("width: 2rem;");
+  });
+
+  it("tints the full AI connection test panel on errors", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const currentModelErrorRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error");
+    const currentModelErrorStatusRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error .ai-setup-current-model__status");
+
+    expect(currentModelErrorRule).toContain("background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));");
+    expect(currentModelErrorRule).toContain("border-color: color-mix(in srgb, var(--warn) 24%, var(--line));");
+    expect(currentModelErrorStatusRule).not.toContain("border-top");
+    expect(currentModelErrorStatusRule).toContain("color: var(--warn);");
   });
 
   it("flattens the managed local section so model cards are not boxed twice", () => {

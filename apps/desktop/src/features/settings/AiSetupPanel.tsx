@@ -147,6 +147,7 @@ export function AiSetupPanel({
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
+            connectionTestKind={connectionTestResult?.kind ?? null}
             connectionTestMessage={connectionTestResult?.message ?? null}
             connectionTestRunning={connectionTestRunning}
             connectionTestDisabled={connectionTestRunning || !isActiveProviderTestable(localAiSetup)}
@@ -163,7 +164,6 @@ export function AiSetupPanel({
             onLocalAiSetupChange={onLocalAiSetupChange}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleProviderChange}
-            onStartModel={managedLocalAi.startModel}
             onStartCloudSetup={onStartCloudSetup}
             onTestConnection={handleTestConnection}
           />
@@ -193,10 +193,8 @@ export function AiSetupPanel({
                 userEmail={userEmail}
                 onDeleteModel={managedLocalAi.deleteModel}
                 onInstallModel={managedLocalAi.installModel}
-                onLocalAiSetupChange={onLocalAiSetupChange}
                 onRefreshCloudStatus={onRefreshCloudStatus}
                 onStartCloudSetup={onStartCloudSetup}
-                onStartModel={managedLocalAi.startModel}
               />
             </AiSetupSectionCard>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>

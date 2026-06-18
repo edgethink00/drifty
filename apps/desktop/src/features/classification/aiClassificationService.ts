@@ -7,12 +7,15 @@ import type {
   ClassificationQuery,
   ProductivityLabel,
 } from "@drifty/domain";
-import { invoke } from "@tauri-apps/api/core";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { readUserOnboardingState } from "../onboarding/onboardingState";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
 import { saveLiveClassificationIfRequested } from "./liveAiClassificationPersistence";
+import {
+  invokeOpenAiChatWithManagedLocalRetry,
+  type NativeOpenAiChatResponse,
+} from "./managedLocalAiChat";
 import { toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 
@@ -76,12 +79,6 @@ export type AiClassificationRunOptions = {
 export type LiveAiClassificationResult =
   | { kind: "classified"; classification: ActivityClassificationRecord }
   | { kind: "unavailable"; reason: string };
-
-type NativeOpenAiChatResponse = {
-  status?: unknown;
-  body?: unknown;
-  latencyMs?: unknown;
-};
 
 type OpenAiChatResponse = {
   choices?: Array<{ message?: { content?: unknown } }>;
@@ -935,7 +932,10 @@ async function classifyLivePayloadWithLocalAi(
   if (!providerRequest) return unavailableLiveClassification("Local AI provider is not fully configured.");
 
   try {
-    const response = await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: providerRequest.request });
+    const response = await invokeOpenAiChatWithManagedLocalRetry(
+      providerRequest.request,
+      provider.provider === "managed_local" ? provider : null,
+    );
     const status = typeof response.status === "number" ? response.status : 0;
     if (status < 200 || status >= 300) {
       return unavailableLiveClassification(`Local AI classification failed with HTTP ${status || "unknown"}.`);
@@ -1004,7 +1004,10 @@ async function runLocalAiClassification(
     };
   }
 
-  const response = await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: providerRequest.request });
+  const response = await invokeOpenAiChatWithManagedLocalRetry(
+    providerRequest.request,
+    provider.provider === "managed_local" ? provider : null,
+  );
   const status = typeof response.status === "number" ? response.status : 0;
   if (status < 200 || status >= 300) {
     throw new Error(`Local AI classification failed with HTTP ${status || "unknown"}.`);

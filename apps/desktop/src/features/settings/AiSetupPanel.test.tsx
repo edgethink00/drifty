@@ -89,7 +89,7 @@ describe("AiSetupPanel", () => {
     expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
   });
 
-  it("allows an installed managed local model in the global model picker", async () => {
+  it("allows an installed managed local model in the global model picker without starting it immediately", async () => {
     renderPanel();
 
     const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
@@ -106,7 +106,7 @@ describe("AiSetupPanel", () => {
     fireEvent.click(qwenOption);
 
     expect(modelSelect.textContent).toContain("Qwen 3.5 4B");
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" }));
+    expect(invokeMock).not.toHaveBeenCalledWith("managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
   });
 
   it("downloads a disabled managed local model from the global model picker action", async () => {

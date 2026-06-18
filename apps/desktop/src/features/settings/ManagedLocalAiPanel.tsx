@@ -1,6 +1,4 @@
 import { useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
-
 import { ManagedModelActionIcon } from "./ManagedModelActionIcon";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
@@ -13,8 +11,6 @@ export type ManagedLocalAiPanelProps = {
   readonly status: ManagedLocalAiStatus | null;
   readonly onDeleteModel: (modelId: string) => void | Promise<void>;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
-  readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
-  readonly onStartModel: (modelId: string) => void | Promise<void>;
 };
 
 export function ManagedLocalAiPanel({
@@ -25,8 +21,6 @@ export function ManagedLocalAiPanel({
   status,
   onDeleteModel,
   onInstallModel,
-  onLocalAiSetupChange,
-  onStartModel,
 }: ManagedLocalAiPanelProps) {
   return (
     <div className="ai-setup-detail ai-setup-detail--local" role="group" aria-label="Local AI settings">
@@ -44,8 +38,6 @@ export function ManagedLocalAiPanel({
             status={status}
             onDeleteModel={onDeleteModel}
             onInstallModel={onInstallModel}
-            onLocalAiSetupChange={onLocalAiSetupChange}
-            onStartModel={onStartModel}
           />
         ))}
       </div>
@@ -67,8 +59,6 @@ function ManagedLocalAiModelRow({
   readonly status: ManagedLocalAiStatus | null;
   readonly onDeleteModel: (modelId: string) => void | Promise<void>;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
-  readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
-  readonly onStartModel: (modelId: string) => void | Promise<void>;
 }) {
   const [finderOpening, setFinderOpening] = useState(false);
   const [finderError, setFinderError] = useState<string | null>(null);
