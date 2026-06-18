@@ -15,6 +15,7 @@ const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+const DASHBOARD_WEEK_PREFETCH_DELAY_MS = 600;
 const DEFAULT_START_OF_DAY_MINUTES = 4 * 60;
 
 function timelineQueryIncludesDay(query: ClassificationQuery, day: string): boolean {
@@ -225,6 +226,22 @@ function createDeferred<T>() {
     reject = promiseReject;
   });
   return { promise, resolve, reject };
+}
+
+function mockAutoAiClassificationEmpty() {
+  aiClassificationMocks.runAiClassificationForUnknownThreshold.mockResolvedValue({
+    status: "empty",
+    selectedSegments: 0,
+    savedRecords: 0,
+    message: "No unknown activity met the threshold.",
+    metrics: selectedDayMetrics,
+  } satisfies AiClassificationSummary);
+}
+
+async function flushInitialDashboardWeekPrefetch() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(DASHBOARD_WEEK_PREFETCH_DELAY_MS);
+  });
 }
 
 const selectedDayUsage = createUsageSummary({
@@ -910,6 +927,7 @@ describe("App AI classification controls", () => {
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     const today = "2026-06-16";
     window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    mockAutoAiClassificationEmpty();
     setRendererFocus(false);
     trackerClient.getStatus.mockResolvedValue({
       running: true,
@@ -922,6 +940,7 @@ describe("App AI classification controls", () => {
     render(<App />);
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+    await flushInitialDashboardWeekPrefetch();
 
     trackerClient.getTimeline.mockClear();
     trackerClient.getCurrentSnapshot.mockClear();
@@ -956,6 +975,7 @@ describe("App AI classification controls", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     const today = "2026-06-16";
+    mockAutoAiClassificationEmpty();
     setRendererFocus(true);
     trackerClient.getStatus.mockResolvedValue({
       running: true,
@@ -995,6 +1015,7 @@ describe("App AI classification controls", () => {
     render(<App />);
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+    await flushInitialDashboardWeekPrefetch();
 
     trackerClient.getTimeline.mockClear();
     trackerClient.getStatus.mockClear();
@@ -1026,6 +1047,7 @@ describe("App AI classification controls", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    mockAutoAiClassificationEmpty();
     setRendererFocus(true);
     trackerClient.getStatus.mockResolvedValue({
       running: true,
@@ -1038,6 +1060,7 @@ describe("App AI classification controls", () => {
     render(<App />);
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+    await flushInitialDashboardWeekPrefetch();
 
     trackerClient.getTimeline.mockClear();
     trackerClient.getCurrentSnapshot.mockClear();
