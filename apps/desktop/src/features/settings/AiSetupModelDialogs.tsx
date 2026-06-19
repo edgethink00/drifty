@@ -9,7 +9,6 @@ export type AiModelOption = {
 
 type OpenRouterModelDialogProps = {
   readonly customModel: string;
-  readonly fallbackSummary: string;
   readonly openRouterPrimaryModel: string;
   readonly options: readonly AiModelOption[];
   readonly selectedModels: readonly string[];
@@ -22,7 +21,6 @@ type OpenRouterModelDialogProps = {
 
 export function OpenRouterModelDialog({
   customModel,
-  fallbackSummary,
   openRouterPrimaryModel,
   options,
   selectedModels,
@@ -38,10 +36,6 @@ export function OpenRouterModelDialog({
         <div className="auth-modal__header">
           <h2 id="openrouter-model-picker-title">OpenRouter models</h2>
           <p>Drifty sends models in priority order. Your API key stays session-only.</p>
-        </div>
-        <div className="model-picker-modal__summary" aria-label="Selected OpenRouter model summary">
-          <span className="chip green">Primary: {openRouterPrimaryModel}</span>
-          <span className="chip gray">{fallbackSummary}</span>
         </div>
         <div className="model-picker-list" role="group" aria-label="OpenRouter model choices">
           {options.map((option) => {
