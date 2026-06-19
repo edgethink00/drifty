@@ -15,12 +15,14 @@ export function isActiveProviderTestable(setup: LocalAiSetupState): boolean {
   }
 }
 
-export function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] | null {
+export function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] {
   switch (section) {
     case "drifty":
-      return null;
+      return "managed_local";
     case "openrouter":
       return "openrouter_byok";
+    case "custom":
+      return "self_hosted";
     default:
       return assertNever(section);
   }
@@ -29,10 +31,11 @@ export function providerForSection(section: AiSetupSection): LocalAiSetupState["
 export function sectionForProvider(provider: LocalAiSetupState["provider"]): AiSetupSection {
   switch (provider) {
     case "managed_local":
-    case "self_hosted":
       return "drifty";
     case "openrouter_byok":
       return "openrouter";
+    case "self_hosted":
+      return "custom";
     default:
       return assertNever(provider);
   }

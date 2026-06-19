@@ -11,6 +11,7 @@ import {
   type AiSetupSection,
 } from "./AiSetupSectionCards";
 import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
+import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
@@ -93,9 +94,7 @@ export function AiSetupPanel({
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
 
   const selectProvider = (section: AiSetupSection) => {
-    const provider = providerForSection(section);
-    if (provider) onLocalAiSetupChange((current) => ({ ...current, provider }));
-    if (section === "drifty") onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local" }));
+    onLocalAiSetupChange((current) => ({ ...current, provider: providerForSection(section) }));
   };
 
   const handleDriftyRouteChange = (route: DriftyRoute) => {
@@ -194,6 +193,12 @@ export function AiSetupPanel({
               <OpenRouterSetupPanel
                 localAiSetup={localAiSetup}
                 onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
+                onLocalAiSetupChange={onLocalAiSetupChange}
+              />
+            </AiSetupSectionCard>
+            <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={expandedSection === "custom"} onToggle={handleToggleSection}>
+              <CustomEndpointSetupPanel
+                localAiSetup={localAiSetup}
                 onLocalAiSetupChange={onLocalAiSetupChange}
               />
             </AiSetupSectionCard>

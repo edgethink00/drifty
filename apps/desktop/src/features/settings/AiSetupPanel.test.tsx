@@ -20,7 +20,7 @@ describe("AiSetupPanel", () => {
     testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
   });
 
-  it("switches between Drifty and OpenRouter setup rows", async () => {
+  it("switches between Drifty, OpenRouter, and custom endpoint setup rows", async () => {
     renderPanel();
 
     const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
@@ -41,7 +41,7 @@ describe("AiSetupPanel", () => {
     expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
 
     fireEvent.click(modelSelect);
-    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 3 12B$/i });
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
     if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
     expect(gemmaOption.disabled).toBe(true);
     expect(modelBeingUsed.textContent).not.toMatch(/download required/i);
@@ -53,17 +53,16 @@ describe("AiSetupPanel", () => {
     const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
     expect(within(driftySettings).getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i })).toBeTruthy();
-    expect(within(localSettings).getByRole("article", { name: /Gemma 3 12B managed local model/i })).toBeTruthy();
+    expect(within(localSettings).getByRole("article", { name: /Gemma 4 12B managed local model/i })).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();
     expect(within(driftySettings).queryByLabelText(/Drifty Cloud selected/i)).toBeNull();
     expect(within(driftySettings).queryByLabelText(/Managed local model selected/i)).toBeNull();
     // Per-model radio selectors were removed; the active model is chosen from the
     // "Model being used" dropdown, so the cards carry no select input.
-    expect(within(localSettings).queryByLabelText(/Select Gemma 3 12B managed local model/i)).toBeNull();
+    expect(within(localSettings).queryByLabelText(/Select Gemma 4 12B managed local model/i)).toBeNull();
     expect(within(localSettings).queryByLabelText(/Select Qwen 3\.5 4B managed local model/i)).toBeNull();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /Custom local endpoint settings/i })).toBeNull();
-    expect(screen.queryByText(/Custom local endpoint/i)).toBeNull();
+    expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
 
     fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
     expect(providerSelect.textContent).toContain("Drifty");
@@ -75,16 +74,29 @@ describe("AiSetupPanel", () => {
     expect(providerSelect.textContent).toContain("OpenRouter");
     expect(modelSelect.textContent).toContain("DeepSeek V4 Flash");
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
 
     chooseOption(modelBeingUsed, /^AI model$/i, /^Qwen 3\.6 Plus$/i);
     expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }));
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Custom endpoint setup row$/i }));
     expect(providerSelect.textContent).toContain("OpenRouter");
     expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
+    expect(screen.getByRole("group", { name: /Custom endpoint settings/i })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
+
+    chooseOption(modelBeingUsed, /^AI provider$/i, /^Custom endpoint$/i);
+    expect(providerSelect.textContent).toContain("Custom endpoint");
+    expect(modelSelect.textContent).toContain("Custom endpoint");
+    expect(screen.getByRole("group", { name: /Custom endpoint settings/i })).toBeTruthy();
+
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }));
+    expect(providerSelect.textContent).toContain("Custom endpoint");
+    expect(modelSelect.textContent).toContain("Custom endpoint");
     expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
   });
 
   it("collapses the expanded provider when its bar is clicked again", () => {
@@ -133,7 +145,7 @@ describe("AiSetupPanel", () => {
     fireEvent.click(within(qwenDefault).getByRole("button", { name: /^Download$/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
 
-    const gemma = within(localSettings).getByRole("article", { name: /Gemma 3 12B managed local model/i });
+    const gemma = within(localSettings).getByRole("article", { name: /Gemma 4 12B managed local model/i });
     fireEvent.click(within(gemma).getByRole("button", { name: /^Download$/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
 
@@ -150,11 +162,11 @@ describe("AiSetupPanel", () => {
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
-    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 3 12B$/i });
+    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
     if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
     expect(gemmaOption.disabled).toBe(true);
 
-    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Gemma 3 12B managed local model$/i }));
+    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Gemma 4 12B managed local model$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
   });
@@ -262,6 +274,22 @@ describe("AiSetupPanel", () => {
       message: "Connected in 42 ms.",
     });
     expect(window.localStorage.getItem("drifty.aiSetup.v1") ?? "").not.toContain("sk-or-v1-test-secret");
+  });
+
+  it("keeps custom endpoint setup in its own row and stores it as self hosted", async () => {
+    renderPanel();
+    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
+
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Custom endpoint setup row$/i }));
+    const endpointSettings = screen.getByRole("group", { name: /^Custom endpoint settings$/i });
+    fireEvent.change(within(endpointSettings).getByLabelText(/^Custom endpoint base URL$/i), { target: { value: "http://localhost:8080/v1" } });
+    fireEvent.change(within(endpointSettings).getByLabelText(/^Custom endpoint model$/i), { target: { value: "gemma-4-12b-it" } });
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    expect(within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i }).textContent).toContain("Custom endpoint");
+    expect(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Custom endpoint");
+    expect(within(endpointSettings).getByDisplayValue("http://localhost:8080/v1")).toBeTruthy();
+    expect(within(endpointSettings).getByDisplayValue("gemma-4-12b-it")).toBeTruthy();
   });
 
   it("tests Drifty Cloud instead of stale managed local settings when Cloud is selected", async () => {
