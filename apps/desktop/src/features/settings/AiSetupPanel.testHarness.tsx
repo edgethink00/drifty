@@ -10,7 +10,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
   const managedCatalog = [
     { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", recommended: false },
     { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", recommended: true },
-    { id: "drifty-gemma-4-12b-local", tier: "gemma", label: "Gemma 3 12B", detail: "Mid-sized Gemma 3 local model.", downloadSize: "~8.0 GB", diskRequired: "16 GB free", minimumMemory: "24 GB RAM", recommended: false },
+    { id: "drifty-gemma-4-12b-local", tier: "gemma", label: "Gemma 4 12B", detail: "Current Gemma 4 12B local model.", downloadSize: "~7.2 GB", diskRequired: "15 GB free", minimumMemory: "16 GB RAM", recommended: false },
     { id: "drifty-qwen3-6-27b-smart", tier: "smart", label: "Qwen 3.6 27B", detail: "Stronger local model.", downloadSize: "~15 GB", diskRequired: "30 GB free", minimumMemory: "36 GB RAM", recommended: false },
   ] as const;
   const defaultManagedStatus: ManagedLocalAiStatus = {

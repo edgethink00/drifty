@@ -71,6 +71,21 @@
   width: 1.28rem;
 }
 
+.ai-setup-brand-mark--custom {
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface));
+  color: var(--accent);
+}
+
+.ai-setup-brand-mark--custom svg {
+  fill: none;
+  height: 1.28rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 1.28rem;
+}
+
 .ai-setup-choice__copy {
   display: grid;
   gap: 0.35rem;

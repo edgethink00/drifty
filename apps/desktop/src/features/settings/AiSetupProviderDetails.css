@@ -160,6 +160,14 @@
   width: 100%;
 }
 
+.ai-setup-detail--custom .ai-setup-field {
+  max-width: min(100%, 28rem);
+}
+
+.ai-setup-detail--custom .settings-input {
+  width: 100%;
+}
+
 .ai-setup-model-row > div {
   display: flex;
   flex-wrap: wrap;
@@ -169,6 +177,27 @@
 
 .ai-setup-model-action {
   justify-self: start;
+}
+
+.ai-setup-custom-endpoint__header {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.ai-setup-custom-endpoint__header strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.16;
+}
+
+.ai-setup-custom-endpoint__header span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
 }
 
 .ai-managed-status {

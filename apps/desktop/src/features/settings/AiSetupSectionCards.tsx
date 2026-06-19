@@ -6,6 +6,7 @@ import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 export const AI_SETUP_SECTIONS = [
   { id: "drifty", title: "Drifty", subtitle: "Use Drifty Cloud or a managed local model" },
   { id: "openrouter", title: "OpenRouter", subtitle: "Use your own key and model routing" },
+  { id: "custom", title: "Custom endpoint", subtitle: "Use an OpenAI-compatible endpoint" },
 ] as const;
 
 export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
@@ -65,6 +66,16 @@ function BrandMark({ section }: { readonly section: AiSetupSection }) {
       return (
         <span className="ai-setup-brand-mark ai-setup-brand-mark--openrouter" aria-hidden="true">
           <img src={openRouterLogoUrl} alt="" />
+        </span>
+      );
+    case "custom":
+      return (
+        <span className="ai-setup-brand-mark ai-setup-brand-mark--custom" aria-hidden="true">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M5 6.4h6.8a3.6 3.6 0 0 1 0 7.2H8.2" />
+            <path d="M8.2 9.9h6.8" />
+            <path d="M8.2 13.6a3.6 3.6 0 0 1 0-7.2h3.6" />
+          </svg>
         </span>
       );
     default:

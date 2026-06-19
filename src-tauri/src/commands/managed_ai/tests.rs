@@ -16,7 +16,7 @@ fn catalog_uses_current_local_models() {
 
     assert_eq!(
         labels,
-        vec!["Qwen 3.5 2B", "Qwen 3.5 4B", "Gemma 3 12B", "Qwen 3.6 27B"]
+        vec!["Qwen 3.5 2B", "Qwen 3.5 4B", "Gemma 4 12B", "Qwen 3.6 27B"]
     );
 }
 

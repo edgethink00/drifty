@@ -62,11 +62,11 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
   {
     id: "drifty-gemma-4-12b-local",
     tier: "gemma",
-    label: "Gemma 3 12B",
-    detail: "Mid-sized Gemma 3 option for private local classification.",
-    downloadSize: "~8.0 GB",
-    diskRequired: "16 GB free",
-    minimumMemory: "24 GB RAM",
+    label: "Gemma 4 12B",
+    detail: "Current Gemma 4 12B option for private local classification.",
+    downloadSize: "~7.2 GB",
+    diskRequired: "15 GB free",
+    minimumMemory: "16 GB RAM",
     recommended: false,
   },
   {

@@ -11,9 +11,12 @@ import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAi
 
 const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
 const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Individual (Cloud)";
+const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
+const CUSTOM_ENDPOINT_MODEL_OPTION = { value: CUSTOM_ENDPOINT_MODEL_ID, label: "Custom endpoint" } as const satisfies SettingsSelectOption<string>;
 const PROVIDER_OPTIONS = [
   { value: "drifty", label: "Drifty", iconSrc: driftyLogoUrl },
   { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
+  { value: "custom", label: "Custom endpoint", accentColor: "var(--accent)" },
 ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
 
 type AiSetupModelBeingUsedProps = {
@@ -63,32 +66,41 @@ export function AiSetupModelBeingUsed({
   onTestConnection,
   onStartCloudSetup,
 }: AiSetupModelBeingUsedProps) {
-  const selectedModelValue = selectedProvider === "openrouter"
-    ? openRouterPrimaryModel
-    : driftyRoute === "cloud"
-      ? DRIFTY_CLOUD_MODEL_ID
-      : localAiSetup.managedLocalModelId;
-  const modelOptions = selectedProvider === "drifty"
-    ? driftyModelOptions(
-      catalog,
-      managedLocalStatus,
-      actionModelId,
-      cloudSubscribeActionDisabled,
-      cloudSubscribeActionLabel,
-      onInstallModel,
-      onStartCloudSetup,
-    )
-    : openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
+  const selectedModelValue = (() => {
+    switch (selectedProvider) {
+      case "drifty":
+        return driftyRoute === "cloud" ? DRIFTY_CLOUD_MODEL_ID : localAiSetup.managedLocalModelId;
+      case "openrouter":
+        return openRouterPrimaryModel;
+      case "custom":
+        return CUSTOM_ENDPOINT_MODEL_ID;
+      default:
+        return assertNever(selectedProvider);
+    }
+  })();
+  const modelOptions = (() => {
+    switch (selectedProvider) {
+      case "drifty":
+        return driftyModelOptions(
+          catalog,
+          managedLocalStatus,
+          actionModelId,
+          cloudSubscribeActionDisabled,
+          cloudSubscribeActionLabel,
+          onInstallModel,
+          onStartCloudSetup,
+        );
+      case "openrouter":
+        return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
+      case "custom":
+        return [CUSTOM_ENDPOINT_MODEL_OPTION];
+      default:
+        return assertNever(selectedProvider);
+    }
+  })();
 
   const handleProviderChange = (provider: AiSetupSection) => {
     onProviderChange(provider);
-    if (provider === "openrouter") {
-      onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
-      return;
-    }
-    if (driftyRoute === "local") {
-      onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local" }));
-    }
   };
 
   const handleModelChange = (modelId: string) => {
@@ -108,6 +120,10 @@ export function AiSetupModelBeingUsed({
         onProviderChange("openrouter");
         onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
         onOpenRouterPrimaryModelChange(modelId);
+        return;
+      case "custom":
+        onProviderChange("custom");
+        onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted" }));
         return;
       default:
         return assertNever(selectedProvider);
