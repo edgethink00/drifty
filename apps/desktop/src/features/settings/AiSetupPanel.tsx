@@ -202,9 +202,7 @@ export function AiSetupPanel({
             </AiSetupSectionCard>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
-                fallbackCount={modelPickers.openRouterFallbackModels.length}
                 localAiSetup={localAiSetup}
-                primaryModel={modelPickers.openRouterPrimaryModel}
                 onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
                 onLocalAiSetupChange={onLocalAiSetupChange}
               />
@@ -234,7 +232,6 @@ export function AiSetupPanel({
       {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog
           customModel={modelPickers.openRouterCustomModel}
-          fallbackSummary={modelPickers.openRouterSelectionSummary}
           openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
           options={modelPickers.openRouterModelOptions}
           selectedModels={modelPickers.openRouterSelectedModels}

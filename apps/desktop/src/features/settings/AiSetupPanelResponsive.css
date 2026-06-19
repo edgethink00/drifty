@@ -7,6 +7,10 @@
     grid-template-columns: 1fr;
   }
 
+  .ai-setup-key-row {
+    grid-template-columns: 1fr;
+  }
+
   .ai-setup-current-model__controls {
     grid-template-columns: 1fr;
   }
