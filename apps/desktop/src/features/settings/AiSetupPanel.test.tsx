@@ -51,7 +51,10 @@ describe("AiSetupPanel", () => {
     fireEvent.click(modelSelect);
 
     const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
-    expect(within(driftySettings).getByRole("group", { name: /Drifty Cloud settings/i })).toBeTruthy();
+    const cloudSettings = within(driftySettings).getByRole("group", { name: /Drifty Cloud settings/i });
+    const cloudDescription = within(driftySettings).getByText("Access powerful AI models managed by Drifty, no local setup required.");
+    expect(cloudSettings).toBeTruthy();
+    expect(cloudDescription.compareDocumentPosition(cloudSettings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i })).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Gemma 4 12B managed local model/i })).toBeTruthy();
     expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();

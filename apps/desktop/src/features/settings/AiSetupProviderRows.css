@@ -25,10 +25,10 @@
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 0.62rem;
-  grid-template-columns: 2rem minmax(0, 1fr) 0.78rem;
-  min-height: 3.7rem;
-  padding: 0.58rem var(--space-3);
+  gap: 0.56rem;
+  grid-template-columns: 1.8rem minmax(0, 1fr) 0.78rem;
+  min-height: 3.35rem;
+  padding: 0.52rem var(--space-3);
   text-align: left;
   width: 100%;
 }
@@ -46,16 +46,16 @@
   align-items: center;
   border-radius: 8px;
   display: inline-flex;
-  height: 2rem;
+  height: 1.8rem;
   justify-content: center;
-  width: 2rem;
+  width: 1.8rem;
 }
 
 .ai-setup-brand-mark img {
   display: block;
-  height: 1.45rem;
+  height: 1.3rem;
   object-fit: contain;
-  width: 1.45rem;
+  width: 1.3rem;
 }
 
 .ai-setup-brand-mark--drifty {
@@ -67,8 +67,8 @@
 }
 
 .ai-setup-brand-mark--openrouter img {
-  height: 1.28rem;
-  width: 1.28rem;
+  height: 1.16rem;
+  width: 1.16rem;
 }
 
 .ai-setup-brand-mark--custom {
@@ -88,7 +88,6 @@
 
 .ai-setup-choice__copy {
   display: grid;
-  gap: 0.35rem;
   min-width: 0;
 }
 
@@ -102,13 +101,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ai-setup-choice__subtitle {
-  color: var(--text-soft);
-  font-size: 0.72rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
 }
 
 .ai-setup-choice__chevron {

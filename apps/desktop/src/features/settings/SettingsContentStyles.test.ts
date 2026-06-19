@@ -96,16 +96,16 @@ describe("Settings content styles", () => {
     const driftyRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--drifty");
     const openRouterImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--openrouter img");
 
-    expect(toggleRule).toContain("grid-template-columns: 2rem minmax(0, 1fr) 0.78rem;");
-    expect(toggleRule).toContain("min-height: 3.7rem;");
-    expect(toggleRule).toContain("padding: 0.58rem var(--space-3);");
-    expect(brandMarkRule).toContain("height: 2rem;");
-    expect(brandMarkRule).toContain("width: 2rem;");
-    expect(brandImageRule).toContain("height: 1.45rem;");
-    expect(brandImageRule).toContain("width: 1.45rem;");
+    expect(toggleRule).toContain("grid-template-columns: 1.8rem minmax(0, 1fr) 0.78rem;");
+    expect(toggleRule).toContain("min-height: 3.35rem;");
+    expect(toggleRule).toContain("padding: 0.52rem var(--space-3);");
+    expect(brandMarkRule).toContain("height: 1.8rem;");
+    expect(brandMarkRule).toContain("width: 1.8rem;");
+    expect(brandImageRule).toContain("height: 1.3rem;");
+    expect(brandImageRule).toContain("width: 1.3rem;");
     expect(driftyRule).toContain("background: color-mix(in srgb, #7bea56 24%, var(--surface));");
-    expect(openRouterImageRule).toContain("height: 1.28rem;");
-    expect(openRouterImageRule).toContain("width: 1.28rem;");
+    expect(openRouterImageRule).toContain("height: 1.16rem;");
+    expect(openRouterImageRule).toContain("width: 1.16rem;");
   });
 
   it("presents AI setup internal tabs as compact pill controls", () => {
