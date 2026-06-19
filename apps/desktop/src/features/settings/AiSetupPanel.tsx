@@ -15,14 +15,14 @@ import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
-import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
-import { testCloudAiConnection } from "./cloudAiConnectionTest";
+import type { AiConnectionTestResult } from "./aiConnectionTest";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
+import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -74,8 +74,10 @@ export function AiSetupPanel({
   // a fresh install, or OpenRouter once the user has switched their primary to it.
   const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
   const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
-  const [connectionTestResult, setConnectionTestResult] = useState<AiConnectionTestResult | null>(null);
-  const [connectionTestRunning, setConnectionTestRunning] = useState(false);
+  const connectionTest = useAiConnectionTestRunner({
+    localAiSetup,
+    onLocalAiConnectionTestResult,
+  });
   const driftyRoute = localAiSetup.driftyRoute;
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   const managedLocalAi = useManagedLocalAiSetup(expandedSection === "drifty", onLocalAiSetupChange);
@@ -99,31 +101,24 @@ export function AiSetupPanel({
 
   const handleDriftyRouteChange = (route: DriftyRoute) => {
     setExpandedSection("drifty");
-    setConnectionTestResult(null);
+    connectionTest.clearResult();
     onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: route }));
   };
 
   const handleProviderChange = (section: AiSetupSection) => {
-    setConnectionTestResult(null);
+    connectionTest.clearResult();
     setExpandedSection(section);
     selectProvider(section);
   };
 
   const handleToggleSection = (section: AiSetupSection) => {
-    setConnectionTestResult(null);
+    connectionTest.clearResult();
     const willExpand = expandedSection !== section;
     setExpandedSection(willExpand ? section : null);
   };
 
   const handleTestConnection = async () => {
-    if (connectionTestRunning) return;
-    setConnectionTestRunning(true);
-    setConnectionTestResult(null);
-    const isCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
-    const result = isCloudRoute ? await testCloudAiConnection() : await testLocalAiConnection(localAiSetup);
-    setConnectionTestResult(result);
-    if (!isCloudRoute) onLocalAiConnectionTestResult(localAiSetup, result);
-    setConnectionTestRunning(false);
+    await connectionTest.run();
   };
 
   return (
@@ -139,10 +134,10 @@ export function AiSetupPanel({
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
-            connectionTestKind={connectionTestResult?.kind ?? null}
-            connectionTestMessage={connectionTestResult?.message ?? null}
-            connectionTestRunning={connectionTestRunning}
-            connectionTestDisabled={connectionTestRunning || !isActiveProviderTestable(localAiSetup)}
+            connectionTestKind={connectionTest.result?.kind ?? null}
+            connectionTestMessage={connectionTest.result?.message ?? null}
+            connectionTestRunning={connectionTest.running}
+            connectionTestDisabled={connectionTest.running || !isActiveProviderTestable(localAiSetup)}
             driftyRoute={driftyRoute}
             localAiSetup={localAiSetup}
             managedLocalStatus={managedLocalAi.status}

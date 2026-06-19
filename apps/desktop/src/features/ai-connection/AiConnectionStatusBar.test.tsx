@@ -47,14 +47,14 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
-  it("returns a warning tone for network issues", () => {
+  it("returns a warning tone for connection issues", () => {
     const status = resolveAiConnectionStatus(statusInput({
       cloudIssueKind: "network",
     }));
 
     expect(status).toMatchObject({
       tone: "warning",
-      label: "Network issue",
+      label: "Connection issue",
       providerLabel: "Cloud AI",
     });
   });
@@ -123,7 +123,7 @@ describe("AiConnectionStatusBar", () => {
       <AiConnectionStatusBar
         status={{
           tone: "warning",
-          label: "Network issue",
+          label: "Connection issue",
           providerLabel: "Cloud AI",
         }}
         onOpenSettings={onOpenSettings}
