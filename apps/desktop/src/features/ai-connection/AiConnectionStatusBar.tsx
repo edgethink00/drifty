@@ -124,7 +124,7 @@ function toneForIssueKind(issueKind: AiConnectionIssueKind): AiConnectionTone {
 function labelForIssueKind(issueKind: AiConnectionIssueKind): string {
   switch (issueKind) {
     case "network":
-      return "Network issue";
+      return "Connection issue";
     case "provider":
       return "Issue";
     default:
