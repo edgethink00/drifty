@@ -5432,6 +5432,7 @@ export default function App() {
           onCheckAccessibility={handleCheckAccessibility}
           onRequestAccessibility={handleRequestAccessibility}
           onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
+          onLocalAiSetupChange={setLocalAiSetup}
           cloudTrialStartedNotice={cloudTrialStartedNotice}
           onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
           onStartCloudTrialWithEmail={() => {

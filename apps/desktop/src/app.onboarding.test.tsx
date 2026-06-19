@@ -4,6 +4,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
+import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 
 const {
   authState,
@@ -24,6 +25,8 @@ const {
   billingMocks,
   appFeatureSwitches,
   startupSettingsClient,
+  invokeMock,
+  sendNotificationMock,
 } = vi.hoisted(() => ({
   authState: {
     user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string } | null,
@@ -69,6 +72,8 @@ const {
     isAvailable: vi.fn(),
     setOpenAtLoginEnabled: vi.fn(),
   },
+  invokeMock: vi.fn(),
+  sendNotificationMock: vi.fn(),
 }));
 
 vi.mock("./features/auth/AuthContext", () => ({
@@ -95,7 +100,7 @@ vi.mock("./features/profile/profileService", () => ({
 vi.mock("@tauri-apps/plugin-notification", () => ({
   isPermissionGranted,
   requestPermission,
-  sendNotification: vi.fn(),
+  sendNotification: sendNotificationMock,
 }));
 
 vi.mock("./lib/api/systemSettingsClient", () => ({
@@ -104,6 +109,10 @@ vi.mock("./lib/api/systemSettingsClient", () => ({
 
 vi.mock("./lib/api/startupSettingsClient", () => ({
   startupSettingsClient,
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
 }));
 
 vi.mock("./lib/api/accessibilityClient", () => ({
@@ -181,6 +190,59 @@ function makeTrackerStatus(overrides: Partial<TrackerStatus> = {}): TrackerStatu
     idleDetectionAvailable: null,
     ...overrides,
   };
+}
+
+const managedCatalog = [
+  { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", recommended: false },
+  { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", recommended: true },
+] as const;
+
+function installManagedModel(modelId: string): ManagedLocalAiStatus {
+  return {
+    state: "installed",
+    selectedModelId: modelId,
+    installedModels: [{ id: modelId, artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}` }],
+    baseUrl: "http://127.0.0.1:39217/v1",
+    model: "drifty-qwen3.5-4b-local",
+    message: "Managed local model downloaded.",
+    artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
+    progress: null,
+    errorKind: null,
+  };
+}
+
+function configureManagedAiMocks() {
+  let managedStatus: ManagedLocalAiStatus = {
+    state: "not_installed",
+    selectedModelId: null,
+    installedModels: [],
+    baseUrl: null,
+    model: null,
+    message: "Choose a local model and Drifty will download it inside the app.",
+    artifactDir: null,
+    progress: null,
+    errorKind: null,
+  };
+  invokeMock.mockImplementation((command: string, args?: unknown) => {
+    switch (command) {
+      case "managed_ai_catalog":
+        return Promise.resolve(managedCatalog);
+      case "managed_ai_status":
+        return Promise.resolve(managedStatus);
+      case "managed_ai_install": {
+        const modelId = modelIdFromArgs(args);
+        managedStatus = installManagedModel(modelId);
+        return Promise.resolve(managedStatus);
+      }
+      default:
+        return Promise.resolve({});
+    }
+  });
+}
+
+function modelIdFromArgs(args: unknown): string {
+  if (!args || typeof args !== "object" || !("modelId" in args) || typeof args.modelId !== "string") return "";
+  return args.modelId;
 }
 
 async function clickEnabledAction(name: RegExp = /^next$/i) {
@@ -288,6 +350,7 @@ describe("App onboarding", () => {
     accessibilityRequestAccess.mockResolvedValue({ granted: false });
     startupSettingsClient.isAvailable.mockReturnValue(false);
     startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue(true);
+    configureManagedAiMocks();
     trackerGetHourlySummary.mockResolvedValue([]);
     openSystemSettingsPane.mockResolvedValue(true);
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
@@ -775,31 +838,96 @@ describe("App onboarding", () => {
     expect(openSystemSettingsPane).not.toHaveBeenCalledWith("accessibility");
   });
 
-  it("routes Local AI through server URL data handling review after a successful connection", async () => {
+  it("lets Local AI onboarding continue during managed model download and applies the completed model", async () => {
+    setTauriRuntime();
+    const installDeferred = createDeferred<ManagedLocalAiStatus>();
+    let managedStatus: ManagedLocalAiStatus = {
+      state: "not_installed",
+      selectedModelId: null,
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Choose a local model and Drifty will download it inside the app.",
+      artifactDir: null,
+      progress: null,
+      errorKind: null,
+    };
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      switch (command) {
+        case "managed_ai_catalog":
+          return Promise.resolve(managedCatalog);
+        case "managed_ai_status":
+          return Promise.resolve(managedStatus);
+        case "managed_ai_install": {
+          const modelId = modelIdFromArgs(args);
+          managedStatus = {
+            state: "installing",
+            selectedModelId: modelId,
+            installedModels: [],
+            baseUrl: null,
+            model: null,
+            message: "Downloading managed local model...",
+            artifactDir: null,
+            progress: null,
+            errorKind: null,
+          };
+          return installDeferred.promise;
+        }
+        default:
+          return Promise.resolve({});
+      }
+    });
     render(<App />);
 
     await chooseLocalAiSetup();
 
-    const serverDialog = await screen.findByRole("dialog", { name: /add your local ai server url/i });
-    fireEvent.change(within(serverDialog).getByRole("textbox", { name: /server url/i }), {
-      target: { value: "http://localhost:3000" },
-    });
+    const localDialog = await screen.findByRole("dialog", { name: /set up your local ai model/i });
+    expect(within(localDialog).queryByRole("textbox", { name: /server url/i })).toBeNull();
     expect(screen.queryByLabelText(/openrouter api key/i)).toBeNull();
-    await clickEnabledAction(/^test connection$/i);
-
-    expect(await screen.findByRole("dialog", { name: /testing connection/i })).toBeTruthy();
-    expect(screen.getByRole("list", { name: /connection checks/i })).toBeTruthy();
-    expect(screen.getByText(/server reachable/i)).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /connection successful/i })).toBeTruthy();
-    }, { timeout: 6000 });
+    const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
+    fireEvent.click(within(defaultModel).getByRole("button", { name: /^download$/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+    expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
 
     expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
-    expect(screen.getByText(/activity goes to http:\/\/localhost:3000, not to drifty cloud/i)).toBeTruthy();
+    expect(screen.getByText(/activity goes to the selected local model managed by drifty, not to drifty cloud/i)).toBeTruthy();
 
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
+    expect(screen.getByText(/local model downloading/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
+    });
+    expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({
+      provider: "managed_local",
+      driftyRoute: "local",
+      managedLocalModelId: "drifty-qwen3-5-4b-default",
+      managedLocalBaseUrl: "",
+      managedLocalModel: "",
+    });
+
+    const completedStatus = installManagedModel("drifty-qwen3-5-4b-default");
+    managedStatus = completedStatus;
+    installDeferred.resolve(completedStatus);
+
+    await waitFor(() => {
+      expect(sendNotificationMock).toHaveBeenCalledWith({
+        title: "Local AI model ready",
+        body: "Qwen 3.5 4B is ready for private classification.",
+      });
+    });
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({
+        provider: "managed_local",
+        driftyRoute: "local",
+        managedLocalModelId: "drifty-qwen3-5-4b-default",
+        managedLocalBaseUrl: "http://127.0.0.1:39217/v1",
+        managedLocalModel: "drifty-qwen3.5-4b-local",
+      });
+    });
   });
 
   it("routes BYOK through OpenRouter key data handling review without exposing the raw key", async () => {
