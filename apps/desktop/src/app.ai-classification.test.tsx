@@ -425,6 +425,17 @@ describe("App AI classification controls", () => {
     });
   });
 
+  it("does not read AI classification usage while refreshing dashboard dates", async () => {
+    render(<App />);
+
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    trackerClient.getTimeline.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /show previous today/i }));
+
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    expect(aiClassificationMocks.getAiClassificationUsageSummary).not.toHaveBeenCalled();
+  });
+
   it("keeps long classification activity detail titles recoverable", async () => {
     const selectedDay = todayIsoDate();
     const longWindowTitle = "Quarterly classification QA reproduction title - ".repeat(10) + "final window title segment";

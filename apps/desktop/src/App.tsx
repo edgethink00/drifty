@@ -64,7 +64,7 @@ import {
   type LocalAiConnectionCheck,
 } from "./features/ai-connection/aiConnectionHealth";
 import { collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, getAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
@@ -328,8 +328,8 @@ function loadClassificationMetrics(day: string): Promise<ClassificationMetrics |
     : Promise.resolve(null);
 }
 
-function loadAiClassificationUsage(day: string): Promise<AiClassificationUsageSummary | null> {
-  return getAiClassificationUsageSummary(day).catch(() => null);
+function loadAiClassificationUsage(_day: string): Promise<AiClassificationUsageSummary | null> {
+  return Promise.resolve(null);
 }
 
 function isRendererFocused(): boolean {
