@@ -131,14 +131,17 @@ describe("Settings content styles", () => {
   it("places managed local model specs on the right with actions under the copy", () => {
     const aiSetupStyles = readAiSetupStyles();
     const modelRule = cssRule(aiSetupStyles, ".ai-managed-model");
+    const copyRule = cssRule(aiSetupStyles, ".ai-managed-model__copy");
     const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
     const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__actions .settings-btn.ai-managed-model__delete-action");
 
-    // Copy + actions stack on the left; tier and specs span the right; no divider.
     expect(modelRule).toContain('"copy meta"');
     expect(modelRule).toContain('"actions meta"');
+    expect(copyRule).toContain("display: flex;");
+    expect(copyRule).toContain("align-items: baseline;");
+    expect(copyRule).toContain("flex-wrap: wrap;");
     expect(metaRule).toContain("justify-items: end;");
     expect(actionsRule).toContain("display: flex;");
     expect(actionsRule).not.toContain("border-top:");
