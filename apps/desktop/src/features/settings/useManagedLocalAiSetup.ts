@@ -99,7 +99,7 @@ export function useManagedLocalAiSetup(
     if (actionModelId || status?.state === "installing" || status?.state === "starting") return;
     setActionModelId(modelId);
     if (options.optimisticInstalling) {
-      setStatus(installingManagedLocalAiStatus(modelId));
+      setStatus(installingManagedLocalAiStatus(modelId, status?.installedModels ?? []));
     }
     try {
       const nextStatus = await action(modelId);
@@ -110,7 +110,7 @@ export function useManagedLocalAiSetup(
     } finally {
       setActionModelId(null);
     }
-  }, [actionModelId, status?.state, syncManagedSetup]);
+  }, [actionModelId, status?.installedModels, status?.state, syncManagedSetup]);
 
   return {
     actionModelId,

@@ -182,7 +182,7 @@ function driftyModelOptions(
       const selectable = isSelectableManagedModel(model.id, status);
       if (selectable) return { value: model.id, label: model.label };
       const installing = status?.selectedModelId === model.id && status.state === "installing";
-      const failed = status?.selectedModelId === model.id && status.state === "error";
+      const failed = status?.selectedModelId === model.id && status.state === "error" && isRetryableManagedModelError(status.errorKind);
       return {
         value: model.id,
         label: model.label,
@@ -205,6 +205,7 @@ function modelActionLabel(isBusy: boolean, failed: boolean, percent: number | nu
 }
 
 function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
+  if (status?.installedModels.some((item) => item.id === modelId)) return true;
   if (status?.selectedModelId !== modelId) return false;
   switch (status.state) {
     case "installed":
@@ -218,6 +219,10 @@ function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus 
     default:
       return assertNever(status.state);
   }
+}
+
+function isRetryableManagedModelError(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
+  return errorKind === "download_failed" || errorKind === "model_artifact_missing";
 }
 
 class AiSetupModelProviderError extends Error {

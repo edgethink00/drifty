@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     require_model, runtime, status_artifact_dir, ManagedAiError, ManagedAiInstallState,
-    ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL,
+    ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL, MANAGED_MODELS,
 };
 
 const STATUS_FILE_NAME: &str = "status.json";
@@ -39,14 +39,32 @@ impl ManagedAiDownloadProgress {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ManagedAiInstalledModel {
+    pub(super) id: String,
+    pub(super) artifact_dir: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedAiStatusErrorKind {
+    DownloadFailed,
+    ModelArtifactMissing,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManagedAiStatus {
     pub(super) state: ManagedAiInstallState,
     pub(super) selected_model_id: Option<String>,
+    #[serde(default)]
+    pub(super) installed_models: Vec<ManagedAiInstalledModel>,
     pub(super) base_url: Option<String>,
     pub(super) model: Option<String>,
     pub(super) message: String,
     pub(super) artifact_dir: Option<String>,
     pub(super) progress: Option<ManagedAiDownloadProgress>,
+    #[serde(default)]
+    pub(super) error_kind: Option<ManagedAiStatusErrorKind>,
 }
 
 pub(super) fn status_for_spec(
@@ -58,11 +76,46 @@ pub(super) fn status_for_spec(
     ManagedAiStatus {
         state,
         selected_model_id: Some(spec.id.to_string()),
+        installed_models: Vec::new(),
         base_url: Some(MANAGED_BASE_URL.to_string()),
         model: Some(spec.runtime_model.to_string()),
         message: message.to_string(),
         artifact_dir: artifact_dir.map(|path| path.to_string_lossy().into_owned()),
         progress: None,
+        error_kind: None,
+    }
+}
+
+pub(super) fn status_for_model_error(
+    spec: ManagedAiModelSpec,
+    artifact_dir: Option<PathBuf>,
+    message: &str,
+    error_kind: ManagedAiStatusErrorKind,
+) -> ManagedAiStatus {
+    ManagedAiStatus {
+        state: ManagedAiInstallState::Error,
+        selected_model_id: Some(spec.id.to_string()),
+        installed_models: Vec::new(),
+        base_url: Some(MANAGED_BASE_URL.to_string()),
+        model: Some(spec.runtime_model.to_string()),
+        message: message.to_string(),
+        artifact_dir: artifact_dir.map(|path| path.to_string_lossy().into_owned()),
+        progress: None,
+        error_kind: Some(error_kind),
+    }
+}
+
+pub(super) fn status_for_global_error(message: &str) -> ManagedAiStatus {
+    ManagedAiStatus {
+        state: ManagedAiInstallState::Error,
+        selected_model_id: None,
+        installed_models: Vec::new(),
+        base_url: None,
+        model: None,
+        message: message.to_string(),
+        artifact_dir: None,
+        progress: None,
+        error_kind: None,
     }
 }
 
@@ -73,18 +126,20 @@ pub(super) fn status_for_download_progress(
     ManagedAiStatus {
         state: ManagedAiInstallState::Installing,
         selected_model_id: Some(spec.id.to_string()),
+        installed_models: Vec::new(),
         base_url: Some(MANAGED_BASE_URL.to_string()),
         model: Some(spec.runtime_model.to_string()),
         message: format!("Downloading managed local model... ({}%)", progress.percent),
         artifact_dir: None,
         progress: Some(progress),
+        error_kind: None,
     }
 }
 
 pub(super) fn read_status(root: &Path) -> Result<ManagedAiStatus, ManagedAiError> {
     let status_path = root.join(STATUS_FILE_NAME);
     if !status_path.exists() {
-        return Ok(default_status());
+        return status_with_installed_models(root, default_status());
     }
     let status = serde_json::from_str(&fs::read_to_string(status_path)?)?;
     normalize_status_artifact_dir(root, status)
@@ -103,12 +158,22 @@ pub(super) fn default_status() -> ManagedAiStatus {
     ManagedAiStatus {
         state: ManagedAiInstallState::NotInstalled,
         selected_model_id: None,
+        installed_models: Vec::new(),
         base_url: None,
         model: None,
         message: "Choose a local model and Drifty will download it inside the app.".to_string(),
         artifact_dir: None,
         progress: None,
+        error_kind: None,
     }
+}
+
+pub(super) fn status_with_installed_models(
+    root: &Path,
+    mut status: ManagedAiStatus,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    status.installed_models = installed_models(root)?;
+    Ok(status)
 }
 
 fn normalize_status_artifact_dir(
@@ -131,6 +196,7 @@ fn normalize_status_artifact_dir(
         {
             status.state = ManagedAiInstallState::Error;
             status.message = MANAGED_ASSETS_MISSING_MESSAGE.to_string();
+            status.error_kind = Some(ManagedAiStatusErrorKind::ModelArtifactMissing);
         }
         if matches!(
             status.state,
@@ -141,5 +207,20 @@ fn normalize_status_artifact_dir(
     } else {
         status.artifact_dir = None;
     }
-    Ok(status)
+    status_with_installed_models(root, status)
+}
+
+fn installed_models(root: &Path) -> Result<Vec<ManagedAiInstalledModel>, ManagedAiError> {
+    MANAGED_MODELS
+        .iter()
+        .copied()
+        .filter_map(|spec| match status_artifact_dir(root, spec) {
+            Ok(Some(path)) => Some(Ok(ManagedAiInstalledModel {
+                id: spec.id.to_string(),
+                artifact_dir: path.to_string_lossy().into_owned(),
+            })),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
 }

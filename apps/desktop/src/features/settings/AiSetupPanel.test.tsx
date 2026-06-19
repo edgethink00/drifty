@@ -118,6 +118,26 @@ describe("AiSetupPanel", () => {
     expect(invokeMock).not.toHaveBeenCalledWith("managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
   });
 
+  it("keeps previously downloaded managed local models selectable after another model is installed", async () => {
+    renderPanel();
+
+    const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
+    const qwenDefault = within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i });
+    fireEvent.click(within(qwenDefault).getByRole("button", { name: /^Download$/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+
+    const gemma = within(localSettings).getByRole("article", { name: /Gemma 3 12B managed local model/i });
+    fireEvent.click(within(gemma).getByRole("button", { name: /^Download$/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-gemma-4-12b-local" }));
+
+    expect(within(qwenDefault).getByRole("button", { name: /^Show in Finder$/i })).toBeTruthy();
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+    const qwenOption = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i });
+    if (!(qwenOption instanceof HTMLButtonElement)) throw new Error("Installed managed model option should be a button.");
+    expect(qwenOption.disabled).toBe(false);
+  });
+
   it("downloads a disabled managed local model from the global model picker action", async () => {
     renderPanel();
 
