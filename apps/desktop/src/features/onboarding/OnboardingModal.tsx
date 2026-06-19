@@ -3,7 +3,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type FormEvent,
+  type SetStateAction,
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
@@ -14,6 +16,8 @@ import { NudgesStep } from "./components/NudgesStep";
 import { StartupLoginPreference } from "./components/StartupLoginPreference";
 import { TypewriterSequence } from "./components/TypewriterSequence";
 import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
+import type { LocalAiSetupState } from "../settings/localAiSetup";
+import { useManagedLocalAiSetup } from "../settings/useManagedLocalAiSetup";
 import {
   MAIN_ACTIVITY_OPTIONS,
   MAX_MAIN_ACTIVITY_SELECTIONS,
@@ -27,6 +31,7 @@ import {
   readUserOnboardingState,
   type UserOnboardingState,
 } from "./onboardingState";
+import { OnboardingManagedLocalAiSetup } from "./OnboardingManagedLocalAiSetup";
 import "./onboarding.css";
 
 const ONBOARDING_STORAGE_ERROR_MESSAGE = "Unable to save setup locally. Check storage permissions and try again.";
@@ -78,9 +83,14 @@ const SIMPLE_SETUP_STEPS: OnboardingStepDef[] = [
   { id: "ready", label: "Ready" },
 ];
 
-// Local AI and BYOK paths keep their separate connection inputs, run a check,
-// then review data handling before the ready step.
-const SELF_HOST_STEPS: OnboardingStepDef[] = [
+const LOCAL_AI_STEPS: OnboardingStepDef[] = [
+  { id: "connect_server", label: "Connect" },
+  { id: "self_data_review", label: "Data" },
+  { id: "ready", label: "Ready" },
+];
+
+// BYOK keeps its separate key input, runs a check, then reviews data handling.
+const BYOK_STEPS: OnboardingStepDef[] = [
   { id: "connect_server", label: "Connect" },
   { id: "test_connection", label: "Test" },
   { id: "self_data_review", label: "Data" },
@@ -89,7 +99,8 @@ const SELF_HOST_STEPS: OnboardingStepDef[] = [
 
 function getOnboardingSteps(setupChoice: SetupChoice | null): OnboardingStepDef[] {
   if (setupChoice === "simple") return [...BASE_STEPS, ...SIMPLE_SETUP_STEPS];
-  if (setupChoice === "local_ai" || setupChoice === "byok") return [...BASE_STEPS, ...SELF_HOST_STEPS];
+  if (setupChoice === "local_ai") return [...BASE_STEPS, ...LOCAL_AI_STEPS];
+  if (setupChoice === "byok") return [...BASE_STEPS, ...BYOK_STEPS];
   return BASE_STEPS;
 }
 
@@ -117,12 +128,6 @@ type ConnectionCheckStatus = "pending" | "loading" | "success" | "error";
 type ConnectionPhase = "idle" | "testing" | "success" | "failed";
 type ConnectionCheck = { id: string; label: string };
 
-const LOCAL_AI_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
-  { id: "reachable", label: "Server reachable" },
-  { id: "detected", label: "Drifty server detected" },
-  { id: "model", label: "Local model endpoint ready" },
-];
-
 const BYOK_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
   { id: "key", label: "OpenRouter key shape valid" },
   { id: "provider", label: "Provider reachable" },
@@ -141,6 +146,53 @@ type NotificationPermissionState = "unknown" | "checking" | "granted" | "denied"
 
 export function hasCompletedUserOnboarding(userId: string, fallbackUserIds: readonly string[] = []): boolean {
   return readUserOnboardingState(userId, fallbackUserIds)?.completed === true;
+}
+
+function isManagedLocalReady(status: ReturnType<typeof useManagedLocalAiSetup>["status"]): status is NonNullable<ReturnType<typeof useManagedLocalAiSetup>["status"]> & {
+  readonly selectedModelId: string;
+  readonly baseUrl: string;
+  readonly model: string;
+} {
+  if (!status?.selectedModelId || !status.baseUrl || !status.model) return false;
+  switch (status.state) {
+    case "installed":
+    case "starting":
+    case "running":
+      return true;
+    case "installing":
+    case "error":
+    case "not_installed":
+      return false;
+    default:
+      return assertNeverManagedStatus(status.state);
+  }
+}
+
+function hasManagedLocalInstallStarted(status: ReturnType<typeof useManagedLocalAiSetup>["status"]): boolean {
+  if (!status?.selectedModelId) return false;
+  switch (status.state) {
+    case "installed":
+    case "starting":
+    case "running":
+    case "installing":
+      return true;
+    case "error":
+    case "not_installed":
+      return false;
+    default:
+      return assertNeverManagedStatus(status.state);
+  }
+}
+
+class ManagedLocalStatusError extends Error {
+  constructor(readonly state: string) {
+    super(`Unhandled managed local AI status: ${state}`);
+    this.name = "ManagedLocalStatusError";
+  }
+}
+
+function assertNeverManagedStatus(value: never): never {
+  throw new ManagedLocalStatusError(String(value));
 }
 
 export function saveUserOnboardingState({
@@ -210,6 +262,7 @@ export function OnboardingModal({
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
+  onLocalAiSetupChange,
   cloudTrialStartedNotice,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithEmail,
@@ -227,6 +280,7 @@ export function OnboardingModal({
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
+  onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   onStartCloudTrialWithGoogle: () => void;
   onStartCloudTrialWithEmail: () => void;
@@ -243,7 +297,6 @@ export function OnboardingModal({
   // Self-host server connection state. The raw API key lives only in component
   // memory and is never persisted; after a successful test we keep a masked
   // version for display.
-  const [serverUrl, setServerUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
   const [connectionPhase, setConnectionPhase] = useState<ConnectionPhase>("idle");
@@ -293,8 +346,10 @@ export function OnboardingModal({
     notificationPermission === "granted" || notificationPermission === "unavailable";
   const isFinalStep = stepIndex === steps.length - 1;
   const isByokSetup = setupChoice === "byok";
-  const connectionChecks = isByokSetup ? BYOK_CONNECTION_CHECKS : LOCAL_AI_CONNECTION_CHECKS;
-  const serverUrlIsValid = /^https?:\/\//i.test(serverUrl.trim());
+  const managedLocalAi = useManagedLocalAiSetup(setupChoice === "local_ai", onLocalAiSetupChange, true);
+  const managedLocalReady = isManagedLocalReady(managedLocalAi.status);
+  const managedLocalStarted = hasManagedLocalInstallStarted(managedLocalAi.status);
+  const connectionChecks = BYOK_CONNECTION_CHECKS;
   const apiKeyIsValid = apiKey.trim().toLowerCase().startsWith("sk-or-");
 
   const canAdvance = (() => {
@@ -310,7 +365,7 @@ export function OnboardingModal({
       case "data_review":
         return true;
       case "connect_server":
-        if (setupChoice === "local_ai") return serverUrlIsValid;
+        if (setupChoice === "local_ai") return managedLocalStarted;
         if (setupChoice === "byok") return apiKeyIsValid;
         return false;
       case "test_connection":
@@ -344,7 +399,8 @@ export function OnboardingModal({
       case "job":
         return null;
       case "connect_server":
-        return isByokSetup ? "Enter an OpenRouter key that starts with sk-or-." : "Server URL must start with http:// or https://.";
+        if (setupChoice === "local_ai") return "Start a local model download to continue.";
+        return "Enter an OpenRouter key that starts with sk-or-.";
       case "test_connection":
         if (connectionPhase === "failed") return "Connection failed. Try again or edit your details.";
         return "Checking your connection.";
@@ -356,7 +412,8 @@ export function OnboardingModal({
       default:
         return null;
     }
-  }, [accessibilityRecheckPending, canAdvance, connectionPhase, isByokSetup, step]);
+  }, [accessibilityRecheckPending, canAdvance, connectionPhase, setupChoice, step]);
+  const localAiSummaryLabel = managedLocalReady ? "Local model ready" : "Local model downloading";
 
   const title = useMemo(() => {
     switch (step) {
@@ -371,7 +428,7 @@ export function OnboardingModal({
       case "data_review":
         return "Review your data settings";
       case "connect_server":
-        return isByokSetup ? "Add your OpenRouter key" : "Add your Local AI server URL";
+        return isByokSetup ? "Add your OpenRouter key" : "Set up your Local AI model";
       case "test_connection":
         return connectionPhase === "success"
           ? "Connection successful"
@@ -400,6 +457,20 @@ export function OnboardingModal({
   const subtitle = step === "choose_setup"
     ? "Start with Drifty Cloud, run AI locally, or bring your own AI key. You can change this later."
     : "";
+
+  useEffect(() => {
+    if (setupChoice !== "local_ai") return;
+    const status = managedLocalAi.status;
+    if (!isManagedLocalReady(status)) return;
+    onLocalAiSetupChange((current) => ({
+      ...current,
+      provider: "managed_local",
+      driftyRoute: "local",
+      managedLocalModelId: status.selectedModelId,
+      managedLocalBaseUrl: status.baseUrl,
+      managedLocalModel: status.model,
+    }));
+  }, [managedLocalAi.status, onLocalAiSetupChange, setupChoice]);
 
   useEffect(() => {
     onRefreshTrackerRef.current = onRefreshTracker;
@@ -507,10 +578,8 @@ export function OnboardingModal({
   useEffect(() => {
     if (step !== "test_connection") return;
 
-    const checks = setupChoice === "byok" ? BYOK_CONNECTION_CHECKS : LOCAL_AI_CONNECTION_CHECKS;
-    const failIndex = setupChoice === "byok"
-      ? apiKeyIsValid ? -1 : 0
-      : serverUrlIsValid ? -1 : 0;
+    const checks = BYOK_CONNECTION_CHECKS;
+    const failIndex = apiKeyIsValid ? -1 : 0;
 
     setConnectionPhase("testing");
     setConnectionFailureLabel(null);
@@ -549,7 +618,7 @@ export function OnboardingModal({
       cancelled = true;
       for (const timerId of timers) window.clearTimeout(timerId);
     };
-  }, [apiKey, apiKeyIsValid, serverUrlIsValid, setupChoice, step, testRunId]);
+  }, [apiKey, apiKeyIsValid, setupChoice, step, testRunId]);
 
   function resetConnectionValidation() {
     setConnectionPhase("idle");
@@ -695,11 +764,6 @@ export function OnboardingModal({
     setMaskedApiKey(null);
   }
 
-  function handleServerUrlChange(value: string) {
-    setServerUrl(value);
-    resetConnectionValidation();
-  }
-
   function handleApiKeyChange(value: string) {
     setApiKey(value);
     resetConnectionValidation();
@@ -712,7 +776,7 @@ export function OnboardingModal({
       setStorageError(null);
       setSetupError(null);
       if (!canAdvance) return;
-      if (step === "connect_server") {
+      if (step === "connect_server" && setupChoice === "byok") {
         setStep("test_connection");
         return;
       }
@@ -732,7 +796,7 @@ export function OnboardingModal({
       case "choose_setup":
         return "Continue";
       case "connect_server":
-        return "Test connection";
+        return setupChoice === "byok" ? "Test connection" : "Continue";
       case "test_connection":
         return "Continue";
       case "self_data_review":
@@ -837,7 +901,7 @@ export function OnboardingModal({
                   </span>
                   <span className="onb-setup-choice__copy">
                     <span className="onb-setup-choice__title">Local AI</span>
-                    <span className="onb-setup-choice__desc">Run AI on your own local server for maximum control.</span>
+                    <span className="onb-setup-choice__desc">Download a Drifty-managed model and run classification locally.</span>
                   </span>
                 </button>
                 <button
@@ -980,10 +1044,18 @@ export function OnboardingModal({
                 <p className="onb-step-desc">
                   {isByokSetup
                     ? "Enter the OpenRouter key Drifty uses for focus insights. The key stays masked during setup."
-                    : "Enter the localhost address for your Local AI server."}
+                    : "Choose a managed local model. Drifty downloads it inside the app and keeps classification on this Mac."}
                 </p>
-                <div className="onb-server-form">
-                  {isByokSetup ? (
+                {setupChoice === "local_ai" ? (
+                  <OnboardingManagedLocalAiSetup
+                    actionModelId={managedLocalAi.actionModelId}
+                    catalog={managedLocalAi.catalog}
+                    loading={managedLocalAi.loading}
+                    status={managedLocalAi.status}
+                    onInstallModel={managedLocalAi.installModel}
+                  />
+                ) : (
+                  <div className="onb-server-form">
                     <label className="onb-field">
                       <span className="onb-field__label">OpenRouter API key</span>
                       <span className="onb-secure-field">
@@ -1014,36 +1086,8 @@ export function OnboardingModal({
                           : "Drifty never displays the raw key after you leave this field."}
                       </span>
                     </label>
-                  ) : (
-                    <label className="onb-field">
-                      <span className="onb-field__label">Local AI server URL</span>
-                      <input
-                        className={`onb-field__input${
-                          serverUrl.trim() && !serverUrlIsValid ? " onb-field__input--invalid" : ""
-                        }`}
-                        type="url"
-                        inputMode="url"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        placeholder="http://localhost:3000"
-                        value={serverUrl}
-                        onChange={(event) => handleServerUrlChange(event.target.value)}
-                        aria-label="Server URL"
-                        aria-invalid={serverUrl.trim() && !serverUrlIsValid ? "true" : "false"}
-                      />
-                      <span
-                        className={`onb-field__hint${
-                          serverUrl.trim() && !serverUrlIsValid ? " onb-field__hint--error" : ""
-                        }`}
-                      >
-                        {serverUrl.trim() && !serverUrlIsValid
-                          ? "Server URL must start with http:// or https://."
-                          : "Use the local Drifty AI server address you control."}
-                      </span>
-                    </label>
-                  )}
-                </div>
+                  </div>
+                )}
               </>
             ) : null}
 
@@ -1104,7 +1148,7 @@ export function OnboardingModal({
                 <p className="onb-step-desc">
                   {isByokSetup
                     ? "With BYOK, Drifty sends minimized activity context to your chosen AI provider through OpenRouter using your masked key."
-                    : "With Local AI, activity context stays pointed at the server you control instead of Drifty Cloud."}
+                    : "With Local AI, minimized activity context stays on this Mac and is classified by the selected local model."}
                 </p>
                 <div className="onb-data-cards" aria-label="Self-hosted data handling summary">
                   <div className="onb-data-card">
@@ -1112,7 +1156,7 @@ export function OnboardingModal({
                     <p className="onb-data-card__desc">
                       {isByokSetup
                         ? "Minimized classification context goes to OpenRouter for the model call."
-                        : `Activity goes to ${serverUrl.trim() || "your Local AI server"}, not to Drifty Cloud.`}
+                        : "Activity goes to the selected local model managed by Drifty, not to Drifty Cloud."}
                     </p>
                   </div>
                   <div className="onb-data-card">
@@ -1120,7 +1164,7 @@ export function OnboardingModal({
                     <p className="onb-data-card__desc">
                       {isByokSetup
                         ? "You manage the provider key, model access, and provider billing."
-                        : "You manage where the server runs, how it stores data, and who can access it."}
+                        : "Drifty manages the local runtime files; you control whether the local model is installed."}
                     </p>
                   </div>
                   <div className="onb-data-card">
@@ -1128,7 +1172,7 @@ export function OnboardingModal({
                     <p className="onb-data-card__desc">
                       {isByokSetup
                         ? `A masked OpenRouter key${maskedApiKey ? ` (${maskedApiKey})` : ""} plus local permissions for activity context.`
-                        : "Local permissions to read activity context and a reachable Local AI server URL."}
+                        : "Local permissions to read activity context and a downloaded managed local model."}
                     </p>
                   </div>
                 </div>
@@ -1211,7 +1255,7 @@ export function OnboardingModal({
                     </li>
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
-                      {setupChoice === "byok" ? "OpenRouter key connected" : "Server URL connected"}
+                      {setupChoice === "byok" ? "OpenRouter key connected" : localAiSummaryLabel}
                     </li>
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
