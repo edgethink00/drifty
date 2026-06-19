@@ -4,9 +4,9 @@ import driftyLogoUrl from "../../assets/drifty-icon.png";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 
 export const AI_SETUP_SECTIONS = [
-  { id: "drifty", title: "Drifty", subtitle: "Use Drifty Cloud or a managed local model" },
-  { id: "openrouter", title: "OpenRouter", subtitle: "Use your own key and model routing" },
-  { id: "custom", title: "Custom endpoint", subtitle: "Use an OpenAI-compatible endpoint" },
+  { id: "drifty", title: "Drifty" },
+  { id: "openrouter", title: "OpenRouter" },
+  { id: "custom", title: "Custom endpoint" },
 ] as const;
 
 export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
@@ -41,7 +41,6 @@ export function AiSetupSectionCard({
         <BrandMark section={section.id} />
         <span className="ai-setup-choice__copy">
           <span className="ai-setup-choice__title">{section.title}</span>
-          <span className="ai-setup-choice__subtitle">{section.subtitle}</span>
         </span>
         <span className="ai-setup-choice__chevron" aria-hidden="true" />
       </button>
