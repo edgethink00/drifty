@@ -68,8 +68,7 @@ export function AiSetupPanel({
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
-  // Which provider is the active one (drives the "Model being used" selector).
-  const [selectedSection, setSelectedSection] = useState<AiSetupSection>(() => sectionForProvider(localAiSetup.provider));
+  const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
   const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
@@ -100,30 +99,21 @@ export function AiSetupPanel({
   };
 
   const handleDriftyRouteChange = (route: DriftyRoute) => {
-    setSelectedSection("drifty");
     setExpandedSection("drifty");
     setConnectionTestResult(null);
     onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: route }));
   };
 
-  // Picking a provider/model in the dropdown selects it and reveals its panel.
   const handleProviderChange = (section: AiSetupSection) => {
     setConnectionTestResult(null);
-    setSelectedSection(section);
     setExpandedSection(section);
     selectProvider(section);
   };
 
-  // Clicking a provider bar expands it (and selects it); clicking the already
-  // expanded one collapses it.
   const handleToggleSection = (section: AiSetupSection) => {
     setConnectionTestResult(null);
     const willExpand = expandedSection !== section;
     setExpandedSection(willExpand ? section : null);
-    if (willExpand) {
-      setSelectedSection(section);
-      selectProvider(section);
-    }
   };
 
   const handleTestConnection = async () => {

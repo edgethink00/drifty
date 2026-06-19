@@ -65,6 +65,12 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByRole("group", { name: /Custom local endpoint settings/i })).toBeNull();
     expect(screen.queryByText(/Custom local endpoint/i)).toBeNull();
 
+    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
+    expect(providerSelect.textContent).toContain("Drifty");
+    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
+    expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
+
     chooseOption(modelBeingUsed, /^AI provider$/i, /^OpenRouter$/i);
     expect(providerSelect.textContent).toContain("OpenRouter");
     expect(modelSelect.textContent).toContain("DeepSeek V4 Flash");
@@ -75,7 +81,8 @@ describe("AiSetupPanel", () => {
     expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
 
     fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }));
-    expect(providerSelect.textContent).toContain("Drifty");
+    expect(providerSelect.textContent).toContain("OpenRouter");
+    expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
     expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
   });
