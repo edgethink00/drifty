@@ -75,6 +75,7 @@
 }
 
 .ai-setup-cloud-route {
+  --cloud-action: #31411f;
   align-items: start;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -86,13 +87,16 @@
   padding: var(--space-3);
 }
 
+:root[data-theme="dark"] .ai-setup-cloud-route {
+  --cloud-action: #566b3d;
+}
+
 .ai-setup-cloud-route__copy {
   display: grid;
   gap: 0.28rem;
   min-width: 0;
 }
 
-.ai-setup-cloud-route__detail,
 .ai-setup-cloud-route__account {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
@@ -118,15 +122,15 @@
 }
 
 .ai-setup-cloud-route .settings-btn--primary {
-  background: var(--productivity-focus);
-  border-color: var(--productivity-focus);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--productivity-focus) 24%, transparent);
+  background: var(--cloud-action);
+  border-color: var(--cloud-action);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);
   color: var(--canvas);
 }
 
 .ai-setup-cloud-route .settings-btn--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--productivity-focus) 88%, black);
-  border-color: color-mix(in srgb, var(--productivity-focus) 88%, black);
+  background: color-mix(in srgb, var(--cloud-action) 88%, black);
+  border-color: color-mix(in srgb, var(--cloud-action) 88%, black);
   color: var(--canvas);
 }
 

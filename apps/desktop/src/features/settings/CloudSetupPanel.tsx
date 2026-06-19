@@ -56,14 +56,14 @@ export function CloudSetupPanel({
     : isCurrentCloudPlan
       ? "Refresh the account entitlement if the status looks stale."
       : null;
+  const statusSummary = statusDetail ? `${statusHeadline} · ${statusDetail}` : statusHeadline;
 
   return (
     <div className="ai-setup-detail ai-setup-detail--cloud" role="group" aria-label="Drifty Cloud settings">
       <article className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
         <div className="ai-setup-cloud-route__copy">
           <strong>Drifty Cloud</strong>
-          <p>{statusHeadline}</p>
-          {statusDetail ? <p className="ai-setup-cloud-route__detail">{statusDetail}</p> : null}
+          <p>{statusSummary}</p>
           {maskedUserEmail ? <p className="ai-setup-cloud-route__account">{maskedUserEmail}</p> : null}
           {billingEntitlementError ? <p className="ai-setup-detail__message">{billingEntitlementError}</p> : null}
         </div>
