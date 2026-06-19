@@ -4,7 +4,7 @@ use super::{
     install_model_at_root_with_downloader, managed_ai_catalog, model_dir, read_status,
     require_model, runtime, start_model_at_root, status_for_spec, write_status,
     ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
-    MANAGED_ASSETS_MISSING_MESSAGE,
+    ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 #[test]
@@ -38,6 +38,10 @@ fn install_downloads_model_artifact_before_marking_installed() {
     );
     assert_eq!(status.model.as_deref(), Some("drifty-qwen3.5-4b-local"));
     assert_eq!(
+        installed_model_ids(&status),
+        vec!["drifty-qwen3-5-4b-default"]
+    );
+    assert_eq!(
         status.artifact_dir.as_deref(),
         Some(artifact_dir.to_string_lossy().as_ref())
     );
@@ -60,8 +64,28 @@ fn install_returns_error_status_when_download_fails() {
         Some("drifty-qwen3-5-4b-default")
     );
     assert!(status.artifact_dir.is_none());
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::DownloadFailed)
+    ));
     assert!(status.message.contains("network unavailable"));
     assert!(!model_dir(root.path(), "drifty-qwen3-5-4b-default").exists());
+}
+
+#[test]
+fn install_reports_global_error_for_non_download_failures() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let status = install_model_at_root_with_downloader(
+        root.path(),
+        "drifty-qwen3-5-4b-default",
+        storage_failing_download,
+    )
+    .expect("install model");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(status.selected_model_id.is_none());
+    assert!(status.error_kind.is_none());
+    assert!(status.message.contains("storage failed"));
 }
 
 #[test]
@@ -76,12 +100,44 @@ fn install_records_downloader_reported_progress_before_marking_installed() {
 
     assert!(matches!(status.state, ManagedAiInstallState::Installed));
     assert!(status.progress.is_none());
+    assert_eq!(
+        installed_model_ids(&status),
+        vec!["drifty-qwen3-5-4b-default"]
+    );
     let saved_status = read_status(root.path()).expect("read final status");
     assert!(matches!(
         saved_status.state,
         ManagedAiInstallState::Installed
     ));
     assert!(saved_status.progress.is_none());
+    assert_eq!(
+        installed_model_ids(&saved_status),
+        vec!["drifty-qwen3-5-4b-default"]
+    );
+}
+
+#[test]
+fn install_tracks_multiple_downloaded_models() {
+    let root = tempfile::tempdir().expect("create temp root");
+    install_model_at_root_with_downloader(root.path(), "drifty-qwen3-5-4b-default", fake_download)
+        .expect("install default model");
+
+    let status = install_model_at_root_with_downloader(
+        root.path(),
+        "drifty-qwen3-5-2b-economy",
+        fake_download,
+    )
+    .expect("install economy model");
+
+    assert_eq!(
+        installed_model_ids(&status),
+        vec!["drifty-qwen3-5-2b-economy", "drifty-qwen3-5-4b-default"]
+    );
+    let saved_status = read_status(root.path()).expect("read saved status");
+    assert_eq!(
+        installed_model_ids(&saved_status),
+        vec!["drifty-qwen3-5-2b-economy", "drifty-qwen3-5-4b-default"]
+    );
 }
 
 #[test]
@@ -91,6 +147,25 @@ fn start_requires_runtime_assets() {
         start_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("start status");
 
     assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::ModelArtifactMissing)
+    ));
+}
+
+#[test]
+fn read_status_reports_installed_models_without_status_file() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+
+    let status = read_status(root.path()).expect("read status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::NotInstalled));
+    assert_eq!(
+        installed_model_ids(&status),
+        vec!["drifty-qwen3-5-4b-default"]
+    );
 }
 
 #[test]
@@ -137,6 +212,10 @@ fn read_status_downgrades_stale_installed_empty_model_dir() {
 
     assert!(matches!(status.state, ManagedAiInstallState::Error));
     assert!(status.artifact_dir.is_none());
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::ModelArtifactMissing)
+    ));
     assert_eq!(status.message, MANAGED_ASSETS_MISSING_MESSAGE);
 }
 
@@ -250,6 +329,16 @@ fn progress_reporting_download(
     fake_download(root, spec, progress)
 }
 
+fn installed_model_ids(status: &super::ManagedAiStatus) -> Vec<&str> {
+    let mut ids = status
+        .installed_models
+        .iter()
+        .map(|model| model.id.as_str())
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids
+}
+
 fn failing_download(
     _root: &Path,
     _spec: ManagedAiModelSpec,
@@ -258,4 +347,12 @@ fn failing_download(
     Err(ManagedAiError::DownloadFailed(
         "network unavailable".to_string(),
     ))
+}
+
+fn storage_failing_download(
+    _root: &Path,
+    _spec: ManagedAiModelSpec,
+    _progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "disk full").into())
 }

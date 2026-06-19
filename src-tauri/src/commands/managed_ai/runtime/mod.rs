@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use super::{
-    status_for_spec, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec, ManagedAiStatus,
+    status_for_model_error, status_for_spec, ManagedAiError, ManagedAiInstallState,
+    ManagedAiModelSpec, ManagedAiStatus, ManagedAiStatusErrorKind,
 };
 
 mod install;
@@ -24,11 +25,11 @@ pub(super) fn start_runtime(
     let runtime_path = install::require_runtime_path(root)?;
     let model_path = artifact_dir.join(spec.file_name);
     if !model_path.is_file() {
-        return Ok(status_for_spec(
-            ManagedAiInstallState::Error,
+        return Ok(status_for_model_error(
             spec,
             Some(artifact_dir.to_path_buf()),
             "Managed local model artifact is missing. Download the model again.",
+            ManagedAiStatusErrorKind::ModelArtifactMissing,
         ));
     }
 
