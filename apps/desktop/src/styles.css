@@ -8435,8 +8435,7 @@ button.flow-cell:focus {
   gap: var(--space-3);
 }
 
-.model-picker-summary__chips,
-.model-picker-modal__summary {
+.model-picker-summary__chips {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -8466,7 +8465,7 @@ button.flow-cell:focus {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
@@ -8494,7 +8493,7 @@ button.flow-cell:focus {
 
 .model-picker-choice__select span {
   display: grid;
-  gap: var(--space-1);
+  gap: 0;
   min-width: 0;
 }
 
@@ -8512,7 +8511,7 @@ button.flow-cell:focus {
 .model-picker-choice__select small {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .model-picker-choice__primary {
@@ -8561,8 +8560,7 @@ button.flow-cell:focus {
     justify-items: stretch;
   }
 
-  .model-picker-summary__chips,
-  .model-picker-modal__summary {
+  .model-picker-summary__chips {
     justify-content: flex-start;
   }
 

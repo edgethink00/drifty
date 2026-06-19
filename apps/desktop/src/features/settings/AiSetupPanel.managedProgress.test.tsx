@@ -14,6 +14,7 @@ describe("AiSetupPanel managed local progress", () => {
     setManagedStatusMock({
       state: "installing",
       selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: [],
       baseUrl: null,
       model: null,
       message: "Downloading managed local model... (44%)",
@@ -23,6 +24,7 @@ describe("AiSetupPanel managed local progress", () => {
         downloadedBytes: 1_200_000_000,
         totalBytes: 2_740_937_888,
       },
+      errorKind: null,
     });
     renderPanel();
 
@@ -39,11 +41,13 @@ describe("AiSetupPanel managed local progress", () => {
     setManagedStatusMock({
       state: "error",
       selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: [],
       baseUrl: null,
       model: null,
       message: "Managed local model download failed: network unavailable",
       artifactDir: null,
       progress: null,
+      errorKind: "download_failed",
     });
     renderPanel();
 
@@ -57,5 +61,25 @@ describe("AiSetupPanel managed local progress", () => {
     fireEvent.click(retryButton);
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+  });
+
+  it("shows non-model managed local errors above the cards without a retry action", async () => {
+    setManagedStatusMock({
+      state: "error",
+      selectedModelId: null,
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Managed local AI storage failed: disk full",
+      artifactDir: null,
+      progress: null,
+      errorKind: null,
+    });
+    renderPanel();
+
+    const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
+
+    expect(within(localSettings).getByText(/disk full/i)).toBeTruthy();
+    expect(within(localSettings).queryByRole("button", { name: /^Retry$/i })).toBeNull();
   });
 });

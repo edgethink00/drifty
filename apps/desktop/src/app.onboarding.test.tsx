@@ -201,11 +201,13 @@ function installManagedModel(modelId: string): ManagedLocalAiStatus {
   return {
     state: "installed",
     selectedModelId: modelId,
+    installedModels: [{ id: modelId, artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}` }],
     baseUrl: "http://127.0.0.1:39217/v1",
     model: "drifty-qwen3.5-4b-local",
     message: "Managed local model downloaded.",
     artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
     progress: null,
+    errorKind: null,
   };
 }
 
@@ -213,11 +215,13 @@ function configureManagedAiMocks() {
   let managedStatus: ManagedLocalAiStatus = {
     state: "not_installed",
     selectedModelId: null,
+    installedModels: [],
     baseUrl: null,
     model: null,
     message: "Choose a local model and Drifty will download it inside the app.",
     artifactDir: null,
     progress: null,
+    errorKind: null,
   };
   invokeMock.mockImplementation((command: string, args?: unknown) => {
     switch (command) {
@@ -840,11 +844,13 @@ describe("App onboarding", () => {
     let managedStatus: ManagedLocalAiStatus = {
       state: "not_installed",
       selectedModelId: null,
+      installedModels: [],
       baseUrl: null,
       model: null,
       message: "Choose a local model and Drifty will download it inside the app.",
       artifactDir: null,
       progress: null,
+      errorKind: null,
     };
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       switch (command) {
@@ -857,11 +863,13 @@ describe("App onboarding", () => {
           managedStatus = {
             state: "installing",
             selectedModelId: modelId,
+            installedModels: [],
             baseUrl: null,
             model: null,
             message: "Downloading managed local model...",
             artifactDir: null,
             progress: null,
+            errorKind: null,
           };
           return installDeferred.promise;
         }

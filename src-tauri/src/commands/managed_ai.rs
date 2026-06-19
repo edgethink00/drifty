@@ -15,7 +15,9 @@ mod tests;
 use catalog::{catalog_model, ManagedAiCatalogModel, ManagedAiModelSpec, MANAGED_MODELS};
 use download::download_model_artifact;
 use status::{
-    default_status, read_status, status_for_download_progress, status_for_spec, write_status,
+    default_status, read_status, status_for_download_progress, status_for_global_error,
+    status_for_model_error, status_for_spec, status_with_installed_models, write_status,
+    ManagedAiStatusErrorKind,
 };
 pub use status::{ManagedAiDownloadProgress, ManagedAiStatus};
 
@@ -108,38 +110,46 @@ fn install_model_at_root_with_downloader(
     ) -> Result<PathBuf, ManagedAiError>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    let installing = status_for_spec(
-        ManagedAiInstallState::Installing,
-        spec,
-        None,
-        "Downloading managed local model...",
-    );
+    let installing = status_with_installed_models(
+        root,
+        status_for_spec(
+            ManagedAiInstallState::Installing,
+            spec,
+            None,
+            "Downloading managed local model...",
+        ),
+    )?;
     write_status(root, &installing)?;
 
     let mut report_progress = |progress: ManagedAiDownloadProgress| {
-        let status = status_for_download_progress(spec, progress);
+        let status =
+            status_with_installed_models(root, status_for_download_progress(spec, progress))?;
         write_status(root, &status)
     };
 
     let artifact_dir = match downloader(root, spec, &mut report_progress) {
         Ok(path) => path,
         Err(error) => {
-            let status = status_for_spec(
-                ManagedAiInstallState::Error,
-                spec,
-                None,
-                &error_message(error),
-            );
+            let status = match model_retry_error_kind(&error) {
+                Some(error_kind) => {
+                    status_for_model_error(spec, None, &error.to_string(), error_kind)
+                }
+                None => status_for_global_error(&error.to_string()),
+            };
+            let status = status_with_installed_models(root, status)?;
             write_status(root, &status)?;
             return Ok(status);
         }
     };
-    let status = status_for_spec(
-        ManagedAiInstallState::Installed,
-        spec,
-        Some(artifact_dir),
-        "Managed local model downloaded.",
-    );
+    let status = status_with_installed_models(
+        root,
+        status_for_spec(
+            ManagedAiInstallState::Installed,
+            spec,
+            Some(artifact_dir),
+            "Managed local model downloaded.",
+        ),
+    )?;
     write_status(root, &status)?;
     Ok(status)
 }
@@ -148,12 +158,15 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
     let spec = require_model(model_id)?;
     let artifact_dir = status_artifact_dir(root, spec)?;
     let Some(artifact_dir) = artifact_dir else {
-        let status = status_for_spec(
-            ManagedAiInstallState::Error,
-            spec,
-            None,
-            MANAGED_ASSETS_MISSING_MESSAGE,
-        );
+        let status = status_with_installed_models(
+            root,
+            status_for_model_error(
+                spec,
+                None,
+                MANAGED_ASSETS_MISSING_MESSAGE,
+                ManagedAiStatusErrorKind::ModelArtifactMissing,
+            ),
+        )?;
         write_status(root, &status)?;
         return Ok(status);
     };
@@ -167,6 +180,7 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
             &error_message(error),
         ),
     };
+    let status = status_with_installed_models(root, status)?;
     write_status(root, &status)?;
     Ok(status)
 }
@@ -178,7 +192,7 @@ fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, 
     if model_path.exists() {
         fs::remove_dir_all(model_path)?;
     }
-    let status = default_status();
+    let status = status_with_installed_models(root, default_status())?;
     write_status(root, &status)?;
     Ok(status)
 }
@@ -244,4 +258,18 @@ fn managed_ai_root(app: &AppHandle) -> Result<PathBuf, ManagedAiError> {
 
 fn error_message(error: ManagedAiError) -> String {
     error.to_string()
+}
+
+fn model_retry_error_kind(error: &ManagedAiError) -> Option<ManagedAiStatusErrorKind> {
+    match error {
+        ManagedAiError::Http(_) | ManagedAiError::DownloadFailed(_) => {
+            Some(ManagedAiStatusErrorKind::DownloadFailed)
+        }
+        ManagedAiError::AppData(_)
+        | ManagedAiError::UnknownModel(_)
+        | ManagedAiError::Io(_)
+        | ManagedAiError::Json(_)
+        | ManagedAiError::RuntimeMissing(_)
+        | ManagedAiError::RuntimeFailed(_) => None,
+    }
 }

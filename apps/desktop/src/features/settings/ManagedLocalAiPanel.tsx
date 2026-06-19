@@ -62,24 +62,24 @@ function ManagedLocalAiModelRow({
 }) {
   const [finderOpening, setFinderOpening] = useState(false);
   const [finderError, setFinderError] = useState<string | null>(null);
-  const selectable = isSelectableManagedModel(model.id, status);
-  const isSelected = selectable && localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "local" && localAiSetup.managedLocalModelId === model.id;
-  const hasCurrentRuntime = status?.selectedModelId === model.id && (status.state === "installed" || status.state === "starting" || status.state === "running");
+  const installedModel = installedManagedModel(model.id, status);
+  const isSelected = Boolean(installedModel) && localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "local" && localAiSetup.managedLocalModelId === model.id;
   const installingThisModel = status?.selectedModelId === model.id && status.state === "installing";
   const startingThisModel = status?.selectedModelId === model.id && status.state === "starting";
-  const errorThisModel = status?.selectedModelId === model.id && status.state === "error";
+  const errorThisModel = status?.selectedModelId === model.id && status.state === "error" && isRetryableManagedModelError(status.errorKind);
   const busyThisModel = actionModelId === model.id || installingThisModel || startingThisModel;
   const anyManagedActionRunning = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
   const downloadProgress = installingThisModel ? status.progress : null;
-  const showInFinderDisabled = busyThisModel || finderOpening || !status?.artifactDir;
+  const artifactDir = installedModel?.artifactDir ?? null;
+  const showInFinderDisabled = busyThisModel || finderOpening || !artifactDir;
 
   const handleShowInFinder = async () => {
-    if (!status?.artifactDir || finderOpening) return;
+    if (!artifactDir || finderOpening) return;
     setFinderError(null);
     setFinderOpening(true);
     try {
       const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
-      await revealItemInDir(status.artifactDir);
+      await revealItemInDir(artifactDir);
     } catch (error) {
       setFinderError(messageFromFinderError(error));
     } finally {
@@ -104,7 +104,7 @@ function ManagedLocalAiModelRow({
         </dl>
       </div>
       <div className="ai-managed-model__actions">
-        {hasCurrentRuntime ? (
+        {installedModel ? (
           <>
             <button
               type="button"
@@ -143,8 +143,17 @@ function ManagedLocalAiModelRow({
   );
 }
 
-function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
-  return status?.selectedModelId === modelId && (status.state === "installed" || status.state === "starting" || status.state === "running");
+function installedManagedModel(modelId: string, status: ManagedLocalAiStatus | null): { readonly artifactDir: string } | null {
+  const installedModel = status?.installedModels.find((item) => item.id === modelId);
+  if (installedModel) return installedModel;
+  if (status?.selectedModelId === modelId && (status.state === "installed" || status.state === "starting" || status.state === "running") && status.artifactDir) {
+    return { artifactDir: status.artifactDir };
+  }
+  return null;
+}
+
+function isRetryableManagedModelError(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
+  return errorKind === "download_failed" || errorKind === "model_artifact_missing";
 }
 
 function messageFromFinderError(error: unknown): string {

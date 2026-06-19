@@ -173,13 +173,13 @@ describe("Settings content styles", () => {
     expect(aiSetupStyles).not.toContain(".ai-setup-route-option.is-selected");
   });
 
-  it("uses the focus color for the Cloud setup CTA", () => {
+  it("uses the muted Cloud action color for the Cloud setup CTA", () => {
     const aiSetupStyles = readAiSetupStyles();
     const cloudPrimaryRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn--primary");
 
-    expect(cloudPrimaryRule).toContain("background: var(--productivity-focus);");
-    expect(cloudPrimaryRule).toContain("border-color: var(--productivity-focus);");
-    expect(cloudPrimaryRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--productivity-focus) 24%, transparent);");
+    expect(cloudPrimaryRule).toContain("background: var(--cloud-action);");
+    expect(cloudPrimaryRule).toContain("border-color: var(--cloud-action);");
+    expect(cloudPrimaryRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);");
   });
 
   it("separates AI providers from shared prompt settings", () => {

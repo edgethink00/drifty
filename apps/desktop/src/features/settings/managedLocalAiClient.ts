@@ -19,14 +19,23 @@ export type ManagedLocalAiDownloadProgress = {
   readonly totalBytes: number;
 };
 
+export type ManagedLocalAiInstalledModel = {
+  readonly id: string;
+  readonly artifactDir: string;
+};
+
+export type ManagedLocalAiStatusErrorKind = "download_failed" | "model_artifact_missing";
+
 export type ManagedLocalAiStatus = {
   readonly state: ManagedLocalAiInstallState;
   readonly selectedModelId: string | null;
+  readonly installedModels: readonly ManagedLocalAiInstalledModel[];
   readonly baseUrl: string | null;
   readonly model: string | null;
   readonly message: string;
   readonly artifactDir: string | null;
   readonly progress: ManagedLocalAiDownloadProgress | null;
+  readonly errorKind: ManagedLocalAiStatusErrorKind | null;
 };
 
 export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
@@ -94,18 +103,20 @@ export async function deleteManagedLocalAiModel(modelId: string): Promise<Manage
 }
 
 export function fallbackManagedLocalAiStatus(message: string): ManagedLocalAiStatus {
-  return { state: "error", selectedModelId: null, baseUrl: null, model: null, message, artifactDir: null, progress: null };
+  return { state: "error", selectedModelId: null, installedModels: [], baseUrl: null, model: null, message, artifactDir: null, progress: null, errorKind: null };
 }
 
-export function installingManagedLocalAiStatus(modelId: string): ManagedLocalAiStatus {
+export function installingManagedLocalAiStatus(modelId: string, installedModels: readonly ManagedLocalAiInstalledModel[] = []): ManagedLocalAiStatus {
   return {
     state: "installing",
     selectedModelId: modelId,
+    installedModels,
     baseUrl: null,
     model: null,
     message: "Downloading managed local model...",
     artifactDir: null,
     progress: null,
+    errorKind: null,
   };
 }
 
@@ -130,12 +141,24 @@ function parseManagedStatus(value: unknown): ManagedLocalAiStatus {
   return {
     state: parseState(value.state),
     selectedModelId: nullableString(value.selectedModelId),
+    installedModels: parseInstalledModels(value.installedModels),
     baseUrl: nullableString(value.baseUrl),
     model: nullableString(value.model),
     message: stringValue(value.message) || "Managed local AI status updated.",
     artifactDir: nullableString(value.artifactDir),
     progress: parseProgress(value.progress),
+    errorKind: parseErrorKind(value.errorKind),
   };
+}
+
+function parseInstalledModels(value: unknown): readonly ManagedLocalAiInstalledModel[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const id = nullableString(item.id);
+    const artifactDir = nullableString(item.artifactDir);
+    return id && artifactDir ? [{ id, artifactDir }] : [];
+  });
 }
 
 function parseProgress(value: unknown): ManagedLocalAiDownloadProgress | null {
@@ -149,6 +172,10 @@ function parseProgress(value: unknown): ManagedLocalAiDownloadProgress | null {
     downloadedBytes: Math.max(downloadedBytes, 0),
     totalBytes: Math.max(totalBytes, 0),
   };
+}
+
+function parseErrorKind(value: unknown): ManagedLocalAiStatusErrorKind | null {
+  return value === "download_failed" || value === "model_artifact_missing" ? value : null;
 }
 
 function parseTier(value: unknown): ManagedLocalAiModel["tier"] | null {

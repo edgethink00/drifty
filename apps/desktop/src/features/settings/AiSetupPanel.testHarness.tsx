@@ -16,11 +16,13 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
   const defaultManagedStatus: ManagedLocalAiStatus = {
     state: "not_installed",
     selectedModelId: null,
+    installedModels: [],
     baseUrl: null,
     model: null,
     message: "Choose a local model and Drifty will download it inside the app.",
     artifactDir: null,
     progress: null,
+    errorKind: null,
   };
   let managedStatus: ManagedLocalAiStatus = defaultManagedStatus;
 
@@ -42,6 +44,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             ...managedStatus,
             state: "installed",
             selectedModelId: modelId,
+            installedModels: upsertInstalledModel(managedStatus.installedModels, modelId),
             baseUrl: "http://127.0.0.1:39217/v1",
             model: "drifty-qwen3.5-4b-local",
             message: "Managed local model downloaded.",
@@ -56,6 +59,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             ...managedStatus,
             state: "running",
             selectedModelId: modelId,
+            installedModels: upsertInstalledModel(managedStatus.installedModels, modelId),
             baseUrl: "http://127.0.0.1:39217/v1",
             model: "drifty-qwen3.5-4b-local",
             message: "Managed local AI runtime is running.",
@@ -64,8 +68,21 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
           };
           return Promise.resolve(managedStatus);
         }
-        case "managed_ai_delete":
-          return Promise.resolve({ ...managedStatus, state: "not_installed", message: managedStatus.message });
+        case "managed_ai_delete": {
+          const modelId = modelIdFromArgs(args);
+          managedStatus = {
+            ...managedStatus,
+            state: "not_installed",
+            selectedModelId: null,
+            installedModels: managedStatus.installedModels.filter((item) => item.id !== modelId),
+            baseUrl: null,
+            model: null,
+            artifactDir: null,
+            progress: null,
+            errorKind: null,
+          };
+          return Promise.resolve(managedStatus);
+        }
         case "ai_classification_openai_chat":
           return Promise.resolve({ status: 200, body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}", latencyMs: 42 });
         default:
@@ -81,6 +98,17 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
     },
   };
 });
+
+function upsertInstalledModel(
+  installedModels: readonly ManagedLocalAiStatus["installedModels"][number][],
+  modelId: string,
+): ManagedLocalAiStatus["installedModels"] {
+  const artifactDir = `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`;
+  return [
+    ...installedModels.filter((item) => item.id !== modelId),
+    { id: modelId, artifactDir },
+  ];
+}
 
 export { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock };
 

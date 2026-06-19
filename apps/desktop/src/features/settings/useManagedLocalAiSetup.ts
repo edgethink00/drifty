@@ -120,7 +120,7 @@ export function useManagedLocalAiSetup(
     if (actionModelId || status?.state === "installing" || status?.state === "starting") return;
     setActionModelId(modelId);
     if (options.optimisticInstalling) {
-      const installingStatus = installingManagedLocalAiStatus(modelId);
+      const installingStatus = installingManagedLocalAiStatus(modelId, status?.installedModels ?? []);
       pendingReadyNotificationModelIdsRef.current.add(modelId);
       setStatus(installingStatus);
       syncManagedSetup(installingStatus, { activateProvider: options.activateProvider });
@@ -136,7 +136,7 @@ export function useManagedLocalAiSetup(
     } finally {
       if (mountedRef.current) setActionModelId(null);
     }
-  }, [actionModelId, notifyReadyOnce, status?.state, syncManagedSetup]);
+  }, [actionModelId, notifyReadyOnce, status?.installedModels, status?.state, syncManagedSetup]);
 
   return {
     actionModelId,
