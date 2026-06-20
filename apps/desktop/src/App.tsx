@@ -2750,8 +2750,10 @@ export default function App() {
           if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
           return;
         }
+        const driftAlarmEvent = buildCurrentDriftAlarmEvent();
+        lastDriftAlarmEventRef.current = driftAlarmEvent;
         const latestFocusTarget = (await resolveCurrentAvailableDriftAlarmFocusTargets())[0] ?? null;
-        void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
+        void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
         markCurrentDriftAlarmDelivered();
         if (latestFocusTarget) {
           window.setTimeout(() => {
