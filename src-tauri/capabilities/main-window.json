@@ -50,6 +50,7 @@
     "allow-auth-save-session",
     "allow-auth-clear-saved-session",
     "allow-focus-target-activate-browser-tab",
+    "allow-focus-target-browser-tab-exists",
     "allow-focus-target-open-app",
     "allow-managed-ai-catalog",
     "allow-managed-ai-status",

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-target-browser-tab-exists"
+description = "Enables the focus_target_browser_tab_exists command without any pre-configured scope."
+commands.allow = ["focus_target_browser_tab_exists"]
+
+[[permission]]
+identifier = "deny-focus-target-browser-tab-exists"
+description = "Denies the focus_target_browser_tab_exists command without any pre-configured scope."
+commands.deny = ["focus_target_browser_tab_exists"]

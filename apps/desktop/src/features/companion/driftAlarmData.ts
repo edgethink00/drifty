@@ -67,11 +67,13 @@ export function getFocusTargetIdentity(target: DriftAlarmFocusTarget): string {
   return (target.siteDomain ?? target.bundleId ?? target.appName).toLowerCase();
 }
 
-export function hasDriftAlarmFocusTargetIconUpgrade(currentEvent: DriftAlarmEvent, nextEvent: DriftAlarmEvent): boolean {
-  const currentTargetsById = new Map(currentEvent.focusTargets.map((target) => [target.targetId, target]));
-  return nextEvent.focusTargets.some((nextTarget) => {
+export function hasDriftAlarmFocusTargetUpdate(currentEvent: DriftAlarmEvent, nextEvent: DriftAlarmEvent): boolean {
+  if (currentEvent.focusTargets.length !== nextEvent.focusTargets.length) return true;
+
+  return nextEvent.focusTargets.some((nextTarget, index) => {
+    const currentTarget = currentEvent.focusTargets[index];
+    if (!currentTarget || currentTarget.targetId !== nextTarget.targetId) return true;
     if (!nextTarget.iconSrc) return false;
-    const currentTarget = currentTargetsById.get(nextTarget.targetId);
     return currentTarget?.iconSrc !== nextTarget.iconSrc;
   });
 }
@@ -330,27 +332,21 @@ export function normalizeDriftAlertDelaySeconds(value: string | number | null): 
   return DRIFT_ALERT_DELAY_OPTIONS.find((option) => option.value === numericValue)?.value ?? DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
 }
 
-export async function openFocusTargetSite(siteDomain: string): Promise<void> {
-  const domain = siteDomain.trim();
-  if (!domain) return;
-  const { openUrl } = await import("@tauri-apps/plugin-opener");
-  await openUrl(`https://${domain}`);
-}
-
-export async function activateFocusTargetSite(target: DriftAlarmFocusTarget): Promise<void> {
+export async function activateFocusTargetSite(target: DriftAlarmFocusTarget): Promise<boolean> {
   const siteDomain = target.siteDomain?.trim() ?? "";
-  if (!siteDomain) return;
+  if (!siteDomain) return false;
 
   const browserName = target.browserName?.trim() ?? "";
-  const siteUrl = target.siteUrl?.trim() ?? "";
-  if (browserName && siteUrl && isTauriRuntime()) {
+  const siteUrl = target.siteUrl?.trim() || null;
+  if (browserName && isTauriRuntime()) {
     try {
-      const activated = await invoke<boolean>("focus_target_activate_browser_tab", { browserName, siteUrl });
-      if (activated) return;
+      const activated = await invoke<boolean>("focus_target_activate_browser_tab", { browserName, siteDomain, siteUrl });
+      return activated === true;
     } catch (error) {
       console.warn("Failed to activate focus target browser tab", error);
+      return false;
     }
   }
 
-  await openFocusTargetSite(siteDomain);
+  return false;
 }
