@@ -64,6 +64,7 @@ const {
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
+    createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
   },
   appFeatureSwitches: {
     devOnboardingBypassEnabled: false,
@@ -146,6 +147,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
+  createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));
 
 vi.mock("./appFeatureSwitches", () => ({

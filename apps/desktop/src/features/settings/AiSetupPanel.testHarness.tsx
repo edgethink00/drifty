@@ -137,6 +137,7 @@ export function renderPanel({
 } = {}) {
   const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
+  const onManageCloudBilling = vi.fn();
   const onLocalAiConnectionTestResult = vi.fn();
 
   function Harness() {
@@ -149,6 +150,7 @@ export function renderPanel({
         billingEntitlementError={null}
         billingEntitlementStatus={billingEntitlementStatus}
         billingPlansDisabled={false}
+        billingPortalLoading={false}
         cloudStatusRefreshing={false}
         cloudStatusLabel="Cloud AI available"
         cloudTrialEndsAt={cloudTrialEndsAt}
@@ -161,6 +163,7 @@ export function renderPanel({
         onDialogOpenChange={vi.fn()}
         onLocalAiConnectionTestResult={onLocalAiConnectionTestResult}
         onLocalAiSetupChange={setLocalAiSetup}
+        onManageCloudBilling={onManageCloudBilling}
         onRefreshCloudStatus={onRefreshCloudStatus}
         onStartCloudSetup={onStartCloudSetup}
       />
@@ -168,5 +171,5 @@ export function renderPanel({
   }
 
   render(<Harness />);
-  return { onLocalAiConnectionTestResult, onRefreshCloudStatus, onStartCloudSetup };
+  return { onLocalAiConnectionTestResult, onManageCloudBilling, onRefreshCloudStatus, onStartCloudSetup };
 }

@@ -57,6 +57,7 @@ const {
   billingMocks: {
     fetchBillingEntitlement: vi.fn(),
     createIndividualCheckout: vi.fn(),
+    createBillingPortalSession: vi.fn(),
   },
   appFeatureSwitches: {
     devOnboardingBypassEnabled: false,
@@ -125,6 +126,7 @@ vi.mock("./lib/api/trackerClient", () => ({
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
+  createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));
 
 vi.mock("./appFeatureSwitches", () => ({
@@ -229,6 +231,7 @@ describe("App onboarding cloud login", () => {
       data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
     });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+    billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
     appFeatureSwitches.devOnboardingBypassEnabled = false;
   });
 

@@ -62,6 +62,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
+    createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
   },
   trackerClient: {
     getStatus: vi.fn(),
@@ -91,6 +92,7 @@ vi.mock("./lib/api/trackerClient", () => ({ trackerClient }));
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
+  createBillingPortalSession: billingMocks.createBillingPortalSession,
 }));
 
 vi.mock("./features/classification/aiClassificationService", () => {
@@ -405,6 +407,7 @@ describe("App AI classification controls", () => {
     trackerClient.updateTrayDriftAlarmStatus.mockResolvedValue(undefined);
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+    billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
     aiClassificationMocks.getAiClassificationUsageSummary.mockImplementation((day: string) => Promise.resolve(
       day === todayIsoDate()
         ? executionUsageAfterAvailable ? executionUsageAfter : executionUsageBefore

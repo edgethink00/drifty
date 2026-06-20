@@ -25,7 +25,23 @@ type CheckoutResponse = {
   error?: string;
 };
 
-type BillingClient = Pick<NonNullable<typeof supabase>, "functions"> | null;
+type BillingPortalResponse = {
+  url?: string;
+  customer_portal_url?: string;
+  error?: string;
+};
+
+type BillingFunctionInvokeOptions = {
+  readonly body?: unknown;
+};
+
+type BillingFunctionInvoker = {
+  invoke<T>(functionName: string, options?: BillingFunctionInvokeOptions): Promise<{ data: T | null; error: unknown }>;
+};
+
+type BillingClient = {
+  readonly functions: BillingFunctionInvoker;
+} | null;
 
 const GENERIC_BILLING_ERROR = "Unable to check billing status.";
 
@@ -65,6 +81,25 @@ export async function createIndividualCheckout(
     return { success: true, data: { url: data.url } };
   } catch (error) {
     return { success: false, error: error instanceof Error && error.message ? error.message : "Unable to create checkout." };
+  }
+}
+
+export async function createBillingPortalSession(client: BillingClient = supabase): Promise<BillingResult<{ url: string }>> {
+  if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
+
+  try {
+    const { data, error } = await client.functions.invoke<BillingPortalResponse>("create-polar-customer-portal", {
+      body: {},
+    });
+
+    if (error) return { success: false, error: await readFunctionError(error, "Unable to open billing management.") };
+    if (data?.error) return { success: false, error: data.error };
+    const url = data?.url ?? data?.customer_portal_url;
+    if (!url) return { success: false, error: "Billing management did not return a redirect URL." };
+
+    return { success: true, data: { url } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error && error.message ? error.message : "Unable to open billing management." };
   }
 }
 

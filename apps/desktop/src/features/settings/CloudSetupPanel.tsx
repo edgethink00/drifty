@@ -8,6 +8,7 @@ export type CloudSetupPanelProps = {
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
+  readonly billingPortalLoading: boolean;
   readonly cloudStatusRefreshing: boolean;
   readonly cloudStatusLabel: string;
   readonly cloudTrialEndsAt: string | null;
@@ -15,6 +16,7 @@ export type CloudSetupPanelProps = {
   readonly isSupabaseConfigured: boolean;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
+  readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
 };
@@ -25,6 +27,7 @@ export function CloudSetupPanel({
   billingEntitlementError,
   billingEntitlementStatus,
   billingPlansDisabled,
+  billingPortalLoading,
   cloudStatusRefreshing,
   cloudStatusLabel,
   cloudTrialEndsAt,
@@ -32,20 +35,24 @@ export function CloudSetupPanel({
   isSupabaseConfigured,
   shouldShowCloudCheckoutPlans,
   userEmail,
+  onManageCloudBilling,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: CloudSetupPanelProps) {
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
+  const isCurrentPaidPlan = isCurrentCloudPlan && billingEntitlementStatus === "active";
   const isCurrentTrial = isCurrentCloudPlan && billingEntitlementStatus === "trialing";
   const maskedUserEmail = maskCloudAccountEmail(userEmail);
   const primaryActionLabel = cloudActionLabel({
     billingCheckoutLoadingInterval,
+    billingPortalLoading,
+    billingEntitlementStatus,
     cloudStatusRefreshing,
     isCurrentCloudPlan,
     isSupabaseConfigured,
   });
-  const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
-  const handlePrimaryAction = isCurrentCloudPlan ? onRefreshCloudStatus : () => onStartCloudSetup();
+  const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
+  const handlePrimaryAction = isCurrentPaidPlan ? onManageCloudBilling : isCurrentCloudPlan ? onRefreshCloudStatus : () => onStartCloudSetup();
   const statusHeadline = isCurrentTrial
     ? "1-week free trial is active"
     : isCurrentCloudPlan
@@ -54,7 +61,7 @@ export function CloudSetupPanel({
   const statusDetail = isCurrentTrial
     ? formatCloudTrialStartedDetail(cloudTrialEndsAt)
     : isCurrentCloudPlan
-      ? "Refresh the account entitlement if the status looks stale."
+      ? "Manage your subscription, invoices, and payment method in Polar."
       : null;
   const statusSummary = statusDetail ? `${statusHeadline} · ${statusDetail}` : statusHeadline;
 
@@ -77,18 +84,24 @@ export function CloudSetupPanel({
 
 function cloudActionLabel({
   billingCheckoutLoadingInterval,
+  billingEntitlementStatus,
+  billingPortalLoading,
   cloudStatusRefreshing,
   isCurrentCloudPlan,
   isSupabaseConfigured,
 }: {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
+  readonly billingPortalLoading: boolean;
   readonly cloudStatusRefreshing: boolean;
   readonly isCurrentCloudPlan: boolean;
   readonly isSupabaseConfigured: boolean;
 }): string {
   if (billingCheckoutLoadingInterval !== null) return "Opening checkout...";
+  if (billingPortalLoading) return "Opening billing...";
   if (cloudStatusRefreshing) return "Checking...";
   if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Set up Drifty Cloud";
+  if (billingEntitlementStatus === "active") return "Manage billing";
   return "Refresh Drifty Cloud";
 }
 
