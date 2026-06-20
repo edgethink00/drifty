@@ -22,8 +22,8 @@ describe("driftAlarmCopy", () => {
       nextFocusLabel: "VS Code",
     });
 
-    expect(driftCopy.title).toBe("Drift detected");
-    expect(driftCopy.summary).toBe("youtube.com · 8 minutes drift");
+    expect(driftCopy.title).toBe("Let's get you back in flow.");
+    expect(driftCopy.summary).toBe("This seems outside your focus flow.");
     expect(driftCopy.contextPills).toEqual(["Now youtube.com", "Latest focus VS Code"]);
     expect(breakReturnCopy.title).toBe("15m Break finished");
     expect(breakReturnCopy.summary).toBe("Break · 15m complete");
@@ -49,7 +49,7 @@ describe("driftAlarmCopy", () => {
     });
 
     expect(copy.title).toBe("Back from x.com");
-    expect(copy.summary).toBe("x.com · 12 minutes drift");
+    expect(copy.summary).toBe("This seems outside your focus flow.");
     expect(copy.contextPills).toEqual(["Now x.com", "Latest focus Linear"]);
     expect(copy.returnToFocusLabel).toBe("Return to focus");
     expect(copy.breakChoiceLabel).toBe("Take a break");
@@ -76,7 +76,7 @@ describe("driftAlarmCopy", () => {
 
     expect(resolveInitialDriftAlarmCopy()).toMatchObject({
       driftTitle: "Custom title",
-      driftSummary: "{context} · {driftDuration} drift",
+      driftSummary: "This seems outside your focus flow.",
       currentContextPill: "Now {context}",
       latestFocusPill: "Latest focus {latestFocus}",
       breakReturnTitle: "Resume after {breakDuration}",
@@ -104,7 +104,7 @@ describe("driftAlarmCopy", () => {
     });
 
     expect(JSON.parse(window.localStorage.getItem(DRIFT_ALARM_COPY_STORAGE_KEY) ?? "{}")).toMatchObject({
-      driftSummary: "{context} · {driftDuration} drift",
+      driftSummary: "This seems outside your focus flow.",
       currentContextPill: "Now {context}",
       latestFocusPill: "Latest focus {latestFocus}",
       backToDashboardLabel: "Back to dashboard",

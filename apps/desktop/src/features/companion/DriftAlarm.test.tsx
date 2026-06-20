@@ -70,7 +70,7 @@ describe("DriftAlarm", () => {
 
     const { container } = render(<DriftAlarm event={event} onAction={onAction} onCancel={onCancel} />);
 
-    const alarm = screen.getByRole("alertdialog", { name: "Drift detected" });
+    const alarm = screen.getByRole("alertdialog", { name: "Let's get you back in flow." });
     expect(alarm).toBeTruthy();
     expect(alarm.getAttribute("role")).toBe("alertdialog");
     expect(alarm.getAttribute("aria-modal")).toBe("true");
@@ -78,20 +78,22 @@ describe("DriftAlarm", () => {
     expect(alarm.classList.contains("watcher-peek--drift-alarm")).toBe(false);
     expect(alarm.classList.contains("da")).toBe(true);
     expect(alarm.classList.contains("watcher-peek--top-right")).toBe(false);
-    expect(screen.getByText(/drift detected/i)).toBeTruthy();
+    expect(screen.getByText("Let's get you back in flow.")).toBeTruthy();
     expect(screen.getByText(/not a drift/i)).toBeTruthy();
     expect(screen.getAllByText(/youtube\.com/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("This seems outside your focus flow.")).toBeTruthy();
     expect(screen.getByAltText("Drifty").classList.contains("window-logo")).toBe(true);
-    expect(container.querySelector(".da__chrome")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Dismiss drift alarm" })).toBeTruthy();
-    expect(screen.getByText("(now drifting)")).toBeTruthy();
+    expect(container.querySelector(".da__chrome")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Dismiss drift alarm" })).toBeNull();
+    expect(screen.queryByText("(now drifting)")).toBeNull();
     expect(screen.queryByText(/Latest focus/i)).toBeNull();
     expect(container.querySelector(".da__context")).toBeNull();
     expect(container.querySelector(".da__drift-copy")).toBeTruthy();
     expect(screen.queryByText(/streak/i)).toBeNull();
 
     expect(screen.getByRole("heading", { name: /return to focus/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /take a break/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Other options" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /take a break/i })).toBeNull();
     expect(screen.getByRole("button", { name: /docs\.drifty\.so/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /visual studio code/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /figma/i })).toBeTruthy();
@@ -102,15 +104,30 @@ describe("DriftAlarm", () => {
     expect(container.querySelector(".app-glyph")).toBeTruthy();
     expect(screen.getByText("VS")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Take a break" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Update settings" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "15m" })).toBeNull();
+    expect(Array.from(container.querySelectorAll(".da__choice--break, .da__correct, .da__settings-action")).map((element) => element.textContent?.trim())).toEqual([
+      "Take a break",
+      "Not a drift",
+      "Update settings",
+    ]);
 
     const firstTarget = screen.getByRole("button", { name: /docs\.drifty\.so/i });
     const breakTrigger = screen.getByRole("button", { name: "Take a break" });
     const correctionButton = screen.getByRole("button", { name: "Not a drift" });
-    fireEvent.click(firstTarget);
-    expect(firstTarget.classList.contains("is-selected")).toBe(true);
     vi.useFakeTimers();
     try {
+      fireEvent.click(firstTarget);
+      expect(firstTarget.classList.contains("is-selected")).toBe(true);
+      expect(firstTarget.classList.contains("is-pending")).toBe(true);
+      expect(firstTarget.getAttribute("aria-busy")).toBe("true");
+      expect(firstTarget.querySelector(".da__target-spinner")).toBeTruthy();
+      expect(onAction).not.toHaveBeenCalled();
+      await advanceBreakActionDelay(300);
+      expect(onAction.mock.calls.map(([action]) => action)).toEqual([
+        { type: "return_to_focus", targetId: "site:docs.drifty.so" },
+      ]);
+
       fireEvent.click(breakTrigger);
       expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
       const breakButton = screen.getByRole("button", { name: "1h" });
@@ -127,8 +144,7 @@ describe("DriftAlarm", () => {
 
     fireEvent.click(correctionButton);
     expect(correctionButton.classList.contains("is-selected")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Alarm settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss drift alarm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update settings" }));
 
     expect(onAction.mock.calls.map(([action]) => action)).toEqual([
       { type: "return_to_focus", targetId: "site:docs.drifty.so" },
@@ -136,8 +152,8 @@ describe("DriftAlarm", () => {
       { type: "manual_correction" },
       { type: "settings" },
     ]);
-    expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(alarm.classList.contains("is-dismissed")).toBe(true);
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(alarm.classList.contains("is-dismissed")).toBe(false);
   });
 
   it("renders break-return alarm copy and extends a break without changing target actions", async () => {
@@ -181,9 +197,9 @@ describe("DriftAlarm", () => {
     expect(screen.getByText("YouTube")).toBeTruthy();
     expect(screen.getByText(/Next focus/i)).toBeTruthy();
     expect(screen.getAllByText("VS Code").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: /extend break/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /extend break/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /take a break/i })).toBeNull();
-    expect(screen.getByRole("button", { name: "Dismiss break return alarm" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Dismiss break return alarm" })).toBeNull();
 
     vi.useFakeTimers();
     try {
@@ -282,24 +298,24 @@ describe("DriftAlarm", () => {
 
     fireEvent.click(opener);
 
-    const alarm = screen.getByRole("alertdialog", { name: "Drift detected" });
-    const settingsButton = screen.getByRole("button", { name: "Alarm settings" });
+    const alarm = screen.getByRole("alertdialog", { name: "Let's get you back in flow." });
+    const settingsButton = screen.getByRole("button", { name: "Update settings" });
     const primaryTarget = screen.getByRole("button", { name: /docs\.drifty\.so/i });
-    const manualCorrectionButton = screen.getByRole("button", { name: "Not a drift" });
 
     expect(alarm.getAttribute("aria-modal")).toBe("true");
     expect(alarm.getAttribute("aria-labelledby")).toBe("drift-alarm-title");
     await waitFor(() => expect(document.activeElement).toBe(primaryTarget));
 
     settingsButton.focus();
-    fireEvent.keyDown(alarm, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(manualCorrectionButton);
-
     fireEvent.keyDown(alarm, { key: "Tab" });
+    expect(document.activeElement).toBe(primaryTarget);
+
+    primaryTarget.focus();
+    fireEvent.keyDown(alarm, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(settingsButton);
 
     fireEvent.keyDown(alarm, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "Drift detected" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "Let's get you back in flow." })).toBeNull());
     expect(document.activeElement).toBe(opener);
     expect(onAction).not.toHaveBeenCalled();
   });

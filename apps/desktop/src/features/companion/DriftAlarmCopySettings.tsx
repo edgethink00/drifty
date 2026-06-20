@@ -6,6 +6,7 @@ import {
   type DriftAlarmEvent,
   type DriftAlarmFocusTarget,
 } from "./DriftAlarm";
+import { DriftAlarmSourceIcon } from "./DriftAlarmSourceIcon";
 import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
@@ -15,6 +16,8 @@ type AlarmPreviewSectionKey = Extract<DriftAlarmCopySectionKey, "drift" | "break
 const NOTIFICATION_PREVIEW = {
   place: "youtube.com",
   driftDurationLabel: "5 minutes",
+  sourceAppName: "Google Chrome",
+  sourceIconSrc: null,
 } as const;
 
 const EXTREME_NUDGE_PREVIEW = {
@@ -163,9 +166,19 @@ export function DriftAlarmCopySettings({
                 ) : null}
                 {activeSectionKey === "notification" ? (
                   <div className="drift-copy-preview__notification">
-                    <span>macOS notification</span>
-                    <strong>{notificationPreview.title}</strong>
-                    <p>{notificationPreview.body}</p>
+                    <span className="drift-copy-preview__notification-kicker">macOS notification</span>
+                    <strong className="drift-copy-preview__notification-title">{notificationPreview.title}</strong>
+                    <div className="drift-copy-preview__notification-source" aria-label={`Notification source ${NOTIFICATION_PREVIEW.place}`}>
+                      <span className="src-tile src-tile--drift" aria-hidden="true">
+                        <DriftAlarmSourceIcon
+                          appName={NOTIFICATION_PREVIEW.sourceAppName}
+                          iconSrc={NOTIFICATION_PREVIEW.sourceIconSrc}
+                          siteDomain={NOTIFICATION_PREVIEW.place}
+                        />
+                      </span>
+                      <span className="drift-copy-preview__notification-place">{NOTIFICATION_PREVIEW.place}</span>
+                      <p>{notificationPreview.body}</p>
+                    </div>
                   </div>
                 ) : null}
                 {activeSectionKey === "extremeNudge" ? (
