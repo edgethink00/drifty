@@ -2,6 +2,10 @@ import { buildAppUsageSummaries, categorizeActivity, classifyActivity } from "@d
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ProductivityLabel } from "@drifty/domain";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatDuration, getLocalDaysBetween, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
+import type { WeeklyChartMode } from "./weeklyChartView";
+
+export { buildWeeklyChartView, chooseChartStepHours, formatChartHourLabel } from "./weeklyChartView";
+export type { WeeklyChartColumn, WeeklyChartMode, WeeklyChartSegment, WeeklyChartView } from "./weeklyChartView";
 
 export type ProductivityAnalysisKind = Extract<ProductivityLabel, "focus" | "drift">;
 
@@ -217,97 +221,9 @@ export function formatInsightSourceValue(item: InsightSourceItem): string {
   return item.valueKind === "count" ? `${item.count}x` : formatDuration(item.seconds);
 }
 
-export type WeeklyChartMode = "productivity" | "category";
-
-export interface WeeklyChartColumn {
-  weekdayIndex: number;
-  weekday: string;
-  off: boolean;
-  totalSeconds: number;
-  barHeightPct: number;
-  segments: Array<{ key: string; heightPct: number; color: string; seconds: number }>;
-}
-
-export interface WeeklyChartView {
-  gridlines: Array<{ topPct: number; label: string }>;
-  columns: WeeklyChartColumn[];
-}
-
 export interface DonutCategorySlice {
   category: ActivityCategory;
   seconds: number;
-}
-
-export function chooseChartStepHours(maxHours: number): number {
-  const candidates = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
-  for (const candidate of candidates) {
-    if (maxHours / candidate <= 4) return candidate;
-  }
-  return candidates[candidates.length - 1];
-}
-
-export function formatChartHourLabel(value: number): string {
-  return Number.isInteger(value) ? `${value}` : `${value.toFixed(1).replace(/\.0$/, "")}`;
-}
-
-export function buildWeeklyChartView(
-  weekly: WeeklyBreakdownDay[],
-  mode: WeeklyChartMode,
-  categorySeries: DonutCategorySlice[],
-): WeeklyChartView {
-  const series = mode === "productivity"
-    ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({ key: productivity, color: PRODUCTIVITY_COLORS[productivity] }))
-    : categorySeries.map((slice) => ({ key: slice.category, color: CATEGORY_COLORS[slice.category] }));
-
-  const valueFor = (day: WeeklyBreakdownDay, key: string): number => {
-    if (mode === "productivity") {
-      if (key === "focus") return day.focusSeconds;
-      if (key === "neutral") return day.neutralSeconds;
-      if (key === "drift") return day.driftSeconds;
-      return 0;
-    }
-    return day.categorySeconds[key as ActivityCategory] ?? 0;
-  };
-
-  const dayTotals = weekly.map((day) => series.reduce((sum, ser) => sum + valueFor(day, ser.key), 0));
-
-  // Shared y-axis across both modes so toggling keeps a consistent scale.
-  const categoryKeys = categorySeries.map((slice) => slice.category);
-  const productivityHours = weekly.map((day) => (day.focusSeconds + day.neutralSeconds + day.driftSeconds) / 3600);
-  const categoryHours = weekly.map((day) => categoryKeys.reduce((sum, key) => sum + (day.categorySeconds[key] ?? 0), 0) / 3600);
-  const maxHours = Math.max(0, ...productivityHours, ...categoryHours);
-  const axisMax = maxHours > 0 ? maxHours / 0.93 : 1;
-  const step = chooseChartStepHours(maxHours);
-
-  const gridlines: Array<{ topPct: number; label: string }> = [];
-  if (maxHours > 0) {
-    for (let value = step; value <= maxHours + 1e-9; value += step) {
-      gridlines.push({ topPct: (1 - value / axisMax) * 100, label: `${formatChartHourLabel(value)}h` });
-    }
-    gridlines.reverse();
-  }
-
-  const columns = weekly.map((day, index) => {
-    const total = dayTotals[index];
-    const off = total <= 0;
-    return {
-      weekdayIndex: day.weekdayIndex,
-      weekday: day.weekday,
-      off,
-      totalSeconds: total,
-      barHeightPct: Math.min((total / (axisMax * 3600)) * 100, 100),
-      segments: off
-        ? []
-        : series
-            .map((ser) => {
-              const value = valueFor(day, ser.key);
-              return value > 0 ? { key: ser.key, heightPct: (value / total) * 100, color: ser.color, seconds: value } : null;
-            })
-            .filter((segment): segment is { key: ProductivityLabel | ActivityCategory; heightPct: number; color: string; seconds: number } => segment !== null),
-    };
-  });
-
-  return { gridlines, columns };
 }
 
 export interface DonutView {
