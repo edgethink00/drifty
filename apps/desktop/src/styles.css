@@ -324,6 +324,7 @@ input, textarea { color: inherit; }
 }
 
 .window-sidebar-toggle {
+  --window-sidebar-toggle-shift: 0px;
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -338,17 +339,18 @@ input, textarea { color: inherit; }
   left: var(--window-nav-offset-x);
   top: calc(var(--window-control-center-y) - 13px);
   z-index: 31;
-  transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), left var(--sidebar-duration) var(--sidebar-ease);
+  transform: translateX(var(--window-sidebar-toggle-shift));
+  transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), transform var(--sidebar-duration) var(--sidebar-ease);
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) .window-sidebar-toggle {
-  left: calc(var(--sidebar-expanded-width) - 31.5px);
+  --window-sidebar-toggle-shift: calc(var(--sidebar-expanded-width) - 31.5px - var(--window-nav-offset-x));
 }
 
 .window-sidebar-toggle:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--window-chrome-icon-hover);
-  transform: none;
+  transform: translateX(var(--window-sidebar-toggle-shift));
 }
 
 .window-sidebar-toggle:focus-visible {
@@ -579,6 +581,7 @@ input, textarea { color: inherit; }
 
 .brand .dot {
   width: 7px;
+  max-width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
@@ -707,6 +710,10 @@ input, textarea { color: inherit; }
   color: var(--canvas);
   border-radius: 6px;
   padding: 11px 13px;
+  display: grid;
+  width: 100%;
+  max-height: 9rem;
+  overflow: hidden;
 }
 
 .live-pill .k {
@@ -719,6 +726,10 @@ input, textarea { color: inherit; }
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
+  max-width: 12rem;
+  max-height: 1rem;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .live-pill .k::before {
@@ -733,7 +744,10 @@ input, textarea { color: inherit; }
   display: flex;
   align-items: baseline;
   gap: 6px;
+  max-width: 100%;
+  max-height: 1.25rem;
   min-width: 0;
+  overflow: hidden;
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -748,10 +762,21 @@ input, textarea { color: inherit; }
   font-weight: 500;
   opacity: 0.58;
 }
-.live-pill .app-class { font-size: 11px; opacity: 0.5; margin-top: 2px; }
+.live-pill .app-class {
+  font-size: 11px;
+  max-width: 100%;
+  max-height: 1rem;
+  opacity: 0.5;
+  overflow: hidden;
+  margin-top: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .sidebar-tracker-toggle {
   width: 100%;
+  display: grid;
+  place-items: center;
   margin-top: 10px;
   padding: 7px 9px;
   border: 1px solid var(--line);
@@ -6371,6 +6396,12 @@ input, textarea { color: inherit; }
 .nav-item.active { background: var(--accent); color: #fff; }
 :root[data-theme="dark"] .nav-item.active { color: #0f0f0d; }
 .nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+.nav-item span {
+  max-width: 9rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
 
 /* Sidebar foot (prototype uses `.sidebar-foot`) */
 .sidebar-foot {
@@ -6419,11 +6450,17 @@ input, textarea { color: inherit; }
   object-fit: cover;
 }
 
-.account-trigger__copy { min-width: 0; display: grid; }
+.account-trigger__copy {
+  max-width: 10rem;
+  min-width: 0;
+  display: grid;
+  overflow: hidden;
+}
 .account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.2; }
 .account-trigger__chevrons {
   display: grid;
   width: 16px;
+  max-width: 16px;
   gap: 2px;
   place-items: center;
   color: var(--text-soft);
@@ -17799,6 +17836,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
     transform var(--sidebar-duration) var(--sidebar-ease),
     width var(--sidebar-duration) var(--sidebar-ease),
     max-width var(--sidebar-duration) var(--sidebar-ease),
+    max-height var(--sidebar-duration) var(--sidebar-ease),
     padding var(--sidebar-duration) var(--sidebar-ease),
     margin var(--sidebar-duration) var(--sidebar-ease),
     background var(--transition-fast),
@@ -17842,12 +17880,11 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .sidebar--collapsed .brand {
   gap: 0;
   width: 100%;
-  padding: 9px 0;
+  padding: 10px 0;
   margin: 0 0 12px;
 }
 
   .sidebar--collapsed .brand .dot {
-    width: 0;
     max-width: 0;
     opacity: 0;
     overflow: hidden;
@@ -17870,8 +17907,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 
   .sidebar--collapsed .nav-label {
     width: 100%;
-    height: 8px;
-    padding: 7px 0 0;
+    padding: 4px 0;
     overflow: hidden;
     color: transparent;
   }
@@ -17891,14 +17927,13 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   .sidebar--collapsed .nav-item {
     gap: 0;
     justify-content: center;
-    width: 2.25rem;
+    width: 100%;
     height: 2.25rem;
     padding: 0;
     border-radius: 10px;
   }
 
   .sidebar--collapsed .nav-item span {
-    width: 0;
     max-width: 0;
     opacity: 0;
     overflow: hidden;
@@ -17922,7 +17957,8 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   }
 
   .sidebar--collapsed .live-pill {
-    width: 2.25rem;
+    width: 100%;
+    max-height: 2.25rem;
     min-height: 2.25rem;
     display: grid;
     place-items: center;
@@ -17930,19 +17966,25 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
     border: 0;
     background: transparent;
     color: inherit;
+    overflow: hidden;
     margin-inline: auto;
   }
 
   .sidebar--collapsed .live-pill .k {
+    width: 100%;
     gap: 0;
+    justify-content: center;
     margin: 0;
-    width: 0;
-    max-width: 0;
-    opacity: 0;
+    max-width: none;
+    height: 100%;
+    max-height: 2.25rem;
+    opacity: 1;
+    color: transparent;
     font-size: 0;
+    letter-spacing: 0;
     overflow: hidden;
     pointer-events: none;
-    transform: translateX(-4px);
+    transform: none;
   }
 
   .sidebar--collapsed .live-pill .k::before {
@@ -17952,8 +17994,9 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 
   .sidebar--collapsed .live-pill .app-name,
   .sidebar--collapsed .live-pill .app-class {
-    width: 0;
     max-width: 0;
+    max-height: 0;
+    margin: 0;
     opacity: 0;
     overflow: hidden;
     pointer-events: none;
@@ -17961,7 +18004,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle {
-    width: 2.25rem;
+    width: 100%;
     height: 2.25rem;
     display: grid;
     place-items: center;
@@ -18033,11 +18076,13 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   }
 
   .sidebar--collapsed .account-trigger {
-    width: 2.25rem;
+    width: 100%;
     height: 2.25rem;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     justify-content: center;
+    justify-items: center;
     gap: 0;
     margin-inline: auto;
     padding: 0;
@@ -18053,7 +18098,6 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 
   .sidebar--collapsed .account-trigger__copy,
   .sidebar--collapsed .account-trigger__chevrons {
-    width: 0;
     max-width: 0;
     opacity: 0;
     overflow: hidden;
