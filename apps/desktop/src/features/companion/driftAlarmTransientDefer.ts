@@ -45,15 +45,18 @@ export function sourceKeyForDriftAlarmCandidate(input: {
 
 export function resolveDriftAlarmTransientDefer(input: DriftAlarmTransientDeferInput): DriftAlarmTransientDeferDecision {
   const activePending = input.pending;
-  if (activePending && input.nowMs >= activePending.expiresAtMs) {
-    return { kind: "expired", pending: activePending };
-  }
-
   if (input.systemTransientActivity) {
     if (!input.candidate) {
       return activePending
         ? { kind: "defer", pending: activePending }
         : { kind: "inactive", pending: null };
+    }
+    if (
+      activePending
+      && activePending.sourceKey === input.candidate.sourceKey
+      && input.nowMs >= activePending.expiresAtMs
+    ) {
+      return { kind: "expired", pending: activePending };
     }
 
     return {
@@ -68,9 +71,15 @@ export function resolveDriftAlarmTransientDefer(input: DriftAlarmTransientDeferI
   }
 
   if (!activePending) return { kind: "inactive", pending: null };
-  if (!input.candidate) return { kind: "cancel", pending: activePending, reason: "missing_candidate" };
+  if (!input.candidate) {
+    if (input.nowMs >= activePending.expiresAtMs) return { kind: "expired", pending: activePending };
+    return { kind: "cancel", pending: activePending, reason: "missing_candidate" };
+  }
   if (input.candidate.sourceKey !== activePending.sourceKey) {
     return { kind: "cancel", pending: activePending, reason: "candidate_changed" };
+  }
+  if (input.nowMs >= activePending.expiresAtMs) {
+    return { kind: "expired", pending: activePending };
   }
   if (input.nowMs < activePending.readyAtMs) {
     return {

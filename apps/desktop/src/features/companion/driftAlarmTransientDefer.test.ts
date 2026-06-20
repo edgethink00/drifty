@@ -90,6 +90,50 @@ describe("drift alarm transient defer", () => {
     expect(decision).toMatchObject({ kind: "cancel", reason: "candidate_changed" });
   });
 
+  it("cancels a changed candidate even when the previous pending alarm expired", () => {
+    const pending = resolveDriftAlarmTransientDefer({
+      pending: null,
+      candidate,
+      systemTransientActivity: "app_switcher",
+      nowMs: 4_000,
+    }).pending;
+
+    const decision = resolveDriftAlarmTransientDefer({
+      pending,
+      candidate: { ...candidate, alertKey: "active:seg-2", sourceKey: "seg-2" },
+      systemTransientActivity: null,
+      nowMs: 4_000 + DRIFT_ALARM_TRANSIENT_DEFER_MAX_MS,
+    });
+
+    expect(decision).toMatchObject({ kind: "cancel", reason: "candidate_changed" });
+  });
+
+  it("starts a new deferral for a changed candidate while a transient remains active", () => {
+    const pending = resolveDriftAlarmTransientDefer({
+      pending: null,
+      candidate,
+      systemTransientActivity: "app_switcher",
+      nowMs: 4_000,
+    }).pending;
+    const nextCandidate = { ...candidate, alertKey: "active:seg-2", sourceKey: "seg-2" };
+
+    const decision = resolveDriftAlarmTransientDefer({
+      pending,
+      candidate: nextCandidate,
+      systemTransientActivity: "app_switcher",
+      nowMs: 4_000 + DRIFT_ALARM_TRANSIENT_DEFER_MAX_MS,
+    });
+
+    expect(decision).toMatchObject({
+      kind: "defer",
+      pending: {
+        alertKey: "active:seg-2",
+        sourceKey: "seg-2",
+        firstDeferredAtMs: 4_000 + DRIFT_ALARM_TRANSIENT_DEFER_MAX_MS,
+      },
+    });
+  });
+
   it("expires a pending alarm after the maximum defer time", () => {
     const pending = resolveDriftAlarmTransientDefer({
       pending: null,
