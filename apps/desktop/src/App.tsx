@@ -1065,6 +1065,9 @@ export default function App() {
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
+  const driftAlarmDayRef = useRef(logicalTodayIsoDate(startOfDayMinutes));
+  const driftAlarmBaseSegmentsRef = useRef<ActivitySegment[]>([]);
+  const driftAlarmHistorySegmentsRef = useRef<ActivitySegment[]>([]);
   const focusedLiveTailRefreshInFlightRef = useRef(false);
   const rendererFocusedRef = useRef(rendererFocused);
   const selectedDayRef = useRef(selectedDay);
@@ -1077,6 +1080,40 @@ export default function App() {
       pendingDriftAlarmTransientRefreshRef.current = 0;
     }
   }, []);
+
+  function clearPendingTransientRefresh() {
+    if (!pendingDriftAlarmTransientRefreshRef.current) return;
+    window.clearTimeout(pendingDriftAlarmTransientRefreshRef.current);
+    pendingDriftAlarmTransientRefreshRef.current = 0;
+  }
+
+  function resetDriftAlarmRuntimeForDay(nextAlarmDay: string) {
+    driftAlarmDayRef.current = nextAlarmDay;
+    driftAlarmBaseSegmentsRef.current = [];
+    driftAlarmHistorySegmentsRef.current = [];
+    liveDriftAlarmSegmentsRef.current = [];
+    pendingDriftAlarmGateRef.current = null;
+    lastEligibleDriftCandidateRef.current = null;
+    pendingDriftAlarmTransientRef.current = null;
+    lastDriftAlertSegmentRef.current = null;
+    clearPendingTransientRefresh();
+  }
+
+  function currentDriftAlarmDay(): string {
+    const nextAlarmDay = logicalTodayIsoDate(startOfDayMinutes);
+    if (driftAlarmDayRef.current !== nextAlarmDay) resetDriftAlarmRuntimeForDay(nextAlarmDay);
+    return nextAlarmDay;
+  }
+
+  function updateDriftAlarmBaseSegments(day: string, nextSegments: ActivitySegment[]) {
+    if (day !== currentDriftAlarmDay()) return;
+    driftAlarmBaseSegmentsRef.current = nextSegments;
+  }
+
+  function updateDriftAlarmHistorySegments(day: string, nextSegments: ActivitySegment[]) {
+    if (day !== currentDriftAlarmDay()) return;
+    driftAlarmHistorySegmentsRef.current = nextSegments;
+  }
 
   const loadClassificationRules = useCallback(async () => {
     setClassificationRulesLoading(true);
@@ -1663,9 +1700,17 @@ export default function App() {
 
       const materializedTimeline = materializeBuiltInHeuristicTimeline(timeline);
       const materializedArchiveTimelines = archiveTimelines;
+      const alarmDay = currentDriftAlarmDay();
+      const isAlarmDayRefresh = day === alarmDay;
 
       if (isForegroundRefresh) setCurrentSnapshot(nextCurrentSnapshot);
-      liveDriftAlarmSegmentsRef.current = [];
+      if (isAlarmDayRefresh) {
+        liveDriftAlarmSegmentsRef.current = [];
+        updateDriftAlarmBaseSegments(day, materializedTimeline.segments);
+        if (materializedArchiveTimelines !== null) {
+          updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
+        }
+      }
       setSegments(materializedTimeline.segments);
       setSegmentsLoadedDay(day);
       if (materializedArchiveTimelines !== null) setHistorySegments(materializedArchiveTimelines.segments);
@@ -1773,6 +1818,7 @@ export default function App() {
       if (historyRefreshRequestRef.current !== requestId) return false;
 
       setHistorySegments(materializedArchiveTimelines.segments);
+      updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
@@ -1814,6 +1860,7 @@ export default function App() {
       if (dashboardWeekPrefetchRequestRef.current !== requestId) return false;
 
       setHistorySegments(materializedArchiveTimelines.segments);
+      updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
       scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
       return true;
     } catch (error) {
@@ -1826,7 +1873,7 @@ export default function App() {
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;
     if (shouldBlockLocalTrackerAccess) return false;
-    if (selectedDayRef.current !== day) return false;
+    if (day !== currentDriftAlarmDay()) return false;
 
     liveDriftAlarmRefreshInFlightRef.current = true;
     try {
@@ -1840,7 +1887,7 @@ export default function App() {
         }),
       ]);
 
-      if (selectedDayRef.current !== day) return false;
+      if (day !== currentDriftAlarmDay()) return false;
       liveDriftAlarmSegmentsRef.current = liveTimeline;
       evaluateDriftAlarmRef.current?.({
         checkedAt: new Date(),
@@ -1888,6 +1935,7 @@ export default function App() {
       if (liveTail.segments.length > 0) {
         const mergedSegments = mergeActivitySegments(segmentsRef.current, liveTail.segments);
         segmentsRef.current = mergedSegments;
+        updateDriftAlarmBaseSegments(day, mergedSegments);
         setSegments(mergedSegments);
         setHistorySegments((current) => current.length > 0 ? mergeActivitySegments(current, liveTail.segments) : current);
         setHourly(buildHourlySummary(mergedSegments));
@@ -1978,16 +2026,15 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
     if (!driftAlertsEnabled) return undefined;
-    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return undefined;
 
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
       // Keep this heavy snapshot poll out of the focused renderer path; alarms resume on the normal cadence once Drifty loses focus.
       if (rendererFocusedRef.current) return;
-      void refreshLiveDriftAlarmActivity(selectedDay);
+      void refreshLiveDriftAlarmActivity(currentDriftAlarmDay());
     }, DRIFT_ALARM_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -2362,22 +2409,18 @@ export default function App() {
     const shouldUpdateRendererState = input.updateRendererState !== false;
     const alarmSnapshot = input.snapshot;
     const liveSegments = input.liveSegments;
-    const evaluationToday = logicalTodayIsoDate(startOfDayMinutes);
+    const evaluationToday = currentDriftAlarmDay();
+    const baseSegments = driftAlarmBaseSegmentsRef.current;
     const evaluation = buildDriftAlarmDebugEvaluationSummary({
-      selectedDay,
+      selectedDay: selectedDayRef.current,
       today: evaluationToday,
       currentSnapshot: alarmSnapshot,
       liveSegmentCount: liveSegments.length,
-      storedSegmentCount: segments.length,
+      storedSegmentCount: baseSegments.length,
       minimumDurationSeconds: driftAlertDelaySeconds,
     });
     const publishEvaluationDriftAlarmTrayStatus = (result: DriftAlarmTrayResult, statusCheckedAt: Date | null = checkedAt) => {
       publishDriftAlarmTrayStatus(result, statusCheckedAt, { updateRendererState: shouldUpdateRendererState });
-    };
-    const clearPendingTransientRefresh = () => {
-      if (!pendingDriftAlarmTransientRefreshRef.current) return;
-      window.clearTimeout(pendingDriftAlarmTransientRefreshRef.current);
-      pendingDriftAlarmTransientRefreshRef.current = 0;
     };
     const clearPendingTransientDriftAlarm = () => {
       pendingDriftAlarmTransientRef.current = null;
@@ -2387,7 +2430,12 @@ export default function App() {
       clearPendingTransientRefresh();
       pendingDriftAlarmTransientRefreshRef.current = window.setTimeout(() => {
         pendingDriftAlarmTransientRefreshRef.current = 0;
-        void refresh(selectedDay, { requireCurrentSnapshot: true });
+        const alarmDay = currentDriftAlarmDay();
+        if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
+          void refresh(alarmDay, { requireCurrentSnapshot: true });
+          return;
+        }
+        void refreshLiveDriftAlarmActivity(alarmDay);
       }, Math.max(0, delayMs));
     };
     if (!driftAlertsEnabled) {
@@ -2397,18 +2445,6 @@ export default function App() {
         evaluation,
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "disabled" }, null);
-      pendingDriftAlarmGateRef.current = null;
-      lastEligibleDriftCandidateRef.current = null;
-      clearPendingTransientDriftAlarm();
-      return;
-    }
-    if (selectedDay !== evaluationToday) {
-      recordDriftAlarmDebugEvent({
-        kind: "evaluation_skipped",
-        reason: "not_today",
-        evaluation,
-      });
-      publishEvaluationDriftAlarmTrayStatus({ kind: "not_today" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
@@ -2429,12 +2465,20 @@ export default function App() {
 
     const systemTransientActivity = alarmSnapshot?.systemTransientActivity ?? null;
     const driftAlarmSegments = liveSegments.length > 0
-      ? mergeDriftAlarmSegments(segments, liveSegments)
-      : segments;
+      ? mergeDriftAlarmSegments(baseSegments, liveSegments)
+      : baseSegments;
     const driftAlarmClassificationOptions = {
-      ...selectedDayClassificationOptions,
       fallbackCandidates: driftAlarmSegments,
+      includeAiClassifications: showAiClassificationImpact,
+      rules: classificationRules,
     } satisfies ClassificationOptions;
+    const driftAlarmFocusTargets = buildRecentFocusTargets(
+      driftAlarmSegments,
+      driftAlarmHistorySegmentsRef.current,
+      driftAlarmClassificationOptions,
+      appIconsRef.current,
+    );
+    const availableDriftAlarmFocusTargetsForAlarm = filterDefinitelyAvailableFocusTargets(driftAlarmFocusTargets);
     const driftCandidates = buildDriftAlarmCandidates({
       segments: driftAlarmSegments,
       currentSnapshot: alarmSnapshot,
@@ -2526,11 +2570,12 @@ export default function App() {
             ? { ...localAiClassificationOptions, persistLiveResult: true }
             : { persistLiveResult: true };
           const refreshAfterLiveAiClassification = async () => {
-            if (shouldUpdateRendererState) {
-              await refresh(selectedDay, { requireCurrentSnapshot: true });
+            const alarmDay = currentDriftAlarmDay();
+            if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
+              await refresh(alarmDay, { requireCurrentSnapshot: true });
               return;
             }
-            void refreshLiveDriftAlarmActivity(selectedDay);
+            void refreshLiveDriftAlarmActivity(alarmDay);
           };
           void classifyLiveActivityWithAi(liveAiCandidate.segment, liveAiOptions).then(async (result) => {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
@@ -2559,7 +2604,9 @@ export default function App() {
                   reason: `ai-unavailable:${result.reason}`,
                   candidateDetail: liveAiCandidateDetail,
                 }, new Date());
-                if (shouldUpdateRendererState) await refresh(selectedDay, { requireCurrentSnapshot: true });
+                if (shouldUpdateRendererState && selectedDayRef.current === currentDriftAlarmDay()) {
+                  await refresh(currentDriftAlarmDay(), { requireCurrentSnapshot: true });
+                }
                 return;
               default:
                 assertNever(result);
@@ -2684,7 +2731,7 @@ export default function App() {
       default:
         assertNever(transientDecision);
     }
-    const buildCurrentDriftAlarmEvent = () => {
+    const buildCurrentDriftAlarmEvent = (focusTargets: readonly DriftAlarmFocusTarget[] = availableDriftAlarmFocusTargetsForAlarm) => {
       const contextLabel = getWatcherContextLabel(segment, category);
       const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
       const sourceAppName = segment.appName.trim() || "Unknown app";
@@ -2697,7 +2744,7 @@ export default function App() {
         driftDurationSeconds: segment.durationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
-        focusTargets: availableDriftAlarmFocusTargets,
+        focusTargets,
         sourceSiteDomain,
         sourceAppName,
         sourceIconSrc,
@@ -2761,9 +2808,19 @@ export default function App() {
           if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
           return;
         }
-        const driftAlarmEvent = buildCurrentDriftAlarmEvent();
+        let resolvedDriftAlarmFocusTargets = availableDriftAlarmFocusTargetsForAlarm;
+        try {
+          resolvedDriftAlarmFocusTargets = await resolveAvailableFocusTargets(driftAlarmFocusTargets);
+        } catch (error: unknown) {
+          if (error instanceof Error) {
+            console.warn("Failed to resolve current drift alarm focus target availability", error);
+          } else {
+            console.warn("Failed to resolve current drift alarm focus target availability", String(error));
+          }
+        }
+        const driftAlarmEvent = buildCurrentDriftAlarmEvent(resolvedDriftAlarmFocusTargets);
         lastDriftAlarmEventRef.current = driftAlarmEvent;
-        const latestFocusTarget = (await resolveCurrentAvailableDriftAlarmFocusTargets())[0] ?? null;
+        const latestFocusTarget = resolvedDriftAlarmFocusTargets[0] ?? null;
         void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
         markCurrentDriftAlarmDelivered();
         if (latestFocusTarget) {
@@ -2862,7 +2919,7 @@ export default function App() {
         if (outcome) completeBreakRecoveryAssessment(pendingBreakReturnAlarm, outcome);
         const focusTargets = pendingBreakReturnAlarm.focusTargets.length
           ? pendingBreakReturnAlarm.focusTargets
-          : availableDriftAlarmFocusTargets;
+          : availableDriftAlarmFocusTargetsForAlarm;
         const breakReturnContextLabel = getWatcherContextLabel(segment, category);
         const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
         const breakReturnAppName = segment.appName.trim() || "Unknown app";
@@ -3081,7 +3138,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, devModeEnabled, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, resolveCurrentAvailableDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [canUseCloudAiClassification, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
