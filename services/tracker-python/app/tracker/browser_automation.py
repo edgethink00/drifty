@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -14,6 +15,7 @@ from app.tracker.accessibility_address_bar import (
 BrowserAutomationStatus = Literal["granted", "denied", "unavailable", "stale", "empty_result", "not_applicable"]
 
 _NO_SCRIPTABLE_WINDOW = "NO_SCRIPTABLE_WINDOW"
+_FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
 
 
 @dataclass
@@ -129,6 +131,10 @@ def _chromium_accessibility_metadata(app_name: str, run_osascript: Callable[[str
     )
 
 
+def _force_chromium_ax_capture_enabled() -> bool:
+    return os.environ.get(_FORCE_CHROMIUM_AX_CAPTURE_ENV) == "1"
+
+
 def _tab_matching_script(
     app_name: str,
     exists_check: str,
@@ -212,6 +218,11 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
     script = browser_script(app_name)
     if not script:
         return BrowserMetadata()
+
+    if _force_chromium_ax_capture_enabled() and is_chromium_browser_app(app_name):
+        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        if fallback:
+            return fallback
 
     try:
         result = run_osascript(script)

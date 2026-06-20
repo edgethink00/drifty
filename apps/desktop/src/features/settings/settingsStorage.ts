@@ -18,6 +18,12 @@ export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassi
 
 export const AUTO_UPDATE_CHECKS_STORAGE_KEY = "drifty.updates.autoCheckOnLaunch";
 
+export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
+
+export const FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY = "drifty.dev.forceChromiumAxCapture";
+
+export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
+
 export const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
 
 export const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
@@ -165,6 +171,21 @@ export function resolveInitialAiClassificationVisibility(): boolean {
 export function resolveInitialAutoUpdateChecksEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(AUTO_UPDATE_CHECKS_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialDevModeEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialForceChromiumAxCaptureEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialForceChromiumAxExtremeNudgeEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY) === "1";
 }
 
 export function applyThemeToDocument(theme: ThemeMode) {

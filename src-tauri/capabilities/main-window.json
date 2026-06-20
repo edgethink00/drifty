@@ -28,6 +28,7 @@
     "allow-tracker-get-dashboard-week-timeline",
     "allow-tracker-get-live-tail",
     "allow-tracker-get-current-snapshot",
+    "allow-tracker-set-developer-diagnostics",
     "allow-tracker-get-hourly-summary",
     "allow-tracker-get-raw-events",
     "allow-tracker-get-top-sites",

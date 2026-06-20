@@ -11,6 +11,7 @@ export type ExtremeNudgeTarget = {
   readonly browserName: string | null;
   readonly siteDomain: string | null;
   readonly siteUrl: string | null;
+  readonly forceChromiumAxTabClose: boolean;
 };
 
 export type ExtremeNudgeApplyResult = {

@@ -54,6 +54,17 @@ describe("trackerClient", () => {
     });
   });
 
+  it("persists developer diagnostics through the tracker command", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({ forceChromiumAxCapture: true });
+
+    await trackerClient.setDeveloperDiagnostics({ forceChromiumAxCapture: true });
+
+    expect(invoke).toHaveBeenCalledWith("tracker_set_developer_diagnostics", {
+      query: { forceChromiumAxCapture: true },
+    });
+  });
+
   it("returns an empty dashboard week timeline outside Tauri", async () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     const { trackerClient } = await import("./trackerClient");

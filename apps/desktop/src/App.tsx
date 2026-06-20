@@ -135,7 +135,6 @@ import {
   listenToNativeDriftAlarmAction,
   listenToNativeDriftAlarmDismissed,
   showNativeDriftAlarm,
-  type ExtremeNudgeTarget,
 } from "./features/companion/driftAlarmBridge";
 import { evaluateYouTubeDriftAlarmGate } from "./features/companion/youtubeDriftAlarmGate";
 import {
@@ -207,7 +206,7 @@ import { localAiProviderConfigFromSetup } from "./features/settings/localAiClass
 import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import type { AiConnectionTestResult } from "./features/settings/aiConnectionTest";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
@@ -567,6 +566,9 @@ export default function App() {
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
   const [availableUpdateSource, setAvailableUpdateSource] = useState<UpdateCheckMode | null>(null);
   const [autoUpdateChecksEnabled, setAutoUpdateChecksEnabled] = useState(resolveInitialAutoUpdateChecksEnabled);
+  const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
+  const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
+  const [forceChromiumAxExtremeNudgeEnabled, setForceChromiumAxExtremeNudgeEnabled] = useState(resolveInitialForceChromiumAxExtremeNudgeEnabled);
   const [updaterChecking, setUpdaterChecking] = useState(false);
   const [updaterInstalling, setUpdaterInstalling] = useState(false);
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
@@ -734,11 +736,12 @@ export default function App() {
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
+    if (!devModeEnabled) return;
     shouldFocusEndOfDayReviewSettingsRef.current = true;
     setSettingsSection("dev");
     navigateToTab("settings");
     setAccountMenuOpen(false);
-  }, [navigateToTab]);
+  }, [devModeEnabled, navigateToTab]);
 
   const openEndOfDayReviewDashboard = useCallback(() => {
     setEndOfDayReviewEvent(null);
@@ -2045,6 +2048,27 @@ export default function App() {
   }, [autoUpdateChecksEnabled]);
 
   useEffect(() => {
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, devModeEnabled ? "1" : "0");
+    if (devModeEnabled) return;
+    if (settingsSection === "dev") setSettingsSection("general");
+    if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
+    if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
+  }, [devModeEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, settingsSection]);
+
+  useEffect(() => {
+    const forceChromiumAxCapture = devModeEnabled && forceChromiumAxCaptureEnabled;
+    window.localStorage.setItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, forceChromiumAxCapture ? "1" : "0");
+    void trackerClient.setDeveloperDiagnostics?.({ forceChromiumAxCapture }).catch((nextError) => {
+      console.warn("Failed to persist tracker developer diagnostics", nextError);
+    });
+  }, [devModeEnabled, forceChromiumAxCaptureEnabled]);
+
+  useEffect(() => {
+    const forceChromiumAxExtremeNudge = devModeEnabled && forceChromiumAxExtremeNudgeEnabled;
+    window.localStorage.setItem(FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, forceChromiumAxExtremeNudge ? "1" : "0");
+  }, [devModeEnabled, forceChromiumAxExtremeNudgeEnabled]);
+
+  useEffect(() => {
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, driftAlertsEnabled ? "1" : "0");
   }, [driftAlertsEnabled]);
 
@@ -2711,7 +2735,9 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then(async (result) => {
+      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
+        forceChromiumAxTabClose: devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+      })).then(async (result) => {
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
@@ -3042,7 +3068,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, resolveCurrentAvailableDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, devModeEnabled, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, resolveCurrentAvailableDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -4386,6 +4412,11 @@ export default function App() {
       theme,
       categoryColorOverrides,
       appThemeColorOverrides,
+      developerDiagnostics: {
+        devModeEnabled,
+        forceChromiumAxCapture: devModeEnabled && forceChromiumAxCaptureEnabled,
+        forceChromiumAxExtremeNudge: devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+      },
       status,
       accessibilityGranted,
       currentSnapshot: snapshotForDebug,
@@ -4422,7 +4453,7 @@ export default function App() {
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, driftAlarmTrayStatus, error, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, error, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -4553,7 +4584,7 @@ export default function App() {
         <SettingsSidebar
           activeSection={settingsSection}
           isCollapsed={isSidebarVisuallyCollapsed}
-          showDevSection={DEV_SETTINGS_ENABLED}
+          showDevSection={DEV_SETTINGS_ENABLED && devModeEnabled}
           onBack={handleSettingsBack}
           onSectionChange={setSettingsSection}
         />
@@ -5224,7 +5255,7 @@ export default function App() {
                       />
                     </div>
                     <div className="settings-block"><h3>Debugging</h3>
-                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Preview a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleOpenDebugLogs()}>View debug logs</button></div></div>
+                      <div className="settings-row"><div><div className="lbl">Dev mode</div><div className="desc">Show local diagnostics controls for this beta build.</div></div><div className="ctrl"><Toggle checked={devModeEnabled} onChange={setDevModeEnabled} ariaLabel="Toggle Dev mode" /></div></div>
                       <SettingsBuildInfoRow />
                     </div>
                   </div>
@@ -5387,8 +5418,15 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                {settingsSection === "dev" && DEV_SETTINGS_ENABLED && (
+                {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <div className="settings-section">
+                    <div className="settings-block"><h3>Debug logs</h3>
+                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Preview a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleOpenDebugLogs()}>View debug logs</button></div></div>
+                    </div>
+                    <div className="settings-block"><h3>AX fallback diagnostics</h3>
+                      <div className="settings-row settings-row--fallback"><div><div className="lbl">Force Chromium AX site capture</div><div className="desc">Skip Chromium tab AppleScript reads and capture the front URL through the Accessibility address bar path.</div></div><div className="ctrl"><Toggle checked={forceChromiumAxCaptureEnabled} onChange={setForceChromiumAxCaptureEnabled} ariaLabel="Force Chromium Accessibility site capture" /></div></div>
+                      <div className="settings-row settings-row--fallback"><div><div className="lbl">Force Chromium AX extreme nudge</div><div className="desc">Skip Chromium tab AppleScript close paths so Extreme nudge must use the Accessibility fallback.</div></div><div className="ctrl"><Toggle checked={forceChromiumAxExtremeNudgeEnabled} onChange={setForceChromiumAxExtremeNudgeEnabled} ariaLabel="Force Chromium Accessibility extreme nudge" /></div></div>
+                    </div>
                     <div className="settings-block settings-block--dev-preview">
                       <h3>Dev</h3>
                       {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (

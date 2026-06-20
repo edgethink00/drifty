@@ -4,26 +4,18 @@ pub(super) fn tab_close_script(
     browser_name: &str,
     site_url: &str,
     site_domain: Option<&str>,
+    force_ax_tab_close: bool,
 ) -> String {
     let browser_name = super::matching::applescript_string_literal(browser_name);
     let target = TargetMatchValues::new(site_url, site_domain);
     let site_url = target.site_url;
     let site_domain = target.site_domain;
     let handlers = matching_handlers();
-    format!(
-        r##"property bestValue : ""
-property bestLength : -1
-property bestPriority : -1
-property readableCount : 0
-property visitedCount : 0
-property maxVisited : 500
-property toolbarVisitedCount : 0
-property toolbarMaxVisited : 120
-property foundAddress : false
-set targetUrl to "{site_url}"
-set targetDomain to "{site_domain}"
-
-tell application "{browser_name}"
+    let apple_script_tab_close = if force_ax_tab_close {
+        String::new()
+    } else {
+        format!(
+            r##"tell application "{browser_name}"
   try
     if exists front window then
       set currentUrl to URL of active tab of front window
@@ -44,7 +36,23 @@ tell application "{browser_name}"
       end try
     end repeat
   end repeat
-end tell
+end tell"##
+        )
+    };
+    format!(
+        r##"property bestValue : ""
+property bestLength : -1
+property bestPriority : -1
+property readableCount : 0
+property visitedCount : 0
+property maxVisited : 500
+property toolbarVisitedCount : 0
+property toolbarMaxVisited : 120
+property foundAddress : false
+set targetUrl to "{site_url}"
+set targetDomain to "{site_domain}"
+
+{apple_script_tab_close}
 try
   tell application "System Events"
     tell process "{browser_name}"

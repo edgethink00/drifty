@@ -43,6 +43,12 @@ pub struct TopSitesQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeveloperDiagnosticsQuery {
+    pub force_chromium_ax_capture: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClassificationQuery {
     pub day: Option<String>,
     pub start: Option<String>,
@@ -193,6 +199,22 @@ pub async fn tracker_get_current_snapshot(
     async_runtime::spawn_blocking(move || {
         controller
             .get_current_snapshot(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_set_developer_diagnostics(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DeveloperDiagnosticsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .set_developer_diagnostics(&app, query.force_chromium_ax_capture)
             .map_err(|error| error.to_string())
     })
     .await

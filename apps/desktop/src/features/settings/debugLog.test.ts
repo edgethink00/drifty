@@ -122,6 +122,11 @@ describe("buildDebugLogPayload", () => {
       theme: "light",
       categoryColorOverrides: {},
       appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: true,
+        forceChromiumAxCapture: true,
+        forceChromiumAxExtremeNudge: false,
+      },
       status: null,
       accessibilityGranted: true,
       currentSnapshot: null,
@@ -146,6 +151,7 @@ describe("buildDebugLogPayload", () => {
     });
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("automationErrorCounts");
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("automationStatusCounts");
+    expect(payload.settings.developerDiagnostics.forceChromiumAxCapture).toBe(true);
   });
 
   it("records cloud AI issue diagnostics without raw provider payloads", () => {
@@ -156,6 +162,11 @@ describe("buildDebugLogPayload", () => {
       theme: "light",
       categoryColorOverrides: {},
       appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: false,
+        forceChromiumAxCapture: false,
+        forceChromiumAxExtremeNudge: false,
+      },
       status: null,
       accessibilityGranted: true,
       currentSnapshot: null,
@@ -280,6 +291,11 @@ describe("buildDebugLogPayload", () => {
       theme: "light",
       categoryColorOverrides: {},
       appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: false,
+        forceChromiumAxCapture: false,
+        forceChromiumAxExtremeNudge: false,
+      },
       status: null,
       accessibilityGranted: true,
       currentSnapshot: null,

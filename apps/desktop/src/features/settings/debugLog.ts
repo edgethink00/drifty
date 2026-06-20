@@ -44,6 +44,11 @@ type BuildDebugLogPayloadInput = {
   readonly theme: ThemeMode;
   readonly categoryColorOverrides: CategoryColorOverrides;
   readonly appThemeColorOverrides: AppThemeColorOverrides;
+  readonly developerDiagnostics: {
+    readonly devModeEnabled: boolean;
+    readonly forceChromiumAxCapture: boolean;
+    readonly forceChromiumAxExtremeNudge: boolean;
+  };
   readonly status: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
   readonly currentSnapshot: CurrentActivitySnapshot | null;
@@ -106,6 +111,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
       theme: input.theme,
       categoryColorOverrides: input.categoryColorOverrides,
       appThemeColorOverrides: input.appThemeColorOverrides,
+      developerDiagnostics: input.developerDiagnostics,
     },
     tracker: {
       running: input.status?.running ?? null,

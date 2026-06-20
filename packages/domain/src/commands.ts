@@ -11,6 +11,7 @@ export type TrackerCommand =
   | "tracker_get_hourly_summary"
   | "tracker_get_raw_events"
   | "tracker_get_top_sites"
+  | "tracker_set_developer_diagnostics"
   | "tracker_get_app_icons"
   | "tracker_get_unclassified_segments"
   | "tracker_get_reusable_ai_classifications"
@@ -168,6 +169,7 @@ export interface TrackerApi {
   getHourlySummary(query: TimelineQuery): Promise<HourBucket[]>;
   getRawEvents(query: RawEventsQuery): Promise<ActivitySegment[]>;
   getTopSites(query: TopSitesQuery): Promise<SiteDuration[]>;
+  setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings): Promise<void>;
   getAppIcons(apps: AppIdentity[]): Promise<AppIconMap>;
   getUnclassifiedSegments(query: ClassificationQuery): Promise<ActivitySegment[]>;
   getReusableAiClassifications(inputFingerprints: string[]): Promise<Record<string, ActivityClassificationRecord>>;
@@ -182,4 +184,8 @@ export interface TrackerApi {
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;
+}
+
+export interface DeveloperDiagnosticsSettings {
+  forceChromiumAxCapture: boolean;
 }

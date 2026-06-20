@@ -6,13 +6,18 @@ import { buildDefaultDriftAlarmCopy, buildExtremeNudgeToastCopy, type DriftAlarm
 
 export const EXTREME_NUDGE_STORAGE_KEY = "drifty.notifications.extremeNudge";
 
-export function buildExtremeNudgeTarget(segment: ActivitySegment): ExtremeNudgeTarget {
+export type ExtremeNudgeTargetOptions = {
+  readonly forceChromiumAxTabClose?: boolean;
+};
+
+export function buildExtremeNudgeTarget(segment: ActivitySegment, options: ExtremeNudgeTargetOptions = {}): ExtremeNudgeTarget {
   return {
     appName: segment.appName.trim() || "Unknown app",
     bundleId: segment.bundleId?.trim() || null,
     browserName: segment.browserName?.trim() || null,
     siteDomain: segment.siteDomain?.trim() || null,
     siteUrl: segment.siteUrl?.trim() || null,
+    forceChromiumAxTabClose: options.forceChromiumAxTabClose ?? false,
   };
 }
 

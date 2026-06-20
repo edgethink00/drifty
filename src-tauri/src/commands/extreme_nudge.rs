@@ -24,6 +24,8 @@ pub struct ExtremeNudgeTarget {
     pub browser_name: Option<String>,
     pub site_domain: Option<String>,
     pub site_url: Option<String>,
+    #[serde(default)]
+    pub force_chromium_ax_tab_close: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -91,6 +93,7 @@ fn apply_extreme_nudge(
             browser_name,
             site_url.as_deref(),
             site_domain.as_deref(),
+            target.force_chromium_ax_tab_close,
         )?;
         return Ok(ExtremeNudgeOutcome {
             kind: ExtremeNudgeOutcomeKind::ClosedBrowserTab,
