@@ -168,6 +168,42 @@ mod tests {
     }
 
     #[test]
+    fn chrome_like_tab_close_script_falls_back_to_bounded_accessibility_address_bar_scan() {
+        let script = tab_close_script(
+            "Google Chrome",
+            "https://ads.google.com/aw/policy/account",
+            Some("ads.google.com"),
+        )
+        .unwrap();
+
+        assert!(!script.contains("tell application \"Google Chrome\" to activate"));
+        assert!(!script.contains("set frontmost to true"));
+        assert!(!script.contains("keystroke \"l\" using command down"));
+        assert!(!script.contains("AXFocusedUIElement"));
+        assert!(!script.contains("entire contents of front window"));
+        assert!(script.contains("property maxVisited : 500"));
+        assert!(script.contains("property toolbarMaxVisited : 120"));
+        assert!(script.contains("on scanToolbarFirst(theElement)"));
+        assert!(script.contains("my scanToolbarFirst(front window)"));
+        assert!(script.contains("UI elements of theElement"));
+        assert!(script.contains("roleText is \"AXTextField\" or roleText is \"AXComboBox\""));
+        assert!(script.contains(
+            "tell application \"Google Chrome\"\n  try\n    if exists front window then"
+        ));
+        assert!(!script
+            .contains("if not (exists front window) then return \"not_found\"\n  set targetUrl"));
+        assert!(script
+            .contains("tell application \"Google Chrome\" to close active tab of front window"));
+        assert!(script.contains(
+            "if my tabMatchesTarget(bestValue, targetUrl, targetDomain) then return \"not_found\""
+        ));
+        assert!(!script.contains("keystroke \"w\" using command down"));
+        assert!(script.contains("end try\nreturn \"not_found\""));
+        assert!(!script.contains("clipboard"));
+        assert!(!script.contains("terminate"));
+    }
+
+    #[test]
     fn browser_tab_target_detection_accepts_safari_and_firefox() {
         assert!(is_supported_browser_tab_target("Safari"));
         assert!(is_supported_browser_tab_target("Safari Technology Preview"));
