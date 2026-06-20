@@ -305,6 +305,12 @@ async function chooseByokSetup(options: { activity?: string } = {}) {
   await clickEnabledAction(/^continue$/i);
 }
 
+async function chooseCustomEndpointSetup(options: { activity?: string } = {}) {
+  await advanceThroughSharedBasics(options);
+  fireEvent.click(screen.getByRole("button", { name: /custom endpoint/i }));
+  await clickEnabledAction(/^continue$/i);
+}
+
 async function connectAccount() {
   await screen.findByRole("dialog", { name: /connect your account/i });
   await clickEnabledNext();
@@ -417,12 +423,13 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
 
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
-    expect(screen.getByText(/start with drifty cloud, run ai locally, or bring your own ai key/i)).toBeTruthy();
+    expect(screen.getByText(/point drifty at an openai-compatible endpoint/i)).toBeTruthy();
     const continueButton = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
     expect(continueButton.disabled).toBe(true);
     expect(screen.getByRole("button", { name: /drifty cloud/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /local ai/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /byok \(bring your own key\)/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /custom endpoint/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /use simple setup/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /set up my own server/i })).toBeNull();
   });
@@ -952,6 +959,37 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/masked openrouter key/i).textContent).toContain("1234");
     expect(screen.queryByText(/validkey1234/i)).toBeNull();
+  });
+
+  it("stores a custom endpoint setup from onboarding after connection review", async () => {
+    render(<App />);
+
+    await chooseCustomEndpointSetup();
+
+    expect(await screen.findByRole("dialog", { name: /add your custom endpoint/i })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/custom endpoint base url/i), { target: { value: "http://localhost:11434/v1" } });
+    fireEvent.change(screen.getByLabelText(/custom endpoint model/i), { target: { value: "llama3.2:latest" } });
+    await clickEnabledAction(/^test connection$/i);
+
+    expect(await screen.findByRole("dialog", { name: /testing connection/i })).toBeTruthy();
+    expect(screen.getByText(/endpoint url valid/i)).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /connection successful/i })).toBeTruthy();
+    }, { timeout: 6000 });
+    await clickEnabledAction(/^continue$/i);
+
+    expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
+    expect(screen.getByText(/minimized classification context goes to your custom endpoint/i)).toBeTruthy();
+    await clickEnabledAction(/^continue$/i);
+    fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({
+        provider: "self_hosted",
+        selfHostedBaseUrl: "http://localhost:11434/v1",
+        selfHostedModel: "llama3.2:latest",
+      });
+    });
   });
 
   it("does not present unverified Screen Recording or Browser Activity as enabled", async () => {

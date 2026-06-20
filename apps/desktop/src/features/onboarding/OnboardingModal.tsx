@@ -31,6 +31,7 @@ import {
   readUserOnboardingState,
   type UserOnboardingState,
 } from "./onboardingState";
+import { OnboardingCustomEndpointSetup, type CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";
 import { OnboardingManagedLocalAiSetup } from "./OnboardingManagedLocalAiSetup";
 import "./onboarding.css";
 
@@ -66,7 +67,7 @@ type OnboardingStep =
   | "notifications";
 
 type OnboardingStepDef = { id: OnboardingStep; label: string };
-type SetupChoice = "simple" | "local_ai" | "byok";
+type SetupChoice = "simple" | "local_ai" | "byok" | "custom_endpoint";
 
 // Steps shared by every path until the user picks a setup type.
 const BASE_STEPS: OnboardingStepDef[] = [
@@ -97,10 +98,18 @@ const BYOK_STEPS: OnboardingStepDef[] = [
   { id: "ready", label: "Ready" },
 ];
 
+const CUSTOM_ENDPOINT_STEPS: OnboardingStepDef[] = [
+  { id: "connect_server", label: "Connect" },
+  { id: "test_connection", label: "Test" },
+  { id: "self_data_review", label: "Data" },
+  { id: "ready", label: "Ready" },
+];
+
 function getOnboardingSteps(setupChoice: SetupChoice | null): OnboardingStepDef[] {
   if (setupChoice === "simple") return [...BASE_STEPS, ...SIMPLE_SETUP_STEPS];
   if (setupChoice === "local_ai") return [...BASE_STEPS, ...LOCAL_AI_STEPS];
   if (setupChoice === "byok") return [...BASE_STEPS, ...BYOK_STEPS];
+  if (setupChoice === "custom_endpoint") return [...BASE_STEPS, ...CUSTOM_ENDPOINT_STEPS];
   return BASE_STEPS;
 }
 
@@ -134,12 +143,60 @@ const BYOK_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
   { id: "classifier", label: "Classification ready" },
 ];
 
+const CUSTOM_ENDPOINT_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
+  { id: "url", label: "Endpoint URL valid" },
+  { id: "model", label: "Model selected" },
+  { id: "classifier", label: "OpenAI-compatible route ready" },
+];
+
+const CUSTOM_ENDPOINT_DEFAULT_DRAFT: CustomEndpointDraft = {
+  baseUrl: "http://localhost:11434/v1",
+  model: "",
+};
+
 // Masks an OpenRouter API key so only the final four characters are ever shown
 // after a successful connection. The raw key is never persisted or logged.
 function maskApiKey(key: string): string {
   const trimmed = key.trim();
   const last4 = trimmed.slice(-4);
   return `sk-or-••••••${last4}`;
+}
+
+function customEndpointBaseUrlError(baseUrl: string): string | null {
+  const trimmedBaseUrl = baseUrl.trim();
+  if (!trimmedBaseUrl) return "Enter a base URL.";
+  if (!/^https?:\/\/\S+$/u.test(trimmedBaseUrl)) return "Base URL should start with http:// or https://.";
+  return null;
+}
+
+function customEndpointModelError(model: string): string | null {
+  return model.trim() ? null : "Enter a model id.";
+}
+
+function connectionChecksForSetup(setupChoice: SetupChoice | null): ReadonlyArray<ConnectionCheck> {
+  switch (setupChoice) {
+    case "byok":
+      return BYOK_CONNECTION_CHECKS;
+    case "custom_endpoint":
+      return CUSTOM_ENDPOINT_CONNECTION_CHECKS;
+    case "simple":
+    case "local_ai":
+    case null:
+      return BYOK_CONNECTION_CHECKS;
+    default:
+      return assertNeverSetupChoice(setupChoice);
+  }
+}
+
+class SetupChoiceError extends Error {
+  constructor(readonly setupChoice: string) {
+    super(`Unhandled onboarding setup choice: ${setupChoice}`);
+    this.name = "SetupChoiceError";
+  }
+}
+
+function assertNeverSetupChoice(value: never): never {
+  throw new SetupChoiceError(String(value));
 }
 
 type NotificationPermissionState = "unknown" | "checking" | "granted" | "denied" | "unavailable";
@@ -299,6 +356,7 @@ export function OnboardingModal({
   // version for display.
   const [apiKey, setApiKey] = useState("");
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
+  const [customEndpointDraft, setCustomEndpointDraft] = useState<CustomEndpointDraft>(CUSTOM_ENDPOINT_DEFAULT_DRAFT);
   const [connectionPhase, setConnectionPhase] = useState<ConnectionPhase>("idle");
   const [checkStatuses, setCheckStatuses] = useState<ConnectionCheckStatus[]>([]);
   const [connectionFailureLabel, setConnectionFailureLabel] = useState<string | null>(null);
@@ -346,11 +404,17 @@ export function OnboardingModal({
     notificationPermission === "granted" || notificationPermission === "unavailable";
   const isFinalStep = stepIndex === steps.length - 1;
   const isByokSetup = setupChoice === "byok";
+  const isCustomEndpointSetup = setupChoice === "custom_endpoint";
+  const isManagedProviderSetup = setupChoice === "local_ai";
+  const isUserManagedProviderSetup = isByokSetup || isCustomEndpointSetup;
   const managedLocalAi = useManagedLocalAiSetup(setupChoice === "local_ai", onLocalAiSetupChange, true);
   const managedLocalReady = isManagedLocalReady(managedLocalAi.status);
   const managedLocalStarted = hasManagedLocalInstallStarted(managedLocalAi.status);
-  const connectionChecks = BYOK_CONNECTION_CHECKS;
+  const connectionChecks = connectionChecksForSetup(setupChoice);
   const apiKeyIsValid = apiKey.trim().toLowerCase().startsWith("sk-or-");
+  const customEndpointBaseUrlIssue = customEndpointBaseUrlError(customEndpointDraft.baseUrl);
+  const customEndpointModelIssue = customEndpointModelError(customEndpointDraft.model);
+  const customEndpointIsValid = customEndpointBaseUrlIssue === null && customEndpointModelIssue === null;
 
   const canAdvance = (() => {
     switch (step) {
@@ -365,8 +429,9 @@ export function OnboardingModal({
       case "data_review":
         return true;
       case "connect_server":
-        if (setupChoice === "local_ai") return managedLocalStarted;
+        if (isManagedProviderSetup) return managedLocalStarted;
         if (setupChoice === "byok") return apiKeyIsValid;
+        if (isCustomEndpointSetup) return customEndpointIsValid;
         return false;
       case "test_connection":
         return connectionPhase === "success";
@@ -399,7 +464,8 @@ export function OnboardingModal({
       case "job":
         return null;
       case "connect_server":
-        if (setupChoice === "local_ai") return "Start a local model download to continue.";
+        if (isManagedProviderSetup) return "Start a local model download to continue.";
+        if (isCustomEndpointSetup) return customEndpointBaseUrlIssue ?? customEndpointModelIssue ?? "Enter your custom endpoint details.";
         return "Enter an OpenRouter key that starts with sk-or-.";
       case "test_connection":
         if (connectionPhase === "failed") return "Connection failed. Try again or edit your details.";
@@ -412,8 +478,20 @@ export function OnboardingModal({
       default:
         return null;
     }
-  }, [accessibilityRecheckPending, canAdvance, connectionPhase, setupChoice, step]);
+  }, [
+    accessibilityRecheckPending,
+    canAdvance,
+    connectionPhase,
+    customEndpointBaseUrlIssue,
+    customEndpointModelIssue,
+    isCustomEndpointSetup,
+    isManagedProviderSetup,
+    setupChoice,
+    step,
+  ]);
   const localAiSummaryLabel = managedLocalReady ? "Local model ready" : "Local model downloading";
+  const userManagedSetupLabel = isByokSetup ? "BYOK selected" : "Custom endpoint selected";
+  const userManagedConnectionLabel = isByokSetup ? "OpenRouter key connected" : "Custom endpoint connected";
 
   const title = useMemo(() => {
     switch (step) {
@@ -428,7 +506,11 @@ export function OnboardingModal({
       case "data_review":
         return "Review your data settings";
       case "connect_server":
-        return isByokSetup ? "Add your OpenRouter key" : "Set up your Local AI model";
+        return isByokSetup
+          ? "Add your OpenRouter key"
+          : isCustomEndpointSetup
+            ? "Add your custom endpoint"
+            : "Set up your Local AI model";
       case "test_connection":
         return connectionPhase === "success"
           ? "Connection successful"
@@ -452,10 +534,10 @@ export function OnboardingModal({
       case "notifications":
         return "Allow notifications";
     }
-  }, [accountConnected, connectionPhase, isByokSetup, setupChoice, step]);
+  }, [accountConnected, connectionPhase, isByokSetup, isCustomEndpointSetup, setupChoice, step]);
 
   const subtitle = step === "choose_setup"
-    ? "Start with Drifty Cloud, run AI locally, or bring your own AI key. You can change this later."
+    ? "Start with Drifty Cloud, run AI locally, bring your own key, or point Drifty at an OpenAI-compatible endpoint."
     : "";
 
   useEffect(() => {
@@ -531,8 +613,8 @@ export function OnboardingModal({
       setAccessibilityRecheckPending(true);
       try {
         await onCheckAccessibilityRef.current();
-      } catch {
-        // ignored: Check again surfaces user-facing errors
+      } catch (error) {
+        if (error instanceof Error) return;
       } finally {
         if (!cancelled) setAccessibilityRecheckPending(false);
         checking = false;
@@ -578,8 +660,14 @@ export function OnboardingModal({
   useEffect(() => {
     if (step !== "test_connection") return;
 
-    const checks = BYOK_CONNECTION_CHECKS;
-    const failIndex = apiKeyIsValid ? -1 : 0;
+    const checks = connectionChecks;
+    const failIndex = isByokSetup
+      ? apiKeyIsValid ? -1 : 0
+      : customEndpointBaseUrlIssue !== null
+        ? 0
+        : customEndpointModelIssue !== null
+          ? 1
+          : -1;
 
     setConnectionPhase("testing");
     setConnectionFailureLabel(null);
@@ -592,6 +680,14 @@ export function OnboardingModal({
       if (cancelled) return;
       if (index >= checks.length) {
         setMaskedApiKey(setupChoice === "byok" ? maskApiKey(apiKey) : null);
+        if (setupChoice === "custom_endpoint") {
+          onLocalAiSetupChange((current) => ({
+            ...current,
+            provider: "self_hosted",
+            selfHostedBaseUrl: customEndpointDraft.baseUrl.trim(),
+            selfHostedModel: customEndpointDraft.model.trim(),
+          }));
+        }
         setConnectionPhase("success");
         return;
       }
@@ -618,7 +714,20 @@ export function OnboardingModal({
       cancelled = true;
       for (const timerId of timers) window.clearTimeout(timerId);
     };
-  }, [apiKey, apiKeyIsValid, setupChoice, step, testRunId]);
+  }, [
+    apiKey,
+    apiKeyIsValid,
+    connectionChecks,
+    customEndpointBaseUrlIssue,
+    customEndpointDraft.baseUrl,
+    customEndpointDraft.model,
+    customEndpointModelIssue,
+    isByokSetup,
+    onLocalAiSetupChange,
+    setupChoice,
+    step,
+    testRunId,
+  ]);
 
   function resetConnectionValidation() {
     setConnectionPhase("idle");
@@ -770,13 +879,24 @@ export function OnboardingModal({
     setMaskedApiKey(null);
   }
 
+  function handleCustomEndpointDraftChange(nextDraft: CustomEndpointDraft) {
+    setCustomEndpointDraft(nextDraft);
+    resetConnectionValidation();
+    onLocalAiSetupChange((current) => ({
+      ...current,
+      provider: "self_hosted",
+      selfHostedBaseUrl: nextDraft.baseUrl,
+      selfHostedModel: nextDraft.model,
+    }));
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isFinalStep) {
       setStorageError(null);
       setSetupError(null);
       if (!canAdvance) return;
-      if (step === "connect_server" && setupChoice === "byok") {
+      if (step === "connect_server" && isUserManagedProviderSetup) {
         setStep("test_connection");
         return;
       }
@@ -796,13 +916,13 @@ export function OnboardingModal({
       case "choose_setup":
         return "Continue";
       case "connect_server":
-        return setupChoice === "byok" ? "Test connection" : "Continue";
+        return isUserManagedProviderSetup ? "Test connection" : "Continue";
       case "test_connection":
         return "Continue";
       case "self_data_review":
         return "Continue";
       case "permissions":
-        return setupChoice === "local_ai" || setupChoice === "byok" ? "Continue" : "Next";
+        return setupChoice === "local_ai" || isUserManagedProviderSetup ? "Continue" : "Next";
       case "nudges":
         return "Continue";
       case "ready":
@@ -927,6 +1047,28 @@ export function OnboardingModal({
                     </span>
                   </span>
                 </button>
+                <button
+                  type="button"
+                  className={`onb-setup-choice__card${
+                    setupChoice === "custom_endpoint" ? " onb-setup-choice__card--selected" : ""
+                  }`}
+                  aria-pressed={setupChoice === "custom_endpoint"}
+                  onClick={() => handleSetupChoice("custom_endpoint")}
+                >
+                  <span className="onb-setup-choice__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M5.4 8.2h7.9a3.8 3.8 0 1 1 0 7.6H9.6" />
+                      <path d="M9.6 12h9" />
+                      <path d="M9.6 15.8a3.8 3.8 0 1 1 0-7.6h3.7" />
+                    </svg>
+                  </span>
+                  <span className="onb-setup-choice__copy">
+                    <span className="onb-setup-choice__title">Custom endpoint</span>
+                    <span className="onb-setup-choice__desc">
+                      Use any OpenAI-compatible local or hosted endpoint with your own model.
+                    </span>
+                  </span>
+                </button>
               </div>
             ) : null}
 
@@ -1044,7 +1186,9 @@ export function OnboardingModal({
                 <p className="onb-step-desc">
                   {isByokSetup
                     ? "Enter the OpenRouter key Drifty uses for focus insights. The key stays masked during setup."
-                    : "Choose a managed local model. Drifty downloads it inside the app and keeps classification on this Mac."}
+                    : isCustomEndpointSetup
+                      ? "Enter the OpenAI-compatible endpoint and model Drifty should use for minimized classification requests."
+                      : "Choose a managed local model. Drifty downloads it inside the app and keeps classification on this Mac."}
                 </p>
                 {setupChoice === "local_ai" ? (
                   <OnboardingManagedLocalAiSetup
@@ -1053,6 +1197,13 @@ export function OnboardingModal({
                     loading={managedLocalAi.loading}
                     status={managedLocalAi.status}
                     onInstallModel={managedLocalAi.installModel}
+                  />
+                ) : isCustomEndpointSetup ? (
+                  <OnboardingCustomEndpointSetup
+                    draft={customEndpointDraft}
+                    baseUrlError={customEndpointDraft.baseUrl.trim() ? customEndpointBaseUrlIssue : null}
+                    modelError={customEndpointDraft.model.trim() ? customEndpointModelIssue : null}
+                    onDraftChange={handleCustomEndpointDraftChange}
                   />
                 ) : (
                   <div className="onb-server-form">
@@ -1097,12 +1248,16 @@ export function OnboardingModal({
                   {connectionPhase === "success"
                     ? isByokSetup
                       ? "Your OpenRouter key is connected and ready for AI classification."
-                      : "Your Local AI server is connected and ready for classification."
+                      : isCustomEndpointSetup
+                        ? "Your custom endpoint is connected and ready for AI classification."
+                        : "Your Local AI server is connected and ready for classification."
                     : connectionPhase === "failed"
                       ? `Drifty could not complete "${connectionFailureLabel ?? "the connection check"}". Review the details below and try again.`
                       : isByokSetup
                         ? "Checking that Drifty can use your masked OpenRouter key."
-                        : "Checking that Drifty can reach your Local AI server."}
+                        : isCustomEndpointSetup
+                          ? "Checking that Drifty can use your custom endpoint."
+                          : "Checking that Drifty can reach your Local AI server."}
                 </p>
                 <ul className="onb-checklist" aria-label="Connection checks">
                   {connectionChecks.map((check, index) => {
@@ -1125,8 +1280,8 @@ export function OnboardingModal({
                         </>
                       ) : (
                         <>
-                          <li>Confirm the server URL is correct and the local server is running.</li>
-                          <li>Make sure your Mac can reach the local address.</li>
+                          <li>Confirm the endpoint URL is correct and the server is running.</li>
+                          <li>Make sure your Mac can reach the endpoint address.</li>
                         </>
                       )}
                     </ul>
@@ -1148,7 +1303,9 @@ export function OnboardingModal({
                 <p className="onb-step-desc">
                   {isByokSetup
                     ? "With BYOK, Drifty sends minimized activity context to your chosen AI provider through OpenRouter using your masked key."
-                    : "With Local AI, minimized activity context stays on this Mac and is classified by the selected local model."}
+                    : isCustomEndpointSetup
+                      ? "With a custom endpoint, Drifty sends minimized activity context to the endpoint and model you entered."
+                      : "With Local AI, minimized activity context stays on this Mac and is classified by the selected local model."}
                 </p>
                 <div className="onb-data-cards" aria-label="Self-hosted data handling summary">
                   <div className="onb-data-card">
@@ -1156,7 +1313,9 @@ export function OnboardingModal({
                     <p className="onb-data-card__desc">
                       {isByokSetup
                         ? "Minimized classification context goes to OpenRouter for the model call."
-                        : "Activity goes to the selected local model managed by Drifty, not to Drifty Cloud."}
+                        : isCustomEndpointSetup
+                          ? "Minimized classification context goes to your custom endpoint for the model call."
+                          : "Activity goes to the selected local model managed by Drifty, not to Drifty Cloud."}
                     </p>
                   </div>
                   <div className="onb-data-card">
@@ -1164,7 +1323,9 @@ export function OnboardingModal({
                     <p className="onb-data-card__desc">
                       {isByokSetup
                         ? "You manage the provider key, model access, and provider billing."
-                        : "Drifty manages the local runtime files; you control whether the local model is installed."}
+                        : isCustomEndpointSetup
+                          ? "You manage the endpoint, model access, uptime, and billing if it is hosted."
+                          : "Drifty manages the local runtime files; you control whether the local model is installed."}
                     </p>
                   </div>
                   <div className="onb-data-card">
@@ -1172,7 +1333,9 @@ export function OnboardingModal({
                     <p className="onb-data-card__desc">
                       {isByokSetup
                         ? `A masked OpenRouter key${maskedApiKey ? ` (${maskedApiKey})` : ""} plus local permissions for activity context.`
-                        : "Local permissions to read activity context and a downloaded managed local model."}
+                        : isCustomEndpointSetup
+                          ? `Local permissions plus ${customEndpointDraft.model.trim()} at ${customEndpointDraft.baseUrl.trim()}.`
+                          : "Local permissions to read activity context and a downloaded managed local model."}
                     </p>
                   </div>
                 </div>
@@ -1247,15 +1410,15 @@ export function OnboardingModal({
                 <p className="onb-step-desc">
                   Drifty will now track your focus and drift in the background while you work.
                 </p>
-                {setupChoice === "local_ai" || setupChoice === "byok" ? (
+                {setupChoice === "local_ai" || isUserManagedProviderSetup ? (
                   <ul className="onb-summary" aria-label="Setup summary">
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
-                      {setupChoice === "byok" ? "BYOK selected" : "Local AI selected"}
+                      {setupChoice === "local_ai" ? "Local AI selected" : userManagedSetupLabel}
                     </li>
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
-                      {setupChoice === "byok" ? "OpenRouter key connected" : localAiSummaryLabel}
+                      {setupChoice === "local_ai" ? localAiSummaryLabel : userManagedConnectionLabel}
                     </li>
                     <li className="onb-summary__item">
                       <span className="onb-summary__check" aria-hidden="true" />
