@@ -80,6 +80,22 @@ def accessibility_address_bar_script(app_name: str) -> str:
           end tell
         end considerAddressCandidate
 
+        on scanKnownChromiumAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set addressContainer to UI element 1 of theWindow
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressToolbar to UI element 1 of addressContainer
+              set addressFieldGroup to UI element 4 of addressToolbar
+              my considerAddressCandidate(UI element 2 of addressFieldGroup)
+            end try
+          end tell
+        end scanKnownChromiumAddressBar
+
         on scanElement(theElement)
           if foundAddress is true then return
           if visitedCount is greater than maxVisited then return
@@ -140,6 +156,7 @@ def accessibility_address_bar_script(app_name: str) -> str:
             set visitedCount to 0
             set toolbarVisitedCount to 0
             set foundAddress to false
+            my scanKnownChromiumAddressBar(front window)
             my scanToolbarFirst(front window)
             if foundAddress is false then
               my scanElement(front window)

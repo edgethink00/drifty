@@ -19,7 +19,7 @@ from app.tracker.browser_automation import (
 )
 
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
-OSASCRIPT_TIMEOUT_SECONDS: Final = 2.0
+OSASCRIPT_TIMEOUT_SECONDS: Final = 3.0
 
 
 class OnScreenWindowRow(TypedDict):

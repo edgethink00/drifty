@@ -54,6 +54,18 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertIn("if foundAddress is true then return", script)
         self.assertIn("if foundAddress is true then exit repeat", script)
 
+    def test_accessibility_address_bar_script_tries_known_chromium_path_before_recursive_scan(self) -> None:
+        script = accessibility_address_bar_script("Google Chrome")
+
+        self.assertIn("on scanKnownChromiumAddressBar(theWindow)", script)
+        self.assertIn("set addressContainer to UI element 1 of theWindow", script)
+        self.assertIn("set addressFieldGroup to UI element 4 of addressToolbar", script)
+        self.assertIn("my considerAddressCandidate(UI element 2 of addressFieldGroup)", script)
+        self.assertLess(
+            script.index("my scanKnownChromiumAddressBar(front window)"),
+            script.index("my scanToolbarFirst(front window)"),
+        )
+
     def test_run_osascript_uses_timeout(self) -> None:
         with patch("app.tracker.macos_workspace.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
@@ -63,12 +75,12 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
             result = _run_osascript("return \"ok\"")
 
         self.assertEqual(result, "ok")
-        self.assertEqual(mock_run.call_args.kwargs["timeout"], 2.0)
+        self.assertEqual(mock_run.call_args.kwargs["timeout"], 3.0)
 
     def test_run_osascript_reports_timeout_as_runtime_error(self) -> None:
         with patch(
             "app.tracker.macos_workspace.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=["osascript"], timeout=2.0),
+            side_effect=subprocess.TimeoutExpired(cmd=["osascript"], timeout=3.0),
         ):
             with self.assertRaisesRegex(RuntimeError, "osascript timed out"):
                 _run_osascript("delay 5")
