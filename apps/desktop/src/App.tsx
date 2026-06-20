@@ -289,6 +289,15 @@ const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Week", label: "Your Week", detail: "Calendar week" },
 ];
 
+function extremeNudgeErrorDiagnostic(error: unknown): string | null {
+  const message = toErrorMessage(error);
+  const separatorIndex = message.lastIndexOf(": ");
+  if (separatorIndex < 0) return null;
+
+  const diagnostic = message.slice(separatorIndex + 2).trim();
+  return /^[a-z0-9_]+$/.test(diagnostic) ? diagnostic : null;
+}
+
 function scheduleIdleWork(callback: () => void): () => void {
   if (typeof window.requestIdleCallback === "function" && typeof window.cancelIdleCallback === "function") {
     const handle = window.requestIdleCallback(callback, { timeout: 1200 });
@@ -2666,15 +2675,16 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then((applied) => {
+      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then((result) => {
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
-          result: applied ? "applied" : "not_applied",
+          result: result.applied ? "applied" : "not_applied",
+          reason: result.diagnostic,
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });
-        if (!applied) {
+        if (!result.applied) {
           if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
           return;
         }
@@ -2688,10 +2698,12 @@ export default function App() {
         }
       }).catch((error) => {
         console.warn("Failed to apply extreme nudge", error);
+        const message = toErrorMessage(error);
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_error",
           alertKey,
-          message: toErrorMessage(error),
+          reason: extremeNudgeErrorDiagnostic(error),
+          message,
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });

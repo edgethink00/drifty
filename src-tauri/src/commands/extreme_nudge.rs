@@ -30,6 +30,7 @@ pub struct ExtremeNudgeTarget {
 #[serde(rename_all = "camelCase")]
 pub struct ExtremeNudgeOutcome {
     pub kind: ExtremeNudgeOutcomeKind,
+    pub diagnostic: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -53,8 +54,8 @@ enum ExtremeNudgeError {
     AppTerminateFailed(String),
     #[error("osascript failed: {0}")]
     AppleScriptFailed(String),
-    #[error("Browser tab was not found for {0}")]
-    BrowserTabNotFound(String),
+    #[error("Browser tab was not found for {target}: {diagnostic}")]
+    BrowserTabNotFound { target: String, diagnostic: String },
 }
 
 #[tauri::command]
@@ -86,9 +87,14 @@ fn apply_extreme_nudge(
             return Err(ExtremeNudgeError::MissingBrowserTarget);
         }
 
-        browser_tabs::close_browser_tab(browser_name, site_url.as_deref(), site_domain.as_deref())?;
+        let diagnostic = browser_tabs::close_browser_tab(
+            browser_name,
+            site_url.as_deref(),
+            site_domain.as_deref(),
+        )?;
         return Ok(ExtremeNudgeOutcome {
             kind: ExtremeNudgeOutcomeKind::ClosedBrowserTab,
+            diagnostic: Some(diagnostic),
         });
     }
 
@@ -96,6 +102,7 @@ fn apply_extreme_nudge(
     terminate_app_by_bundle_id(&bundle_id)?;
     Ok(ExtremeNudgeOutcome {
         kind: ExtremeNudgeOutcomeKind::TerminatedApp,
+        diagnostic: None,
     })
 }
 

@@ -32,10 +32,15 @@ pub(super) fn close_browser_tab(
     browser_name: &str,
     site_url: Option<&str>,
     site_domain: Option<&str>,
-) -> Result<(), ExtremeNudgeError> {
+) -> Result<String, ExtremeNudgeError> {
     let target_label = site_url.or(site_domain).unwrap_or("unknown target");
-    let script = tab_close_script(browser_name, site_url.unwrap_or(""), site_domain)
-        .ok_or_else(|| ExtremeNudgeError::BrowserTabNotFound(target_label.to_string()))?;
+    let script =
+        tab_close_script(browser_name, site_url.unwrap_or(""), site_domain).ok_or_else(|| {
+            ExtremeNudgeError::BrowserTabNotFound {
+                target: target_label.to_string(),
+                diagnostic: "unsupported_browser".to_string(),
+            }
+        })?;
     let output = run_osascript(&script)?;
 
     if !output.status.success() {
@@ -45,13 +50,53 @@ pub(super) fn close_browser_tab(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    if stdout.trim() == "closed_browser_tab" {
-        return Ok(());
+    let result = parse_tab_close_output(stdout.trim());
+    if let BrowserTabCloseOutput::Closed { diagnostic } = result {
+        return Ok(diagnostic.to_string());
     }
 
-    Err(ExtremeNudgeError::BrowserTabNotFound(
-        target_label.to_string(),
-    ))
+    Err(ExtremeNudgeError::BrowserTabNotFound {
+        target: target_label.to_string(),
+        diagnostic: result.diagnostic().to_string(),
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BrowserTabCloseOutput<'a> {
+    Closed { diagnostic: &'a str },
+    NotFound { diagnostic: &'a str },
+}
+
+impl BrowserTabCloseOutput<'_> {
+    fn diagnostic(&self) -> &str {
+        match self {
+            Self::Closed { diagnostic } | Self::NotFound { diagnostic } => diagnostic,
+        }
+    }
+}
+
+fn parse_tab_close_output(output: &str) -> BrowserTabCloseOutput<'_> {
+    match output.split_once(':') {
+        Some(("closed_browser_tab", diagnostic)) if !diagnostic.trim().is_empty() => {
+            BrowserTabCloseOutput::Closed {
+                diagnostic: diagnostic.trim(),
+            }
+        }
+        Some(("not_found", diagnostic)) if !diagnostic.trim().is_empty() => {
+            BrowserTabCloseOutput::NotFound {
+                diagnostic: diagnostic.trim(),
+            }
+        }
+        _ if output == "closed_browser_tab" => BrowserTabCloseOutput::Closed {
+            diagnostic: "closed_browser_tab",
+        },
+        _ if output == "not_found" => BrowserTabCloseOutput::NotFound {
+            diagnostic: "not_found",
+        },
+        _ => BrowserTabCloseOutput::NotFound {
+            diagnostic: "unexpected_script_output",
+        },
+    }
 }
 
 fn run_osascript(script: &str) -> Result<Output, ExtremeNudgeError> {
@@ -192,15 +237,32 @@ mod tests {
         ));
         assert!(!script
             .contains("if not (exists front window) then return \"not_found\"\n  set targetUrl"));
-        assert!(script
-            .contains("tell application \"Google Chrome\" to close active tab of front window"));
         assert!(script.contains(
-            "if my tabMatchesTarget(bestValue, targetUrl, targetDomain) then return \"not_found\""
+            "try\n          tell application \"Google Chrome\" to close active tab of front window"
+        ));
+        assert!(script.contains(
+            "if my tabMatchesTarget(bestValue, targetUrl, targetDomain) then return \"not_found:chromium_ax_post_close_target_still_frontmost\""
         ));
         assert!(!script.contains("keystroke \"w\" using command down"));
-        assert!(script.contains("end try\nreturn \"not_found\""));
+        assert!(script.contains("end try\nreturn \"not_found:chromium_ax_target_mismatch\""));
         assert!(!script.contains("clipboard"));
         assert!(!script.contains("terminate"));
+    }
+
+    #[test]
+    fn tab_close_output_preserves_diagnostic_reason() {
+        assert_eq!(
+            parse_tab_close_output("closed_browser_tab:chromium_ax_front_tab"),
+            BrowserTabCloseOutput::Closed {
+                diagnostic: "chromium_ax_front_tab"
+            }
+        );
+        assert_eq!(
+            parse_tab_close_output("not_found:chromium_ax_close_failed"),
+            BrowserTabCloseOutput::NotFound {
+                diagnostic: "chromium_ax_close_failed"
+            }
+        );
     }
 
     #[test]

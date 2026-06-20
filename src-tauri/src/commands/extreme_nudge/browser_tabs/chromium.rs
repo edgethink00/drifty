@@ -29,7 +29,7 @@ tell application "{browser_name}"
       set currentUrl to URL of active tab of front window
       if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
         close active tab of front window
-        return "closed_browser_tab"
+        return "closed_browser_tab:chromium_active_tab"
       end if
     end if
   end try
@@ -39,7 +39,7 @@ tell application "{browser_name}"
         set currentUrl to URL of browserTab
         if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
           close browserTab
-          return "closed_browser_tab"
+          return "closed_browser_tab:chromium_scanned_tab"
         end if
       end try
     end repeat
@@ -48,8 +48,8 @@ end tell
 try
   tell application "System Events"
     tell process "{browser_name}"
-      if frontmost is false then return "not_found"
-      if not (exists front window) then return "not_found"
+      if frontmost is false then return "not_found:chromium_ax_not_frontmost"
+      if not (exists front window) then return "not_found:chromium_ax_no_front_window"
       set bestValue to ""
       set bestLength to -1
       set bestPriority to -1
@@ -60,8 +60,13 @@ try
       my scanToolbarFirst(front window)
       if foundAddress is false then my scanElement(front window)
       set currentUrl to bestValue
+      if currentUrl is "" then return "not_found:chromium_ax_no_address_candidate"
       if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
-        tell application "{browser_name}" to close active tab of front window
+        try
+          tell application "{browser_name}" to close active tab of front window
+        on error
+          return "not_found:chromium_ax_close_failed"
+        end try
         delay 0.2
         set bestValue to ""
         set bestLength to -1
@@ -73,14 +78,14 @@ try
         if exists front window then
           my scanToolbarFirst(front window)
           if foundAddress is false then my scanElement(front window)
-          if my tabMatchesTarget(bestValue, targetUrl, targetDomain) then return "not_found"
+          if my tabMatchesTarget(bestValue, targetUrl, targetDomain) then return "not_found:chromium_ax_post_close_target_still_frontmost"
         end if
-        return "closed_browser_tab"
+        return "closed_browser_tab:chromium_ax_front_tab"
       end if
     end tell
   end tell
 end try
-return "not_found"
+return "not_found:chromium_ax_target_mismatch"
 
 on considerAddressCandidate(addressField)
   tell application "System Events"
