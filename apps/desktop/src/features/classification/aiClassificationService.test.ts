@@ -847,6 +847,15 @@ describe("runAiClassification cloud contract", () => {
       const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
       nativeInvoke.mockReset();
       nativeInvoke
+        .mockResolvedValueOnce({
+          state: "running",
+          selectedModelId: "drifty-qwen3-5-4b-default",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          message: "Managed local AI runtime is running.",
+          artifactDir: null,
+          progress: null,
+        })
         .mockRejectedValueOnce("error sending request for url (http://127.0.0.1:39217/v1/chat/completions)")
         .mockResolvedValueOnce({
           state: "running",
@@ -888,21 +897,24 @@ describe("runAiClassification cloud contract", () => {
       });
 
       expect(result.status).toBe("saved");
-      expect(nativeInvoke).toHaveBeenNthCalledWith(1, "ai_classification_openai_chat", {
+      expect(nativeInvoke).toHaveBeenNthCalledWith(1, "managed_ai_status");
+      expect(nativeInvoke).toHaveBeenNthCalledWith(2, "ai_classification_openai_chat", {
         request: expect.objectContaining({
           baseUrl: "http://127.0.0.1:39217/v1",
           model: "drifty-qwen3.5-4b-local",
-          maxTokens: 1024,
+          maxTokens: 4096,
+          timeoutMs: 180_000,
           reasoningFormat: "none",
           chatTemplateKwargs: { enable_thinking: false },
         }),
       });
-      expect(nativeInvoke).toHaveBeenNthCalledWith(2, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
-      expect(nativeInvoke).toHaveBeenNthCalledWith(3, "ai_classification_openai_chat", {
+      expect(nativeInvoke).toHaveBeenNthCalledWith(3, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
+      expect(nativeInvoke).toHaveBeenNthCalledWith(4, "ai_classification_openai_chat", {
         request: expect.objectContaining({
           baseUrl: "http://127.0.0.1:39217/v1",
           model: "drifty-qwen3.5-4b-local",
-          maxTokens: 1024,
+          maxTokens: 4096,
+          timeoutMs: 180_000,
           reasoningFormat: "none",
           chatTemplateKwargs: { enable_thinking: false },
         }),
@@ -912,6 +924,82 @@ describe("runAiClassification cloud contract", () => {
         aiResult: true,
         model: "drifty-qwen3.5-4b-local",
         latencyMs: 88,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("switches managed local runtime before classification when a different model is running", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke
+        .mockResolvedValueOnce({
+          state: "running",
+          selectedModelId: "drifty-qwen3-5-2b-economy",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-2b-local",
+          message: "Managed local AI runtime is running.",
+          artifactDir: null,
+          progress: null,
+        })
+        .mockResolvedValueOnce({
+          state: "running",
+          selectedModelId: "drifty-qwen3-5-4b-default",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          message: "Managed local AI runtime is running.",
+          artifactDir: null,
+          progress: null,
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  results: [{
+                    id: segment.id,
+                    category: "workspace",
+                    productivity: "focus",
+                    confidence: 0.82,
+                    reason: "Local work context",
+                  }],
+                }),
+              },
+            }],
+          }),
+          latencyMs: 91,
+        });
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "managed_local",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          modelId: "drifty-qwen3-5-4b-default",
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenNthCalledWith(1, "managed_ai_status");
+      expect(nativeInvoke).toHaveBeenNthCalledWith(2, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
+      expect(nativeInvoke).toHaveBeenNthCalledWith(3, "ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          maxTokens: 4096,
+          timeoutMs: 180_000,
+        }),
+      });
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        aiResult: true,
+        model: "drifty-qwen3.5-4b-local",
+        latencyMs: 91,
       })]);
     } finally {
       cleanupServiceMocks();

@@ -22,7 +22,9 @@ pub(super) fn start_runtime(
         return Ok(running_status(spec, artifact_dir));
     }
 
+    process::stop_unrelated_child(spec.id)?;
     let runtime_path = install::require_runtime_path(root)?;
+    process::stop_stale_runtime_server(&runtime_path)?;
     let model_path = artifact_dir.join(spec.file_name);
     if !model_path.is_file() {
         return Ok(status_for_model_error(

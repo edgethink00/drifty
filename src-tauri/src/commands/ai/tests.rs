@@ -161,6 +161,7 @@ fn chat_request(base_url: String) -> AiClassificationChatRequest {
         messages: vec![json!({ "role": "user", "content": "classify" })],
         headers: serde_json::Map::new(),
         max_tokens: None,
+        timeout_ms: None,
         temperature: None,
         chat_template_kwargs: serde_json::Map::new(),
         reasoning_format: None,

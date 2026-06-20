@@ -1,7 +1,9 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+
+const DEFAULT_CHAT_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +14,7 @@ pub struct AiClassificationChatRequest {
     pub models: Option<Vec<String>>,
     pub messages: Vec<serde_json::Value>,
     pub max_tokens: Option<u32>,
+    pub timeout_ms: Option<u64>,
     pub temperature: Option<f64>,
     pub reasoning_format: Option<String>,
     #[serde(default)]
@@ -50,8 +53,13 @@ pub fn post_openai_chat(
     }
 
     let url = format!("{base_url}/chat/completions");
+    let timeout = request
+        .timeout_ms
+        .filter(|value| *value > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_CHAT_TIMEOUT);
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(timeout)
         .build()
         .map_err(|error| error.to_string())?;
 

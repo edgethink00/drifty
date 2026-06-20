@@ -32,8 +32,11 @@ export async function invokeOpenAiChatWithManagedLocalRetry(
   request: Record<string, unknown>,
   managedLocalProvider: ManagedLocalProviderConfig | null,
 ): Promise<NativeOpenAiChatResponse> {
+  const readyRequest = managedLocalProvider
+    ? await requestForReadyManagedLocalRuntime(request, managedLocalProvider)
+    : request;
   try {
-    return await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request });
+    return await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: readyRequest });
   } catch (error) {
     if (!managedLocalProvider || !isLikelyManagedLocalConnectionError(error)) throw error;
     const readyStatus = await ensureManagedLocalAiReady(managedLocalProvider.modelId);
@@ -46,6 +49,18 @@ export async function invokeOpenAiChatWithManagedLocalRetry(
 export function isLikelyManagedLocalConnectionError(error: unknown): boolean {
   const message = messageFromUnknownError(error).toLowerCase();
   return CONNECTION_ERROR_MARKERS.some((marker) => message.includes(marker));
+}
+
+async function requestForReadyManagedLocalRuntime(
+  request: Record<string, unknown>,
+  provider: ManagedLocalProviderConfig,
+): Promise<Record<string, unknown>> {
+  const status = await getManagedLocalAiStatus();
+  const readyStatus = readyManagedLocalStatus(status, provider.modelId);
+  if (readyStatus) return requestWithManagedLocalRuntime(request, provider, readyStatus);
+
+  const startedStatus = await ensureManagedLocalAiReady(provider.modelId);
+  return requestWithManagedLocalRuntime(request, provider, startedStatus);
 }
 
 async function ensureManagedLocalAiReady(modelId: string): Promise<ManagedLocalAiStatus> {

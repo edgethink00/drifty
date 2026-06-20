@@ -1,7 +1,8 @@
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
-export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 1024;
+export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 4096;
+export const MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS = 180_000;
 export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
 
 export type MinimizedActivityPayload = {
@@ -34,6 +35,7 @@ export type LocalAiProviderRequest = {
 
 type OpenAiCompatibleRequestOptions = {
   readonly maxTokens?: number;
+  readonly timeoutMs?: number;
   readonly reasoningFormat?: "none";
   readonly chatTemplateKwargs?: {
     readonly enable_thinking: false;
@@ -52,7 +54,10 @@ export function toLocalProviderRequest(
         provider.model,
         payload,
         workProfile,
-        managedLocalRuntimeRequestOptions(MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS),
+        managedLocalRuntimeRequestOptions(
+          MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS,
+          MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS,
+        ),
       );
     case "self_hosted":
       return openAiCompatibleProviderRequest(provider.baseUrl, provider.model, payload, workProfile);
@@ -81,9 +86,10 @@ export function toLocalProviderRequest(
   }
 }
 
-export function managedLocalRuntimeRequestOptions(maxTokens: number): OpenAiCompatibleRequestOptions {
+export function managedLocalRuntimeRequestOptions(maxTokens: number, timeoutMs?: number): OpenAiCompatibleRequestOptions {
   return {
     maxTokens,
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
     reasoningFormat: "none",
     chatTemplateKwargs: { enable_thinking: false },
   };

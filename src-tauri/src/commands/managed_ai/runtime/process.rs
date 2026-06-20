@@ -29,9 +29,9 @@ pub(super) fn start_child(
     model_path: &Path,
     spec: ManagedAiModelSpec,
 ) -> Result<(), ManagedAiError> {
-    let child = spawn_runtime(root, runtime_path, model_path, spec)?;
     let mut guard = runtime_guard()?;
     stop_child_in_guard(&mut guard)?;
+    let child = spawn_runtime(root, runtime_path, model_path, spec)?;
     *guard = Some(ManagedRuntimeChild {
         model_id: spec.id,
         child,
@@ -112,6 +112,18 @@ pub(super) fn stop_unrelated_child(model_id: &str) -> Result<(), ManagedAiError>
     Ok(())
 }
 
+pub(super) fn stop_stale_runtime_server(runtime_path: &Path) -> Result<(), ManagedAiError> {
+    let Some(runtime_path) = runtime_path.to_str() else {
+        return Ok(());
+    };
+    for pid in runtime_listener_pids()? {
+        if process_command_contains(pid, runtime_path)? {
+            kill_process(pid)?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn stop_runtime_for_model(model_id: &str) -> Result<(), ManagedAiError> {
     let mut guard = runtime_guard()?;
     let should_stop = guard
@@ -135,6 +147,57 @@ pub(super) fn stop_runtime_for_tests() {
             let _ = runtime.child.kill();
             let _ = runtime.child.wait();
         }
+    }
+}
+
+fn runtime_listener_pids() -> Result<Vec<u32>, ManagedAiError> {
+    let output = match Command::new("lsof")
+        .arg("-nP")
+        .arg(format!("-iTCP:{RUNTIME_PORT}"))
+        .arg("-sTCP:LISTEN")
+        .arg("-t")
+        .output()
+    {
+        Ok(output) => output,
+        Err(_) => return Ok(Vec::new()),
+    };
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    Ok(text
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect())
+}
+
+fn process_command_contains(pid: u32, expected: &str) -> Result<bool, ManagedAiError> {
+    let output = Command::new("ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("command=")
+        .output()
+        .map_err(|error| ManagedAiError::RuntimeFailed(error.to_string()))?;
+    if !output.status.success() {
+        return Ok(false);
+    }
+    let command = String::from_utf8_lossy(&output.stdout);
+    Ok(command.contains(expected))
+}
+
+fn kill_process(pid: u32) -> Result<(), ManagedAiError> {
+    let status = Command::new("kill")
+        .arg("-KILL")
+        .arg(pid.to_string())
+        .status()
+        .map_err(|error| ManagedAiError::RuntimeFailed(error.to_string()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ManagedAiError::RuntimeFailed(format!(
+            "Failed to stop stale managed local AI runtime process {pid}."
+        )))
     }
 }
 
