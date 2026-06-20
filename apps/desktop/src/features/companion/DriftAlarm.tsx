@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
-import { AppGlyph } from "../../components/AppGlyph";
-import { SiteFavicon } from "../../components/SiteFavicon";
+import { DriftAlarmActionStack } from "./DriftAlarmActionStack";
 import { BreakDurationPicker } from "./BreakDurationPicker";
-import { DismissIcon, FlagIcon, SettingsIcon } from "./DriftAlarmIcons";
 import { DriftAlarmFocusTargetList } from "./DriftAlarmFocusTargets";
-import { buildDefaultDriftAlarmCopy, buildDriftAlarmCopy, type DriftAlarmRenderedCopy } from "./driftAlarmCopy";
+import { DriftAlarmSourceIcon } from "./DriftAlarmSourceIcon";
+import { buildFallbackDriftAlarmCopy } from "./driftAlarmFallbackCopy";
 import { DRIFT_ALARM_FOCUS_TARGET_LIMIT, type DriftAlarmAction, type DriftAlarmEvent, type DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import { renderBreakReturnSummary, renderBreakReturnTitle, renderContextPill } from "./driftAlarmRendering";
 import { useDelayedDriftAlarmAction } from "./useDelayedDriftAlarmAction";
@@ -17,6 +16,7 @@ const DRIFT_ALARM_TITLE_ID = "drift-alarm-title";
 const DRIFT_ALARM_DESCRIPTION_ID = "drift-alarm-description";
 const TARGET_ACTION_ID_PREFIX = "target:";
 const BREAK_ACTION_ID_PREFIX = "break:";
+const DRIFT_ALARM_SECONDARY_OPTIONS_LABEL = "Other options";
 const DRIFT_ALARM_FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
   "[href]",
@@ -41,7 +41,7 @@ export function DriftAlarm({
   const eventId = event?.id ?? null;
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
-  const { clearPendingBreakAction, isBreakActionPending, runDriftAlarmAction } = useDelayedDriftAlarmAction(onAction, isPreview);
+  const { clearPendingDriftAlarmAction, isBreakActionPending, isDriftAlarmActionPending, pendingFocusTargetId, runDriftAlarmAction } = useDelayedDriftAlarmAction(onAction, isPreview);
 
   useEffect(() => {
     if (isPreview) return undefined;
@@ -69,8 +69,8 @@ export function DriftAlarm({
   useEffect(() => {
     setSelectedActionId(null);
     setIsDismissed(false);
-    clearPendingBreakAction();
-  }, [clearPendingBreakAction, eventId]);
+    clearPendingDriftAlarmAction();
+  }, [clearPendingDriftAlarmAction, eventId]);
 
   if (!event) return null;
 
@@ -85,14 +85,14 @@ export function DriftAlarm({
   const selectedBreakMinutes = getSelectedBreakMinutes(selectedActionId);
 
   const selectAction = (actionId: string, action: DriftAlarmAction) => {
-    if (isBreakActionPending) return;
+    if (isDriftAlarmActionPending) return;
     setSelectedActionId(actionId);
     setIsDismissed(false);
     runDriftAlarmAction(action);
   };
 
   const dismissAlarm = () => {
-    clearPendingBreakAction();
+    clearPendingDriftAlarmAction();
     setSelectedActionId(null);
     setIsDismissed(true);
     onCancel?.();
@@ -152,14 +152,6 @@ export function DriftAlarm({
     >
       <div className="da__topbar">
         <img className="window-logo" src={driftyWordmarkUrl} alt="Drifty" />
-        <div className="da__chrome">
-          <button className="icon-btn" type="button" aria-label="Alarm settings" onClick={() => selectAction("settings", { type: "settings" })}>
-            <SettingsIcon />
-          </button>
-          <button className="icon-btn" type="button" aria-label={isBreakReturn ? "Dismiss break return alarm" : "Dismiss drift alarm"} onClick={dismissAlarm}>
-            <DismissIcon />
-          </button>
-        </div>
       </div>
 
       <div className="da__hero">
@@ -167,7 +159,7 @@ export function DriftAlarm({
           {isBreakReturn && breakReturn ? (
             <h2 className="da__hero-title" id={titleId}>{breakReturn ? renderBreakReturnTitle(copy.title, breakReturn.breakDurationLabel) : copy.title}</h2>
           ) : (
-            <h2 id={titleId}>{copy.title}</h2>
+            <h2 className="da__hero-title--drift" id={titleId}>{copy.title}</h2>
           )}
           <div className="da__drift" id={descriptionId}>
             {isBreakReturn && breakReturn ? (
@@ -180,7 +172,7 @@ export function DriftAlarm({
             ) : (
               <>
                 <span className="src-tile src-tile--drift" aria-hidden="true">
-                  <DriftSourceIcon
+                  <DriftAlarmSourceIcon
                     appName={event.sourceAppName}
                     iconSrc={event.sourceIconSrc}
                     siteDomain={event.sourceSiteDomain}
@@ -188,7 +180,7 @@ export function DriftAlarm({
                 </span>
                 <span className="da__drift-copy">
                   <strong>{driftContextLabel}</strong>
-                  <small>(now drifting)</small>
+                  <small>{copy.summary}</small>
                 </span>
               </>
             )}
@@ -215,14 +207,16 @@ export function DriftAlarm({
               backToDashboardLabel={copy.backToDashboardLabel}
               focusTargets={focusTargets}
               noFocusTargetLabel={copy.noFocusTargetLabel}
+              pendingTargetId={pendingFocusTargetId}
               selectedTargetId={selectedTargetId}
               onSelectTarget={(targetId) => selectAction(`${TARGET_ACTION_ID_PREFIX}${targetId}`, { type: "return_to_focus", targetId })}
             />
           </div>
         </section>
 
-        <section className="da__choice da__choice--break" aria-labelledby="drift-alarm-break-options">
-          <h3 className="overline da__choice-label" id="drift-alarm-break-options">{copy.breakChoiceLabel}</h3>
+        <h3 className="overline da__choice-label da__choice-label--secondary">{DRIFT_ALARM_SECONDARY_OPTIONS_LABEL}</h3>
+
+        <section className="da__choice da__choice--break" aria-label={copy.breakChoiceLabel}>
           <BreakDurationPicker
             isPending={isBreakActionPending}
             label={copy.breakChoiceLabel}
@@ -231,33 +225,15 @@ export function DriftAlarm({
             onSelect={(minutes) => selectAction(`${BREAK_ACTION_ID_PREFIX}${minutes}`, { type: "start_break", minutes })}
           />
         </section>
-      </div>
 
-      <button className={`da__correct${selectedActionId === "manual_correction" ? " is-selected" : ""}`} type="button" onClick={() => selectAction("manual_correction", { type: "manual_correction" })}>
-        <FlagIcon />
-        {copy.manualCorrectionLabel}
-      </button>
+        <DriftAlarmActionStack
+          manualCorrectionLabel={copy.manualCorrectionLabel}
+          selectedActionId={selectedActionId}
+          onSelectAction={selectAction}
+        />
+      </div>
     </aside>
   );
-}
-
-
-function DriftSourceIcon({
-  siteDomain,
-  appName,
-  iconSrc,
-}: {
-  siteDomain: string | null;
-  appName: string;
-  iconSrc: string | null;
-}) {
-  if (siteDomain) {
-    return <SiteFavicon domain={siteDomain} fallbackIconSrc={iconSrc} size={20} />;
-  }
-  if (iconSrc) {
-    return <img className="app-icon app-icon--sm" src={iconSrc} alt="" aria-hidden="true" />;
-  }
-  return <AppGlyph appName={appName} iconSrc={null} size="sm" />;
 }
 
 function getDriftAlarmFocusableElements(alarm: HTMLElement): HTMLElement[] {
@@ -274,30 +250,4 @@ function getSelectedBreakMinutes(actionId: string | null): number | null {
   if (!actionId?.startsWith(BREAK_ACTION_ID_PREFIX)) return null;
   const minutes = Number(actionId.slice(BREAK_ACTION_ID_PREFIX.length));
   return Number.isInteger(minutes) ? minutes : null;
-}
-
-function buildFallbackDriftAlarmCopy(event: DriftAlarmEvent, focusTargets: readonly DriftAlarmFocusTarget[]): DriftAlarmRenderedCopy {
-  const defaultCopy = buildDefaultDriftAlarmCopy();
-  switch (event.mode) {
-    case "drift":
-      return buildDriftAlarmCopy(defaultCopy, {
-        mode: "drift",
-        contextLabel: event.contextLabel,
-        driftDurationLabel: event.driftDurationLabel,
-        latestFocusLabel: focusTargets[0]?.label ?? null,
-      });
-    case "break_return":
-      return buildDriftAlarmCopy(defaultCopy, {
-        mode: "break_return",
-        breakDurationLabel: event.breakReturn.breakDurationLabel,
-        pausedFromLabel: event.breakReturn.pausedFromLabel,
-        nextFocusLabel: event.breakReturn.nextFocusLabel,
-      });
-    default:
-      return assertNeverDriftAlarmEvent(event);
-  }
-}
-
-function assertNeverDriftAlarmEvent(value: never): never {
-  throw new Error(`Unexpected drift alarm event: ${JSON.stringify(value)}`);
 }

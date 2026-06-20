@@ -7,6 +7,7 @@ type DriftAlarmFocusTargetListProps = {
   readonly backToDashboardLabel: string;
   readonly focusTargets: readonly DriftAlarmFocusTarget[];
   readonly noFocusTargetLabel: string;
+  readonly pendingTargetId: string | null;
   readonly selectedTargetId: string | null;
   readonly onSelectTarget: (targetId: string) => void;
 };
@@ -15,6 +16,7 @@ export function DriftAlarmFocusTargetList({
   backToDashboardLabel,
   focusTargets,
   noFocusTargetLabel,
+  pendingTargetId,
   selectedTargetId,
   onSelectTarget,
 }: DriftAlarmFocusTargetListProps) {
@@ -23,14 +25,16 @@ export function DriftAlarmFocusTargetList({
       <div className="da__target-empty">
         <span>{noFocusTargetLabel}</span>
         <button
-          className={`da__target da__target--primary${selectedTargetId === "dashboard" ? " is-selected" : ""}`}
+          className={`da__target da__target--primary${selectedTargetId === "dashboard" ? " is-selected" : ""}${pendingTargetId === "dashboard" ? " is-pending" : ""}`}
           type="button"
+          aria-busy={pendingTargetId === "dashboard" ? "true" : undefined}
+          disabled={pendingTargetId !== null}
           onClick={() => onSelectTarget("dashboard")}
           data-drift-alarm-initial-focus="true"
         >
           <span className="da__target-icon" aria-hidden="true"><span className="da__target-glyph">Dr</span></span>
           <span className="da__target-copy"><strong>{backToDashboardLabel}</strong><small aria-hidden="true">Choose a focus destination</small></span>
-          <span className="da__target-go" aria-hidden="true"><ArrowRightIcon /></span>
+          <span className="da__target-go" aria-hidden="true">{pendingTargetId === "dashboard" ? <span className="da__target-spinner" /> : <ArrowRightIcon />}</span>
         </button>
       </div>
     );
@@ -40,9 +44,11 @@ export function DriftAlarmFocusTargetList({
     <>
       {focusTargets.map((target, index) => (
         <button
-          className={`da__target${index === 0 ? " da__target--primary" : ""}${selectedTargetId === target.targetId ? " is-selected" : ""}`}
+          className={`da__target${index === 0 ? " da__target--primary" : ""}${selectedTargetId === target.targetId ? " is-selected" : ""}${pendingTargetId === target.targetId ? " is-pending" : ""}`}
           key={target.targetId}
           type="button"
+          aria-busy={pendingTargetId === target.targetId ? "true" : undefined}
+          disabled={pendingTargetId !== null}
           onClick={() => onSelectTarget(target.targetId)}
           data-drift-alarm-initial-focus={index === 0 ? "true" : undefined}
         >
@@ -52,7 +58,7 @@ export function DriftAlarmFocusTargetList({
             <small>{target.detail}</small>
           </span>
           <span className="da__target-go" aria-hidden="true">
-            <ArrowRightIcon />
+            {pendingTargetId === target.targetId ? <span className="da__target-spinner" /> : <ArrowRightIcon />}
           </span>
         </button>
       ))}

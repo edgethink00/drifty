@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DriftAlarm, buildDriftAlarmEvent, type DriftAlarmAction } from "./DriftAlarm";
 
@@ -16,14 +16,14 @@ describe("DriftAlarm fallback states", () => {
 
     render(<DriftAlarm event={event} onAction={onAction} />);
 
-    expect(screen.getByText(/drift detected/i)).toBeTruthy();
+    expect(screen.getByText("Let's get you back in flow.")).toBeTruthy();
     expect(screen.getAllByText(/this drift/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("(now drifting)")).toBeTruthy();
+    expect(screen.queryByText("(now drifting)")).toBeNull();
     expect(screen.queryByText(/1 hour drift/i)).toBeNull();
     expect(screen.queryByText(/streak/i)).toBeNull();
   });
 
-  it("caps custom break options at one hour and falls back when focus targets are empty", () => {
+  it("caps custom break options at one hour and falls back when focus targets are empty", async () => {
     const onAction = vi.fn<(action: DriftAlarmAction) => void>();
     const event = buildDriftAlarmEvent({
       id: "alarm-empty-focus",
@@ -43,7 +43,20 @@ describe("DriftAlarm fallback states", () => {
     expect(screen.getByRole("button", { name: "1h" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "90m" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to dashboard" }));
+    vi.useFakeTimers();
+    try {
+      const fallbackTarget = screen.getByRole("button", { name: "Back to dashboard" });
+      fireEvent.click(fallbackTarget);
+      expect(fallbackTarget.classList.contains("is-pending")).toBe(true);
+      expect(fallbackTarget.getAttribute("aria-busy")).toBe("true");
+      expect(onAction).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
     expect(onAction).toHaveBeenCalledWith({ type: "return_to_focus", targetId: "dashboard" });
   });
 });

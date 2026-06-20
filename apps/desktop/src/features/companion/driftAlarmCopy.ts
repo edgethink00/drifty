@@ -64,8 +64,8 @@ export type ExtremeNudgeToastCopy = {
 type TemplateValues = Record<string, string | null>;
 
 const DEFAULT_DRIFT_ALARM_COPY = {
-  driftTitle: "Drift detected",
-  driftSummary: "{context} · {driftDuration} drift",
+  driftTitle: "Let's get you back in flow.",
+  driftSummary: "This seems outside your focus flow.",
   currentContextPill: "Now {context}",
   latestFocusPill: "Latest focus {latestFocus}",
   returnToFocusLabel: "Return to focus",
