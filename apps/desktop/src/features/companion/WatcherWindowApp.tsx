@@ -8,6 +8,7 @@ import {
   listenToNativeWatcherShow,
   setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction,
+  triggerNativeExtremeNudgeAction,
   type WatcherWindowEvent,
 } from "./watcherBridge";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
@@ -75,12 +76,17 @@ export function WatcherWindowApp() {
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openNotificationSettings"));
   }, []);
 
+  const handleExtremeNudgeAction = useCallback((action: Parameters<typeof triggerNativeExtremeNudgeAction>[0]) => {
+    setEvent(null);
+    ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action));
+  }, []);
+
   const isReviewEvent = isEndOfDayReviewEvent(event);
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
 
   useEffect(() => {
-    if (isReviewEvent) ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
-  }, [isReviewEvent]);
+    if (isReviewEvent || isExtremeNudgeToastEvent) ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
+  }, [isExtremeNudgeToastEvent, isReviewEvent]);
 
   return (
     <main className="watcher-window-surface" aria-label="Drifty watcher window">
@@ -93,7 +99,7 @@ export function WatcherWindowApp() {
           onClose={handleDismiss}
         />
       ) : isExtremeNudgeToastEvent ? (
-        <ExtremeNudgeToast event={event} onDismiss={handleToastDismiss} />
+        <ExtremeNudgeToast event={event} onAction={handleExtremeNudgeAction} onDismiss={handleToastDismiss} />
       ) : (
         <WatcherPeek event={event} onDismiss={handleDismiss} onPhaseChange={handlePhaseChange} />
       )}

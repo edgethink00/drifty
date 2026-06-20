@@ -1372,7 +1372,7 @@ describe("runAiClassification cloud contract", () => {
   });
 
   it("uses nearest classified YouTube video with confidence, duration, and start-time tie breakers", async () => {
-    const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/feed/subscriptions");
+    const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/results?search_query=workspace");
     const lowerConfidence = createYouTubeVideoSegment(2, {
       startedAt: "2026-05-22T08:59:00.000Z",
       endedAt: "2026-05-22T09:00:00.000Z",
@@ -1408,7 +1408,7 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("keeps inherited YouTube home, feed, search, and channel pages out of Edge and local AI payloads", async () => {
+  it("keeps deterministic and inherited YouTube browse pages out of Edge and local AI payloads", async () => {
     const browseSegments = [
       createYouTubeBrowseSegment(1, "https://www.youtube.com/"),
       createYouTubeBrowseSegment(2, "https://www.youtube.com/feed"),
@@ -1431,9 +1431,16 @@ describe("runAiClassification cloud contract", () => {
       expect(invoke).not.toHaveBeenCalled();
       expect(nativeInvoke).not.toHaveBeenCalled();
       expect(getReusableAiClassifications).not.toHaveBeenCalled();
-      expect(saveClassifications).toHaveBeenCalledTimes(1);
-      expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(4);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining(browseSegments.map((segment) => expect.objectContaining({ segmentId: segment.id, source: "system", aiResult: false }))));
+      expect(saveClassifications).toHaveBeenCalledTimes(2);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([
+        expect.objectContaining({ segmentId: "segment-2", source: "rule", category: "entertainment", productivity: "drift", aiResult: false }),
+      ]);
+      expect(saveClassifications.mock.calls[1]?.[0]).toHaveLength(3);
+      expect(saveClassifications.mock.calls[1]?.[0]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ segmentId: "segment-1", source: "system", aiResult: false }),
+        expect.objectContaining({ segmentId: "segment-3", source: "system", aiResult: false }),
+        expect.objectContaining({ segmentId: "segment-4", source: "system", aiResult: false }),
+      ]));
     } finally {
       cleanupServiceMocks();
     }

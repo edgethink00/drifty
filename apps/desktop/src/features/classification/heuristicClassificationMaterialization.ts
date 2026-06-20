@@ -1,5 +1,6 @@
 import {
   classifyActivityDetailed,
+  isSustainedYouTubeFeedPage,
   type ActivityClassificationRecord,
   type ActivitySegment,
   type ClassificationOptions,
@@ -8,7 +9,7 @@ import {
 } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 
-export const BUILT_IN_HEURISTIC_TAXONOMY_VERSION = "builtin-heuristics-v1";
+export const BUILT_IN_HEURISTIC_TAXONOMY_VERSION = "builtin-heuristics-v2";
 
 const BUILT_IN_HEURISTIC_SAVE_BATCH_SIZE = 500;
 
@@ -122,6 +123,7 @@ function shouldMaterializeSegment(segment: ActivitySegment): boolean {
   const stored = segment.classification;
   if (!stored) return true;
   if (isAuthoritativeStoredClassification(stored)) return false;
+  if (shouldRefreshStoredYouTubeFeedClassification(segment, stored)) return true;
   if (isFreshBuiltInHeuristicClassification(stored)) return false;
   return true;
 }
@@ -136,6 +138,17 @@ function isFreshBuiltInHeuristicClassification(classification: StoredActivityCla
     isBuiltInHeuristicSource(classification.source)
     && classification.taxonomyVersion === BUILT_IN_HEURISTIC_TAXONOMY_VERSION
     && classification.stale !== true
+  );
+}
+
+function shouldRefreshStoredYouTubeFeedClassification(
+  segment: ActivitySegment,
+  classification: StoredActivityClassification,
+): boolean {
+  return (
+    classification.source === "youtube"
+    && isSustainedYouTubeFeedPage(segment)
+    && (classification.category !== "entertainment" || classification.productivity !== "drift")
   );
 }
 

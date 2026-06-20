@@ -25,6 +25,7 @@ export function buildExtremeNudgeToastEvent(
   segment: ActivitySegment,
   focusTarget: DriftAlarmFocusTarget | null,
   copySettings: DriftAlarmCopySettingsValue = buildDefaultDriftAlarmCopy(),
+  breakOptions: readonly number[] = [],
 ): ExtremeNudgeToastEvent {
   const closedLabel = segment.siteDomain?.trim()
     || segment.siteTitle?.trim()
@@ -40,5 +41,6 @@ export function buildExtremeNudgeToastEvent(
     title: copy.title,
     closedLabel,
     focusLabel: focusTarget?.label ?? null,
+    breakOptions,
   };
 }

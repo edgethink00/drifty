@@ -1008,12 +1008,10 @@ describe('domain helpers', () => {
     }
   });
 
-  it('keeps YouTube browse pages unknown and neutral across home, feed, search, and channel paths', () => {
+  it('keeps non-feed YouTube browse pages unknown and neutral across home, search, and channel paths', () => {
     const navigationCases = [
       { siteDomain: 'www.youtube.com', siteUrl: 'https://www.youtube.com/' },
       { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/results?search_query=typescript' },
-      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/feed' },
-      { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/feed/subscriptions' },
       { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/@drifty' },
       { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/@drifty/videos' },
       { siteDomain: 'youtube.com', siteUrl: 'https://www.youtube.com/channel/UC123' },
@@ -1030,6 +1028,26 @@ describe('domain helpers', () => {
         siteUrl,
       })).toEqual({ category: 'unknown', productivity: 'neutral' });
     }
+  });
+
+  it('classifies sustained YouTube feed pages as entertainment drift only after thirty seconds', () => {
+    expect(classifyActivity({
+      ...segments[0],
+      durationSeconds: 29,
+      appName: 'Safari',
+      siteDomain: 'youtube.com',
+      siteTitle: 'YouTube',
+      siteUrl: 'https://www.youtube.com/feed',
+    })).toEqual({ category: 'unknown', productivity: 'neutral' });
+
+    expect(classifyActivity({
+      ...segments[0],
+      durationSeconds: 30,
+      appName: 'Safari',
+      siteDomain: 'youtube.com',
+      siteTitle: 'YouTube',
+      siteUrl: 'https://www.youtube.com/feed/subscriptions',
+    })).toEqual({ category: 'entertainment', productivity: 'drift' });
   });
 
   it('does not use YouTube title heuristics for classification', () => {

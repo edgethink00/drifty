@@ -6,6 +6,7 @@ mod managed_ai;
 mod system_settings;
 mod tracker;
 mod watcher;
+mod watcher_extreme_nudge;
 
 pub use accessibility::*;
 pub use ai::*;
@@ -15,3 +16,4 @@ pub use managed_ai::*;
 pub use system_settings::*;
 pub use tracker::*;
 pub use watcher::*;
+pub use watcher_extreme_nudge::*;

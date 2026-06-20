@@ -130,4 +130,40 @@ describe("materializeBuiltInHeuristicClassifications", () => {
     expect(result.classifications).toEqual([]);
     expect(result.segments[0]).toBe(persistedDomainSegment);
   });
+
+  it("refreshes stored neutral YouTube feed rows after the feed duration crosses thirty seconds", () => {
+    const persistedFeedSegment = segment({
+      id: "persisted-youtube-feed",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/feed",
+      durationSeconds: 30,
+      classification: storedClassification("youtube", {
+        category: "unknown",
+        productivity: "neutral",
+        taxonomyVersion: BUILT_IN_HEURISTIC_TAXONOMY_VERSION,
+      }),
+    });
+
+    const result = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      segments: [persistedFeedSegment],
+    });
+
+    expect(result.classifications).toEqual([
+      expect.objectContaining({
+        segmentId: "persisted-youtube-feed",
+        source: "youtube",
+        category: "entertainment",
+        productivity: "drift",
+      }),
+    ]);
+    expect(result.segments[0]?.classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+    }));
+  });
 });
