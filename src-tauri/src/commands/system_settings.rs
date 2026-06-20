@@ -13,7 +13,9 @@ use tauri::async_runtime;
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     static kAXTrustedCheckOptionPrompt: CFStringRef;
-    fn AXIsProcessTrustedWithOptions(options: core_foundation::dictionary::CFDictionaryRef) -> Boolean;
+    fn AXIsProcessTrustedWithOptions(
+        options: core_foundation::dictionary::CFDictionaryRef,
+    ) -> Boolean;
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,11 +59,35 @@ pub async fn focus_target_open_app(bundle_id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn focus_target_activate_browser_tab(
     browser_name: String,
-    site_url: String,
+    site_url: Option<String>,
+    site_domain: Option<String>,
 ) -> Result<bool, String> {
-    async_runtime::spawn_blocking(move || activate_focus_target_browser_tab(&browser_name, &site_url))
-        .await
-        .map_err(|error| error.to_string())?
+    async_runtime::spawn_blocking(move || {
+        activate_focus_target_browser_tab(
+            &browser_name,
+            site_url.as_deref(),
+            site_domain.as_deref(),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn focus_target_browser_tab_exists(
+    browser_name: String,
+    site_url: Option<String>,
+    site_domain: Option<String>,
+) -> Result<bool, String> {
+    async_runtime::spawn_blocking(move || {
+        focus_target_browser_tab_exists_internal(
+            &browser_name,
+            site_url.as_deref(),
+            site_domain.as_deref(),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn normalize_focus_target_bundle_id(bundle_id: &str) -> Result<String, String> {
@@ -74,16 +100,37 @@ fn normalize_focus_target_bundle_id(bundle_id: &str) -> Result<String, String> {
 }
 
 fn focus_target_open_args(bundle_id: &str) -> Result<Vec<String>, String> {
-    Ok(vec!["-b".to_string(), normalize_focus_target_bundle_id(bundle_id)?])
+    Ok(vec![
+        "-b".to_string(),
+        normalize_focus_target_bundle_id(bundle_id)?,
+    ])
 }
 
-fn normalize_focus_target_url(site_url: &str) -> Result<String, String> {
-    let trimmed = site_url.trim();
-    if trimmed.is_empty() {
-        return Err("Focus target site URL is required".to_string());
+#[derive(Debug, Eq, PartialEq)]
+struct FocusTargetBrowserTabMatch {
+    site_url: String,
+    site_domain: String,
+}
+
+fn focus_target_browser_tab_match(
+    site_url: Option<&str>,
+    site_domain: Option<&str>,
+) -> Result<FocusTargetBrowserTabMatch, String> {
+    let normalized_url = site_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default()
+        .to_string();
+    let normalized_domain = focus_target_domain(&normalized_url, site_domain).unwrap_or_default();
+
+    if normalized_url.is_empty() && normalized_domain.is_empty() {
+        return Err("Focus target site URL or domain is required".to_string());
     }
 
-    Ok(trimmed.to_string())
+    Ok(FocusTargetBrowserTabMatch {
+        site_url: normalized_url,
+        site_domain: normalized_domain,
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -102,13 +149,21 @@ fn open_focus_target_app(_bundle_id: &str) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn activate_focus_target_browser_tab(browser_name: &str, site_url: &str) -> Result<bool, String> {
-    let site_url = normalize_focus_target_url(site_url)?;
+fn activate_focus_target_browser_tab(
+    browser_name: &str,
+    site_url: Option<&str>,
+    site_domain: Option<&str>,
+) -> Result<bool, String> {
+    let target_match = focus_target_browser_tab_match(site_url, site_domain)?;
     let Some(app_name) = focus_target_browser_app_name(browser_name) else {
         return Ok(false);
     };
 
-    let script = focus_target_browser_tab_script(app_name, &site_url);
+    let script = focus_target_browser_tab_script(
+        app_name,
+        &target_match.site_url,
+        Some(&target_match.site_domain),
+    );
     let output = Command::new("osascript")
         .args(["-e", &script])
         .output()
@@ -122,8 +177,49 @@ fn activate_focus_target_browser_tab(browser_name: &str, site_url: &str) -> Resu
 }
 
 #[cfg(not(target_os = "macos"))]
-fn activate_focus_target_browser_tab(_browser_name: &str, _site_url: &str) -> Result<bool, String> {
+fn activate_focus_target_browser_tab(
+    _browser_name: &str,
+    _site_url: Option<&str>,
+    _site_domain: Option<&str>,
+) -> Result<bool, String> {
     Err("Focus target browser tab activation is only available on macOS".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn focus_target_browser_tab_exists_internal(
+    browser_name: &str,
+    site_url: Option<&str>,
+    site_domain: Option<&str>,
+) -> Result<bool, String> {
+    let target_match = focus_target_browser_tab_match(site_url, site_domain)?;
+    let Some(app_name) = focus_target_browser_app_name(browser_name) else {
+        return Ok(false);
+    };
+
+    let script = focus_target_browser_tab_exists_script(
+        app_name,
+        &target_match.site_url,
+        Some(&target_match.site_domain),
+    );
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim() == "found_browser_tab")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn focus_target_browser_tab_exists_internal(
+    _browser_name: &str,
+    _site_url: Option<&str>,
+    _site_domain: Option<&str>,
+) -> Result<bool, String> {
+    Err("Focus target browser tab lookup is only available on macOS".to_string())
 }
 
 fn focus_target_browser_app_name(browser_name: &str) -> Option<&'static str> {
@@ -138,16 +234,60 @@ fn focus_target_browser_app_name(browser_name: &str) -> Option<&'static str> {
     }
 }
 
-fn focus_target_browser_tab_script(browser_name: &str, site_url: &str) -> String {
+fn focus_target_browser_tab_script(
+    browser_name: &str,
+    site_url: &str,
+    site_domain: Option<&str>,
+) -> String {
+    focus_target_browser_tab_script_for_result(
+        browser_name,
+        site_url,
+        site_domain,
+        FocusTargetBrowserTabScriptMode::Activate,
+    )
+}
+
+fn focus_target_browser_tab_exists_script(
+    browser_name: &str,
+    site_url: &str,
+    site_domain: Option<&str>,
+) -> String {
+    focus_target_browser_tab_script_for_result(
+        browser_name,
+        site_url,
+        site_domain,
+        FocusTargetBrowserTabScriptMode::Exists,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum FocusTargetBrowserTabScriptMode {
+    Activate,
+    Exists,
+}
+
+fn focus_target_browser_tab_script_for_result(
+    browser_name: &str,
+    site_url: &str,
+    site_domain: Option<&str>,
+    mode: FocusTargetBrowserTabScriptMode,
+) -> String {
     let browser_name = applescript_string_literal(browser_name);
     let site_url = applescript_string_literal(site_url);
+    let site_domain = applescript_string_literal(site_domain.unwrap_or_default());
+    let handlers = focus_target_browser_tab_match_handlers();
 
     if browser_name == "Safari" {
-        return format!(
-            r#"tell application "{browser_name}"
+        return match mode {
+            FocusTargetBrowserTabScriptMode::Activate => format!(
+                r#"{handlers}
+set targetUrl to "{site_url}"
+set targetDomain to "{site_domain}"
+tell application "{browser_name}"
   repeat with browserWindow in windows
     repeat with tabIndex from 1 to count of tabs of browserWindow
-      if URL of tab tabIndex of browserWindow is "{site_url}" then
+      set currentUrl to URL of tab tabIndex of browserWindow
+      if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
         set current tab of browserWindow to tab tabIndex of browserWindow
         set index of browserWindow to 1
         activate
@@ -157,14 +297,36 @@ fn focus_target_browser_tab_script(browser_name: &str, site_url: &str) -> String
   end repeat
   return "not_found"
 end tell"#
-        );
-    }
-
-    format!(
-        r#"tell application "{browser_name}"
+            ),
+            FocusTargetBrowserTabScriptMode::Exists => format!(
+                r#"{handlers}
+set targetUrl to "{site_url}"
+set targetDomain to "{site_domain}"
+tell application "{browser_name}"
   repeat with browserWindow in windows
     repeat with tabIndex from 1 to count of tabs of browserWindow
-      if URL of tab tabIndex of browserWindow is "{site_url}" then
+      set currentUrl to URL of tab tabIndex of browserWindow
+      if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
+        return "found_browser_tab"
+      end if
+    end repeat
+  end repeat
+  return "not_found"
+end tell"#
+            ),
+        };
+    }
+
+    match mode {
+        FocusTargetBrowserTabScriptMode::Activate => format!(
+            r#"{handlers}
+set targetUrl to "{site_url}"
+set targetDomain to "{site_domain}"
+tell application "{browser_name}"
+  repeat with browserWindow in windows
+    repeat with tabIndex from 1 to count of tabs of browserWindow
+      set currentUrl to URL of tab tabIndex of browserWindow
+      if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
         set active tab index of browserWindow to tabIndex
         set index of browserWindow to 1
         activate
@@ -174,7 +336,114 @@ end tell"#
   end repeat
   return "not_found"
 end tell"#
-    )
+        ),
+        FocusTargetBrowserTabScriptMode::Exists => format!(
+            r#"{handlers}
+set targetUrl to "{site_url}"
+set targetDomain to "{site_domain}"
+tell application "{browser_name}"
+  repeat with browserWindow in windows
+    repeat with tabIndex from 1 to count of tabs of browserWindow
+      set currentUrl to URL of tab tabIndex of browserWindow
+      if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
+        return "found_browser_tab"
+      end if
+    end repeat
+  end repeat
+  return "not_found"
+end tell"#
+        ),
+    }
+}
+
+fn focus_target_browser_tab_match_handlers() -> &'static str {
+    r#"on normalizedUrlHost(rawUrl)
+  set previousTextItemDelimiters to AppleScript's text item delimiters
+  set AppleScript's text item delimiters to "://"
+  set urlParts to text items of rawUrl
+  if (count of urlParts) > 1 then
+    set rawHostAndPath to item 2 of urlParts
+  else
+    set rawHostAndPath to item 1 of urlParts
+  end if
+  set AppleScript's text item delimiters to "/"
+  set rawHost to item 1 of text items of rawHostAndPath
+  set AppleScript's text item delimiters to ":"
+  set rawHost to item 1 of text items of rawHost
+  set AppleScript's text item delimiters to previousTextItemDelimiters
+  ignoring case
+    if rawHost starts with "www." then return text 5 thru -1 of rawHost
+    return rawHost
+  end ignoring
+end normalizedUrlHost
+
+on tabMatchesTarget(currentUrl, targetUrl, targetDomain)
+  if targetUrl is not "" and currentUrl is targetUrl then return true
+  if targetDomain is "" then return false
+  ignoring case
+    if my normalizedUrlHost(currentUrl) is targetDomain then return true
+  end ignoring
+  return false
+end tabMatchesTarget"#
+}
+
+fn focus_target_domain(site_url: &str, site_domain: Option<&str>) -> Option<String> {
+    site_domain
+        .and_then(normalize_focus_target_domain)
+        .or_else(|| site_url_host(site_url).and_then(|host| normalize_focus_target_domain(&host)))
+}
+
+fn normalize_focus_target_domain(value: &str) -> Option<String> {
+    let trimmed = value.trim().trim_end_matches('.');
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if trimmed.contains("://") {
+        return site_url_host(trimmed).and_then(|host| normalize_focus_target_domain(&host));
+    }
+
+    let host = trimmed
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .trim_end_matches('.');
+    let host_without_port = host.split(':').next().unwrap_or_default().trim();
+    if host_without_port.is_empty() {
+        return None;
+    }
+
+    let lower_host = host_without_port.to_ascii_lowercase();
+    let normalized = lower_host
+        .strip_prefix("www.")
+        .unwrap_or(lower_host.as_str())
+        .to_string();
+    if normalized.contains('.') {
+        Some(normalized)
+    } else {
+        None
+    }
+}
+
+fn site_url_host(site_url: &str) -> Option<String> {
+    let trimmed = site_url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let without_scheme = trimmed
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(trimmed);
+    let without_userinfo = without_scheme
+        .rsplit_once('@')
+        .map(|(_, rest)| rest)
+        .unwrap_or(without_scheme);
+    without_userinfo
+        .split(['/', '?', '#'])
+        .next()
+        .and_then(normalize_focus_target_domain)
 }
 
 fn applescript_string_literal(value: &str) -> String {
@@ -214,7 +483,8 @@ fn request_accessibility_prompt_if_needed(urls: &[&str]) {
 
     let prompt_key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
     let prompt_value = CFBoolean::true_value();
-    let options = CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt_value.as_CFType())]);
+    let options =
+        CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt_value.as_CFType())]);
     unsafe {
         AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef());
     }
@@ -273,10 +543,39 @@ mod tests {
         let script = focus_target_browser_tab_script(
             "Google Chrome",
             "https://docs.drifty.so/work",
+            Some("docs.drifty.so"),
         );
 
         assert!(script.contains("repeat with tabIndex from 1 to count of tabs"));
         assert!(script.contains("set active tab index of browserWindow to tabIndex"));
+        assert!(script.contains("tabMatchesTarget(currentUrl, targetUrl, targetDomain)"));
         assert!(script.contains("return \"activated_browser_tab\""));
+    }
+
+    #[test]
+    fn focus_target_browser_tab_exists_script_checks_tabs_without_activation() {
+        let script = focus_target_browser_tab_exists_script(
+            "Google Chrome",
+            "https://docs.drifty.so/work",
+            Some("docs.drifty.so"),
+        );
+
+        assert!(script.contains("repeat with tabIndex from 1 to count of tabs"));
+        assert!(script.contains("return \"found_browser_tab\""));
+        assert!(!script.contains("set active tab index"));
+        assert!(!script.contains("activate"));
+    }
+
+    #[test]
+    fn focus_target_browser_domain_falls_back_from_url() {
+        assert_eq!(
+            focus_target_domain("https://www.docs.drifty.so/work", None),
+            Some("docs.drifty.so".to_string())
+        );
+        assert_eq!(
+            focus_target_domain("https://docs.drifty.so/work", Some("  WWW.DRIFTY.SO  ")),
+            Some("drifty.so".to_string())
+        );
+        assert_eq!(focus_target_domain("not a url", None), None);
     }
 }

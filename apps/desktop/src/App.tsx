@@ -167,9 +167,10 @@ import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSecti
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
-import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetIconUpgrade, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
+import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, hasDriftAlarmFocusTargetUpdate, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
+import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
 import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
@@ -812,6 +813,41 @@ export default function App() {
     () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
     [appIcons, historySegments, segments, selectedDayClassificationOptions],
   );
+  const [availableDriftAlarmFocusTargets, setAvailableDriftAlarmFocusTargets] = useState<DriftAlarmFocusTarget[]>([]);
+  const availableDriftAlarmFocusTargetsRef = useRef<DriftAlarmFocusTarget[]>([]);
+  const availableDriftAlarmFocusTargetsPromiseRef = useRef<Promise<DriftAlarmFocusTarget[]> | null>(null);
+  const applyAvailableDriftAlarmFocusTargets = useCallback((targets: DriftAlarmFocusTarget[]) => {
+    if (haveSameDriftAlarmFocusTargets(availableDriftAlarmFocusTargetsRef.current, targets)) return;
+    availableDriftAlarmFocusTargetsRef.current = targets;
+    setAvailableDriftAlarmFocusTargets(targets);
+  }, []);
+  const resolveCurrentAvailableDriftAlarmFocusTargets = useCallback(async () => {
+    const pendingTargets = availableDriftAlarmFocusTargetsPromiseRef.current;
+    if (!pendingTargets) return availableDriftAlarmFocusTargetsRef.current;
+    try {
+      return await pendingTargets;
+    } catch (error) {
+      console.warn("Failed to resolve current focus target availability", error);
+      return availableDriftAlarmFocusTargetsRef.current;
+    }
+  }, []);
+  useEffect(() => {
+    let active = true;
+    const definitelyAvailableTargets = filterDefinitelyAvailableFocusTargets(recentDriftAlarmFocusTargets);
+    applyAvailableDriftAlarmFocusTargets(definitelyAvailableTargets);
+
+    const resolvedTargetsPromise = resolveAvailableFocusTargets(recentDriftAlarmFocusTargets);
+    availableDriftAlarmFocusTargetsPromiseRef.current = resolvedTargetsPromise;
+    void resolvedTargetsPromise.then((resolvedTargets) => {
+      if (!active) return;
+      if (availableDriftAlarmFocusTargetsPromiseRef.current !== resolvedTargetsPromise) return;
+      applyAvailableDriftAlarmFocusTargets(resolvedTargets);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
   const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
@@ -1301,7 +1337,7 @@ export default function App() {
   const showDriftAlarm = useCallback((event: DriftAlarmEvent) => {
     const delivery = summarizeDriftAlarmEvent(event);
     const currentEvent = driftAlarmEventRef.current;
-    if (currentEvent?.id === event.id && !hasDriftAlarmFocusTargetIconUpgrade(currentEvent, event)) {
+    if (currentEvent?.id === event.id && !hasDriftAlarmFocusTargetUpdate(currentEvent, event)) {
       recordDriftAlarmDebugEvent({
         kind: "native_show_duplicate",
         alertKey: event.id,
@@ -1368,13 +1404,13 @@ export default function App() {
       driftDurationSeconds: option.driftDurationSeconds,
       preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
       generatedAt: new Date().toISOString(),
-      focusTargets: recentDriftAlarmFocusTargets,
+      focusTargets: availableDriftAlarmFocusTargets,
       sourceSiteDomain: option.sourceSiteDomain,
       sourceAppName: option.sourceAppName,
       sourceIconSrc: option.sourceIconSrc,
       copySettings: driftAlarmCopy,
     }));
-  }, [driftAlarmCopy, recentDriftAlarmFocusTargets, showDriftAlarm]);
+  }, [availableDriftAlarmFocusTargets, driftAlarmCopy, showDriftAlarm]);
 
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
@@ -1440,7 +1476,7 @@ export default function App() {
 
   const returnToFocusTarget = useCallback((target: DriftAlarmFocusTarget | null) => {
     if (target?.siteDomain) {
-      void activateFocusTargetSite(target).catch((error) => console.warn("Failed to open focus target site", error));
+      void activateFocusTargetSite(target).catch((error) => console.warn("Failed to activate focus target site", error));
       return;
     }
     if (target?.bundleId && isTauriRuntime()) {
@@ -2626,7 +2662,7 @@ export default function App() {
         driftDurationSeconds: segment.durationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
-        focusTargets: recentDriftAlarmFocusTargets,
+        focusTargets: availableDriftAlarmFocusTargets,
         sourceSiteDomain,
         sourceAppName,
         sourceIconSrc,
@@ -2675,7 +2711,7 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then((result) => {
+      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment)).then(async (result) => {
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
@@ -2688,7 +2724,7 @@ export default function App() {
           if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
           return;
         }
-        const latestFocusTarget = recentDriftAlarmFocusTargets[0] ?? null;
+        const latestFocusTarget = (await resolveCurrentAvailableDriftAlarmFocusTargets())[0] ?? null;
         void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
         markCurrentDriftAlarmDelivered();
         if (latestFocusTarget) {
@@ -2787,7 +2823,7 @@ export default function App() {
         if (outcome) completeBreakRecoveryAssessment(pendingBreakReturnAlarm, outcome);
         const focusTargets = pendingBreakReturnAlarm.focusTargets.length
           ? pendingBreakReturnAlarm.focusTargets
-          : recentDriftAlarmFocusTargets;
+          : availableDriftAlarmFocusTargets;
         const breakReturnContextLabel = getWatcherContextLabel(segment, category);
         const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
         const breakReturnAppName = segment.appName.trim() || "Unknown app";
@@ -3006,7 +3042,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recentDriftAlarmFocusTargets, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, resolveCurrentAvailableDriftAlarmFocusTargets, returnToFocusTarget, selectedDay, selectedDayClassificationOptions, segments, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
