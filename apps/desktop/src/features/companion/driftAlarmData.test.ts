@@ -171,6 +171,55 @@ describe("buildDriftAlarmCandidates", () => {
 
     expect(candidates).toEqual([]);
   });
+
+  it("flags a live YouTube feed drift candidate after thirty seconds", () => {
+    const feedSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "youtube-feed-segment",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:00:15.000Z",
+      durationSeconds: 15,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "YouTube",
+      siteDomain: "youtube.com",
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/feed",
+      youtubeVideoId: null,
+    };
+    const feedSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      observedAt: "2026-06-11T09:00:30.000Z",
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "YouTube",
+      siteDomain: "youtube.com",
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/feed",
+      youtubeVideoId: null,
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [feedSegment],
+      currentSnapshot: feedSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 30,
+    });
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        alertKey: "active:youtube-feed-segment",
+        category: "entertainment",
+        sourceSegmentId: "youtube-feed-segment",
+        segment: expect.objectContaining({
+          durationSeconds: 30,
+          siteUrl: "https://www.youtube.com/feed",
+        }),
+      }),
+    ]);
+  });
 });
 
 describe("normalizeDriftAlertDelaySeconds", () => {

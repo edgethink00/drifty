@@ -3,6 +3,7 @@ import type { ActivityClassification, ActivitySegment } from "./activity";
 const YOUTUBE_MUSIC_PLAYLIST_PREFIXES = ["RD", "RDMM", "RDAMVM", "RDCLAK", "RDAMPL", "OLAK"] as const;
 
 const YOUTUBE_MUSIC_METADATA_CATEGORIES = new Set(["", "entertainment", "people & blogs"]);
+export const YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS = 30;
 
 const YOUTUBE_MUSIC_METADATA_HINTS = [
   "music",
@@ -54,6 +55,10 @@ export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClass
     return { category: "music", productivity: "neutral" };
   }
 
+  if (isSustainedYouTubeFeedPage(segment)) {
+    return { category: "entertainment", productivity: "drift" };
+  }
+
   if (isYouTubeBrowsePage(segment)) {
     return { category: "unknown", productivity: "neutral" };
   }
@@ -94,6 +99,18 @@ export function isYouTubeBrowsePage(segment: ActivitySegment): boolean {
 }
 
 export const isYouTubeNavigationPage = isYouTubeBrowsePage;
+
+export function isYouTubeFeedPage(segment: ActivitySegment): boolean {
+  const site = normalizeYouTubeSite(segment.siteDomain);
+  if (!isYouTubeSite(site) || site === "music.youtube.com" || segment.youtubeVideoId) return false;
+
+  const path = youtubePathFromUrl(segment.siteUrl);
+  return path === "/feed" || Boolean(path?.startsWith("/feed/"));
+}
+
+export function isSustainedYouTubeFeedPage(segment: ActivitySegment): boolean {
+  return isYouTubeFeedPage(segment) && segment.durationSeconds >= YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS;
+}
 
 export function isYouTubeVideoSegment(segment: ActivitySegment): boolean {
   const site = normalizeYouTubeSite(segment.siteDomain);
