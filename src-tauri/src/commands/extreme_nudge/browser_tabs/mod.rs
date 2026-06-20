@@ -32,15 +32,19 @@ pub(super) fn close_browser_tab(
     browser_name: &str,
     site_url: Option<&str>,
     site_domain: Option<&str>,
+    force_chromium_ax_tab_close: bool,
 ) -> Result<String, ExtremeNudgeError> {
     let target_label = site_url.or(site_domain).unwrap_or("unknown target");
-    let script =
-        tab_close_script(browser_name, site_url.unwrap_or(""), site_domain).ok_or_else(|| {
-            ExtremeNudgeError::BrowserTabNotFound {
-                target: target_label.to_string(),
-                diagnostic: "unsupported_browser".to_string(),
-            }
-        })?;
+    let script = tab_close_script(
+        browser_name,
+        site_url.unwrap_or(""),
+        site_domain,
+        force_chromium_ax_tab_close,
+    )
+    .ok_or_else(|| ExtremeNudgeError::BrowserTabNotFound {
+        target: target_label.to_string(),
+        diagnostic: "unsupported_browser".to_string(),
+    })?;
     let output = run_osascript(&script)?;
 
     if !output.status.success() {
@@ -149,12 +153,14 @@ fn tab_close_script(
     browser_name: &str,
     site_url: &str,
     site_domain: Option<&str>,
+    force_chromium_ax_tab_close: bool,
 ) -> Option<String> {
     match browser_tab_script_kind(browser_name)? {
         BrowserTabScriptKind::Chromium => Some(chromium::tab_close_script(
             browser_name,
             site_url,
             site_domain,
+            force_chromium_ax_tab_close,
         )),
         BrowserTabScriptKind::Firefox => Some(firefox::tab_close_script(
             browser_name,
@@ -180,6 +186,7 @@ mod tests {
             "Google Chrome",
             "https://youtube.com/watch?v=abc",
             Some("youtube.com"),
+            false,
         )
         .unwrap();
 
@@ -206,6 +213,7 @@ mod tests {
             "Google Chrome",
             target.site_url.as_deref().unwrap(),
             target.site_domain.as_deref(),
+            false,
         )
         .unwrap();
 
@@ -218,6 +226,7 @@ mod tests {
             "Google Chrome",
             "https://ads.google.com/aw/policy/account",
             Some("ads.google.com"),
+            false,
         )
         .unwrap();
 
@@ -250,6 +259,22 @@ mod tests {
     }
 
     #[test]
+    fn chrome_like_tab_close_script_can_force_accessibility_fallback() {
+        let script = tab_close_script(
+            "Google Chrome",
+            "https://youtube.com/watch?v=abc",
+            Some("youtube.com"),
+            true,
+        )
+        .unwrap();
+
+        assert!(!script.contains("URL of active tab of front window"));
+        assert!(!script.contains("repeat with browserWindow in windows"));
+        assert!(script.contains("tell process \"Google Chrome\""));
+        assert!(script.contains("return \"closed_browser_tab:chromium_ax_front_tab\""));
+    }
+
+    #[test]
     fn tab_close_output_preserves_diagnostic_reason() {
         assert_eq!(
             parse_tab_close_output("closed_browser_tab:chromium_ax_front_tab"),
@@ -278,6 +303,7 @@ mod tests {
             "Safari",
             "https://www.example.com/watch",
             Some("example.com"),
+            false,
         )
         .unwrap();
 
@@ -294,6 +320,7 @@ mod tests {
             "Firefox",
             "https://www.example.com/watch",
             Some("example.com"),
+            false,
         )
         .unwrap();
 
@@ -312,7 +339,8 @@ mod tests {
 
     #[test]
     fn tab_matcher_accepts_schemaless_browser_urls() {
-        let script = tab_close_script("Firefox", "example.com/watch", Some("example.com")).unwrap();
+        let script =
+            tab_close_script("Firefox", "example.com/watch", Some("example.com"), false).unwrap();
 
         assert!(script.contains("set afterScheme to currentUrl"));
         assert!(script.contains("if afterScheme is not \"\" then"));

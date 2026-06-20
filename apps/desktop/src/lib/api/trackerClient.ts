@@ -10,6 +10,7 @@ import type {
   ClassificationRuleApplyResult,
   ClassificationRuleCandidate,
   ClassificationRuleInput,
+  DeveloperDiagnosticsSettings,
   DriftAlarmTrayStatus,
   CurrentActivitySnapshot,
   LiveTailQuery,
@@ -187,6 +188,10 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return previewTopSites(query);
     const result = await safeInvoke<SiteDuration[]>("tracker_get_top_sites", { query });
     return result ?? [];
+  },
+  async setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings) {
+    if (shouldUsePreviewData()) return;
+    await safeInvoke("tracker_set_developer_diagnostics", { query: settings });
   },
   async getAppIcons(apps: AppIdentity[]) {
     if (shouldUsePreviewData()) return previewAppIcons(apps);

@@ -19,12 +19,12 @@ use commands::{
     tracker_get_classification_rules, tracker_get_current_snapshot,
     tracker_get_dashboard_week_timeline, tracker_get_hourly_summary, tracker_get_live_tail,
     tracker_get_raw_events, tracker_get_reusable_ai_classifications, tracker_get_status,
-    tracker_get_timeline, tracker_get_top_sites,
-    tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
-    tracker_save_classification_rule, tracker_save_classifications,
-    tracker_search_classification_rule_candidates, tracker_start, tracker_stop,
-    watcher_peek_dismiss, watcher_peek_end_of_day_review_action, watcher_peek_hide,
-    watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show, DriftAlarmState,
+    tracker_get_timeline, tracker_get_top_sites, tracker_get_unclassified_segments,
+    tracker_refresh_non_ai_classifications, tracker_save_classification_rule,
+    tracker_save_classifications, tracker_search_classification_rule_candidates,
+    tracker_set_developer_diagnostics, tracker_start, tracker_stop, watcher_peek_dismiss,
+    watcher_peek_end_of_day_review_action, watcher_peek_hide, watcher_peek_respond,
+    watcher_peek_set_interactive, watcher_peek_show, DriftAlarmState,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::TrackerController;
@@ -88,8 +88,8 @@ fn remember_auth_deep_links<R: Runtime>(
 }
 
 fn is_auth_callback_deep_link(url: &str) -> bool {
-    let is_callback =
-        url.starts_with("drifty://auth/callback") || url.starts_with("drifty://auth/google-callback");
+    let is_callback = url.starts_with("drifty://auth/callback")
+        || url.starts_with("drifty://auth/google-callback");
     is_callback && !contains_auth_session_token(url)
 }
 
@@ -197,6 +197,7 @@ pub fn run() {
             tracker_get_dashboard_week_timeline,
             tracker_get_live_tail,
             tracker_get_current_snapshot,
+            tracker_set_developer_diagnostics,
             tracker_get_hourly_summary,
             tracker_get_raw_events,
             tracker_get_top_sites,

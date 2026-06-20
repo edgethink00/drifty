@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SettingsSidebar, type SettingsSection } from "./SettingsSidebar";
 
 describe("SettingsSidebar", () => {
-  it("hides the Dev section when production gates disable it", () => {
+  it("hides the Dev section when the caller disables it", () => {
     const onSectionChange = vi.fn<(section: SettingsSection) => void>();
 
     render(<SettingsSidebar activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);

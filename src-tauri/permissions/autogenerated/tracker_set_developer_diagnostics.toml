@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-set-developer-diagnostics"
+description = "Enables the tracker_set_developer_diagnostics command without any pre-configured scope."
+commands.allow = ["tracker_set_developer_diagnostics"]
+
+[[permission]]
+identifier = "deny-tracker-set-developer-diagnostics"
+description = "Denies the tracker_set_developer_diagnostics command without any pre-configured scope."
+commands.deny = ["tracker_set_developer_diagnostics"]

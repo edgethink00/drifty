@@ -121,6 +121,18 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_current_snapshot", json!({}))
     }
 
+    pub fn set_developer_diagnostics(
+        &self,
+        app: &AppHandle,
+        force_chromium_ax_capture: bool,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "set_developer_diagnostics",
+            json!({ "forceChromiumAxCapture": force_chromium_ax_capture }),
+        )
+    }
+
     pub fn get_hourly_summary(
         &self,
         app: &AppHandle,
@@ -475,7 +487,6 @@ fn resolve_python_bin() -> String {
         return path;
     }
 
-
     let system_python = PathBuf::from("/usr/bin/python3");
     if system_python.exists() {
         return system_python.display().to_string();
@@ -488,7 +499,6 @@ fn resolve_tracker_script(app: &AppHandle) -> PathBuf {
     if let Ok(path) = std::env::var("DRIFTY_TRACKER_SCRIPT") {
         return PathBuf::from(path);
     }
-
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let mut candidates = Vec::new();

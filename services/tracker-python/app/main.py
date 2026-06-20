@@ -28,6 +28,8 @@ DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
 IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "180"))
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
+FORCE_CHROMIUM_AX_CAPTURE_META_KEY = "developer_diagnostics_force_chromium_ax_capture"
+FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 
@@ -52,12 +54,21 @@ def database() -> TrackerDatabase:
     return TrackerDatabase(DB_PATH)
 
 
+def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
+    enabled = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
+    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if enabled else "0"
+
+
 def _bool_meta(value: str | None) -> bool | None:
     if value == "true":
         return True
     if value == "false":
         return False
     return None
+
+
+def _bool_payload(value: object) -> bool:
+    return value is True
 
 
 def _float_meta(value: str | None) -> float | None:
@@ -347,7 +358,16 @@ def get_classification_metrics(payload: dict):
     return response(True, database().classification_metrics(start, end))
 
 
+def set_developer_diagnostics(payload: dict):
+    force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
+    db = database()
+    db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true" if force_chromium_ax_capture else "false")
+    _apply_developer_diagnostics_env(db)
+    return response(True, {"forceChromiumAxCapture": force_chromium_ax_capture})
+
+
 def get_current_snapshot():
+    _apply_developer_diagnostics_env(database())
     snapshot = current_snapshot()
     return response(
         True,
@@ -469,6 +489,7 @@ COMMANDS = {
     "save_classifications": save_classifications,
     "refresh_non_ai_classifications": refresh_non_ai_classifications,
     "get_classification_metrics": get_classification_metrics,
+    "set_developer_diagnostics": set_developer_diagnostics,
 }
 
 
@@ -492,6 +513,7 @@ def daemon():
                 time.sleep(SAMPLE_SECONDS)
                 continue
 
+            _apply_developer_diagnostics_env(db)
             snapshot = current_snapshot(include_system_transient=False)
             capture_tick = time.monotonic()
             sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)

@@ -137,6 +137,18 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
             ),
         )
 
+    def test_browser_metadata_can_force_chromium_accessibility_address_bar(self) -> None:
+        with patch.dict(os.environ, {"DRIFTY_FORCE_CHROMIUM_AX_CAPTURE": "1"}), patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="https://www.example.com/path?from=ax\nExample Page - Google Chrome",
+        ) as mock_run:
+            result = _browser_metadata("Google Chrome")
+
+        self.assertEqual(result.site_domain, "example.com")
+        self.assertEqual(result.site_url, "https://www.example.com/path?from=ax")
+        self.assertEqual(result.match_state, "accessibility-address-bar")
+        self.assertEqual(mock_run.call_count, 1)
+
     def test_browser_metadata_normalizes_schemaless_accessibility_address(self) -> None:
         with patch(
             "app.tracker.macos_workspace._run_osascript",
