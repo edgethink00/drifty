@@ -5,6 +5,7 @@ import { vi } from "vitest";
 import { AiSetupPanel } from "./AiSetupPanel";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
+import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
 
 const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock } = vi.hoisted(() => {
   const managedCatalog = [
@@ -142,6 +143,10 @@ export function renderPanel({
 
   function Harness() {
     const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
+    const connectionTest = useAiConnectionTestRunner({
+      localAiSetup,
+      onLocalAiConnectionTestResult,
+    });
 
     return (
       <AiSetupPanel
@@ -154,6 +159,7 @@ export function renderPanel({
         cloudStatusRefreshing={false}
         cloudStatusLabel="Cloud AI available"
         cloudTrialEndsAt={cloudTrialEndsAt}
+        connectionTest={connectionTest}
         currentBillingPlan={currentBillingPlan}
         isSupabaseConfigured={true}
         localAiSetup={localAiSetup}
@@ -161,7 +167,6 @@ export function renderPanel({
         userEmail={userEmail}
         workProfileUserId={workProfileUserId}
         onDialogOpenChange={vi.fn()}
-        onLocalAiConnectionTestResult={onLocalAiConnectionTestResult}
         onLocalAiSetupChange={setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
         onRefreshCloudStatus={onRefreshCloudStatus}

@@ -19,7 +19,7 @@ export type AiConnectionStatusInput = {
 
 export type LocalAiProviderStatus =
   | { readonly kind: "unconfigured" }
-  | { readonly kind: "test_needed" }
+  | { readonly kind: "checking" }
   | { readonly kind: "connected" }
   | { readonly kind: "failed"; readonly issueKind: AiConnectionIssueKind };
 
@@ -53,10 +53,10 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
         label: labelForIssueKind(input.localProviderStatus.issueKind),
         providerLabel: input.localProviderLabel ?? "Local AI",
       };
-    case "test_needed":
+    case "checking":
       return {
         tone: "neutral",
-        label: "Test needed",
+        label: "Checking",
         providerLabel: input.localProviderLabel ?? "Local AI",
       };
     case "unconfigured":
