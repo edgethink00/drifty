@@ -13443,7 +13443,8 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .extreme-nudge-toast {
   --extreme-toast-tone: var(--warn);
   --extreme-toast-ease: cubic-bezier(.16, 1, .3, 1);
-  align-items: center;
+  --extreme-toast-visible-duration: 8s;
+  align-items: start;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   border: 1px solid color-mix(in srgb, var(--extreme-toast-tone) 18%, var(--line));
   border-radius: var(--radius-sm);
@@ -13461,7 +13462,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   right: var(--space-3);
   top: var(--space-3);
   transform-origin: right center;
-  width: min(22rem, calc(100vw - var(--space-6)));
+  width: min(24.5rem, calc(100vw - var(--space-6)));
   will-change: opacity, transform;
 }
 
@@ -13487,7 +13488,11 @@ html[data-theme="dark"] .extreme-nudge-toast {
 }
 
 .extreme-nudge-toast[data-phase="visible"]::after {
-  animation: extreme-nudge-toast-progress 4s linear forwards;
+  animation: extreme-nudge-toast-progress var(--extreme-toast-visible-duration) linear forwards;
+}
+
+.extreme-nudge-toast[data-timer-paused="true"]::after {
+  animation-play-state: paused;
 }
 
 .extreme-nudge-toast[data-phase="leaving"] {
@@ -13522,6 +13527,40 @@ html[data-theme="dark"] .extreme-nudge-toast {
 
 .extreme-nudge-toast__copy {
   min-width: 0;
+}
+
+.extreme-nudge-toast__actions {
+  grid-column: 2;
+  justify-self: stretch;
+  min-width: 0;
+}
+
+.extreme-nudge-toast .da__break-picker {
+  max-width: none;
+  width: 100%;
+}
+
+.extreme-nudge-toast .da__break-trigger {
+  min-height: 2rem;
+  padding: 0 var(--space-2);
+  width: 100%;
+}
+
+.extreme-nudge-toast .da__break-trigger-copy strong {
+  font-size: var(--type-setting-label-size);
+}
+
+.extreme-nudge-toast .da__break-menu {
+  margin-top: var(--space-1);
+}
+
+.extreme-nudge-toast .da__break-options {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.extreme-nudge-toast .da__break-option,
+.extreme-nudge-toast .da__break-custom-submit {
+  min-height: 1.8rem;
 }
 
 .extreme-nudge-toast__eyebrow,

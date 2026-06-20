@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FocusEvent } from "react";
+import { BreakDurationPicker } from "./BreakDurationPicker";
+import type { DriftAlarmAction } from "./driftAlarmEvent";
+import { useDelayedDriftAlarmAction } from "./useDelayedDriftAlarmAction";
 
 export type ExtremeNudgeToastEvent = {
   kind: "extremeNudgeToast";
@@ -8,43 +11,116 @@ export type ExtremeNudgeToastEvent = {
   title: string;
   closedLabel: string;
   focusLabel: string | null;
+  breakOptions?: readonly number[];
 };
 
 type ToastPhase = "visible" | "leaving";
 
-const EXTREME_NUDGE_TOAST_VISIBLE_MS = 4_000;
+const EXTREME_NUDGE_TOAST_VISIBLE_MS = 8_000;
 const EXTREME_NUDGE_TOAST_EXIT_MS = 280;
 
 export function ExtremeNudgeToast({
   event,
   onDismiss,
+  onAction,
   isPreview = false,
 }: {
   event: ExtremeNudgeToastEvent;
   onDismiss?: () => void;
+  onAction?: (action: DriftAlarmAction) => void;
   isPreview?: boolean;
 }) {
   const [phase, setPhase] = useState<ToastPhase>("visible");
+  const [selectedBreakMinutes, setSelectedBreakMinutes] = useState<number | null>(null);
+  const [isFocusHoldingTimer, setIsFocusHoldingTimer] = useState(false);
+  const [isPointerHoldingTimer, setIsPointerHoldingTimer] = useState(false);
+  const dismissTimerRef = useRef<number | null>(null);
+  const remainingVisibleMsRef = useRef(EXTREME_NUDGE_TOAST_VISIBLE_MS);
+  const visibleTimerRef = useRef<number | null>(null);
+  const visibleTimerStartedAtMsRef = useRef<number | null>(null);
+  const breakOptions = event.breakOptions ?? [];
+  const isTimerPaused = isFocusHoldingTimer || isPointerHoldingTimer;
+  const handleAction = useCallback((action: DriftAlarmAction) => {
+    onAction?.(action);
+  }, [onAction]);
+  const { clearPendingDriftAlarmAction, isBreakActionPending, runDriftAlarmAction } = useDelayedDriftAlarmAction(handleAction, isPreview || !onAction);
+
+  const clearToastTimers = useCallback(() => {
+    if (visibleTimerRef.current !== null) {
+      window.clearTimeout(visibleTimerRef.current);
+      visibleTimerRef.current = null;
+    }
+    if (dismissTimerRef.current !== null) {
+      window.clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+    visibleTimerStartedAtMsRef.current = null;
+  }, []);
+
+  const pauseVisibleTimer = useCallback(() => {
+    if (visibleTimerRef.current !== null) {
+      window.clearTimeout(visibleTimerRef.current);
+      visibleTimerRef.current = null;
+    }
+    if (visibleTimerStartedAtMsRef.current !== null) {
+      const elapsedMs = Date.now() - visibleTimerStartedAtMsRef.current;
+      remainingVisibleMsRef.current = Math.max(0, remainingVisibleMsRef.current - elapsedMs);
+      visibleTimerStartedAtMsRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
+    clearToastTimers();
+    remainingVisibleMsRef.current = EXTREME_NUDGE_TOAST_VISIBLE_MS;
     setPhase("visible");
-    if (isPreview) return undefined;
-    const exitTimer = window.setTimeout(() => setPhase("leaving"), EXTREME_NUDGE_TOAST_VISIBLE_MS);
-    const dismissTimer = window.setTimeout(() => onDismiss?.(), EXTREME_NUDGE_TOAST_VISIBLE_MS + EXTREME_NUDGE_TOAST_EXIT_MS);
+    setSelectedBreakMinutes(null);
+    setIsFocusHoldingTimer(false);
+    setIsPointerHoldingTimer(false);
+    clearPendingDriftAlarmAction();
+    return clearToastTimers;
+  }, [clearPendingDriftAlarmAction, clearToastTimers, event.id]);
 
-    return () => {
-      window.clearTimeout(exitTimer);
-      window.clearTimeout(dismissTimer);
-    };
-  }, [event.id, isPreview, onDismiss]);
+  useEffect(() => {
+    if (isPreview || phase !== "visible" || isTimerPaused) {
+      pauseVisibleTimer();
+      return undefined;
+    }
+
+    visibleTimerStartedAtMsRef.current = Date.now();
+    visibleTimerRef.current = window.setTimeout(() => {
+      remainingVisibleMsRef.current = 0;
+      visibleTimerRef.current = null;
+      visibleTimerStartedAtMsRef.current = null;
+      setPhase("leaving");
+      dismissTimerRef.current = window.setTimeout(() => onDismiss?.(), EXTREME_NUDGE_TOAST_EXIT_MS);
+    }, remainingVisibleMsRef.current);
+
+    return pauseVisibleTimer;
+  }, [isPreview, isTimerPaused, onDismiss, pauseVisibleTimer, phase]);
+
+  const selectBreakMinutes = (minutes: number) => {
+    setSelectedBreakMinutes(minutes);
+    runDriftAlarmAction({ type: "start_break", minutes });
+  };
+
+  const handleBlur = (focusEvent: FocusEvent<HTMLElement>) => {
+    const nextTarget = focusEvent.relatedTarget;
+    if (nextTarget instanceof Node && focusEvent.currentTarget.contains(nextTarget)) return;
+    setIsFocusHoldingTimer(false);
+  };
 
   return (
     <aside
       className="extreme-nudge-toast"
       data-phase={phase}
+      data-timer-paused={isTimerPaused ? "true" : undefined}
       role={isPreview ? "group" : "status"}
       aria-live={isPreview ? undefined : "polite"}
       aria-atomic={isPreview ? undefined : "true"}
+      onBlur={handleBlur}
+      onFocus={() => setIsFocusHoldingTimer(true)}
+      onPointerEnter={() => setIsPointerHoldingTimer(true)}
+      onPointerLeave={() => setIsPointerHoldingTimer(false)}
     >
       <div className="extreme-nudge-toast__mark" aria-hidden="true">
         <ExtremeNudgeScissorsIcon />
@@ -54,6 +130,17 @@ export function ExtremeNudgeToast({
         <h2>{event.title}</h2>
         <p>{event.focusLabel ? `Focus switched to ${event.focusLabel}` : "Focus target was not available"}</p>
       </div>
+      {onAction && breakOptions.length > 0 ? (
+        <div className="extreme-nudge-toast__actions">
+          <BreakDurationPicker
+            isPending={isBreakActionPending}
+            label="Take a break"
+            options={breakOptions}
+            selectedMinutes={selectedBreakMinutes}
+            onSelect={selectBreakMinutes}
+          />
+        </div>
+      ) : null}
     </aside>
   );
 }
