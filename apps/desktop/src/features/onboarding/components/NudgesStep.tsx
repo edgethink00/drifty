@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 
 type NudgesStepProps = {
   driftAlarmEnabled: boolean;
@@ -14,6 +15,10 @@ export function NudgesStep({
   onExtremeNudgeChange,
 }: NudgesStepProps) {
   const [extremeConfirmOpen, setExtremeConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    if (extremeConfirmOpen && extremeNudgeEnabled) setExtremeConfirmOpen(false);
+  }, [extremeConfirmOpen, extremeNudgeEnabled]);
 
   function handleExtremeToggle() {
     if (extremeNudgeEnabled) {
@@ -74,13 +79,27 @@ export function NudgesStep({
         </li>
       </ul>
       {extremeConfirmOpen ? (
-        <ExtremeNudgeConfirmDialog
+        <ExtremeNudgeConfirmPortal
           onCancel={() => setExtremeConfirmOpen(false)}
           onConfirm={confirmExtremeNudge}
         />
       ) : null}
     </>
   );
+}
+
+function ExtremeNudgeConfirmPortal({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const dialog = <ExtremeNudgeConfirmDialog onCancel={onCancel} onConfirm={onConfirm} />;
+  const portalRoot = typeof document === "undefined"
+    ? null
+    : document.querySelector<HTMLElement>(".onboarding-screen");
+  return portalRoot ? createPortal(dialog, portalRoot) : dialog;
 }
 
 function ExtremeNudgeConfirmDialog({
@@ -90,21 +109,54 @@ function ExtremeNudgeConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    confirmButtonRef.current?.focus({ preventScroll: true });
+    const previouslyFocusedElement = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    cancelButtonRef.current?.focus({ preventScroll: true });
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusableButtons = [cancelButtonRef.current, confirmButtonRef.current].filter(
+        (button): button is HTMLButtonElement => button !== null && !button.disabled,
+      );
+      const firstButton = focusableButtons[0];
+      const lastButton = focusableButtons[focusableButtons.length - 1];
+      if (!firstButton || !lastButton) return;
+
+      if (event.shiftKey && document.activeElement === firstButton) {
+        event.preventDefault();
+        lastButton.focus();
+        return;
+      }
+      if (!event.shiftKey && document.activeElement === lastButton) {
+        event.preventDefault();
+        firstButton.focus();
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      previouslyFocusedElement?.focus({ preventScroll: true });
+    };
   }, [onCancel]);
 
+  function handleBackdropMouseDown(event: MouseEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget) onCancel();
+  }
+
   return (
-    <div className="onb-confirm-backdrop" aria-hidden="false">
+    <div className="onb-confirm-backdrop" onMouseDown={handleBackdropMouseDown}>
       <section
         className="onb-confirm-dialog"
         role="alertdialog"
@@ -124,7 +176,7 @@ function ExtremeNudgeConfirmDialog({
           This is more direct than a warning.
         </p>
         <div className="onb-confirm-dialog__actions">
-          <button type="button" className="onb-button onb-button--ghost" onClick={onCancel}>
+          <button type="button" className="onb-button onb-button--ghost" onClick={onCancel} ref={cancelButtonRef}>
             Keep off
           </button>
           <button
