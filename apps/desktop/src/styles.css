@@ -11587,7 +11587,18 @@ button.flow-cell:focus {
   }
 
   .content--settings .page {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
     padding: 16px clamp(14px, 4vw, 22px) 32px;
+    width: 100%;
+  }
+
+  .content--settings .settings-layout,
+  .content--settings .settings-panel-stack,
+  .content--settings .settings-section {
+    min-width: 0;
+    width: 100%;
   }
 }
 

@@ -152,6 +152,7 @@ import {
 } from "./features/profile/profileService";
 import {
   type BillingInterval,
+  createBillingPortalSession,
   createIndividualCheckout,
   fetchBillingEntitlement,
   type BillingEntitlement,
@@ -784,6 +785,7 @@ export default function App() {
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
@@ -3671,12 +3673,44 @@ export default function App() {
         return;
       }
 
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(checkoutResult.data.url);
+      await openExternalUrl(checkoutResult.data.url);
     } catch (error) {
       setBillingEntitlementError(toErrorMessage(error));
     } finally {
       setBillingCheckoutLoadingInterval(null);
+    }
+  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
+
+  const handleManageCloudBilling = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    if (!user || !hasRequiredAccountAuth) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    if (billingEntitlement?.status !== "active") {
+      void refreshBillingEntitlement();
+      return;
+    }
+
+    setBillingEntitlementError(null);
+    setBillingPortalLoading(true);
+    try {
+      const portalResult = await createBillingPortalSession();
+      if (!portalResult.success) {
+        setBillingEntitlementError(portalResult.error);
+        return;
+      }
+
+      await openExternalUrl(portalResult.data.url);
+    } catch (error) {
+      setBillingEntitlementError(toErrorMessage(error));
+    } finally {
+      setBillingPortalLoading(false);
     }
   }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
 
@@ -5264,6 +5298,7 @@ export default function App() {
                       billingEntitlementError={effectiveBillingEntitlementError}
                       billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                       billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                      billingPortalLoading={billingPortalLoading}
                       cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                       cloudStatusLabel={cloudStatusLabel}
                       cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
@@ -5276,6 +5311,7 @@ export default function App() {
                       onDialogOpenChange={setAiSetupDialogOpen}
                       onLocalAiConnectionTestResult={recordLocalAiConnectionTestResult}
                       onLocalAiSetupChange={setLocalAiSetup}
+                      onManageCloudBilling={handleManageCloudBilling}
                       onRefreshCloudStatus={refreshBillingEntitlement}
                       onStartCloudSetup={handleStartDriftyCloudSetup}
                     />
@@ -5492,4 +5528,15 @@ export default function App() {
 
     </div>
   );
+}
+
+async function openExternalUrl(url: string): Promise<void> {
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+    return;
+  } catch (error) {
+    if (typeof window === "undefined") throw error;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }

@@ -40,6 +40,7 @@ const { accessibilityClient, authState, billingMocks, processMocks, trackerClien
     billingMocks: {
       fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
       createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
+      createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
     },
     processMocks: {
       relaunch: vi.fn().mockResolvedValue(undefined),
@@ -79,6 +80,7 @@ vi.mock("./lib/api/accessibilityClient", () => ({ accessibilityClient }));
 vi.mock("./lib/api/trackerClient", () => ({ trackerClient }));
 vi.mock("./features/billing/billingService", () => ({
   createIndividualCheckout: billingMocks.createIndividualCheckout,
+  createBillingPortalSession: billingMocks.createBillingPortalSession,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauriInvoke }));

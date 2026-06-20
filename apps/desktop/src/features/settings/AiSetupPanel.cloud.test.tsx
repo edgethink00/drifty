@@ -43,8 +43,17 @@ describe("AiSetupPanel Cloud setup", () => {
     expect(onStartCloudSetup).toHaveBeenCalledWith();
   });
 
-  it("refreshes Cloud status from the active Cloud row", () => {
-    const { onRefreshCloudStatus } = renderPanel();
+  it("opens billing management from the active Cloud row", () => {
+    const { onManageCloudBilling, onRefreshCloudStatus } = renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /manage billing/i }));
+
+    expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
+    expect(onRefreshCloudStatus).not.toHaveBeenCalled();
+  });
+
+  it("refreshes Cloud status from the trialing Cloud row", () => {
+    const { onRefreshCloudStatus } = renderPanel({ billingEntitlementStatus: "trialing" });
 
     fireEvent.click(screen.getByRole("button", { name: /refresh drifty cloud/i }));
 

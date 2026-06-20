@@ -32,6 +32,7 @@ type AiSetupPanelProps = {
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
+  readonly billingPortalLoading: boolean;
   readonly cloudStatusRefreshing: boolean;
   readonly cloudStatusLabel: string;
   readonly cloudTrialEndsAt: string | null;
@@ -44,6 +45,7 @@ type AiSetupPanelProps = {
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiConnectionTestResult: (setup: LocalAiSetupState, result: AiConnectionTestResult) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
+  readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
 };
@@ -54,6 +56,7 @@ export function AiSetupPanel({
   billingEntitlementError,
   billingEntitlementStatus,
   billingPlansDisabled,
+  billingPortalLoading,
   cloudStatusRefreshing,
   cloudStatusLabel,
   cloudTrialEndsAt,
@@ -66,6 +69,7 @@ export function AiSetupPanel({
   onDialogOpenChange,
   onLocalAiConnectionTestResult,
   onLocalAiSetupChange,
+  onManageCloudBilling,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
@@ -166,6 +170,7 @@ export function AiSetupPanel({
                 billingEntitlementError={billingEntitlementError}
                 billingEntitlementStatus={billingEntitlementStatus}
                 billingPlansDisabled={billingPlansDisabled}
+                billingPortalLoading={billingPortalLoading}
                 catalog={managedLocalAi.catalog}
                 cloudStatusRefreshing={cloudStatusRefreshing}
                 cloudStatusLabel={cloudStatusLabel}
@@ -180,6 +185,7 @@ export function AiSetupPanel({
                 userEmail={userEmail}
                 onDeleteModel={managedLocalAi.deleteModel}
                 onInstallModel={managedLocalAi.installModel}
+                onManageCloudBilling={onManageCloudBilling}
                 onRefreshCloudStatus={onRefreshCloudStatus}
                 onStartCloudSetup={onStartCloudSetup}
               />
