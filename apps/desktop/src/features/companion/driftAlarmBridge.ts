@@ -13,6 +13,11 @@ export type ExtremeNudgeTarget = {
   readonly siteUrl: string | null;
 };
 
+export type ExtremeNudgeApplyResult = {
+  readonly applied: boolean;
+  readonly diagnostic: string | null;
+};
+
 type DriftAlarmActionEvent = {
   action: unknown;
 };
@@ -38,10 +43,30 @@ export async function triggerNativeDriftAlarmAction(action: DriftAlarmAction): P
   await invoke("drift_alarm_action", { action });
 }
 
-export async function applyNativeExtremeNudge(target: ExtremeNudgeTarget): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
-  await invoke("extreme_nudge_apply", { target });
-  return true;
+export async function applyNativeExtremeNudge(target: ExtremeNudgeTarget): Promise<ExtremeNudgeApplyResult> {
+  if (!isTauriRuntime()) {
+    return {
+      applied: false,
+      diagnostic: "not_tauri_runtime",
+    };
+  }
+  const outcome = await invoke<unknown>("extreme_nudge_apply", { target });
+  return {
+    applied: true,
+    diagnostic: nativeExtremeNudgeDiagnostic(outcome),
+  };
+}
+
+function nativeExtremeNudgeDiagnostic(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const diagnostic = Reflect.get(value, "diagnostic");
+  if (typeof diagnostic !== "string") return null;
+  return normalizeExtremeNudgeDiagnostic(diagnostic);
+}
+
+function normalizeExtremeNudgeDiagnostic(value: string): string | null {
+  const normalized = value.trim();
+  return normalized ? normalized : null;
 }
 
 export async function getNativeDriftAlarmCurrent(): Promise<DriftAlarmEvent | null> {
