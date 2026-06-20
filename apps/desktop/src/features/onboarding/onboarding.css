@@ -57,6 +57,7 @@
   --onb-action-border: rgba(var(--onb-accent-rgb), 0.24);
   --onb-warn: var(--warn, #9e4238);
   --onb-warn-soft: var(--warn-soft, #f0deda);
+  --onb-danger-line: var(--danger-line, rgba(158, 66, 56, 0.3));
   --onb-blue: #416d98;
   --onb-blue-soft: #eaf4fb;
   --onb-shadow-soft: 0 1px 2px rgba(38, 38, 32, 0.035);
@@ -99,6 +100,7 @@
   --onb-action-border: oklch(0.78 0.08 136 / 0.28);
   --onb-warn: oklch(0.68 0.13 32);
   --onb-warn-soft: oklch(0.235 0.04 32);
+  --onb-danger-line: rgba(200, 90, 78, 0.32);
   --onb-blue: oklch(0.7 0.055 245);
   --onb-blue-soft: oklch(0.235 0.028 245);
   --onb-shadow-soft: 0 1px 2px oklch(0 0 0 / 0.16);
@@ -349,6 +351,15 @@
 }
 
 .onboarding-card .onboarding-body--choose_setup .onboarding-viewport {
+  overflow: visible;
+}
+
+.onboarding-card .onboarding-body--nudges {
+  contain: none;
+  overflow: visible;
+}
+
+.onboarding-card .onboarding-body--nudges .onboarding-viewport {
   overflow: visible;
 }
 
@@ -1948,44 +1959,48 @@
   color: var(--onb-warn);
 }
 
-.onboarding-card .onb-confirm-backdrop {
+.onboarding-screen .onb-confirm-backdrop {
   position: fixed;
   inset: 0;
   z-index: 40;
   display: grid;
   place-items: center;
   padding: var(--onb-space-6);
-  background: transparent;
-  backdrop-filter: none;
+  background: color-mix(in oklch, var(--onb-canvas) 28%, transparent);
+  backdrop-filter: blur(0.4px);
 }
 
-.onboarding-card .onb-confirm-dialog {
+.onboarding-screen .onb-confirm-dialog {
   box-sizing: border-box;
   position: relative;
-  width: min(var(--onb-content-width), calc(100vw - 48px));
-  padding: 22px 22px 20px 72px;
-  border: 1px solid var(--onb-line-strong);
-  border-radius: var(--onb-radius-sm);
-  background: var(--onb-surface);
-  box-shadow: 0 18px 48px rgba(39, 37, 31, 0.12);
-  transform: translateX(-32px);
+  display: grid;
+  width: min(432px, calc(100vw - 48px));
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: var(--onb-space-4);
+  row-gap: var(--onb-space-2);
+  padding: 20px;
+  border: 1px solid var(--onb-danger-line);
+  border-radius: var(--onb-radius-lg);
+  background: color-mix(in oklch, var(--onb-surface) 94%, var(--onb-warn-soft));
+  box-shadow:
+    0 22px 70px rgba(39, 37, 31, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  transform: translateY(-42px);
 }
 
-.onboarding-card .onb-confirm-dialog__mark {
-  position: absolute;
-  top: 22px;
-  left: 22px;
+.onboarding-screen .onb-confirm-dialog__mark {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid color-mix(in oklch, var(--onb-blue) 34%, transparent);
+  width: 40px;
+  height: 40px;
+  grid-row: 1 / span 2;
+  border: 1px solid var(--onb-danger-line);
   border-radius: 50%;
-  background: color-mix(in oklch, var(--onb-blue-soft) 72%, var(--onb-surface));
-  color: var(--onb-blue);
+  background: color-mix(in oklch, var(--onb-warn-soft) 72%, var(--onb-surface));
+  color: var(--onb-warn);
 }
 
-.onboarding-card .onb-confirm-dialog__icon {
+.onboarding-screen .onb-confirm-dialog__icon {
   width: 19px;
   height: 19px;
   stroke: currentColor;
@@ -1994,16 +2009,19 @@
   stroke-linejoin: round;
 }
 
-.onboarding-card .onb-confirm-dialog__eyebrow {
-  margin-bottom: var(--onb-space-2);
+.onboarding-screen .onb-confirm-dialog__eyebrow {
+  grid-column: 2;
+  align-self: end;
+  margin: 0;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--onb-blue);
+  color: var(--onb-warn);
 }
 
-.onboarding-card .onb-confirm-dialog__title {
+.onboarding-screen .onb-confirm-dialog__title {
+  grid-column: 2;
   margin: 0;
   font-size: 22px;
   line-height: 1.15;
@@ -2011,14 +2029,16 @@
   color: var(--onb-text);
 }
 
-.onboarding-card .onb-confirm-dialog__desc {
-  margin: var(--onb-space-3) 0 0;
+.onboarding-screen .onb-confirm-dialog__desc {
+  grid-column: 1 / -1;
+  margin: var(--onb-space-2) 0 0;
   font-size: 13px;
   line-height: 1.55;
   color: var(--onb-text-muted);
 }
 
-.onboarding-card .onb-confirm-dialog__actions {
+.onboarding-screen .onb-confirm-dialog__actions {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -2026,48 +2046,86 @@
   margin-top: var(--onb-space-5);
 }
 
-.onboarding-card .onb-confirm-dialog__actions .onb-button {
+.onboarding-screen .onb-confirm-dialog__actions .onb-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 118px;
+  min-height: 36px;
+  padding: 0 var(--onb-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--onb-radius-sm);
+  background: transparent;
+  color: var(--onb-text);
+  cursor: pointer;
+  font-family: var(--onb-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), color var(--onb-transition-fast), box-shadow var(--onb-transition-fast);
 }
 
-.onboarding-card .onb-confirm-dialog__actions .onb-button--primary {
-  background: var(--onb-blue);
+.onboarding-screen .onb-confirm-dialog__actions .onb-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--onb-accent-rgb), 0.16);
+}
+
+.onboarding-screen .onb-confirm-dialog__actions .onb-button--ghost:hover:not(:disabled) {
+  border-color: var(--onb-line);
+  background: color-mix(in oklch, var(--onb-bg-2) 48%, transparent);
+}
+
+.onboarding-screen .onb-confirm-dialog__actions .onb-button--primary {
+  border-color: var(--onb-warn);
+  background: var(--onb-warn);
   color: white;
 }
 
-.onboarding-card .onb-confirm-dialog__actions .onb-button--primary:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--onb-blue) 84%, var(--onb-text));
+.onboarding-screen .onb-confirm-dialog__actions .onb-button--primary:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--onb-warn) 84%, var(--onb-text));
+  background: color-mix(in oklch, var(--onb-warn) 84%, var(--onb-text));
 }
 
-:root[data-theme="dark"] .onboarding-card .onb-confirm-dialog {
-  box-shadow: 0 20px 56px oklch(0 0 0 / 0.38);
+:root[data-theme="dark"] .onboarding-screen .onb-confirm-dialog {
+  background: color-mix(in oklch, var(--onb-surface) 88%, var(--onb-warn-soft));
+  box-shadow:
+    0 24px 74px oklch(0 0 0 / 0.48),
+    0 1px 0 oklch(1 0 0 / 0.06) inset;
 }
 
-:root[data-theme="dark"] .onboarding-card .onb-confirm-dialog__actions .onb-button--primary {
+:root[data-theme="dark"] .onboarding-screen .onb-confirm-dialog__actions .onb-button--primary {
   color: var(--onb-canvas);
 }
 
 @media (max-width: 460px) {
-  .onboarding-card .onb-confirm-backdrop {
+  .onboarding-screen .onb-confirm-backdrop {
     padding: var(--onb-space-4);
   }
 
-  .onboarding-card .onb-confirm-dialog {
+  .onboarding-screen .onb-confirm-dialog {
     width: min(380px, calc(100vw - 56px));
+    grid-template-columns: minmax(0, 1fr);
     padding: 20px;
     transform: none;
   }
 
-  .onboarding-card .onb-confirm-dialog__mark {
-    position: static;
+  .onboarding-screen .onb-confirm-dialog__mark {
+    grid-row: auto;
     margin-bottom: var(--onb-space-3);
   }
 
-  .onboarding-card .onb-confirm-dialog__actions {
+  .onboarding-screen .onb-confirm-dialog__eyebrow,
+  .onboarding-screen .onb-confirm-dialog__title,
+  .onboarding-screen .onb-confirm-dialog__desc,
+  .onboarding-screen .onb-confirm-dialog__actions {
+    grid-column: 1;
+  }
+
+  .onboarding-screen .onb-confirm-dialog__actions {
     justify-content: stretch;
   }
 
-  .onboarding-card .onb-confirm-dialog__actions .onb-button {
+  .onboarding-screen .onb-confirm-dialog__actions .onb-button {
     flex: 1 1 100%;
   }
 }
@@ -2142,12 +2200,12 @@
 
 .onboarding-card .onb-nudge-row--selected {
   border-color: color-mix(in oklch, var(--onb-warn) 20%, var(--onb-line-strong));
-  background: #fbf7f5;
+  background: color-mix(in oklch, var(--onb-surface) 78%, var(--onb-warn-soft));
 }
 
 .onboarding-card .onb-nudge-row--selected:hover {
   border-color: color-mix(in oklch, var(--onb-warn) 26%, var(--onb-line-strong));
-  background: #faf2ef;
+  background: color-mix(in oklch, var(--onb-surface) 68%, var(--onb-warn-soft));
 }
 
 :root[data-theme="dark"] .onboarding-card .onb-nudge-row--selected {
