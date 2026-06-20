@@ -206,6 +206,8 @@ import { localAiProviderConfigFromSetup } from "./features/settings/localAiClass
 import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
 import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import type { AiConnectionTestResult } from "./features/settings/aiConnectionTest";
+import { isActiveProviderTestable } from "./features/settings/aiSetupProviderSelection";
+import { useAiConnectionTestRunner } from "./features/settings/useAiConnectionTestRunner";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
@@ -854,21 +856,45 @@ export default function App() {
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
   const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
+  const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
+    const fingerprint = localAiSetupFingerprint(testedSetup);
+    if (!fingerprint) {
+      setLocalAiConnectionCheck(null);
+      return;
+    }
+    setLocalAiConnectionCheck({
+      provider: testedSetup.provider,
+      fingerprint,
+      status: result.kind === "success" ? "connected" : "failed",
+      issueKind: result.kind === "success" ? null : aiConnectionIssueKindFromMessage(result.message),
+      message: result.message,
+      checkedAt: Date.now(),
+    });
+  }, []);
+  const aiConnectionTest = useAiConnectionTestRunner({
+    localAiSetup,
+    onLocalAiConnectionTestResult: recordLocalAiConnectionTestResult,
+  });
   const localAiProviderStatus = useMemo<LocalAiProviderStatus>(() => {
     if (!localAiConnectionFingerprint) return { kind: "unconfigured" };
-    if (
-      !localAiConnectionCheck
-      || localAiConnectionCheck.provider !== localAiSetup.provider
-      || localAiConnectionCheck.fingerprint !== localAiConnectionFingerprint
-    ) {
-      return { kind: "test_needed" };
+    if (aiConnectionTest.runningFingerprint === localAiConnectionFingerprint) return { kind: "checking" };
+
+    const currentConnectionCheck = (
+      localAiConnectionCheck
+      && localAiConnectionCheck.provider === localAiSetup.provider
+      && localAiConnectionCheck.fingerprint === localAiConnectionFingerprint
+    )
+      ? localAiConnectionCheck
+      : null;
+    if (!currentConnectionCheck) {
+      return isActiveProviderTestable(localAiSetup) ? { kind: "checking" } : { kind: "unconfigured" };
     }
-    if (localAiConnectionCheck.status === "connected") return { kind: "connected" };
+    if (currentConnectionCheck.status === "connected") return { kind: "connected" };
     return {
       kind: "failed",
-      issueKind: localAiConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(localAiConnectionCheck.message),
+      issueKind: currentConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(currentConnectionCheck.message),
     };
-  }, [localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup.provider]);
+  }, [aiConnectionTest.runningFingerprint, localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup]);
     const {
       user,
       status: authStatus,
@@ -913,21 +939,6 @@ export default function App() {
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
     setObservedAiClassificationFailure(false);
   }, [aiClassificationProviderKey]);
-  const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
-    const fingerprint = localAiSetupFingerprint(testedSetup);
-    if (!fingerprint) {
-      setLocalAiConnectionCheck(null);
-      return;
-    }
-    setLocalAiConnectionCheck({
-      provider: testedSetup.provider,
-      fingerprint,
-      status: result.kind === "success" ? "connected" : "failed",
-      issueKind: result.kind === "success" ? null : aiConnectionIssueKindFromMessage(result.message),
-      message: result.message,
-      checkedAt: Date.now(),
-    });
-  }, []);
   const recordLocalAiClassificationSummary = useCallback((summary: AiClassificationSummary) => {
     if (!localAiConnectionFingerprint) return;
     if (summary.status === "error") {
@@ -5383,6 +5394,7 @@ export default function App() {
                       cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                       cloudStatusLabel={cloudStatusLabel}
                       cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
+                      connectionTest={aiConnectionTest}
                       currentBillingPlan={currentBillingPlan}
                       isSupabaseConfigured={effectiveIsSupabaseConfigured}
                       localAiSetup={localAiSetup}
@@ -5390,7 +5402,6 @@ export default function App() {
                       userEmail={user?.email ?? null}
                       workProfileUserId={user?.id ?? "local"}
                       onDialogOpenChange={setAiSetupDialogOpen}
-                      onLocalAiConnectionTestResult={recordLocalAiConnectionTestResult}
                       onLocalAiSetupChange={setLocalAiSetup}
                       onManageCloudBilling={handleManageCloudBilling}
                       onRefreshCloudStatus={refreshBillingEntitlement}
