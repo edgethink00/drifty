@@ -225,7 +225,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     ? await trackerClient.saveClassifications(deterministicRecords)
     : { saved: 0 };
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
-  const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload);
+  const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload, deterministicSegmentIds);
   const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId));
   const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved;
 
@@ -314,7 +314,7 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   const deterministicSaveResult = deterministicRecords.length > 0
     ? await trackerClient.saveClassifications(deterministicRecords)
     : { saved: 0 };
-  const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload);
+  const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload, deterministicSegmentIds);
   const unknownPayload = payload
     .filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId))
     .slice(0, threshold);
@@ -699,9 +699,13 @@ function hasMeaningfulActivityContext(segment: ActivitySegment): boolean {
   );
 }
 
-async function saveInheritedYouTubeBrowseClassifications(segments: ActivitySegment[], payload: MinimizedActivityPayload[]): Promise<{ saved: number; segmentIds: Set<string> }> {
+async function saveInheritedYouTubeBrowseClassifications(
+  segments: ActivitySegment[],
+  payload: MinimizedActivityPayload[],
+  excludedSegmentIds: ReadonlySet<string>,
+): Promise<{ saved: number; segmentIds: Set<string> }> {
   const payloadById = new Map(payload.map((item) => [item.segmentId, item]));
-  const browseTargets = segments.filter((segment) => isYouTubeBrowsePage(segment));
+  const browseTargets = segments.filter((segment) => isYouTubeBrowsePage(segment) && !excludedSegmentIds.has(segment.id));
   if (browseTargets.length === 0) return { saved: 0, segmentIds: new Set<string>() };
 
   const timelineRange = youtubeBrowseInheritanceTimelineRange(browseTargets);

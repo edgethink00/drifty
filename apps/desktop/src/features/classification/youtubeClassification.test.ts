@@ -89,4 +89,52 @@ describe("YouTube classification", () => {
       source: "youtube",
     }));
   });
+
+  it("keeps short YouTube feed visits neutral", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      durationSeconds: 29,
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/feed",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "youtube",
+    }));
+  });
+
+  it("classifies sustained YouTube feed visits as entertainment drift", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      durationSeconds: 30,
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/feed/subscriptions",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+    }));
+  });
+
+  it("keeps YouTube home neutral even after thirty seconds", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      durationSeconds: 60,
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "youtube",
+    }));
+  });
 });
