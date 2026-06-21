@@ -20,6 +20,8 @@ pub struct AiClassificationChatRequest {
     #[serde(default)]
     pub chat_template_kwargs: serde_json::Map<String, serde_json::Value>,
     #[serde(default)]
+    pub provider: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
     pub headers: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -115,6 +117,12 @@ pub fn post_openai_chat(
         body.insert(
             "chat_template_kwargs".to_string(),
             serde_json::Value::Object(request.chat_template_kwargs),
+        );
+    }
+    if !request.provider.is_empty() {
+        body.insert(
+            "provider".to_string(),
+            serde_json::Value::Object(request.provider),
         );
     }
 
