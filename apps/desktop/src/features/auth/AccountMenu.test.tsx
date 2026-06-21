@@ -4,8 +4,13 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_LOCAL_AI_SETUP } from "../settings/localAiSetup";
 import { AccountMenu } from "./AccountMenu";
+import type { AuthConnectionStatus } from "./authConnectionStatus";
 
-function renderAccountMenu() {
+function renderAccountMenu({
+  cloudConnectionStatus = "online",
+}: {
+  cloudConnectionStatus?: AuthConnectionStatus;
+} = {}) {
   const handlers = {
     onUpgrade: vi.fn(),
     onSettings: vi.fn(),
@@ -20,6 +25,7 @@ function renderAccountMenu() {
       <AccountMenu
         billingEntitlement={null}
         billingEntitlementLoading={false}
+        cloudConnectionStatus={cloudConnectionStatus}
         isOpen={isOpen}
         isSidebarCollapsed={false}
         localAiSetup={DEFAULT_LOCAL_AI_SETUP}
@@ -44,7 +50,7 @@ describe("AccountMenu", () => {
     const chevrons = container.querySelector(".account-trigger__chevrons");
     const chevronMarks = container.querySelectorAll(".account-trigger__chevron-mark");
 
-    expect(trigger.querySelector(".account-trigger__copy")?.textContent).toBe("Account");
+    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("Account");
 
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(chevrons?.getAttribute("aria-hidden")).toBe("true");
@@ -69,5 +75,14 @@ describe("AccountMenu", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: /^Settings$/ }));
     expect(handlers.onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows offline mode in the account trigger when cloud auth is unavailable", () => {
+    renderAccountMenu({ cloudConnectionStatus: "offline" });
+
+    const trigger = screen.getByRole("button", { name: /account offline mode/i });
+
+    expect(trigger.querySelector(".account-trigger__status")?.textContent).toBe("Offline mode");
+    expect(trigger.getAttribute("data-cloud-status")).toBe("offline");
   });
 });

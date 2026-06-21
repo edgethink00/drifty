@@ -6419,8 +6419,25 @@ input, textarea { color: inherit; }
   object-fit: cover;
 }
 
-.account-trigger__copy { min-width: 0; display: grid; }
+.account-trigger__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+}
 .account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.2; }
+.account-trigger__status {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  font-weight: 620;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-trigger[data-cloud-status="offline"] .account-trigger__status { color: var(--warn); }
 .account-trigger__chevrons {
   display: grid;
   width: 16px;
@@ -17859,6 +17876,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .sidebar-tracker-toggle,
 .account-trigger,
 .account-trigger__copy,
+.account-trigger__status,
 .account-trigger__chevrons {
   transition:
     opacity var(--sidebar-fade-duration) ease-out,
@@ -17890,6 +17908,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-name,
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-class,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__copy,
+.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__status,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevrons {
   transition-delay: var(--sidebar-fade-delay);
 }
@@ -17901,6 +17920,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 .sidebar--collapsed .live-pill .app-name,
 .sidebar--collapsed .live-pill .app-class,
 .sidebar--collapsed .account-trigger__copy,
+.sidebar--collapsed .account-trigger__status,
 .sidebar--collapsed .account-trigger__chevrons {
   transition-delay: 0ms;
 }
@@ -18118,6 +18138,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   }
 
   .sidebar--collapsed .account-trigger__copy,
+  .sidebar--collapsed .account-trigger__status,
   .sidebar--collapsed .account-trigger__chevrons {
     width: 0;
     max-width: 0;
@@ -18146,6 +18167,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   .sidebar-tracker-toggle,
   .account-trigger,
   .account-trigger__copy,
+  .account-trigger__status,
   .account-trigger__chevrons {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
