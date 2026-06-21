@@ -375,6 +375,44 @@ class TrackerMainTests(unittest.TestCase):
         thread.return_value.start.assert_called_once()
         tracker_main._YOUTUBE_METADATA_IN_FLIGHT.discard("abc123")
 
+    def test_serve_processes_requests_echoes_id_and_survives_errors(self) -> None:
+        import io
+        import json
+
+        requests = "\n".join(
+            [
+                json.dumps({"id": 1, "command": "ping", "payload": {"value": 7}}),
+                "",  # blank line should be skipped, not break the loop
+                json.dumps({"id": 2, "command": "does_not_exist", "payload": {}}),
+                json.dumps({"command": "ping", "payload": {}}),  # no id -> no id echoed
+            ]
+        )
+        stub_commands = {"ping": lambda payload: tracker_main.response(True, payload)}
+        out = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", stub_commands), patch.object(
+            tracker_main.sys, "stdin", io.StringIO(requests)
+        ), patch.object(tracker_main.sys, "stdout", out):
+            tracker_main.serve()
+
+        lines = [line for line in out.getvalue().splitlines() if line]
+        self.assertEqual(len(lines), 3)
+
+        first = json.loads(lines[0])
+        self.assertTrue(first["ok"])
+        self.assertEqual(first["data"], {"value": 7})
+        self.assertEqual(first["id"], 1)
+
+        # An unknown command returns an error envelope but does NOT kill the loop.
+        second = json.loads(lines[1])
+        self.assertFalse(second["ok"])
+        self.assertEqual(second["id"], 2)
+        self.assertIsNotNone(second["error"])
+
+        # A request without an id gets no id field echoed back.
+        third = json.loads(lines[2])
+        self.assertTrue(third["ok"])
+        self.assertNotIn("id", third)
+
 
 if __name__ == "__main__":
     unittest.main()
