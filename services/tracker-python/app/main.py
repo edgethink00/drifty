@@ -571,15 +571,29 @@ def daemon():
         pid_path().unlink(missing_ok=True)
 
 
-def handle_request(raw_request: str):
+def dispatch_request(raw_request: str):
     try:
         request = json.loads(raw_request)
         command = request["command"]
         payload = request.get("payload", {})
         handler = COMMANDS[command]
-        print(json.dumps(handler(payload)))
+        return handler(payload)
     except Exception as exc:
-        print(json.dumps(response(False, error=str(exc))))
+        return response(False, error=str(exc))
+
+
+def handle_request(raw_request: str):
+    print(json.dumps(dispatch_request(raw_request)))
+
+
+def serve(input_stream=None, output_stream=None) -> None:
+    requests = input_stream if input_stream is not None else sys.stdin
+    responses = output_stream if output_stream is not None else sys.stdout
+    for raw_request in requests:
+        if not raw_request.strip():
+            continue
+        responses.write(json.dumps(dispatch_request(raw_request)) + "\n")
+        responses.flush()
 
 
 def main():
@@ -595,6 +609,10 @@ def main():
 
     if args.mode == "daemon":
         daemon()
+        return
+
+    if args.mode == "serve":
+        serve()
         return
 
     if args.request_json:
