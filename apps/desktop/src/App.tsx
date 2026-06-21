@@ -196,7 +196,9 @@ import {
   WeekDashboardDayModelCache,
   buildWeekDashboardModel,
   prewarmClosedWeekDashboardDays,
+  syncWeekDashboardDayModelCacheSettings,
   type WeekDashboardCacheStats,
+  type WeekDashboardDayModelCacheSettings,
   type WeekDashboardModel,
 } from "./features/dashboard/weekDashboardModel";
 import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
@@ -3159,9 +3161,13 @@ export default function App() {
     () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact }),
     [historySegments, showAiClassificationImpact],
   );
-  const weekDashboardDayModelCache = useMemo(
-    () => new WeekDashboardDayModelCache(),
-    [historySegments, showAiClassificationImpact, startOfDayMinutes],
+  const weekDashboardDayModelCacheRef = useRef(new WeekDashboardDayModelCache());
+  const weekDashboardDayModelCacheSettingsRef = useRef<WeekDashboardDayModelCacheSettings | null>(null);
+  const weekDashboardDayModelCache = weekDashboardDayModelCacheRef.current;
+  weekDashboardDayModelCacheSettingsRef.current = syncWeekDashboardDayModelCacheSettings(
+    weekDashboardDayModelCache,
+    weekDashboardDayModelCacheSettingsRef.current,
+    { includeAiClassifications: showAiClassificationImpact, startOfDayMinutes },
   );
   const leaderboardClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: leaderboardSegments, includeAiClassifications: showAiClassificationImpact }),
