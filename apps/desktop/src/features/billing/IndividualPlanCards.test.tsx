@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { IndividualPlanCards } from "./IndividualPlanCards";
 
 describe("IndividualPlanCards", () => {
-  it("shows Free, Individual, and Pro with a monthly/yearly interval switch", () => {
+  it("shows Free and Individual with a monthly/yearly interval switch", () => {
     render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} onSelectPlan={vi.fn()} />);
 
     const freePlan = screen.getByRole("article", { name: /free plan/i });
     const individualPlan = screen.getByRole("button", { name: /choose individual plan/i });
-    const proPlan = screen.getByRole("article", { name: /pro plan/i });
 
     expect(screen.getByRole("radio", { name: /monthly/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /yearly/i })).toBeTruthy();
@@ -32,12 +32,18 @@ describe("IndividualPlanCards", () => {
     expect(within(individualPlan).getByText("Cloud AI")).toBeTruthy();
     expect(within(individualPlan).getByText("Start Individual")).toBeTruthy();
 
-    expect(within(proPlan).getByText("Soon")).toBeTruthy();
-    expect(within(proPlan).queryByText("Higher-tier AI")).toBeNull();
-    expect(within(proPlan).getByText("Launch pricing")).toBeTruthy();
-    expect(within(proPlan).getByText("coming soon")).toBeTruthy();
-    expect(within(proPlan).getAllByText(/Pro model access/).length).toBeGreaterThan(0);
-    expect(within(proPlan).getAllByText("Coming soon").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("article", { name: /pro plan/i })).toBeNull();
+    expect(screen.queryByText("Launch pricing")).toBeNull();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+  });
+
+  it("keeps the billing interval switch ten percent shorter without changing its width rhythm", () => {
+    const styles = readFileSync("src/styles.css", "utf8");
+
+    expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*height:\s*2\.390625rem;/);
+    expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*padding:\s*0\.225rem 0\.25rem;/);
+    expect(styles).toMatch(/\.individual-plan-interval\s*\{[\s\S]*height:\s*1\.940625rem;/);
+    expect(styles).toMatch(/\.individual-plan-interval\s*\{[\s\S]*min-width:\s*6\.5rem;/);
   });
 
   it("marks Individual as current during an active trial", () => {

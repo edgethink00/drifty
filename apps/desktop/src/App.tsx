@@ -40,6 +40,7 @@ import { SiteFavicon } from "./components/SiteFavicon";
 import { AppUsagePanel } from "./features/dashboard/AppUsagePanel";
 import {
   DashboardAiUnavailableNotice,
+  isCloudBillingVariant,
   resolveDashboardAiUnavailableState,
   type DashboardAiUnavailableVariant,
 } from "./features/dashboard/DashboardAiUnavailableNotice";
@@ -48,6 +49,7 @@ import {
   isDashboardAiRecoveryOverlayVariant,
 } from "./features/dashboard/DashboardAiRecoveryOverlay";
 import {
+  clearDashboardAiRecoveryDismissal,
   isDashboardAiRecoveryDismissed,
   storeDashboardAiRecoveryDismissal,
 } from "./features/dashboard/dashboardAiRecoveryDismissal";
@@ -3885,11 +3887,20 @@ export default function App() {
     }
   }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
 
-  const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
-    void variant;
+  const openDashboardAiSetup = useCallback(() => {
     setSettingsSection("aiSetup");
     navigateToTab("settings");
   }, [navigateToTab]);
+
+  const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
+    if (isCloudBillingVariant(variant)) {
+      clearDashboardAiRecoveryDismissal(variant);
+      setDismissedDashboardAiRecoveryKey((dismissedKey) => (dismissedKey === variant ? null : dismissedKey));
+      return;
+    }
+
+    openDashboardAiSetup();
+  }, [openDashboardAiSetup]);
 
   const dismissCloudTrialStartedNotice = useCallback(() => {
     setCloudTrialStartedNotice(null);
@@ -4798,7 +4809,7 @@ export default function App() {
                 retrying={classificationActionLoading}
                 state={dashboardAiRecoveryState}
                 onClose={handleDismissDashboardAiRecovery}
-                onOpenAiSetup={() => handleDashboardAiUnavailableAction(dashboardAiRecoveryState.variant)}
+                onOpenAiSetup={openDashboardAiSetup}
                 onRetryAi={() => void handleRunSelectedDayAiClassification()}
                 onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
               />
