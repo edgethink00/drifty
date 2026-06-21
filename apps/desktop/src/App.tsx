@@ -3832,7 +3832,7 @@ export default function App() {
       return;
     }
 
-    if (billingEntitlement?.status === "active" || billingEntitlement?.status === "trialing") {
+    if (billingEntitlement?.status === "active") {
       void refreshBillingEntitlement();
       return;
     }
