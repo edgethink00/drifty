@@ -15,6 +15,15 @@ export function storeDashboardAiRecoveryDismissal(recoveryKey: string, nowMs = D
   }
 }
 
+export function clearDashboardAiRecoveryDismissal(recoveryKey: string): void {
+  try {
+    window.localStorage.removeItem(storageKeyForRecoveryKey(recoveryKey));
+  } catch (error) {
+    if (error instanceof Error) return;
+    throw error;
+  }
+}
+
 function readDashboardAiRecoveryDismissedUntil(recoveryKey: string): number | null {
   try {
     const rawValue = window.localStorage.getItem(storageKeyForRecoveryKey(recoveryKey));
