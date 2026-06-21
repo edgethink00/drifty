@@ -183,6 +183,7 @@ describe("Settings content styles", () => {
     expect(cloudPrimaryRule).toContain("background: var(--cloud-action);");
     expect(cloudPrimaryRule).toContain("border-color: var(--cloud-action);");
     expect(cloudPrimaryRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);");
+    expect(cloudPrimaryRule).toContain("--settings-control-height: 2.5875rem;");
   });
 
   it("separates AI providers from shared prompt settings", () => {
