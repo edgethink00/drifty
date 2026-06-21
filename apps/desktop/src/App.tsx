@@ -284,7 +284,11 @@ const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
-const DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS = APP_REFRESH_INTERVAL_MS;
+// Week history is mostly closed-day data that rarely changes, so it does not need
+// to expire on the 30s live-refresh cadence. A longer TTL keeps the prefetch cache
+// warm across typical "browse Today, then open Week" navigation, avoiding a full
+// (~470ms) tracker IPC on most period switches.
+const DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS = 5 * 60_000;
 
 const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
@@ -1972,9 +1976,21 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
     if (!hasLoadedOnce) return undefined;
-    return scheduleIdleWork(() => {
+    // This effect fires on view-affecting transitions (tab / dashboard period /
+    // classification range / selected day). When the active view needs history data
+    // (e.g. switching Today -> Week), that history IS the on-screen content, so fetch
+    // it immediately. Deferring via requestIdleCallback could delay the fetch by up to
+    // its 1200ms timeout precisely when the main thread is busy re-rendering the new
+    // view. refreshHistoryData early-returns when no history is needed and guards
+    // against stale/duplicate responses, so an immediate call is safe.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
       void refreshHistoryData(selectedDay);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek, trendsRange]);
 
   useEffect(() => {
