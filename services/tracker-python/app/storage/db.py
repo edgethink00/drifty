@@ -6,7 +6,7 @@ import uuid
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from app.storage.activity_segment_serialization import (
@@ -15,8 +15,10 @@ from app.storage.activity_segment_serialization import (
     serialize_dashboard_week_activity_row,
 )
 from app.storage.timestamps import parse_iso_datetime
-from app.tracker.macos_workspace import Snapshot
-from app.tracker.youtube_metadata import YouTubeVideoMetadata
+
+if TYPE_CHECKING:
+    from app.tracker.macos_workspace import Snapshot
+    from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 
 VALID_RULE_TARGET_KINDS = {"app", "site"}
