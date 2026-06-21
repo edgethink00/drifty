@@ -48,6 +48,10 @@ import {
   isDashboardAiRecoveryOverlayVariant,
 } from "./features/dashboard/DashboardAiRecoveryOverlay";
 import {
+  isDashboardAiRecoveryDismissed,
+  storeDashboardAiRecoveryDismissal,
+} from "./features/dashboard/dashboardAiRecoveryDismissal";
+import {
   buildDashboardAiUnavailablePreviewInput,
   DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS,
   type DashboardAiUnavailablePreviewCase,
@@ -3310,9 +3314,11 @@ export default function App() {
       })
       : null;
   const dashboardAiRecoveryKey = dashboardAiUnavailableState && isDashboardAiRecoveryOverlayVariant(dashboardAiUnavailableState.variant)
-    ? `${dashPeriod}:${selectedDay}:${dashboardAiUnavailableState.variant}`
+    ? dashboardAiUnavailableState.variant
     : null;
-  const dashboardAiRecoveryState = dashboardAiRecoveryKey !== null && dismissedDashboardAiRecoveryKey !== dashboardAiRecoveryKey
+  const dashboardAiRecoveryDismissed = dashboardAiRecoveryKey !== null
+    && (dismissedDashboardAiRecoveryKey === dashboardAiRecoveryKey || isDashboardAiRecoveryDismissed(dashboardAiRecoveryKey));
+  const dashboardAiRecoveryState = dashboardAiRecoveryKey !== null && !dashboardAiRecoveryDismissed
     ? dashboardAiUnavailableState
     : null;
   const updateDialogBlocked = Boolean(
@@ -3897,6 +3903,7 @@ export default function App() {
 
   const handleDismissDashboardAiRecovery = useCallback(() => {
     if (dashboardAiRecoveryKey === null) return;
+    storeDashboardAiRecoveryDismissal(dashboardAiRecoveryKey);
     setDismissedDashboardAiRecoveryKey(dashboardAiRecoveryKey);
   }, [dashboardAiRecoveryKey]);
 
