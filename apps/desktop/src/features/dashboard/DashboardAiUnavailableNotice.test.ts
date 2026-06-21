@@ -47,8 +47,8 @@ describe("resolveDashboardAiUnavailableState", () => {
       canUseCloudAiClassification: false,
       hasRequiredAccountAuth: true,
       isSupabaseConfigured: true,
-      localAiReady: true,
-      observedAiClassificationFailure: true,
+      localAiReady: false,
+      observedAiClassificationFailure: false,
     })).toMatchObject({
       variant: "cloud-billing",
       ctaLabel: "Review plans",
@@ -81,7 +81,7 @@ describe("resolveDashboardAiUnavailableState", () => {
     })).toBeNull();
 
     expect(resolveDashboardAiUnavailableState({
-      billingEntitlement: null,
+      billingEntitlement: trialExpiredEntitlement,
       billingEntitlementError: null,
       billingEntitlementLoading: false,
       canUseCloudAiClassification: false,
@@ -90,6 +90,33 @@ describe("resolveDashboardAiUnavailableState", () => {
       localAiReady: true,
       observedAiClassificationFailure: false,
     })).toBeNull();
+
+    expect(resolveDashboardAiUnavailableState({
+      billingEntitlement: null,
+      billingEntitlementError: null,
+      billingEntitlementLoading: false,
+      canUseCloudAiClassification: true,
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      localAiReady: true,
+      observedAiClassificationFailure: true,
+    })).toBeNull();
+  });
+
+  it("routes failed local AI ahead of locked Cloud billing", () => {
+    expect(resolveDashboardAiUnavailableState({
+      billingEntitlement: trialExpiredEntitlement,
+      billingEntitlementError: null,
+      billingEntitlementLoading: false,
+      canUseCloudAiClassification: false,
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      localAiReady: true,
+      observedAiClassificationFailure: true,
+    })).toMatchObject({
+      variant: "provider-disconnected",
+      ctaLabel: "Open AI setup",
+    });
   });
 
   it("shows provider disconnected when a configured local provider has failed", () => {
