@@ -527,15 +527,46 @@ def daemon():
         pid_path().unlink(missing_ok=True)
 
 
+def _dispatch(request: dict):
+    command = request["command"]
+    payload = request.get("payload", {})
+    handler = COMMANDS[command]
+    return handler(payload)
+
+
 def handle_request(raw_request: str):
     try:
         request = json.loads(raw_request)
-        command = request["command"]
-        payload = request.get("payload", {})
-        handler = COMMANDS[command]
-        print(json.dumps(handler(payload)))
+        print(json.dumps(_dispatch(request)))
     except Exception as exc:
         print(json.dumps(response(False, error=str(exc))))
+
+
+def serve():
+    """Persistent request server (one JSON request per stdin line, one JSON
+    response per stdout line).
+
+    Keeps the interpreter warm and modules imported so each query avoids the
+    ~200-400ms cold-start cost of spawning a fresh ``python main.py`` process.
+    Errors are returned per request and never break the loop; EOF on stdin
+    (parent process exit / closed pipe) ends the loop cleanly.
+    """
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
+        if not line:
+            continue
+        request_id = None
+        try:
+            request = json.loads(line)
+            request_id = request.get("id")
+            envelope = _dispatch(request)
+        except Exception as exc:  # never let a single bad request kill the server
+            envelope = response(False, error=str(exc))
+        if request_id is not None:
+            envelope = {**envelope, "id": request_id}
+        sys.stdout.write(json.dumps(envelope))
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def main():
@@ -551,6 +582,10 @@ def main():
 
     if args.mode == "daemon":
         daemon()
+        return
+
+    if args.mode == "serve":
+        serve()
         return
 
     if args.request_json:
