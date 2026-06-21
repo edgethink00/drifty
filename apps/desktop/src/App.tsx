@@ -84,6 +84,7 @@ import { shouldUsePreviewData } from "./lib/api/previewData";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
+import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
@@ -217,7 +218,7 @@ import { EmptyState } from "./components/EmptyState";
 import { Toggle } from "./components/Toggle";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
-import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./features/auth/AuthGates";
+import { AuthConfigurationGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
 import { FlowCompactSplitChart } from "./features/dashboard/CompactCharts";
 import { HistoryCalendarPanel } from "./features/dashboard/HistoryCalendarPanel";
@@ -899,11 +900,12 @@ export default function App() {
       issueKind: currentConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(currentConnectionCheck.message),
     };
   }, [aiConnectionTest.runningFingerprint, localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup]);
-    const {
-      user,
-      status: authStatus,
-      signInWithGoogle,
-      signInAnonymously,
+  const {
+    user,
+    status: authStatus,
+    cloudConnectionStatus: reportedCloudConnectionStatus,
+    signInWithGoogle,
+    signInAnonymously,
     signOut,
     isEnabled: isSupabaseConfigured,
     isAuthRequired,
@@ -915,10 +917,13 @@ export default function App() {
   const isEffectiveAuthRequired = isAuthRequired || developerAuthRequiredPreview;
   const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !developerAuthRequiredPreview;
   const hasEffectiveBlockingAuthConfigurationError = hasBlockingAuthConfigurationError || (developerAuthRequiredPreview && !isSupabaseConfigured);
-  const shouldCheckBillingEntitlement = isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
+  const cloudConnectionStatus: AuthConnectionStatus = reportedCloudConnectionStatus
+    ?? (isSupabaseConfigured ? (authStatus === "loading" ? "checking" : "online") : "disabled");
+  const isCloudOnline = cloudConnectionStatus === "online";
+  const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
-  const canUseCloudAiClassification = isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const canUseCloudAiClassification = isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
   const aiClassificationProviderKey = localAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
     : canUseCloudAiClassification
@@ -4559,10 +4564,6 @@ export default function App() {
     }
   }, [debugLogPreview]);
 
-  if (authStatus === "loading") {
-    return <AuthLoadingGate />;
-  }
-
   if (developerAuthRequiredPreview && hasEffectiveBlockingAuthConfigurationError) {
     return <AuthConfigurationGate />;
   }
@@ -4612,8 +4613,18 @@ export default function App() {
   const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
   const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
-  const cloudStatusLabel = driftyCloudStatusLabel(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
-  const aiServerStatusLabel = aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
+  const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
+  const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
+  const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
+    ? "Offline mode"
+    : effectiveCloudConnectionStatus === "checking"
+      ? "Checking cloud"
+      : driftyCloudStatusLabel(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
+  const aiServerStatusLabel = effectiveCloudConnectionStatus === "offline"
+    ? "Offline"
+    : effectiveCloudConnectionStatus === "checking"
+      ? "Checking"
+      : aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
   const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
   const currentBillingPlan =
     effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing"
@@ -4621,7 +4632,6 @@ export default function App() {
       : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
         ? "free"
         : null;
-  const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
   return (
     <div className={isSidebarVisuallyCollapsed ? "app-shell app-shell--sidebar-collapsed" : "app-shell"}>
       <div className="window-chrome">
@@ -4731,6 +4741,7 @@ export default function App() {
           <AccountMenu
             billingEntitlement={billingEntitlement}
             billingEntitlementLoading={billingEntitlementLoading}
+            cloudConnectionStatus={cloudConnectionStatus}
             isOpen={accountMenuOpen}
             isSidebarCollapsed={isSidebarVisuallyCollapsed}
             localAiSetup={localAiSetup}
