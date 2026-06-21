@@ -7169,6 +7169,14 @@ input, textarea { color: inherit; }
   overflow-y: hidden;
 }
 
+.content--dashboard:has(.dashboard-page-head--today) {
+  overflow-y: hidden;
+}
+
+.content--dashboard:has(.dashboard-page-head--today) > .page {
+  padding-bottom: var(--space-2);
+}
+
 .page--week-dashboard {
   display: flex;
   flex-direction: column;
