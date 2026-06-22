@@ -294,6 +294,10 @@ export function buildRecentFocusTargets(segments: ActivitySegment[], historySegm
   return targets;
 }
 
+export function canApplyExtremeNudgeToCategory(category: ActivityCategory): boolean {
+  return category !== "communication";
+}
+
 export function formatFocusTargetDetail({
   appName,
   siteDomain,
