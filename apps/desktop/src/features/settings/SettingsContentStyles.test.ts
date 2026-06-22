@@ -89,6 +89,17 @@ describe("Settings content styles", () => {
     expect(activeRules.every((rule) => rule.includes("box-shadow: none;"))).toBe(true);
   });
 
+  it("keeps focused classification rule suggestions above adjacent rule fields", () => {
+    const styles = readAppStyles();
+    const searchRule = cssRule(styles, ".classification-rule-search");
+    const focusedSearchRule = cssRule(styles, ".classification-rule-search:focus-within");
+    const popoverRule = cssRule(styles, ".classification-rule-search__popover");
+
+    expect(searchRule).toContain("z-index: 3;");
+    expect(focusedSearchRule).toContain("z-index: 24;");
+    expect(popoverRule).toContain("z-index: 25;");
+  });
+
   it("keeps AI setup provider rows compact", () => {
     const aiSetupStyles = readAiSetupStyles();
     const toggleRule = cssRule(aiSetupStyles, ".ai-setup-choice__toggle");

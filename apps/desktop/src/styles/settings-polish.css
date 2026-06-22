@@ -2029,6 +2029,10 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   z-index: 3;
 }
 
+.classification-rule-search:focus-within {
+  z-index: 24;
+}
+
 .classification-rule-candidates {
   display: grid;
   gap: var(--space-1);
@@ -2040,7 +2044,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   top: calc(100% + var(--space-2));
   right: 0;
   left: 0;
-  z-index: 10;
+  z-index: 25;
   max-height: min(18rem, calc(100vh - 12rem));
   padding: var(--space-1);
   overflow-y: auto;
