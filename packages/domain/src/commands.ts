@@ -98,6 +98,11 @@ export interface ClassificationRuleCandidate {
   lastSeenAt?: string | null;
 }
 
+export interface ClassificationRuleCandidateQuery {
+  readonly query: string;
+  readonly targetKind?: ClassificationRuleTargetKind;
+}
+
 export interface ClassificationRuleApplyResult {
   matchedCount: number;
   appliedCount: number;
@@ -177,7 +182,7 @@ export interface TrackerApi {
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
   deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
-  searchClassificationRuleCandidates(query: string): Promise<ClassificationRuleCandidate[]>;
+  searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery): Promise<ClassificationRuleCandidate[]>;
   applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;

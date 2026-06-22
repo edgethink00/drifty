@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, ReactNode, RefObject } from "react";
+import type { ChangeEvent, FocusEvent, ReactNode, RefObject } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -628,6 +628,8 @@ export default function App() {
   const [appRuleProductivity, setAppRuleProductivity] = useState<ProductivityLabel>("focus");
   const [classificationRuleCandidates, setClassificationRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
   const [classificationRuleCandidatesLoading, setClassificationRuleCandidatesLoading] = useState(false);
+  const [appRuleSearchPanelOpen, setAppRuleSearchPanelOpen] = useState(false);
+  const appRuleSearchRef = useRef<HTMLDivElement | null>(null);
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
   const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
   const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
@@ -1244,8 +1246,28 @@ export default function App() {
     setAppRuleSearch(candidate.displayName);
     setAppRuleDisplayName(candidate.displayName);
     setAppRuleTargetValue(candidate.targetValue);
+    setAppRuleSearchPanelOpen(false);
     if (candidate.category) setAppRuleCategory(candidate.category);
     if (candidate.productivity) setAppRuleProductivity(candidate.productivity);
+  }
+
+  const scrollAppRuleSearchIntoViewIfNeeded = useCallback(() => {
+    const container = appRuleSearchRef.current;
+    if (!container || typeof container.scrollIntoView !== "function") return;
+    const rect = container.getBoundingClientRect();
+    if (rect.top >= 72 && rect.bottom + 320 <= window.innerHeight) return;
+    container.scrollIntoView({ block: "center", inline: "nearest" });
+  }, []);
+
+  function handleAppRuleSearchFocus() {
+    setAppRuleSearchPanelOpen(true);
+    window.requestAnimationFrame(scrollAppRuleSearchIntoViewIfNeeded);
+  }
+
+  function handleAppRuleSearchBlur(event: FocusEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setAppRuleSearchPanelOpen(false);
   }
 
   function selectDay(day: string | ((currentDay: string) => string)) {
@@ -2244,17 +2266,17 @@ export default function App() {
 
   useEffect(() => {
     if (activeTab !== "settings" || settingsSection !== "classification") return undefined;
-    const query = appRuleSearch.trim();
-    if (query.length < 2) {
-      setClassificationRuleCandidates([]);
+    if (!appRuleSearchPanelOpen) {
       setClassificationRuleCandidatesLoading(false);
       return undefined;
     }
+    const query = appRuleSearch.trim();
 
     let disposed = false;
+    setClassificationRuleCandidates([]);
     setClassificationRuleCandidatesLoading(true);
     const timeoutId = window.setTimeout(() => {
-      void trackerClient.searchClassificationRuleCandidates(query).then((candidates) => {
+      void trackerClient.searchClassificationRuleCandidates({ query, targetKind: "app" }).then((candidates) => {
         if (disposed) return;
         setClassificationRuleCandidates(candidates.filter((candidate) => candidate.targetKind === "app"));
       }).catch((nextError) => {
@@ -2270,7 +2292,13 @@ export default function App() {
       disposed = true;
       window.clearTimeout(timeoutId);
     };
-  }, [activeTab, appRuleSearch, settingsSection]);
+  }, [activeTab, appRuleSearch, appRuleSearchPanelOpen, settingsSection]);
+
+  useEffect(() => {
+    if (!appRuleSearchPanelOpen) return undefined;
+    const frameId = window.requestAnimationFrame(scrollAppRuleSearchIntoViewIfNeeded);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [appRuleSearchPanelOpen, classificationRuleCandidates.length, classificationRuleCandidatesLoading, scrollAppRuleSearchIntoViewIfNeeded]);
 
   useEffect(() => {
     window.localStorage.setItem(WATCHER_PERIODIC_MIN_STORAGE_KEY, String(watcherPeriodicMinMinutes));
@@ -5407,33 +5435,33 @@ export default function App() {
                           <div className="desc">Search app names Drifty has recorded locally, then choose category and productivity.</div>
                         </div>
                         <div className="ctrl classification-rule-form__grid classification-rule-form__grid--app">
-                          <label className="classification-rule-field classification-rule-field--wide">
-                            <span>Recorded app</span>
-                            <input className="settings-input" type="search" value={appRuleSearch} onChange={(event) => { setAppRuleSearch(event.target.value); setAppRuleTargetValue(""); setAppRuleDisplayName(""); }} placeholder="Search apps..." aria-label="Search recorded apps for App rule" />
-                          </label>
+                          <div ref={appRuleSearchRef} className="classification-rule-field classification-rule-field--wide classification-rule-search" onFocus={handleAppRuleSearchFocus} onBlur={handleAppRuleSearchBlur}>
+                            <label htmlFor="classification-app-rule-search">Recorded app</label>
+                            <input id="classification-app-rule-search" className="settings-input" type="search" value={appRuleSearch} onChange={(event) => { setAppRuleSearch(event.target.value); setAppRuleTargetValue(""); setAppRuleDisplayName(""); }} placeholder="Search apps..." aria-label="Search recorded apps for App rule" autoComplete="off" aria-expanded={appRuleSearchPanelOpen} aria-controls="classification-app-rule-candidates" />
+                            {appRuleSearchPanelOpen ? (
+                              <div id="classification-app-rule-candidates" className="classification-rule-candidates classification-rule-search__popover" aria-label="Recorded app suggestions">
+                                {classificationRuleCandidatesLoading ? <span className="classification-rule-hint">{appRuleSearch.trim() ? "Searching local app history..." : "Loading most-used apps..."}</span> : null}
+                                {!classificationRuleCandidatesLoading && classificationRuleCandidates.length === 0 ? <span className="classification-rule-hint">{appRuleSearch.trim() ? "No recorded apps match this search." : "No recorded apps recorded yet."}</span> : null}
+                                {classificationRuleCandidates.map((candidate) => {
+                                  const candidateUsageLabel = formatClassificationCandidateUsageLabel(candidate);
+                                  return (
+                                    <button key={candidate.id} type="button" className={`classification-rule-candidate${appRuleTargetValue === candidate.targetValue ? " is-selected" : ""}`} onClick={() => handleSelectClassificationCandidate(candidate)} aria-label={`Choose ${candidate.displayName}, ${candidateUsageLabel}`}>
+                                      <span className="classification-rule-candidate__identity">
+                                        <AppGlyph appName={candidate.appName ?? candidate.displayName} iconSrc={classificationRuleCandidateAppIconSrc(candidate, appIcons)} size="sm" />
+                                        <span className="classification-rule-candidate__text"><strong>{candidate.displayName}</strong>{candidate.bundleId ? <small>{candidate.bundleId}</small> : null}</span>
+                                      </span>
+                                      <span className="classification-rule-candidate__usage"><strong>{secondsToLabel(candidate.totalSeconds)}</strong><em>{candidate.segmentCount} {candidate.segmentCount === 1 ? "segment" : "segments"}</em></span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
                           <ClassificationPicker label="Category" ariaLabel="App rule category" value={appRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={setAppRuleCategory} />
                           <ClassificationPicker label="Productivity" ariaLabel="App rule productivity" value={appRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={setAppRuleProductivity} />
                           <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleSaveAppRule()} disabled={classificationRuleSavingKind !== null || !appRuleTargetValue.trim()}>{classificationRuleSavingKind === "app" ? "Saving..." : "Save App rule"}</button>
                         </div>
                         {appRuleDisplayName ? <p className="classification-rule-selected" role="status">Selected app: {appRuleDisplayName}</p> : null}
-                        <div className="classification-rule-candidates" aria-label="Recorded app search results">
-                          {classificationRuleCandidatesLoading ? <span className="classification-rule-hint">Searching local app history...</span> : null}
-                          {!classificationRuleCandidatesLoading && appRuleSearch.trim().length < 2 ? <span className="classification-rule-hint">Type at least 2 characters to list most-used recorded apps from this Mac.</span> : null}
-                          {!classificationRuleCandidatesLoading && appRuleSearch.trim().length >= 2 && classificationRuleCandidates.length === 0 ? <span className="classification-rule-hint">No recorded apps match this search.</span> : null}
-                          {classificationRuleCandidates.length > 0 ? <div className="classification-rule-candidates__heading">Most used matching apps</div> : null}
-                          {classificationRuleCandidates.map((candidate) => {
-                            const candidateUsageLabel = formatClassificationCandidateUsageLabel(candidate);
-                            return (
-                              <button key={candidate.id} type="button" className={`classification-rule-candidate${appRuleTargetValue === candidate.targetValue ? " is-selected" : ""}`} onClick={() => handleSelectClassificationCandidate(candidate)} aria-label={`Choose ${candidate.displayName}, ${candidateUsageLabel}`}>
-                                <span className="classification-rule-candidate__identity">
-                                  <AppGlyph appName={candidate.appName ?? candidate.displayName} iconSrc={classificationRuleCandidateAppIconSrc(candidate, appIcons)} size="sm" />
-                                  <span className="classification-rule-candidate__text"><strong>{candidate.displayName}</strong>{candidate.bundleId ? <small>{candidate.bundleId}</small> : null}</span>
-                                </span>
-                                <span className="classification-rule-candidate__usage"><strong>{secondsToLabel(candidate.totalSeconds)}</strong><em>{candidate.segmentCount} {candidate.segmentCount === 1 ? "segment" : "segments"}</em></span>
-                              </button>
-                            );
-                          })}
-                        </div>
                       </div>
                       {classificationRulesError ? <p className="classification-summary classification-summary--error" role="alert">{classificationRulesError}</p> : null}
                       {classificationRuleMessage ? <p className="classification-summary" role="status">{classificationRuleMessage}</p> : null}

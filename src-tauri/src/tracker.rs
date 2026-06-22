@@ -245,11 +245,12 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         query: String,
+        target_kind: Option<String>,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "search_classification_rule_candidates",
-            json!({ "query": query }),
+            json!({ "query": query, "targetKind": target_kind }),
         )
     }
 
