@@ -77,6 +77,11 @@
   width: 100%;
 }
 
+.ai-setup-support-section__toggle--bare {
+  grid-template-columns: minmax(0, 1fr) 1rem;
+  min-height: 2.9rem;
+}
+
 .ai-setup-support-section__toggle:hover {
   background: color-mix(in srgb, var(--bg-2) 38%, transparent);
   transform: none;

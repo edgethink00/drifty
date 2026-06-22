@@ -42,9 +42,7 @@ export function AiSetupSupportSections({
 
       <AiSetupSupportSection
         id="privacyReview"
-        badge="No raw cloud timeline"
         expanded={expandedSection === "privacyReview"}
-        subtitle="Review the minimized fields AI classification can receive."
         title="Privacy review"
         onToggle={setExpandedSection}
       >
@@ -63,11 +61,11 @@ function AiSetupSupportSection({
   title,
   onToggle,
 }: {
-  readonly badge: string;
+  readonly badge?: string;
   readonly children: ReactNode;
   readonly expanded: boolean;
   readonly id: AiSetupSupportSectionId;
-  readonly subtitle: string;
+  readonly subtitle?: string;
   readonly title: string;
   readonly onToggle: (section: AiSetupSupportSectionId | null) => void;
 }) {
@@ -79,7 +77,7 @@ function AiSetupSupportSection({
       <button
         id={buttonId}
         type="button"
-        className="ai-setup-support-section__toggle"
+        className={`ai-setup-support-section__toggle${badge || subtitle ? "" : " ai-setup-support-section__toggle--bare"}`}
         aria-label={title}
         aria-controls={panelId}
         aria-expanded={expanded}
@@ -87,9 +85,9 @@ function AiSetupSupportSection({
       >
         <span className="ai-setup-support-section__copy">
           <strong>{title}</strong>
-          <span>{subtitle}</span>
+          {subtitle ? <span>{subtitle}</span> : null}
         </span>
-        <span className="chip gray">{badge}</span>
+        {badge ? <span className="chip gray">{badge}</span> : null}
         <span className="ai-setup-support-section__chevron" aria-hidden="true" />
       </button>
       {expanded ? (
