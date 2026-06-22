@@ -6933,11 +6933,9 @@ input, textarea { color: inherit; }
   --dashboard-ai-notice-panel: color-mix(in srgb, var(--surface) 96%, var(--dashboard-ai-notice-soft));
   --dashboard-ai-notice-glow: color-mix(in srgb, var(--dashboard-ai-notice-soft) 52%, transparent);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
   margin-bottom: var(--block-gap-compact);
-  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--dashboard-ai-notice-line);
   border-radius: var(--radius-md);
   background:
@@ -6965,14 +6963,13 @@ input, textarea { color: inherit; }
 
 .dashboard-ai-notice__signal {
   align-items: center;
-  align-self: start;
   background: color-mix(in srgb, var(--dashboard-ai-notice-accent) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--dashboard-ai-notice-accent) 34%, transparent);
   border-radius: 999px;
   display: inline-flex;
+  flex: 0 0 auto;
   height: 1.45rem;
   justify-content: center;
-  margin-top: 0.08rem;
   width: 1.45rem;
 }
 
@@ -6985,13 +6982,22 @@ input, textarea { color: inherit; }
   width: 0.48rem;
 }
 
-.dashboard-ai-notice__copy {
+.dashboard-ai-notice__heading {
+  align-content: center;
   display: grid;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
-.dashboard-ai-notice__copy strong {
+.dashboard-ai-notice__title-row {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.dashboard-ai-notice__title-row strong {
   color: var(--text);
   font-family: var(--font-display);
   font-size: 0.92rem;
@@ -6999,8 +7005,8 @@ input, textarea { color: inherit; }
   letter-spacing: 0;
 }
 
-.dashboard-ai-notice__copy p {
-  max-width: 72ch;
+.dashboard-ai-notice__body {
+  max-width: none;
   margin: 0;
   color: var(--text-soft);
   font-size: 0.72rem;
@@ -7008,6 +7014,8 @@ input, textarea { color: inherit; }
 }
 
 .dashboard-ai-notice .settings-btn {
+  justify-self: start;
+  margin-top: var(--space-2);
   white-space: nowrap;
 }
 
