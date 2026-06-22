@@ -37,7 +37,7 @@
 
 .ai-setup-work-profile-selectors:has(.ai-setup-activity-tags):not(:has(.ai-setup-activity-other))
   .ai-setup-work-profile-selector:nth-child(2) {
-  align-content: space-between;
+  align-content: start;
 }
 
 .ai-setup-work-profile-selector > span {
@@ -99,7 +99,6 @@
   min-width: 0;
 }
 
-.content--settings .ai-setup-activity-add .settings-input,
 .content--settings .ai-setup-activity-other {
   min-height: 2.85rem;
   width: 100%;
@@ -135,6 +134,18 @@
   background: var(--surface);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--text) 10%);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.ai-setup-work-profile-selector .onb-dropdown__trigger[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.ai-setup-work-profile-selector .onb-dropdown__trigger[data-disabled="true"]:hover,
+.ai-setup-work-profile-selector .onb-dropdown__trigger[data-disabled="true"]:focus-within {
+  background: color-mix(in srgb, var(--surface) 88%, var(--bg-2));
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: none;
 }
 
 .ai-setup-work-profile-selector .onb-dropdown__input {
@@ -204,7 +215,7 @@ body > .onb-dropdown__menu {
   margin-top: 0.35rem;
   overflow: auto;
   padding: 0.25rem;
-  z-index: 9999;
+  z-index: var(--z-settings-popover);
 }
 
 body > .onb-dropdown__menu[data-placement="top"] {
