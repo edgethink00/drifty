@@ -1,4 +1,4 @@
-import { classifyActivityDetailed } from "@drifty/domain";
+import { classifyActivityDetailed, logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 
@@ -77,10 +77,10 @@ export function buildHistoryRows(segments: readonly ActivitySegment[]): readonly
   return rows.sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 }
 
-export function buildHistoryDayGroups(rows: readonly HistoryRow[]): readonly HistoryDayGroup[] {
+export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMinutes = 0): readonly HistoryDayGroup[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of rows) {
-    const dayKey = row.startedAt.slice(0, 10);
+    const dayKey = logicalDayIsoDateForDate(new Date(row.startedAt), startOfDayMinutes);
     const dayRows = groups.get(dayKey) ?? [];
     dayRows.push(row);
     groups.set(dayKey, dayRows);

@@ -724,6 +724,10 @@ describe("runAiClassification cloud contract", () => {
           baseUrl: "https://openrouter.ai/api/v1",
           apiKey: "sk-or-v1-test",
           model: "qwen/qwen3.6-flash",
+          provider: {
+            data_collection: "deny",
+            zdr: true,
+          },
           headers: expect.objectContaining({
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
@@ -763,6 +767,10 @@ describe("runAiClassification cloud contract", () => {
           baseUrl: "https://openrouter.ai/api/v1",
           apiKey: "sk-or-v1-test",
           models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-flash-1.5"],
+          provider: {
+            data_collection: "deny",
+            zdr: true,
+          },
           headers: expect.objectContaining({
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
@@ -799,6 +807,10 @@ describe("runAiClassification cloud contract", () => {
       expect(nativeInvoke).toHaveBeenCalledWith("ai_classification_openai_chat", {
         request: expect.objectContaining({
           models: ["deepseek/deepseek-v4-flash", "anthropic/claude-3.5-haiku"],
+          provider: {
+            data_collection: "deny",
+            zdr: true,
+          },
         }),
       });
       const request = nativeInvoke.mock.calls[0]?.[1]?.request as Record<string, unknown>;

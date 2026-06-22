@@ -2,6 +2,7 @@ import { getAccountDisplayName } from "./accountDisplay";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { aiConnectionStatusLabel } from "../ai-connection/aiStatusLabels";
+import type { AuthConnectionStatus } from "./authConnectionStatus";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
@@ -14,9 +15,28 @@ export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
+function accountStatusLabel({
+  billingEntitlement,
+  billingEntitlementLoading,
+  cloudConnectionStatus,
+  isSignedIn,
+  localAiSetup,
+}: {
+  billingEntitlement: BillingEntitlement | null;
+  billingEntitlementLoading: boolean;
+  cloudConnectionStatus: AuthConnectionStatus;
+  isSignedIn: boolean;
+  localAiSetup: LocalAiSetupState;
+}) {
+  if (cloudConnectionStatus === "offline") return "Offline mode";
+  if (cloudConnectionStatus === "checking") return "Checking cloud";
+  return aiConnectionStatusLabel(localAiSetup, billingEntitlement, billingEntitlementLoading, isSignedIn);
+}
+
 export function AccountMenu({
   billingEntitlement,
   billingEntitlementLoading,
+  cloudConnectionStatus,
   isOpen,
   isSidebarCollapsed,
   localAiSetup,
@@ -31,6 +51,7 @@ export function AccountMenu({
 }: {
   billingEntitlement: BillingEntitlement | null;
   billingEntitlementLoading: boolean;
+  cloudConnectionStatus: AuthConnectionStatus;
   isOpen: boolean;
   isSidebarCollapsed: boolean;
   localAiSetup: LocalAiSetupState;
@@ -47,7 +68,13 @@ export function AccountMenu({
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : "Account";
-  const accountStatusLabel = aiConnectionStatusLabel(localAiSetup, billingEntitlement, billingEntitlementLoading, isSignedIn);
+  const accountStatus = accountStatusLabel({
+    billingEntitlement,
+    billingEntitlementLoading,
+    cloudConnectionStatus,
+    isSignedIn,
+    localAiSetup,
+  });
   const trimmedUserAvatarUrl = userAvatarUrl?.trim();
 
   const updatePopoverPosition = useCallback(() => {
@@ -137,14 +164,16 @@ export function AccountMenu({
         ref={triggerRef}
         type="button"
         className="account-trigger"
+        data-cloud-status={cloudConnectionStatus}
         onClick={onToggle}
-        aria-label={`${displayName} ${accountStatusLabel}`}
+        aria-label={`${displayName} ${accountStatus}`}
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
         <span className="account-avatar">{trimmedUserAvatarUrl ? <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" /> : displayName.charAt(0).toUpperCase()}</span>
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
+          <span className="account-trigger__status">{accountStatus}</span>
         </span>
         <span className="account-trigger__chevrons" aria-hidden="true">
           <span className="account-trigger__chevron-mark account-trigger__chevron-mark--up" />

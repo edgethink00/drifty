@@ -16,7 +16,9 @@ export type DriftAlarmBreakSnooze = {
   focusTargets: DriftAlarmFocusTarget[];
 };
 
-export type DriftAlertDelaySeconds = 0 | 60 | 300;
+export type DriftAlertDelaySeconds = 0 | 30 | 60 | 120 | 300 | 600 | 900 | 1800;
+
+export type DriftAlertDelayValue = "0" | "30" | "60" | "120" | "300" | "600" | "900" | "1800";
 
 export const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
 
@@ -24,11 +26,18 @@ export const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDel
 
 export const DEFAULT_DRIFT_ALERT_DELAY_SECONDS: DriftAlertDelaySeconds = 60;
 
+export const DEFAULT_DRIFT_ALERT_DELAY_VALUE: DriftAlertDelayValue = "60";
+
 export const DRIFT_ALERT_DELAY_OPTIONS = [
-  { value: 0, label: "Instant", detail: "As soon as drift is detected" },
-  { value: 60, label: "1m", detail: "After 1 minute of drift" },
-  { value: 300, label: "5m", detail: "After 5 minutes of drift" },
-] as const satisfies ReadonlyArray<{ value: DriftAlertDelaySeconds; label: string; detail: string }>;
+  { value: "0", seconds: 0, label: "Instant", detail: "As soon as drift is detected" },
+  { value: "30", seconds: 30, label: "30s", detail: "After 30 seconds of drift" },
+  { value: "60", seconds: 60, label: "1m", detail: "After 1 minute of drift" },
+  { value: "120", seconds: 120, label: "2m", detail: "After 2 minutes of drift" },
+  { value: "300", seconds: 300, label: "5m", detail: "After 5 minutes of drift" },
+  { value: "600", seconds: 600, label: "10m", detail: "After 10 minutes of drift" },
+  { value: "900", seconds: 900, label: "15m", detail: "After 15 minutes of drift" },
+  { value: "1800", seconds: 1800, label: "30m", detail: "After 30 minutes of drift" },
+] as const satisfies ReadonlyArray<{ value: DriftAlertDelayValue; seconds: DriftAlertDelaySeconds; label: string; detail: string }>;
 
 export const DRIFT_ALARM_PREVIEW_OPTIONS = [
   { id: "youtube-5m", label: "YouTube 5m", contextLabel: "youtube.com", sourceSiteDomain: "youtube.com", sourceAppName: "Google Chrome", sourceIconSrc: null, driftDurationSeconds: 5 * 60, preservedFocusStrikeSeconds: 30 * 60 },
@@ -332,8 +341,16 @@ export function resolveInitialExtremeNudgeEnabled(): boolean {
 
 export function normalizeDriftAlertDelaySeconds(value: string | number | null): DriftAlertDelaySeconds {
   if (value === null || value === "") return DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
-  const numericValue = typeof value === "number" ? value : Number(value);
-  return DRIFT_ALERT_DELAY_OPTIONS.find((option) => option.value === numericValue)?.value ?? DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
+  const delayValue = typeof value === "number" ? String(value) : value;
+  return DRIFT_ALERT_DELAY_OPTIONS.find((option) => option.value === delayValue)?.seconds ?? DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
+}
+
+export function driftAlertDelayValueFromSeconds(seconds: DriftAlertDelaySeconds): DriftAlertDelayValue {
+  return DRIFT_ALERT_DELAY_OPTIONS.find((option) => option.seconds === seconds)?.value ?? DEFAULT_DRIFT_ALERT_DELAY_VALUE;
+}
+
+export function driftAlertDelaySecondsFromValue(value: DriftAlertDelayValue): DriftAlertDelaySeconds {
+  return DRIFT_ALERT_DELAY_OPTIONS.find((option) => option.value === value)?.seconds ?? DEFAULT_DRIFT_ALERT_DELAY_SECONDS;
 }
 
 export async function activateFocusTargetSite(target: DriftAlarmFocusTarget): Promise<boolean> {

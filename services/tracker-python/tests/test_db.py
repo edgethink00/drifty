@@ -783,6 +783,7 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         site_candidates = self.database.search_classification_rule_candidates("example")
         app_candidates = self.database.search_classification_rule_candidates("safari")
+        app_only_candidates = self.database.search_classification_rule_candidates("", target_kind="app")
 
         self.assertEqual(site_candidates[0]["targetValue"], "blog.example.com")
         self.assertEqual(site_candidates[0]["targetKind"], "site")
@@ -796,6 +797,9 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(app_candidates[0]["totalSeconds"], 600)
         self.assertEqual(app_candidates[1]["bundleId"], "com.apple.Safari")
         self.assertEqual(app_candidates[1]["totalSeconds"], 500)
+        self.assertEqual([candidate["targetKind"] for candidate in app_only_candidates], ["app", "app"])
+        self.assertEqual(app_only_candidates[0]["bundleId"], "com.apple.SafariTechnologyPreview")
+        self.assertEqual(app_only_candidates[1]["bundleId"], "com.apple.Safari")
 
     def test_apply_classification_rules_matches_site_subdomains_and_app_names(self) -> None:
         self.database.insert_segment(

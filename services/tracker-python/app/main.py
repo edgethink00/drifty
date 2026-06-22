@@ -10,19 +10,19 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 APP_DIR = Path(__file__).resolve().parent
 PACKAGE_ROOT = APP_DIR.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from app.permissions.accessibility import accessibility_granted
 from app.storage.db import TrackerDatabase
-from app.storage.live_tail import fetch_live_tail
-from app.tracker.idle import seconds_since_last_input
-from app.tracker.macos_workspace import current_snapshot
-from app.tracker.power_state import PowerStateSample, current_power_state
-from app.tracker.youtube_metadata import fetch_youtube_metadata
+
+if TYPE_CHECKING:
+    from app.tracker.macos_workspace import Snapshot
+    from app.tracker.power_state import PowerStateSample
+    from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
@@ -52,6 +52,49 @@ def ensure_state_dir() -> None:
 
 def database() -> TrackerDatabase:
     return TrackerDatabase(DB_PATH)
+
+
+def accessibility_granted() -> bool:
+    from app.permissions.accessibility import accessibility_granted as read_accessibility_granted
+
+    return read_accessibility_granted()
+
+
+def seconds_since_last_input() -> float | None:
+    from app.tracker.idle import seconds_since_last_input as read_seconds_since_last_input
+
+    return read_seconds_since_last_input()
+
+
+def current_snapshot(include_system_transient: bool = True) -> Snapshot:
+    from app.tracker.macos_workspace import current_snapshot as read_current_snapshot
+
+    return read_current_snapshot(include_system_transient=include_system_transient)
+
+
+def current_power_state() -> PowerStateSample:
+    from app.tracker.power_state import current_power_state as read_current_power_state
+
+    return read_current_power_state()
+
+
+def fetch_youtube_metadata(site_url: str, video_id: str, timeout_seconds: float) -> YouTubeVideoMetadata:
+    from app.tracker.youtube_metadata import fetch_youtube_metadata as read_youtube_metadata
+
+    return read_youtube_metadata(site_url, video_id, timeout_seconds=timeout_seconds)
+
+
+def fetch_live_tail(
+    db: TrackerDatabase,
+    start: str | None,
+    end: str | None,
+    after_segment_id: str | None,
+    after_ended_at: str | None,
+    limit: int | str | None = 8,
+) -> list[dict[str, object]]:
+    from app.storage.live_tail import fetch_live_tail as read_fetch_live_tail
+
+    return read_fetch_live_tail(db, start, end, after_segment_id, after_ended_at, limit)
 
 
 def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
@@ -231,6 +274,7 @@ def get_live_tail(payload: dict):
     start, end = day_bounds(safe_payload)
     running = is_running()
     tracker_mode = db.get_meta("tracker_mode") if running else None
+
     segments = fetch_live_tail(
         db,
         start,
@@ -339,7 +383,12 @@ def search_classification_rule_candidates(payload: dict):
     query = payload.get("query", "")
     if not isinstance(query, str):
         return response(False, error="query must be a string")
-    return response(True, database().search_classification_rule_candidates(query))
+    target_kind = payload.get("targetKind")
+    if target_kind is not None and not isinstance(target_kind, str):
+        return response(False, error="targetKind must be site or app")
+    if target_kind is not None and target_kind not in {"site", "app"}:
+        return response(False, error="targetKind must be site or app")
+    return response(True, database().search_classification_rule_candidates(query, target_kind=target_kind))
 
 
 def apply_classification_rules(payload: dict):
@@ -527,15 +576,46 @@ def daemon():
         pid_path().unlink(missing_ok=True)
 
 
+def _dispatch(request: dict):
+    command = request["command"]
+    payload = request.get("payload", {})
+    handler = COMMANDS[command]
+    return handler(payload)
+
+
 def handle_request(raw_request: str):
     try:
         request = json.loads(raw_request)
-        command = request["command"]
-        payload = request.get("payload", {})
-        handler = COMMANDS[command]
-        print(json.dumps(handler(payload)))
+        print(json.dumps(_dispatch(request)))
     except Exception as exc:
         print(json.dumps(response(False, error=str(exc))))
+
+
+def serve():
+    """Persistent request server (one JSON request per stdin line, one JSON
+    response per stdout line).
+
+    Keeps the interpreter warm and modules imported so each query avoids the
+    ~200-400ms cold-start cost of spawning a fresh ``python main.py`` process.
+    Errors are returned per request and never break the loop; EOF on stdin
+    (parent process exit / closed pipe) ends the loop cleanly.
+    """
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
+        if not line:
+            continue
+        request_id = None
+        try:
+            request = json.loads(line)
+            request_id = request.get("id")
+            envelope = _dispatch(request)
+        except Exception as exc:  # never let a single bad request kill the server
+            envelope = response(False, error=str(exc))
+        if request_id is not None:
+            envelope = {**envelope, "id": request_id}
+        sys.stdout.write(json.dumps(envelope))
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def main():
@@ -551,6 +631,10 @@ def main():
 
     if args.mode == "daemon":
         daemon()
+        return
+
+    if args.mode == "serve":
+        serve()
         return
 
     if args.request_json:

@@ -59,15 +59,15 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
-  it("returns test needed when local provider settings have not been verified", () => {
+  it("returns checking while local provider settings are being verified", () => {
     const status = resolveAiConnectionStatus(statusInput({
-      localProviderStatus: { kind: "test_needed" },
+      localProviderStatus: { kind: "checking" },
       localProviderLabel: "Local AI",
     }));
 
     expect(status).toMatchObject({
       tone: "neutral",
-      label: "Test needed",
+      label: "Checking",
       providerLabel: "Local AI",
     });
   });

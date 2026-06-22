@@ -59,20 +59,14 @@
   .ai-setup-personalization__footer,
   .ai-setup-support-zone__header,
   .ai-setup-work-profile-panel,
-  .ai-setup-work-profile-selectors,
-  .ai-privacy-review__excluded {
+  .ai-setup-work-profile-selectors {
     align-items: start;
     grid-template-columns: 1fr;
   }
 
-  .ai-setup-support-zone__header,
-  .ai-privacy-review__header {
+  .ai-setup-support-zone__header {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .ai-privacy-review__checklist {
-    grid-template-columns: 1fr;
   }
 
   .ai-setup-support-section__toggle {

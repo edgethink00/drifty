@@ -16,6 +16,10 @@ export type BrowserCaptureSummary = {
   readonly accessibilityAddressBarFallbackSegments: number;
   readonly accessibilityAddressBarFallbackRatio: number | null;
   readonly siteSourceCounts: Readonly<Record<string, number>>;
+  readonly browserAutomationStatusCounts: Readonly<Record<string, number>>;
+  readonly browserAutomationErrorCounts: Readonly<Record<string, number>>;
+  readonly browserAutomationErrorSegments: number;
+  readonly browserAutomationDeniedSegments: number;
 };
 
 export type BrowserCaptureDiagnostics = {
@@ -25,6 +29,10 @@ export type BrowserCaptureDiagnostics = {
   readonly siteContextSegments: number;
   readonly missingSiteContextSegments: number;
   readonly siteContextRatio: number | null;
+  readonly browserAutomationStatusCounts: Readonly<Record<string, number>>;
+  readonly browserAutomationErrorCounts: Readonly<Record<string, number>>;
+  readonly browserAutomationErrorSegments: number;
+  readonly browserAutomationDeniedSegments: number;
   readonly byBrowser: readonly BrowserCaptureSummary[];
 };
 
@@ -35,6 +43,10 @@ type BrowserCaptureAccumulator = {
   missingSiteContextSegments: number;
   accessibilityAddressBarFallbackSegments: number;
   siteSourceCounts: Record<string, number>;
+  browserAutomationStatusCounts: Record<string, number>;
+  browserAutomationErrorCounts: Record<string, number>;
+  browserAutomationErrorSegments: number;
+  browserAutomationDeniedSegments: number;
 };
 
 type BuildDebugLogPayloadInput = {
@@ -98,6 +110,8 @@ const SUPPORTED_BROWSER_NAMES = [
 ];
 
 const SUPPORTED_BROWSER_NAME_SET: ReadonlySet<string> = new Set(SUPPORTED_BROWSER_NAMES);
+const MISSING_DIAGNOSTIC_VALUE = "missing";
+const MAX_BROWSER_AUTOMATION_ERROR_LENGTH = 240;
 
 export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
   const currentSnapshot = buildCurrentSnapshotSummary(input.currentSnapshot);
@@ -124,6 +138,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
             browserName: currentSnapshot.browserName,
             status: currentSnapshot.browserAutomationStatus,
             hasError: currentSnapshot.hasBrowserAutomationError,
+            error: currentSnapshot.browserAutomationError,
             siteSource: currentSnapshot.siteSource,
             captureConfidence: currentSnapshot.captureConfidence,
             hasSiteContext: currentSnapshot.hasSiteContext,
@@ -207,6 +222,7 @@ function buildCurrentSnapshotSummary(snapshot: CurrentActivitySnapshot | null) {
     captureConfidence: snapshot.captureConfidence ?? null,
     hasSiteContext: hasSiteContext(snapshot),
     browserAutomationStatus: snapshot.browserAutomationStatus ?? null,
+    browserAutomationError: browserAutomationError(snapshot.browserAutomationError),
     hasBrowserAutomationError: Boolean(cleanText(snapshot.browserAutomationError)),
   };
 }
@@ -219,6 +235,10 @@ function buildBrowserCaptureDiagnostics(
   let browserSegments = 0;
   let siteContextSegments = 0;
   let missingSiteContextSegments = 0;
+  let browserAutomationErrorSegments = 0;
+  let browserAutomationDeniedSegments = 0;
+  const browserAutomationStatusCounts: Record<string, number> = {};
+  const browserAutomationErrorCounts: Record<string, number> = {};
 
   for (const segment of segments) {
     const browserName = resolveBrowserName(segment);
@@ -236,6 +256,10 @@ function buildBrowserCaptureDiagnostics(
       missingSiteContextSegments: 0,
       accessibilityAddressBarFallbackSegments: 0,
       siteSourceCounts: {},
+      browserAutomationStatusCounts: {},
+      browserAutomationErrorCounts: {},
+      browserAutomationErrorSegments: 0,
+      browserAutomationDeniedSegments: 0,
     };
 
     accumulator.totalSegments += 1;
@@ -247,6 +271,23 @@ function buildBrowserCaptureDiagnostics(
     if (siteSource === "accessibility-address-bar") {
       accumulator.accessibilityAddressBarFallbackSegments += 1;
     }
+
+    const automationStatus = segment.browserAutomationStatus ?? MISSING_DIAGNOSTIC_VALUE;
+    incrementCount(browserAutomationStatusCounts, automationStatus);
+    incrementCount(accumulator.browserAutomationStatusCounts, automationStatus);
+    if (automationStatus === "denied") {
+      browserAutomationDeniedSegments += 1;
+      accumulator.browserAutomationDeniedSegments += 1;
+    }
+
+    const automationError = browserAutomationError(segment.browserAutomationError);
+    if (automationError) {
+      browserAutomationErrorSegments += 1;
+      accumulator.browserAutomationErrorSegments += 1;
+      incrementCount(browserAutomationErrorCounts, automationError);
+      incrementCount(accumulator.browserAutomationErrorCounts, automationError);
+    }
+
     byBrowser.set(browserName, accumulator);
   }
 
@@ -260,6 +301,10 @@ function buildBrowserCaptureDiagnostics(
       accessibilityAddressBarFallbackSegments: summary.accessibilityAddressBarFallbackSegments,
       accessibilityAddressBarFallbackRatio: ratio(summary.accessibilityAddressBarFallbackSegments, summary.totalSegments),
       siteSourceCounts: { ...summary.siteSourceCounts },
+      browserAutomationStatusCounts: { ...summary.browserAutomationStatusCounts },
+      browserAutomationErrorCounts: { ...summary.browserAutomationErrorCounts },
+      browserAutomationErrorSegments: summary.browserAutomationErrorSegments,
+      browserAutomationDeniedSegments: summary.browserAutomationDeniedSegments,
     }))
     .sort((left, right) => right.totalSegments - left.totalSegments || left.browserName.localeCompare(right.browserName));
 
@@ -270,6 +315,10 @@ function buildBrowserCaptureDiagnostics(
     siteContextSegments,
     missingSiteContextSegments,
     siteContextRatio: ratio(siteContextSegments, browserSegments),
+    browserAutomationStatusCounts,
+    browserAutomationErrorCounts,
+    browserAutomationErrorSegments,
+    browserAutomationDeniedSegments,
     byBrowser: summaries,
   };
 }
@@ -289,6 +338,13 @@ function hasSiteContext(segment: Pick<ActivitySegment, "siteDomain" | "siteTitle
 function cleanText(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function browserAutomationError(value: string | null | undefined): string | null {
+  const cleaned = cleanText(value)?.replace(/\s+/g, " ");
+  if (!cleaned) return null;
+  if (cleaned.length <= MAX_BROWSER_AUTOMATION_ERROR_LENGTH) return cleaned;
+  return `${cleaned.slice(0, MAX_BROWSER_AUTOMATION_ERROR_LENGTH - 3)}...`;
 }
 
 function incrementCount(counts: Record<string, number>, key: string): void {
