@@ -1733,6 +1733,15 @@ input, textarea { color: inherit; }
   opacity: 0.5;
 }
 
+.focus-drift__drift-mist {
+  fill: url("#focus-drift-chart-drift-mist");
+  opacity: 1;
+}
+
+.focus-drift__drift-mist-stop--strong { stop-color: color-mix(in srgb, var(--productivity-drift) 29%, transparent); }
+.focus-drift__drift-mist-stop--soft { stop-color: color-mix(in srgb, var(--productivity-drift) 8%, transparent); }
+.focus-drift__drift-mist-stop--clear { stop-color: transparent; }
+
 .focus-drift__line {
   fill: none;
   stroke-linecap: round;
