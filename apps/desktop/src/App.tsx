@@ -204,10 +204,17 @@ type PlanItem = {
   source: "Quick add" | "Pinned";
 };
 
-type DashboardWeekHistoryLoad = {
+type CompactHistoryLoad = {
   readonly key: string;
+  readonly start: string;
+  readonly end: string;
   readonly loadedAtMs: number;
   readonly materialized: BuiltInHeuristicClassificationMaterialization;
+};
+
+type CompactHistoryRange = {
+  readonly start: string;
+  readonly end: string;
 };
 
 type DashboardPreviousWeekFocusLoad = {
@@ -224,13 +231,36 @@ const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
-// Week history is mostly closed-day data that rarely changes, so it does not need
+// Compact history is mostly closed-day data that rarely changes, so it does not need
 // to expire on the 30s live-refresh cadence. A longer TTL keeps the prefetch cache
-// warm across typical "browse Today, then open Week" navigation, avoiding a full
-// (~470ms) tracker IPC on most period switches.
-const DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS = 5 * 60_000;
+// warm across typical "browse Today, then open Week/Trends" navigation, avoiding
+// a full tracker IPC on most period switches.
+const COMPACT_HISTORY_CACHE_TTL_MS = 5 * 60_000;
 const DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS = 4000;
 const EMPTY_ACTIVITY_SEGMENTS: ActivitySegment[] = [];
+
+function compactHistoryRangeKey(range: CompactHistoryRange): string {
+  return `${range.start}:${range.end}`;
+}
+
+function isFreshCompactHistoryLoad(load: CompactHistoryLoad): boolean {
+  return Date.now() - load.loadedAtMs <= COMPACT_HISTORY_CACHE_TTL_MS;
+}
+
+function compactHistoryRangeContains(outer: CompactHistoryRange, inner: CompactHistoryRange): boolean {
+  return new Date(outer.start).getTime() <= new Date(inner.start).getTime()
+    && new Date(outer.end).getTime() >= new Date(inner.end).getTime();
+}
+
+function findFreshCompactHistoryLoad(cache: ReadonlyMap<string, CompactHistoryLoad>, range: CompactHistoryRange): CompactHistoryLoad | null {
+  const exact = cache.get(compactHistoryRangeKey(range));
+  if (exact && isFreshCompactHistoryLoad(exact) && compactHistoryRangeContains(exact, range)) return exact;
+
+  for (const load of cache.values()) {
+    if (isFreshCompactHistoryLoad(load) && compactHistoryRangeContains(load, range)) return load;
+  }
+  return null;
+}
 
 function extremeNudgeErrorDiagnostic(error: unknown): string | null {
   const message = toErrorMessage(error);
@@ -638,6 +668,7 @@ export default function App() {
   const [observedAiClassificationFailure, setObservedAiClassificationFailure] = useState(false);
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
+  const [compactHistoryCacheRevision, setCompactHistoryCacheRevision] = useState(0);
   const [weekDashboardCacheRevision, setWeekDashboardCacheRevision] = useState(0);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
@@ -826,9 +857,9 @@ export default function App() {
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const dashboardWeekPrefetchRequestRef = useRef(0);
-  const dashboardWeekHistoryCacheRef = useRef<Map<string, DashboardWeekHistoryLoad>>(new Map());
-  const dashboardWeekHistoryInFlightRef = useRef<{ key: string; promise: Promise<DashboardWeekHistoryLoad> } | null>(null);
-  const dashboardWeekHistoryCacheGenerationRef = useRef(0);
+  const compactHistoryCacheRef = useRef<Map<string, CompactHistoryLoad>>(new Map());
+  const compactHistoryInFlightRef = useRef<Map<string, { readonly range: CompactHistoryRange; readonly promise: Promise<CompactHistoryLoad> }>>(new Map());
+  const compactHistoryCacheGenerationRef = useRef(0);
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
@@ -854,35 +885,41 @@ export default function App() {
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const evaluateDriftAlarmRef = useRef<DriftAlarmEvaluator | null>(null);
-  const loadDashboardWeekHistory = useCallback((historyTimelineRange: { start: string; end: string }): Promise<DashboardWeekHistoryLoad> => {
-    const key = `${historyTimelineRange.start}:${historyTimelineRange.end}`;
-    const cached = dashboardWeekHistoryCacheRef.current.get(key);
-    if (cached && Date.now() - cached.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) {
+  const loadCompactHistoryRange = useCallback((historyTimelineRange: CompactHistoryRange): Promise<CompactHistoryLoad> => {
+    const key = compactHistoryRangeKey(historyTimelineRange);
+    const cached = findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange);
+    if (cached) {
       return Promise.resolve(cached);
     }
 
-    const inFlight = dashboardWeekHistoryInFlightRef.current;
-    if (inFlight?.key === key) return inFlight.promise;
+    const exactInFlight = compactHistoryInFlightRef.current.get(key);
+    if (exactInFlight) return exactInFlight.promise;
+    for (const inFlight of compactHistoryInFlightRef.current.values()) {
+      if (compactHistoryRangeContains(inFlight.range, historyTimelineRange)) return inFlight.promise;
+    }
 
-    const generation = dashboardWeekHistoryCacheGenerationRef.current;
+    const generation = compactHistoryCacheGenerationRef.current;
     const promise = trackerClient.getDashboardWeekTimeline(historyTimelineRange).then((archiveTimelines) => {
-      const nextLoad: DashboardWeekHistoryLoad = {
+      const nextLoad: CompactHistoryLoad = {
         key,
+        start: historyTimelineRange.start,
+        end: historyTimelineRange.end,
         loadedAtMs: Date.now(),
         materialized: materializeBuiltInHeuristicTimeline(archiveTimelines),
       };
-      if (dashboardWeekHistoryCacheGenerationRef.current === generation) {
-        dashboardWeekHistoryCacheRef.current.set(key, nextLoad);
+      if (compactHistoryCacheGenerationRef.current === generation) {
+        compactHistoryCacheRef.current.set(key, nextLoad);
+        setCompactHistoryCacheRevision((revision) => revision + 1);
       }
       return nextLoad;
     }).finally(() => {
-      const current = dashboardWeekHistoryInFlightRef.current;
-      if (current?.key === key && dashboardWeekHistoryCacheGenerationRef.current === generation) {
-        dashboardWeekHistoryInFlightRef.current = null;
+      const current = compactHistoryInFlightRef.current.get(key);
+      if (current?.promise === promise && compactHistoryCacheGenerationRef.current === generation) {
+        compactHistoryInFlightRef.current.delete(key);
       }
     });
 
-    dashboardWeekHistoryInFlightRef.current = { key, promise };
+    compactHistoryInFlightRef.current.set(key, { range: historyTimelineRange, promise });
     return promise;
   }, [materializeBuiltInHeuristicTimeline]);
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
@@ -1370,11 +1407,12 @@ export default function App() {
       startOfWeek,
       trendsRange,
     });
+    const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (shouldLoadHistory && activeTab === "trends" && trendsRange === "Week");
 
     try {
       const archiveTimelineRequest: Promise<BuiltInHeuristicClassificationMaterialization | null> = shouldLoadHistory
-        ? shouldLoadDashboardWeekHistory
-          ? loadDashboardWeekHistory(historyTimelineRange).then((load) => load.materialized)
+        ? shouldLoadCompactHistory
+          ? loadCompactHistoryRange(historyTimelineRange).then((load) => load.materialized)
           : trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline))
         : Promise.resolve(null);
       const historyHourlySummaryRequest = shouldLoadHistorySummaries
@@ -1510,6 +1548,7 @@ export default function App() {
       startOfWeek,
       trendsRange,
     });
+    const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (activeTab === "trends" && trendsRange === "Week");
     const loadMissingHistoryIcons = (segmentsToInspect: readonly ActivitySegment[]) => {
       void (async () => {
         try {
@@ -1567,8 +1606,8 @@ export default function App() {
       }
 
       const [materializedArchiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
-        shouldLoadDashboardWeekHistory
-          ? loadDashboardWeekHistory(historyTimelineRange).then((load) => load.materialized)
+        shouldLoadCompactHistory
+          ? loadCompactHistoryRange(historyTimelineRange).then((load) => load.materialized)
           : trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline)),
         shouldLoadHistorySummaries
           ? trackerClient.getHourlySummary(historySummaryRange)
@@ -1594,21 +1633,21 @@ export default function App() {
     }
   }
 
-  const prefetchDashboardWeekHistory = useCallback(async (day: string): Promise<boolean> => {
+  const prefetchCurrentWeekHistory = useCallback(async (day: string): Promise<boolean> => {
     if (shouldBlockLocalTrackerAccess) return false;
 
-    const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineRange = getLogicalDayRange(selectedWeekRange.startDay, selectedWeekRange.endDay, startOfDayMinutes);
-    const prefetchKey = `${historyTimelineRange.start}:${historyTimelineRange.end}`;
-    const cachedWeekHistory = dashboardWeekHistoryCacheRef.current.get(prefetchKey);
-    if (cachedWeekHistory && Date.now() - cachedWeekHistory.loadedAtMs <= DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS) return false;
-    if (dashboardWeekHistoryInFlightRef.current?.key === prefetchKey) return false;
+    const rollingWeekRange = getInsightPeriodRange(day, "Week", startOfDayMinutes);
+    const historyTimelineRange = { start: rollingWeekRange.start, end: rollingWeekRange.end };
+    const prefetchKey = compactHistoryRangeKey(historyTimelineRange);
+    const cachedWeekHistory = findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange);
+    if (cachedWeekHistory) return false;
+    if (compactHistoryInFlightRef.current.has(prefetchKey)) return false;
 
     const requestId = dashboardWeekPrefetchRequestRef.current + 1;
     dashboardWeekPrefetchRequestRef.current = requestId;
 
     try {
-      const { materialized: materializedArchiveTimelines } = await loadDashboardWeekHistory(historyTimelineRange);
+      const { materialized: materializedArchiveTimelines } = await loadCompactHistoryRange(historyTimelineRange);
       if (dashboardWeekPrefetchRequestRef.current !== requestId) return false;
 
       setHistorySegments(materializedArchiveTimelines.segments);
@@ -1617,10 +1656,10 @@ export default function App() {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
-      console.warn("Failed to prefetch dashboard week history", message);
+      console.warn("Failed to prefetch current week history", message);
       return false;
     }
-  }, [loadDashboardWeekHistory, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek]);
+  }, [loadCompactHistoryRange, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;
@@ -1744,22 +1783,24 @@ export default function App() {
   }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek, trendsRange]);
 
   useEffect(() => {
-    dashboardWeekHistoryCacheGenerationRef.current += 1;
-    dashboardWeekHistoryCacheRef.current.clear();
-    dashboardWeekHistoryInFlightRef.current = null;
+    compactHistoryCacheGenerationRef.current += 1;
+    compactHistoryCacheRef.current.clear();
+    compactHistoryInFlightRef.current.clear();
+    setCompactHistoryCacheRevision((revision) => revision + 1);
   }, [classificationRules, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
     if (!hasLoadedOnce) return undefined;
     if (activeTab !== "dashboard" || dashPeriod !== "Today") return undefined;
+    if (selectedDay !== logicalTodayIsoDate(startOfDayMinutes)) return undefined;
 
     const timeoutId = window.setTimeout(() => {
-      void prefetchDashboardWeekHistory(selectedDay);
-    }, 600);
+      void prefetchCurrentWeekHistory(selectedDay);
+    }, 300);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeTab, dashPeriod, hasLoadedOnce, prefetchDashboardWeekHistory, selectedDay, shouldBlockLocalTrackerAccess]);
+  }, [activeTab, dashPeriod, hasLoadedOnce, prefetchCurrentWeekHistory, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
@@ -2917,8 +2958,17 @@ export default function App() {
   const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
   const shouldBuildInsightModels = activeTab === "trends";
   const insightSegments = useMemo(
-    () => shouldBuildInsightModels ? filterSegmentsForRange(historySegments, insightRange.start, insightRange.end) : EMPTY_ACTIVITY_SEGMENTS,
-    [historySegments, insightRange.end, insightRange.start, shouldBuildInsightModels],
+    () => {
+      if (!shouldBuildInsightModels) return EMPTY_ACTIVITY_SEGMENTS;
+      if (trendsRange === "Week") {
+        const cachedWeekHistory = findFreshCompactHistoryLoad(compactHistoryCacheRef.current, insightRange);
+        if (cachedWeekHistory) {
+          return filterSegmentsForRange(cachedWeekHistory.materialized.segments, insightRange.start, insightRange.end);
+        }
+      }
+      return filterSegmentsForRange(historySegments, insightRange.start, insightRange.end);
+    },
+    [compactHistoryCacheRevision, historySegments, insightRange, shouldBuildInsightModels, trendsRange],
   );
   const insightWeekVisibility = useMemo(
     () => trendsRange === "Week" ? { startDay: insightRange.startDay } : undefined,
@@ -2946,7 +2996,7 @@ export default function App() {
     const timeout = window.setTimeout(() => {
       if (cancelled) return;
       cancelIdleWork = scheduleIdleWork(() => {
-        void loadDashboardWeekHistory({
+        void loadCompactHistoryRange({
           start: dashboardPreviousWeekRange.start,
           end: dashboardPreviousWeekRange.end,
         }).then((load) => {
@@ -2983,7 +3033,7 @@ export default function App() {
     dashboardPreviousWeekRange.endDay,
     dashboardPreviousWeekRange.start,
     dashboardPreviousWeekRange.startDay,
-    loadDashboardWeekHistory,
+    loadCompactHistoryRange,
     shouldBlockLocalTrackerAccess,
     showAiClassificationImpact,
     startOfDayMinutes,

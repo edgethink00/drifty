@@ -55,12 +55,18 @@ export function buildActivityRefreshPlan({
     ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
     : getLogicalDayRange(historyStartDay, historyAnchorDay, startOfDayMinutes);
   const selectedWeekRange = getDashboardPeriodRange(historyAnchorDay, "Week", startOfDayMinutes, startOfWeek);
+  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
+  const dashboardWeekHistoryEndDay = shouldLoadDashboardWeekHistory
+    && selectedWeekRange.startDay <= todayDay
+    && todayDay <= selectedWeekRange.endDay
+    ? todayDay
+    : selectedWeekRange.endDay;
   const historyTimelineRange = trendsHistoryRange
     ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
     : getLogicalDayRange(
       shouldLoadDashboardWeekHistory ? selectedWeekRange.startDay : historyStartDay,
       shouldLoadDashboardWeekHistory
-        ? selectedWeekRange.endDay
+        ? dashboardWeekHistoryEndDay
         : historyAnchorDay > selectedWeekRange.endDay
           ? historyAnchorDay
           : selectedWeekRange.endDay,
