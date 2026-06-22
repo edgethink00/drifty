@@ -74,6 +74,22 @@ import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import {
+  fallbackUpdatePolicy,
+  fetchUpdatePolicy,
+  markUpdateAutoInstallAttempted,
+  markUpdateInteracted,
+  msUntilAutomaticDialog,
+  persistAutoInstallFutureUpdates,
+  persistUpdateInteractionMap,
+  readUpdateInteractionMap,
+  resolveInitialAutoInstallFutureUpdates,
+  shouldAutoInstallUpdate,
+  shouldShowAutomaticUpdateDialog,
+  upsertUpdateSeen,
+  type UpdateInteractionMap,
+  type UpdatePolicy,
+} from "./features/updates/updatePolicy";
+import {
   DEFAULT_LEADERBOARD_PERIOD,
   LEADERBOARD_PERIODS,
   fetchGlobalLeaderboard,
@@ -217,7 +233,7 @@ import type { LocalAiSetupState } from "./features/settings/localAiSetup";
 import type { AiConnectionTestResult } from "./features/settings/aiConnectionTest";
 import { isActiveProviderTestable } from "./features/settings/aiSetupProviderSelection";
 import { useAiConnectionTestRunner } from "./features/settings/useAiConnectionTestRunner";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, AUTO_UPDATE_CHECKS_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialAutoUpdateChecksEnabled, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
@@ -588,7 +604,11 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
   const [availableUpdateSource, setAvailableUpdateSource] = useState<UpdateCheckMode | null>(null);
-  const [autoUpdateChecksEnabled, setAutoUpdateChecksEnabled] = useState(resolveInitialAutoUpdateChecksEnabled);
+  const [availableUpdatePolicy, setAvailableUpdatePolicy] = useState<UpdatePolicy | null>(null);
+  const [updateInteractions, setUpdateInteractions] = useState<UpdateInteractionMap>(readUpdateInteractionMap);
+  const updateInteractionsRef = useRef(updateInteractions);
+  const [updatePromptNowMs, setUpdatePromptNowMs] = useState(() => Date.now());
+  const [autoInstallFutureUpdates, setAutoInstallFutureUpdates] = useState(resolveInitialAutoInstallFutureUpdates);
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceChromiumAxExtremeNudgeEnabled, setForceChromiumAxExtremeNudgeEnabled] = useState(resolveInitialForceChromiumAxExtremeNudgeEnabled);
@@ -696,6 +716,36 @@ export default function App() {
     navigateToTab("dashboard", "Today");
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
+  useEffect(() => {
+    updateInteractionsRef.current = updateInteractions;
+  }, [updateInteractions]);
+
+  const updateStoredInteractions = useCallback((producer: (current: UpdateInteractionMap) => UpdateInteractionMap) => {
+    const nextInteractions = producer(updateInteractionsRef.current);
+    updateInteractionsRef.current = nextInteractions;
+    setUpdateInteractions(nextInteractions);
+    persistUpdateInteractionMap(nextInteractions);
+    return nextInteractions;
+  }, []);
+
+  const installUpdate = useCallback(async (updateToInstall: AvailableUpdate) => {
+    if (updaterInstallingRef.current) return;
+
+    updaterInstallingRef.current = true;
+    setUpdaterInstalling(true);
+    setUpdaterError(null);
+
+    try {
+      await updateToInstall.downloadAndInstall();
+      await relaunch();
+    } catch (nextError) {
+      setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
+    } finally {
+      updaterInstallingRef.current = false;
+      setUpdaterInstalling(false);
+    }
+  }, []);
+
   const handleCheckForUpdates = useCallback(async (mode: UpdateCheckMode = "manual") => {
     if (updaterCheckingRef.current || updaterInstallingRef.current) return;
 
@@ -710,18 +760,37 @@ export default function App() {
     try {
       const nextUpdate = await check();
       if (nextUpdate) {
+        const nowMs = Date.now();
+        const nextPolicy = await fetchUpdatePolicy(nextUpdate.version);
+        const nextInteractions = updateStoredInteractions((currentInteractions) => {
+          const seenInteractions = upsertUpdateSeen(currentInteractions, nextUpdate.version, nowMs);
+          return isManualCheck ? markUpdateInteracted(seenInteractions, nextUpdate.version, nowMs) : seenInteractions;
+        });
+        const nextInteraction = nextInteractions[nextUpdate.version] ?? null;
         setAvailableUpdate(nextUpdate);
+        setAvailableUpdatePolicy(nextPolicy);
         setAvailableUpdateSource(mode);
+        setUpdatePromptNowMs(nowMs);
+        if (!isManualCheck && shouldAutoInstallUpdate({
+          autoInstallFutureUpdates,
+          policy: nextPolicy,
+          interaction: nextInteraction,
+        })) {
+          updateStoredInteractions((currentInteractions) => markUpdateAutoInstallAttempted(currentInteractions, nextUpdate.version, Date.now()));
+          await installUpdate(nextUpdate);
+        }
         return;
       }
       if (isManualCheck) {
         setAvailableUpdate(null);
+        setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
         setUpdaterMessage("Drifty is up to date.");
       }
     } catch (nextError) {
       if (isManualCheck) {
         setAvailableUpdate(null);
+        setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
         setUpdaterError(`Update check failed: ${toErrorMessage(nextError)}`);
       }
@@ -729,25 +798,13 @@ export default function App() {
       updaterCheckingRef.current = false;
       if (isManualCheck) setUpdaterChecking(false);
     }
-  }, []);
+  }, [autoInstallFutureUpdates, installUpdate, updateStoredInteractions]);
 
   const handleInstallUpdate = useCallback(async () => {
-    if (!availableUpdate || updaterInstallingRef.current) return;
-
-    updaterInstallingRef.current = true;
-    setUpdaterInstalling(true);
-    setUpdaterError(null);
-
-    try {
-      await availableUpdate.downloadAndInstall();
-      await relaunch();
-    } catch (nextError) {
-      setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
-    } finally {
-      updaterInstallingRef.current = false;
-      setUpdaterInstalling(false);
-    }
-  }, [availableUpdate]);
+    if (!availableUpdate) return;
+    updateStoredInteractions((currentInteractions) => markUpdateInteracted(currentInteractions, availableUpdate.version, Date.now()));
+    await installUpdate(availableUpdate);
+  }, [availableUpdate, installUpdate, updateStoredInteractions]);
 
   const handleTrayCheckForUpdates = useCallback(() => {
     openSettingsTab();
@@ -755,9 +812,13 @@ export default function App() {
   }, [handleCheckForUpdates, openSettingsTab]);
 
   const dismissAvailableUpdate = useCallback(() => {
+    if (availableUpdate) {
+      updateStoredInteractions((currentInteractions) => markUpdateInteracted(currentInteractions, availableUpdate.version, Date.now()));
+    }
     setAvailableUpdate(null);
+    setAvailableUpdatePolicy(null);
     setAvailableUpdateSource(null);
-  }, []);
+  }, [availableUpdate, updateStoredInteractions]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -2163,8 +2224,8 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    window.localStorage.setItem(AUTO_UPDATE_CHECKS_STORAGE_KEY, autoUpdateChecksEnabled ? "1" : "0");
-  }, [autoUpdateChecksEnabled]);
+    persistAutoInstallFutureUpdates(autoInstallFutureUpdates);
+  }, [autoInstallFutureUpdates]);
 
   useEffect(() => {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, devModeEnabled ? "1" : "0");
@@ -2340,7 +2401,6 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
-    if (!autoUpdateChecksEnabled) return undefined;
     if (autoUpdateLaunchCheckScheduledRef.current) return undefined;
     autoUpdateLaunchCheckScheduledRef.current = true;
 
@@ -2354,7 +2414,7 @@ export default function App() {
       window.clearTimeout(timeoutId);
       if (!checkStarted) autoUpdateLaunchCheckScheduledRef.current = false;
     };
-  }, [autoUpdateChecksEnabled, handleCheckForUpdates]);
+  }, [handleCheckForUpdates]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -3442,8 +3502,37 @@ export default function App() {
     || isProfileEditorOpen
     || cmdOpen,
   );
-  const visibleUpdate = updateDialogBlocked || availableUpdateSource !== "manual" ? null : availableUpdate;
+  const availableUpdateInteraction = availableUpdate ? updateInteractions[availableUpdate.version] ?? null : null;
+  const currentUpdatePolicy = availableUpdate ? availableUpdatePolicy ?? fallbackUpdatePolicy(availableUpdate.version) : null;
+  const shouldShowAvailableUpdateDialog = availableUpdate && currentUpdatePolicy
+    ? availableUpdateSource === "manual"
+      || (availableUpdateSource === "automatic" && shouldShowAutomaticUpdateDialog({
+        policy: currentUpdatePolicy,
+        interaction: availableUpdateInteraction,
+        nowMs: updatePromptNowMs,
+      }))
+    : false;
+  const visibleUpdate = updateDialogBlocked || !shouldShowAvailableUpdateDialog ? null : availableUpdate;
   const titlebarUpdate = updateDialogBlocked || visibleUpdate ? null : availableUpdate;
+
+  useEffect(() => {
+    if (!availableUpdate || !currentUpdatePolicy || availableUpdateSource !== "automatic") return undefined;
+
+    const remainingMs = msUntilAutomaticDialog({
+      policy: currentUpdatePolicy,
+      interaction: availableUpdateInteraction,
+      nowMs: Date.now(),
+    });
+    if (remainingMs === null) return undefined;
+    if (remainingMs <= 0) {
+      setUpdatePromptNowMs(Date.now());
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setUpdatePromptNowMs(Date.now()), remainingMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [availableUpdate, availableUpdateInteraction, availableUpdateSource, currentUpdatePolicy]);
+
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
   const selectedDayProductivityTotals = useMemo(
     () => buildProductivityDurations(segments, selectedDayClassificationOptions),
@@ -5461,7 +5550,7 @@ export default function App() {
                       <StartupSettingsRow />
                     </div>
                     <div className="settings-block"><h3>Updates</h3>
-                      <div className="settings-row"><label htmlFor="automatic-update-checks"><div className="lbl">Automatic update checks</div><div className="desc">Check for signed updates shortly after Drifty opens.</div></label><div className="ctrl"><input id="automatic-update-checks" className="drifty-checkbox" type="checkbox" aria-label="Automatically check for updates on launch" checked={autoUpdateChecksEnabled} onChange={(event) => setAutoUpdateChecksEnabled(event.target.checked)} /></div></div>
+                      <div className="settings-row"><div><div className="lbl">Automatic update checks</div><div className="desc">Drifty checks for signed updates shortly after launch. General releases stay in the titlebar first; urgent releases can prompt immediately.</div></div><div className="ctrl ctrl--value">Always on</div></div>
                       <div className="settings-row"><div><div className="lbl">Manual update check</div><div className="desc">Drifty checks GitHub Releases for signed update metadata before showing an available download.</div>{updaterMessage ? <p className="capture-recency" role="status">{updaterMessage}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleCheckForUpdates()} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? "Checking..." : "Check for Updates"}</button></div></div>
                     </div>
                     <div className="settings-block"><h3>Permissions</h3>
@@ -5828,11 +5917,25 @@ export default function App() {
 
       {visibleUpdate ? (
         <div className="auth-modal__overlay" onClick={dismissAvailableUpdate}>
-          <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
+          <section className="auth-modal profile-modal update-dialog-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
             <h2 id="available-update-title" className="update-dialog-title">Drifty {visibleUpdate.version} is available</h2>
             {visibleUpdate.date ? <p className="capture-recency">Published {new Date(visibleUpdate.date).toLocaleString()}</p> : null}
-            <p className="profile-modal__bio">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
+            {currentUpdatePolicy?.urgency === "urgent" ? <p className="capture-recency">Urgent update</p> : null}
+            {currentUpdatePolicy?.message ? <p className="profile-modal__bio">{currentUpdatePolicy.message}</p> : null}
+            <section className="update-dialog-summary" aria-label="Change summary">
+              <div className="update-dialog-summary__label">Change summary</div>
+              <p className="update-dialog-summary__body">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
+            </section>
             {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
+            <label className="update-dialog-checkbox">
+              <input
+                className="update-dialog-checkbox__input"
+                type="checkbox"
+                checked={autoInstallFutureUpdates}
+                onChange={(event) => setAutoInstallFutureUpdates(event.target.checked)}
+              />
+              <span className="update-dialog-checkbox__label">Automatically install and restart future updates</span>
+            </label>
             <div className="profile-editor-modal__actions">
               <button type="button" className="ghost-button" onClick={dismissAvailableUpdate} disabled={updaterInstalling}>Not now</button>
               <button type="button" className="settings-btn" onClick={() => void handleInstallUpdate()} disabled={updaterChecking || updaterInstalling}>{updaterInstalling ? "Installing..." : "Install and restart"}</button>
