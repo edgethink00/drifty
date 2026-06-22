@@ -3344,10 +3344,12 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
+
   useEffect(() => {
     if (!WATCHER_PEEK_PROTOTYPE_ENABLED) return;
     if (!watcherPeekEnabled) return;
-    if (selectedDay !== todayIsoDate()) return;
+    if (selectedDay !== todayDay) return;
     if (!status?.running) return;
 
     let cancelled = false;
@@ -3373,9 +3375,8 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
+  }, [selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, todayDay, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
 
-  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const dashboardRange = useMemo(() => getDashboardPeriodRange(selectedDay, dashPeriod, startOfDayMinutes, startOfWeek), [dashPeriod, selectedDay, startOfDayMinutes, startOfWeek]);
   const dashboardWeekRange = useMemo(() => getDashboardPeriodRange(selectedDay, "Week", startOfDayMinutes, startOfWeek), [selectedDay, startOfDayMinutes, startOfWeek]);
   const dashboardPreviousWeekRange = useMemo(() => {
@@ -3610,12 +3611,12 @@ export default function App() {
   useEffect(() => {
     if (!hasLoadedOnce) return;
     if (shouldBlockLocalTrackerAccess) return;
-    if (selectedDay !== todayIsoDate()) return;
+    if (selectedDay !== todayDay) return;
 
     const client = trackerClient as Partial<typeof trackerClient>;
     if (typeof client.updateTrayProductivityIcon !== "function") return;
     void client.updateTrayProductivityIcon(trayProductivityMix).catch(() => undefined);
-  }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, trayProductivityMix]);
+  }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, todayDay, trayProductivityMix]);
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;
     if (typeof client.updateTrayDriftAlarmStatus !== "function") return;
@@ -4866,7 +4867,7 @@ export default function App() {
       isNextDisabled={!canShiftDashboardForward}
       onPrevious={() => shiftDashboardPeriod(-1)}
       onNext={() => shiftDashboardPeriod(1)}
-      onToday={() => selectDay(todayIsoDate())}
+      onToday={() => selectDay(todayDay)}
       previousLabel={`Show previous ${dashPeriod.toLowerCase()}`}
       nextLabel={`Show next ${dashPeriod.toLowerCase()}`}
     />
@@ -5500,7 +5501,7 @@ export default function App() {
                   isNextDisabled={!canShiftInsightForward}
                   onPrevious={() => selectDay((p) => shiftInsightPeriodDay(p, trendsRange, -1))}
                   onNext={() => { if (canShiftInsightForward) selectDay((p) => shiftInsightPeriodDay(p, trendsRange, 1)); }}
-                  onToday={() => selectDay(todayIsoDate())}
+                  onToday={() => selectDay(todayDay)}
                   previousLabel="Show previous insight window"
                   nextLabel="Show next insight window"
                 />
