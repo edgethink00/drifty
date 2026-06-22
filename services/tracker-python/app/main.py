@@ -10,19 +10,19 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 APP_DIR = Path(__file__).resolve().parent
 PACKAGE_ROOT = APP_DIR.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from app.permissions.accessibility import accessibility_granted
 from app.storage.db import TrackerDatabase
-from app.storage.live_tail import fetch_live_tail
-from app.tracker.idle import seconds_since_last_input
-from app.tracker.macos_workspace import current_snapshot
-from app.tracker.power_state import PowerStateSample, current_power_state
-from app.tracker.youtube_metadata import fetch_youtube_metadata
+
+if TYPE_CHECKING:
+    from app.tracker.macos_workspace import Snapshot
+    from app.tracker.power_state import PowerStateSample
+    from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
@@ -52,6 +52,49 @@ def ensure_state_dir() -> None:
 
 def database() -> TrackerDatabase:
     return TrackerDatabase(DB_PATH)
+
+
+def accessibility_granted() -> bool:
+    from app.permissions.accessibility import accessibility_granted as read_accessibility_granted
+
+    return read_accessibility_granted()
+
+
+def seconds_since_last_input() -> float | None:
+    from app.tracker.idle import seconds_since_last_input as read_seconds_since_last_input
+
+    return read_seconds_since_last_input()
+
+
+def current_snapshot(include_system_transient: bool = True) -> Snapshot:
+    from app.tracker.macos_workspace import current_snapshot as read_current_snapshot
+
+    return read_current_snapshot(include_system_transient=include_system_transient)
+
+
+def current_power_state() -> PowerStateSample:
+    from app.tracker.power_state import current_power_state as read_current_power_state
+
+    return read_current_power_state()
+
+
+def fetch_youtube_metadata(site_url: str, video_id: str, timeout_seconds: float) -> YouTubeVideoMetadata:
+    from app.tracker.youtube_metadata import fetch_youtube_metadata as read_youtube_metadata
+
+    return read_youtube_metadata(site_url, video_id, timeout_seconds=timeout_seconds)
+
+
+def fetch_live_tail(
+    db: TrackerDatabase,
+    start: str | None,
+    end: str | None,
+    after_segment_id: str | None,
+    after_ended_at: str | None,
+    limit: int | str | None = 8,
+) -> list[dict[str, object]]:
+    from app.storage.live_tail import fetch_live_tail as read_fetch_live_tail
+
+    return read_fetch_live_tail(db, start, end, after_segment_id, after_ended_at, limit)
 
 
 def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
@@ -231,6 +274,7 @@ def get_live_tail(payload: dict):
     start, end = day_bounds(safe_payload)
     running = is_running()
     tracker_mode = db.get_meta("tracker_mode") if running else None
+
     segments = fetch_live_tail(
         db,
         start,

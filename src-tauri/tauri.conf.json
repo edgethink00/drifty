@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "drifty",
-        "width": 1280,
-        "height": 826,
+        "width": 1254,
+        "height": 809,
         "minWidth": 960,
         "minHeight": 680,
         "resizable": true,
