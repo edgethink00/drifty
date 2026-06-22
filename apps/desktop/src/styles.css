@@ -1090,10 +1090,10 @@ input, textarea { color: inherit; }
   width: auto;
   flex-shrink: 0;
   grid-template-columns: none;
-  gap: 2px;
-  padding: 3.5px;
+  gap: 1.7px;
+  padding: 3px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: color-mix(in srgb, var(--text) 7%, var(--surface));
 }
 
@@ -1105,9 +1105,9 @@ input, textarea { color: inherit; }
   justify-content: center;
   width: auto;
   gap: 0;
-  padding: 0.39rem 0.83rem;
+  padding: 0.33rem 0.71rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-soft);
   text-align: center;
@@ -1118,7 +1118,7 @@ input, textarea { color: inherit; }
 
 .classification-range-controls .settings-mode-option span {
   font-family: var(--font-display, inherit);
-  font-size: 0.83rem;
+  font-size: 0.675rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -8655,7 +8655,7 @@ button.flow-cell:focus {
   .trends-range-controls .settings-mode-option {
     flex: 1 1 0;
     min-width: 0;
-    padding-inline: 0.56rem;
+    padding-inline: 0.48rem;
   }
 
   .trends-range-controls .day-nav {
