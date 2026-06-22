@@ -5609,6 +5609,7 @@ export default function App() {
                       cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                       cloudStatusLabel={cloudStatusLabel}
                       cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
+                      connectionStatus={aiConnectionStatus}
                       connectionTest={aiConnectionTest}
                       currentBillingPlan={currentBillingPlan}
                       isSupabaseConfigured={effectiveIsSupabaseConfigured}

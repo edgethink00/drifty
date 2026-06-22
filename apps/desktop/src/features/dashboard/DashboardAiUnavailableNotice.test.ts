@@ -154,8 +154,19 @@ describe("DashboardAiUnavailableNotice", () => {
     ));
 
     const notice = screen.getByLabelText(/AI unavailable notice/i);
-    expect(within(notice).getByText(/^AI setup needed$/i)).toBeTruthy();
-    expect(notice.querySelector(".dashboard-ai-notice__signal")).toBeTruthy();
-    expect(notice.querySelector(".dashboard-ai-notice__signal-dot")).toBeTruthy();
+    const heading = notice.querySelector(".dashboard-ai-notice__heading");
+    const titleRow = notice.querySelector(".dashboard-ai-notice__title-row");
+    const body = notice.querySelector(".dashboard-ai-notice__body");
+
+    expect(heading).toBeTruthy();
+    expect(titleRow).toBeTruthy();
+    expect(body).toBeTruthy();
+    expect(within(notice).queryByText(/^AI setup needed$/i)).toBeNull();
+    expect(within(notice).getByText(/^Connect an AI provider$/i)).toBeTruthy();
+    expect(within(heading as HTMLElement).getByRole("button", { name: /^Connect AI$/i })).toBeTruthy();
+    expect(within(heading as HTMLElement).getByText(/Richer AI analysis is unavailable/i)).toBeTruthy();
+    expect(titleRow?.querySelector(".dashboard-ai-notice__signal")).toBeTruthy();
+    expect(titleRow?.querySelector(".dashboard-ai-notice__signal-dot")).toBeTruthy();
+    expect(titleRow?.firstElementChild?.classList.contains("dashboard-ai-notice__signal")).toBe(true);
   });
 });
