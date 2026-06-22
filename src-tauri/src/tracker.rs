@@ -128,11 +128,15 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         force_chromium_ax_capture: bool,
+        force_frontmost_fallback_capture: bool,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "set_developer_diagnostics",
-            json!({ "forceChromiumAxCapture": force_chromium_ax_capture }),
+            json!({
+                "forceChromiumAxCapture": force_chromium_ax_capture,
+                "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
+            }),
         )
     }
 

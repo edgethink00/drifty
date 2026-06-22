@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -21,6 +22,7 @@ from app.tracker.browser_automation import (
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
 FrontmostCaptureSource = Literal["system-events", "lsappinfo", "unavailable"]
 OSASCRIPT_TIMEOUT_SECONDS: Final = 3.0
+FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
 
 
 class OnScreenWindowRow(TypedDict):
@@ -105,6 +107,42 @@ def _optional_text(value: str | None) -> str | None:
     if not cleaned or cleaned == "missing value":
         return None
     return cleaned
+
+
+def _lsappinfo_text(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith('"'):
+        return _optional_text(cleaned)
+
+    chars: list[str] = []
+    escaped = False
+    for char in cleaned[1:]:
+        if escaped:
+            chars.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            return _optional_text("".join(chars))
+        chars.append(char)
+    return None
+
+
+def _lsappinfo_assignment(line: str, key: str) -> str | None:
+    for prefix in (f'"{key}"=', f"{key}="):
+        if line.startswith(prefix):
+            return _lsappinfo_text(line.split("=", 1)[1])
+    return None
+
+
+def _lsappinfo_header_app_name(line: str) -> str | None:
+    if not line.startswith('"') or line.startswith('"name"=') or line.startswith('"bundleID"='):
+        return None
+    return _lsappinfo_text(line)
 
 
 def _error_text(error: RuntimeError) -> str:
@@ -219,10 +257,14 @@ def _frontmost_via_lsappinfo() -> tuple[str | None, str | None, str | None]:
     bundle_id = None
     for line in info.splitlines():
         line = line.strip()
-        if line.startswith('"name"='):
-            app_name = line.split("=", 1)[1].strip().strip('"')
-        if line.startswith('"bundleID"=') or line.startswith("bundleID="):
-            bundle_id = line.split("=", 1)[1].strip().strip('"')
+        if app_name is None:
+            app_name = _lsappinfo_header_app_name(line)
+        parsed_name = _lsappinfo_assignment(line, "name")
+        if parsed_name is not None:
+            app_name = parsed_name
+        parsed_bundle_id = _lsappinfo_assignment(line, "bundleID")
+        if parsed_bundle_id is not None:
+            bundle_id = parsed_bundle_id
 
     fallback_error = None
     if app_name is None:
@@ -231,22 +273,34 @@ def _frontmost_via_lsappinfo() -> tuple[str | None, str | None, str | None]:
     return app_name, bundle_id, fallback_error
 
 
+def _force_frontmost_fallback_capture() -> bool:
+    return os.environ.get(FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV) == "1"
+
+
+def _frontmost_via_fallback_capture() -> tuple[str | None, str | None, str | None, str | None]:
+    try:
+        app_name, bundle_id, frontmost_fallback_error = _frontmost_via_lsappinfo()
+    except RuntimeError as fallback_error:
+        return None, None, None, _error_text(fallback_error)
+    window_title = read_front_window_title() if app_name else None
+    return app_name, bundle_id, window_title, frontmost_fallback_error
+
+
 def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     frontmost_capture_source: FrontmostCaptureSource = "system-events"
     frontmost_capture_error = None
     frontmost_fallback_error = None
-    try:
-        app_name, bundle_id, window_title = _frontmost_via_system_events()
-    except RuntimeError as error:
-        frontmost_capture_error = _error_text(error)
-        try:
-            app_name, bundle_id, frontmost_fallback_error = _frontmost_via_lsappinfo()
-        except RuntimeError as fallback_error:
-            app_name = None
-            bundle_id = None
-            frontmost_fallback_error = _error_text(fallback_error)
-        window_title = read_front_window_title() if app_name else None
+    if _force_frontmost_fallback_capture():
+        frontmost_capture_error = "System Events frontmost capture skipped by developer diagnostics."
+        app_name, bundle_id, window_title, frontmost_fallback_error = _frontmost_via_fallback_capture()
         frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
+    else:
+        try:
+            app_name, bundle_id, window_title = _frontmost_via_system_events()
+        except RuntimeError as error:
+            frontmost_capture_error = _error_text(error)
+            app_name, bundle_id, window_title, frontmost_fallback_error = _frontmost_via_fallback_capture()
+            frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
 
     system_transient_activity = _system_transient_activity() if include_system_transient else None
 
