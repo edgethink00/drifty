@@ -118,6 +118,11 @@ pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+#[tauri::command]
+fn app_reveal_main_window(app: AppHandle) {
+    reveal_main_window(&app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -221,6 +226,7 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            app_reveal_main_window,
             focus_target_activate_browser_tab,
             focus_target_browser_tab_exists,
             focus_target_open_app,

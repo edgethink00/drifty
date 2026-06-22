@@ -21,6 +21,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 export const UPDATE_POLICY_URL = "https://github.com/edgethink00/drifty_releases/releases/latest/download/update-policy.json";
 export const UPDATE_AUTO_INSTALL_STORAGE_KEY = "drifty.updates.autoInstallFuture";
 export const UPDATE_INTERACTION_STORAGE_KEY = "drifty.updates.interactions.v1";
+export const POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY = "drifty.updates.focusAfterRelaunch";
 export const DEFAULT_GENERAL_PROMPT_AFTER_MS = 72 * 60 * 60 * 1000;
 const UPDATE_POLICY_FETCH_TIMEOUT_MS = 4000;
 
@@ -130,6 +131,23 @@ export function resolveInitialAutoInstallFutureUpdates(): boolean {
 export function persistAutoInstallFutureUpdates(enabled: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(UPDATE_AUTO_INSTALL_STORAGE_KEY, enabled ? "1" : "0");
+}
+
+export function markPostUpdateRelaunchFocusPending(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, "1");
+}
+
+export function clearPostUpdateRelaunchFocusPending(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY);
+}
+
+export function consumePostUpdateRelaunchFocusPending(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY) !== "1") return false;
+  clearPostUpdateRelaunchFocusPending();
+  return true;
 }
 
 export function upsertUpdateSeen(interactions: UpdateInteractionMap, version: string, nowMs: number): UpdateInteractionMap {

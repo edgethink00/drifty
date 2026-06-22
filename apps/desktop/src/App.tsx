@@ -62,6 +62,7 @@ import { useClassificationRulesController } from "./features/classification/useC
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import { useUpdateController } from "./features/updates/useUpdateController";
+import { consumePostUpdateRelaunchFocusPending } from "./features/updates/updatePolicy";
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
@@ -215,6 +216,7 @@ type DashboardPreviousWeekFocusLoad = {
 };
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
+const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
@@ -1950,6 +1952,19 @@ export default function App() {
     if (typeof row?.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
     row?.focus();
   }, [activeTab, settingsSection]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+    if (!consumePostUpdateRelaunchFocusPending()) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      void invoke<void>("app_reveal_main_window").catch((nextError: unknown) => {
+        console.warn("Unable to bring Drifty forward after update relaunch.", toErrorMessage(nextError));
+      });
+    }, POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
