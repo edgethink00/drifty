@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDriftAlarmCandidates, normalizeDriftAlertDelaySeconds } from "./driftAlarmData";
+import { buildDriftAlarmCandidates, canApplyExtremeNudgeToCategory, normalizeDriftAlertDelaySeconds } from "./driftAlarmData";
 import type { ActivitySegment, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 
 const driftSegment: ActivitySegment = {
@@ -237,5 +237,13 @@ describe("normalizeDriftAlertDelaySeconds", () => {
     expect(normalizeDriftAlertDelaySeconds("600")).toBe(600);
     expect(normalizeDriftAlertDelaySeconds("900")).toBe(900);
     expect(normalizeDriftAlertDelaySeconds("1800")).toBe(1800);
+  });
+});
+
+describe("canApplyExtremeNudgeToCategory", () => {
+  it("blocks app-closing nudges for communication activity", () => {
+    expect(canApplyExtremeNudgeToCategory("communication")).toBe(false);
+    expect(canApplyExtremeNudgeToCategory("entertainment")).toBe(true);
+    expect(canApplyExtremeNudgeToCategory("game")).toBe(true);
   });
 });
