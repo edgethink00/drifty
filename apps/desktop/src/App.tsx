@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, FocusEvent, ReactNode, RefObject } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check } from "@tauri-apps/plugin-updater";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
   buildRollingFocusSeconds,
   categorizeActivity,
-  CATEGORY_ORDER,
   buildCategoryDurations,
   buildProductivityDurations,
-  PRODUCTIVITY_ORDER,
   computePreservedFocusStrikeSeconds,
   classifyActivity,
   classifyActivityDetailed,
@@ -29,23 +24,17 @@ import {
   type CategoryDuration,
   type ProductivityDuration,
   formatTimelineItems,
-  secondsToLabel,
   shiftIsoDate,
   todayIsoDate,
   totalDurationSeconds,
 } from "@drifty/domain";
 import logoUrl from "./assets/drifty-icon.png";
-import { AppGlyph } from "./components/AppGlyph";
-import { SiteFavicon } from "./components/SiteFavicon";
-import { AppUsagePanel } from "./features/dashboard/AppUsagePanel";
 import {
-  DashboardAiUnavailableNotice,
   isCloudBillingVariant,
   resolveDashboardAiUnavailableState,
   type DashboardAiUnavailableVariant,
 } from "./features/dashboard/DashboardAiUnavailableNotice";
 import {
-  DashboardAiRecoveryOverlay,
   isDashboardAiRecoveryOverlayVariant,
 } from "./features/dashboard/DashboardAiRecoveryOverlay";
 import {
@@ -55,68 +44,42 @@ import {
 } from "./features/dashboard/dashboardAiRecoveryDismissal";
 import {
   buildDashboardAiUnavailablePreviewInput,
-  DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS,
   type DashboardAiUnavailablePreviewCase,
   type DashboardAiUnavailablePreviewState,
 } from "./features/dashboard/dashboardAiUnavailablePreview";
-import { FlowChartView } from "./features/flow-chart/FlowChartView";
-import { LeaderboardView } from "./features/leaderboard/LeaderboardView";
+import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
+import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { HistoryView } from "./features/history/HistoryView";
-import { AiConnectionStatusBar, resolveAiConnectionStatus, type LocalAiProviderStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import {
   aiConnectionIssueKindFromMessage,
-  localAiProviderLabel,
-  localAiSetupFingerprint,
-  type LocalAiConnectionCheck,
 } from "./features/ai-connection/aiConnectionHealth";
 import { collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
+import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
+import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
-import {
-  fallbackUpdatePolicy,
-  fetchUpdatePolicy,
-  markUpdateAutoInstallAttempted,
-  markUpdateInteracted,
-  msUntilAutomaticDialog,
-  persistAutoInstallFutureUpdates,
-  persistUpdateInteractionMap,
-  readUpdateInteractionMap,
-  resolveInitialAutoInstallFutureUpdates,
-  shouldAutoInstallUpdate,
-  shouldShowAutomaticUpdateDialog,
-  upsertUpdateSeen,
-  type UpdateInteractionMap,
-  type UpdatePolicy,
-} from "./features/updates/updatePolicy";
-import {
-  DEFAULT_LEADERBOARD_PERIOD,
-  LEADERBOARD_PERIODS,
-  fetchGlobalLeaderboard,
-  fetchOwnLeaderboardEntry,
-  optOutLeaderboard,
-  publishOwnFocusTotal,
-  type LeaderboardPeriod,
-  type LeaderboardRow,
-  type OwnLeaderboardEntry,
-} from "./features/leaderboard/leaderboardService";
+import { useUpdateController } from "./features/updates/useUpdateController";
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEV_SETTINGS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
-import { SettingsBuildInfoRow } from "./features/settings/SettingsBuildInfoRow";
-import { StartupSettingsRow } from "./features/settings/StartupSettingsRow";
-import { CategoryColorControls, ClassificationPicker, ThemeColorControls, type AppThemeColorKey, type ColorOption } from "./features/settings/SettingsColorControls";
-import { SettingsSelect } from "./features/settings/SettingsSelect";
+import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
+import { DataExportSettingsSection } from "./features/settings/DataExportSettingsSection";
+import { DevSettingsSection } from "./features/settings/DevSettingsSection";
+import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
+import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
+import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import { buildDebugLogPayload } from "./features/settings/debugLog";
-import { DriftAlarmCopySettings } from "./features/companion/DriftAlarmCopySettings";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
@@ -165,33 +128,16 @@ import {
   buildDriftAlarmManualCorrectionRuleInput,
 } from "./features/companion/driftAlarmManualCorrection";
 import {
-  fallbackDisplayName,
-  fetchOwnProfile,
-  fetchPublicProfile,
-  saveOwnProfile,
-  type PublicProfile,
-  type UserProfile,
-} from "./features/profile/profileService";
-import {
-  type BillingInterval,
-  createBillingPortalSession,
-  createIndividualCheckout,
-  fetchBillingEntitlement,
-  type BillingEntitlement,
-} from "./features/billing/billingService";
-import {
   CloudTrialStartedNotice,
-  claimCloudTrialStartedNotice,
-  type CloudTrialStartedNoticeModel,
 } from "./features/billing/CloudTrialStartedNotice";
-import { AiSetupPanel } from "./features/settings/AiSetupPanel";
+import { useCloudBillingController } from "./features/billing/useCloudBillingController";
+import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
-import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, captureRowSurfaceDetails, classificationActivityDetailsId, classificationActivityLabel, classificationRowSummary, classificationRuleAppIconSrc, classificationRuleCandidateAppIconSrc, classificationRuleTargetLabel, classificationSourceLabel, classifySegmentSourceKey, classifySourceKey, formatCategoryPercentage, formatClassificationCandidateUsageLabel, formatClassificationRuleApplyResult, formatClassificationSourceProductivityMix, hasDuplicateClassificationRule, normalizeDomainRuleInput, productivityMixAriaLabel, usageItemLabel } from "./features/classification/classificationViewData";
+import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
-import { DRIFT_ALARM_PREVIEW_OPTIONS, DRIFT_ALERTS_STORAGE_KEY, DRIFT_ALERT_DELAY_OPTIONS, DRIFT_ALERT_DELAY_STORAGE_KEY, EXTREME_NUDGE_STORAGE_KEY, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, driftAlertDelaySecondsFromValue, driftAlertDelayValueFromSeconds, hasDriftAlarmFocusTargetUpdate, resolveInitialDriftAlertDelaySeconds, resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "./features/companion/driftAlarmData";
+import { DRIFT_ALARM_PREVIEW_OPTIONS, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
-import type { DriftAlertDelaySeconds } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
@@ -202,15 +148,16 @@ import {
   sourceKeyForDriftAlarmCandidate,
   type DriftAlarmTransientPending,
 } from "./features/companion/driftAlarmTransientDefer";
-import { persistDriftAlarmCopy, resolveInitialDriftAlarmCopy } from "./features/companion/driftAlarmCopyStorage";
+import { useCompanionSettingsController } from "./features/companion/useCompanionSettingsController";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
 import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
-import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_MODE_STORAGE_KEY, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PEEK_STORAGE_KEY, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MAX_STORAGE_KEY, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_STORAGE_KEY, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, normalizeWatcherPeriodicMinutes, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek, resolveInitialWatcherMode, resolveInitialWatcherPeekEnabled, resolveInitialWatcherPeriodicMinutes } from "./features/companion/watcherData";
-import type { DriftReminderState, WatcherMode, WatcherSnapshot } from "./features/companion/watcherData";
-import { INSIGHT_RANGE_OPTIONS, formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
-import type { ClassificationRange, DashboardPeriod, DashboardPeriodOption, InsightRange } from "./features/dashboard/dashboardPeriods";
+import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
+import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
+import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
+import type { ClassificationRange, DashboardPeriod, InsightRange } from "./features/dashboard/dashboardPeriods";
+import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
 import { buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
@@ -226,62 +173,27 @@ import {
 } from "./features/dashboard/weekDashboardModel";
 import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
-import { getLeaderboardPeriodFocusLabel, getLeaderboardWindowStartDay } from "./features/leaderboard/leaderboardWindow";
-import { localAiProviderConfigFromSetup } from "./features/settings/localAiClassificationOptions";
-import { LOCAL_AI_SETUP_STORAGE_KEY, resolveInitialLocalAiSetup, toPersistedLocalAiSetup } from "./features/settings/localAiSetup";
-import type { LocalAiSetupState } from "./features/settings/localAiSetup";
-import type { AiConnectionTestResult } from "./features/settings/aiConnectionTest";
-import { isActiveProviderTestable } from "./features/settings/aiSetupProviderSelection";
-import { useAiConnectionTestRunner } from "./features/settings/useAiConnectionTestRunner";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, categoryControlColor, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, productivityControlColor, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
+import { useAiSetupController } from "./features/settings/useAiSetupController";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
-import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
+import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getDayPart, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
-import { EmptyState } from "./components/EmptyState";
 import { Toggle } from "./components/Toggle";
+import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
+import { activityNav, commandBarTabs, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
-import { FlowCompactSplitChart } from "./features/dashboard/CompactCharts";
-import { HistoryCalendarPanel } from "./features/dashboard/HistoryCalendarPanel";
 import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
-import { WeekDashboard } from "./features/dashboard/WeekDashboard";
+import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardRefreshInputs } from "./features/dashboard/dashboardRefreshPolicy";
-import { BreakRecoveryCard } from "./features/insights/BreakRecoveryCard";
-import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./features/insights/InsightCards";
-import { EditProfileModal, ProfileModal, buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl } from "./features/profile/ProfileModals";
-
-type TabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "settings";
-
-type NavigationSnapshot = {
-  tabId: TabId;
-  dashPeriod: DashboardPeriod;
-};
-
-type NavigationHistoryState = {
-  entries: NavigationSnapshot[];
-  index: number;
-};
-
-const commandBarTabs = [
-  { id: "dashboard", label: "Dashboard", sub: "Today at a glance" },
-  { id: "classification", label: "Classification", sub: "Activity breakdown" },
-  { id: "trends", label: "Trends", sub: "Patterns and trends" },
-  { id: "history", label: "History", sub: "Local records" },
-  { id: "leaderboard", label: "Leaderboard", sub: "Global focus ranking" },
-  { id: "settings", label: "Settings", sub: "App preferences" },
-] satisfies ReadonlyArray<{ id: TabId; label: string; sub: string }>;
-
-type NavItem = {
-  id: TabId;
-  label: string;
-  icon: NavIconType;
-};
-
-type NavIconType = "home" | "calendar" | "classification" | "history" | "trends" | "leaderboard" | "settings";
+import { TrendsPage } from "./features/insights/TrendsPage";
+import { ProfileDialogs } from "./features/profile/ProfileDialogs";
+import { copyTextToClipboard } from "./features/profile/ProfileModals";
 
 type PlanItem = {
   id: string;
@@ -290,10 +202,6 @@ type PlanItem = {
   completed: boolean;
   source: "Quick add" | "Pinned";
 };
-
-type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
-
-type UpdateCheckMode = "manual" | "automatic";
 
 type DashboardWeekHistoryLoad = {
   readonly key: string;
@@ -321,13 +229,6 @@ const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 const DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS = 5 * 60_000;
 const DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS = 4000;
 const EMPTY_ACTIVITY_SEGMENTS: ActivitySegment[] = [];
-const HISTORY_RECENT_LOOKBACK_DAYS = 6;
-const HISTORY_ARCHIVE_LOOKBACK_DAYS = 89;
-
-const dashboardPeriodOptions: DashboardPeriodOption[] = [
-  { period: "Today", label: "Your Day", detail: "Live timeline" },
-  { period: "Week", label: "Your Week", detail: "Calendar week" },
-];
 
 function extremeNudgeErrorDiagnostic(error: unknown): string | null {
   const message = toErrorMessage(error);
@@ -357,13 +258,6 @@ function emptyWeekDashboardModel(): WeekDashboardModel {
   };
   return { rows: [], calendarEvents: new Map(), cacheStats: emptyStats };
 }
-
-const activityNav: NavItem[] = [
-  { id: "classification", label: "Classification", icon: "classification" },
-  { id: "trends", label: "Trends", icon: "trends" },
-  { id: "history", label: "History", icon: "history" },
-  { id: "leaderboard", label: "Leaderboard", icon: "leaderboard" },
-];
 
 const initialPlanItems: PlanItem[] = [
   { id: "plan-1", title: "Review the morning focus block", estimate: "10m", completed: false, source: "Pinned" },
@@ -489,85 +383,13 @@ type DriftAlarmTrayPublishOptions = {
   readonly updateRendererState?: boolean;
 };
 
-/* ── SVG Icons ── */
-function NavIcon({ type }: { type: NavIconType }) {
-  const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, width: 18, height: 18 };
-  switch (type) {
-    case "home":
-      return (<svg {...props}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" /></svg>);
-    case "calendar":
-      return (<svg {...props}><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /><path d="M8 14h2M14 14h2M8 17h2" /></svg>);
-    case "classification":
-      return (<svg {...props}><path d="M4 5h16M4 12h10M4 19h14" /><circle cx="18" cy="12" r="2" /><circle cx="20" cy="19" r="2" /></svg>);
-    case "history":
-      return (<svg {...props}><path d="M12 8v5l3 2" /><path d="M5.6 5.6A9 9 0 1 1 3 12" /><path d="M3 4v5h5" /></svg>);
-    case "trends":
-      return (<svg {...props}><path d="M4 20h16" /><path d="M6 16l4-5 3 3 5-7" /></svg>);
-    case "leaderboard":
-      return (<svg {...props}><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" /><path d="M7 5H5a2 2 0 0 0 2 4" /><path d="M17 5h2a2 2 0 0 1-2 4" /></svg>);
-    case "settings":
-      return (<svg {...props}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>);
-  }
-}
-
-function WindowThemeToggle({ theme, onToggle }: { theme: ThemeMode; onToggle: () => void }) {
-  const nextTheme = theme === "dark" ? "light" : "dark";
-
-  return (
-    <button
-      type="button"
-      className="window-theme-toggle"
-      onClick={onToggle}
-      aria-label="Toggle theme"
-      aria-pressed={theme === "dark"}
-      title={`Switch to ${nextTheme} mode`}
-    >
-      {theme === "dark" ? (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M21 12.8A8.2 8.2 0 1 1 11.2 3a6.4 6.4 0 0 0 9.8 9.8Z" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-        </svg>
-      )}
-    </button>
-  );
-}
-
 function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
-}
-
-type MainContentShellProps = {
-  activeTab: TabId;
-  loading: boolean;
-  hasLoadedOnce: boolean;
-  error: string | null;
-  contentRef?: RefObject<HTMLElement>;
-  children: ReactNode;
-};
-
-function MainContentShell({ activeTab, loading, hasLoadedOnce, error, contentRef, children }: MainContentShellProps) {
-  const isRefreshing = loading && hasLoadedOnce;
-
-  return (
-    <main ref={contentRef} className={`content content--${activeTab}`}>
-      <div className="refresh-indicator" data-active={isRefreshing} aria-live="polite" aria-hidden={!isRefreshing}>
-        Refreshing tracker data&hellip;
-      </div>
-      {error ? <div className="notice notice--error">Error: {error}</div> : null}
-      {children}
-    </main>
-  );
 }
 
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
-  const updaterCheckingRef = useRef(false);
-  const updaterInstallingRef = useRef(false);
   const autoUpdateLaunchCheckScheduledRef = useRef(false);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
@@ -588,7 +410,6 @@ export default function App() {
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
-  const [leaderboardSegments, setLeaderboardSegments] = useState<ActivitySegment[]>([]);
   const [hourly, setHourly] = useState<HourBucket[]>([]);
   const [insightHourly, setInsightHourly] = useState<HourBucket[]>([]);
   const [insightTopSites, setInsightTopSites] = useState<SiteDuration[]>([]);
@@ -600,35 +421,52 @@ export default function App() {
   const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
   const [classificationRange, setClassificationRange] = useState<ClassificationRange>("Day");
   const [trendsRange, setTrendsRange] = useState<InsightRange>("Week");
-  const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<string | null>(null);
+  const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<ActivityCategory | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
-  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
-  const [availableUpdateSource, setAvailableUpdateSource] = useState<UpdateCheckMode | null>(null);
-  const [availableUpdatePolicy, setAvailableUpdatePolicy] = useState<UpdatePolicy | null>(null);
-  const [updateInteractions, setUpdateInteractions] = useState<UpdateInteractionMap>(readUpdateInteractionMap);
-  const updateInteractionsRef = useRef(updateInteractions);
-  const [updatePromptNowMs, setUpdatePromptNowMs] = useState(() => Date.now());
-  const [autoInstallFutureUpdates, setAutoInstallFutureUpdates] = useState(resolveInitialAutoInstallFutureUpdates);
+  const {
+    autoInstallFutureUpdates,
+    availableUpdate,
+    currentUpdatePolicy,
+    dismissAvailableUpdate,
+    handleCheckForUpdates,
+    handleInstallUpdate,
+    setAutoInstallFutureUpdates,
+    shouldShowAvailableUpdateDialog,
+    updaterChecking,
+    updaterError,
+    updaterInstalling,
+    updaterMessage,
+  } = useUpdateController();
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceChromiumAxExtremeNudgeEnabled, setForceChromiumAxExtremeNudgeEnabled] = useState(resolveInitialForceChromiumAxExtremeNudgeEnabled);
-  const [updaterChecking, setUpdaterChecking] = useState(false);
-  const [updaterInstalling, setUpdaterInstalling] = useState(false);
-  const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
-  const [updaterError, setUpdaterError] = useState<string | null>(null);
   const [startOfDayMinutes, setStartOfDayMinutes] = useState(resolveInitialStartOfDayMinutes);
   const [startOfWeek, setStartOfWeek] = useState<StartOfWeek>(resolveInitialStartOfWeek);
   const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
-  const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
-  const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
-  const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
-  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
+  const {
+    driftAlertDelaySeconds,
+    driftAlertsEnabled,
+    driftAlarmCopy,
+    extremeNudgeEnabled,
+    handleWatcherPeriodicMaxChange,
+    handleWatcherPeriodicMinChange,
+    setDriftAlertDelaySeconds,
+    setDriftAlarmCopy,
+    setDriftAlertsEnabled,
+    setExtremeNudgeEnabled,
+    setWatcherMode,
+    setWatcherPeekEnabled,
+    watcherMode,
+    watcherPeekEnabled,
+    watcherPeriodicMaxMinutes,
+    watcherPeriodicMinMinutes,
+  } = useCompanionSettingsController();
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
-    const enabled = resolveInitialDriftAlertsEnabled();
+    const enabled = driftAlertsEnabled;
     return buildDriftAlarmTrayStatus({
       enabled,
       checkedAt: null,
@@ -637,37 +475,72 @@ export default function App() {
   });
   const [breakRecoveryAssessment, setBreakRecoveryAssessment] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmInteractions, setDriftAlarmInteractions] = useState<DriftAlarmInteraction[]>(readDriftAlarmInteractions);
-  const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
-  const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
-  const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(resolveInitialLocalAiSetup);
-  const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
-  const [classificationRules, setClassificationRules] = useState<ClassificationRule[]>([]);
-  const [classificationRulesLoading, setClassificationRulesLoading] = useState(false);
-  const [classificationRulesError, setClassificationRulesError] = useState<string | null>(null);
-  const [classificationRuleMessage, setClassificationRuleMessage] = useState<string | null>(null);
-  const [classificationRuleSavingKind, setClassificationRuleSavingKind] = useState<ClassificationRuleTargetKind | null>(null);
-  const [classificationRuleDeletingId, setClassificationRuleDeletingId] = useState<string | null>(null);
-  const [classificationRuleApplying, setClassificationRuleApplying] = useState(false);
-  const [classificationRuleApplyResult, setClassificationRuleApplyResult] = useState<ClassificationRuleApplyResult | null>(null);
-  const [domainRuleInput, setDomainRuleInput] = useState("");
-  const [domainRuleCategory, setDomainRuleCategory] = useState<ActivityCategory>("workspace");
-  const [domainRuleProductivity, setDomainRuleProductivity] = useState<ProductivityLabel>("focus");
-  const [appRuleSearch, setAppRuleSearch] = useState("");
-  const [appRuleTargetValue, setAppRuleTargetValue] = useState("");
-  const [appRuleDisplayName, setAppRuleDisplayName] = useState("");
-  const [appRuleCategory, setAppRuleCategory] = useState<ActivityCategory>("workspace");
-  const [appRuleProductivity, setAppRuleProductivity] = useState<ProductivityLabel>("focus");
-  const [classificationRuleCandidates, setClassificationRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
-  const [classificationRuleCandidatesLoading, setClassificationRuleCandidatesLoading] = useState(false);
-  const [appRuleSearchPanelOpen, setAppRuleSearchPanelOpen] = useState(false);
-  const appRuleSearchRef = useRef<HTMLDivElement | null>(null);
-  const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
+  const {
+    aiConnectionTest,
+    aiSetupDialogOpen,
+    localAiClassificationOptions,
+    localAiConnectionFingerprint,
+    localAiConnectionProviderLabel,
+    localAiProviderStatus,
+    localAiSetup,
+    recordLocalAiClassificationError,
+    recordLocalAiClassificationSummary,
+    setAiSetupDialogOpen,
+    setLocalAiSetup,
+  } = useAiSetupController();
+  const {
+    appRuleCategory,
+    appRuleDisplayName,
+    appRuleProductivity,
+    appRuleSearch,
+    appRuleSearchPanelOpen,
+    appRuleSearchRef,
+    appRuleTargetValue,
+    classificationRuleApplyResult,
+    classificationRuleApplying,
+    classificationRuleCandidates,
+    classificationRuleCandidatesLoading,
+    classificationRuleDeletingId,
+    classificationRuleMessage,
+    classificationRuleSavingKind,
+    classificationRules,
+    classificationRulesError,
+    classificationRulesLoading,
+    domainRuleCandidates,
+    domainRuleCandidatesLoading,
+    domainRuleCategory,
+    domainRuleInput,
+    domainRuleProductivity,
+    domainRuleSearchPanelOpen,
+    domainRuleSearchRef,
+    handleAppRuleSearchBlur,
+    handleAppRuleSearchFocus,
+    handleApplyClassificationRules,
+    handleDeleteClassificationRule,
+    handleDomainRuleSearchBlur,
+    handleDomainRuleSearchFocus,
+    handleSaveAppRule,
+    handleSaveDomainRule,
+    handleSelectClassificationCandidate,
+    handleSelectDomainRuleCandidate,
+    handleToggleClassificationRule,
+    loadClassificationRules,
+    saveClassificationRule,
+    setAppRuleCategory,
+    setAppRuleProductivity,
+    setDomainRuleCategory,
+    setDomainRuleProductivity,
+    updateAppRuleSearch,
+    updateDomainRuleInput,
+  } = useClassificationRulesController({
+    activeTab,
+    settingsSection,
+    onRefreshSelectedDay: () => refresh(selectedDay),
+  });
   const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
   const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
   const [dismissedDashboardAiRecoveryKey, setDismissedDashboardAiRecoveryKey] = useState<string | null>(null);
-  const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
-  const [watcherPeriodicMaxMinutes, setWatcherPeriodicMaxMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("max"));
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
   const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
   const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
@@ -718,109 +591,10 @@ export default function App() {
     navigateToTab("dashboard", "Today");
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
-  useEffect(() => {
-    updateInteractionsRef.current = updateInteractions;
-  }, [updateInteractions]);
-
-  const updateStoredInteractions = useCallback((producer: (current: UpdateInteractionMap) => UpdateInteractionMap) => {
-    const nextInteractions = producer(updateInteractionsRef.current);
-    updateInteractionsRef.current = nextInteractions;
-    setUpdateInteractions(nextInteractions);
-    persistUpdateInteractionMap(nextInteractions);
-    return nextInteractions;
-  }, []);
-
-  const installUpdate = useCallback(async (updateToInstall: AvailableUpdate) => {
-    if (updaterInstallingRef.current) return;
-
-    updaterInstallingRef.current = true;
-    setUpdaterInstalling(true);
-    setUpdaterError(null);
-
-    try {
-      await updateToInstall.downloadAndInstall();
-      await relaunch();
-    } catch (nextError) {
-      setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
-    } finally {
-      updaterInstallingRef.current = false;
-      setUpdaterInstalling(false);
-    }
-  }, []);
-
-  const handleCheckForUpdates = useCallback(async (mode: UpdateCheckMode = "manual") => {
-    if (updaterCheckingRef.current || updaterInstallingRef.current) return;
-
-    const isManualCheck = mode === "manual";
-    updaterCheckingRef.current = true;
-    if (isManualCheck) {
-      setUpdaterChecking(true);
-      setUpdaterMessage(null);
-      setUpdaterError(null);
-    }
-
-    try {
-      const nextUpdate = await check();
-      if (nextUpdate) {
-        const nowMs = Date.now();
-        const nextPolicy = await fetchUpdatePolicy(nextUpdate.version);
-        const nextInteractions = updateStoredInteractions((currentInteractions) => {
-          const seenInteractions = upsertUpdateSeen(currentInteractions, nextUpdate.version, nowMs);
-          return isManualCheck ? markUpdateInteracted(seenInteractions, nextUpdate.version, nowMs) : seenInteractions;
-        });
-        const nextInteraction = nextInteractions[nextUpdate.version] ?? null;
-        setAvailableUpdate(nextUpdate);
-        setAvailableUpdatePolicy(nextPolicy);
-        setAvailableUpdateSource(mode);
-        setUpdatePromptNowMs(nowMs);
-        if (!isManualCheck && shouldAutoInstallUpdate({
-          autoInstallFutureUpdates,
-          policy: nextPolicy,
-          interaction: nextInteraction,
-        })) {
-          updateStoredInteractions((currentInteractions) => markUpdateAutoInstallAttempted(currentInteractions, nextUpdate.version, Date.now()));
-          await installUpdate(nextUpdate);
-        }
-        return;
-      }
-      if (isManualCheck) {
-        setAvailableUpdate(null);
-        setAvailableUpdatePolicy(null);
-        setAvailableUpdateSource(null);
-        setUpdaterMessage("Drifty is up to date.");
-      }
-    } catch (nextError) {
-      if (isManualCheck) {
-        setAvailableUpdate(null);
-        setAvailableUpdatePolicy(null);
-        setAvailableUpdateSource(null);
-        setUpdaterError(`Update check failed: ${toErrorMessage(nextError)}`);
-      }
-    } finally {
-      updaterCheckingRef.current = false;
-      if (isManualCheck) setUpdaterChecking(false);
-    }
-  }, [autoInstallFutureUpdates, installUpdate, updateStoredInteractions]);
-
-  const handleInstallUpdate = useCallback(async () => {
-    if (!availableUpdate) return;
-    updateStoredInteractions((currentInteractions) => markUpdateInteracted(currentInteractions, availableUpdate.version, Date.now()));
-    await installUpdate(availableUpdate);
-  }, [availableUpdate, installUpdate, updateStoredInteractions]);
-
   const handleTrayCheckForUpdates = useCallback(() => {
     openSettingsTab();
     void handleCheckForUpdates();
   }, [handleCheckForUpdates, openSettingsTab]);
-
-  const dismissAvailableUpdate = useCallback(() => {
-    if (availableUpdate) {
-      updateStoredInteractions((currentInteractions) => markUpdateInteracted(currentInteractions, availableUpdate.version, Date.now()));
-    }
-    setAvailableUpdate(null);
-    setAvailableUpdatePolicy(null);
-    setAvailableUpdateSource(null);
-  }, [availableUpdate, updateStoredInteractions]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -852,23 +626,7 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [developerAuthRequiredPreview, setDeveloperAuthRequiredPreview] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
-  const [ownLeaderboardEntry, setOwnLeaderboardEntry] = useState<OwnLeaderboardEntry | null>(null);
-  const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const [leaderboardActionLoading, setLeaderboardActionLoading] = useState(false);
   const [historyDeleting, setHistoryDeleting] = useState(false);
-  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
-  const [leaderboardActionError, setLeaderboardActionError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [profileDraft, setProfileDraft] = useState({ displayName: "", bio: "", avatarUrl: "", websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileReadyUserId, setProfileReadyUserId] = useState<string | null>(null);
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileMessage, setProfileMessage] = useState<string | null>(null);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileShareMessage, setProfileShareMessage] = useState<string | null>(null);
-  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
   const [aiClassificationUsageDay, setAiClassificationUsageDay] = useState<string | null>(null);
@@ -878,16 +636,6 @@ export default function App() {
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
   const [weekDashboardCacheRevision, setWeekDashboardCacheRevision] = useState(0);
-  const [selectedLeaderboardRow, setSelectedLeaderboardRow] = useState<LeaderboardRow | null>(null);
-  const [selectedPublicProfile, setSelectedPublicProfile] = useState<PublicProfile | null>(null);
-  const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
-  const [selectedProfileError, setSelectedProfileError] = useState<string | null>(null);
-  const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
-  const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
-  const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
-  const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
-  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
-  const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: segments,
@@ -939,48 +687,6 @@ export default function App() {
       active = false;
     };
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
-  const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
-  const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
-  const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
-  const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
-    const fingerprint = localAiSetupFingerprint(testedSetup);
-    if (!fingerprint) {
-      setLocalAiConnectionCheck(null);
-      return;
-    }
-    setLocalAiConnectionCheck({
-      provider: testedSetup.provider,
-      fingerprint,
-      status: result.kind === "success" ? "connected" : "failed",
-      issueKind: result.kind === "success" ? null : aiConnectionIssueKindFromMessage(result.message),
-      message: result.message,
-      checkedAt: Date.now(),
-    });
-  }, []);
-  const aiConnectionTest = useAiConnectionTestRunner({
-    localAiSetup,
-    onLocalAiConnectionTestResult: recordLocalAiConnectionTestResult,
-  });
-  const localAiProviderStatus = useMemo<LocalAiProviderStatus>(() => {
-    if (!localAiConnectionFingerprint) return { kind: "unconfigured" };
-    if (aiConnectionTest.runningFingerprint === localAiConnectionFingerprint) return { kind: "checking" };
-
-    const currentConnectionCheck = (
-      localAiConnectionCheck
-      && localAiConnectionCheck.provider === localAiSetup.provider
-      && localAiConnectionCheck.fingerprint === localAiConnectionFingerprint
-    )
-      ? localAiConnectionCheck
-      : null;
-    if (!currentConnectionCheck) {
-      return isActiveProviderTestable(localAiSetup) ? { kind: "checking" } : { kind: "unconfigured" };
-    }
-    if (currentConnectionCheck.status === "connected") return { kind: "connected" };
-    return {
-      kind: "failed",
-      issueKind: currentConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(currentConnectionCheck.message),
-    };
-  }, [aiConnectionTest.runningFingerprint, localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup]);
   const {
     user,
     status: authStatus,
@@ -1004,7 +710,89 @@ export default function App() {
   const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
   const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+  const requestCloudBillingAuth = useCallback(() => setAuthModalOpen(true), []);
+  const {
+    billingCheckoutLoadingInterval,
+    billingEntitlement,
+    billingEntitlementError,
+    billingEntitlementLoading,
+    billingPortalLoading,
+    cloudTrialStartedNotice,
+    dismissCloudTrialStartedNotice,
+    handleManageCloudBilling,
+    handleStartDriftyCloudSetup,
+    openCloudTrialStartedNoticeAiSetup,
+    refreshBillingEntitlement,
+  } = useCloudBillingController({
+    hasRequiredAccountAuth,
+    isSupabaseConfigured,
+    shouldCheckBillingEntitlement,
+    user,
+    onAuthRequired: requestCloudBillingAuth,
+    onOpenAiSetup: openAiSetupSettings,
+  });
   const canUseCloudAiClassification = isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const requestLeaderboardAuth = useCallback(() => setAuthModalOpen(true), []);
+  const {
+    activeLeaderboardPeriod,
+    isLeaderboardOptedIn,
+    isProfileEditorOpen,
+    leaderboardActionError,
+    leaderboardActionLoading,
+    leaderboardError,
+    leaderboardLoading,
+    leaderboardProfileBio,
+    leaderboardProfileDisplayName,
+    leaderboardProfileGithubUrl,
+    leaderboardProfileLinkedinUrl,
+    leaderboardProfileWebsiteUrl,
+    leaderboardSegments,
+    leaderboardUsesPreviewProfile,
+    leaderboardWindowEndDay,
+    leaderboardWindowStartDay,
+    localRollingFocusSeconds,
+    ownLeaderboardEntry,
+    profile,
+    profileDraft,
+    profileError,
+    profileLoading,
+    profileMessage,
+    profileReadyUserId,
+    profileSaving,
+    profileShareMessage,
+    rows: leaderboardRows,
+    selectedLeaderboardRow,
+    selectedProfileError,
+    selectedProfileLoading,
+    selectedPublicProfile,
+    totalLeaderboardFocusSeconds,
+    closeProfileEditor,
+    closeSelectedProfile,
+    handleLeaderboardOptIn,
+    handleLeaderboardOptOut,
+    handleProfilePhotoSelected,
+    handleSaveProfileFromModal,
+    handleSelectLeaderboardProfile,
+    handleShareLeaderboardProfile,
+    handleViewOwnLeaderboardProfile,
+    openProfileEditor,
+    refreshLeaderboardData,
+    removeProfilePhoto,
+    setActiveLeaderboardPeriod,
+    updateProfileDraft,
+  } = useLeaderboardProfileController({
+    activeTab,
+    allowsEffectiveAnonymousAuth,
+    authMetadataAvatarUrl,
+    hasRequiredAccountAuth,
+    isEffectiveAuthRequired,
+    isSupabaseConfigured,
+    showAiClassificationImpact,
+    signInAnonymously,
+    startOfDayMinutes,
+    user,
+    onAuthRequired: requestLeaderboardAuth,
+  });
   const aiClassificationProviderKey = localAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
     : canUseCloudAiClassification
@@ -1029,40 +817,6 @@ export default function App() {
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
     setObservedAiClassificationFailure(false);
   }, [aiClassificationProviderKey]);
-  const recordLocalAiClassificationSummary = useCallback((summary: AiClassificationSummary) => {
-    if (!localAiConnectionFingerprint) return;
-    if (summary.status === "error") {
-      setLocalAiConnectionCheck({
-        provider: localAiSetup.provider,
-        fingerprint: localAiConnectionFingerprint,
-        status: "failed",
-        issueKind: aiConnectionIssueKindFromMessage(summary.message),
-        message: summary.message,
-        checkedAt: Date.now(),
-      });
-      return;
-    }
-    if (summary.status !== "saved") return;
-    setLocalAiConnectionCheck({
-      provider: localAiSetup.provider,
-      fingerprint: localAiConnectionFingerprint,
-      status: "connected",
-      issueKind: null,
-      message: summary.message,
-      checkedAt: Date.now(),
-    });
-  }, [localAiConnectionFingerprint, localAiSetup.provider]);
-  const recordLocalAiClassificationError = useCallback((message: string) => {
-    if (!localAiConnectionFingerprint) return;
-    setLocalAiConnectionCheck({
-      provider: localAiSetup.provider,
-      fingerprint: localAiConnectionFingerprint,
-      status: "failed",
-      issueKind: aiConnectionIssueKindFromMessage(message),
-      message,
-      checkedAt: Date.now(),
-    });
-  }, [localAiConnectionFingerprint, localAiSetup.provider]);
   const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
@@ -1072,7 +826,6 @@ export default function App() {
   const dashboardWeekHistoryCacheRef = useRef<Map<string, DashboardWeekHistoryLoad>>(new Map());
   const dashboardWeekHistoryInFlightRef = useRef<{ key: string; promise: Promise<DashboardWeekHistoryLoad> } | null>(null);
   const dashboardWeekHistoryCacheGenerationRef = useRef(0);
-  const leaderboardRefreshRequestRef = useRef(0);
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
@@ -1155,7 +908,6 @@ export default function App() {
     setDriftAlarmTrayStatus(nextStatus);
   }, [driftAlertsEnabled, status?.running]);
   const driftAlarmPreviewCounterRef = useRef(0);
-  const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
@@ -1207,144 +959,6 @@ export default function App() {
   function updateDriftAlarmHistorySegments(day: string, nextSegments: ActivitySegment[]) {
     if (day !== currentDriftAlarmDay()) return;
     driftAlarmHistorySegmentsRef.current = nextSegments;
-  }
-
-  const loadClassificationRules = useCallback(async () => {
-    setClassificationRulesLoading(true);
-    setClassificationRulesError(null);
-    try {
-      setClassificationRules(await trackerClient.getClassificationRules());
-    } catch (nextError) {
-      setClassificationRulesError(toErrorMessage(nextError));
-    } finally {
-      setClassificationRulesLoading(false);
-    }
-  }, []);
-
-  const saveClassificationRule = useCallback(async (input: ClassificationRuleInput) => {
-    setClassificationRuleSavingKind(input.targetKind);
-    setClassificationRulesError(null);
-    setClassificationRuleMessage(null);
-    setClassificationRuleApplyResult(null);
-    try {
-      const savedRule = await trackerClient.saveClassificationRule(input);
-      const applyResult = await trackerClient.applyClassificationRules();
-      setClassificationRuleApplyResult(applyResult);
-      setClassificationRuleMessage(`${classificationRuleTargetLabel(savedRule.targetKind)} rule saved locally.`);
-      setClassificationRules(await trackerClient.getClassificationRules());
-      await refresh(selectedDay);
-      return true;
-    } catch (nextError) {
-      setClassificationRulesError(toErrorMessage(nextError));
-      return false;
-    } finally {
-      setClassificationRuleSavingKind(null);
-    }
-  }, [selectedDay]);
-
-  async function handleSaveDomainRule() {
-    const targetValue = normalizeDomainRuleInput(domainRuleInput);
-    if (!targetValue) {
-      setClassificationRulesError("Enter a domain or URL, like example.com.");
-      return;
-    }
-    if (hasDuplicateClassificationRule(classificationRules, "site", targetValue)) {
-      setClassificationRulesError("A Domain rule for this site already exists. Edit or delete the existing rule first.");
-      return;
-    }
-    const saved = await saveClassificationRule({ targetKind: "site", targetValue, category: domainRuleCategory, productivity: domainRuleProductivity, enabled: true });
-    if (saved) setDomainRuleInput("");
-  }
-
-  async function handleSaveAppRule() {
-    const targetValue = appRuleTargetValue.trim();
-    if (!targetValue) {
-      setClassificationRulesError("Search and choose a recorded app before saving an App rule.");
-      return;
-    }
-    if (hasDuplicateClassificationRule(classificationRules, "app", targetValue)) {
-      setClassificationRulesError("An App rule for this app already exists. Edit or delete the existing rule first.");
-      return;
-    }
-    const saved = await saveClassificationRule({ targetKind: "app", targetValue, category: appRuleCategory, productivity: appRuleProductivity, enabled: true });
-    if (saved) {
-      setAppRuleSearch("");
-      setAppRuleTargetValue("");
-      setAppRuleDisplayName("");
-      setClassificationRuleCandidates([]);
-    }
-  }
-
-  async function handleToggleClassificationRule(rule: ClassificationRule, enabled: boolean) {
-    await saveClassificationRule({
-      targetKind: rule.targetKind,
-      targetValue: rule.targetValue,
-      category: rule.category,
-      productivity: rule.productivity,
-      enabled,
-      confidence: rule.confidence ?? null,
-    });
-  }
-
-  async function handleDeleteClassificationRule(rule: ClassificationRule) {
-    setClassificationRuleDeletingId(rule.id);
-    setClassificationRulesError(null);
-    setClassificationRuleMessage(null);
-    setClassificationRuleApplyResult(null);
-    try {
-      await trackerClient.deleteClassificationRule(rule.id);
-      setClassificationRuleMessage(`${classificationRuleTargetLabel(rule.targetKind)} rule deleted locally.`);
-      setClassificationRules(await trackerClient.getClassificationRules());
-      await refresh(selectedDay);
-    } catch (nextError) {
-      setClassificationRulesError(toErrorMessage(nextError));
-    } finally {
-      setClassificationRuleDeletingId(null);
-    }
-  }
-
-  async function handleApplyClassificationRules() {
-    setClassificationRuleApplying(true);
-    setClassificationRulesError(null);
-    setClassificationRuleMessage(null);
-    try {
-      const applyResult = await trackerClient.applyClassificationRules();
-      setClassificationRuleApplyResult(applyResult);
-      setClassificationRuleMessage("Local rules reapplied to matching activity.");
-      await refresh(selectedDay);
-    } catch (nextError) {
-      setClassificationRulesError(toErrorMessage(nextError));
-    } finally {
-      setClassificationRuleApplying(false);
-    }
-  }
-
-  function handleSelectClassificationCandidate(candidate: ClassificationRuleCandidate) {
-    setAppRuleSearch(candidate.displayName);
-    setAppRuleDisplayName(candidate.displayName);
-    setAppRuleTargetValue(candidate.targetValue);
-    setAppRuleSearchPanelOpen(false);
-    if (candidate.category) setAppRuleCategory(candidate.category);
-    if (candidate.productivity) setAppRuleProductivity(candidate.productivity);
-  }
-
-  const scrollAppRuleSearchIntoViewIfNeeded = useCallback(() => {
-    const container = appRuleSearchRef.current;
-    if (!container || typeof container.scrollIntoView !== "function") return;
-    const rect = container.getBoundingClientRect();
-    if (rect.top >= 72 && rect.bottom + 320 <= window.innerHeight) return;
-    container.scrollIntoView({ block: "center", inline: "nearest" });
-  }, []);
-
-  function handleAppRuleSearchFocus() {
-    setAppRuleSearchPanelOpen(true);
-    window.requestAnimationFrame(scrollAppRuleSearchIntoViewIfNeeded);
-  }
-
-  function handleAppRuleSearchBlur(event: FocusEvent<HTMLDivElement>) {
-    const nextTarget = event.relatedTarget;
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-    setAppRuleSearchPanelOpen(false);
   }
 
   function selectDay(day: string | ((currentDay: string) => string)) {
@@ -1717,17 +1331,6 @@ export default function App() {
     void hideNativeWatcherPeek();
   }, [clearWatcherEvent]);
 
-  const handleWatcherPeriodicMinChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = normalizeWatcherPeriodicMinutes(event.target.value, DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES.min);
-    setWatcherPeriodicMinMinutes(nextValue);
-    setWatcherPeriodicMaxMinutes((currentValue) => Math.max(currentValue, nextValue));
-  }, []);
-
-  const handleWatcherPeriodicMaxChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = normalizeWatcherPeriodicMinutes(event.target.value, DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES.max);
-    setWatcherPeriodicMaxMinutes(Math.max(nextValue, watcherPeriodicMinMinutes));
-  }, [watcherPeriodicMinMinutes]);
-
   async function refresh(day = selectedDay, options: { requireCurrentSnapshot?: boolean; foreground?: boolean } = {}): Promise<boolean> {
     const isRequiredCurrentSnapshotRefresh = options.requireCurrentSnapshot === true;
     const isForegroundRefresh = options.foreground !== false || isRequiredCurrentSnapshotRefresh;
@@ -1748,29 +1351,22 @@ export default function App() {
     if (isForegroundRefresh) setLoading(true);
     setError(null);
 
-    const shouldLoadHistory = isForegroundRefresh && shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
-    const shouldLoadDashboardWeekHistory = shouldLoadHistory && activeTab === "dashboard" && dashPeriod === "Week";
-    const shouldLoadTrendsHistory = activeTab === "trends";
-    const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
-    const historyAnchorDay = shouldLoadHistory && activeTab === "history" ? logicalTodayIsoDate(startOfDayMinutes) : day;
-    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(historyAnchorDay, -HISTORY_ARCHIVE_LOOKBACK_DAYS);
-    const historySummaryRange = trendsHistoryRange
-      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-      : getLogicalDayRange(historyStartDay, historyAnchorDay, startOfDayMinutes);
-    const selectedWeekRange = getDashboardPeriodRange(historyAnchorDay, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineRange = trendsHistoryRange
-      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-      : getLogicalDayRange(
-        shouldLoadDashboardWeekHistory ? selectedWeekRange.startDay : historyStartDay,
-        shouldLoadDashboardWeekHistory
-          ? selectedWeekRange.endDay
-          : historyAnchorDay > selectedWeekRange.endDay
-            ? historyAnchorDay
-            : selectedWeekRange.endDay,
-        startOfDayMinutes,
-      );
-    const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
-    const shouldLoadHistorySummaries = shouldLoadHistory && !shouldLoadDashboardWeekHistory;
+    const {
+      historySummaryRange,
+      historyTimelineRange,
+      selectedDayRange,
+      shouldLoadDashboardWeekHistory,
+      shouldLoadHistory,
+      shouldLoadHistorySummaries,
+    } = buildActivityRefreshPlan({
+      activeTab,
+      dashPeriod,
+      day,
+      shouldLoadHistory: isForegroundRefresh && shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange),
+      startOfDayMinutes,
+      startOfWeek,
+      trendsRange,
+    });
 
     try {
       const archiveTimelineRequest: Promise<BuiltInHeuristicClassificationMaterialization | null> = shouldLoadHistory
@@ -1896,30 +1492,21 @@ export default function App() {
     historyRefreshRequestRef.current = requestId;
     setError(null);
 
-    const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
-    const shouldLoadTrendsHistory = activeTab === "trends";
-    const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
-    const historyAnchorDay = activeTab === "history" ? logicalTodayIsoDate(startOfDayMinutes) : day;
-    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(historyAnchorDay, -HISTORY_ARCHIVE_LOOKBACK_DAYS);
-    const historySummaryRange = trendsHistoryRange
-      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-      : getLogicalDayRange(historyStartDay, historyAnchorDay, startOfDayMinutes);
-    const selectedWeekRange = getDashboardPeriodRange(historyAnchorDay, "Week", startOfDayMinutes, startOfWeek);
-    const historyTimelineRange = trendsHistoryRange
-      ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-      : getLogicalDayRange(
-        shouldLoadDashboardWeekHistory ? selectedWeekRange.startDay : historyStartDay,
-        shouldLoadDashboardWeekHistory
-          ? selectedWeekRange.endDay
-          : historyAnchorDay > selectedWeekRange.endDay
-            ? historyAnchorDay
-            : selectedWeekRange.endDay,
-        startOfDayMinutes,
-      );
-    const shouldLoadHistorySummaries = !shouldLoadDashboardWeekHistory;
-    const historyRecentTimelineRange = activeTab === "history"
-      ? getLogicalDayRange(shiftIsoDate(historyAnchorDay, -HISTORY_RECENT_LOOKBACK_DAYS), historyAnchorDay, startOfDayMinutes)
-      : null;
+    const {
+      historyRecentTimelineRange,
+      historySummaryRange,
+      historyTimelineRange,
+      shouldLoadDashboardWeekHistory,
+      shouldLoadHistorySummaries,
+    } = buildActivityRefreshPlan({
+      activeTab,
+      dashPeriod,
+      day,
+      shouldLoadHistory,
+      startOfDayMinutes,
+      startOfWeek,
+      trendsRange,
+    });
     const loadMissingHistoryIcons = (segmentsToInspect: readonly ActivitySegment[]) => {
       void (async () => {
         try {
@@ -2278,19 +1865,16 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    persistAutoInstallFutureUpdates(autoInstallFutureUpdates);
-  }, [autoInstallFutureUpdates]);
-
-  useEffect(() => {
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, devModeEnabled ? "1" : "0");
-    if (devModeEnabled) return;
+    const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
+    if (effectiveDevModeEnabled) return;
     if (settingsSection === "dev") setSettingsSection("general");
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
   }, [devModeEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, settingsSection]);
 
   useEffect(() => {
-    const forceChromiumAxCapture = devModeEnabled && forceChromiumAxCaptureEnabled;
+    const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
     window.localStorage.setItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, forceChromiumAxCapture ? "1" : "0");
     void trackerClient.setDeveloperDiagnostics?.({ forceChromiumAxCapture }).catch((nextError) => {
       console.warn("Failed to persist tracker developer diagnostics", nextError);
@@ -2298,29 +1882,9 @@ export default function App() {
   }, [devModeEnabled, forceChromiumAxCaptureEnabled]);
 
   useEffect(() => {
-    const forceChromiumAxExtremeNudge = devModeEnabled && forceChromiumAxExtremeNudgeEnabled;
+    const forceChromiumAxExtremeNudge = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled;
     window.localStorage.setItem(FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, forceChromiumAxExtremeNudge ? "1" : "0");
   }, [devModeEnabled, forceChromiumAxExtremeNudgeEnabled]);
-
-  useEffect(() => {
-    window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, driftAlertsEnabled ? "1" : "0");
-  }, [driftAlertsEnabled]);
-
-  useEffect(() => {
-    if (!driftAlertsEnabled && extremeNudgeEnabled) setExtremeNudgeEnabled(false);
-  }, [driftAlertsEnabled, extremeNudgeEnabled]);
-
-  useEffect(() => {
-    window.localStorage.setItem(DRIFT_ALERT_DELAY_STORAGE_KEY, String(driftAlertDelaySeconds));
-  }, [driftAlertDelaySeconds]);
-
-  useEffect(() => {
-    persistDriftAlarmCopy(driftAlarmCopy);
-  }, [driftAlarmCopy]);
-
-  useEffect(() => {
-    window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, extremeNudgeEnabled ? "1" : "0");
-  }, [extremeNudgeEnabled]);
 
   useEffect(() => {
     driftAlarmSnoozeRef.current = driftAlarmSnooze;
@@ -2366,78 +1930,8 @@ export default function App() {
   }, [breakRecoveryAssessment, recordBreakRecoveryOutcome]);
 
   useEffect(() => {
-    window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
-  }, [watcherPeekEnabled]);
-
-  useEffect(() => {
-    window.localStorage.setItem(WATCHER_MODE_STORAGE_KEY, watcherMode);
-  }, [watcherMode]);
-
-  useEffect(() => {
     window.localStorage.setItem(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, showAiClassificationImpact ? "1" : "0");
   }, [showAiClassificationImpact]);
-
-  useEffect(() => {
-    window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedLocalAiSetup(localAiSetup)));
-  }, [localAiSetup]);
-
-  // Load rules at startup too: live drift detection reads them through classification options.
-  useEffect(() => {
-    void loadClassificationRules();
-  }, [loadClassificationRules]);
-
-  useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "classification") return;
-    void loadClassificationRules();
-  }, [activeTab, loadClassificationRules, settingsSection]);
-
-  useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "classification") return undefined;
-    if (!appRuleSearchPanelOpen) {
-      setClassificationRuleCandidatesLoading(false);
-      return undefined;
-    }
-    const query = appRuleSearch.trim();
-
-    let disposed = false;
-    setClassificationRuleCandidates([]);
-    setClassificationRuleCandidatesLoading(true);
-    const timeoutId = window.setTimeout(() => {
-      void trackerClient.searchClassificationRuleCandidates({ query, targetKind: "app" }).then((candidates) => {
-        if (disposed) return;
-        setClassificationRuleCandidates(candidates.filter((candidate) => candidate.targetKind === "app"));
-      }).catch((nextError) => {
-        if (disposed) return;
-        setClassificationRulesError(toErrorMessage(nextError));
-        setClassificationRuleCandidates([]);
-      }).finally(() => {
-        if (!disposed) setClassificationRuleCandidatesLoading(false);
-      });
-    }, 180);
-
-    return () => {
-      disposed = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [activeTab, appRuleSearch, appRuleSearchPanelOpen, settingsSection]);
-
-  useEffect(() => {
-    if (!appRuleSearchPanelOpen) return undefined;
-    const frameId = window.requestAnimationFrame(scrollAppRuleSearchIntoViewIfNeeded);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [appRuleSearchPanelOpen, classificationRuleCandidates.length, classificationRuleCandidatesLoading, scrollAppRuleSearchIntoViewIfNeeded]);
-
-  useEffect(() => {
-    window.localStorage.setItem(WATCHER_PERIODIC_MIN_STORAGE_KEY, String(watcherPeriodicMinMinutes));
-  }, [watcherPeriodicMinMinutes]);
-
-  useEffect(() => {
-    window.localStorage.setItem(WATCHER_PERIODIC_MAX_STORAGE_KEY, String(watcherPeriodicMaxMinutes));
-  }, [watcherPeriodicMaxMinutes]);
-
-  useEffect(() => {
-    if (watcherPeriodicMaxMinutes < watcherPeriodicMinMinutes) setWatcherPeriodicMaxMinutes(watcherPeriodicMinMinutes);
-  }, [watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
 
   useEffect(() => { watcherEventRef.current = watcherEvent; }, [watcherEvent]);
 
@@ -2977,7 +2471,7 @@ export default function App() {
         evaluation,
       });
       void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
-        forceChromiumAxTabClose: devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+        forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
       })).then(async (result) => {
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
@@ -3483,10 +2977,6 @@ export default function App() {
     weekDashboardDayModelCacheSettingsRef.current,
     { includeAiClassifications: showAiClassificationImpact, startOfDayMinutes },
   );
-  const leaderboardClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: leaderboardSegments, includeAiClassifications: showAiClassificationImpact }),
-    [leaderboardSegments, showAiClassificationImpact],
-  );
   useEffect(() => {
     if (historySegments.length === 0) return undefined;
 
@@ -3558,36 +3048,8 @@ export default function App() {
     || isProfileEditorOpen
     || cmdOpen,
   );
-  const availableUpdateInteraction = availableUpdate ? updateInteractions[availableUpdate.version] ?? null : null;
-  const currentUpdatePolicy = availableUpdate ? availableUpdatePolicy ?? fallbackUpdatePolicy(availableUpdate.version) : null;
-  const shouldShowAvailableUpdateDialog = availableUpdate && currentUpdatePolicy
-    ? availableUpdateSource === "manual"
-      || (availableUpdateSource === "automatic" && shouldShowAutomaticUpdateDialog({
-        policy: currentUpdatePolicy,
-        interaction: availableUpdateInteraction,
-        nowMs: updatePromptNowMs,
-      }))
-    : false;
   const visibleUpdate = updateDialogBlocked || !shouldShowAvailableUpdateDialog ? null : availableUpdate;
   const titlebarUpdate = updateDialogBlocked || visibleUpdate ? null : availableUpdate;
-
-  useEffect(() => {
-    if (!availableUpdate || !currentUpdatePolicy || availableUpdateSource !== "automatic") return undefined;
-
-    const remainingMs = msUntilAutomaticDialog({
-      policy: currentUpdatePolicy,
-      interaction: availableUpdateInteraction,
-      nowMs: Date.now(),
-    });
-    if (remainingMs === null) return undefined;
-    if (remainingMs <= 0) {
-      setUpdatePromptNowMs(Date.now());
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => setUpdatePromptNowMs(Date.now()), remainingMs);
-    return () => window.clearTimeout(timeoutId);
-  }, [availableUpdate, availableUpdateInteraction, availableUpdateSource, currentUpdatePolicy]);
 
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
   const selectedDayProductivityTotals = useMemo(
@@ -3703,8 +3165,6 @@ export default function App() {
   const canShiftInsightForward = nextInsightDay <= todayDay;
   const dashboardDateContext = dashPeriod === "Week" ? "Selected week" : selectedDayContext;
   const dashboardDateLabel = dashPeriod === "Week" ? formatDateRangeLabel(dashboardRange.startDay, dashboardRange.endDay) : selectedDayLabel;
-  const activeInsightRangeOption = INSIGHT_RANGE_OPTIONS.find((option) => option.range === trendsRange);
-  const insightDateContext = activeInsightRangeOption?.context ?? "Weekly window";
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
@@ -3865,89 +3325,6 @@ export default function App() {
     () => buildFocusDriftChart(segments, selectedDay, selectedDayClassificationOptions, currentMinuteOfDay, startOfDayMinutes),
     [currentMinuteOfDay, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes],
   );
-  const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
-  const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
-  const localRollingFocusSeconds = useMemo(
-    () => buildRollingFocusSeconds(leaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions, startOfDayMinutes),
-    [leaderboardClassificationOptions, leaderboardSegments, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes],
-  );
-  const leaderboardProfileDisplayName = useMemo(() => profile?.display_name || fallbackDisplayName(user?.email), [profile?.display_name, user?.email]);
-  const leaderboardUsesPreviewProfile = shouldUsePreviewData();
-  const leaderboardProfileBio = profile?.bio || profileDraft.bio || (leaderboardUsesPreviewProfile ? "Building quiet tools for deeper work." : "");
-  const leaderboardProfileWebsiteUrl = profile?.website_url || profileDraft.websiteUrl || (leaderboardUsesPreviewProfile ? "drifty.so/drifty" : "");
-  const leaderboardProfileGithubUrl = profile?.github_url || profileDraft.githubUrl || (leaderboardUsesPreviewProfile ? "github.com/edgethink00" : "");
-  const leaderboardProfileLinkedinUrl = profile?.linkedin_url || profileDraft.linkedinUrl || (leaderboardUsesPreviewProfile ? "linkedin.com/in/drifty" : "");
-  const leaderboardTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
-  const isLeaderboardOptedIn = ownLeaderboardEntry?.opted_in === true;
-
-  const refreshLeaderboardData = useCallback(async () => {
-    const requestId = ++leaderboardRefreshRequestRef.current;
-
-    if (!isSupabaseConfigured && !shouldUsePreviewData()) {
-      setLeaderboardRows([]);
-      setOwnLeaderboardEntry(null);
-      setLeaderboardSegments([]);
-      setLeaderboardLoading(false);
-      setLeaderboardError(null);
-      return;
-    }
-
-    setLeaderboardLoading(true);
-    setLeaderboardError(null);
-
-    try {
-      const [globalResult, ownResult, leaderboardTimeline] = await Promise.all([
-        fetchGlobalLeaderboard(activeLeaderboardPeriod, 100),
-        user ? fetchOwnLeaderboardEntry(activeLeaderboardPeriod) : Promise.resolve({ success: true, error: null, data: null }),
-        trackerClient.getTimeline(getLogicalDayRange(leaderboardWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes)),
-      ]);
-
-      if (leaderboardRefreshRequestRef.current !== requestId) return;
-
-      if (!globalResult.success) {
-        setLeaderboardRows([]);
-        setOwnLeaderboardEntry(null);
-        setLeaderboardSegments([]);
-        setLeaderboardError(globalResult.error ?? "Unable to load leaderboard");
-        return;
-      }
-
-      if (!ownResult.success) {
-        setLeaderboardRows(globalResult.data ?? []);
-        setOwnLeaderboardEntry(null);
-        setLeaderboardSegments(leaderboardTimeline);
-        setLeaderboardError(ownResult.error ?? "Unable to load your leaderboard status");
-        return;
-      }
-
-      setLeaderboardRows(globalResult.data ?? []);
-      setOwnLeaderboardEntry(ownResult.data ?? null);
-      setLeaderboardSegments(leaderboardTimeline);
-    } catch (nextError) {
-      if (leaderboardRefreshRequestRef.current !== requestId) return;
-      setLeaderboardRows([]);
-      setOwnLeaderboardEntry(null);
-      setLeaderboardSegments([]);
-      setLeaderboardError(toErrorMessage(nextError));
-    } finally {
-      if (leaderboardRefreshRequestRef.current === requestId) setLeaderboardLoading(false);
-    }
-  }, [activeLeaderboardPeriod, isSupabaseConfigured, leaderboardWindowEndDay, leaderboardWindowStartDay, user]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured && !shouldUsePreviewData()) {
-      setLeaderboardRows([]);
-      setOwnLeaderboardEntry(null);
-      setLeaderboardSegments([]);
-      setLeaderboardLoading(false);
-      setLeaderboardError(null);
-      return;
-    }
-
-    if (activeTab !== "leaderboard") return;
-
-    void refreshLeaderboardData();
-  }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
 
   const handleDeleteHistorySegments = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0 || historyDeleting) return;
@@ -4058,96 +3435,6 @@ export default function App() {
     }
   }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired]);
 
-  const refreshBillingEntitlement = useCallback(async (): Promise<BillingEntitlement | null> => {
-    if (!shouldCheckBillingEntitlement) {
-      setBillingEntitlement(null);
-      setBillingEntitlementLoading(false);
-      setBillingEntitlementError(null);
-      return null;
-    }
-
-    const requestId = ++billingEntitlementRequestRef.current;
-    setBillingEntitlementLoading(true);
-    setBillingEntitlementError(null);
-    const result = await fetchBillingEntitlement();
-    if (requestId !== billingEntitlementRequestRef.current) return null;
-    if (result.success) {
-      setBillingEntitlement(result.data);
-      setBillingEntitlementLoading(false);
-      return result.data;
-    } else {
-      setBillingEntitlementError(result.error);
-    }
-    setBillingEntitlementLoading(false);
-    return null;
-  }, [shouldCheckBillingEntitlement]);
-
-  const handleStartDriftyCloudSetup = useCallback(async (billingInterval: BillingInterval = "monthly") => {
-    if (!isSupabaseConfigured) {
-      setAuthModalOpen(true);
-      return;
-    }
-
-    if (!user || !hasRequiredAccountAuth) {
-      setAuthModalOpen(true);
-      return;
-    }
-
-    if (billingEntitlement?.status === "active") {
-      void refreshBillingEntitlement();
-      return;
-    }
-
-    setBillingEntitlementError(null);
-    setBillingCheckoutLoadingInterval(billingInterval);
-    try {
-      const checkoutResult = await createIndividualCheckout(billingInterval);
-      if (!checkoutResult.success) {
-        setBillingEntitlementError(checkoutResult.error);
-        return;
-      }
-
-      await openExternalUrl(checkoutResult.data.url);
-    } catch (error) {
-      setBillingEntitlementError(toErrorMessage(error));
-    } finally {
-      setBillingCheckoutLoadingInterval(null);
-    }
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
-
-  const handleManageCloudBilling = useCallback(async () => {
-    if (!isSupabaseConfigured) {
-      setAuthModalOpen(true);
-      return;
-    }
-
-    if (!user || !hasRequiredAccountAuth) {
-      setAuthModalOpen(true);
-      return;
-    }
-
-    if (billingEntitlement?.status !== "active") {
-      void refreshBillingEntitlement();
-      return;
-    }
-
-    setBillingEntitlementError(null);
-    setBillingPortalLoading(true);
-    try {
-      const portalResult = await createBillingPortalSession();
-      if (!portalResult.success) {
-        setBillingEntitlementError(portalResult.error);
-        return;
-      }
-
-      await openExternalUrl(portalResult.data.url);
-    } catch (error) {
-      setBillingEntitlementError(toErrorMessage(error));
-    } finally {
-      setBillingPortalLoading(false);
-    }
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, refreshBillingEntitlement, user]);
-
   const openDashboardAiSetup = useCallback(() => {
     setSettingsSection("aiSetup");
     navigateToTab("settings");
@@ -4163,119 +3450,11 @@ export default function App() {
     openDashboardAiSetup();
   }, [openDashboardAiSetup]);
 
-  const dismissCloudTrialStartedNotice = useCallback(() => {
-    setCloudTrialStartedNotice(null);
-  }, []);
-
-  const openCloudTrialStartedNoticeAiSetup = useCallback(() => {
-    setSettingsSection("aiSetup");
-    navigateToTab("settings");
-    setCloudTrialStartedNotice(null);
-  }, [navigateToTab]);
-
   const handleDismissDashboardAiRecovery = useCallback(() => {
     if (dashboardAiRecoveryKey === null) return;
     storeDashboardAiRecoveryDismissal(dashboardAiRecoveryKey);
     setDismissedDashboardAiRecoveryKey(dashboardAiRecoveryKey);
   }, [dashboardAiRecoveryKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!shouldCheckBillingEntitlement) {
-      billingEntitlementRequestRef.current += 1;
-      setBillingEntitlement(null);
-      setBillingEntitlementLoading(false);
-      setBillingEntitlementError(null);
-      return undefined;
-    }
-
-    const requestId = ++billingEntitlementRequestRef.current;
-    setBillingEntitlementLoading(true);
-    setBillingEntitlementError(null);
-    void fetchBillingEntitlement().then((result) => {
-      if (cancelled) return;
-      if (requestId !== billingEntitlementRequestRef.current) return;
-      if (result.success) {
-        setBillingEntitlement(result.data);
-      } else {
-        setBillingEntitlement(null);
-        setBillingEntitlementError(result.error);
-      }
-    }).finally(() => {
-      if (!cancelled && requestId === billingEntitlementRequestRef.current) setBillingEntitlementLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldCheckBillingEntitlement, user?.id]);
-
-  useEffect(() => {
-    const userId = user?.id;
-    if (!userId) {
-      setCloudTrialStartedNotice(null);
-      return;
-    }
-
-    const notice = claimCloudTrialStartedNotice(userId, billingEntitlement);
-    if (notice) setCloudTrialStartedNotice(notice);
-  }, [billingEntitlement, user?.id]);
-
-  useEffect(() => {
-    function handleBillingSuccess() {
-      void refreshBillingEntitlement();
-    }
-
-    window.addEventListener("drifty:billing-success", handleBillingSuccess);
-    return () => window.removeEventListener("drifty:billing-success", handleBillingSuccess);
-  }, [refreshBillingEntitlement]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
-      const displayName = fallbackDisplayName(user?.email);
-      setProfile(null);
-      setProfileDraft({ displayName, bio: "", avatarUrl: authMetadataAvatarUrl, websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
-      setProfileLoading(false);
-      setProfileReadyUserId(user?.id ?? null);
-      setProfileError(null);
-      setProfileMessage(null);
-      return;
-    }
-
-    let cancelled = false;
-    setProfileLoading(true);
-    setProfileReadyUserId(null);
-    setProfileError(null);
-    void fetchOwnProfile().then((result) => {
-      if (cancelled) return;
-      if (!result.success) {
-        const displayName = fallbackDisplayName(user.email);
-        setProfile(null);
-        setProfileDraft({ displayName, bio: "", avatarUrl: authMetadataAvatarUrl, websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: true });
-        setProfileError(result.error ?? "Unable to load profile");
-      } else {
-        const nextProfile = result.data ?? null;
-        setProfile(nextProfile);
-        setProfileDraft({
-          displayName: nextProfile?.display_name ?? fallbackDisplayName(user.email),
-          bio: nextProfile?.bio ?? "",
-          avatarUrl: nextProfile?.avatar_url || authMetadataAvatarUrl,
-          websiteUrl: nextProfile?.website_url ?? "",
-          githubUrl: nextProfile?.github_url ?? "",
-          linkedinUrl: nextProfile?.linkedin_url ?? "",
-          isPublic: true,
-        });
-      }
-    }).finally(() => {
-      if (!cancelled) {
-        setProfileLoading(false);
-        setProfileReadyUserId(user.id);
-      }
-    });
-
-    return () => { cancelled = true; };
-  }, [authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
 
   useEffect(() => {
     if (isDevOnboardingBypassEnabled()) {
@@ -4312,7 +3491,7 @@ export default function App() {
   function handleOnboardingComplete(state: UserOnboardingState) {
     const displayName = state.displayName.trim();
     if (displayName) {
-      setProfileDraft((draft) => ({ ...draft, displayName }));
+      updateProfileDraft({ displayName });
     }
     setDriftAlertsEnabled(state.driftAlarmEnabled);
     setExtremeNudgeEnabled(state.extremeNudgeEnabled);
@@ -4491,250 +3670,6 @@ export default function App() {
     }
   }
 
-  async function handleLeaderboardOptIn() {
-    setLeaderboardActionLoading(true);
-    setLeaderboardActionError(null);
-    setProfileError(null);
-
-    try {
-      if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
-        setAuthModalOpen(true);
-        setLeaderboardActionError("Sign in with a drifty.so account before joining the beta leaderboard.");
-        return;
-      }
-
-      if (!user) {
-        if (!allowsEffectiveAnonymousAuth) {
-          setAuthModalOpen(true);
-          setLeaderboardActionError("Sign in before joining the beta leaderboard.");
-          return;
-        }
-
-        const anonymousResult = await signInAnonymously();
-        if (anonymousResult.error || !anonymousResult.user) {
-          setLeaderboardActionError(anonymousResult.error?.message ?? "Unable to join leaderboard without a beta session.");
-          return;
-        }
-      }
-
-      const profileResult = await saveOwnProfile({
-        display_name: profileDraft.displayName,
-        bio: profileDraft.bio,
-        avatar_url: profileDraft.avatarUrl,
-        website_url: profileDraft.websiteUrl,
-        github_url: profileDraft.githubUrl,
-        linkedin_url: profileDraft.linkedinUrl,
-        timezone: leaderboardTimezone,
-        is_public: true,
-      });
-
-      if (!profileResult.success || !profileResult.data) {
-        setLeaderboardActionError(profileResult.error ?? "Unable to prepare public profile");
-        if (profileResult.error === "Not authenticated") setAuthModalOpen(true);
-        return;
-      }
-
-      const nextProfile = profileResult.data;
-      setProfile(nextProfile);
-      setProfileDraft({
-        displayName: nextProfile.display_name,
-        bio: nextProfile.bio,
-        avatarUrl: nextProfile.avatar_url,
-        websiteUrl: nextProfile.website_url,
-        githubUrl: nextProfile.github_url,
-        linkedinUrl: nextProfile.linkedin_url,
-        isPublic: true,
-      });
-
-      const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
-      const allPeriodSegments = await trackerClient.getTimeline(getLogicalDayRange(allPeriodWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes));
-      const publishResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => {
-        const windowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, period);
-        const focusSeconds = buildRollingFocusSeconds(allPeriodSegments, windowStartDay, leaderboardWindowEndDay, {
-          fallbackCandidates: allPeriodSegments,
-          includeAiClassifications: showAiClassificationImpact,
-        }, startOfDayMinutes);
-        return publishOwnFocusTotal({
-          profileDisplayName: nextProfile.display_name,
-          period,
-          focus_seconds: focusSeconds,
-          focus_seconds_7d: focusSeconds,
-          window_start_date: windowStartDay,
-          window_end_date: leaderboardWindowEndDay,
-          timezone: leaderboardTimezone,
-        });
-      }));
-      const result = publishResults.find((nextResult) => !nextResult.success) ?? publishResults[0];
-
-      if (!result.success) {
-        setLeaderboardActionError(result.error ?? "Unable to join leaderboard");
-        if (result.error === "Not authenticated") setAuthModalOpen(true);
-        return;
-      }
-
-      await refreshLeaderboardData();
-    } catch (nextError) {
-      setLeaderboardActionError(toErrorMessage(nextError));
-    } finally {
-      setLeaderboardActionLoading(false);
-    }
-  }
-
-  async function handleLeaderboardOptOut() {
-    setLeaderboardActionLoading(true);
-    setLeaderboardActionError(null);
-
-    try {
-      const optOutResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => optOutLeaderboard(period)));
-      const result = optOutResults.find((nextResult) => !nextResult.success) ?? optOutResults[0];
-      if (!result.success) {
-        setLeaderboardActionError(result.error ?? "Unable to leave leaderboard");
-        return;
-      }
-
-      await refreshLeaderboardData();
-    } catch (nextError) {
-      setLeaderboardActionError(toErrorMessage(nextError));
-    } finally {
-      setLeaderboardActionLoading(false);
-    }
-  }
-
-  async function handleSaveProfile() {
-    setProfileSaving(true);
-    setProfileMessage(null);
-    setProfileError(null);
-
-    try {
-      const result = await saveOwnProfile({
-        display_name: profileDraft.displayName,
-        bio: profileDraft.bio,
-        avatar_url: profileDraft.avatarUrl,
-        website_url: profileDraft.websiteUrl,
-        github_url: profileDraft.githubUrl,
-        linkedin_url: profileDraft.linkedinUrl,
-        timezone: leaderboardTimezone,
-        is_public: true,
-      });
-
-      if (!result.success || !result.data) {
-        setProfileError(result.error ?? "Unable to save profile");
-        return false;
-      }
-
-      setProfile(result.data);
-      setProfileDraft({
-        displayName: result.data.display_name,
-        bio: result.data.bio,
-        avatarUrl: result.data.avatar_url,
-        websiteUrl: result.data.website_url,
-        githubUrl: result.data.github_url,
-        linkedinUrl: result.data.linkedin_url,
-        isPublic: true,
-      });
-      setProfileMessage("Profile saved.");
-      if (activeTab === "leaderboard") await refreshLeaderboardData();
-      return true;
-    } catch (nextError) {
-      setProfileError(toErrorMessage(nextError));
-      return false;
-    } finally {
-      setProfileSaving(false);
-    }
-  }
-
-  async function handleSaveProfileFromModal() {
-    const saved = await handleSaveProfile();
-    if (saved) setIsProfileEditorOpen(false);
-  }
-
-  async function handleProfilePhotoSelected(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setProfileError("Choose an image file for your profile photo.");
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      setProfileError("Profile photo must be under 2 MB.");
-      return;
-    }
-
-    try {
-      const avatarUrl = await readImageFileAsDataUrl(file);
-      setProfileError(null);
-      setProfileMessage(null);
-      setProfileDraft((draft) => ({ ...draft, avatarUrl, isPublic: true }));
-    } catch (nextError) {
-      setProfileError(toErrorMessage(nextError));
-    }
-  }
-
-  async function handleShareLeaderboardProfile() {
-    const publicId = profile?.public_id?.trim();
-    if (!publicId) {
-      setProfileShareMessage("Save or join first to create your public profile link.");
-      return;
-    }
-
-    try {
-      await copyTextToClipboard(buildPublicProfileUrl(publicId));
-      setProfileShareMessage("Copied to clipboard.");
-      window.setTimeout(() => setProfileShareMessage(null), 2200);
-    } catch (nextError) {
-      setProfileShareMessage(toErrorMessage(nextError));
-    }
-  }
-
-  const totalLeaderboardFocusSeconds = useMemo(
-    () => leaderboardRows.reduce((sum, row) => sum + Math.max(0, row.focus_seconds_7d), 0),
-    [leaderboardRows],
-  );
-
-  async function handleSelectLeaderboardProfile(row: LeaderboardRow) {
-    setSelectedLeaderboardRow(row);
-    setSelectedPublicProfile(null);
-    setSelectedProfileError(null);
-
-    if (!row.public_id) {
-      setSelectedProfileLoading(false);
-      return;
-    }
-
-    setSelectedProfileLoading(true);
-    try {
-      const result = await fetchPublicProfile(row.public_id, row.period);
-      if (!result.success) {
-        setSelectedProfileError(result.error ?? "Unable to load profile");
-        return;
-      }
-      setSelectedPublicProfile(result.data ?? null);
-    } catch (nextError) {
-      setSelectedProfileError(toErrorMessage(nextError));
-    } finally {
-      setSelectedProfileLoading(false);
-    }
-  }
-
-  async function handleViewOwnLeaderboardProfile() {
-    if (!ownLeaderboardEntry) return;
-    await handleSelectLeaderboardProfile({
-      rank: ownLeaderboardEntry.rank ?? 0,
-      public_id: profile?.public_id ?? null,
-      display_name: leaderboardProfileDisplayName,
-      avatar_url: profile?.avatar_url ?? "",
-      period: ownLeaderboardEntry.period,
-      focus_seconds: ownLeaderboardEntry.focus_seconds,
-      focus_seconds_7d: ownLeaderboardEntry.focus_seconds_7d,
-      window_start_date: ownLeaderboardEntry.window_start_date,
-      window_end_date: ownLeaderboardEntry.window_end_date,
-      updated_at: ownLeaderboardEntry.updated_at,
-    });
-  }
-
   function handleCmdNav(tabId: TabId) {
     if (tabId === "settings") openSettingsTab();
     else navigateToTab(tabId);
@@ -4784,8 +3719,8 @@ export default function App() {
       appThemeColorOverrides,
       developerDiagnostics: {
         devModeEnabled,
-        forceChromiumAxCapture: devModeEnabled && forceChromiumAxCaptureEnabled,
-        forceChromiumAxExtremeNudge: devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+        forceChromiumAxCapture: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled,
+        forceChromiumAxExtremeNudge: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
       },
       status,
       accessibilityGranted,
@@ -5057,403 +3992,93 @@ export default function App() {
 
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
-          <div className={`page${dashPeriod === "Week" ? " page--week-dashboard" : ""}`}>
-            {dashboardAiUnavailableState ? (
-              <DashboardAiUnavailableNotice
-                state={dashboardAiUnavailableState}
-                onAction={handleDashboardAiUnavailableAction}
-              />
-            ) : null}
-            {dashboardAiRecoveryState ? (
-              <DashboardAiRecoveryOverlay
-                billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                retrying={classificationActionLoading}
-                state={dashboardAiRecoveryState}
-                onClose={handleDismissDashboardAiRecovery}
-                onOpenAiSetup={openDashboardAiSetup}
-                onRetryAi={() => void handleRunSelectedDayAiClassification()}
-                onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
-              />
-            ) : null}
-
-            {dashPeriod === "Week" ? null : (
-              <div className={`pg-head dashboard-page-head${dashPeriod === "Today" ? " dashboard-page-head--today" : ""}`}>
-                <div className="dashboard-page-head__row">
-                  <div>
-                    {dashPeriod === "Today" ? null : <div className="eyebrow">{dashboardPeriodLabel}</div>}
-                    <h1>{dashboardTitle}</h1>
-                  </div>
-                  {dashboardDateNavigator}
-                </div>
-              </div>
-            )}
-
-            {dashPeriod === "Week" ? (
-              <WeekDashboard
-                rows={weekRows}
-                calendarEvents={weekCalendarEvents}
-                appIcons={appIcons}
-                startDay={dashboardRange.startDay}
-                endDay={dashboardRange.endDay}
-                categoryEntries={dashboardCategoryTotals}
-                productivityEntries={dashboardProductivityTotals}
-                totalSeconds={totalSeconds}
-                focusDeltaPercent={shouldUsePreviewData() ? 21 : weekFocusDeltaPercent}
-                isPreviewSurface={shouldUsePreviewData()}
-                startOfDayMinutes={startOfDayMinutes}
-                dateNavigator={dashboardDateNavigator}
-              />
-            ) : dashPeriod === "Month" ? (
-              <HistoryCalendarPanel
-                segments={historySegments}
-                selectedDay={selectedDay}
-                classificationOptions={historyClassificationOptions}
-                startOfDayMinutes={startOfDayMinutes}
-                onSelectDay={selectDay}
-              />
-            ) : (
-              <>
-                {/* Flow chart + breakdown */}
-                {hasTimelineData ? (
-                  <div className="flow-breakdown-layout">
-                    <div className="flow-breakdown-layout__chart">
-                      <FlowChartView
-                        blocks={flowBlocks}
-                        appIcons={appIcons}
-                        currentMinuteOfDay={currentMinuteOfDay}
-                        intervalMinutes={flowIntervalMinutes}
-                        startOfDayMinutes={startOfDayMinutes}
-                        onIntervalChange={setFlowIntervalMinutes}
-                      />
-                    </div>
-                    <FlowCompactSplitChart
-                      categoryEntries={dashboardCategoryTotals}
-                      productivityEntries={dashboardProductivityTotals}
-                      totalSeconds={totalSeconds}
-                      flowBlocks={flowBlocks}
-                      appIcons={appIcons}
-                    />
-                  </div>
-                ) : (
-                  <EmptyState title="No timeline yet" detail={status?.running ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused. Use the sidebar control or move to a day with recorded activity."} />
-                )}
-              </>
-            )}
-
-            {dashPeriod === "Today" ? (
-              <>
-                <div className="dashboard-insight-stack">
-                  {focusDriftSection}
-                </div>
-
-                <AppUsagePanel
-                  items={dashboardAppUsage}
-                  periodLabel={dashPeriod.toLowerCase()}
-                  totalSeconds={totalSeconds}
-                  appIcons={appIcons}
-                />
-
-              </>
-            ) : null}
-          </div>
+          <DashboardPage
+            appIcons={appIcons}
+            billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+            classificationActionLoading={classificationActionLoading}
+            currentMinuteOfDay={currentMinuteOfDay}
+            dashboardAiRecoveryState={dashboardAiRecoveryState}
+            dashboardAiUnavailableState={dashboardAiUnavailableState}
+            dashboardAppUsage={dashboardAppUsage}
+            dashboardCategoryTotals={dashboardCategoryTotals}
+            dashboardDateNavigator={dashboardDateNavigator}
+            dashboardPeriodLabel={dashboardPeriodLabel}
+            dashboardProductivityTotals={dashboardProductivityTotals}
+            dashboardRange={dashboardRange}
+            dashboardTitle={dashboardTitle}
+            dashPeriod={dashPeriod}
+            flowBlocks={flowBlocks}
+            flowIntervalMinutes={flowIntervalMinutes}
+            focusDriftSection={focusDriftSection}
+            hasTimelineData={hasTimelineData}
+            historyClassificationOptions={historyClassificationOptions}
+            historySegments={historySegments}
+            isPreviewSurface={shouldUsePreviewData()}
+            selectedDay={selectedDay}
+            selectedDayLabel={selectedDayLabel}
+            startOfDayMinutes={startOfDayMinutes}
+            statusRunning={status?.running === true}
+            totalSeconds={totalSeconds}
+            weekCalendarEvents={weekCalendarEvents}
+            weekFocusDeltaPercent={weekFocusDeltaPercent}
+            weekRows={weekRows}
+            onDashboardAiUnavailableAction={handleDashboardAiUnavailableAction}
+            onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
+            onFlowIntervalChange={setFlowIntervalMinutes}
+            onOpenDashboardAiSetup={openDashboardAiSetup}
+            onRetrySelectedDayAiClassification={() => void handleRunSelectedDayAiClassification()}
+            onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
+            onSelectDay={selectDay}
+          />
         ) : null}
 
         {/* Classification */}
         {activeTab === "classification" ? (
-          <div className="page">
-            <div className="pg-head">
-              <div>
-                <div className="eyebrow">Classification</div>
-                <h1>Activity breakdown</h1>
-              </div>
-              <div className="classification-range-controls">
-                <div className="settings-mode-switch" role="radiogroup" aria-label="Classification range">
-                  {(["Day", "Week"] as const).map((range) => (
-                    <button
-                      key={range}
-                      type="button"
-                      className={`settings-mode-option${classificationRange === range ? " is-active" : ""}`}
-                      role="radio"
-                      aria-checked={classificationRange === range}
-                      onClick={() => setClassificationRange(range)}
-                    >
-                      <span>{range}</span>
-                    </button>
-                  ))}
-                </div>
-                <DateNavigator
-                  ariaLabel={`Classification ${classificationRange.toLowerCase()} selector`}
-                  context={classificationDateContext}
-                  label={classificationDateLabel}
-                  todayLabel="Today"
-                  isTodayDisabled={isCurrentClassificationRange}
-                  isNextDisabled={!canShiftClassificationForward}
-                  onPrevious={() => selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, -1, todayDay, startOfDayMinutes, startOfWeek))}
-                  onNext={() => { if (canShiftClassificationForward) selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, 1, todayDay, startOfDayMinutes, startOfWeek)); }}
-                  onToday={() => selectDay(getSafeClassificationNavigationDay(selectedDay, classificationRange, 0, todayDay, startOfDayMinutes, startOfWeek))}
-                  previousLabel={classificationRange === "Week" ? "Show previous classification week" : "Show previous day"}
-                  nextLabel={classificationRange === "Week" ? "Show next classification week" : "Show next day"}
-                />
-              </div>
-            </div>
-
-            <div className="clf-summary">
-              <div className="clf-stat"><span className="eyebrow">Total</span><strong>{formatDuration(classificationTotalSeconds)}</strong></div>
-              <div className="clf-stat"><span className="eyebrow">Sessions</span><strong>{classificationSegments.length}</strong></div>
-              <div className="clf-stat clf-stat--with-icon"><span className="eyebrow">Top app</span><div className="clf-stat__row"><AppGlyph appName={classificationTopApp?.appName ?? classificationTopAppLabel} iconSrc={classificationTopApp ? appIcons[classificationTopApp.bundleId ?? classificationTopApp.appName] ?? null : null} size="sm" /><strong>{classificationTopAppLabel}</strong></div></div>
-              <div className="clf-stat"><span className="eyebrow">Quality</span><strong>{classificationQualityPercent}%</strong></div>
-            </div>
-
-            {classificationCategoryBreakdowns.length > 0 ? (
-              <section className="classification-panel-view" aria-label="Classification panel view" style={classificationPanelStyle}>
-                <div className="classification-panel-view__grid">
-                  <section className="classification-panel-view__panel" aria-label="Categories">
-                    <header className="classification-panel-view__panel-header panel-header">
-                      <div className="panel-header__left">
-                        <span className="label-mono">Categories</span>
-                        <strong className="panel-header__title">{classificationCategoryBreakdowns.length} tracked</strong>
-                      </div>
-                      <div className="panel-header__right">
-                        <span className="panel-header__meta">Total</span>
-                        <strong className="panel-header__value">{formatDuration(classificationTotalSeconds)}</strong>
-                      </div>
-                    </header>
-                    <div className="classification-panel-view__panel-body">
-                      <div className="classification-panel-view__list" role="list">
-                        {classificationCategoryBreakdowns.map((breakdown) => {
-                          const isSelected = breakdown.category === effectiveClassifyCategoryId;
-                          const peakSeconds = classificationCategoryBreakdowns[0]?.totalSeconds ?? 0;
-                          const barWidth = Math.max((breakdown.totalSeconds / Math.max(peakSeconds, 1)) * 100, 4);
-                          return (
-                            <button
-                              key={breakdown.category}
-                              type="button"
-                              className="classification-panel-view__category-row"
-                              data-selected={String(isSelected)}
-                              aria-pressed={isSelected}
-                              onClick={() => {
-                                setClassifySelectedCategoryId(breakdown.category);
-                                setClassifySelectedSourceId(null);
-                              }}
-                            >
-                              <div className="classification-panel-view__row-top">
-                                <div className="classification-panel-view__row-title">
-                                  <span className={`category-dot category-dot--${breakdown.category}`} aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0 }} />
-                                  <strong>{categoryLabel(breakdown.category)}</strong>
-                                </div>
-                                <span>{formatCompactDurationFromSeconds(breakdown.totalSeconds)}</span>
-                              </div>
-                              <div className="classification-panel-view__bar" aria-hidden="true">
-                                <span style={{ width: `${barWidth}%`, background: CATEGORY_COLORS[breakdown.category] }} />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="classification-panel-view__panel" aria-label="Apps and sites">
-                    <header className="classification-panel-view__panel-header panel-header">
-                      <div className="panel-header__left">
-                        <span className="label-mono">Apps &amp; Sites</span>
-                        <strong className="panel-header__title">
-                          {selectedClassificationBreakdown ? categoryLabel(selectedClassificationBreakdown.category) : "No category"}
-                        </strong>
-                      </div>
-                      <div className="panel-header__right">
-                        <span className="panel-header__meta">{classificationSourceSummaries.length === 1 ? "source" : "sources"}</span>
-                        <strong className="panel-header__value">{classificationSourceSummaries.length}</strong>
-                      </div>
-                    </header>
-                    <div className="classification-panel-view__panel-body">
-                      {classificationSourceSummaries.length > 0 ? (
-                        <div className="classification-panel-view__list" role="list">
-                          {classificationSourceSummaries.map((item) => {
-                            const sourceKey = classifySourceKey(item);
-                            const isSelected = sourceKey === effectiveClassifySourceId;
-                            return (
-                              <button
-                                key={sourceKey}
-                                type="button"
-                                className="classification-panel-view__source-row"
-                                data-selected={String(isSelected)}
-                                aria-pressed={isSelected}
-                                onClick={() => setClassifySelectedSourceId(sourceKey)}
-                              >
-                                <div className="classification-panel-view__source-icon">
-                                  {item.usageKind === "site" && item.siteDomain
-                                    ? <SiteFavicon domain={item.siteDomain} size={24} fallbackIconSrc={appIcons[item.appName] ?? null} />
-                                    : <AppGlyph appName={item.usageKind === "site" ? item.label : item.appName} iconSrc={appIcons[item.appName] ?? null} size="sm" />}
-                                </div>
-                                <div className="classification-panel-view__source-copy">
-                                  <strong>{item.label}</strong>
-                                  <div className="classification-panel-view__source-meta">
-                                    <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
-                                    <span className="classification-panel-view__source-productivity" aria-label={formatClassificationSourceProductivityMix(item.productivityMix)} title={formatClassificationSourceProductivityMix(item.productivityMix)}>
-                                      {item.productivityMix.map((entry) => (
-                                        <span
-                                          key={entry.productivity}
-                                          className={`classification-panel-view__source-productivity-dot classification-panel-view__source-productivity-dot--${entry.productivity}`}
-                                          style={{ width: `${Math.max(7, Math.round(entry.ratio * 18))}px` }}
-                                          aria-hidden="true"
-                                        />
-                                      ))}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="classification-panel-view__source-measure">
-                                  <strong>{formatCompactDurationFromSeconds(item.totalSeconds)}</strong>
-                                  <span>{item.shareOfTotal * 100 >= 10 ? `${Math.round(item.shareOfTotal * 100)}%` : `${(item.shareOfTotal * 100).toFixed(1)}%`}</span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="classification-panel-view__empty">
-                          <span className="label-mono">Apps &amp; Sites</span>
-                          <strong>No sources in this category yet</strong>
-                          <p>Tracked apps and browser surfaces will appear here once this category has activity.</p>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="classification-panel-view__panel classification-panel-view__panel--detail" aria-label="Activity details">
-                    {selectedClassificationSourceSummary ? (
-                      <>
-                        <header className="classification-panel-view__panel-header panel-header">
-                          <div className="panel-header__left">
-                            <span className="label-mono">Activity details</span>
-                            <strong className="panel-header__title">
-                              {selectedClassificationSourceSummary.label}
-                            </strong>
-                          </div>
-                          <div className="panel-header__right classification-panel-view__detail-meta">
-                            <span className="panel-header__meta">
-                              {selectedClassificationSourceSummary.sessionCount} {selectedClassificationSourceSummary.sessionCount === 1 ? "session" : "sessions"}
-                            </span>
-                            <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
-                          </div>
-                        </header>
-                        <div className="classification-panel-view__panel-body">
-                          <div className="classification-panel-view__list" role="list">
-                            {classificationActivityRows.map((row) => {
-                              const rowMeta = `${row.count} ${row.count === 1 ? "activity" : "activities"} · ${row.startedLabel} - ${row.endedLabel}`;
-                              const isExpanded = row.hasDetails && expandedClassificationActivityRows.has(row.id);
-                              const detailsId = classificationActivityDetailsId(row.id);
-                              const rowSummary = (
-                                <>
-                                  <div className="classification-panel-view__activity-copy">
-                                    <strong title={row.label}>{row.label}</strong>
-                                    <span title={rowMeta}>{rowMeta}</span>
-                                  </div>
-                                  <div className="classification-panel-view__activity-measure">
-                                    <div className="classification-panel-view__bar" aria-hidden="true">
-                                      <span style={{ width: `${Math.max((row.totalSeconds / Math.max(classificationActivityPeakSeconds, 1)) * 100, 4)}%`, background: selectedClassificationTone }} />
-                                    </div>
-                                    <strong>{formatCompactDurationFromSeconds(row.totalSeconds)}</strong>
-                                  </div>
-                                </>
-                              );
-                              return (
-                                <div key={row.id} className="classification-panel-view__activity-row" role="listitem" data-expandable={String(row.hasDetails)} data-expanded={String(isExpanded)}>
-                                  {row.hasDetails ? (
-                                    <button
-                                      type="button"
-                                      className="classification-panel-view__activity-toggle"
-                                      aria-expanded={isExpanded}
-                                      aria-controls={detailsId}
-                                      onClick={() => {
-                                        setExpandedClassificationActivityRows((current) => {
-                                          const next = new Set(current);
-                                          if (next.has(row.id)) next.delete(row.id);
-                                          else next.add(row.id);
-                                          return next;
-                                        });
-                                      }}
-                                    >
-                                      {rowSummary}
-                                      <span className="sr-only">Capture details {isExpanded ? "expanded" : "collapsed"}</span>
-                                      <span className="classification-panel-view__activity-chevron" aria-hidden="true">{isExpanded ? "⌄" : ">"}</span>
-                                    </button>
-                                  ) : (
-                                    <div className="classification-panel-view__activity-summary">
-                                      {rowSummary}
-                                    </div>
-                                  )}
-                                  {isExpanded ? (() => {
-                                    const surfaceDetails = captureRowSurfaceDetails(row.segments);
-                                    const summary = classificationRowSummary(row.segments, classificationOptions);
-                                    return (
-                                      <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={`Capture details for ${row.label}`}>
-                                        <div className="classification-panel-view__activity-overview">
-                                          {surfaceDetails.length > 0 ? (
-                                            <div className="classification-panel-view__activity-surface" aria-label="Capture surface">
-                                              <span className="label-mono">Surface</span>
-                                              <div className="classification-panel-view__activity-surface-list">
-                                                {surfaceDetails.map((detail) => <span key={detail}>{detail}</span>)}
-                                              </div>
-                                            </div>
-                                          ) : null}
-                                          {summary ? (
-                                            <dl className="classification-panel-view__activity-classification" aria-label="Classification summary">
-                                              <div><dt>Category</dt><dd>{summary.categoryLabel}</dd></div>
-                                              <div><dt>Productivity</dt><dd>{summary.productivityLabel}</dd></div>
-                                              <div><dt>Source</dt><dd>{summary.sourceLabel}</dd></div>
-                                              <div><dt>Confidence</dt><dd>{summary.confidenceLabel}</dd></div>
-                                            </dl>
-                                          ) : null}
-                                        </div>
-                                        <div className="classification-panel-view__capture-timeline">
-                                          <span className="label-mono">Capture slices</span>
-                                          <div className="classification-panel-view__capture-slice-list" role="list" aria-label={`Capture slices for ${row.label}`}>
-                                            {row.segments.map((segment, index) => {
-                                              const segmentRange = `${formatTimeLabel(segment.startedAt)} - ${formatTimeLabel(segment.endedAt)}`;
-                                              const segmentDuration = formatCompactDurationFromSeconds(segment.durationSeconds);
-                                              const segmentTitle = classificationActivityLabel(segment);
-                                              return (
-                                                <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentTitle}, ${segmentRange}, ${segmentDuration}`}>
-                                                  <div className="classification-panel-view__capture-slice-copy">
-                                                    <strong className="classification-panel-view__capture-slice-title" title={segmentTitle}>{segmentTitle}</strong>
-                                                    <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
-                                                  </div>
-                                                  <strong className="classification-panel-view__capture-slice-duration">{segmentDuration}</strong>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })() : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="classification-panel-view__empty">
-                        <span className="label-mono">Activity details</span>
-                        <strong>Select an app or site to see activity details.</strong>
-                        <p>Choose a source from the middle panel to inspect its titles, pages, and time distribution.</p>
-                      </div>
-                    )}
-                  </section>
-                </div>
-              </section>
-            ) : (
-              <section className="classification-panel-view" aria-label="Classification panel view">
-                <div className="classification-panel-view__empty classification-panel-view__empty--full">
-                  <span className="label-mono">Classification</span>
-                  <strong>No category data yet</strong>
-                  <p>Category, source, and activity details will appear here once tracking captures activity for the selected range.</p>
-                </div>
-              </section>
-            )}
-          </div>
+          <ClassificationPage
+            appIcons={appIcons}
+            canShiftClassificationForward={canShiftClassificationForward}
+            classificationActivityPeakSeconds={classificationActivityPeakSeconds}
+            classificationActivityRows={classificationActivityRows}
+            classificationCategoryBreakdowns={classificationCategoryBreakdowns}
+            classificationDateContext={classificationDateContext}
+            classificationDateLabel={classificationDateLabel}
+            classificationOptions={classificationOptions}
+            classificationPanelStyle={classificationPanelStyle}
+            classificationQualityPercent={classificationQualityPercent}
+            classificationRange={classificationRange}
+            classificationSessionCount={classificationSegments.length}
+            classificationSourceSummaries={classificationSourceSummaries}
+            classificationTopAppIconSrc={classificationTopApp ? appIcons[classificationTopApp.bundleId ?? classificationTopApp.appName] ?? null : null}
+            classificationTopAppLabel={classificationTopAppLabel}
+            classificationTopAppName={classificationTopApp?.appName ?? classificationTopAppLabel}
+            classificationTotalSeconds={classificationTotalSeconds}
+            effectiveClassifyCategoryId={effectiveClassifyCategoryId}
+            effectiveClassifySourceId={effectiveClassifySourceId}
+            expandedClassificationActivityRows={expandedClassificationActivityRows}
+            isCurrentClassificationRange={isCurrentClassificationRange}
+            selectedClassificationBreakdown={selectedClassificationBreakdown}
+            selectedClassificationSourceSummary={selectedClassificationSourceSummary}
+            selectedClassificationTone={selectedClassificationTone}
+            onActivityRowToggle={(rowId) => {
+              setExpandedClassificationActivityRows((current) => {
+                const next = new Set(current);
+                if (next.has(rowId)) next.delete(rowId);
+                else next.add(rowId);
+                return next;
+              });
+            }}
+            onCategorySelect={(category) => {
+              setClassifySelectedCategoryId(category);
+              setClassifySelectedSourceId(null);
+            }}
+            onNextClassificationRange={() => {
+              if (canShiftClassificationForward) selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, 1, todayDay, startOfDayMinutes, startOfWeek));
+            }}
+            onPreviousClassificationRange={() => selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, -1, todayDay, startOfDayMinutes, startOfWeek))}
+            onRangeChange={setClassificationRange}
+            onSourceSelect={setClassifySelectedSourceId}
+            onTodayClassificationRange={() => selectDay(getSafeClassificationNavigationDay(selectedDay, classificationRange, 0, todayDay, startOfDayMinutes, startOfWeek))}
+          />
         ) : null}
 
         {activeTab === "history" ? (
@@ -5470,128 +4095,67 @@ export default function App() {
 
         {/* Insights */}
         {activeTab === "trends" ? (
-          <div className="page insights-page">
-            <div className="pg-head insights-page__head">
-              <div>
-                <div className="eyebrow">Trends</div>
-                <h1>Patterns and trends</h1>
-              </div>
-              <div className="classification-range-controls trends-range-controls">
-                <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Trends range">
-                  {INSIGHT_RANGE_OPTIONS.map((option) => (
-                    <button
-                      key={option.range}
-                      type="button"
-                      className={`settings-mode-option${trendsRange === option.range ? " is-active" : ""}`}
-                      role="radio"
-                      aria-checked={trendsRange === option.range}
-                      onClick={() => setTrendsRange(option.range)}
-                    >
-                      <span>{option.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <DateNavigator
-                  ariaLabel="Insight window selector"
-                  context={insightDateContext}
-                  label={insightDateLabel}
-                  todayLabel="Latest"
-                  isTodayDisabled={isTodaySelected}
-                  isNextDisabled={!canShiftInsightForward}
-                  onPrevious={() => selectDay((p) => shiftInsightPeriodDay(p, trendsRange, -1))}
-                  onNext={() => { if (canShiftInsightForward) selectDay((p) => shiftInsightPeriodDay(p, trendsRange, 1)); }}
-                  onToday={() => selectDay(todayIsoDate())}
-                  previousLabel="Show previous insight window"
-                  nextLabel="Show next insight window"
-                />
-              </div>
-            </div>
-
-            <WeeklyCategoryRow
-              weekly={weeklyBreakdown}
-              categoryTotals={activeInsightCategoryTotals}
-              segments={insightSegments}
-              classificationOptions={insightClassificationOptions}
-              appIcons={appIcons}
-              productivityTotals={{
-                focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
-                neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
-                drift: activeInsightProductivityTotals.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0,
-              }}
-            />
-
-            <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
-              <ProductivityPersonaCard
-                classificationOptions={insightClassificationOptions}
-                hasData={insightSegments.length > 0}
-                report={productivityPersonaReport}
-                segments={insightSegments}
-                variant="radar"
-              />
-              <AttentionRhythmCard
-                appIcons={appIcons}
-                cells={attentionRhythm}
-                classificationOptions={insightClassificationOptions}
-                segments={insightSegments}
-              />
-            </div>
-
-            <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
-              <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
-              <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
-            </div>
-
-            <BreakRecoveryCard summary={breakRecoveryInsight} />
-          </div>
+          <TrendsPage
+            activeInsightCategoryTotals={activeInsightCategoryTotals}
+            activeInsightProductivityTotals={activeInsightProductivityTotals}
+            appIcons={appIcons}
+            attentionRhythm={attentionRhythm}
+            breakRecoveryInsight={breakRecoveryInsight}
+            canShiftInsightForward={canShiftInsightForward}
+            driftSourceLists={driftSourceLists}
+            focusSourceLists={focusSourceLists}
+            insightClassificationOptions={insightClassificationOptions}
+            insightDateLabel={insightDateLabel}
+            insightSegments={insightSegments}
+            isTodaySelected={isTodaySelected}
+            productivityPersonaReport={productivityPersonaReport}
+            trendsRange={trendsRange}
+            weeklyBreakdown={weeklyBreakdown}
+            onNextInsightRange={() => {
+              if (canShiftInsightForward) selectDay((p) => shiftInsightPeriodDay(p, trendsRange, 1));
+            }}
+            onPreviousInsightRange={() => selectDay((p) => shiftInsightPeriodDay(p, trendsRange, -1))}
+            onTodayInsightRange={() => selectDay(todayIsoDate())}
+            onTrendsRangeChange={setTrendsRange}
+          />
         ) : null}
 
         {/* Leaderboard */}
         {activeTab === "leaderboard" ? (
-          <div className="page">
-            <div className="pg-head">
-              <div>
-                <div className="eyebrow">Leaderboard</div>
-                <h1>Global focus ranking</h1>
-              </div>
-            </div>
-
-            <div className="leaderboard-page-layout">
-              <LeaderboardView
-                isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
-                isSignedIn={isPolicySignedIn}
-                isLoading={leaderboardLoading}
-                error={leaderboardError}
-                isOptedIn={isLeaderboardOptedIn}
-                ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
-                activePeriod={activeLeaderboardPeriod}
-                leaderboard={leaderboardRows}
-                focusSeconds7d={localRollingFocusSeconds}
-                totalFocusSeconds7d={totalLeaderboardFocusSeconds}
-                windowStartDay={leaderboardWindowStartDay}
-                windowEndDay={leaderboardWindowEndDay}
-                profileDisplayName={leaderboardProfileDisplayName}
-                profileAvatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
-                profileBio={leaderboardProfileBio}
-                profileWebsiteUrl={leaderboardProfileWebsiteUrl}
-                profileGithubUrl={leaderboardProfileGithubUrl}
-                profileLinkedinUrl={leaderboardProfileLinkedinUrl}
-                email={user?.email ?? null}
-                isActionLoading={leaderboardActionLoading}
-                actionError={leaderboardActionError}
-                onOptIn={() => void handleLeaderboardOptIn()}
-                onSignIn={() => void handleLeaderboardOptIn()}
-                onEditProfile={() => setIsProfileEditorOpen(true)}
-                onViewOwnProfile={() => void handleViewOwnLeaderboardProfile()}
-                onShareProfile={() => void handleShareLeaderboardProfile()}
-                onOptOut={() => void handleLeaderboardOptOut()}
-                onPeriodChange={setActiveLeaderboardPeriod}
-                onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
-              />
-            </div>
-            {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
-            {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
-            {profileShareMessage ? <div className="leaderboard-share-toast" role="status">{profileShareMessage}</div> : null}
-          </div>
+          <LeaderboardPage
+            actionError={leaderboardActionError}
+            activePeriod={activeLeaderboardPeriod}
+            email={user?.email ?? null}
+            error={leaderboardError}
+            focusSeconds7d={localRollingFocusSeconds}
+            isActionLoading={leaderboardActionLoading}
+            isLoading={leaderboardLoading}
+            isOptedIn={isLeaderboardOptedIn}
+            isSignedIn={isPolicySignedIn}
+            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
+            leaderboard={leaderboardRows}
+            ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            profileAvatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
+            profileBio={leaderboardProfileBio}
+            profileDisplayName={leaderboardProfileDisplayName}
+            profileError={profileError}
+            profileGithubUrl={leaderboardProfileGithubUrl}
+            profileLinkedinUrl={leaderboardProfileLinkedinUrl}
+            profileMessage={profileMessage}
+            profileShareMessage={profileShareMessage}
+            profileWebsiteUrl={leaderboardProfileWebsiteUrl}
+            totalFocusSeconds7d={totalLeaderboardFocusSeconds}
+            windowEndDay={leaderboardWindowEndDay}
+            windowStartDay={leaderboardWindowStartDay}
+            onEditProfile={openProfileEditor}
+            onOptIn={() => void handleLeaderboardOptIn()}
+            onOptOut={() => void handleLeaderboardOptOut()}
+            onPeriodChange={setActiveLeaderboardPeriod}
+            onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
+            onShareProfile={() => void handleShareLeaderboardProfile()}
+            onSignIn={() => void handleLeaderboardOptIn()}
+            onViewOwnProfile={() => void handleViewOwnLeaderboardProfile()}
+          />
         ) : null}
 
         {/* Settings */}
@@ -5600,264 +4164,148 @@ export default function App() {
             <h1 className="sr-only">Settings</h1>
             <div className="settings-panel-stack">
                 {settingsSection === "general" && (
-                  <div className="settings-section settings-section--general">
-                    <div className="settings-block"><h3>General</h3>
-                      <div className="settings-row"><label><div className="lbl">Start of day</div><div className="desc">Treat days as starting on this hour. Default is 4:00 AM.</div></label><div className="ctrl"><SettingsSelect ariaLabel="Start of day" value={startOfDayValue} options={START_OF_DAY_OPTIONS} onChange={handleStartOfDayChange} /></div></div>
-                      <div className="settings-row"><label><div className="lbl">Start of week</div><div className="desc">Choose the first day shown for weekly views.</div></label><div className="ctrl"><SettingsSelect ariaLabel="Start of week" value={startOfWeek} options={START_OF_WEEK_OPTIONS} onChange={handleStartOfWeekChange} /></div></div>
-                      <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => setTheme("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => setTheme("dark")}><span>Dark</span></button></div></div></div>
-                    </div>
-                    <div className="settings-block"><h3>Startup</h3>
-                      <StartupSettingsRow />
-                    </div>
-                    <div className="settings-block"><h3>Updates</h3>
-                      <div className="settings-row"><div><div className="lbl">Automatic update checks</div><div className="desc">Drifty checks for signed updates shortly after launch. General releases stay in the titlebar first; urgent releases can prompt immediately.</div></div><div className="ctrl ctrl--value">Always on</div></div>
-                      <div className="settings-row"><div><div className="lbl">Manual update check</div><div className="desc">Drifty checks GitHub Releases for signed update metadata before showing an available download.</div>{updaterMessage ? <p className="capture-recency" role="status">{updaterMessage}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleCheckForUpdates()} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? "Checking..." : "Check for Updates"}</button></div></div>
-                    </div>
-                    <div className="settings-block"><h3>Permissions</h3>
-                      <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Grant Accessibility permission so Drifty can read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleRequestAccessibility()}>Grant Accessibility access</button></div></div>
-                    </div>
-                    <div className="settings-block"><h3>Colors</h3>
-                      <CategoryColorControls
-                        options={CATEGORY_COLOR_OPTIONS}
-                        overrides={categoryColorOverrides}
-                        onColorChange={handleCategoryColorChange}
-                        onColorReset={handleCategoryColorReset}
-                      />
-                      <ThemeColorControls
-                        accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
-                        productivityOptions={APP_THEME_PRODUCTIVITY_COLOR_OPTIONS}
-                        overrides={appThemeColorOverrides}
-                        onColorChange={handleAppThemeColorChange}
-                        onColorReset={handleAppThemeColorReset}
-                      />
-                    </div>
-                    <div className="settings-block"><h3>Debugging</h3>
-                      <div className="settings-row"><div><div className="lbl">Dev mode</div><div className="desc">Show local diagnostics controls for this beta build.</div></div><div className="ctrl"><Toggle checked={devModeEnabled} onChange={setDevModeEnabled} ariaLabel="Toggle Dev mode" /></div></div>
-                      <SettingsBuildInfoRow />
-                    </div>
-                  </div>
+                  <GeneralSettingsSection
+                    appThemeColorOverrides={appThemeColorOverrides}
+                    categoryColorOverrides={categoryColorOverrides}
+                    devModeEnabled={devModeEnabled}
+                    isDevSettingsEnabled={DEV_SETTINGS_ENABLED}
+                    startOfDayValue={startOfDayValue}
+                    startOfWeek={startOfWeek}
+                    theme={theme}
+                    updaterChecking={updaterChecking}
+                    updaterError={updaterError}
+                    updaterInstalling={updaterInstalling}
+                    updaterMessage={updaterMessage}
+                    onAppThemeColorChange={handleAppThemeColorChange}
+                    onAppThemeColorReset={handleAppThemeColorReset}
+                    onCategoryColorChange={handleCategoryColorChange}
+                    onCategoryColorReset={handleCategoryColorReset}
+                    onCheckForUpdates={() => void handleCheckForUpdates()}
+                    onRequestAccessibility={() => void handleRequestAccessibility()}
+                    onStartOfDayChange={handleStartOfDayChange}
+                    onStartOfWeekChange={handleStartOfWeekChange}
+                    onThemeChange={setTheme}
+                    onDevModeChange={setDevModeEnabled}
+                  />
                 )}
                 {settingsSection === "classification" && (
-                  <div className="settings-section settings-section--classification">
-                    <div className="settings-block cloud-overview">
-                      <h3>Classification</h3>
-                      <div className="settings-row">
-                        <div>
-                          <div className="lbl">Classification rules</div>
-                          <div className="desc">Create local rules for domains and recorded apps. Rules stay on this Mac and are never synced to Drifty Cloud.</div>
-                        </div>
-                        <div className="ctrl"><span className="chip green">Local only</span></div>
-                      </div>
-                      <div className="settings-row settings-row--fallback classification-rule-form">
-                        <div>
-                          <div className="lbl">Add Domain rule</div>
-                          <div className="desc">Type a domain or paste a URL. Drifty stores the normalized domain locally.</div>
-                        </div>
-                        <div className="ctrl classification-rule-form__grid">
-                          <label className="classification-rule-field">
-                            <span>Domain or URL</span>
-                            <input className="settings-input" type="text" value={domainRuleInput} onChange={(event) => setDomainRuleInput(event.target.value)} placeholder="example.com" aria-label="Domain rule domain or URL" />
-                          </label>
-                          <ClassificationPicker label="Category" ariaLabel="Domain rule category" value={domainRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={setDomainRuleCategory} />
-                          <ClassificationPicker label="Productivity" ariaLabel="Domain rule productivity" value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={setDomainRuleProductivity} />
-                          <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleSaveDomainRule()} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? "Saving..." : "Save Domain rule"}</button>
-                        </div>
-                      </div>
-                      <div className="settings-row settings-row--fallback settings-row--group-end classification-rule-form">
-                        <div>
-                          <div className="lbl">Add App rule</div>
-                          <div className="desc">Search app names Drifty has recorded locally, then choose category and productivity.</div>
-                        </div>
-                        <div className="ctrl classification-rule-form__grid classification-rule-form__grid--app">
-                          <div ref={appRuleSearchRef} className="classification-rule-field classification-rule-field--wide classification-rule-search" onFocus={handleAppRuleSearchFocus} onBlur={handleAppRuleSearchBlur}>
-                            <label htmlFor="classification-app-rule-search">Recorded app</label>
-                            <input id="classification-app-rule-search" className="settings-input" type="search" value={appRuleSearch} onChange={(event) => { setAppRuleSearch(event.target.value); setAppRuleTargetValue(""); setAppRuleDisplayName(""); }} placeholder="Search apps..." aria-label="Search recorded apps for App rule" autoComplete="off" aria-expanded={appRuleSearchPanelOpen} aria-controls="classification-app-rule-candidates" />
-                            {appRuleSearchPanelOpen ? (
-                              <div id="classification-app-rule-candidates" className="classification-rule-candidates classification-rule-search__popover" aria-label="Recorded app suggestions">
-                                {classificationRuleCandidatesLoading ? <span className="classification-rule-hint">{appRuleSearch.trim() ? "Searching local app history..." : "Loading most-used apps..."}</span> : null}
-                                {!classificationRuleCandidatesLoading && classificationRuleCandidates.length === 0 ? <span className="classification-rule-hint">{appRuleSearch.trim() ? "No recorded apps match this search." : "No recorded apps recorded yet."}</span> : null}
-                                {classificationRuleCandidates.map((candidate) => {
-                                  const candidateUsageLabel = formatClassificationCandidateUsageLabel(candidate);
-                                  return (
-                                    <button key={candidate.id} type="button" className={`classification-rule-candidate${appRuleTargetValue === candidate.targetValue ? " is-selected" : ""}`} onClick={() => handleSelectClassificationCandidate(candidate)} aria-label={`Choose ${candidate.displayName}, ${candidateUsageLabel}`}>
-                                      <span className="classification-rule-candidate__identity">
-                                        <AppGlyph appName={candidate.appName ?? candidate.displayName} iconSrc={classificationRuleCandidateAppIconSrc(candidate, appIcons)} size="sm" />
-                                        <span className="classification-rule-candidate__text"><strong>{candidate.displayName}</strong>{candidate.bundleId ? <small>{candidate.bundleId}</small> : null}</span>
-                                      </span>
-                                      <span className="classification-rule-candidate__usage"><strong>{secondsToLabel(candidate.totalSeconds)}</strong><em>{candidate.segmentCount} {candidate.segmentCount === 1 ? "segment" : "segments"}</em></span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ) : null}
-                          </div>
-                          <ClassificationPicker label="Category" ariaLabel="App rule category" value={appRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={setAppRuleCategory} />
-                          <ClassificationPicker label="Productivity" ariaLabel="App rule productivity" value={appRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={setAppRuleProductivity} />
-                          <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleSaveAppRule()} disabled={classificationRuleSavingKind !== null || !appRuleTargetValue.trim()}>{classificationRuleSavingKind === "app" ? "Saving..." : "Save App rule"}</button>
-                        </div>
-                        {appRuleDisplayName ? <p className="classification-rule-selected" role="status">Selected app: {appRuleDisplayName}</p> : null}
-                      </div>
-                      {classificationRulesError ? <p className="classification-summary classification-summary--error" role="alert">{classificationRulesError}</p> : null}
-                      {classificationRuleMessage ? <p className="classification-summary" role="status">{classificationRuleMessage}</p> : null}
-                      {classificationRuleApplyResult ? <p className="classification-summary" role="status">{formatClassificationRuleApplyResult(classificationRuleApplyResult)}</p> : null}
-                    </div>
-                    <div className="settings-block">
-                      <h3>Saved local rules</h3>
-                      <div className="settings-row settings-row--group-end classification-rule-list-head">
-                        <div>
-                          <div className="lbl">Saved local rules</div>
-                          <div className="desc">Use the switch to save a rule as off, delete it, or reapply enabled rules to existing activity.</div>
-                        </div>
-                        <div className="ctrl settings-row__actions">
-                          <button type="button" className="settings-btn" onClick={() => void loadClassificationRules()} disabled={classificationRulesLoading}>Refresh</button>
-                          <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handleApplyClassificationRules()} disabled={classificationRuleApplying || classificationRules.length === 0}>{classificationRuleApplying ? "Applying..." : "Apply rules"}</button>
-                        </div>
-                      </div>
-                      {classificationRulesLoading ? <p className="classification-rule-hint">Loading local rules...</p> : null}
-                      {!classificationRulesLoading && classificationRules.length === 0 ? (
-                        <div className="empty-state classification-rule-empty">
-                          <span className="eyebrow">No local rules</span>
-                          <strong>No custom rules yet</strong>
-                          <p>Add a Domain or App rule to override local classification for matching activity.</p>
-                        </div>
-                      ) : null}
-                      {classificationRules.length > 0 ? (
-                        <div className="classification-rule-list" aria-label="Saved local classification rules">
-                          {classificationRules.map((rule) => (
-                            <article className="classification-rule-card" key={rule.id} aria-label={`${classificationRuleTargetLabel(rule.targetKind)} rule ${rule.targetValue}`}>
-                              <div className="classification-rule-card__main">
-                                <span className="classification-rule-card__icon">
-                                  {rule.targetKind === "site" ? <SiteFavicon domain={rule.targetValue} size={24} /> : <AppGlyph appName={rule.targetValue} iconSrc={classificationRuleAppIconSrc(rule, appIcons)} size="sm" />}
-                                </span>
-                                <span className="chip gray">{classificationRuleTargetLabel(rule.targetKind)}</span>
-                                <div>
-                                  <strong>{rule.targetValue}</strong>
-                                  <p>{categoryLabel(rule.category)} · {productivityLabel(rule.productivity)} · {rule.enabled ? "Enabled" : "Disabled"}</p>
-                                </div>
-                              </div>
-                              <div className="classification-rule-card__actions">
-                                <Toggle checked={rule.enabled} onChange={(enabled) => void handleToggleClassificationRule(rule, enabled)} ariaLabel={`${rule.enabled ? "Disable" : "Enable"} ${rule.targetValue} rule`} />
-                                <button type="button" className="settings-btn danger" onClick={() => void handleDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? "Deleting..." : "Delete"}</button>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                  <ClassificationSettingsSection
+                    appIcons={appIcons}
+                    appRuleCategory={appRuleCategory}
+                    appRuleDisplayName={appRuleDisplayName}
+                    appRuleProductivity={appRuleProductivity}
+                    appRuleSearch={appRuleSearch}
+                    appRuleSearchPanelOpen={appRuleSearchPanelOpen}
+                    appRuleSearchRef={appRuleSearchRef}
+                    appRuleTargetValue={appRuleTargetValue}
+                    appThemeColorOverrides={appThemeColorOverrides}
+                    categoryColorOverrides={categoryColorOverrides}
+                    classificationRuleApplyResult={classificationRuleApplyResult}
+                    classificationRuleApplying={classificationRuleApplying}
+                    classificationRuleCandidates={classificationRuleCandidates}
+                    classificationRuleCandidatesLoading={classificationRuleCandidatesLoading}
+                    classificationRuleDeletingId={classificationRuleDeletingId}
+                    classificationRuleMessage={classificationRuleMessage}
+                    classificationRuleSavingKind={classificationRuleSavingKind}
+                    classificationRules={classificationRules}
+                    classificationRulesError={classificationRulesError}
+                    classificationRulesLoading={classificationRulesLoading}
+                    domainRuleCandidates={domainRuleCandidates}
+                    domainRuleCandidatesLoading={domainRuleCandidatesLoading}
+                    domainRuleCategory={domainRuleCategory}
+                    domainRuleInput={domainRuleInput}
+                    domainRuleProductivity={domainRuleProductivity}
+                    domainRuleSearchPanelOpen={domainRuleSearchPanelOpen}
+                    domainRuleSearchRef={domainRuleSearchRef}
+                    onAppRuleCategoryChange={setAppRuleCategory}
+                    onAppRuleProductivityChange={setAppRuleProductivity}
+                    onAppRuleSearchBlur={handleAppRuleSearchBlur}
+                    onAppRuleSearchChange={updateAppRuleSearch}
+                    onAppRuleSearchFocus={handleAppRuleSearchFocus}
+                    onApplyClassificationRules={() => void handleApplyClassificationRules()}
+                    onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
+                    onDomainRuleCategoryChange={setDomainRuleCategory}
+                    onDomainRuleInputChange={updateDomainRuleInput}
+                    onDomainRuleProductivityChange={setDomainRuleProductivity}
+                    onDomainRuleSearchBlur={handleDomainRuleSearchBlur}
+                    onDomainRuleSearchFocus={handleDomainRuleSearchFocus}
+                    onLoadClassificationRules={() => void loadClassificationRules()}
+                    onSaveAppRule={() => void handleSaveAppRule()}
+                    onSaveDomainRule={() => void handleSaveDomainRule()}
+                    onSelectClassificationCandidate={handleSelectClassificationCandidate}
+                    onSelectDomainRuleCandidate={handleSelectDomainRuleCandidate}
+                    onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
+                  />
                 )}
                 {settingsSection === "aiSetup" && (
-                  <div className="settings-section settings-section--ai-setup">
-                    <AiSetupPanel
-                      aiServerStatusLabel={aiServerStatusLabel}
-                      billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                      billingEntitlementError={effectiveBillingEntitlementError}
-                      billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
-                      billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
-                      billingPortalLoading={billingPortalLoading}
-                      cloudStatusRefreshing={effectiveBillingEntitlementLoading}
-                      cloudStatusLabel={cloudStatusLabel}
-                      cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
-                      connectionStatus={aiConnectionStatus}
-                      connectionTest={aiConnectionTest}
-                      currentBillingPlan={currentBillingPlan}
-                      isSupabaseConfigured={effectiveIsSupabaseConfigured}
-                      localAiSetup={localAiSetup}
-                      shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
-                      userEmail={user?.email ?? null}
-                      workProfileUserId={user?.id ?? "local"}
-                      onDialogOpenChange={setAiSetupDialogOpen}
-                      onLocalAiSetupChange={setLocalAiSetup}
-                      onManageCloudBilling={handleManageCloudBilling}
-                      onRefreshCloudStatus={refreshBillingEntitlement}
-                      onStartCloudSetup={handleStartDriftyCloudSetup}
-                    />
-                  </div>
+                  <AiSetupSettingsSection
+                    aiServerStatusLabel={aiServerStatusLabel}
+                    billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+                    billingEntitlementError={effectiveBillingEntitlementError}
+                    billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
+                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                    billingPortalLoading={billingPortalLoading}
+                    cloudStatusRefreshing={effectiveBillingEntitlementLoading}
+                    cloudStatusLabel={cloudStatusLabel}
+                    cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
+                    connectionStatus={aiConnectionStatus}
+                    connectionTest={aiConnectionTest}
+                    currentBillingPlan={currentBillingPlan}
+                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
+                    localAiSetup={localAiSetup}
+                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+                    userEmail={user?.email ?? null}
+                    workProfileUserId={user?.id ?? "local"}
+                    onDialogOpenChange={setAiSetupDialogOpen}
+                    onLocalAiSetupChange={setLocalAiSetup}
+                    onManageCloudBilling={handleManageCloudBilling}
+                    onRefreshCloudStatus={refreshBillingEntitlement}
+                    onStartCloudSetup={handleStartDriftyCloudSetup}
+                  />
                 )}
                 {settingsSection === "notifications" && (
-                  <div className="settings-section"><div className="settings-block"><h3>Notifications</h3>
-                    <div className="settings-row"><div><div className="lbl">Drift alerts</div><div className="desc">Show a drift alarm when current activity is classified as drift.</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled} onChange={(enabled) => { setDriftAlertsEnabled(enabled); if (!enabled) setExtremeNudgeEnabled(false); }} ariaLabel="Toggle drift alerts" /></div></div>
-                    <div className={`settings-row${driftAlertsEnabled ? "" : " settings-row--disabled"}`}><div><div className="lbl settings-label-with-badge">Extreme nudge <span className="settings-beta-badge">Beta</span></div><div className="desc">{driftAlertsEnabled ? "Beta feature: close the drift browser tab or quit the drift app instead of showing the alarm." : "Turn on Drift alerts before enabling Extreme nudge."}</div></div><div className="ctrl"><Toggle checked={driftAlertsEnabled && extremeNudgeEnabled} disabled={!driftAlertsEnabled} onChange={setExtremeNudgeEnabled} ariaLabel="Toggle extreme nudge" /></div></div>
-                    <div className="settings-row"><div><div className="lbl">Drift alert timing</div></div><div className="ctrl"><SettingsSelect ariaLabel="Drift alert timing" value={driftAlertDelayValueFromSeconds(driftAlertDelaySeconds)} options={DRIFT_ALERT_DELAY_OPTIONS} onChange={(value) => setDriftAlertDelaySeconds(driftAlertDelaySecondsFromValue(value))} className="settings-select-control--timing" /></div></div>
-                    <DriftAlarmCopySettings value={driftAlarmCopy} onChange={setDriftAlarmCopy} />
-                  </div></div>
+                  <NotificationsSettingsSection
+                    driftAlertDelaySeconds={driftAlertDelaySeconds}
+                    driftAlertsEnabled={driftAlertsEnabled}
+                    driftAlarmCopy={driftAlarmCopy}
+                    extremeNudgeEnabled={extremeNudgeEnabled}
+                    onDriftAlertDelaySecondsChange={setDriftAlertDelaySeconds}
+                    onDriftAlarmCopyChange={setDriftAlarmCopy}
+                    onDriftAlertsChange={setDriftAlertsEnabled}
+                    onExtremeNudgeChange={setExtremeNudgeEnabled}
+                  />
                 )}
                 {settingsSection === "privacy" && (
                   <PrivacySettingsSection />
                 )}
                 {settingsSection === "data" && (
-                  <div className="settings-section">
-                    <div className="settings-block"><h3>Data & Export</h3>
-                      <div className="settings-row"><div><div className="lbl">Database</div></div><div className="ctrl ctrl--value">{status?.databasePath ?? "Unknown"}</div></div>
-                      <div className="settings-row"><div><div className="lbl">Sessions logged</div></div><div className="ctrl ctrl--value">{segments.length} today</div></div>
-                    </div>
-                    <div className="settings-block"><h3>Export</h3>
-                      <div className="settings-row"><div><div className="lbl">Export session data</div><div className="desc">All sessions as CSV</div></div><div className="ctrl"><button className="settings-btn">Download CSV</button></div></div>
-                    </div>
-                  </div>
+                  <DataExportSettingsSection databasePath={status?.databasePath} todaySessionCount={segments.length} />
                 )}
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
-                  <div className="settings-section">
-                    <div className="settings-block"><h3>Debug logs</h3>
-                      <div className="settings-row"><div><div className="lbl">Debug logs</div><div className="desc">Preview a local JSON bundle with safe app status and setting values.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={() => void handleOpenDebugLogs()}>View debug logs</button></div></div>
-                    </div>
-                    <div className="settings-block"><h3>AX fallback diagnostics</h3>
-                      <div className="settings-row settings-row--fallback"><div><div className="lbl">Force Chromium AX site capture</div><div className="desc">Skip Chromium tab AppleScript reads and capture the front URL through the Accessibility address bar path.</div></div><div className="ctrl"><Toggle checked={forceChromiumAxCaptureEnabled} onChange={setForceChromiumAxCaptureEnabled} ariaLabel="Force Chromium Accessibility site capture" /></div></div>
-                      <div className="settings-row settings-row--fallback"><div><div className="lbl">Force Chromium AX extreme nudge</div><div className="desc">Skip Chromium tab AppleScript close paths so Extreme nudge must use the Accessibility fallback.</div></div><div className="ctrl"><Toggle checked={forceChromiumAxExtremeNudgeEnabled} onChange={setForceChromiumAxExtremeNudgeEnabled} ariaLabel="Force Chromium Accessibility extreme nudge" /></div></div>
-                    </div>
-                    <div className="settings-block settings-block--dev-preview">
-                      <h3>Dev</h3>
-                      {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
-                        <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}><div><div className="lbl">End-of-day review</div><div className="desc">Dev-only local summary after 6:00 PM, or preview it now.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={handleEndOfDayReviewPreview}>Preview</button></div></div>
-                      ) : null}
-                      {DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ? (
-                        <div className="settings-row"><div><div className="lbl">Drift alarm previews</div><div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div></div><div className="ctrl settings-row__actions">{DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (<button key={option.id} type="button" className="settings-btn" onClick={() => previewDriftAlarm(option)}>{option.label}</button>))}</div></div>
-                      ) : null}
-                      {WATCHER_PEEK_SETTINGS_VISIBLE && WATCHER_PEEK_PROTOTYPE_ENABLED && (
-                      <>
-                      <div className="settings-row" role="group" aria-label="Peek watcher prototype"><div><div className="lbl">Peek watcher prototype</div><div className="desc">Opt-in experiment for a quiet watcher overlay. Choose a regular cadence or drift-only nudges.</div></div><div className="ctrl settings-row__actions"><button type="button" className="settings-btn" onClick={() => showWatcherPeek(true)}>Preview</button><Toggle checked={watcherPeekEnabled} onChange={setWatcherPeekEnabled} ariaLabel="Toggle peek watcher prototype" /></div></div>
-                      <div className="settings-row"><div><div className="lbl">Watcher mode</div><div className="desc">Choose regular check-ins or a quieter mode that only speaks when drift continues.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Watcher mode"><button type="button" className={`settings-mode-option${watcherMode === "periodic" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "periodic"} onClick={() => setWatcherMode("periodic")}><span>Periodic</span><small>Every few minutes</small></button><button type="button" className={`settings-mode-option${watcherMode === "drift_only" ? " is-active" : ""}`} role="radio" aria-checked={watcherMode === "drift_only"} onClick={() => setWatcherMode("drift_only")}><span>Drift only</span><small>Quiet during focus</small></button></div></div></div>
-                      {watcherMode === "periodic" ? (
-                        <div className="settings-row"><div><div className="lbl">Periodic cadence</div><div className="desc">Show the watcher at a random interval inside this range. Default is 10-30 minutes.</div></div><div className="ctrl settings-row__actions"><input className="settings-input settings-input--compact" type="number" min={WATCHER_PERIODIC_MIN_LIMIT_MINUTES} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMinMinutes} onChange={handleWatcherPeriodicMinChange} aria-label="Minimum watcher interval minutes" /><span className="settings-inline-unit">to</span><input className="settings-input settings-input--compact" type="number" min={watcherPeriodicMinMinutes} max={WATCHER_PERIODIC_MAX_LIMIT_MINUTES} value={watcherPeriodicMaxMinutes} onChange={handleWatcherPeriodicMaxChange} aria-label="Maximum watcher interval minutes" /><span className="settings-inline-unit">min</span></div></div>
-                      ) : (
-                        <div className="settings-row"><div><div className="lbl">Drift-only cadence</div><div className="desc">No focus messages. First nudge appears 10 seconds after drift is detected, then 5 minutes, 30 minutes, 1 hour, and 2 hours if it continues.</div></div><div className="ctrl"><span className="chip">10s · 5m · 30m · 1h · 2h</span></div></div>
-                      )}
-                      </>
-                      )}
-                    </div>
-                    {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
-                      <div className="settings-block settings-block--dev-preview">
-                        <h3>AI unavailable preview</h3>
-                        <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="AI unavailable preview case">
-                          <div>
-                            <div className="lbl">AI unavailable preview</div>
-                            <div className="desc">
-                              Apply a selected AI unavailable case to the dashboard three days ago. {dashboardAiUnavailablePreview ? `Active on ${formatDayLabel(dashboardAiUnavailablePreview.appliedDay)}.` : "Dev builds only."}
-                            </div>
-                          </div>
-                          <div className="ctrl settings-row__actions">
-                            <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="AI unavailable preview cases">
-                              {DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS.map((option) => (
-                                <button
-                                  key={option.id}
-                                  type="button"
-                                  className={`settings-mode-option${dashboardAiUnavailablePreviewCase === option.id ? " is-active" : ""}`}
-                                  role="radio"
-                                  aria-checked={dashboardAiUnavailablePreviewCase === option.id}
-                                  onClick={() => setDashboardAiUnavailablePreviewCase(option.id)}
-                                >
-                                  <span>{option.label}</span>
-                                  <small>{option.detail}</small>
-                                </button>
-                              ))}
-                            </div>
-                            <button type="button" className="settings-btn settings-btn--primary" onClick={previewDashboardAiUnavailableCase}>Preview 3 days ago</button>
-                            {dashboardAiUnavailablePreview ? <button type="button" className="settings-btn" onClick={clearDashboardAiUnavailablePreview}>Clear preview</button> : null}
-                          </div>
-                        </div>
-                      </div>
-                      ) : null}
-                  </div>
+                  <DevSettingsSection
+                    dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
+                    dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
+                    endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
+                    forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
+                    forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
+                    watcherMode={watcherMode}
+                    watcherPeekEnabled={watcherPeekEnabled}
+                    watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
+                    watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
+                    onClearDashboardAiUnavailablePreview={clearDashboardAiUnavailablePreview}
+                    onDashboardAiUnavailablePreviewCaseChange={setDashboardAiUnavailablePreviewCase}
+                    onEndOfDayReviewPreview={handleEndOfDayReviewPreview}
+                    onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
+                    onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
+                    onOpenDebugLogs={() => void handleOpenDebugLogs()}
+                    onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
+                    onPreviewDriftAlarm={previewDriftAlarm}
+                    onShowWatcherPeek={showWatcherPeek}
+                    onWatcherModeChange={setWatcherMode}
+                    onWatcherPeekEnabledChange={setWatcherPeekEnabled}
+                    onWatcherPeriodicMaxChange={handleWatcherPeriodicMaxChange}
+                    onWatcherPeriodicMinChange={handleWatcherPeriodicMinChange}
+                  />
                 )}
             </div>
           </div>
@@ -5944,77 +4392,41 @@ export default function App() {
         />
       ) : null}
 
-      {selectedLeaderboardRow ? (
-        <ProfileModal
-          row={selectedLeaderboardRow}
-          profile={selectedPublicProfile}
-          isLoading={selectedProfileLoading}
-          error={selectedProfileError}
-          onClose={() => {
-            setSelectedLeaderboardRow(null);
-            setSelectedPublicProfile(null);
-            setSelectedProfileError(null);
-          }}
-        />
-      ) : null}
-
-      {isProfileEditorOpen ? (
-        <EditProfileModal
-          displayName={leaderboardProfileDisplayName}
-          avatarUrl={profileDraft.avatarUrl}
-          profileDraft={profileDraft}
-          profileLoading={profileLoading}
-          profileSaving={profileSaving}
-          profileMessage={profileMessage}
-          profileError={profileError}
-          onClose={() => setIsProfileEditorOpen(false)}
-          onPhotoSelected={(event) => void handleProfilePhotoSelected(event)}
-          onRemovePhoto={() => setProfileDraft((draft) => ({ ...draft, avatarUrl: "", isPublic: true }))}
-          onChange={(updater) => setProfileDraft((draft) => ({ ...draft, ...updater, isPublic: true }))}
-          onSave={() => void handleSaveProfileFromModal()}
-        />
-      ) : null}
+      <ProfileDialogs
+        avatarUrl={profileDraft.avatarUrl}
+        displayName={leaderboardProfileDisplayName}
+        isProfileEditorOpen={isProfileEditorOpen}
+        profileDraft={profileDraft}
+        profileError={profileError}
+        profileLoading={profileLoading}
+        profileMessage={profileMessage}
+        profileSaving={profileSaving}
+        selectedLeaderboardRow={selectedLeaderboardRow}
+        selectedProfileError={selectedProfileError}
+        selectedProfileLoading={selectedProfileLoading}
+        selectedPublicProfile={selectedPublicProfile}
+        onCloseEditor={closeProfileEditor}
+        onCloseSelectedProfile={closeSelectedProfile}
+        onDraftChange={updateProfileDraft}
+        onPhotoSelected={(event) => void handleProfilePhotoSelected(event)}
+        onRemovePhoto={removeProfilePhoto}
+        onSaveProfile={() => void handleSaveProfileFromModal()}
+      />
 
       {visibleUpdate ? (
-        <div className="auth-modal__overlay" onClick={dismissAvailableUpdate}>
-          <section className="auth-modal profile-modal update-dialog-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
-            <h2 id="available-update-title" className="update-dialog-title">Drifty {visibleUpdate.version} is available</h2>
-            {visibleUpdate.date ? <p className="capture-recency">Published {new Date(visibleUpdate.date).toLocaleString()}</p> : null}
-            {currentUpdatePolicy?.urgency === "urgent" ? <p className="capture-recency">Urgent update</p> : null}
-            {currentUpdatePolicy?.message ? <p className="profile-modal__bio">{currentUpdatePolicy.message}</p> : null}
-            <section className="update-dialog-summary" aria-label="Change summary">
-              <div className="update-dialog-summary__label">Change summary</div>
-              <p className="update-dialog-summary__body">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
-            </section>
-            {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
-            <label className="update-dialog-checkbox">
-              <input
-                className="update-dialog-checkbox__input"
-                type="checkbox"
-                checked={autoInstallFutureUpdates}
-                onChange={(event) => setAutoInstallFutureUpdates(event.target.checked)}
-              />
-              <span className="update-dialog-checkbox__label">Automatically install and restart future updates</span>
-            </label>
-            <div className="profile-editor-modal__actions">
-              <button type="button" className="ghost-button" onClick={dismissAvailableUpdate} disabled={updaterInstalling}>Not now</button>
-              <button type="button" className="settings-btn" onClick={() => void handleInstallUpdate()} disabled={updaterChecking || updaterInstalling}>{updaterInstalling ? "Installing..." : "Install and restart"}</button>
-            </div>
-          </section>
-        </div>
+        <AvailableUpdateDialog
+          autoInstallFutureUpdates={autoInstallFutureUpdates}
+          policy={currentUpdatePolicy}
+          update={visibleUpdate}
+          updaterChecking={updaterChecking}
+          updaterError={updaterError}
+          updaterInstalling={updaterInstalling}
+          onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
+          onDismiss={dismissAvailableUpdate}
+          onInstall={() => void handleInstallUpdate()}
+        />
       ) : null}
 
     </div>
   );
-}
-
-async function openExternalUrl(url: string): Promise<void> {
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-    return;
-  } catch (error) {
-    if (typeof window === "undefined") throw error;
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
 }

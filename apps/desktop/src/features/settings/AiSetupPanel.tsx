@@ -26,7 +26,7 @@ import type { UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunne
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
-type AiSetupPanelProps = {
+export type AiSetupPanelProps = {
   readonly aiServerStatusLabel: string;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
