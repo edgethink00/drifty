@@ -24,7 +24,8 @@ export type TrackerCommand =
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
-  | "tray_update_productivity_icon";
+  | "tray_update_productivity_icon"
+  | "tray_update_drift_alarm_status";
 
 export interface DayQuery {
   day: string;
@@ -152,6 +153,7 @@ export interface DriftAlarmTrayStatus {
   readonly lastCheckedLabel: string;
   readonly resultLabel: string;
   readonly detailLabel: string | null;
+  readonly trackerRunning?: boolean | null;
 }
 
 export type AppIconMap = Record<string, string | null>;
