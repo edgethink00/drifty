@@ -16,8 +16,6 @@ export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 
-export const AUTO_UPDATE_CHECKS_STORAGE_KEY = "drifty.updates.autoCheckOnLaunch";
-
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 
 export const FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY = "drifty.dev.forceChromiumAxCapture";
@@ -166,11 +164,6 @@ export function resolveInitialSidebarCollapsed(): boolean {
 export function resolveInitialAiClassificationVisibility(): boolean {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
-}
-
-export function resolveInitialAutoUpdateChecksEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(AUTO_UPDATE_CHECKS_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialDevModeEnabled(): boolean {
