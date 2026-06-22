@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readAppStyles } from "./test/readStyles";
 
 function readStyles(): string {
-  return readFileSync("src/styles.css", "utf8");
+  return readAppStyles();
 }
 
 function cssBlock(styles: string, selector: string): string {

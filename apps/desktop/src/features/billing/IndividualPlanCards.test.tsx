@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { IndividualPlanCards } from "./IndividualPlanCards";
+import { readAppStyles } from "../../test/readStyles";
 
 describe("IndividualPlanCards", () => {
   it("shows Free and Individual with a monthly/yearly interval switch", () => {
@@ -38,7 +38,7 @@ describe("IndividualPlanCards", () => {
   });
 
   it("keeps the billing interval switch ten percent shorter without changing its width rhythm", () => {
-    const styles = readFileSync("src/styles.css", "utf8");
+    const styles = readAppStyles();
 
     expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*height:\s*2\.390625rem;/);
     expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*padding:\s*0\.225rem 0\.25rem;/);

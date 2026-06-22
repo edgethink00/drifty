@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readAppStyles } from "../../test/readStyles";
 
 function cssRule(styles: string, selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -20,7 +21,7 @@ function readAiSetupStyles(): string {
 
 describe("Settings content styles", () => {
   it("presents direct settings block headings outside the grouped rows", () => {
-    const styles = readFileSync("src/styles.css", "utf8");
+    const styles = readAppStyles();
     const blockRule = cssRule(styles, ".content--settings .settings-block:has(> h3)");
     const headingRule = cssRule(styles, ".content--settings .settings-block > h3");
 
@@ -33,7 +34,7 @@ describe("Settings content styles", () => {
   });
 
   it("uses inset separators inside grouped settings rows", () => {
-    const styles = readFileSync("src/styles.css", "utf8");
+    const styles = readAppStyles();
     const rowRule = cssRule(styles, ".content--settings .settings-block:has(> h3) > .settings-row");
     const separatorRule = cssRule(
       styles,
@@ -53,7 +54,7 @@ describe("Settings content styles", () => {
   });
 
   it("emphasizes the top heading of every settings section", () => {
-    const styles = readFileSync("src/styles.css", "utf8");
+    const styles = readAppStyles();
     const sectionHeadingRule = cssRule(
       styles,
       ".content--settings .settings-section .settings-block:first-child > h3",
@@ -70,7 +71,7 @@ describe("Settings content styles", () => {
   });
 
   it("keeps settings segmented controls outline-free like AI setup tabs", () => {
-    const styles = readFileSync("src/styles.css", "utf8");
+    const styles = readAppStyles();
     const switchRules = [
       cssRule(styles, ".content--settings .settings-mode-switch"),
       cssRule(styles, ".content--settings .settings-section--general .settings-mode-switch"),
@@ -206,13 +207,17 @@ describe("Settings content styles", () => {
 
   it("keeps the first heading aligned to the active settings section label", () => {
     const appSource = readFileSync("src/App.tsx", "utf8");
+    const notificationsSource = readFileSync("src/features/settings/NotificationsSettingsSection.tsx", "utf8");
+    const dataExportSource = readFileSync("src/features/settings/DataExportSettingsSection.tsx", "utf8");
 
     expect(appSource).toContain('settingsSection === "notifications"');
-    expect(appSource).toContain("<h3>Notifications</h3>");
+    expect(appSource).toContain("<NotificationsSettingsSection");
+    expect(notificationsSource).toContain("<h3>Notifications</h3>");
     expect(appSource).toContain('settingsSection === "privacy"');
     expect(appSource).toContain("<PrivacySettingsSection />");
     expect(appSource).toContain('settingsSection === "data"');
-    expect(appSource).toContain("<h3>Data & Export</h3>");
+    expect(appSource).toContain("<DataExportSettingsSection");
+    expect(dataExportSource).toContain("<h3>Data &amp; Export</h3>");
   });
 
   it("shares one privacy review component between AI setup and Privacy settings", () => {

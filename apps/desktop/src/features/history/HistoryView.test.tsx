@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HistoryView } from "./HistoryView";
+import { readAppStyles } from "../../test/readStyles";
 
-const styles = readFileSync("src/styles.css", "utf8");
+const styles = readAppStyles();
 
 function cssRule(selector: string): string {
   return styles.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{[\\s\\S]*?\\}`))?.[0] ?? "";

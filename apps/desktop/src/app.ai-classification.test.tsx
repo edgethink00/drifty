@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment, ClassificationMetrics, ClassificationQuery, CurrentActivitySnapshot } from "@drifty/domain";
 import { logicalDayIsoDateForDate, todayIsoDate } from "@drifty/domain";
@@ -8,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 
-const styles = readFileSync("src/styles.css", "utf8");
+const styles = readAppStyles();
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -185,6 +184,7 @@ vi.mock("./features/profile/profileService", () => ({
 }));
 
 import App from "./App";
+import { readAppStyles } from "./test/readStyles";
 
 const selectedDayMetrics: ClassificationMetrics = {
   totalSegments: 100,
