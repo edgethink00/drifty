@@ -2,6 +2,8 @@ import type { Dispatch, SetStateAction } from "react";
 
 import driftyLogoUrl from "../../assets/drifty-icon.png";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
+import type { AiConnectionStatus, AiConnectionTone } from "../ai-connection/AiConnectionStatusBar";
+import { DRIFTY_CLOUD_MODEL_ID, driftyModelOptions, isSelectableManagedModel } from "./AiSetupDriftyModelOptions";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import type { DriftyRoute } from "./DriftySetupPanel";
@@ -9,8 +11,6 @@ import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 
-const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
-const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Individual (Cloud)";
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 const CUSTOM_ENDPOINT_MODEL_OPTION = { value: CUSTOM_ENDPOINT_MODEL_ID, label: "Custom endpoint" } as const satisfies SettingsSelectOption<string>;
 const PROVIDER_OPTIONS = [
@@ -28,6 +28,7 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
   readonly actionModelId: string | null;
+  readonly connectionStatus: AiConnectionStatus;
   readonly connectionTestKind: "success" | "error" | null;
   readonly connectionTestMessage: string | null;
   readonly connectionTestRunning: boolean;
@@ -52,6 +53,7 @@ export function AiSetupModelBeingUsed({
   openRouterPrimaryModel,
   selectedProvider,
   actionModelId,
+  connectionStatus,
   connectionTestKind,
   connectionTestMessage,
   connectionTestRunning,
@@ -144,7 +146,17 @@ export function AiSetupModelBeingUsed({
           {connectionTestRunning ? "Testing..." : "Test connection"}
         </button>
       </div>
-      <div className={`ai-setup-current-model${connectionTestKind ? ` is-${connectionTestKind}` : ""}`}>
+      <div className={`ai-setup-current-model${classNameForConnectionTone(connectionStatus.tone)}`}>
+        <div
+          className="ai-setup-current-model__ai-status"
+          data-tone={connectionStatus.tone}
+          role={connectionStatus.tone === "error" ? "alert" : "status"}
+          aria-label={`AI status: ${connectionStatus.label}, ${connectionStatus.providerLabel}`}
+        >
+          <span className="ai-setup-current-model__ai-status-dot" aria-hidden="true" />
+          <span className="ai-setup-current-model__ai-status-label">{connectionStatus.label}</span>
+          <span className="ai-setup-current-model__ai-status-provider">{connectionStatus.providerLabel}</span>
+        </div>
         <div className="ai-setup-current-model__controls">
           <SettingsSelect
             ariaLabel="AI provider"
@@ -163,7 +175,10 @@ export function AiSetupModelBeingUsed({
           />
         </div>
         {connectionTestMessage ? (
-          <p className="ai-setup-current-model__status" role={connectionTestKind === "error" ? "alert" : "status"}>
+          <p
+            className={`ai-setup-current-model__status${connectionTestKind ? ` is-${connectionTestKind}` : ""}`}
+            role={connectionTestKind === "error" ? "alert" : "status"}
+          >
             {connectionTestMessage}
           </p>
         ) : null}
@@ -172,73 +187,18 @@ export function AiSetupModelBeingUsed({
   );
 }
 
-function driftyModelOptions(
-  catalog: readonly ManagedLocalAiModel[],
-  status: ManagedLocalAiStatus | null,
-  actionModelId: string | null,
-  cloudSubscribeActionDisabled: boolean,
-  cloudSubscribeActionLabel: string | null,
-  onInstallModel: (modelId: string) => void | Promise<void>,
-  onStartCloudSetup: () => void | Promise<void>,
-): readonly SettingsSelectOption<string>[] {
-  return [
-    {
-      value: DRIFTY_CLOUD_MODEL_ID,
-      label: DRIFTY_CLOUD_MODEL_LABEL,
-      actionLabel: cloudSubscribeActionLabel ?? undefined,
-      actionAriaLabel: cloudSubscribeActionLabel ? "Subscribe to Drifty Individual Cloud" : undefined,
-      actionDisabled: cloudSubscribeActionDisabled,
-      onAction: cloudSubscribeActionLabel
-        ? () => {
-          void onStartCloudSetup();
-        }
-        : undefined,
-    },
-    ...catalog.map((model) => {
-      const selectable = isSelectableManagedModel(model.id, status);
-      if (selectable) return { value: model.id, label: model.label };
-      const installing = status?.selectedModelId === model.id && status.state === "installing";
-      const failed = status?.selectedModelId === model.id && status.state === "error" && isRetryableManagedModelError(status.errorKind);
-      return {
-        value: model.id,
-        label: model.label,
-        disabled: true,
-        actionLabel: modelActionLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null),
-        actionAriaLabel: `Download ${model.label} managed local model`,
-        actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
-        onAction: (modelId: string) => {
-          void onInstallModel(modelId);
-        },
-      };
-    }),
-  ];
-}
-
-function modelActionLabel(isBusy: boolean, failed: boolean, percent: number | null): string {
-  if (isBusy) return percent === null ? "Downloading..." : `Downloading ${percent.toFixed(0)}%`;
-  if (failed) return "Retry";
-  return "Download";
-}
-
-function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {
-  if (status?.installedModels.some((item) => item.id === modelId)) return true;
-  if (status?.selectedModelId !== modelId) return false;
-  switch (status.state) {
-    case "installed":
-    case "starting":
-    case "running":
-      return true;
-    case "installing":
+function classNameForConnectionTone(tone: AiConnectionTone): string {
+  switch (tone) {
+    case "ok":
+      return " is-success";
     case "error":
-    case "not_installed":
-      return false;
+      return " is-error";
+    case "warning":
+    case "neutral":
+      return "";
     default:
-      return assertNever(status.state);
+      return assertNever(tone);
   }
-}
-
-function isRetryableManagedModelError(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
-  return errorKind === "download_failed" || errorKind === "model_artifact_missing";
 }
 
 class AiSetupModelProviderError extends Error {

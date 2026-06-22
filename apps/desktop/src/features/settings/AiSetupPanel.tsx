@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
+import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
@@ -35,6 +36,7 @@ type AiSetupPanelProps = {
   readonly cloudStatusRefreshing: boolean;
   readonly cloudStatusLabel: string;
   readonly cloudTrialEndsAt: string | null;
+  readonly connectionStatus: AiConnectionStatus;
   readonly currentBillingPlan: BillingPlanId | null;
   readonly isSupabaseConfigured: boolean;
   readonly localAiSetup: LocalAiSetupState;
@@ -59,6 +61,7 @@ export function AiSetupPanel({
   cloudStatusRefreshing,
   cloudStatusLabel,
   cloudTrialEndsAt,
+  connectionStatus,
   currentBillingPlan,
   isSupabaseConfigured,
   localAiSetup,
@@ -88,11 +91,30 @@ export function AiSetupPanel({
       ? "Subscribe"
       : "Opening...";
   const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
+  const connectionTestKind = connectionTest.result?.kind ?? null;
+  const isCloudRouteSelected = localAiSetup.provider === "managed_local" && driftyRoute === "cloud";
+  const preserveCloudProbeErrorRef = useRef(false);
 
   useEffect(() => {
     onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
+
+  useEffect(() => {
+    if (isCloudRouteSelected && connectionTestKind === "error") return;
+    preserveCloudProbeErrorRef.current = false;
+  }, [connectionTestKind, isCloudRouteSelected]);
+
+  useEffect(() => {
+    if (!isCloudRouteSelected || connectionStatus.tone !== "ok" || connectionTestKind !== "error") return;
+    if (preserveCloudProbeErrorRef.current) return;
+    connectionTest.clearResult();
+  }, [connectionStatus.tone, connectionTest.clearResult, connectionTestKind, isCloudRouteSelected]);
+
+  const clearConnectionTestResult = () => {
+    preserveCloudProbeErrorRef.current = false;
+    connectionTest.clearResult();
+  };
 
   const selectProvider = (section: AiSetupSection) => {
     onLocalAiSetupChange((current) => ({ ...current, provider: providerForSection(section) }));
@@ -100,23 +122,24 @@ export function AiSetupPanel({
 
   const handleDriftyRouteChange = (route: DriftyRoute) => {
     setExpandedSection("drifty");
-    connectionTest.clearResult();
+    clearConnectionTestResult();
     onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: route }));
   };
 
   const handleProviderChange = (section: AiSetupSection) => {
-    connectionTest.clearResult();
+    clearConnectionTestResult();
     setExpandedSection(section);
     selectProvider(section);
   };
 
   const handleToggleSection = (section: AiSetupSection) => {
-    connectionTest.clearResult();
+    clearConnectionTestResult();
     const willExpand = expandedSection !== section;
     setExpandedSection(willExpand ? section : null);
   };
 
   const handleTestConnection = async () => {
+    preserveCloudProbeErrorRef.current = isCloudRouteSelected && connectionStatus.tone === "ok";
     await connectionTest.run();
   };
 
@@ -133,7 +156,8 @@ export function AiSetupPanel({
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
-            connectionTestKind={connectionTest.result?.kind ?? null}
+            connectionStatus={connectionStatus}
+            connectionTestKind={connectionTestKind}
             connectionTestMessage={connectionTest.result?.message ?? null}
             connectionTestRunning={connectionTest.running}
             connectionTestDisabled={connectionTest.running || !isActiveProviderTestable(localAiSetup)}

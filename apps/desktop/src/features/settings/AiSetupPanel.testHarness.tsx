@@ -1,8 +1,9 @@
 import { render } from "@testing-library/react";
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { vi } from "vitest";
 
 import { AiSetupPanel } from "./AiSetupPanel";
+import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
@@ -122,6 +123,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 export function renderPanel({
+  connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI" },
   currentBillingPlan = "individual",
   billingEntitlementStatus = "active",
   cloudTrialEndsAt = null,
@@ -129,6 +131,7 @@ export function renderPanel({
   userEmail = null,
   workProfileUserId = "local",
 }: {
+  readonly connectionStatus?: AiConnectionStatus;
   readonly currentBillingPlan?: "free" | "individual";
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
   readonly cloudTrialEndsAt?: string | null;
@@ -140,13 +143,16 @@ export function renderPanel({
   const onStartCloudSetup = vi.fn();
   const onManageCloudBilling = vi.fn();
   const onLocalAiConnectionTestResult = vi.fn();
+  let setConnectionStatus: Dispatch<SetStateAction<AiConnectionStatus>> | null = null;
 
   function Harness() {
     const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
+    const [currentConnectionStatus, setCurrentConnectionStatus] = useState<AiConnectionStatus>(connectionStatus);
     const connectionTest = useAiConnectionTestRunner({
       localAiSetup,
       onLocalAiConnectionTestResult,
     });
+    setConnectionStatus = setCurrentConnectionStatus;
 
     return (
       <AiSetupPanel
@@ -159,6 +165,7 @@ export function renderPanel({
         cloudStatusRefreshing={false}
         cloudStatusLabel="Cloud AI available"
         cloudTrialEndsAt={cloudTrialEndsAt}
+        connectionStatus={currentConnectionStatus}
         connectionTest={connectionTest}
         currentBillingPlan={currentBillingPlan}
         isSupabaseConfigured={true}
@@ -176,5 +183,21 @@ export function renderPanel({
   }
 
   render(<Harness />);
-  return { onLocalAiConnectionTestResult, onManageCloudBilling, onRefreshCloudStatus, onStartCloudSetup };
+  return {
+    onLocalAiConnectionTestResult,
+    onManageCloudBilling,
+    onRefreshCloudStatus,
+    onStartCloudSetup,
+    setConnectionStatus: (nextConnectionStatus: AiConnectionStatus) => {
+      if (!setConnectionStatus) throw new AiSetupPanelTestHarnessError("AI setup panel test harness is not mounted.");
+      setConnectionStatus(nextConnectionStatus);
+    },
+  };
+}
+
+class AiSetupPanelTestHarnessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiSetupPanelTestHarnessError";
+  }
 }
