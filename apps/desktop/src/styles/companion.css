@@ -2449,7 +2449,7 @@ html[data-surface="watcher"] .end-of-day-review,
 
 html[data-theme="dark"] .eodr-category-stack-bar {
   height: 11.2px;
-  background: rgba(244, 241, 229, .09);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 html[data-theme="dark"] .eodr-category-stack-bar i {
