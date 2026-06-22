@@ -102,7 +102,7 @@ export type AiDebugLogInput = {
     readonly entitlementError: string | null;
   };
   readonly local: {
-    readonly providerLabel: "BYOK AI" | "Local AI";
+    readonly providerLabel: string;
     readonly providerStatus: LocalAiProviderStatus;
   };
   readonly classification: {
