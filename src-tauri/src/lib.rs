@@ -133,6 +133,7 @@ pub fn run() {
                     }
                     tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
                         managed_ai_stop_runtime_for_app_exit();
+                        tracker::shutdown_serve_process();
                     }
                     tauri::RunEvent::WindowEvent {
                         label,

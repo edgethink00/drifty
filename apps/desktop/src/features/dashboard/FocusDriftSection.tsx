@@ -46,6 +46,12 @@ function axisTickStyle(x: number): FocusDriftAxisTickStyle {
   return { "--focus-drift-axis-x": `${x}%` };
 }
 
+function buildFocusDriftAreaPath(points: readonly FocusDriftPoint[], path: string): string {
+  const first = points[0];
+  const last = points[points.length - 1];
+  return first && last && path ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${path.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z` : "";
+}
+
 export const FocusDriftSection = memo(function FocusDriftSection({
   activeHourCount,
   appIcons,
@@ -65,6 +71,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     [chart.points],
   );
   const liveStyle = liveStyleForChart(chart);
+  const driftMistAreaPath = useMemo(
+    () => buildFocusDriftAreaPath(chart.points, chart.driftPath),
+    [chart.driftPath, chart.points],
+  );
 
   function readChartBounds(event: MouseEvent<SVGRectElement>): DOMRect | null {
     const bounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
@@ -133,6 +143,11 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                   <clipPath id="focus-drift-chart-bounds" clipPathUnits="userSpaceOnUse">
                     <rect x={FOCUS_DRIFT_CLIP_BOUNDS.left} y={FOCUS_DRIFT_CLIP_BOUNDS.top} width={FOCUS_DRIFT_CLIP_BOUNDS.right - FOCUS_DRIFT_CLIP_BOUNDS.left} height={FOCUS_DRIFT_CLIP_BOUNDS.bottom - FOCUS_DRIFT_CLIP_BOUNDS.top} />
                   </clipPath>
+                  <linearGradient id="focus-drift-chart-drift-mist" x1="0" x2="0" y1="0" y2="1">
+                    <stop className="focus-drift__drift-mist-stop--strong" offset="0%" />
+                    <stop className="focus-drift__drift-mist-stop--soft" offset="78%" />
+                    <stop className="focus-drift__drift-mist-stop--clear" offset="100%" />
+                  </linearGradient>
                 </defs>
                 <path className="focus-drift__grid" d={FOCUS_DRIFT_GRID_PATH} />
                 {chart.currentX !== null ? (
@@ -140,6 +155,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                 ) : null}
                 <g clipPath="url(#focus-drift-chart-bounds)">
                   <path className="focus-drift__area" d={chart.focusAreaPath} />
+                  <path className="focus-drift__drift-mist" d={driftMistAreaPath} />
                   <path className="focus-drift__line focus-drift__line--focus" d={chart.focusPath} />
                   <path className="focus-drift__line focus-drift__line--drift" d={chart.driftPath} />
                 </g>

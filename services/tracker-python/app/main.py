@@ -383,7 +383,12 @@ def search_classification_rule_candidates(payload: dict):
     query = payload.get("query", "")
     if not isinstance(query, str):
         return response(False, error="query must be a string")
-    return response(True, database().search_classification_rule_candidates(query))
+    target_kind = payload.get("targetKind")
+    if target_kind is not None and not isinstance(target_kind, str):
+        return response(False, error="targetKind must be site or app")
+    if target_kind is not None and target_kind not in {"site", "app"}:
+        return response(False, error="targetKind must be site or app")
+    return response(True, database().search_classification_rule_candidates(query, target_kind=target_kind))
 
 
 def apply_classification_rules(payload: dict):
@@ -571,29 +576,46 @@ def daemon():
         pid_path().unlink(missing_ok=True)
 
 
-def dispatch_request(raw_request: str):
-    try:
-        request = json.loads(raw_request)
-        command = request["command"]
-        payload = request.get("payload", {})
-        handler = COMMANDS[command]
-        return handler(payload)
-    except Exception as exc:
-        return response(False, error=str(exc))
+def _dispatch(request: dict):
+    command = request["command"]
+    payload = request.get("payload", {})
+    handler = COMMANDS[command]
+    return handler(payload)
 
 
 def handle_request(raw_request: str):
-    print(json.dumps(dispatch_request(raw_request)))
+    try:
+        request = json.loads(raw_request)
+        print(json.dumps(_dispatch(request)))
+    except Exception as exc:
+        print(json.dumps(response(False, error=str(exc))))
 
 
-def serve(input_stream=None, output_stream=None) -> None:
-    requests = input_stream if input_stream is not None else sys.stdin
-    responses = output_stream if output_stream is not None else sys.stdout
-    for raw_request in requests:
-        if not raw_request.strip():
+def serve():
+    """Persistent request server (one JSON request per stdin line, one JSON
+    response per stdout line).
+
+    Keeps the interpreter warm and modules imported so each query avoids the
+    ~200-400ms cold-start cost of spawning a fresh ``python main.py`` process.
+    Errors are returned per request and never break the loop; EOF on stdin
+    (parent process exit / closed pipe) ends the loop cleanly.
+    """
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
+        if not line:
             continue
-        responses.write(json.dumps(dispatch_request(raw_request)) + "\n")
-        responses.flush()
+        request_id = None
+        try:
+            request = json.loads(line)
+            request_id = request.get("id")
+            envelope = _dispatch(request)
+        except Exception as exc:  # never let a single bad request kill the server
+            envelope = response(False, error=str(exc))
+        if request_id is not None:
+            envelope = {**envelope, "id": request_id}
+        sys.stdout.write(json.dumps(envelope))
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def main():

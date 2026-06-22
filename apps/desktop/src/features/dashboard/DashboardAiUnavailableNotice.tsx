@@ -49,13 +49,13 @@ const CONNECT_AI_STATE = {
 } satisfies DashboardAiUnavailableState;
 
 export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailableInput): DashboardAiUnavailableState | null {
+  if (input.localAiReady && !input.observedAiClassificationFailure) return null;
+  if (input.canUseCloudAiClassification) return null;
+  if (input.localAiReady && input.observedAiClassificationFailure) return PROVIDER_DISCONNECTED_STATE;
   if (input.billingEntitlement?.status === "locked") {
     return input.billingEntitlement.lockedReason === "trial_expired" ? TRIAL_ENDED_STATE : CLOUD_BILLING_STATE;
   }
-  if (input.canUseCloudAiClassification) return null;
-  if (input.localAiReady && !input.observedAiClassificationFailure) return null;
   if (input.billingEntitlementLoading && input.isSupabaseConfigured && input.hasRequiredAccountAuth) return null;
-  if (input.localAiReady && input.observedAiClassificationFailure) return PROVIDER_DISCONNECTED_STATE;
   if (input.billingEntitlementError) return CONNECT_AI_STATE;
   if (!input.isSupabaseConfigured || !input.hasRequiredAccountAuth) return CONNECT_AI_STATE;
   return CONNECT_AI_STATE;

@@ -694,111 +694,115 @@ class TrackerDatabase:
             )
             return cursor.rowcount
 
-    def search_classification_rule_candidates(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    def search_classification_rule_candidates(self, query: str, target_kind: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         needle = query.strip().lower()
+        include_sites = target_kind is None or target_kind == "site"
+        include_apps = target_kind is None or target_kind == "app"
         candidates: list[dict[str, Any]] = []
         with self.connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT
-                    normalized_site,
-                    site_title,
-                    browser_name,
-                    category,
-                    productivity,
-                    segment_count,
-                    total_seconds,
-                    first_seen_at,
-                    last_seen_at
-                FROM (
+            if include_sites:
+                rows = conn.execute(
+                    """
                     SELECT
-                        lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, ''))) AS raw_site,
+                        normalized_site,
                         site_title,
                         browser_name,
+                        category,
+                        productivity,
+                        segment_count,
+                        total_seconds,
+                        first_seen_at,
+                        last_seen_at
+                    FROM (
+                        SELECT
+                            lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, ''))) AS raw_site,
+                            site_title,
+                            browser_name,
+                            activity_classifications.category AS category,
+                            activity_classifications.productivity AS productivity,
+                            COUNT(*) AS segment_count,
+                            SUM(duration_seconds) AS total_seconds,
+                            MIN(started_at) AS first_seen_at,
+                            MAX(ended_at) AS last_seen_at,
+                            COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) AS normalized_site
+                        FROM activity_segments
+                        LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
+                        WHERE COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) IS NOT NULL
+                        GROUP BY lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')))
+                    )
+                    ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
+                    """
+                ).fetchall()
+                for row in rows:
+                    domain = self._normalize_site_target(row["normalized_site"])
+                    if not domain or (needle and needle not in domain.lower() and needle not in str(row["site_title"] or "").lower()):
+                        continue
+                    candidates.append(
+                        {
+                            "id": f"site:{domain}",
+                            "targetKind": "site",
+                            "targetValue": domain,
+                            "displayName": domain,
+                            "appName": None,
+                            "bundleId": None,
+                            "siteDomain": domain,
+                            "siteTitle": row["site_title"],
+                            "browserName": row["browser_name"],
+                            "category": row["category"],
+                            "productivity": row["productivity"],
+                            "segmentCount": int(row["segment_count"] or 0),
+                            "totalSeconds": int(row["total_seconds"] or 0),
+                            "firstSeenAt": row["first_seen_at"],
+                            "lastSeenAt": row["last_seen_at"],
+                        }
+                    )
+
+            if include_apps:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        app_name,
+                        bundle_id,
                         activity_classifications.category AS category,
                         activity_classifications.productivity AS productivity,
                         COUNT(*) AS segment_count,
                         SUM(duration_seconds) AS total_seconds,
                         MIN(started_at) AS first_seen_at,
-                        MAX(ended_at) AS last_seen_at,
-                        COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) AS normalized_site
+                        MAX(ended_at) AS last_seen_at
                     FROM activity_segments
                     LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
-                    WHERE COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) IS NOT NULL
-                    GROUP BY lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')))
-                )
-                ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
-                """
-            ).fetchall()
-            for row in rows:
-                domain = self._normalize_site_target(row["normalized_site"])
-                if not domain or (needle and needle not in domain.lower() and needle not in str(row["site_title"] or "").lower()):
-                    continue
-                candidates.append(
-                    {
-                        "id": f"site:{domain}",
-                        "targetKind": "site",
-                        "targetValue": domain,
-                        "displayName": domain,
-                        "appName": None,
-                        "bundleId": None,
-                        "siteDomain": domain,
-                        "siteTitle": row["site_title"],
-                        "browserName": row["browser_name"],
-                        "category": row["category"],
-                        "productivity": row["productivity"],
-                        "segmentCount": int(row["segment_count"] or 0),
-                        "totalSeconds": int(row["total_seconds"] or 0),
-                        "firstSeenAt": row["first_seen_at"],
-                        "lastSeenAt": row["last_seen_at"],
-                    }
-                )
-
-            rows = conn.execute(
-                """
-                SELECT
-                    app_name,
-                    bundle_id,
-                    activity_classifications.category AS category,
-                    activity_classifications.productivity AS productivity,
-                    COUNT(*) AS segment_count,
-                    SUM(duration_seconds) AS total_seconds,
-                    MIN(started_at) AS first_seen_at,
-                    MAX(ended_at) AS last_seen_at
-                FROM activity_segments
-                LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
-                GROUP BY app_name, bundle_id
-                ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
-                """
-            ).fetchall()
-            for row in rows:
-                app_name = row["app_name"] or ""
-                bundle_id = row["bundle_id"]
-                searchable = f"{app_name} {bundle_id or ''}".lower()
-                if needle and needle not in searchable:
-                    continue
-                target_value = bundle_id if bundle_id else app_name
-                if not target_value:
-                    continue
-                candidates.append(
-                    {
-                        "id": f"app:{target_value}",
-                        "targetKind": "app",
-                        "targetValue": target_value,
-                        "displayName": app_name,
-                        "appName": app_name,
-                        "bundleId": bundle_id,
-                        "siteDomain": None,
-                        "siteTitle": None,
-                        "browserName": None,
-                        "category": row["category"],
-                        "productivity": row["productivity"],
-                        "segmentCount": int(row["segment_count"] or 0),
-                        "totalSeconds": int(row["total_seconds"] or 0),
-                        "firstSeenAt": row["first_seen_at"],
-                        "lastSeenAt": row["last_seen_at"],
-                    }
-                )
+                    GROUP BY app_name, bundle_id
+                    ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
+                    """
+                ).fetchall()
+                for row in rows:
+                    app_name = row["app_name"] or ""
+                    bundle_id = row["bundle_id"]
+                    searchable = f"{app_name} {bundle_id or ''}".lower()
+                    if needle and needle not in searchable:
+                        continue
+                    target_value = bundle_id if bundle_id else app_name
+                    if not target_value:
+                        continue
+                    candidates.append(
+                        {
+                            "id": f"app:{target_value}",
+                            "targetKind": "app",
+                            "targetValue": target_value,
+                            "displayName": app_name,
+                            "appName": app_name,
+                            "bundleId": bundle_id,
+                            "siteDomain": None,
+                            "siteTitle": None,
+                            "browserName": None,
+                            "category": row["category"],
+                            "productivity": row["productivity"],
+                            "segmentCount": int(row["segment_count"] or 0),
+                            "totalSeconds": int(row["total_seconds"] or 0),
+                            "firstSeenAt": row["first_seen_at"],
+                            "lastSeenAt": row["last_seen_at"],
+                        }
+                    )
         return candidates[:limit]
 
     def apply_classification_rules(self, start: str | None = None, end: str | None = None) -> dict[str, int]:

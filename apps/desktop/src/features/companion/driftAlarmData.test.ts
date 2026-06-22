@@ -230,7 +230,12 @@ describe("normalizeDriftAlertDelaySeconds", () => {
 
   it("keeps explicit supported timings", () => {
     expect(normalizeDriftAlertDelaySeconds(0)).toBe(0);
+    expect(normalizeDriftAlertDelaySeconds("30")).toBe(30);
     expect(normalizeDriftAlertDelaySeconds("60")).toBe(60);
+    expect(normalizeDriftAlertDelaySeconds("120")).toBe(120);
     expect(normalizeDriftAlertDelaySeconds("300")).toBe(300);
+    expect(normalizeDriftAlertDelaySeconds("600")).toBe(600);
+    expect(normalizeDriftAlertDelaySeconds("900")).toBe(900);
+    expect(normalizeDriftAlertDelaySeconds("1800")).toBe(1800);
   });
 });

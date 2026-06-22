@@ -1,6 +1,6 @@
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildAttentionRhythm, buildWeeklyBreakdown } from "./insightData";
+import { buildAttentionRhythm, buildWeeklyBreakdown, buildWeeklyChartView } from "./insightData";
 
 function segmentOnDay(
   id: string,
@@ -95,5 +95,38 @@ describe("insight weekly builders", () => {
     expect(activeWednesdayHours).toEqual([9, 10, 11, 12]);
     expect(cells.find((cell) => cell.weekdayIndex === 2 && cell.hour === 9)).toMatchObject({ state: "focus", intensity: 3 });
     expect(cells.find((cell) => cell.weekdayIndex === 2 && cell.hour === 12)).toMatchObject({ state: "focus", intensity: 1 });
+  });
+
+  it("orders weekly chart segments by each day's largest share first", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 0,
+        neutralSeconds: 0,
+        driftSeconds: 0,
+        categorySeconds: {
+          workspace: 1800,
+          learning: 1800,
+          entertainment: 7200,
+          utility: 3600,
+        },
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "category", [
+      { category: "workspace", seconds: 1800 },
+      { category: "learning", seconds: 1800 },
+      { category: "entertainment", seconds: 7200 },
+      { category: "utility", seconds: 3600 },
+    ]);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([
+      "entertainment",
+      "utility",
+      "workspace",
+      "learning",
+    ]);
   });
 });

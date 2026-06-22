@@ -3,9 +3,8 @@ use core_foundation::base::Boolean;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{mpsc, Mutex, OnceLock};
-use std::thread;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -246,11 +245,12 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         query: String,
+        target_kind: Option<String>,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "search_classification_rule_candidates",
-            json!({ "query": query }),
+            json!({ "query": query, "targetKind": target_kind }),
         )
     }
 
@@ -373,240 +373,34 @@ impl TrackerController {
         command: &str,
         payload: Value,
     ) -> Result<T, TrackerError> {
-        let config = tracker_sidecar_config(app)?;
+        let script_path = resolve_tracker_script(app);
+        if !script_path.exists() {
+            return Err(TrackerError::MissingScript(
+                script_path.display().to_string(),
+            ));
+        }
+        let db_path = resolve_db_path(app);
+
         let request = json!({
             "command": command,
             "payload": payload,
         });
 
-        let mut client = tracker_sidecar().lock().map_err(|err| {
-            TrackerError::CommandFailed(format!("tracker sidecar lock failed: {err}"))
-        })?;
-        invoke_sidecar(&mut client, config, request)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TrackerSidecarConfig {
-    python_bin: String,
-    script_path: PathBuf,
-    db_path: PathBuf,
-}
-
-const TRACKER_SIDECAR_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
-#[derive(Debug)]
-struct TrackerSidecarClient {
-    config: Option<TrackerSidecarConfig>,
-    process: Option<TrackerSidecarProcess>,
-    request_timeout: Duration,
-}
-
-#[derive(Debug)]
-struct TrackerSidecarProcess {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: Option<BufReader<ChildStdout>>,
-}
-
-impl Default for TrackerSidecarClient {
-    fn default() -> Self {
-        Self {
-            config: None,
-            process: None,
-            request_timeout: TRACKER_SIDECAR_REQUEST_TIMEOUT,
-        }
-    }
-}
-
-impl TrackerSidecarClient {
-    fn request(
-        &mut self,
-        config: TrackerSidecarConfig,
-        request: &Value,
-    ) -> Result<String, TrackerError> {
-        self.prepare_config(config);
-        let request_line = serde_json::to_string(request)
-            .map_err(|err| TrackerError::ParseFailed(err.to_string()))?;
-        self.write_request_line(&request_line)?;
-        self.read_response_line()
-    }
-
-    fn write_request_line(&mut self, request_line: &str) -> Result<(), TrackerError> {
-        let write_result = {
-            let process = self.ensure_running()?;
-            writeln!(process.stdin, "{request_line}").and_then(|_| process.stdin.flush())
+        // Fast path: reuse a long-lived `serve` process so each query avoids the
+        // ~160ms interpreter/import cold-start (and the contention of spawning
+        // several interpreters at once during a refresh burst). Fall back to a
+        // one-shot invocation if the persistent process is unavailable.
+        let raw = match serve_request(&script_path, &db_path, &request) {
+            Ok(line) => line.into_bytes(),
+            Err(_) => invoke_one_shot(&script_path, &db_path, &request)?,
         };
 
-        if let Err(err) = write_result {
-            self.clear_process();
-            return Err(TrackerError::CommandFailed(format!(
-                "tracker sidecar write failed: {err}; process will be restarted on the next request"
-            )));
-        }
-
-        Ok(())
-    }
-
-    fn read_response_line(&mut self) -> Result<String, TrackerError> {
-        let timeout = self.request_timeout;
-        let stdout = {
-            let process = self.process.as_mut().ok_or_else(|| {
-                TrackerError::CommandFailed("tracker sidecar process missing".into())
-            })?;
-            process.stdout.take().ok_or_else(|| {
-                TrackerError::CommandFailed("tracker sidecar stdout reader missing".into())
-            })?
-        };
-
-        let (sender, receiver) = mpsc::channel();
-        thread::spawn(move || {
-            let mut stdout = stdout;
-            let mut response_line = String::new();
-            let result = match stdout.read_line(&mut response_line) {
-                Ok(0) => Err(TrackerError::CommandFailed(
-                    "tracker sidecar closed stdout before sending a response; process will be restarted on the next request"
-                        .into(),
-                )),
-                Ok(_) => Ok(response_line),
-                Err(err) => Err(TrackerError::CommandFailed(format!(
-                    "tracker sidecar read failed: {err}; process will be restarted on the next request"
-                ))),
-            };
-            let _ = sender.send((stdout, result));
-        });
-
-        match receiver.recv_timeout(timeout) {
-            Ok((stdout, Ok(response_line))) => {
-                let process = self.process.as_mut().ok_or_else(|| {
-                    TrackerError::CommandFailed("tracker sidecar process missing".into())
-                })?;
-                process.stdout = Some(stdout);
-                Ok(response_line)
-            }
-            Ok((_stdout, Err(error))) => {
-                self.clear_process();
-                Err(error)
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                self.clear_process();
-                Err(TrackerError::CommandFailed(format!(
-                    "tracker sidecar timed out after {}ms; process will be restarted on the next request",
-                    timeout.as_millis()
-                )))
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                self.clear_process();
-                Err(TrackerError::CommandFailed(
-                    "tracker sidecar response reader failed; process will be restarted on the next request"
-                        .into(),
-                ))
-            }
-        }
-    }
-
-    fn prepare_config(&mut self, config: TrackerSidecarConfig) {
-        if self.config.as_ref() == Some(&config) {
-            return;
-        }
-
-        self.clear_process();
-        self.config = Some(config);
-    }
-
-    fn ensure_running(&mut self) -> Result<&mut TrackerSidecarProcess, TrackerError> {
-        if self.process_is_dead()? {
-            self.clear_process();
-        }
-
-        if self.process.is_none() {
-            let config = self.config.as_ref().ok_or_else(|| {
-                TrackerError::CommandFailed("tracker sidecar configuration missing".into())
-            })?;
-            self.process = Some(spawn_sidecar(config)?);
-        }
-
-        self.process
-            .as_mut()
-            .ok_or_else(|| TrackerError::CommandFailed("tracker sidecar failed to start".into()))
-    }
-
-    fn process_is_dead(&mut self) -> Result<bool, TrackerError> {
-        let Some(process) = self.process.as_mut() else {
-            return Ok(false);
-        };
-
-        process
-            .child
-            .try_wait()
-            .map(|status| status.is_some())
-            .map_err(|err| {
-                TrackerError::CommandFailed(format!("tracker sidecar status check failed: {err}"))
-            })
-    }
-
-    fn clear_process(&mut self) {
-        let Some(mut process) = self.process.take() else {
-            return;
-        };
-
-        let _ = process.child.kill();
-        let _ = process.child.wait();
-    }
-
-    #[cfg(test)]
-    fn kill_child_for_test(&mut self) -> Result<(), TrackerError> {
-        let Some(process) = self.process.as_mut() else {
-            return Err(TrackerError::CommandFailed(
-                "tracker sidecar test child missing".into(),
-            ));
-        };
-
-        process
-            .child
-            .kill()
-            .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
-        process
-            .child
-            .wait()
-            .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
-        Ok(())
+        parse_envelope::<T>(&raw)
     }
 }
 
-impl Drop for TrackerSidecarClient {
-    fn drop(&mut self) {
-        self.clear_process();
-    }
-}
-
-fn tracker_sidecar() -> &'static Mutex<TrackerSidecarClient> {
-    static SIDECAR: OnceLock<Mutex<TrackerSidecarClient>> = OnceLock::new();
-    SIDECAR.get_or_init(|| Mutex::new(TrackerSidecarClient::default()))
-}
-
-fn tracker_sidecar_config(app: &AppHandle) -> Result<TrackerSidecarConfig, TrackerError> {
-    let script_path = resolve_tracker_script(app);
-    if !script_path.exists() {
-        return Err(TrackerError::MissingScript(
-            script_path.display().to_string(),
-        ));
-    }
-
-    Ok(TrackerSidecarConfig {
-        python_bin: resolve_python_bin(),
-        script_path,
-        db_path: resolve_db_path(app),
-    })
-}
-
-fn invoke_sidecar<T: for<'de> Deserialize<'de>>(
-    client: &mut TrackerSidecarClient,
-    config: TrackerSidecarConfig,
-    request: Value,
-) -> Result<T, TrackerError> {
-    let response_line = client.request(config, &request)?;
-    let envelope = serde_json::from_str::<SidecarEnvelope<T>>(response_line.trim_end())
+fn parse_envelope<T: for<'de> Deserialize<'de>>(raw: &[u8]) -> Result<T, TrackerError> {
+    let envelope = serde_json::from_slice::<SidecarEnvelope<T>>(raw)
         .map_err(|err| TrackerError::ParseFailed(err.to_string()))?;
 
     if !envelope.ok {
@@ -620,46 +414,163 @@ fn invoke_sidecar<T: for<'de> Deserialize<'de>>(
     envelope.data.ok_or(TrackerError::MissingData)
 }
 
-fn spawn_sidecar(config: &TrackerSidecarConfig) -> Result<TrackerSidecarProcess, TrackerError> {
-    let mut child = Command::new(&config.python_bin)
-        .arg(&config.script_path)
-        .arg("serve")
+fn invoke_one_shot(
+    script: &Path,
+    db: &Path,
+    request: &Value,
+) -> Result<Vec<u8>, TrackerError> {
+    let output = Command::new(resolve_python_bin())
+        .arg(script)
         .arg("--db")
-        .arg(&config.db_path)
+        .arg(db)
+        .arg("--request-json")
+        .arg(request.to_string())
+        .output()
+        .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
+
+    if !output.status.success() {
+        return Err(TrackerError::CommandFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+
+    Ok(output.stdout)
+}
+
+/// A long-lived `python main.py ... serve` process. Requests and responses are
+/// newline-delimited JSON; access is serialized through a mutex so request and
+/// response order always match (the server processes one line at a time).
+struct ServeProcess {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    script_path: PathBuf,
+    db_path: PathBuf,
+}
+
+static SERVE_PROCESS: OnceLock<Mutex<Option<ServeProcess>>> = OnceLock::new();
+static SERVE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+fn serve_slot() -> &'static Mutex<Option<ServeProcess>> {
+    SERVE_PROCESS.get_or_init(|| Mutex::new(None))
+}
+
+fn spawn_serve_process(script: &Path, db: &Path) -> Result<ServeProcess, TrackerError> {
+    let mut child = Command::new(resolve_python_bin())
+        .arg(script)
+        .arg("--db")
+        .arg(db)
+        .arg("serve")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|err| {
-            TrackerError::CommandFailed(format!("tracker sidecar spawn failed: {err}"))
-        })?;
+        .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
 
-    let stdin = match child.stdin.take() {
-        Some(stdin) => stdin,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(TrackerError::CommandFailed(
-                "tracker sidecar stdin pipe unavailable".into(),
-            ));
-        }
-    };
-    let stdout = match child.stdout.take() {
-        Some(stdout) => stdout,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(TrackerError::CommandFailed(
-                "tracker sidecar stdout pipe unavailable".into(),
-            ));
-        }
-    };
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| TrackerError::CommandFailed("serve stdin unavailable".into()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| TrackerError::CommandFailed("serve stdout unavailable".into()))?;
 
-    Ok(TrackerSidecarProcess {
+    Ok(ServeProcess {
         child,
         stdin,
-        stdout: Some(BufReader::new(stdout)),
+        stdout: BufReader::new(stdout),
+        script_path: script.to_path_buf(),
+        db_path: db.to_path_buf(),
     })
+}
+
+fn kill_serve_process(mut proc: ServeProcess) {
+    let _ = proc.child.kill();
+    let _ = proc.child.wait();
+}
+
+fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, TrackerError> {
+    proc.stdin.write_all(line.as_bytes()).map_err(serve_io_err)?;
+    proc.stdin.write_all(b"\n").map_err(serve_io_err)?;
+    proc.stdin.flush().map_err(serve_io_err)?;
+
+    let mut response = String::new();
+    let read = proc.stdout.read_line(&mut response).map_err(serve_io_err)?;
+    if read == 0 {
+        return Err(TrackerError::CommandFailed(
+            "serve process closed its output".into(),
+        ));
+    }
+    Ok(response)
+}
+
+fn serve_io_err(err: std::io::Error) -> TrackerError {
+    TrackerError::CommandFailed(err.to_string())
+}
+
+fn serve_request(script: &Path, db: &Path, request: &Value) -> Result<String, TrackerError> {
+    let slot = serve_slot();
+    let mut guard = slot
+        .lock()
+        .map_err(|_| TrackerError::CommandFailed("serve lock poisoned".into()))?;
+
+    // Discard a process spawned for a different script/db (paths can change
+    // between dev runs); it will be respawned below.
+    let stale = guard
+        .as_ref()
+        .map(|proc| proc.script_path != script || proc.db_path != db)
+        .unwrap_or(false);
+    if stale {
+        if let Some(proc) = guard.take() {
+            kill_serve_process(proc);
+        }
+    }
+
+    // Two attempts: the first may discover a dead process (broken pipe), the
+    // second runs against a freshly spawned one.
+    let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
+    for _ in 0..2 {
+        if guard.is_none() {
+            *guard = Some(spawn_serve_process(script, db)?);
+        }
+
+        let id = SERVE_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+        let mut framed = request.clone();
+        if let Some(object) = framed.as_object_mut() {
+            object.insert("id".into(), json!(id));
+        }
+        let line = framed.to_string();
+
+        let attempt = {
+            let proc = guard.as_mut().expect("serve process present");
+            serve_round_trip(proc, &line)
+        };
+
+        match attempt {
+            Ok(response) => return Ok(response),
+            Err(err) => {
+                last_err = err;
+                if let Some(proc) = guard.take() {
+                    kill_serve_process(proc);
+                }
+            }
+        }
+    }
+
+    Err(last_err)
+}
+
+/// Terminate the long-lived serve process (called on app exit). The process also
+/// exits on its own when its stdin reaches EOF, so this is a best-effort cleanup.
+pub fn shutdown_serve_process() {
+    if let Some(slot) = SERVE_PROCESS.get() {
+        if let Ok(mut guard) = slot.lock() {
+            if let Some(proc) = guard.take() {
+                kill_serve_process(proc);
+            }
+        }
+    }
 }
 
 fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<String>) -> Value {
@@ -932,252 +843,5 @@ mod tests {
     fn native_unavailable_preserves_python_fallback_value() {
         assert!(!merged_accessibility_granted(false, None));
         assert!(merged_accessibility_granted(true, None));
-    }
-
-    #[test]
-    fn sidecar_line_protocol_reuses_one_process_for_multiple_requests() {
-        let script_path = write_fake_sidecar_script(
-            r#"
-import json
-import os
-import sys
-
-for raw in sys.stdin:
-    request = json.loads(raw)
-    print(json.dumps({
-        "ok": True,
-        "data": {
-            "pid": os.getpid(),
-            "command": request["command"],
-            "payload": request.get("payload", {}),
-        },
-        "error": None,
-    }), flush=True)
-"#,
-        );
-        let config = fake_sidecar_config(&script_path);
-        let mut client = TrackerSidecarClient::default();
-
-        let first = invoke_sidecar::<Value>(
-            &mut client,
-            config.clone(),
-            json!({ "command": "first", "payload": { "value": 1 } }),
-        )
-        .expect("first request succeeds");
-        let second = invoke_sidecar::<Value>(
-            &mut client,
-            config,
-            json!({ "command": "second", "payload": { "value": 2 } }),
-        )
-        .expect("second request succeeds");
-
-        assert_eq!(first["command"], "first");
-        assert_eq!(second["command"], "second");
-        assert_eq!(first["pid"], second["pid"]);
-    }
-
-    #[test]
-    fn sidecar_respawns_when_existing_child_is_dead_before_request() {
-        let script_path = write_fake_sidecar_script(
-            r#"
-import json
-import os
-import sys
-
-for raw in sys.stdin:
-    request = json.loads(raw)
-    print(json.dumps({
-        "ok": True,
-        "data": {
-            "pid": os.getpid(),
-            "command": request["command"],
-        },
-        "error": None,
-    }), flush=True)
-"#,
-        );
-        let config = fake_sidecar_config(&script_path);
-        let mut client = TrackerSidecarClient::default();
-
-        let first = invoke_sidecar::<Value>(
-            &mut client,
-            config.clone(),
-            json!({ "command": "before_kill", "payload": {} }),
-        )
-        .expect("first request succeeds");
-        client.kill_child_for_test().expect("child can be killed");
-        let second = invoke_sidecar::<Value>(
-            &mut client,
-            config,
-            json!({ "command": "after_kill", "payload": {} }),
-        )
-        .expect("request after dead child succeeds");
-
-        assert_eq!(first["command"], "before_kill");
-        assert_eq!(second["command"], "after_kill");
-        assert_ne!(first["pid"], second["pid"]);
-    }
-
-    #[test]
-    fn sidecar_timeout_clears_process_and_next_request_respawns() {
-        let script_path = write_fake_sidecar_script(
-            r#"
-import json
-import os
-import sys
-import time
-
-for raw in sys.stdin:
-    request = json.loads(raw)
-    if request["command"] == "hang":
-        time.sleep(5)
-        continue
-    print(json.dumps({
-        "ok": True,
-        "data": {
-            "pid": os.getpid(),
-            "command": request["command"],
-        },
-        "error": None,
-    }), flush=True)
-"#,
-        );
-        let config = fake_sidecar_config(&script_path);
-        let mut client = TrackerSidecarClient::default();
-        client.request_timeout = Duration::from_millis(750);
-
-        let error = invoke_sidecar::<Value>(
-            &mut client,
-            config.clone(),
-            json!({ "command": "hang", "payload": {} }),
-        )
-        .expect_err("unresponsive request times out");
-        assert!(error.to_string().contains("timed out"));
-
-        let recovered = invoke_sidecar::<Value>(
-            &mut client,
-            config,
-            json!({ "command": "after_timeout", "payload": {} }),
-        )
-        .expect("next request respawns sidecar");
-
-        assert_eq!(recovered["command"], "after_timeout");
-    }
-
-    #[test]
-    fn sidecar_client_round_trips_with_real_python_tracker_serve_mode() {
-        let temp_dir = tempfile::tempdir().expect("temp dir is created");
-        let config = TrackerSidecarConfig {
-            python_bin: resolve_python_bin(),
-            script_path: real_tracker_script_path(),
-            db_path: temp_dir.path().join("tracker.sqlite3"),
-        };
-        let mut client = TrackerSidecarClient::default();
-        client.request_timeout = Duration::from_secs(10);
-
-        let week_timeline = invoke_sidecar::<Value>(
-            &mut client,
-            config.clone(),
-            json!({
-                "command": "get_dashboard_week_timeline",
-                "payload": {
-                    "start": "2026-04-06T00:00:00",
-                    "end": "2026-04-12T23:59:59",
-                },
-            }),
-        )
-        .expect("dashboard week request succeeds against real Python sidecar");
-        let first_pid = sidecar_test_child_id(&client);
-
-        let live_tail = invoke_sidecar::<Value>(
-            &mut client,
-            config.clone(),
-            json!({
-                "command": "get_live_tail",
-                "payload": {
-                    "start": "2026-04-06T00:00:00",
-                    "end": "2026-04-12T23:59:59",
-                },
-            }),
-        )
-        .expect("live tail request succeeds against same real Python sidecar");
-        let second_pid = sidecar_test_child_id(&client);
-
-        let error = invoke_sidecar::<Value>(
-            &mut client,
-            config.clone(),
-            json!({ "command": "__unknown_test_command__", "payload": {} }),
-        )
-        .expect_err("Python command errors are returned without killing the sidecar");
-        let third_pid = sidecar_test_child_id(&client);
-
-        let recovered = invoke_sidecar::<Value>(
-            &mut client,
-            config,
-            json!({
-                "command": "get_dashboard_week_timeline",
-                "payload": {
-                    "start": "2026-04-06T00:00:00",
-                    "end": "2026-04-12T23:59:59",
-                },
-            }),
-        )
-        .expect("sidecar remains usable after Python command error");
-        let fourth_pid = sidecar_test_child_id(&client);
-
-        assert_eq!(week_timeline.as_array().map(Vec::len), Some(0));
-        assert_eq!(live_tail["segments"].as_array().map(Vec::len), Some(0));
-        assert_eq!(recovered.as_array().map(Vec::len), Some(0));
-        assert!(matches!(
-            error,
-            TrackerError::TrackerReturnedError(message)
-                if message.contains("__unknown_test_command__")
-        ));
-        assert_eq!(first_pid, second_pid);
-        assert_eq!(first_pid, third_pid);
-        assert_eq!(first_pid, fourth_pid);
-    }
-
-    fn fake_sidecar_config(script_path: &Path) -> TrackerSidecarConfig {
-        TrackerSidecarConfig {
-            python_bin: resolve_python_bin(),
-            script_path: script_path.to_path_buf(),
-            db_path: PathBuf::from("fake-tracker.sqlite3"),
-        }
-    }
-
-    fn write_fake_sidecar_script(source: &str) -> PathBuf {
-        let temp_dir = tempfile::tempdir().expect("temp dir is created");
-        let script_path = temp_dir.path().join("fake_sidecar.py");
-        std::fs::write(&script_path, source).expect("fake sidecar script is written");
-        let _kept_dir = temp_dir.keep();
-        script_path
-    }
-
-    fn real_tracker_script_path() -> PathBuf {
-        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("src-tauri has a repository parent")
-            .to_path_buf();
-        let script_path = repo_root
-            .join("services")
-            .join("tracker-python")
-            .join("app")
-            .join("main.py");
-        assert!(
-            script_path.exists(),
-            "real tracker script must exist at {}",
-            script_path.display()
-        );
-        script_path
-    }
-
-    fn sidecar_test_child_id(client: &TrackerSidecarClient) -> u32 {
-        client
-            .process
-            .as_ref()
-            .expect("sidecar process is running")
-            .child
-            .id()
     }
 }

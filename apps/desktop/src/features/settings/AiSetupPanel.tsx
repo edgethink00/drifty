@@ -15,14 +15,13 @@ import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import type { LocalAiSetupState } from "./localAiSetup";
-import type { AiConnectionTestResult } from "./aiConnectionTest";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
-import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
+import type { UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -39,11 +38,11 @@ type AiSetupPanelProps = {
   readonly currentBillingPlan: BillingPlanId | null;
   readonly isSupabaseConfigured: boolean;
   readonly localAiSetup: LocalAiSetupState;
+  readonly connectionTest: UseAiConnectionTestRunnerResult;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly workProfileUserId: string;
   readonly onDialogOpenChange: (open: boolean) => void;
-  readonly onLocalAiConnectionTestResult: (setup: LocalAiSetupState, result: AiConnectionTestResult) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
@@ -63,11 +62,11 @@ export function AiSetupPanel({
   currentBillingPlan,
   isSupabaseConfigured,
   localAiSetup,
+  connectionTest,
   shouldShowCloudCheckoutPlans,
   userEmail,
   workProfileUserId,
   onDialogOpenChange,
-  onLocalAiConnectionTestResult,
   onLocalAiSetupChange,
   onManageCloudBilling,
   onRefreshCloudStatus,
@@ -78,10 +77,6 @@ export function AiSetupPanel({
   // a fresh install, or OpenRouter once the user has switched their primary to it.
   const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
   const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
-  const connectionTest = useAiConnectionTestRunner({
-    localAiSetup,
-    onLocalAiConnectionTestResult,
-  });
   const driftyRoute = localAiSetup.driftyRoute;
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   const managedLocalAi = useManagedLocalAiSetup(expandedSection === "drifty", onLocalAiSetupChange);
