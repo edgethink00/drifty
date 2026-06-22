@@ -13102,6 +13102,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 }
 
 .classification-rule-field span,
+.classification-rule-field label,
 .classification-rule-hint,
 .classification-rule-copy,
 .classification-rule-selected,
@@ -13202,10 +13203,32 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   margin: 0;
 }
 
+.classification-rule-search {
+  position: relative;
+  z-index: 3;
+}
+
 .classification-rule-candidates {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
   width: 100%;
+}
+
+.classification-rule-search__popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  left: 0;
+  z-index: 10;
+  max-height: min(18rem, calc(100vh - 12rem));
+  padding: var(--space-1);
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-strong) 42%, transparent)),
+    var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .classification-rule-candidates__heading {
@@ -13220,11 +13243,12 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   background: var(--classification-rule-control-bg);
   color: var(--text);
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   justify-content: space-between;
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
   text-align: left;
+  width: 100%;
 }
 
 .classification-rule-candidate:hover,
@@ -13232,6 +13256,12 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
   background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
   transform: none;
+}
+
+.classification-rule-candidate:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 2px;
 }
 
 .classification-rule-candidate__identity,
@@ -13250,7 +13280,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .classification-rule-candidate__usage {
   align-items: flex-start;
   display: grid;
-  gap: var(--space-1);
+  gap: 0.125rem;
 }
 
 .classification-rule-candidate__usage {
@@ -13272,7 +13302,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .classification-rule-card p {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: var(--type-setting-desc-size);
+  font-size: var(--type-caption-size);
   font-style: normal;
 }
 
@@ -13361,16 +13391,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   .classification-rule-card {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .classification-rule-candidate {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .classification-rule-candidate__usage {
-    justify-items: start;
-    text-align: left;
   }
 
   .classification-rule-card__actions {

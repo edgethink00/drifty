@@ -339,7 +339,12 @@ def search_classification_rule_candidates(payload: dict):
     query = payload.get("query", "")
     if not isinstance(query, str):
         return response(False, error="query must be a string")
-    return response(True, database().search_classification_rule_candidates(query))
+    target_kind = payload.get("targetKind")
+    if target_kind is not None and not isinstance(target_kind, str):
+        return response(False, error="targetKind must be site or app")
+    if target_kind is not None and target_kind not in {"site", "app"}:
+        return response(False, error="targetKind must be site or app")
+    return response(True, database().search_classification_rule_candidates(query, target_kind=target_kind))
 
 
 def apply_classification_rules(payload: dict):

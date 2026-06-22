@@ -223,7 +223,7 @@ class TrackerMainTests(unittest.TestCase):
             rules = tracker_main.get_classification_rules({})
             saved = tracker_main.save_classification_rule({"input": {"targetKind": "app", "targetValue": "Linear"}})
             deleted = tracker_main.delete_classification_rule({"id": "rule-1"})
-            candidates = tracker_main.search_classification_rule_candidates({"query": "lin"})
+            candidates = tracker_main.search_classification_rule_candidates({"query": "lin", "targetKind": "app"})
             applied = tracker_main.apply_classification_rules({"start": "2026-04-06T00:00:00", "end": "2026-04-07T00:00:00"})
 
         self.assertTrue(rules["ok"])
@@ -233,7 +233,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(applied["data"]["appliedCount"], 1)
         mock_db.save_classification_rule.assert_called_once_with({"targetKind": "app", "targetValue": "Linear"})
         mock_db.delete_classification_rule.assert_called_once_with("rule-1")
-        mock_db.search_classification_rule_candidates.assert_called_once_with("lin")
+        mock_db.search_classification_rule_candidates.assert_called_once_with("lin", target_kind="app")
         mock_db.apply_classification_rules.assert_called_once_with("2026-04-06T00:00:00", "2026-04-07T00:00:00")
 
     def test_delete_activity_segments_forwards_string_ids_to_database(self) -> None:
