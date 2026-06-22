@@ -321,6 +321,8 @@ const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 const DASHBOARD_WEEK_HISTORY_CACHE_TTL_MS = 5 * 60_000;
 const DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS = 4000;
 const EMPTY_ACTIVITY_SEGMENTS: ActivitySegment[] = [];
+const HISTORY_RECENT_LOOKBACK_DAYS = 6;
+const HISTORY_ARCHIVE_LOOKBACK_DAYS = 89;
 
 const dashboardPeriodOptions: DashboardPeriodOption[] = [
   { period: "Today", label: "Your Day", detail: "Live timeline" },
@@ -1746,19 +1748,20 @@ export default function App() {
     const shouldLoadDashboardWeekHistory = shouldLoadHistory && activeTab === "dashboard" && dashPeriod === "Week";
     const shouldLoadTrendsHistory = activeTab === "trends";
     const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
-    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(day, -89);
+    const historyAnchorDay = shouldLoadHistory && activeTab === "history" ? logicalTodayIsoDate(startOfDayMinutes) : day;
+    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(historyAnchorDay, -HISTORY_ARCHIVE_LOOKBACK_DAYS);
     const historySummaryRange = trendsHistoryRange
       ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-      : getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
-    const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
+      : getLogicalDayRange(historyStartDay, historyAnchorDay, startOfDayMinutes);
+    const selectedWeekRange = getDashboardPeriodRange(historyAnchorDay, "Week", startOfDayMinutes, startOfWeek);
     const historyTimelineRange = trendsHistoryRange
       ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
       : getLogicalDayRange(
         shouldLoadDashboardWeekHistory ? selectedWeekRange.startDay : historyStartDay,
         shouldLoadDashboardWeekHistory
           ? selectedWeekRange.endDay
-          : day > selectedWeekRange.endDay
-            ? day
+          : historyAnchorDay > selectedWeekRange.endDay
+            ? historyAnchorDay
             : selectedWeekRange.endDay,
         startOfDayMinutes,
       );
@@ -1892,25 +1895,83 @@ export default function App() {
     const shouldLoadDashboardWeekHistory = activeTab === "dashboard" && dashPeriod === "Week";
     const shouldLoadTrendsHistory = activeTab === "trends";
     const trendsHistoryRange = shouldLoadTrendsHistory ? getInsightPeriodRange(day, trendsRange, startOfDayMinutes) : null;
-    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(day, -89);
+    const historyAnchorDay = activeTab === "history" ? logicalTodayIsoDate(startOfDayMinutes) : day;
+    const historyStartDay = trendsHistoryRange?.startDay ?? shiftIsoDate(historyAnchorDay, -HISTORY_ARCHIVE_LOOKBACK_DAYS);
     const historySummaryRange = trendsHistoryRange
       ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-      : getLogicalDayRange(historyStartDay, day, startOfDayMinutes);
-    const selectedWeekRange = getDashboardPeriodRange(day, "Week", startOfDayMinutes, startOfWeek);
+      : getLogicalDayRange(historyStartDay, historyAnchorDay, startOfDayMinutes);
+    const selectedWeekRange = getDashboardPeriodRange(historyAnchorDay, "Week", startOfDayMinutes, startOfWeek);
     const historyTimelineRange = trendsHistoryRange
       ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
       : getLogicalDayRange(
         shouldLoadDashboardWeekHistory ? selectedWeekRange.startDay : historyStartDay,
         shouldLoadDashboardWeekHistory
           ? selectedWeekRange.endDay
-          : day > selectedWeekRange.endDay
-            ? day
+          : historyAnchorDay > selectedWeekRange.endDay
+            ? historyAnchorDay
             : selectedWeekRange.endDay,
         startOfDayMinutes,
       );
     const shouldLoadHistorySummaries = !shouldLoadDashboardWeekHistory;
+    const historyRecentTimelineRange = activeTab === "history"
+      ? getLogicalDayRange(shiftIsoDate(historyAnchorDay, -HISTORY_RECENT_LOOKBACK_DAYS), historyAnchorDay, startOfDayMinutes)
+      : null;
+    const loadMissingHistoryIcons = (segmentsToInspect: readonly ActivitySegment[]) => {
+      void (async () => {
+        try {
+          const missingIconRequests = collectMissingAppIconRequests(segmentsToInspect, appIconsRef.current);
+          if (missingIconRequests.length === 0) return;
+          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
+          if (historyRefreshRequestRef.current !== requestId) return;
+          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
+        } catch (error) {
+          if (historyRefreshRequestRef.current !== requestId) return;
+          const message = error instanceof Error ? error.message : "unknown error";
+          console.warn("Failed to load history app icons", message);
+        }
+      })();
+    };
 
     try {
+      if (historyRecentTimelineRange !== null) {
+        const materializedRecentTimeline = await trackerClient
+          .getTimeline(historyRecentTimelineRange)
+          .then((timeline) => materializeBuiltInHeuristicTimeline(timeline));
+
+        if (historyRefreshRequestRef.current !== requestId) return false;
+
+        setHistorySegments(materializedRecentTimeline.segments);
+        scheduleBuiltInHeuristicClassificationPersistence(materializedRecentTimeline.classifications);
+        loadMissingHistoryIcons(materializedRecentTimeline.segments);
+
+        void (async () => {
+          try {
+            const [materializedArchiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
+              trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline)),
+              shouldLoadHistorySummaries
+                ? trackerClient.getHourlySummary(historySummaryRange)
+                : Promise.resolve<HourBucket[] | null>(null),
+              shouldLoadHistorySummaries
+                ? trackerClient.getTopSites({ ...historySummaryRange, limit: 8 })
+                : Promise.resolve<SiteDuration[] | null>(null),
+            ]);
+
+            if (historyRefreshRequestRef.current !== requestId) return;
+
+            setHistorySegments(materializedArchiveTimelines.segments);
+            if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
+            if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
+            scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
+            loadMissingHistoryIcons(materializedArchiveTimelines.segments);
+          } catch (nextError) {
+            if (historyRefreshRequestRef.current !== requestId) return;
+            setError(toErrorMessage(nextError));
+          }
+        })();
+
+        return true;
+      }
+
       const [materializedArchiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
         shouldLoadDashboardWeekHistory
           ? loadDashboardWeekHistory(historyTimelineRange).then((load) => load.materialized)
@@ -1930,18 +1991,7 @@ export default function App() {
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
-
-      void (async () => {
-        try {
-          const missingIconRequests = collectMissingAppIconRequests(materializedArchiveTimelines.segments, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (historyRefreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch {
-          if (historyRefreshRequestRef.current !== requestId) return;
-        }
-      })();
+      loadMissingHistoryIcons(materializedArchiveTimelines.segments);
       return true;
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return false;
@@ -5403,6 +5453,7 @@ export default function App() {
               appIcons={appIcons}
               deleting={historyDeleting}
               segments={historySegments}
+              startOfDayMinutes={startOfDayMinutes}
               onDeleteSelected={handleDeleteHistorySegments}
             />
           </div>
