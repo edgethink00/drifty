@@ -301,7 +301,7 @@ class MacosWorkspaceTests(unittest.TestCase):
 
     def test_current_snapshot_falls_back_to_lsappinfo_when_system_events_lookup_fails(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events lookup failed')) as mock_run, \
-             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes')) as mock_lsappinfo, \
+             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes', None)) as mock_lsappinfo, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
              patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
             snapshot = current_snapshot()
@@ -310,8 +310,30 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.bundle_id, 'com.apple.Notes')
         self.assertIsNone(snapshot.window_title)
         self.assertEqual(snapshot.source, 'nsworkspace')
+        self.assertEqual(snapshot.frontmost_capture_source, 'lsappinfo')
+        self.assertEqual(snapshot.frontmost_capture_error, 'System Events lookup failed')
+        self.assertIsNone(snapshot.frontmost_fallback_error)
         mock_run.assert_called_once()
         mock_lsappinfo.assert_called_once()
+
+    def test_current_snapshot_records_frontmost_diagnostics_when_all_app_capture_fails(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('osascript timed out')), \
+             patch(
+                 'app.tracker.macos_workspace._frontmost_via_lsappinfo',
+                 return_value=(None, None, 'lsappinfo info returned no parseable app name.'),
+             ), \
+             patch('app.tracker.macos_workspace.read_front_window_title') as mock_window_title, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.app_name, 'Unavailable')
+        self.assertIsNone(snapshot.bundle_id)
+        self.assertIsNone(snapshot.window_title)
+        self.assertEqual(snapshot.source, 'nsworkspace')
+        self.assertEqual(snapshot.frontmost_capture_source, 'unavailable')
+        self.assertEqual(snapshot.frontmost_capture_error, 'osascript timed out')
+        self.assertEqual(snapshot.frontmost_fallback_error, 'lsappinfo info returned no parseable app name.')
+        mock_window_title.assert_not_called()
 
     def test_current_snapshot_prefers_ax_title_from_browser_pass(self) -> None:
         metadata = BrowserMetadata(

@@ -438,6 +438,9 @@ def get_current_snapshot():
             "browserAutomationStatus": snapshot.browser_automation_status,
             "browserAutomationError": snapshot.browser_automation_error,
             "systemTransientActivity": snapshot.system_transient_activity,
+            "frontmostCaptureSource": snapshot.frontmost_capture_source,
+            "frontmostCaptureError": snapshot.frontmost_capture_error,
+            "frontmostFallbackError": snapshot.frontmost_fallback_error,
         },
     )
 
