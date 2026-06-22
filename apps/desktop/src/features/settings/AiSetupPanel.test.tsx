@@ -239,13 +239,12 @@ describe("AiSetupPanel", () => {
     expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
-    const requiredFields = screen.getByRole("list", { name: /Required AI classification fields/i });
-    const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
-    expect(within(requiredFields).getByText(/App name and basic app context/i)).toBeTruthy();
-    expect(within(requiredFields).getAllByText(/Required/i)).toHaveLength(2);
-    expect(within(optionalFields).getByRole("switch", { name: /Browser or site domain/i })).toBeTruthy();
-    expect(within(optionalFields).getByRole("switch", { name: /Page title or window title/i })).toBeTruthy();
-    const optionalSwitches = within(optionalFields).getAllByRole("switch");
+    const sharedFields = screen.getByRole("list", { name: /Fields shared with AI classification/i });
+    expect(within(sharedFields).getByText(/App name and basic app context/i)).toBeTruthy();
+    expect(within(sharedFields).getByText(/Activity duration/i)).toBeTruthy();
+    expect(within(sharedFields).getByRole("switch", { name: /Browser or site domain/i })).toBeTruthy();
+    expect(within(sharedFields).getByRole("switch", { name: /Page title or window title/i })).toBeTruthy();
+    const optionalSwitches = within(sharedFields).getAllByRole("switch");
     expect(optionalSwitches).toHaveLength(3);
     for (const optionalSwitch of optionalSwitches) {
       if (!(optionalSwitch instanceof HTMLInputElement)) throw new Error("Optional privacy controls should render as switches.");
@@ -253,7 +252,7 @@ describe("AiSetupPanel", () => {
     }
     expect(screen.queryByRole("button", { name: /Save selection/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Reset optional/i })).toBeNull();
-    expect(screen.getByText(/Raw timeline rows/i)).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: /Fields kept on device/i })).getByText(/Raw timeline rows/i)).toBeTruthy();
   });
 });
 
