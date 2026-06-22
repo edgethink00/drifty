@@ -187,6 +187,82 @@ describe("buildDebugLogPayload", () => {
     expect(payload.settings.developerDiagnostics.forceChromiumAxCapture).toBe(true);
   });
 
+  it("summarizes frontmost app capture diagnostics for unavailable history", () => {
+    const unavailableSegment = segment({
+      appName: "Unavailable",
+      browserName: null,
+      durationSeconds: 120,
+      source: "nsworkspace",
+      frontmostCaptureSource: "unavailable",
+      frontmostCaptureError: "osascript timed out",
+      frontmostFallbackError: "lsappinfo info returned no parseable app name.",
+    });
+    const fallbackSegment = segment({
+      id: "fallback-segment",
+      appName: "Notes",
+      browserName: null,
+      bundleId: "com.apple.Notes",
+      durationSeconds: 30,
+      frontmostCaptureSource: "lsappinfo",
+      frontmostCaptureError: "System Events lookup failed",
+    });
+
+    const payload = buildDebugLogPayload({
+      selectedDay: "2026-06-13",
+      startOfDayMinutes: 240,
+      startOfWeek: "monday",
+      theme: "light",
+      categoryColorOverrides: {},
+      appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: true,
+        forceChromiumAxCapture: false,
+        forceChromiumAxExtremeNudge: true,
+      },
+      status: null,
+      accessibilityGranted: true,
+      currentSnapshot: {
+        observedAt: "2026-06-13T15:05:00.000Z",
+        appName: "Unavailable",
+        source: "nsworkspace",
+        frontmostCaptureSource: "unavailable",
+        frontmostCaptureError: "osascript timed out",
+        frontmostFallbackError: "lsappinfo info returned no parseable app name.",
+      },
+      driftAlarm,
+      driftAlarmDebugEvents: [],
+      segments: [unavailableSegment, fallbackSegment],
+      historySegments: [],
+      leaderboardSegments: [],
+      ai: baseAiDebug,
+      error: null,
+    });
+
+    expect(payload.tracker.currentSnapshot).toMatchObject({
+      appName: "Unavailable",
+      frontmostCaptureSource: "unavailable",
+      frontmostCaptureError: "osascript timed out",
+      frontmostFallbackError: "lsappinfo info returned no parseable app name.",
+      hasFrontmostCaptureError: true,
+      hasFrontmostFallbackError: true,
+    });
+    expect(payload.tracker.frontmostCaptureDiagnostics.today).toMatchObject({
+      unavailableSegments: 1,
+      unavailableSeconds: 120,
+      captureSourceCounts: {
+        unavailable: 1,
+        lsappinfo: 1,
+      },
+      captureErrorCounts: {
+        "osascript timed out": 1,
+        "System Events lookup failed": 1,
+      },
+      fallbackErrorCounts: {
+        "lsappinfo info returned no parseable app name.": 1,
+      },
+    });
+  });
+
   it("records cloud AI issue diagnostics without raw provider payloads", () => {
     const payload = buildDebugLogPayload({
       selectedDay: "2026-06-13",

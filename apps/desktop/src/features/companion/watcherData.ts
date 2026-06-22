@@ -164,6 +164,9 @@ export function currentSnapshotToSegment(current: CurrentActivitySnapshot, durat
     youtubeVideoId: current.youtubeVideoId,
     youtubePlaylistId: current.youtubePlaylistId,
     youtubeIsShorts: current.youtubeIsShorts,
+    frontmostCaptureSource: current.frontmostCaptureSource,
+    frontmostCaptureError: current.frontmostCaptureError,
+    frontmostFallbackError: current.frontmostFallbackError,
     platform: "macos",
     source: current.source,
   };

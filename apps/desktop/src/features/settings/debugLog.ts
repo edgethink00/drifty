@@ -36,6 +36,16 @@ export type BrowserCaptureDiagnostics = {
   readonly byBrowser: readonly BrowserCaptureSummary[];
 };
 
+export type FrontmostCaptureDiagnostics = {
+  readonly source: BrowserCaptureDiagnosticsSource;
+  readonly totalSegments: number;
+  readonly unavailableSegments: number;
+  readonly unavailableSeconds: number;
+  readonly captureSourceCounts: Readonly<Record<string, number>>;
+  readonly captureErrorCounts: Readonly<Record<string, number>>;
+  readonly fallbackErrorCounts: Readonly<Record<string, number>>;
+};
+
 type BrowserCaptureAccumulator = {
   browserName: string;
   totalSegments: number;
@@ -144,10 +154,24 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
             hasSiteContext: currentSnapshot.hasSiteContext,
           }
         : null,
+      frontmostCapture: currentSnapshot
+        ? {
+            source: currentSnapshot.frontmostCaptureSource,
+            hasCaptureError: currentSnapshot.hasFrontmostCaptureError,
+            captureError: currentSnapshot.frontmostCaptureError,
+            hasFallbackError: currentSnapshot.hasFrontmostFallbackError,
+            fallbackError: currentSnapshot.frontmostFallbackError,
+          }
+        : null,
       browserCaptureDiagnostics: {
         today: buildBrowserCaptureDiagnostics("today", input.segments),
         history: buildBrowserCaptureDiagnostics("history", input.historySegments),
         leaderboard: buildBrowserCaptureDiagnostics("leaderboard", input.leaderboardSegments),
+      },
+      frontmostCaptureDiagnostics: {
+        today: buildFrontmostCaptureDiagnostics("today", input.segments),
+        history: buildFrontmostCaptureDiagnostics("history", input.historySegments),
+        leaderboard: buildFrontmostCaptureDiagnostics("leaderboard", input.leaderboardSegments),
       },
     },
     driftAlarm: {
@@ -224,6 +248,48 @@ function buildCurrentSnapshotSummary(snapshot: CurrentActivitySnapshot | null) {
     browserAutomationStatus: snapshot.browserAutomationStatus ?? null,
     browserAutomationError: browserAutomationError(snapshot.browserAutomationError),
     hasBrowserAutomationError: Boolean(cleanText(snapshot.browserAutomationError)),
+    frontmostCaptureSource: snapshot.frontmostCaptureSource ?? null,
+    frontmostCaptureError: diagnosticError(snapshot.frontmostCaptureError),
+    frontmostFallbackError: diagnosticError(snapshot.frontmostFallbackError),
+    hasFrontmostCaptureError: Boolean(cleanText(snapshot.frontmostCaptureError)),
+    hasFrontmostFallbackError: Boolean(cleanText(snapshot.frontmostFallbackError)),
+  };
+}
+
+function buildFrontmostCaptureDiagnostics(
+  source: BrowserCaptureDiagnosticsSource,
+  segments: readonly ActivitySegment[],
+): FrontmostCaptureDiagnostics {
+  const captureSourceCounts: Record<string, number> = {};
+  const captureErrorCounts: Record<string, number> = {};
+  const fallbackErrorCounts: Record<string, number> = {};
+  let unavailableSegments = 0;
+  let unavailableSeconds = 0;
+
+  for (const segment of segments) {
+    const captureSource = cleanText(segment.frontmostCaptureSource) ?? MISSING_DIAGNOSTIC_VALUE;
+    incrementCount(captureSourceCounts, captureSource);
+
+    const captureError = diagnosticError(segment.frontmostCaptureError);
+    if (captureError) incrementCount(captureErrorCounts, captureError);
+
+    const fallbackError = diagnosticError(segment.frontmostFallbackError);
+    if (fallbackError) incrementCount(fallbackErrorCounts, fallbackError);
+
+    if (segment.appName === "Unavailable") {
+      unavailableSegments += 1;
+      unavailableSeconds += segment.durationSeconds;
+    }
+  }
+
+  return {
+    source,
+    totalSegments: segments.length,
+    unavailableSegments,
+    unavailableSeconds,
+    captureSourceCounts,
+    captureErrorCounts,
+    fallbackErrorCounts,
   };
 }
 
@@ -341,6 +407,10 @@ function cleanText(value: string | null | undefined): string | null {
 }
 
 function browserAutomationError(value: string | null | undefined): string | null {
+  return diagnosticError(value);
+}
+
+function diagnosticError(value: string | null | undefined): string | null {
   const cleaned = cleanText(value)?.replace(/\s+/g, " ");
   if (!cleaned) return null;
   if (cleaned.length <= MAX_BROWSER_AUTOMATION_ERROR_LENGTH) return cleaned;

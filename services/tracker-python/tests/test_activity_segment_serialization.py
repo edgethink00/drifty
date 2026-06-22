@@ -65,6 +65,38 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         self.assertEqual(segment["browserAutomationStatus"], "empty_result")
         self.assertEqual(segment["browserAutomationError"], "Google Chrome returned an empty browser automation result.")
 
+    def test_fetch_timeline_includes_frontmost_capture_diagnostics(self) -> None:
+        started_at = "2026-06-13T00:00:00+00:00"
+        with TemporaryDirectory() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": "2026-06-13T00:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": "Unavailable",
+                    "bundle_id": None,
+                    "window_title": None,
+                    "platform": "macos",
+                    "source": "nsworkspace",
+                    "confidence": 1.0,
+                    "raw_context_json": json.dumps(
+                        {
+                            "frontmost_capture_source": "unavailable",
+                            "frontmost_capture_error": "osascript timed out",
+                            "frontmost_fallback_error": "lsappinfo info returned no parseable app name.",
+                        }
+                    ),
+                }
+            )
+
+            local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+            segment = database.fetch_timeline(local_day)[0]
+
+        self.assertEqual(segment["frontmostCaptureSource"], "unavailable")
+        self.assertEqual(segment["frontmostCaptureError"], "osascript timed out")
+        self.assertEqual(segment["frontmostFallbackError"], "lsappinfo info returned no parseable app name.")
+
     def test_fetch_timeline_hides_uncertain_front_fallback_site_context(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
         with TemporaryDirectory() as tempdir:
