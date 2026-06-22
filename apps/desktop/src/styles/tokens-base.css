@@ -70,6 +70,7 @@
   --accent-mid: #789645;
   --accent-soft: #e1ead5;
   --accent-strong: #486924;
+  --on-accent: #ffffff;
   --warn: #9e4238;
   --warn-soft: #f0deda;
   --productivity-focus: #4f751e;
@@ -119,6 +120,7 @@
   --accent-mid: #abc96d;
   --accent-soft: #26321d;
   --accent-strong: #b6d779;
+  --on-accent: #0f0f0d;
   --warn: #c85a4e;
   --warn-soft: #2e1a18;
   --productivity-focus: #b7d96b;

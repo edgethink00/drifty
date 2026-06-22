@@ -907,11 +907,11 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #b8c870, var(--accent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, white), var(--accent));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700;
   font-size: 18px;
 }

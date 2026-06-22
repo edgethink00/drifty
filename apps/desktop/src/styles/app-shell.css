@@ -314,8 +314,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(110,125,36,.35); }
-  50% { box-shadow: 0 0 0 6px rgba(110,125,36,0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
 }
 
 .nav-label {
@@ -361,11 +361,7 @@
 
 .nav-button--active {
   background: var(--accent);
-  color: #fff;
-}
-
-:root[data-theme="dark"] .nav-button--active {
-  color: #0f0f0d;
+  color: var(--on-accent);
 }
 
 .nav-button svg {
@@ -534,11 +530,11 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #b8c870, var(--accent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, white), var(--accent));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 700;
   font-size: 10px;
 }
@@ -753,7 +749,7 @@
 .seg button.on {
   background: var(--text);
   color: var(--canvas);
-  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 18%, transparent);
   font-weight: 600;
 }
 

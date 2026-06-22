@@ -1048,11 +1048,7 @@
 .feedback-modal__primary:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
-}
-
-:root[data-theme="dark"] .feedback-modal__primary:hover:not(:disabled) {
-  color: #0f0f0d;
+  color: var(--on-accent);
 }
 
 .feedback-modal__sent {

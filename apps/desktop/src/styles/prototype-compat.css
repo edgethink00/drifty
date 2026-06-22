@@ -20,8 +20,7 @@
   transition: color .15s, background .15s;
 }
 .nav-item:hover { background: var(--bg-2); color: var(--text); transform: none; }
-.nav-item.active { background: var(--accent); color: #fff; }
-:root[data-theme="dark"] .nav-item.active { color: #0f0f0d; }
+.nav-item.active { background: var(--accent); color: var(--on-accent); }
 .nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
 .nav-item span {
   max-width: 9rem;
