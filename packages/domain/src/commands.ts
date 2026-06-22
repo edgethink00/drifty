@@ -195,4 +195,5 @@ export interface TrackerApi {
 
 export interface DeveloperDiagnosticsSettings {
   forceChromiumAxCapture: boolean;
+  forceFrontmostFallbackCapture: boolean;
 }

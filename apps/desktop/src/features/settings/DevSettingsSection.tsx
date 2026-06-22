@@ -14,6 +14,7 @@ type DevSettingsSectionProps = {
   readonly endOfDayReviewSettingsRowRef: RefObject<HTMLDivElement>;
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
+  readonly forceFrontmostFallbackCaptureEnabled: boolean;
   readonly watcherMode: WatcherMode;
   readonly watcherPeekEnabled: boolean;
   readonly watcherPeriodicMaxMinutes: number;
@@ -23,6 +24,7 @@ type DevSettingsSectionProps = {
   readonly onEndOfDayReviewPreview: () => void;
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
+  readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
@@ -39,6 +41,7 @@ export function DevSettingsSection({
   endOfDayReviewSettingsRowRef,
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
+  forceFrontmostFallbackCaptureEnabled,
   watcherMode,
   watcherPeekEnabled,
   watcherPeriodicMaxMinutes,
@@ -48,6 +51,7 @@ export function DevSettingsSection({
   onEndOfDayReviewPreview,
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
+  onForceFrontmostFallbackCaptureChange,
   onOpenDebugLogs,
   onPreviewDashboardAiUnavailableCase,
   onPreviewDriftAlarm,
@@ -80,6 +84,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={forceChromiumAxCaptureEnabled} onChange={onForceChromiumAxCaptureChange} ariaLabel="Force Chromium Accessibility site capture" />
+          </div>
+        </div>
+        <div className="settings-row settings-row--fallback">
+          <div>
+            <div className="lbl">Force frontmost fallback tracking</div>
+            <div className="desc">Skip System Events frontmost app capture so tracker samples must identify the app through the lsappinfo fallback.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={forceFrontmostFallbackCaptureEnabled} onChange={onForceFrontmostFallbackCaptureChange} ariaLabel="Force frontmost fallback tracking" />
           </div>
         </div>
         <div className="settings-row settings-row--fallback">

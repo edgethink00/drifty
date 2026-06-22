@@ -41,6 +41,12 @@ export type FrontmostCaptureDiagnostics = {
   readonly totalSegments: number;
   readonly unavailableSegments: number;
   readonly unavailableSeconds: number;
+  readonly unavailableRatio: number | null;
+  readonly systemEventsSegments: number;
+  readonly lsappinfoSegments: number;
+  readonly missingCaptureSourceSegments: number;
+  readonly captureErrorSegments: number;
+  readonly fallbackErrorSegments: number;
   readonly captureSourceCounts: Readonly<Record<string, number>>;
   readonly captureErrorCounts: Readonly<Record<string, number>>;
   readonly fallbackErrorCounts: Readonly<Record<string, number>>;
@@ -69,6 +75,7 @@ type BuildDebugLogPayloadInput = {
   readonly developerDiagnostics: {
     readonly devModeEnabled: boolean;
     readonly forceChromiumAxCapture: boolean;
+    readonly forceFrontmostFallbackCapture: boolean;
     readonly forceChromiumAxExtremeNudge: boolean;
   };
   readonly status: TrackerStatus | null;
@@ -265,16 +272,30 @@ function buildFrontmostCaptureDiagnostics(
   const fallbackErrorCounts: Record<string, number> = {};
   let unavailableSegments = 0;
   let unavailableSeconds = 0;
+  let systemEventsSegments = 0;
+  let lsappinfoSegments = 0;
+  let missingCaptureSourceSegments = 0;
+  let captureErrorSegments = 0;
+  let fallbackErrorSegments = 0;
 
   for (const segment of segments) {
     const captureSource = cleanText(segment.frontmostCaptureSource) ?? MISSING_DIAGNOSTIC_VALUE;
     incrementCount(captureSourceCounts, captureSource);
+    if (captureSource === "system-events") systemEventsSegments += 1;
+    if (captureSource === "lsappinfo") lsappinfoSegments += 1;
+    if (captureSource === MISSING_DIAGNOSTIC_VALUE) missingCaptureSourceSegments += 1;
 
     const captureError = diagnosticError(segment.frontmostCaptureError);
-    if (captureError) incrementCount(captureErrorCounts, captureError);
+    if (captureError) {
+      captureErrorSegments += 1;
+      incrementCount(captureErrorCounts, captureError);
+    }
 
     const fallbackError = diagnosticError(segment.frontmostFallbackError);
-    if (fallbackError) incrementCount(fallbackErrorCounts, fallbackError);
+    if (fallbackError) {
+      fallbackErrorSegments += 1;
+      incrementCount(fallbackErrorCounts, fallbackError);
+    }
 
     if (segment.appName === "Unavailable") {
       unavailableSegments += 1;
@@ -287,6 +308,12 @@ function buildFrontmostCaptureDiagnostics(
     totalSegments: segments.length,
     unavailableSegments,
     unavailableSeconds,
+    unavailableRatio: ratio(unavailableSegments, segments.length),
+    systemEventsSegments,
+    lsappinfoSegments,
+    missingCaptureSourceSegments,
+    captureErrorSegments,
+    fallbackErrorSegments,
     captureSourceCounts,
     captureErrorCounts,
     fallbackErrorCounts,
