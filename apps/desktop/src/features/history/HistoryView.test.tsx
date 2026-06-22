@@ -156,6 +156,12 @@ describe("HistoryView", () => {
     expect(screen.queryByRole("button", { name: /^show more older records$/i })).toBeNull();
   });
 
+  it("anchors sparse search results to the top of the scroll region", () => {
+    expect(cssRule(".history-groups")).toMatch(/align-content:\s*start;/);
+    expect(cssRule(".history-group")).toMatch(/align-content:\s*start;/);
+    expect(cssRule(".history-list")).toMatch(/align-content:\s*start;/);
+  });
+
   it("requires confirmation before deleting selected history records", async () => {
     const deleteSelected = vi.fn().mockResolvedValue(undefined);
     render(
