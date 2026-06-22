@@ -41,6 +41,8 @@ export function AiSetupWorkProfileSection({
       workActivityOther: activity === "Other" ? "" : workProfileDraft.workActivityOther,
     });
   };
+  const hasMaximumWorkActivities = workProfileDraft.workActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS;
+  const availableWorkActivities = MAIN_ACTIVITY_OPTIONS.filter((activity) => !workProfileDraft.workActivities.includes(activity));
 
   return (
     <section className="ai-setup-personalization" aria-label="AI classification personalization">
@@ -66,22 +68,18 @@ export function AiSetupWorkProfileSection({
                 </div>
               ) : null}
               <div className="ai-setup-activity-add">
-                <select
-                  className="settings-input"
-                  aria-label="Add work activity"
-                  disabled={workProfileDraft.workActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS}
-                  value=""
-                  onChange={(event) => addWorkActivity(event.target.value)}
-                >
-                  <option value="">
-                    {workProfileDraft.workActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS
-                      ? "Maximum 5 selected"
-                      : "Add activity..."}
-                  </option>
-                  {MAIN_ACTIVITY_OPTIONS.filter((activity) => !workProfileDraft.workActivities.includes(activity)).map((activity) => (
-                    <option key={activity} value={activity}>{activity}</option>
-                  ))}
-                </select>
+                <Dropdown
+                  ariaLabel="Add work activity"
+                  disabled={hasMaximumWorkActivities}
+                  keepOpenForOther={false}
+                  onChange={(activity) => {
+                    if (activity) addWorkActivity(activity);
+                  }}
+                  options={availableWorkActivities}
+                  placeholder={hasMaximumWorkActivities ? "Maximum 5 selected" : "Add activity..."}
+                  searchable
+                  value={null}
+                />
               </div>
               {workProfileDraft.workActivities.includes("Other") ? (
                 <input

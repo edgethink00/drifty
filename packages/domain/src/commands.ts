@@ -24,7 +24,8 @@ export type TrackerCommand =
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
-  | "tray_update_productivity_icon";
+  | "tray_update_productivity_icon"
+  | "tray_update_drift_alarm_status";
 
 export interface DayQuery {
   day: string;
@@ -98,6 +99,11 @@ export interface ClassificationRuleCandidate {
   lastSeenAt?: string | null;
 }
 
+export interface ClassificationRuleCandidateQuery {
+  readonly query: string;
+  readonly targetKind?: ClassificationRuleTargetKind;
+}
+
 export interface ClassificationRuleApplyResult {
   matchedCount: number;
   appliedCount: number;
@@ -147,6 +153,7 @@ export interface DriftAlarmTrayStatus {
   readonly lastCheckedLabel: string;
   readonly resultLabel: string;
   readonly detailLabel: string | null;
+  readonly trackerRunning?: boolean | null;
 }
 
 export type AppIconMap = Record<string, string | null>;
@@ -177,7 +184,7 @@ export interface TrackerApi {
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
   deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
-  searchClassificationRuleCandidates(query: string): Promise<ClassificationRuleCandidate[]>;
+  searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery): Promise<ClassificationRuleCandidate[]>;
   applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
@@ -188,4 +195,5 @@ export interface TrackerApi {
 
 export interface DeveloperDiagnosticsSettings {
   forceChromiumAxCapture: boolean;
+  forceFrontmostFallbackCapture: boolean;
 }

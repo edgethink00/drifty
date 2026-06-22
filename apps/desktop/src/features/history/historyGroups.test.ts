@@ -1,6 +1,6 @@
-import type { ActivitySegment } from "@drifty/domain";
+import { logicalDayIsoDateForDate, type ActivitySegment } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildHistoryRows } from "./historyGroups";
+import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 
 function historySegment(
   id: string,
@@ -61,5 +61,57 @@ describe("buildHistoryRows", () => {
       ["notes"],
       ["cmux-1"],
     ]);
+  });
+});
+
+describe("buildHistoryRowsWindow", () => {
+  it("returns only the newest requested rows while keeping a merged boundary row complete", () => {
+    const windowedRows = buildHistoryRowsWindow([
+      historySegment("older", "2026-06-10T01:00:00+00:00", "2026-06-10T01:30:00+00:00", 1_800, {
+        appName: "Notes",
+        bundleId: "com.apple.Notes",
+        windowTitle: "Planning",
+      }),
+      historySegment("latest-start", "2026-06-10T02:00:00+00:00", "2026-06-10T02:10:00+00:00", 600),
+      historySegment("latest-end", "2026-06-10T02:10:00+00:00", "2026-06-10T02:30:00+00:00", 1_200),
+    ], 1);
+
+    expect(windowedRows.hasMore).toBe(true);
+    expect(windowedRows.rows).toHaveLength(1);
+    expect(windowedRows.rows[0]).toMatchObject({
+      id: "history-row-latest-start-latest-end",
+      startedAt: "2026-06-10T02:00:00+00:00",
+      endedAt: "2026-06-10T02:30:00+00:00",
+      durationSeconds: 1_800,
+      segmentIds: ["latest-start", "latest-end"],
+    });
+  });
+
+  it("reports no older rows when the requested window covers the timeline", () => {
+    const windowedRows = buildHistoryRowsWindow([
+      historySegment("start", "2026-06-10T01:00:00+00:00", "2026-06-10T01:10:00+00:00", 600),
+      historySegment("end", "2026-06-10T01:10:00+00:00", "2026-06-10T01:20:00+00:00", 600),
+    ], 5);
+
+    expect(windowedRows.hasMore).toBe(false);
+    expect(windowedRows.rows.map((row) => row.segmentIds)).toEqual([["start", "end"]]);
+  });
+});
+
+describe("buildHistoryDayGroups", () => {
+  it("groups records by local logical day instead of the UTC date key", () => {
+    const startedAt = new Date(2026, 5, 22, 5, 30, 0, 0).toISOString();
+    const endedAt = new Date(2026, 5, 22, 5, 45, 0, 0).toISOString();
+    const rows = buildHistoryRows([
+      historySegment("local-morning", startedAt, endedAt, 900),
+    ]);
+
+    const groups = buildHistoryDayGroups(rows, 4 * 60);
+    const firstGroup = groups[0];
+    if (!firstGroup) throw new Error("Expected a history day group");
+
+    expect(firstGroup.dayKey).toBe(logicalDayIsoDateForDate(new Date(startedAt), 4 * 60));
+    expect(firstGroup.dayKey).not.toBe(startedAt.slice(0, 10));
+    expect(firstGroup.rows.map((row) => row.segmentIds)).toEqual([["local-morning"]]);
   });
 });

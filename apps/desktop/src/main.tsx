@@ -5,6 +5,7 @@ import "./styles.css";
 import "./features/chartHoverMotion.css";
 
 type BootstrapSurface = "app" | "watcher" | "drift-alarm";
+type ResolvedBootstrapSurface = BootstrapSurface | "privacy-review-concepts";
 
 declare global {
   interface Window {
@@ -72,6 +73,14 @@ function BootstrapLoader() {
           return;
         }
 
+        if (import.meta.env.DEV && nextSurface === "privacy-review-concepts") {
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing privacy review concepts…");
+          const mod = await import("./features/settings/AiPrivacyReviewConceptsApp");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Privacy review concepts imported");
+          setLoadedApp(() => mod.AiPrivacyReviewConceptsApp);
+          return;
+        }
+
         window.__DRIFTY_SET_BOOT_STATUS__?.("Importing App module…");
         const [{ AuthProvider }, { initializePostHog }, mod] = await Promise.all([
           import("./features/auth/AuthContext"),
@@ -111,15 +120,16 @@ function BootstrapLoader() {
   return <LoadedApp />;
 }
 
-function resolveLocationSurface(location: Pick<Location, "pathname" | "search">): BootstrapSurface {
+function resolveLocationSurface(location: Pick<Location, "pathname" | "search">): ResolvedBootstrapSurface {
   const requestedSurface = new URLSearchParams(location.search).get("driftySurface");
   if (requestedSurface === "watcher" || requestedSurface === "drift-alarm") return requestedSurface;
+  if (import.meta.env.DEV && requestedSurface === "privacy-review-concepts") return requestedSurface;
   if (location.pathname === "/watcher") return "watcher";
   if (location.pathname === "/drift-alarm") return "drift-alarm";
   return "app";
 }
 
-async function resolveBootstrapSurface(): Promise<BootstrapSurface> {
+async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
   const locationSurface = resolveLocationSurface(window.location);
   if (locationSurface !== "app") return locationSurface;
   if (!("__TAURI_INTERNALS__" in window)) return "app";
@@ -135,9 +145,14 @@ async function resolveBootstrapSurface(): Promise<BootstrapSurface> {
   }
 }
 
-function resolveCurrentSurface(): BootstrapSurface {
+function resolveCurrentSurface(): ResolvedBootstrapSurface {
   const documentSurface = document.documentElement.dataset.surface;
-  if (documentSurface === "watcher" || documentSurface === "drift-alarm") return documentSurface;
+  if (documentSurface === "watcher" || documentSurface === "drift-alarm") {
+    return documentSurface;
+  }
+  if (import.meta.env.DEV && documentSurface === "privacy-review-concepts") {
+    return documentSurface;
+  }
   return resolveLocationSurface(window.location);
 }
 

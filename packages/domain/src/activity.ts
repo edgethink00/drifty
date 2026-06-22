@@ -2,6 +2,7 @@ export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "unknow
 export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "window-title" | "unknown" | null;
 export type BrowserAutomationStatus = "granted" | "denied" | "unavailable" | "stale" | "empty_result" | "not_applicable";
 export type SystemTransientActivity = "mission_control" | "app_switcher" | "launchpad" | "spotlight" | "system_overlay" | null;
+export type FrontmostCaptureSource = "system-events" | "lsappinfo" | "unavailable";
 export const FLOW_INTERVAL_OPTIONS = [3, 5, 10] as const;
 export type FlowIntervalMinutes = typeof FLOW_INTERVAL_OPTIONS[number];
 export type ProductivityLabel = "focus" | "neutral" | "drift";
@@ -84,6 +85,9 @@ export interface ActivitySegment {
   siteSource?: SiteSource;
   browserAutomationStatus?: BrowserAutomationStatus | null;
   browserAutomationError?: string | null;
+  frontmostCaptureSource?: FrontmostCaptureSource | null;
+  frontmostCaptureError?: string | null;
+  frontmostFallbackError?: string | null;
   platform: "macos" | "windows" | "android" | "ios";
   source: TrackerSource;
   confidence?: number | null;
@@ -107,6 +111,9 @@ export interface CurrentActivitySnapshot {
   browserAutomationStatus?: BrowserAutomationStatus | null;
   browserAutomationError?: string | null;
   systemTransientActivity?: SystemTransientActivity;
+  frontmostCaptureSource?: FrontmostCaptureSource | null;
+  frontmostCaptureError?: string | null;
+  frontmostFallbackError?: string | null;
   source: TrackerSource;
 }
 

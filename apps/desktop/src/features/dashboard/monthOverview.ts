@@ -1,4 +1,4 @@
-import { buildCategoryDurations, buildProductivityDurations, classifyActivity, logicalDayIsoDateForDate, todayIsoDate } from "@drifty/domain";
+import { buildCategoryDurations, buildProductivityDurations, classifyActivity, logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivitySegment, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
 import { chunk, formatHistoryMonthLabel } from "../../lib/formatting";
 import type { CSSProperties } from "react";
@@ -45,7 +45,7 @@ export function buildMonthV2Overview(segments: ActivitySegment[], selectedDay: s
   const monthKey = selectedDay.slice(0, 7);
   const [yearValue, monthValue] = monthKey.split("-").map(Number);
   const daysInMonth = new Date(yearValue, monthValue, 0).getDate();
-  const today = todayIsoDate();
+  const today = logicalDayIsoDateForDate(new Date(), startOfDayMinutes);
   const cells: MonthOverviewCell[] = [];
   const firstWeekday = new Date(`${monthKey}-01T12:00:00`).getDay();
 

@@ -115,6 +115,30 @@ fn posts_optional_generation_controls_for_managed_local_runtime() {
 }
 
 #[test]
+fn posts_provider_preferences_when_supplied() {
+    let (address, server) = capture_one_chat_request();
+    let mut request = chat_request(format!("http://{address}"));
+    request.provider = serde_json::Map::from_iter([
+        ("data_collection".to_string(), json!("deny")),
+        ("zdr".to_string(), json!(true)),
+    ]);
+
+    if let Err(error) = post_openai_chat(request) {
+        panic!("chat request succeeds: {error}");
+    }
+
+    let request = match server.join() {
+        Ok(request) => request,
+        Err(error) => std::panic::resume_unwind(error),
+    };
+    let body = request_body_json(&request);
+    assert_eq!(
+        body.get("provider"),
+        Some(&json!({ "data_collection": "deny", "zdr": true }))
+    );
+}
+
+#[test]
 fn rejects_requests_without_any_non_empty_model() {
     let mut request = chat_request("http://127.0.0.1:9".to_string());
     request.model = Some(" ".to_string());
@@ -160,6 +184,7 @@ fn chat_request(base_url: String) -> AiClassificationChatRequest {
         models: None,
         messages: vec![json!({ "role": "user", "content": "classify" })],
         headers: serde_json::Map::new(),
+        provider: serde_json::Map::new(),
         max_tokens: None,
         timeout_ms: None,
         temperature: None,
