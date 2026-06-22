@@ -4055,21 +4055,25 @@ input, textarea { color: inherit; }
 }
 
 .update-dialog-modal {
+  max-height: min(640px, calc(100dvh - var(--space-6)));
   max-width: 640px;
+  overflow-y: auto;
 }
 
 .update-dialog-summary {
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface-strong));
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  background: color-mix(in srgb, var(--bg-2) 42%, var(--surface));
   border-radius: var(--radius-sm);
   display: grid;
   gap: var(--space-2);
   margin-top: var(--space-4);
+  max-height: 8.75rem;
+  overflow-y: auto;
   padding: var(--space-3);
+  scrollbar-gutter: stable;
 }
 
 .update-dialog-summary__label {
-  color: var(--accent);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: var(--type-caption-size);
   font-weight: 700;
