@@ -11,6 +11,13 @@ import type {
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
+import {
+  DRIFTY_PRODUCTIVITY_RUBRIC_V1,
+  scoreDriftyProductivityRubricV1,
+  type DriftyProductivityRubricVersion,
+  type ProductivityRubricScore,
+  type ProductivityScoreDimensionKey,
+} from "./productivityRubric";
 import { classifyYouTubeActivity, classifyYouTubeWindowTitle } from "./youtubeClassification";
 
 const UI_LOCALE = "en-US";
@@ -166,6 +173,8 @@ export interface ProductivityPersonaMetrics {
 export interface ProductivityPersonaReport {
   personaId: ProductivityPersonaId;
   personaName: ProductivityPersonaName;
+  rubricVersion: DriftyProductivityRubricVersion;
+  scores: ProductivityRubricScore;
   axes: ProductivityPersonaAxis[];
   metrics: ProductivityPersonaMetrics;
 }
@@ -961,11 +970,14 @@ export function buildProductivityPersona(segments: ActivitySegment[], options?: 
     return left.id.localeCompare(right.id);
   });
   const metrics = buildProductivityPersonaMetrics(orderedSegments, options ?? {});
-  const persona = resolveProductivityPersona(metrics);
+  const scores = scoreDriftyProductivityRubricV1(metrics);
+  const persona = resolveProductivityPersona(metrics, scores);
 
   return {
     personaId: persona.id,
     personaName: persona.name,
+    rubricVersion: DRIFTY_PRODUCTIVITY_RUBRIC_V1.version,
+    scores,
     axes: buildProductivityPersonaAxes(metrics),
     metrics,
   };
@@ -1068,16 +1080,52 @@ function buildProductivityPersonaAxes(metrics: ProductivityPersonaMetrics): Prod
   ];
 }
 
-function resolveProductivityPersona(metrics: ProductivityPersonaMetrics): { id: ProductivityPersonaId; name: ProductivityPersonaName } {
-  if (metrics.nightShare >= 0.35) return PRODUCTIVITY_PERSONAS.night_owl;
-  if (metrics.focusShare >= 0.35 && metrics.driftShare >= 0.3) return PRODUCTIVITY_PERSONAS.deep_focus_deep_drift;
-  if (metrics.focusShare >= 0.65 && metrics.focusAverageSegmentSeconds >= 1500 && metrics.switchRatePerHour <= 6) {
+function resolveProductivityPersona(
+  metrics: ProductivityPersonaMetrics,
+  scores: ProductivityRubricScore,
+): { id: ProductivityPersonaId; name: ProductivityPersonaName } {
+  const { personas } = DRIFTY_PRODUCTIVITY_RUBRIC_V1;
+  const focusQualityScore = scoreForDimension(scores, "focus_quality");
+  const driftControlScore = scoreForDimension(scores, "drift_control");
+  const switchingStabilityScore = scoreForDimension(scores, "switching_stability");
+
+  if (metrics.nightShare >= personas.nightOwl.nightShareMinimum) return PRODUCTIVITY_PERSONAS.night_owl;
+  if (
+    metrics.focusShare >= personas.deepFocusDeepDrift.focusShareMinimum &&
+    metrics.driftShare >= personas.deepFocusDeepDrift.driftShareMinimum
+  ) {
+    return PRODUCTIVITY_PERSONAS.deep_focus_deep_drift;
+  }
+  if (
+    metrics.focusShare >= personas.deepDiver.focusShareMinimum &&
+    metrics.focusAverageSegmentSeconds >= personas.deepDiver.focusAverageSegmentSecondsMinimum &&
+    metrics.switchRatePerHour <= personas.deepDiver.switchRatePerHourMaximum &&
+    focusQualityScore >= personas.deepDiver.focusQualityScoreMinimum &&
+    switchingStabilityScore >= personas.deepDiver.switchingStabilityScoreMinimum
+  ) {
     return PRODUCTIVITY_PERSONAS.deep_diver;
   }
-  if (metrics.driftShare >= 0.5 && metrics.driftAverageSegmentSeconds >= 720) return PRODUCTIVITY_PERSONAS.drift_diver;
-  if (metrics.focusShare >= 0.5 && metrics.focusAverageSegmentSeconds < 900) return PRODUCTIVITY_PERSONAS.focus_sprinter;
-  if (metrics.reactiveShare >= 0.35) return PRODUCTIVITY_PERSONAS.reactive_operator;
+  if (
+    metrics.driftShare >= personas.driftDiver.driftShareMinimum &&
+    metrics.driftAverageSegmentSeconds >= personas.driftDiver.driftAverageSegmentSecondsMinimum &&
+    driftControlScore <= personas.driftDiver.driftControlScoreMaximum
+  ) {
+    return PRODUCTIVITY_PERSONAS.drift_diver;
+  }
+  if (
+    metrics.focusShare >= personas.focusSprinter.focusShareMinimum &&
+    metrics.focusAverageSegmentSeconds < personas.focusSprinter.focusAverageSegmentSecondsMaximum
+  ) {
+    return PRODUCTIVITY_PERSONAS.focus_sprinter;
+  }
+  if (metrics.reactiveShare >= personas.reactiveOperator.reactiveShareMinimum) {
+    return PRODUCTIVITY_PERSONAS.reactive_operator;
+  }
   return PRODUCTIVITY_PERSONAS.balanced_builder;
+}
+
+function scoreForDimension(scores: ProductivityRubricScore, key: ProductivityScoreDimensionKey): number {
+  return scores.dimensions.find((dimension) => dimension.key === key)?.score ?? 0;
 }
 
 function personaSurfaceKey(segment: ActivitySegment): string {

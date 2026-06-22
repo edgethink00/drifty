@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DRIFTY_PRODUCTIVITY_RUBRIC_V1,
   FLOW_INTERVAL_OPTIONS,
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -7,12 +8,15 @@ import {
   buildHourlyBuckets,
   buildProductivityPersona,
   computePreservedFocusStrikeSeconds,
+  DRIFTY_PRODUCTIVITY_RUBRIC_VERSION,
   classifyActivity,
   classifyActivityDetailed,
   groupSegmentsByApp,
+  scoreDriftyProductivityRubricV1,
   topSites,
   type ActivitySegment,
   type ProductivityPersonaId,
+  type ProductivityRubricMetricInput,
 } from '@drifty/domain';
 
 const segments: ActivitySegment[] = [
@@ -947,6 +951,129 @@ describe('domain helpers', () => {
     expect(report.personaId).toBe('drift_diver');
     expect(report.metrics.focusShare).toBe(0.25);
     expect(report.metrics.driftShare).toBe(0.75);
+  });
+
+  it('returns the same fixed rubric score and persona for the same segment input', () => {
+    const personaSegments = [
+      segment({ id: 'stable-1', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 10, 0), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+      segment({ id: 'stable-2', start: localIsoAt(0, 10, 0), end: localIsoAt(0, 11, 0), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+      segment({ id: 'stable-3', start: localIsoAt(0, 11, 0), end: localIsoAt(0, 11, 20), appName: 'Slack' }),
+    ];
+
+    const firstReport = buildProductivityPersona(personaSegments);
+    const secondReport = buildProductivityPersona([...personaSegments].reverse());
+
+    expect(firstReport.rubricVersion).toBe(DRIFTY_PRODUCTIVITY_RUBRIC_VERSION);
+    expect(secondReport.rubricVersion).toBe(DRIFTY_PRODUCTIVITY_RUBRIC_VERSION);
+    expect(secondReport.personaId).toBe(firstReport.personaId);
+    expect(secondReport.scores.overallScore).toBe(firstReport.scores.overallScore);
+  });
+
+  it('scores stable focus work above fragmented drift-heavy work on the fixed rubric', () => {
+    const focusHeavyReport = buildProductivityPersona([
+      segment({ id: 'focus-score-1', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 10, 20), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+      segment({ id: 'focus-score-2', start: localIsoAt(0, 10, 20), end: localIsoAt(0, 11, 0), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    ]);
+    const driftHeavyReport = buildProductivityPersona([
+      segment({ id: 'drift-score-1', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 9, 10), appName: 'Safari', browserName: 'Safari', siteDomain: 'youtube.com' }),
+      segment({ id: 'drift-score-2', start: localIsoAt(0, 9, 10), end: localIsoAt(0, 9, 20), appName: 'Slack' }),
+      segment({ id: 'drift-score-3', start: localIsoAt(0, 9, 20), end: localIsoAt(0, 9, 30), appName: 'Safari', browserName: 'Safari', siteDomain: 'x.com' }),
+      segment({ id: 'drift-score-4', start: localIsoAt(0, 9, 30), end: localIsoAt(0, 9, 40), appName: 'Mail' }),
+      segment({ id: 'drift-score-5', start: localIsoAt(0, 9, 40), end: localIsoAt(0, 10, 0), appName: 'Safari', browserName: 'Safari', siteDomain: 'youtube.com' }),
+    ]);
+
+    expect(focusHeavyReport.scores.overallScore).toBeGreaterThan(driftHeavyReport.scores.overallScore);
+  });
+
+  it('uses stored AI classifications in fixed rubric scores', () => {
+    const heuristicReport = buildProductivityPersona([
+      segment({ id: 'ai-score-heuristic', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 10, 0), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    ]);
+    const storedAiReport = buildProductivityPersona([
+      segment({
+        id: 'ai-score-stored',
+        start: localIsoAt(0, 9, 0),
+        end: localIsoAt(0, 10, 0),
+        appName: 'Code',
+        bundleId: 'com.microsoft.VSCode',
+        classification: {
+          source: 'llm',
+          aiResult: true,
+          category: 'entertainment',
+          productivity: 'drift',
+          confidence: 0.99,
+        },
+      }),
+    ]);
+
+    expect(storedAiReport.metrics.driftShare).toBe(1);
+    expect(storedAiReport.scores.overallScore).toBeLessThan(heuristicReport.scores.overallScore);
+  });
+
+  it('scores exact derived fixed rubric threshold metrics without calibration state', () => {
+    const { dimensions } = DRIFTY_PRODUCTIVITY_RUBRIC_V1;
+    const atTargets: ProductivityRubricMetricInput = {
+      focusShare: dimensions.focusQuality.focusShare.target,
+      focusAverageSegmentSeconds: dimensions.focusQuality.focusAverageSegmentSeconds.target,
+      driftShare: dimensions.driftControl.driftShare.target,
+      switchRatePerHour: dimensions.switchingStability.switchRatePerHour.target,
+      reactiveShare: dimensions.reactiveLoad.reactiveShare.target,
+      nightShare: dimensions.nightBalance.nightShare.target,
+    };
+    const atFloorsAndCeilings: ProductivityRubricMetricInput = {
+      focusShare: dimensions.focusQuality.focusShare.floor,
+      focusAverageSegmentSeconds: dimensions.focusQuality.focusAverageSegmentSeconds.floor,
+      driftShare: dimensions.driftControl.driftShare.ceiling,
+      switchRatePerHour: dimensions.switchingStability.switchRatePerHour.ceiling,
+      reactiveShare: dimensions.reactiveLoad.reactiveShare.ceiling,
+      nightShare: dimensions.nightBalance.nightShare.ceiling,
+    };
+
+    expect(scoreDriftyProductivityRubricV1(atTargets).overallScore).toBe(1);
+    expect(scoreDriftyProductivityRubricV1(atFloorsAndCeilings).overallScore).toBe(0);
+  });
+
+  it('uses fixed rubric constants rather than user-history samples for dimension scores', () => {
+    const { dimensions } = DRIFTY_PRODUCTIVITY_RUBRIC_V1;
+    const midpointMetrics: ProductivityRubricMetricInput = {
+      focusShare: (dimensions.focusQuality.focusShare.floor + dimensions.focusQuality.focusShare.target) / 2,
+      focusAverageSegmentSeconds: (
+        dimensions.focusQuality.focusAverageSegmentSeconds.floor +
+        dimensions.focusQuality.focusAverageSegmentSeconds.target
+      ) / 2,
+      driftShare: (dimensions.driftControl.driftShare.target + dimensions.driftControl.driftShare.ceiling) / 2,
+      switchRatePerHour: (
+        dimensions.switchingStability.switchRatePerHour.target +
+        dimensions.switchingStability.switchRatePerHour.ceiling
+      ) / 2,
+      reactiveShare: (dimensions.reactiveLoad.reactiveShare.target + dimensions.reactiveLoad.reactiveShare.ceiling) / 2,
+      nightShare: (dimensions.nightBalance.nightShare.target + dimensions.nightBalance.nightShare.ceiling) / 2,
+    };
+
+    expect(scoreDriftyProductivityRubricV1(midpointMetrics)).toMatchObject({
+      rubricVersion: DRIFTY_PRODUCTIVITY_RUBRIC_V1.version,
+      overallScore: 0.5,
+      dimensions: [
+        { key: "focus_quality", score: 0.5 },
+        { key: "drift_control", score: 0.5 },
+        { key: "switching_stability", score: 0.5 },
+        { key: "reactive_load", score: 0.5 },
+        { key: "night_balance", score: 0.5 },
+      ],
+    });
+  });
+
+  it('returns the same fixed rubric score for repeated calls with the same metric object', () => {
+    const metrics: ProductivityRubricMetricInput = {
+      focusShare: 0.51,
+      focusAverageSegmentSeconds: 45,
+      driftShare: 0.012,
+      switchRatePerHour: 36,
+      reactiveShare: 0.011,
+      nightShare: 0.192,
+    };
+
+    expect(scoreDriftyProductivityRubricV1(metrics)).toEqual(scoreDriftyProductivityRubricV1(metrics));
   });
 
   it('keeps high surface switching as a metric while assigning the next meaningful persona', () => {

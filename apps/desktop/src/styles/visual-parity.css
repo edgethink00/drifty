@@ -299,6 +299,7 @@
 
 .persona-radar-card__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   min-width: 0;
@@ -306,7 +307,14 @@
 }
 
 .persona-radar-card__head .insight-section__label {
+  flex: 0 1 auto;
   margin-bottom: 0;
+}
+
+.persona-radar-card__head .productivity-persona-card__badge {
+  flex: 1 1 11rem;
+  min-width: 0;
+  white-space: normal;
 }
 
 .persona-radar-card__help {
