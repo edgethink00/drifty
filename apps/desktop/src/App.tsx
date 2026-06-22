@@ -507,25 +507,32 @@ export default function App() {
     classificationRules,
     classificationRulesError,
     classificationRulesLoading,
+    domainRuleCandidates,
+    domainRuleCandidatesLoading,
     domainRuleCategory,
     domainRuleInput,
     domainRuleProductivity,
+    domainRuleSearchPanelOpen,
+    domainRuleSearchRef,
     handleAppRuleSearchBlur,
     handleAppRuleSearchFocus,
     handleApplyClassificationRules,
     handleDeleteClassificationRule,
+    handleDomainRuleSearchBlur,
+    handleDomainRuleSearchFocus,
     handleSaveAppRule,
     handleSaveDomainRule,
     handleSelectClassificationCandidate,
+    handleSelectDomainRuleCandidate,
     handleToggleClassificationRule,
     loadClassificationRules,
     saveClassificationRule,
     setAppRuleCategory,
     setAppRuleProductivity,
     setDomainRuleCategory,
-    setDomainRuleInput,
     setDomainRuleProductivity,
     updateAppRuleSearch,
+    updateDomainRuleInput,
   } = useClassificationRulesController({
     activeTab,
     settingsSection,
@@ -4203,9 +4210,13 @@ export default function App() {
                     classificationRules={classificationRules}
                     classificationRulesError={classificationRulesError}
                     classificationRulesLoading={classificationRulesLoading}
+                    domainRuleCandidates={domainRuleCandidates}
+                    domainRuleCandidatesLoading={domainRuleCandidatesLoading}
                     domainRuleCategory={domainRuleCategory}
                     domainRuleInput={domainRuleInput}
                     domainRuleProductivity={domainRuleProductivity}
+                    domainRuleSearchPanelOpen={domainRuleSearchPanelOpen}
+                    domainRuleSearchRef={domainRuleSearchRef}
                     onAppRuleCategoryChange={setAppRuleCategory}
                     onAppRuleProductivityChange={setAppRuleProductivity}
                     onAppRuleSearchBlur={handleAppRuleSearchBlur}
@@ -4214,12 +4225,15 @@ export default function App() {
                     onApplyClassificationRules={() => void handleApplyClassificationRules()}
                     onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
                     onDomainRuleCategoryChange={setDomainRuleCategory}
-                    onDomainRuleInputChange={setDomainRuleInput}
+                    onDomainRuleInputChange={updateDomainRuleInput}
                     onDomainRuleProductivityChange={setDomainRuleProductivity}
+                    onDomainRuleSearchBlur={handleDomainRuleSearchBlur}
+                    onDomainRuleSearchFocus={handleDomainRuleSearchFocus}
                     onLoadClassificationRules={() => void loadClassificationRules()}
                     onSaveAppRule={() => void handleSaveAppRule()}
                     onSaveDomainRule={() => void handleSaveDomainRule()}
                     onSelectClassificationCandidate={handleSelectClassificationCandidate}
+                    onSelectDomainRuleCandidate={handleSelectDomainRuleCandidate}
                     onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
                   />
                 )}

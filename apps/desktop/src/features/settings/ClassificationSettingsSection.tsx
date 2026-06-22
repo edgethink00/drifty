@@ -20,6 +20,7 @@ import {
   classificationRuleTargetLabel,
   formatClassificationCandidateUsageLabel,
   formatClassificationRuleApplyResult,
+  normalizeDomainRuleInput,
 } from "../classification/classificationViewData";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import {
@@ -51,9 +52,13 @@ type ClassificationSettingsSectionProps = {
   readonly classificationRules: ClassificationRule[];
   readonly classificationRulesError: string | null;
   readonly classificationRulesLoading: boolean;
+  readonly domainRuleCandidates: ClassificationRuleCandidate[];
+  readonly domainRuleCandidatesLoading: boolean;
   readonly domainRuleCategory: ActivityCategory;
   readonly domainRuleInput: string;
   readonly domainRuleProductivity: ProductivityLabel;
+  readonly domainRuleSearchPanelOpen: boolean;
+  readonly domainRuleSearchRef: RefObject<HTMLDivElement>;
   readonly onAppRuleCategoryChange: (category: ActivityCategory) => void;
   readonly onAppRuleProductivityChange: (productivity: ProductivityLabel) => void;
   readonly onAppRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
@@ -64,10 +69,13 @@ type ClassificationSettingsSectionProps = {
   readonly onDomainRuleCategoryChange: (category: ActivityCategory) => void;
   readonly onDomainRuleInputChange: (value: string) => void;
   readonly onDomainRuleProductivityChange: (productivity: ProductivityLabel) => void;
+  readonly onDomainRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
+  readonly onDomainRuleSearchFocus: () => void;
   readonly onLoadClassificationRules: () => void;
   readonly onSaveAppRule: () => void;
   readonly onSaveDomainRule: () => void;
   readonly onSelectClassificationCandidate: (candidate: ClassificationRuleCandidate) => void;
+  readonly onSelectDomainRuleCandidate: (candidate: ClassificationRuleCandidate) => void;
   readonly onToggleClassificationRule: (rule: ClassificationRule, enabled: boolean) => void;
 };
 
@@ -92,9 +100,13 @@ export function ClassificationSettingsSection({
   classificationRules,
   classificationRulesError,
   classificationRulesLoading,
+  domainRuleCandidates,
+  domainRuleCandidatesLoading,
   domainRuleCategory,
   domainRuleInput,
   domainRuleProductivity,
+  domainRuleSearchPanelOpen,
+  domainRuleSearchRef,
   onAppRuleCategoryChange,
   onAppRuleProductivityChange,
   onAppRuleSearchBlur,
@@ -105,10 +117,13 @@ export function ClassificationSettingsSection({
   onDomainRuleCategoryChange,
   onDomainRuleInputChange,
   onDomainRuleProductivityChange,
+  onDomainRuleSearchBlur,
+  onDomainRuleSearchFocus,
   onLoadClassificationRules,
   onSaveAppRule,
   onSaveDomainRule,
   onSelectClassificationCandidate,
+  onSelectDomainRuleCandidate,
   onToggleClassificationRule,
 }: ClassificationSettingsSectionProps) {
   return (
@@ -128,10 +143,30 @@ export function ClassificationSettingsSection({
             <div className="desc">Type a domain or paste a URL. Drifty stores the normalized domain locally.</div>
           </div>
           <div className="ctrl classification-rule-form__grid">
-            <label className="classification-rule-field">
-              <span>Domain or URL</span>
-              <input className="settings-input" type="text" value={domainRuleInput} onChange={(event) => onDomainRuleInputChange(event.target.value)} placeholder="example.com" aria-label="Domain rule domain or URL" />
-            </label>
+            <div ref={domainRuleSearchRef} className="classification-rule-field classification-rule-field--wide classification-rule-search" onFocus={onDomainRuleSearchFocus} onBlur={onDomainRuleSearchBlur}>
+              <label htmlFor="classification-domain-rule-search">Domain or URL</label>
+              <input id="classification-domain-rule-search" className="settings-input" type="search" value={domainRuleInput} onChange={(event) => onDomainRuleInputChange(event.target.value)} placeholder="example.com" aria-label="Domain rule domain or URL" autoComplete="off" aria-expanded={domainRuleSearchPanelOpen} aria-controls="classification-domain-rule-candidates" />
+              {domainRuleSearchPanelOpen ? (
+                <div id="classification-domain-rule-candidates" className="classification-rule-candidates classification-rule-search__popover" aria-label="Recorded site suggestions">
+                  {domainRuleCandidatesLoading ? <span className="classification-rule-hint">{domainRuleInput.trim() ? "Searching local site history..." : "Loading most-used sites..."}</span> : null}
+                  {!domainRuleCandidatesLoading && domainRuleCandidates.length === 0 ? <span className="classification-rule-hint">{domainRuleInput.trim() ? "No recorded sites match this search." : "No recorded sites recorded yet."}</span> : null}
+                  {domainRuleCandidates.map((candidate) => {
+                    const candidateUsageLabel = formatClassificationCandidateUsageLabel(candidate);
+                    const siteDomain = candidate.siteDomain ?? candidate.targetValue;
+                    const siteDetail = candidate.siteTitle || candidate.browserName || "Recorded site";
+                    return (
+                      <button key={candidate.id} type="button" className={`classification-rule-candidate${normalizeDomainRuleInput(domainRuleInput) === candidate.targetValue ? " is-selected" : ""}`} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelectDomainRuleCandidate(candidate)} aria-label={`Choose ${candidate.displayName}, ${candidateUsageLabel}`}>
+                        <span className="classification-rule-candidate__identity">
+                          <SiteFavicon domain={siteDomain} size={20} />
+                          <span className="classification-rule-candidate__text"><strong>{candidate.displayName}</strong><small>{siteDetail}</small></span>
+                        </span>
+                        <span className="classification-rule-candidate__usage"><strong>{secondsToLabel(candidate.totalSeconds)}</strong><em>{candidate.segmentCount} {candidate.segmentCount === 1 ? "segment" : "segments"}</em></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
             <ClassificationPicker label="Category" ariaLabel="Domain rule category" value={domainRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={onDomainRuleCategoryChange} />
             <ClassificationPicker label="Productivity" ariaLabel="Domain rule productivity" value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onDomainRuleProductivityChange} />
             <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveDomainRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? "Saving..." : "Save Domain rule"}</button>
@@ -153,7 +188,7 @@ export function ClassificationSettingsSection({
                   {classificationRuleCandidates.map((candidate) => {
                     const candidateUsageLabel = formatClassificationCandidateUsageLabel(candidate);
                     return (
-                      <button key={candidate.id} type="button" className={`classification-rule-candidate${appRuleTargetValue === candidate.targetValue ? " is-selected" : ""}`} onClick={() => onSelectClassificationCandidate(candidate)} aria-label={`Choose ${candidate.displayName}, ${candidateUsageLabel}`}>
+                      <button key={candidate.id} type="button" className={`classification-rule-candidate${appRuleTargetValue === candidate.targetValue ? " is-selected" : ""}`} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelectClassificationCandidate(candidate)} aria-label={`Choose ${candidate.displayName}, ${candidateUsageLabel}`}>
                         <span className="classification-rule-candidate__identity">
                           <AppGlyph appName={candidate.appName ?? candidate.displayName} iconSrc={classificationRuleCandidateAppIconSrc(candidate, appIcons)} size="sm" />
                           <span className="classification-rule-candidate__text"><strong>{candidate.displayName}</strong>{candidate.bundleId ? <small>{candidate.bundleId}</small> : null}</span>

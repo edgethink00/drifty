@@ -41,25 +41,32 @@ type UseClassificationRulesControllerResult = {
   readonly classificationRules: ClassificationRule[];
   readonly classificationRulesError: string | null;
   readonly classificationRulesLoading: boolean;
+  readonly domainRuleCandidates: ClassificationRuleCandidate[];
+  readonly domainRuleCandidatesLoading: boolean;
   readonly domainRuleCategory: ActivityCategory;
   readonly domainRuleInput: string;
   readonly domainRuleProductivity: ProductivityLabel;
+  readonly domainRuleSearchPanelOpen: boolean;
+  readonly domainRuleSearchRef: RefObject<HTMLDivElement>;
   readonly handleAppRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
   readonly handleAppRuleSearchFocus: () => void;
   readonly handleApplyClassificationRules: () => Promise<void>;
   readonly handleDeleteClassificationRule: (rule: ClassificationRule) => Promise<void>;
+  readonly handleDomainRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
+  readonly handleDomainRuleSearchFocus: () => void;
   readonly handleSaveAppRule: () => Promise<void>;
   readonly handleSaveDomainRule: () => Promise<void>;
   readonly handleSelectClassificationCandidate: (candidate: ClassificationRuleCandidate) => void;
+  readonly handleSelectDomainRuleCandidate: (candidate: ClassificationRuleCandidate) => void;
   readonly handleToggleClassificationRule: (rule: ClassificationRule, enabled: boolean) => Promise<void>;
   readonly loadClassificationRules: () => Promise<void>;
   readonly saveClassificationRule: (input: ClassificationRuleInput) => Promise<boolean>;
   readonly setAppRuleCategory: Dispatch<SetStateAction<ActivityCategory>>;
   readonly setAppRuleProductivity: Dispatch<SetStateAction<ProductivityLabel>>;
   readonly setDomainRuleCategory: Dispatch<SetStateAction<ActivityCategory>>;
-  readonly setDomainRuleInput: Dispatch<SetStateAction<string>>;
   readonly setDomainRuleProductivity: Dispatch<SetStateAction<ProductivityLabel>>;
   readonly updateAppRuleSearch: (value: string) => void;
+  readonly updateDomainRuleInput: (value: string) => void;
 };
 
 export function useClassificationRulesController({
@@ -76,6 +83,9 @@ export function useClassificationRulesController({
   const [classificationRuleApplying, setClassificationRuleApplying] = useState(false);
   const [classificationRuleApplyResult, setClassificationRuleApplyResult] = useState<ClassificationRuleApplyResult | null>(null);
   const [domainRuleInput, setDomainRuleInput] = useState("");
+  const [domainRuleCandidates, setDomainRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
+  const [domainRuleCandidatesLoading, setDomainRuleCandidatesLoading] = useState(false);
+  const [domainRuleSearchPanelOpen, setDomainRuleSearchPanelOpen] = useState(false);
   const [domainRuleCategory, setDomainRuleCategory] = useState<ActivityCategory>("workspace");
   const [domainRuleProductivity, setDomainRuleProductivity] = useState<ProductivityLabel>("focus");
   const [appRuleSearch, setAppRuleSearch] = useState("");
@@ -86,6 +96,7 @@ export function useClassificationRulesController({
   const [classificationRuleCandidates, setClassificationRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
   const [classificationRuleCandidatesLoading, setClassificationRuleCandidatesLoading] = useState(false);
   const [appRuleSearchPanelOpen, setAppRuleSearchPanelOpen] = useState(false);
+  const domainRuleSearchRef = useRef<HTMLDivElement | null>(null);
   const appRuleSearchRef = useRef<HTMLDivElement | null>(null);
 
   const loadClassificationRules = useCallback(async () => {
@@ -132,7 +143,10 @@ export function useClassificationRulesController({
       return;
     }
     const saved = await saveClassificationRule({ targetKind: "site", targetValue, category: domainRuleCategory, productivity: domainRuleProductivity, enabled: true });
-    if (saved) setDomainRuleInput("");
+    if (saved) {
+      setDomainRuleInput("");
+      setDomainRuleCandidates([]);
+    }
   }, [classificationRules, domainRuleCategory, domainRuleInput, domainRuleProductivity, saveClassificationRule]);
 
   const handleSaveAppRule = useCallback(async () => {
@@ -207,6 +221,22 @@ export function useClassificationRulesController({
     if (candidate.productivity) setAppRuleProductivity(candidate.productivity);
   }, []);
 
+  const handleSelectDomainRuleCandidate = useCallback((candidate: ClassificationRuleCandidate) => {
+    const targetValue = candidate.targetValue || candidate.siteDomain || candidate.displayName;
+    setDomainRuleInput(targetValue);
+    setDomainRuleSearchPanelOpen(false);
+    if (candidate.category) setDomainRuleCategory(candidate.category);
+    if (candidate.productivity) setDomainRuleProductivity(candidate.productivity);
+  }, []);
+
+  const scrollDomainRuleSearchIntoViewIfNeeded = useCallback(() => {
+    const container = domainRuleSearchRef.current;
+    if (!container || typeof container.scrollIntoView !== "function") return;
+    const rect = container.getBoundingClientRect();
+    if (rect.top >= 72 && rect.bottom + 320 <= window.innerHeight) return;
+    container.scrollIntoView({ block: "center", inline: "nearest" });
+  }, []);
+
   const scrollAppRuleSearchIntoViewIfNeeded = useCallback(() => {
     const container = appRuleSearchRef.current;
     if (!container || typeof container.scrollIntoView !== "function") return;
@@ -215,10 +245,21 @@ export function useClassificationRulesController({
     container.scrollIntoView({ block: "center", inline: "nearest" });
   }, []);
 
+  const handleDomainRuleSearchFocus = useCallback(() => {
+    setDomainRuleSearchPanelOpen(true);
+    window.requestAnimationFrame(scrollDomainRuleSearchIntoViewIfNeeded);
+  }, [scrollDomainRuleSearchIntoViewIfNeeded]);
+
   const handleAppRuleSearchFocus = useCallback(() => {
     setAppRuleSearchPanelOpen(true);
     window.requestAnimationFrame(scrollAppRuleSearchIntoViewIfNeeded);
   }, [scrollAppRuleSearchIntoViewIfNeeded]);
+
+  const handleDomainRuleSearchBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDomainRuleSearchPanelOpen(false);
+  }, []);
 
   const handleAppRuleSearchBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
     const nextTarget = event.relatedTarget;
@@ -232,6 +273,10 @@ export function useClassificationRulesController({
     setAppRuleDisplayName("");
   }, []);
 
+  const updateDomainRuleInput = useCallback((value: string) => {
+    setDomainRuleInput(value);
+  }, []);
+
   useEffect(() => {
     void loadClassificationRules();
   }, [loadClassificationRules]);
@@ -240,6 +285,36 @@ export function useClassificationRulesController({
     if (activeTab !== "settings" || settingsSection !== "classification") return;
     void loadClassificationRules();
   }, [activeTab, loadClassificationRules, settingsSection]);
+
+  useEffect(() => {
+    if (activeTab !== "settings" || settingsSection !== "classification") return undefined;
+    if (!domainRuleSearchPanelOpen) {
+      setDomainRuleCandidatesLoading(false);
+      return undefined;
+    }
+    const query = domainRuleInput.trim();
+
+    let disposed = false;
+    setDomainRuleCandidates([]);
+    setDomainRuleCandidatesLoading(true);
+    const timeoutId = window.setTimeout(() => {
+      void trackerClient.searchClassificationRuleCandidates({ query, targetKind: "site" }).then((candidates) => {
+        if (disposed) return;
+        setDomainRuleCandidates(candidates.filter((candidate) => candidate.targetKind === "site"));
+      }).catch((nextError) => {
+        if (disposed) return;
+        setClassificationRulesError(toErrorMessage(nextError));
+        setDomainRuleCandidates([]);
+      }).finally(() => {
+        if (!disposed) setDomainRuleCandidatesLoading(false);
+      });
+    }, 180);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeTab, domainRuleInput, domainRuleSearchPanelOpen, settingsSection]);
 
   useEffect(() => {
     if (activeTab !== "settings" || settingsSection !== "classification") return undefined;
@@ -272,6 +347,12 @@ export function useClassificationRulesController({
   }, [activeTab, appRuleSearch, appRuleSearchPanelOpen, settingsSection]);
 
   useEffect(() => {
+    if (!domainRuleSearchPanelOpen) return undefined;
+    const frameId = window.requestAnimationFrame(scrollDomainRuleSearchIntoViewIfNeeded);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [domainRuleCandidates.length, domainRuleCandidatesLoading, domainRuleSearchPanelOpen, scrollDomainRuleSearchIntoViewIfNeeded]);
+
+  useEffect(() => {
     if (!appRuleSearchPanelOpen) return undefined;
     const frameId = window.requestAnimationFrame(scrollAppRuleSearchIntoViewIfNeeded);
     return () => window.cancelAnimationFrame(frameId);
@@ -295,24 +376,31 @@ export function useClassificationRulesController({
     classificationRules,
     classificationRulesError,
     classificationRulesLoading,
+    domainRuleCandidates,
+    domainRuleCandidatesLoading,
     domainRuleCategory,
     domainRuleInput,
     domainRuleProductivity,
+    domainRuleSearchPanelOpen,
+    domainRuleSearchRef,
     handleAppRuleSearchBlur,
     handleAppRuleSearchFocus,
     handleApplyClassificationRules,
     handleDeleteClassificationRule,
+    handleDomainRuleSearchBlur,
+    handleDomainRuleSearchFocus,
     handleSaveAppRule,
     handleSaveDomainRule,
     handleSelectClassificationCandidate,
+    handleSelectDomainRuleCandidate,
     handleToggleClassificationRule,
     loadClassificationRules,
     saveClassificationRule,
     setAppRuleCategory,
     setAppRuleProductivity,
     setDomainRuleCategory,
-    setDomainRuleInput,
     setDomainRuleProductivity,
     updateAppRuleSearch,
+    updateDomainRuleInput,
   };
 }

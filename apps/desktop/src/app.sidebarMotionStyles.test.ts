@@ -5,9 +5,10 @@ function readStyles(): string {
   return readAppStyles();
 }
 
-function cssBlock(styles: string, selector: string): string {
+function cssBlock(styles: string, selector: string, occurrence: "first" | "last" = "first"): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return styles.match(new RegExp(`${escapedSelector}\\s*\\{[\\s\\S]*?\\n\\}`))?.[0] ?? "";
+  const matches = Array.from(styles.matchAll(new RegExp(`(?:^|\\n)\\s*${escapedSelector}\\s*\\{[\\s\\S]*?\\n\\s*\\}`, "g")));
+  return (occurrence === "last" ? matches[matches.length - 1] : matches[0])?.[0] ?? "";
 }
 
 describe("sidebar motion styles", () => {
@@ -31,20 +32,24 @@ describe("sidebar motion styles", () => {
     const collapsedLiveStatusBlock = cssBlock(styles, ".sidebar--collapsed .live-pill .k");
     const collapsedLiveCopyBlock =
       styles.match(/\.sidebar--collapsed \.live-pill \.app-name,\s*\.sidebar--collapsed \.live-pill \.app-class\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
+    const collapsedFooterControlsBlock =
+      styles.match(/\.sidebar--collapsed \.live-pill,\s*\.sidebar--collapsed \.sidebar-tracker-toggle,\s*\.sidebar--collapsed \.account-menu-shell,\s*\.sidebar--collapsed \.account-trigger\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
     const collapsedTrackerToggleBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle");
-    const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger");
+    const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
 
     expect(navTextBlock).toContain("max-width: 9rem;");
     expect(collapsedNavLabelBlock).toContain("padding: 4px 0;");
     expect(collapsedNavTextBlock).toContain("max-width: 0;");
     expect(collapsedNavTextBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
-    expect(collapsedLivePillBlock).toContain("width: 100%;");
+    expect(collapsedFooterControlsBlock).toContain("width: 2.25rem;");
+    expect(collapsedFooterControlsBlock).toContain("max-width: 2.25rem;");
     expect(collapsedLivePillBlock).toContain("max-height: 2.25rem;");
     expect(collapsedLivePillBlock).toContain("overflow: hidden;");
     expect(collapsedLiveStatusBlock).toContain("opacity: 1;");
     expect(collapsedLiveCopyBlock).toContain("max-height: 0;");
     expect(collapsedLiveCopyBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
-    expect(collapsedTrackerToggleBlock).toContain("width: 100%;");
-    expect(collapsedAccountTriggerBlock).toContain("width: 100%;");
+    expect(collapsedTrackerToggleBlock).toContain("overflow: visible;");
+    expect(collapsedAccountTriggerBlock).toContain("display: flex;");
+    expect(collapsedAccountTriggerBlock).toContain("justify-content: center;");
   });
 });
