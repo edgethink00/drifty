@@ -11,13 +11,14 @@ type HistoryViewProps = {
   readonly deleting: boolean;
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
   readonly segments: readonly ActivitySegment[];
+  readonly startOfDayMinutes?: number;
 };
 
 // History loads ~90 days of segments (easily 10k+); rendering them all at once
 // blocks the main thread, so the list grows in pages instead.
 const HISTORY_RENDER_STEP = 200;
 
-export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: HistoryViewProps) {
+export function HistoryView({ appIcons, deleting, onDeleteSelected, segments, startOfDayMinutes = 0 }: HistoryViewProps) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -35,7 +36,7 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
   const renderedRows = visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
   const hiddenCount = visibleRows.length - renderedRows.length;
 
-  const groups = useMemo(() => buildHistoryDayGroups(renderedRows), [renderedRows]);
+  const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
   const selectedCount = selectedIds.size;
   const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
 

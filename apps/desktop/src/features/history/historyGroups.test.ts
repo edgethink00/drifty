@@ -1,6 +1,6 @@
-import type { ActivitySegment } from "@drifty/domain";
+import { logicalDayIsoDateForDate, type ActivitySegment } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildHistoryRows } from "./historyGroups";
+import { buildHistoryDayGroups, buildHistoryRows } from "./historyGroups";
 
 function historySegment(
   id: string,
@@ -61,5 +61,23 @@ describe("buildHistoryRows", () => {
       ["notes"],
       ["cmux-1"],
     ]);
+  });
+});
+
+describe("buildHistoryDayGroups", () => {
+  it("groups records by local logical day instead of the UTC date key", () => {
+    const startedAt = new Date(2026, 5, 22, 5, 30, 0, 0).toISOString();
+    const endedAt = new Date(2026, 5, 22, 5, 45, 0, 0).toISOString();
+    const rows = buildHistoryRows([
+      historySegment("local-morning", startedAt, endedAt, 900),
+    ]);
+
+    const groups = buildHistoryDayGroups(rows, 4 * 60);
+    const firstGroup = groups[0];
+    if (!firstGroup) throw new Error("Expected a history day group");
+
+    expect(firstGroup.dayKey).toBe(logicalDayIsoDateForDate(new Date(startedAt), 4 * 60));
+    expect(firstGroup.dayKey).not.toBe(startedAt.slice(0, 10));
+    expect(firstGroup.rows.map((row) => row.segmentIds)).toEqual([["local-morning"]]);
   });
 });
