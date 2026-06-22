@@ -1135,6 +1135,10 @@ export default function App() {
       checkedAt,
       result,
     });
+    const nextNativeStatus = {
+      ...nextStatus,
+      trackerRunning: status?.running ?? null,
+    };
     recordDriftAlarmDebugEvent({
       kind: "tray_status_published",
       trayResult: summarizeDriftAlarmTrayResult(result),
@@ -1143,13 +1147,13 @@ export default function App() {
     if (options?.updateRendererState === false) {
       const client = trackerClient as Partial<typeof trackerClient>;
       if (typeof client.updateTrayDriftAlarmStatus === "function") {
-        void client.updateTrayDriftAlarmStatus(nextStatus).catch(() => undefined);
+        void client.updateTrayDriftAlarmStatus(nextNativeStatus).catch(() => undefined);
       }
       return;
     }
 
     setDriftAlarmTrayStatus(nextStatus);
-  }, [driftAlertsEnabled]);
+  }, [driftAlertsEnabled, status?.running]);
   const driftAlarmPreviewCounterRef = useRef(0);
   const billingEntitlementRequestRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
@@ -3386,7 +3390,8 @@ export default function App() {
   const dashboardPreviousWeekFocusKey = `${dashboardPreviousWeekRange.start}:${dashboardPreviousWeekRange.end}:${showAiClassificationImpact}`;
   const dashboardSegments = useMemo(() => {
     const source = dashPeriod === "Today" ? segments : historySegments;
-    return filterSegmentsForRange(source, dashboardRange.start, dashboardRange.end);
+    const rangeSegments = filterSegmentsForRange(source, dashboardRange.start, dashboardRange.end);
+    return dashPeriod === "Week" ? mergeActivitySegments(rangeSegments, filterSegmentsForRange(segments, dashboardRange.start, dashboardRange.end)) : rangeSegments;
   }, [dashPeriod, dashboardRange.end, dashboardRange.start, historySegments, segments]);
   const dashboardClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: dashboardSegments, includeAiClassifications: showAiClassificationImpact }),
@@ -3614,8 +3619,11 @@ export default function App() {
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;
     if (typeof client.updateTrayDriftAlarmStatus !== "function") return;
-    void client.updateTrayDriftAlarmStatus(driftAlarmTrayStatus).catch(() => undefined);
-  }, [driftAlarmTrayStatus]);
+    void client.updateTrayDriftAlarmStatus({
+      ...driftAlarmTrayStatus,
+      trackerRunning: status?.running ?? null,
+    }).catch(() => undefined);
+  }, [driftAlarmTrayStatus, status?.running]);
   const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 6 }), [dashboardSegments]);
   const dashboardTopApps = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 1, groupBy: "app" }), [dashboardSegments]);
   const dayField = useMemo(() => buildQuarterHourDayField(segments, selectedDay, startOfDayMinutes), [segments, selectedDay, startOfDayMinutes]);

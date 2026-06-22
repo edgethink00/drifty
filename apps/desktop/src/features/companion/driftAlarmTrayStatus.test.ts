@@ -33,6 +33,17 @@ describe("drift alarm tray status", () => {
     expect(status.statusLabel).toBe("Drift alerts: Monitoring");
   });
 
+  it("includes tracker running state when provided for native tray menu labels", () => {
+    const status = buildDriftAlarmTrayStatus({
+      enabled: true,
+      checkedAt: null,
+      result: { kind: "no_candidate" },
+      trackerRunning: true,
+    });
+
+    expect(status.trackerRunning).toBe(true);
+  });
+
   it("keeps suppressed reasons and candidate details privacy safe", () => {
     const checkedAt = new Date(2026, 5, 12, 9, 8, 7);
     const status = buildDriftAlarmTrayStatus({
