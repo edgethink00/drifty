@@ -5917,16 +5917,19 @@ export default function App() {
 
       {visibleUpdate ? (
         <div className="auth-modal__overlay" onClick={dismissAvailableUpdate}>
-          <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
+          <section className="auth-modal profile-modal update-dialog-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
             <h2 id="available-update-title" className="update-dialog-title">Drifty {visibleUpdate.version} is available</h2>
             {visibleUpdate.date ? <p className="capture-recency">Published {new Date(visibleUpdate.date).toLocaleString()}</p> : null}
             {currentUpdatePolicy?.urgency === "urgent" ? <p className="capture-recency">Urgent update</p> : null}
             {currentUpdatePolicy?.message ? <p className="profile-modal__bio">{currentUpdatePolicy.message}</p> : null}
-            <p className="profile-modal__bio">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
+            <section className="update-dialog-summary" aria-label="Change summary">
+              <div className="update-dialog-summary__label">Change summary</div>
+              <p className="update-dialog-summary__body">{visibleUpdate.body?.trim() || "No release notes were provided."}</p>
+            </section>
             {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
             <label className="update-dialog-checkbox">
               <input
-                className="drifty-checkbox"
+                className="update-dialog-checkbox__input"
                 type="checkbox"
                 checked={autoInstallFutureUpdates}
                 onChange={(event) => setAutoInstallFutureUpdates(event.target.checked)}
