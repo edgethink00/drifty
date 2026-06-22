@@ -52,8 +52,8 @@ describe("sidebar motion styles", () => {
     expect(collapsedLiveCopyBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
     expect(collapsedTrackerToggleBlock).toContain("overflow: visible;");
     expect(collapsedTrackerDotBlock).toContain("display: block;");
-    expect(collapsedTrackerPauseIconBlock).toContain("width: 7px;");
-    expect(collapsedTrackerPauseIconBlock).toContain("height: 10px;");
+    expect(collapsedTrackerPauseIconBlock).toContain("width: 6.3px;");
+    expect(collapsedTrackerPauseIconBlock).toContain("height: 9px;");
     expect(collapsedAccountTriggerBlock).toContain("display: flex;");
     expect(collapsedAccountTriggerBlock).toContain("justify-content: center;");
   });

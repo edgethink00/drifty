@@ -2078,11 +2078,11 @@
 
   .sidebar--collapsed .sidebar-tracker-toggle[data-state="pause"]::before {
     content: "";
-    width: 7px;
-    height: 10px;
+    width: 6.3px;
+    height: 9px;
     background: linear-gradient(to right, currentColor 0 34%, transparent 34% 66%, currentColor 66% 100%);
     border-radius: 1px;
-    transform: translateY(-2px);
+    transform: translateY(-1px);
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle[data-state="unavailable"]::before {
