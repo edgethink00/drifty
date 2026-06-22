@@ -55,6 +55,51 @@ class TrackerMainTests(unittest.TestCase):
         kill.assert_called_once_with(12345, tracker_main.signal.SIGTERM)
         popen.assert_called_once()
 
+    def test_start_tracking_replaces_same_path_daemon_when_runtime_fingerprint_differs(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main.pid_path().write_text("12345")
+            mock_db = MagicMock()
+            mock_db.get_meta.return_value = "old-runtime"
+            current_command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+
+            with patch.object(tracker_main, "is_running", return_value=True), patch.object(
+                tracker_main, "_process_command", return_value=current_command
+            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "_tracker_runtime_fingerprint", return_value="new-runtime"
+            ), patch("app.main.os.kill") as kill, patch("app.main.time.sleep"), patch(
+                "app.main.subprocess.Popen"
+            ) as popen, patch.object(tracker_main, "get_status", return_value={"data": {"running": True}}):
+                tracker_main.start_tracking()
+
+        mock_db.get_meta.assert_called_once_with(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY)
+        kill.assert_called_once_with(12345, tracker_main.signal.SIGTERM)
+        popen.assert_called_once()
+
+    def test_start_tracking_keeps_same_path_daemon_when_runtime_fingerprint_matches(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main.pid_path().write_text("12345")
+            mock_db = MagicMock()
+            mock_db.get_meta.return_value = "same-runtime"
+            current_command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+
+            with patch.object(tracker_main, "is_running", return_value=True), patch.object(
+                tracker_main, "_process_command", return_value=current_command
+            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "_tracker_runtime_fingerprint", return_value="same-runtime"
+            ), patch("app.main.os.kill") as kill, patch("app.main.subprocess.Popen") as popen, patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": True}}
+            ):
+                result = tracker_main.start_tracking()
+
+        self.assertTrue(result["ok"])
+        mock_db.get_meta.assert_called_once_with(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY)
+        kill.assert_not_called()
+        popen.assert_not_called()
+
     def test_get_current_snapshot_returns_camel_case_payload_without_recording(self) -> None:
         snapshot = Snapshot(
             observed_at="2026-04-06T09:00:00+00:00",
@@ -236,6 +281,42 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.search_classification_rule_candidates.assert_called_once_with("lin", target_kind="app")
         mock_db.apply_classification_rules.assert_called_once_with("2026-04-06T00:00:00", "2026-04-07T00:00:00")
 
+    def test_set_developer_diagnostics_persists_frontmost_fallback_capture_flag(self) -> None:
+        mock_db = MagicMock()
+
+        with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+            tracker_main, "_apply_developer_diagnostics_env"
+        ) as apply_env:
+            result = tracker_main.set_developer_diagnostics({
+                "forceChromiumAxCapture": True,
+                "forceFrontmostFallbackCapture": True,
+            })
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["data"],
+            {
+                "forceChromiumAxCapture": True,
+                "forceFrontmostFallbackCapture": True,
+            },
+        )
+        mock_db.set_meta.assert_any_call(tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true")
+        mock_db.set_meta.assert_any_call(tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY, "true")
+        apply_env.assert_called_once_with(mock_db)
+
+    def test_apply_developer_diagnostics_env_sets_frontmost_fallback_capture_env(self) -> None:
+        mock_db = MagicMock()
+        mock_db.get_meta.side_effect = lambda key, default=None: {
+            tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY: "false",
+            tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY: "true",
+        }.get(key, default)
+
+        with patch.dict(tracker_main.os.environ, {}, clear=True):
+            tracker_main._apply_developer_diagnostics_env(mock_db)
+
+            self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_CHROMIUM_AX_CAPTURE_ENV], "0")
+            self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV], "1")
+
     def test_delete_activity_segments_forwards_string_ids_to_database(self) -> None:
         mock_db = MagicMock()
         mock_db.delete_activity_segments.return_value = 2
@@ -341,6 +422,25 @@ class TrackerMainTests(unittest.TestCase):
         snapshot.assert_not_called()
         mock_db.trim_latest_segment.assert_called_once_with(power_state.observed_at.isoformat())
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
+
+    def test_daemon_records_runtime_fingerprint_on_start(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
+                should_capture=False,
+                reason="non_user_visible_wake_type:darkwake",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "_tracker_runtime_fingerprint", return_value="runtime-fp"
+            ), patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+                tracker_main.time, "sleep", side_effect=KeyboardInterrupt
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        mock_db.set_meta.assert_any_call(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY, "runtime-fp")
 
     def test_enqueue_youtube_metadata_fetch_skips_cached_video(self) -> None:
         with TemporaryDirectory() as tmp:

@@ -45,6 +45,7 @@ pub struct TopSitesQuery {
 #[serde(rename_all = "camelCase")]
 pub struct DeveloperDiagnosticsQuery {
     pub force_chromium_ax_capture: bool,
+    pub force_frontmost_fallback_capture: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,7 +232,11 @@ pub async fn tracker_set_developer_diagnostics(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .set_developer_diagnostics(&app, query.force_chromium_ax_capture)
+            .set_developer_diagnostics(
+                &app,
+                query.force_chromium_ax_capture,
+                query.force_frontmost_fallback_capture,
+            )
             .map_err(|error| error.to_string())
     })
     .await

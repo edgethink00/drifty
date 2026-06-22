@@ -130,6 +130,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: true,
         forceChromiumAxCapture: true,
+        forceFrontmostFallbackCapture: true,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,
@@ -185,6 +186,7 @@ describe("buildDebugLogPayload", () => {
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("segments");
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("rawActivityRows");
     expect(payload.settings.developerDiagnostics.forceChromiumAxCapture).toBe(true);
+    expect(payload.settings.developerDiagnostics.forceFrontmostFallbackCapture).toBe(true);
   });
 
   it("summarizes frontmost app capture diagnostics for unavailable history", () => {
@@ -217,6 +219,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: true,
         forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: true,
         forceChromiumAxExtremeNudge: true,
       },
       status: null,
@@ -249,6 +252,12 @@ describe("buildDebugLogPayload", () => {
     expect(payload.tracker.frontmostCaptureDiagnostics.today).toMatchObject({
       unavailableSegments: 1,
       unavailableSeconds: 120,
+      unavailableRatio: 0.5,
+      systemEventsSegments: 0,
+      lsappinfoSegments: 1,
+      missingCaptureSourceSegments: 0,
+      captureErrorSegments: 2,
+      fallbackErrorSegments: 1,
       captureSourceCounts: {
         unavailable: 1,
         lsappinfo: 1,
@@ -274,6 +283,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: false,
         forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: false,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,
@@ -403,6 +413,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: false,
         forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: false,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,

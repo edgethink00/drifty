@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -30,6 +31,9 @@ IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "18
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
 FORCE_CHROMIUM_AX_CAPTURE_META_KEY = "developer_diagnostics_force_chromium_ax_capture"
 FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
+FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY = "developer_diagnostics_force_frontmost_fallback_capture"
+FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
+TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 
@@ -98,8 +102,10 @@ def fetch_live_tail(
 
 
 def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
-    enabled = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
-    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if enabled else "0"
+    force_chromium_ax_capture = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
+    force_frontmost_fallback_capture = db.get_meta(FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY) == "true"
+    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if force_chromium_ax_capture else "0"
+    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if force_frontmost_fallback_capture else "0"
 
 
 def _bool_meta(value: str | None) -> bool | None:
@@ -169,6 +175,24 @@ def _current_script_path() -> str:
     return str(Path(__file__).resolve())
 
 
+def _tracker_runtime_source_files() -> list[Path]:
+    return [
+        path
+        for path in APP_DIR.rglob("*.py")
+        if "__pycache__" not in path.parts
+    ]
+
+
+def _tracker_runtime_fingerprint() -> str:
+    digest = hashlib.sha256()
+    for path in sorted(_tracker_runtime_source_files()):
+        digest.update(str(path.relative_to(APP_DIR)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def _running_daemon_matches_current_script(pid: int) -> bool:
     command = _process_command(pid)
     if not command:
@@ -179,6 +203,12 @@ def _running_daemon_matches_current_script(pid: int) -> bool:
     if "tracker-python" in command and "main.py" in command:
         return False
     return True
+
+
+def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bool:
+    if not _running_daemon_matches_current_script(pid):
+        return False
+    return db.get_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY) == _tracker_runtime_fingerprint()
 
 
 def _stop_stale_tracker_daemon(pid: int) -> None:
@@ -193,7 +223,7 @@ def start_tracking():
     ensure_state_dir()
     if is_running():
         pid = _read_tracker_pid()
-        if pid is None or _running_daemon_matches_current_script(pid):
+        if pid is None or _running_daemon_matches_current_runtime(pid, database()):
             return response(True, get_status()["data"])
         _stop_stale_tracker_daemon(pid)
         time.sleep(0.25)
@@ -409,10 +439,21 @@ def get_classification_metrics(payload: dict):
 
 def set_developer_diagnostics(payload: dict):
     force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
+    force_frontmost_fallback_capture = _bool_payload(payload.get("forceFrontmostFallbackCapture"))
     db = database()
     db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true" if force_chromium_ax_capture else "false")
+    db.set_meta(
+        FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
+        "true" if force_frontmost_fallback_capture else "false",
+    )
     _apply_developer_diagnostics_env(db)
-    return response(True, {"forceChromiumAxCapture": force_chromium_ax_capture})
+    return response(
+        True,
+        {
+            "forceChromiumAxCapture": force_chromium_ax_capture,
+            "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
+        },
+    )
 
 
 def get_current_snapshot():
@@ -550,6 +591,7 @@ def daemon():
     pid_path().write_text(str(os.getpid()))
     db = database()
     db.set_meta("tracker_script_path", _current_script_path())
+    db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
     last_capture_tick: float | None = None
 
     try:

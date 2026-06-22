@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
+import { readAppStyles } from "../../test/readStyles";
 
-const styles = readFileSync("src/styles.css", "utf8");
+const styles = readAppStyles();
 
 function makeFlowBlock(overrides: Partial<FlowBlock> = {}): FlowBlock {
   return {

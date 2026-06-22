@@ -5,6 +5,16 @@ import { formatCompactDurationFromSeconds, formatRelativeTime } from "../../lib/
 import { MetricTile } from "../../components/MetricTile";
 import type { ChangeEvent } from "react";
 
+export type ProfileDraft = {
+  displayName: string;
+  bio: string;
+  avatarUrl: string;
+  websiteUrl: string;
+  githubUrl: string;
+  linkedinUrl: string;
+  isPublic: boolean;
+};
+
 export function ProfileModal({
   row,
   profile,
@@ -66,7 +76,7 @@ export function EditProfileModal({
 }: {
   displayName: string;
   avatarUrl: string;
-  profileDraft: { displayName: string; bio: string; avatarUrl: string; websiteUrl: string; githubUrl: string; linkedinUrl: string; isPublic: boolean };
+  profileDraft: ProfileDraft;
   profileLoading: boolean;
   profileSaving: boolean;
   profileMessage: string | null;
@@ -74,7 +84,7 @@ export function EditProfileModal({
   onClose: () => void;
   onPhotoSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemovePhoto: () => void;
-  onChange: (updater: Partial<{ displayName: string; bio: string; avatarUrl: string; websiteUrl: string; githubUrl: string; linkedinUrl: string; isPublic: boolean }>) => void;
+  onChange: (updater: Partial<ProfileDraft>) => void;
   onSave: () => void;
 }) {
   return (
