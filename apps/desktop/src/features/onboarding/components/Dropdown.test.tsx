@@ -19,6 +19,21 @@ function ControlledDropdown() {
   );
 }
 
+function TransientOtherDropdown({ disabled = false }: { readonly disabled?: boolean }) {
+  return (
+    <Dropdown
+      ariaLabel="Add work activity"
+      disabled={disabled}
+      keepOpenForOther={false}
+      onChange={() => undefined}
+      options={["Coding", "Other"]}
+      placeholder="Add activity..."
+      searchable
+      value={null}
+    />
+  );
+}
+
 describe("Dropdown", () => {
   const originalInnerHeight = window.innerHeight;
   const originalInnerWidth = window.innerWidth;
@@ -67,5 +82,23 @@ describe("Dropdown", () => {
 
     const menuBottom = Number.parseFloat(listbox.style.top) + Number.parseFloat(listbox.style.maxHeight);
     expect(menuBottom).toBeLessThanOrEqual(window.innerHeight - 12);
+  });
+
+  it("closes after Other when configured as a transient add picker", async () => {
+    render(<TransientOtherDropdown />);
+
+    const trigger = screen.getByRole("combobox", { name: /add work activity/i });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("option", { name: "Other" }));
+
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+  });
+
+  it("does not open when disabled", () => {
+    render(<TransientOtherDropdown disabled />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: /add work activity/i }));
+
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

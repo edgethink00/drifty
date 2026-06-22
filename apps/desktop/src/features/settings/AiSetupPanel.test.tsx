@@ -155,8 +155,10 @@ describe("AiSetupPanel", () => {
     const addActivity = screen.getByRole("combobox", { name: /add work activity/i });
     const fieldCombo = screen.getByRole("combobox", { name: /your field/i });
     expect(screen.getByPlaceholderText("Product development")).toBeTruthy();
+    expect(addActivity).not.toBeInstanceOf(HTMLSelectElement);
 
-    fireEvent.change(addActivity, { target: { value: "Data Analysis" } });
+    fireEvent.click(addActivity);
+    fireEvent.click(await screen.findByRole("option", { name: "Data Analysis" }));
     expect(screen.getByRole("button", { name: /remove data analysis/i })).toBeTruthy();
     fireEvent.click(fieldCombo);
     fireEvent.click(await screen.findByRole("option", { name: "AI" }));
