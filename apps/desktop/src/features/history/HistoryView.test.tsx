@@ -46,6 +46,25 @@ const historySegments: ActivitySegment[] = [
   },
 ];
 
+function manyHistorySegments(count: number): ActivitySegment[] {
+  const base = Date.UTC(2026, 5, 10, 0, 0, 0, 0);
+  return Array.from({ length: count }, (_, index) => {
+    const startedAt = new Date(base + index * 5 * 60_000).toISOString();
+    const endedAt = new Date(base + (index + 1) * 5 * 60_000).toISOString();
+    return {
+      id: `many-${index}`,
+      appName: "cmux",
+      bundleId: "com.example.cmux",
+      durationSeconds: 300,
+      endedAt,
+      platform: "macos",
+      source: "accessibility",
+      startedAt,
+      windowTitle: `Window ${index}`,
+    };
+  });
+}
+
 describe("HistoryView", () => {
   afterEach(() => cleanup());
 
@@ -114,6 +133,27 @@ describe("HistoryView", () => {
     expect(cssRule(".content--history .page--history")).toMatch(/display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".history-view")).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\);[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".history-groups")).toMatch(/min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
+  });
+
+  it("renders the newest history rows first and reveals older rows on demand", () => {
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+        segments={manyHistorySegments(205)}
+      />,
+    );
+
+    expect(screen.getAllByRole("checkbox", { name: /select window/i })).toHaveLength(200);
+    expect(screen.getByText("Window 204")).toBeTruthy();
+    expect(screen.queryByText("Window 0")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^show more older records$/i }));
+
+    expect(screen.getAllByRole("checkbox", { name: /select window/i })).toHaveLength(205);
+    expect(screen.getByText("Window 0")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^show more older records$/i })).toBeNull();
   });
 
   it("requires confirmation before deleting selected history records", async () => {
