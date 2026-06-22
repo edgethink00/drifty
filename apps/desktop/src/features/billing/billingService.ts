@@ -28,6 +28,7 @@ type CheckoutResponse = {
 type BillingPortalResponse = {
   url?: string;
   customer_portal_url?: string;
+  customerPortalUrl?: string;
   error?: string;
 };
 
@@ -94,7 +95,7 @@ export async function createBillingPortalSession(client: BillingClient = supabas
 
     if (error) return { success: false, error: await readFunctionError(error, "Unable to open billing management.") };
     if (data?.error) return { success: false, error: data.error };
-    const url = data?.url ?? data?.customer_portal_url;
+    const url = readBillingPortalUrl(data);
     if (!url) return { success: false, error: "Billing management did not return a redirect URL." };
 
     return { success: true, data: { url } };
@@ -103,19 +104,46 @@ export async function createBillingPortalSession(client: BillingClient = supabas
   }
 }
 
+type JsonResponseLike = {
+  readonly json: () => Promise<unknown>;
+};
+
 async function readFunctionError(error: unknown, fallback: string): Promise<string> {
-  if (!error || typeof error !== "object" || !("context" in error)) return fallback;
-  const context = (error as { context?: unknown }).context;
-  if (!(context instanceof Response)) return fallback;
+  if (!isRecord(error)) return fallback;
+  const context = error.context;
+  if (!isJsonResponseLike(context)) return fallback;
   try {
     const body = await context.json();
-    if (body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string") {
-      return (body as { error: string }).error;
-    }
-  } catch {
+    const message = readErrorMessage(body);
+    if (message) return message;
+  } catch (nextError) {
+    if (nextError instanceof Error) return fallback;
     return fallback;
   }
   return fallback;
+}
+
+function readBillingPortalUrl(data: BillingPortalResponse | null): string | null {
+  return readNonEmptyString(data?.url)
+    ?? readNonEmptyString(data?.customer_portal_url)
+    ?? readNonEmptyString(data?.customerPortalUrl);
+}
+
+function readErrorMessage(body: unknown): string | null {
+  if (!isRecord(body)) return null;
+  return readNonEmptyString(body.error);
+}
+
+function isJsonResponseLike(value: unknown): value is JsonResponseLike {
+  return isRecord(value) && typeof value.json === "function";
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isBillingEntitlement(value: unknown): value is BillingEntitlement {
