@@ -36,6 +36,7 @@ fn main() {
             "auth_load_saved_session",
             "auth_save_session",
             "auth_clear_saved_session",
+            "app_reveal_main_window",
             "focus_target_activate_browser_tab",
             "focus_target_browser_tab_exists",
             "focus_target_open_app",

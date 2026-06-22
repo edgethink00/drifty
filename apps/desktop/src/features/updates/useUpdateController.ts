@@ -5,8 +5,10 @@ import { toErrorMessage } from "../../lib/formatting";
 import {
   fallbackUpdatePolicy,
   fetchUpdatePolicy,
+  clearPostUpdateRelaunchFocusPending,
   markUpdateAutoInstallAttempted,
   markUpdateInteracted,
+  markPostUpdateRelaunchFocusPending,
   msUntilAutomaticDialog,
   persistAutoInstallFutureUpdates,
   persistUpdateInteractionMap,
@@ -73,8 +75,10 @@ export function useUpdateController(): UseUpdateControllerResult {
 
     try {
       await updateToInstall.downloadAndInstall();
+      markPostUpdateRelaunchFocusPending();
       await relaunch();
     } catch (nextError) {
+      clearPostUpdateRelaunchFocusPending();
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
     } finally {
       updaterInstallingRef.current = false;
