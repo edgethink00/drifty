@@ -4,7 +4,7 @@ export function PrivacySettingsSection() {
   return (
     <div className="settings-section settings-section--privacy">
       <div className="settings-block">
-        <h3>Privacy</h3>
+        <h3>Privacy review</h3>
         <div className="settings-row">
           <div>
             <div className="lbl">Raw tracking history is not published</div>

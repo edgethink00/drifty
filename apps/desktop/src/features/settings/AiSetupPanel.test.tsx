@@ -238,13 +238,20 @@ describe("AiSetupPanel", () => {
     expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
-    const appContextCheck = screen.getByRole("checkbox", { name: /App name and basic app context is sent/i });
-    const domainCheck = screen.getByRole("checkbox", { name: /Browser or site domain is sent/i });
-    if (!(appContextCheck instanceof HTMLInputElement) || !(domainCheck instanceof HTMLInputElement)) {
-      throw new Error("Privacy review fields should render as checkboxes.");
+    const requiredFields = screen.getByRole("list", { name: /Required AI classification fields/i });
+    const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
+    expect(within(requiredFields).getByText(/App name and basic app context/i)).toBeTruthy();
+    expect(within(requiredFields).getAllByText(/Required/i)).toHaveLength(2);
+    expect(within(optionalFields).getByRole("switch", { name: /Browser or site domain/i })).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /Page title or window title/i })).toBeTruthy();
+    const optionalSwitches = within(optionalFields).getAllByRole("switch");
+    expect(optionalSwitches).toHaveLength(3);
+    for (const optionalSwitch of optionalSwitches) {
+      if (!(optionalSwitch instanceof HTMLInputElement)) throw new Error("Optional privacy controls should render as switches.");
+      expect(optionalSwitch.checked).toBe(true);
     }
-    expect(appContextCheck.checked).toBe(true);
-    expect(domainCheck.checked).toBe(true);
+    expect(screen.queryByRole("button", { name: /Save selection/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Reset optional/i })).toBeNull();
     expect(screen.getByText(/Raw timeline rows/i)).toBeTruthy();
   });
 });
