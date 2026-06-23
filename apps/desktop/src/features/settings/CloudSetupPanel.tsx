@@ -78,7 +78,7 @@ export function CloudSetupPanel({
           {maskedUserEmail ? <p className="ai-setup-cloud-route__account">{maskedUserEmail}</p> : null}
           {billingEntitlementError ? <p className="ai-setup-detail__message">{billingEntitlementError}</p> : null}
         </div>
-        <button type="button" className="settings-btn settings-btn--primary" onClick={() => void handlePrimaryAction()} disabled={primaryActionDisabled}>
+        <button type="button" className="settings-btn settings-btn--primary ai-setup-cloud-route__action" onClick={() => void handlePrimaryAction()} disabled={primaryActionDisabled}>
           {primaryActionLabel}
         </button>
       </article>

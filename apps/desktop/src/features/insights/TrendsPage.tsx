@@ -1,4 +1,5 @@
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, buildProductivityPersona } from "@drifty/domain";
+import type { ReactNode } from "react";
 import { DateNavigator } from "../../components/DateNavigator";
 import { BreakRecoveryCard } from "./BreakRecoveryCard";
 import type { BreakRecoveryInsight } from "../companion/driftAlarmRecovery";
@@ -11,6 +12,8 @@ type TrendsPageProps = {
   readonly activeInsightProductivityTotals: ProductivityDuration[];
   readonly appIcons: AppIconMap;
   readonly attentionRhythm: AttentionRhythmCell[];
+  readonly bodyFallback?: ReactNode;
+  readonly bodyReady?: boolean;
   readonly breakRecoveryInsight: BreakRecoveryInsight;
   readonly canShiftInsightForward: boolean;
   readonly driftSourceLists: InsightSourceLists;
@@ -33,6 +36,8 @@ export function TrendsPage({
   activeInsightProductivityTotals,
   appIcons,
   attentionRhythm,
+  bodyFallback,
+  bodyReady = true,
   breakRecoveryInsight,
   canShiftInsightForward,
   driftSourceLists,
@@ -95,37 +100,41 @@ export function TrendsPage({
         </div>
       </div>
 
-      <WeeklyCategoryRow
-        weekly={weeklyBreakdown}
-        categoryTotals={activeInsightCategoryTotals}
-        segments={insightSegments}
-        classificationOptions={insightClassificationOptions}
-        appIcons={appIcons}
-        productivityTotals={productivityTotals}
-      />
+      {bodyReady ? (
+        <>
+          <WeeklyCategoryRow
+            weekly={weeklyBreakdown}
+            categoryTotals={activeInsightCategoryTotals}
+            segments={insightSegments}
+            classificationOptions={insightClassificationOptions}
+            appIcons={appIcons}
+            productivityTotals={productivityTotals}
+          />
 
-      <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
-        <ProductivityPersonaCard
-          classificationOptions={insightClassificationOptions}
-          hasData={insightSegments.length > 0}
-          report={productivityPersonaReport}
-          segments={insightSegments}
-          variant="radar"
-        />
-        <AttentionRhythmCard
-          appIcons={appIcons}
-          cells={attentionRhythm}
-          classificationOptions={insightClassificationOptions}
-          segments={insightSegments}
-        />
-      </div>
+          <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
+            <ProductivityPersonaCard
+              classificationOptions={insightClassificationOptions}
+              hasData={insightSegments.length > 0}
+              report={productivityPersonaReport}
+              segments={insightSegments}
+              variant="radar"
+            />
+            <AttentionRhythmCard
+              appIcons={appIcons}
+              cells={attentionRhythm}
+              classificationOptions={insightClassificationOptions}
+              segments={insightSegments}
+            />
+          </div>
 
-      <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
-        <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
-        <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
-      </div>
+          <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
+            <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
+            <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
+          </div>
 
-      <BreakRecoveryCard summary={breakRecoveryInsight} />
+          <BreakRecoveryCard summary={breakRecoveryInsight} />
+        </>
+      ) : bodyFallback}
     </div>
   );
 }

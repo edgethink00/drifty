@@ -188,14 +188,23 @@ describe("Settings content styles", () => {
     expect(aiSetupStyles).not.toContain(".ai-setup-route-option.is-selected");
   });
 
-  it("uses the muted Cloud action color for the Cloud setup CTA", () => {
+  it("keeps the Cloud setup CTA compact and slightly brighter", () => {
     const aiSetupStyles = readAiSetupStyles();
-    const cloudPrimaryRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn--primary");
+    const cloudSource = readFileSync("src/features/settings/CloudSetupPanel.tsx", "utf8");
+    const cloudRouteRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route");
+    const cloudRouteDarkRule = cssRule(aiSetupStyles, ':root[data-theme="dark"] .ai-setup-cloud-route');
+    const cloudActionRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action");
 
-    expect(cloudPrimaryRule).toContain("background: var(--cloud-action);");
-    expect(cloudPrimaryRule).toContain("border-color: var(--cloud-action);");
-    expect(cloudPrimaryRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);");
-    expect(cloudPrimaryRule).toContain("--settings-control-height: 2.5875rem;");
+    expect(cloudSource).toContain("settings-btn settings-btn--primary ai-setup-cloud-route__action");
+    expect(cloudRouteRule).toContain("--cloud-action: #344622;");
+    expect(cloudRouteDarkRule).toContain("--cloud-action: #5a7042;");
+    expect(cloudActionRule).toContain("font-size: 0.756rem;");
+    expect(cloudActionRule).toContain("font-weight: 520;");
+    expect(cloudActionRule).toContain("height: 2.25rem;");
+    expect(cloudActionRule).toContain("min-height: 2.25rem;");
+    expect(cloudActionRule).toContain("background: var(--cloud-action);");
+    expect(cloudActionRule).toContain("border-color: var(--cloud-action);");
+    expect(cloudActionRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);");
   });
 
   it("separates AI providers from shared prompt settings", () => {
