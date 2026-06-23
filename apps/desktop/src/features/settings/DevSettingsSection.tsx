@@ -4,6 +4,7 @@ import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLE
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { DRIFT_ALARM_PREVIEW_OPTIONS } from "../companion/driftAlarmData";
 import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, type WatcherMode } from "../companion/watcherData";
+import { DeveloperPreReleaseUpdateRow } from "../updates/DeveloperPreReleaseUpdateRow";
 import { formatDayLabel } from "../../lib/formatting";
 
 type DriftAlarmPreviewOption = typeof DRIFT_ALARM_PREVIEW_OPTIONS[number];
@@ -107,6 +108,7 @@ export function DevSettingsSection({
       </div>
       <div className="settings-block settings-block--dev-preview">
         <h3>Dev</h3>
+        <DeveloperPreReleaseUpdateRow />
         {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
           <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}>
             <div>

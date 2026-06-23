@@ -21,6 +21,8 @@
     "allow-accessibility-get-status",
     "allow-accessibility-request-access",
     "allow-ai-classification-openai-chat",
+    "allow-developer-check-pre-release-update",
+    "allow-developer-install-pre-release-update",
     "allow-tracker-get-status",
     "allow-tracker-start",
     "allow-tracker-stop",
