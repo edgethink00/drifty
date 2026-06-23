@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within, waitFor } from "@testing-library/rea
 import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LeaderboardPeriod, LeaderboardResult, LeaderboardRow, OwnLeaderboardEntry } from "./features/leaderboard/leaderboardService";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
 const {
@@ -123,6 +124,59 @@ function markOnboardingCompleted(userId: string) {
 
 function formatDayLabel(day: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
+}
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+  readonly reject: (reason?: unknown) => void;
+};
+
+function createDeferred<T>(): Deferred<T> {
+  let resolveDeferred: ((value: T) => void) | undefined;
+  let rejectDeferred: ((reason?: unknown) => void) | undefined;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveDeferred = resolve;
+    rejectDeferred = reject;
+  });
+
+  if (!resolveDeferred || !rejectDeferred) throw new Error("Unable to create deferred promise");
+
+  return {
+    promise,
+    resolve: resolveDeferred,
+    reject: rejectDeferred,
+  };
+}
+
+function makeLeaderboardRow(period: LeaderboardPeriod): LeaderboardRow {
+  return {
+    rank: 1,
+    public_id: "profile-1",
+    display_name: "Alex",
+    avatar_url: "",
+    period,
+    focus_seconds: 3600,
+    focus_seconds_7d: 3600,
+    window_start_date: shiftIsoDate(todayIsoDate(), period === "monthly" ? -29 : -6),
+    window_end_date: todayIsoDate(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function makeOwnLeaderboardEntry(period: LeaderboardPeriod): OwnLeaderboardEntry {
+  return {
+    rank: 1,
+    display_name: "Alex",
+    period,
+    focus_seconds: 3600,
+    focus_seconds_7d: 3600,
+    window_start_date: shiftIsoDate(todayIsoDate(), period === "monthly" ? -29 : -6),
+    window_end_date: todayIsoDate(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    opted_in: true,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 describe("App leaderboard participation", () => {
@@ -315,6 +369,61 @@ describe("App leaderboard participation", () => {
       });
     });
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
+  });
+
+  it("shows joined controls after a signed-out anonymous join refresh", async () => {
+    const today = todayIsoDate();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const zeroFocusRow = {
+      ...makeLeaderboardRow("weekly"),
+      display_name: "alex",
+      focus_seconds: 0,
+      focus_seconds_7d: 0,
+      window_start_date: shiftIsoDate(today, -6),
+      window_end_date: today,
+    };
+    const zeroFocusOwnEntry = {
+      ...makeOwnLeaderboardEntry("weekly"),
+      display_name: "alex",
+      focus_seconds: 0,
+      focus_seconds_7d: 0,
+      window_start_date: shiftIsoDate(today, -6),
+      window_end_date: today,
+    };
+
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+    authState.signInAnonymously.mockImplementation(() => {
+      authState.user = { email: null };
+      authState.status = "authenticated";
+      return Promise.resolve({ error: null, user: { email: null } });
+    });
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard
+      .mockResolvedValueOnce({ success: true, error: null, data: [] })
+      .mockResolvedValue({ success: true, error: null, data: [zeroFocusRow] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: zeroFocusOwnEntry });
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+
+    await waitFor(() => {
+      expect(authState.signInAnonymously).toHaveBeenCalledTimes(1);
+      expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
+      expect(fetchGlobalLeaderboard).toHaveBeenCalledWith("weekly", 100);
+    });
+
+    expect(screen.queryByText(/loading leaderboard/i)).toBeNull();
+    expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
+    expect(await screen.findByRole("button", { name: /leave leaderboard/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /view profile/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /^share$/i })).toBeTruthy();
+    expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ timezone, is_public: true }));
   });
 
   it("prefills the leaderboard profile photo from Google metadata when the user has no saved avatar", async () => {
@@ -626,6 +735,128 @@ describe("App leaderboard participation", () => {
     });
 
     expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
+  });
+
+  it("keeps rendered leaderboard content mounted during a deferred refresh after initial load", async () => {
+    const deferredLeaderboard = createDeferred<LeaderboardResult<LeaderboardRow[]>>();
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard
+      .mockResolvedValueOnce({ success: true, error: null, data: [makeLeaderboardRow("weekly")] })
+      .mockReturnValueOnce(deferredLeaderboard.promise);
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: makeOwnLeaderboardEntry("weekly") });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+
+    expect(await screen.findByRole("button", { name: /view alex profile/i })).toBeTruthy();
+    expect(await screen.findByText("Alex")).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^monthly$/i }));
+    await waitFor(() => {
+      expect(fetchGlobalLeaderboard).toHaveBeenCalledWith("monthly", 100);
+    });
+
+    const blockingLoading = screen.queryByText(/loading leaderboard/i);
+    const profileButtonDuringRefresh = screen.queryByRole("button", { name: /view alex profile/i });
+    const profileNameDuringRefresh = screen.queryByText("Alex");
+    const compactRefreshStatus = screen.queryByText(/refreshing leaderboard/i);
+    deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("monthly")] });
+    await screen.findByRole("button", { name: /view alex profile/i });
+
+    expect(blockingLoading).toBeNull();
+    expect(profileButtonDuringRefresh).toBeTruthy();
+    expect(profileNameDuringRefresh).toBeTruthy();
+    expect(compactRefreshStatus).toBeTruthy();
+  });
+
+  it("clears joined controls after opt-out even when the follow-up refresh fails", async () => {
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard
+      .mockResolvedValueOnce({ success: true, error: null, data: [makeLeaderboardRow("weekly")] })
+      .mockRejectedValueOnce(new Error("Network unavailable"));
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: makeOwnLeaderboardEntry("weekly") });
+    optOutLeaderboard.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /leave leaderboard/i }));
+
+    await waitFor(() => {
+      expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
+    });
+    expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /leave leaderboard/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /view profile/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
+    expect((await screen.findByRole("status")).textContent).toMatch(/network unavailable/i);
+  });
+
+  it("keeps joined profile editing available and avoids blocking loading during the save refresh", async () => {
+    const deferredLeaderboard = createDeferred<LeaderboardResult<LeaderboardRow[]>>();
+    getTimeline.mockResolvedValue([]);
+    fetchOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    fetchGlobalLeaderboard
+      .mockResolvedValueOnce({ success: true, error: null, data: [makeLeaderboardRow("weekly")] })
+      .mockReturnValueOnce(deferredLeaderboard.promise);
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: makeOwnLeaderboardEntry("weekly") });
+    saveOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex Drifty",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    render(<App />);
+
+    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
+    await screen.findByText("Upload photo");
+    const editor = document.querySelector(".profile-editor-modal");
+    if (!(editor instanceof HTMLElement)) throw new Error("Profile editor modal did not open");
+    fireEvent.change(within(editor).getByLabelText(/display name/i), { target: { value: "Alex Drifty" } });
+    fireEvent.click(within(editor).getByRole("button", { name: /save profile/i }));
+
+    await waitFor(() => {
+      expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Alex Drifty" }));
+      expect(fetchGlobalLeaderboard).toHaveBeenCalledTimes(2);
+    });
+    const blockingLoading = screen.queryByText(/loading leaderboard/i);
+    deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("weekly")] });
+    await screen.findByText(/profile saved/i);
+
+    expect(blockingLoading).toBeNull();
   });
 
   it("reopens sign-in when a stale leaderboard session cannot save a profile", async () => {
