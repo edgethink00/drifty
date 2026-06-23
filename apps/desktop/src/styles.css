@@ -16542,7 +16542,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   min-width: 12.75rem;
 }
 
-.leaderboard-hero__join {
+.leaderboard-hero__participation {
   min-height: 1.82rem;
   padding: 0.36rem 0.68rem;
   border-color: var(--line);
@@ -17314,10 +17314,8 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   gap: 0.54rem;
 }
 
-.leaderboard-hero__join {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  justify-self: start;
+.leaderboard-hero__participation {
+  min-width: 9.8rem;
   min-height: 1.82rem;
   padding: 0.36rem 0.68rem;
   border-color: var(--line);
@@ -17389,6 +17387,7 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
 }
 
 .leaderboard-hero__actions .settings-btn,
+.leaderboard-hero__actions .ghost-button,
 .leaderboard-hero__name-row .settings-btn,
 .leaderboard-actions .settings-btn {
   min-height: 1.75rem;
@@ -17651,12 +17650,6 @@ html[data-theme="dark"] .end-of-day-review__action.is-selected {
   .leaderboard-hero__identity {
     align-items: flex-start;
   }
-
-  .leaderboard-hero__join {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
   .leaderboard-hero__stats,
   .leaderboard-toolbar__stats,
   .leaderboard-window {

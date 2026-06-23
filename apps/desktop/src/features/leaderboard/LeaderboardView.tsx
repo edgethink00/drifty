@@ -126,25 +126,26 @@ export function LeaderboardView({
                       ))}
                     </div>
                   ) : null}
-                  {isOptedIn ? (
-                    <div className="leaderboard-hero__actions">
-                      <button type="button" className="settings-btn" onClick={() => onViewOwnProfile?.()} disabled={!onViewOwnProfile}>View profile</button>
-                      <button type="button" className="settings-btn" onClick={() => onShareProfile?.()} disabled={!onShareProfile}>Share</button>
-                      <button type="button" className="ghost-button" onClick={() => onOptOut?.()} disabled={isActionLoading || !onOptOut}>{isActionLoading ? "Leaving…" : "Leave leaderboard"}</button>
-                    </div>
-                  ) : null}
+                  <div className="leaderboard-hero__actions">
+                    {isOptedIn ? (
+                      <>
+                        <button type="button" className="settings-btn" onClick={() => onViewOwnProfile?.()} disabled={!onViewOwnProfile}>View profile</button>
+                        <button type="button" className="settings-btn" onClick={() => onShareProfile?.()} disabled={!onShareProfile}>Share</button>
+                        <button type="button" className="ghost-button leaderboard-hero__participation" onClick={() => onOptOut?.()} disabled={isActionLoading || !onOptOut}>{isActionLoading ? "Leaving…" : "Leave leaderboard"}</button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="settings-btn leaderboard-hero__participation"
+                        onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
+                        disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
+                      >
+                        {isActionLoading ? "Joining…" : "Join leaderboard"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-              {!isOptedIn ? (
-                <button
-                  type="button"
-                  className="settings-btn leaderboard-hero__join"
-                  onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
-                  disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
-                >
-                  {isActionLoading ? "Joining…" : "Join leaderboard"}
-                </button>
-              ) : null}
               <div className="leaderboard-hero__stats leaderboard-row__meta leaderboard-row__meta--compact" aria-label="Profile ranking summary">
                 <div className="leaderboard-stat">
                   <span className="label-mono">Focus time</span>
