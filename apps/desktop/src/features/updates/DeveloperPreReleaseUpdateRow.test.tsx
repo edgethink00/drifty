@@ -42,6 +42,16 @@ describe("DeveloperPreReleaseUpdateRow", () => {
     expect((await screen.findByRole("status")).textContent).toMatch(/no pre-release update is available/i);
   });
 
+  it("shows an unpublished manifest state when the pre-release channel has no release JSON", async () => {
+    invokeMock.mockRejectedValue("Could not fetch a valid release JSON from the remote");
+    render(<DeveloperPreReleaseUpdateRow />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Check pre-release$/i }));
+
+    expect((await screen.findByRole("status")).textContent).toMatch(/no pre-release manifest is published yet/i);
+    expect(screen.queryByText(/pre-release update check failed/i)).toBeNull();
+  });
+
   it("installs and relaunches an available pre-release update", async () => {
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "developer_check_pre_release_update") {
