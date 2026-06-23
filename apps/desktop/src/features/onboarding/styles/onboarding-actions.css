@@ -1,0 +1,107 @@
+/* ── Footer actions ── */
+.onboarding-card .onb-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--onb-space-3);
+  width: 100%;
+  min-height: 36px;
+  padding: 0;
+  margin-top: var(--onb-action-gap);
+  border-top: 0;
+  flex-shrink: 0;
+}
+
+.onboarding-card .onb-actions--setup {
+  padding: 0;
+  margin-top: var(--onb-action-gap);
+}
+
+.onboarding-card .onb-actions .onb-button--primary {
+  min-height: 36px;
+  min-width: 104px;
+  flex: 0 0 auto;
+  padding: 0 var(--onb-space-4);
+  border-radius: var(--onb-radius-sm);
+  border-color: var(--onb-continue-bg);
+  background: var(--onb-continue-bg);
+  color: #fff;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.onboarding-card .onb-actions .onb-button--primary:hover:not(:disabled) {
+  border-color: var(--onb-continue-bg-hover);
+  background: var(--onb-continue-bg-hover);
+  color: #fff;
+  box-shadow: none;
+}
+
+.onboarding-card .onb-actions .onb-button--primary:active:not(:disabled) {
+  border-color: var(--onb-continue-bg-hover);
+  background: var(--onb-continue-bg-hover);
+  color: #fff;
+  box-shadow: none;
+}
+
+.onboarding-card .onb-actions .onb-button--primary:disabled {
+  border-color: var(--onb-line);
+  background: color-mix(in oklch, var(--onb-bg-2) 82%, var(--onb-surface));
+  color: var(--onb-text-soft);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.onboarding-card .onb-actions .onb-button--primary:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--onb-accent-rgb), 0.14);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-actions .onb-button--primary {
+  color: var(--onb-canvas);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-actions .onb-button--primary:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-actions .onb-button--primary:active:not(:disabled) {
+  color: var(--onb-canvas);
+}
+
+.onboarding-card .onb-actions__back {
+  font-family: var(--onb-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--onb-text-muted);
+  background: var(--onb-surface);
+  border: 1px solid var(--onb-line-strong);
+  border-radius: var(--onb-radius-sm);
+  cursor: pointer;
+  min-height: 36px;
+  min-width: 78px;
+  flex: 0 0 auto;
+  padding: 0 var(--onb-space-4);
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), color var(--onb-transition-fast), box-shadow var(--onb-transition-fast);
+}
+.onboarding-card .onb-actions__back:hover {
+  color: var(--onb-text);
+  border-color: rgba(55, 53, 47, 0.2);
+  background: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-bg-2));
+}
+
+.onboarding-card .onb-actions__back:active {
+  background: var(--onb-bg-2);
+}
+
+.onboarding-card .onb-actions__spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.onboarding-card .onb-hint {
+  font-size: 12px;
+  color: color-mix(in oklch, var(--onb-text-soft) 82%, var(--onb-warn));
+  text-align: center;
+  line-height: 1.4;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}

@@ -2,6 +2,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "./styles.css";
+import "./features/history/history.css";
+import "./features/dashboard/dashboard.css";
+import "./features/dashboard/week-dashboard.css";
+import "./features/dashboard/month-calendar.css";
+import "./features/insights/insights.css";
+import "./features/leaderboard/leaderboard.css";
 import "./features/chartHoverMotion.css";
 
 type BootstrapSurface = "app" | "watcher" | "drift-alarm";

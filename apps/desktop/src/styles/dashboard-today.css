@@ -700,33 +700,6 @@
 }
 
 /* ── Insight layout ── */
-.insight-primary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 250px;
-  gap: var(--space-4);
-}
-
-.insight-primary__main, .insight-primary__aside {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.insight-primary__aside {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.insight-primary__eyebrow { margin-bottom: 0.45rem; }
-
-.insight-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  opacity: 0.9;
-}
-
-.insight-grid--wide { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr); }
-.insight-grid--support { align-items: start; }
 
 /* Chart block */
 .chart-block .chart-head {

@@ -1,0 +1,84 @@
+/* ── Step transition (content fade + slide, smooth card height) ── */
+/* biome-ignore lint/style/noDescendingSpecificity: viewport base styles intentionally follow body-specific viewport overrides. */
+.onboarding-card .onboarding-viewport {
+  position: relative;
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: var(--onb-step-content-baseline);
+  overflow-y: auto;
+  overflow-x: visible;
+  scrollbar-gutter: stable;
+  transition: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: direct viewport fallback mirrors the prototype cascade. */
+.onboarding-card > .onboarding-viewport {
+  flex: 0 0 var(--onb-step-frame-baseline);
+  height: var(--onb-step-frame-baseline);
+  min-height: var(--onb-step-frame-baseline);
+  max-height: var(--onb-step-frame-baseline);
+}
+
+.onboarding-card > .onboarding-viewport .onboarding-body {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: var(--onb-step-content-baseline);
+}
+
+.onboarding-card .onboarding-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  justify-content: safe center;
+  min-height: 100%;
+  width: 100%;
+  padding: 0;
+  animation: onb-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.onboarding-card .onboarding-step--static {
+  animation: none;
+}
+
+@keyframes onb-step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Visually hidden (accessible but not painted) ── */
+.onboarding-screen .onb-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.onboarding-card .onboarding-title.onb-visually-hidden {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0 0 var(--onb-header-gap);
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  visibility: hidden;
+}
