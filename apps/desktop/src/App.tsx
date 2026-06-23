@@ -4582,6 +4582,7 @@ export default function App() {
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
+                    onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
                     onShowWatcherPeek={showWatcherPeek}

@@ -109,6 +109,10 @@ function emptyProfileDraft(email: string | null | undefined, authMetadataAvatarU
   };
 }
 
+function getLeaderboardUserScopeKey(authenticatedUser: AuthState["user"] | null | undefined) {
+  return authenticatedUser ? authenticatedUser.id ?? authenticatedUser.email ?? "authenticated" : "signed-out";
+}
+
 export function useLeaderboardProfileController({
   activeTab,
   allowsEffectiveAnonymousAuth,
@@ -125,7 +129,9 @@ export function useLeaderboardProfileController({
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [ownLeaderboardEntry, setOwnLeaderboardEntry] = useState<OwnLeaderboardEntry | null>(null);
   const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardHasResolvedOnce, setLeaderboardHasResolvedOnce] = useState(false);
+  const [leaderboardHasLoadedOnce, setLeaderboardHasLoadedOnce] = useState(false);
+  const [leaderboardRefreshing, setLeaderboardRefreshing] = useState(false);
   const [leaderboardActionLoading, setLeaderboardActionLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardActionError, setLeaderboardActionError] = useState<string | null>(null);
@@ -144,6 +150,9 @@ export function useLeaderboardProfileController({
   const [selectedProfileError, setSelectedProfileError] = useState<string | null>(null);
   const [leaderboardSegments, setLeaderboardSegments] = useState<ActivitySegment[]>([]);
   const leaderboardRefreshRequestRef = useRef(0);
+  const leaderboardHasResolvedOnceRef = useRef(false);
+  const leaderboardHasLoadedOnceRef = useRef(false);
+  const leaderboardOwnEntryScopeRef = useRef<string | null>(null);
 
   const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
   const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
@@ -162,44 +171,66 @@ export function useLeaderboardProfileController({
   const leaderboardProfileGithubUrl = profile?.github_url || profileDraft.githubUrl || (leaderboardUsesPreviewProfile ? "github.com/edgethink00" : "");
   const leaderboardProfileLinkedinUrl = profile?.linkedin_url || profileDraft.linkedinUrl || (leaderboardUsesPreviewProfile ? "linkedin.com/in/drifty" : "");
   const leaderboardTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
-  const isLeaderboardOptedIn = ownLeaderboardEntry?.opted_in === true;
+  const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+  const leaderboardOwnEntryScopeKey = isPolicySignedIn ? getLeaderboardUserScopeKey(user) : "signed-out";
+  const scopedOwnLeaderboardEntry = leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey ? ownLeaderboardEntry : null;
+  const isLeaderboardOptedIn = scopedOwnLeaderboardEntry?.opted_in === true;
 
-  const refreshLeaderboardData = useCallback(async () => {
+  const refreshLeaderboardData = useCallback(async (authenticatedUser = user) => {
     const requestId = ++leaderboardRefreshRequestRef.current;
+    const hasResolvedLeaderboardState = leaderboardHasResolvedOnceRef.current;
+    const shouldPreserveLeaderboardState = leaderboardHasLoadedOnceRef.current;
+    const canLoadOwnLeaderboardEntry = Boolean(authenticatedUser) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+    const authenticatedUserScopeKey = canLoadOwnLeaderboardEntry ? getLeaderboardUserScopeKey(authenticatedUser) : "signed-out";
 
     if (!isSupabaseConfigured && !shouldUsePreviewData()) {
       setLeaderboardRows([]);
       setOwnLeaderboardEntry(null);
       setLeaderboardSegments([]);
-      setLeaderboardLoading(false);
+      leaderboardOwnEntryScopeRef.current = null;
+      leaderboardHasResolvedOnceRef.current = false;
+      leaderboardHasLoadedOnceRef.current = false;
+      setLeaderboardHasResolvedOnce(false);
+      setLeaderboardHasLoadedOnce(false);
+      setLeaderboardRefreshing(false);
       setLeaderboardError(null);
       return;
     }
 
-    setLeaderboardLoading(true);
-    setLeaderboardError(null);
+    setLeaderboardRefreshing(true);
+    if (!hasResolvedLeaderboardState || shouldPreserveLeaderboardState) setLeaderboardError(null);
 
     try {
       const [globalResult, ownResult, leaderboardTimeline] = await Promise.all([
         fetchGlobalLeaderboard(activeLeaderboardPeriod, 100),
-        user ? fetchOwnLeaderboardEntry(activeLeaderboardPeriod) : Promise.resolve({ success: true, error: null, data: null }),
+        canLoadOwnLeaderboardEntry ? fetchOwnLeaderboardEntry(activeLeaderboardPeriod) : Promise.resolve({ success: true, error: null, data: null }),
         trackerClient.getTimeline(getLogicalDayRange(leaderboardWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes)),
       ]);
 
       if (leaderboardRefreshRequestRef.current !== requestId) return;
 
       if (!globalResult.success) {
-        setLeaderboardRows([]);
-        setOwnLeaderboardEntry(null);
-        setLeaderboardSegments([]);
+        if (!shouldPreserveLeaderboardState) {
+          setLeaderboardRows([]);
+          setOwnLeaderboardEntry(null);
+          setLeaderboardSegments([]);
+          leaderboardOwnEntryScopeRef.current = null;
+        }
+        leaderboardHasResolvedOnceRef.current = true;
+        setLeaderboardHasResolvedOnce(true);
         setLeaderboardError(globalResult.error ?? "Unable to load leaderboard");
         return;
       }
 
       if (!ownResult.success) {
-        setLeaderboardRows(globalResult.data ?? []);
-        setOwnLeaderboardEntry(null);
-        setLeaderboardSegments(leaderboardTimeline);
+        if (!shouldPreserveLeaderboardState) {
+          setLeaderboardRows(globalResult.data ?? []);
+          setOwnLeaderboardEntry(null);
+          setLeaderboardSegments(leaderboardTimeline);
+          leaderboardOwnEntryScopeRef.current = null;
+        }
+        leaderboardHasResolvedOnceRef.current = true;
+        setLeaderboardHasResolvedOnce(true);
         setLeaderboardError(ownResult.error ?? "Unable to load your leaderboard status");
         return;
       }
@@ -207,23 +238,39 @@ export function useLeaderboardProfileController({
       setLeaderboardRows(globalResult.data ?? []);
       setOwnLeaderboardEntry(ownResult.data ?? null);
       setLeaderboardSegments(leaderboardTimeline);
+      leaderboardOwnEntryScopeRef.current = authenticatedUserScopeKey;
+      leaderboardHasResolvedOnceRef.current = true;
+      leaderboardHasLoadedOnceRef.current = true;
+      setLeaderboardHasResolvedOnce(true);
+      setLeaderboardHasLoadedOnce(true);
+      setLeaderboardError(null);
     } catch (nextError) {
       if (leaderboardRefreshRequestRef.current !== requestId) return;
-      setLeaderboardRows([]);
-      setOwnLeaderboardEntry(null);
-      setLeaderboardSegments([]);
+      if (!shouldPreserveLeaderboardState) {
+        setLeaderboardRows([]);
+        setOwnLeaderboardEntry(null);
+        setLeaderboardSegments([]);
+        leaderboardOwnEntryScopeRef.current = null;
+      }
+      leaderboardHasResolvedOnceRef.current = true;
+      setLeaderboardHasResolvedOnce(true);
       setLeaderboardError(toErrorMessage(nextError));
     } finally {
-      if (leaderboardRefreshRequestRef.current === requestId) setLeaderboardLoading(false);
+      if (leaderboardRefreshRequestRef.current === requestId) setLeaderboardRefreshing(false);
     }
-  }, [activeLeaderboardPeriod, isSupabaseConfigured, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes, user]);
+  }, [activeLeaderboardPeriod, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes, user]);
 
   useEffect(() => {
     if (!isSupabaseConfigured && !shouldUsePreviewData()) {
       setLeaderboardRows([]);
       setOwnLeaderboardEntry(null);
       setLeaderboardSegments([]);
-      setLeaderboardLoading(false);
+      leaderboardOwnEntryScopeRef.current = null;
+      leaderboardHasResolvedOnceRef.current = false;
+      leaderboardHasLoadedOnceRef.current = false;
+      setLeaderboardHasResolvedOnce(false);
+      setLeaderboardHasLoadedOnce(false);
+      setLeaderboardRefreshing(false);
       setLeaderboardError(null);
       return;
     }
@@ -298,6 +345,7 @@ export function useLeaderboardProfileController({
         return;
       }
 
+      let authenticatedUser = user;
       if (!user) {
         if (!allowsEffectiveAnonymousAuth) {
           onAuthRequired();
@@ -310,6 +358,7 @@ export function useLeaderboardProfileController({
           setLeaderboardActionError(anonymousResult.error?.message ?? "Unable to join leaderboard without a beta session.");
           return;
         }
+        authenticatedUser = anonymousResult.user;
       }
 
       const profileResult = await saveOwnProfile({
@@ -331,7 +380,7 @@ export function useLeaderboardProfileController({
 
       const nextProfile = profileResult.data;
       setProfile(nextProfile);
-      setProfileDraft(profileDraftFromProfile(nextProfile, user?.email, authMetadataAvatarUrl));
+      setProfileDraft(profileDraftFromProfile(nextProfile, authenticatedUser?.email, authMetadataAvatarUrl));
 
       const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
       const allPeriodSegments = await trackerClient.getTimeline(getLogicalDayRange(allPeriodWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes));
@@ -359,7 +408,7 @@ export function useLeaderboardProfileController({
         return;
       }
 
-      await refreshLeaderboardData();
+      await refreshLeaderboardData(authenticatedUser);
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
     } finally {
@@ -379,13 +428,15 @@ export function useLeaderboardProfileController({
         return;
       }
 
+      leaderboardOwnEntryScopeRef.current = leaderboardOwnEntryScopeKey;
+      setOwnLeaderboardEntry(null);
       await refreshLeaderboardData();
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
     } finally {
       setLeaderboardActionLoading(false);
     }
-  }, [refreshLeaderboardData]);
+  }, [leaderboardOwnEntryScopeKey, refreshLeaderboardData]);
 
   const handleSaveProfile = useCallback(async () => {
     setProfileSaving(true);
@@ -499,29 +550,35 @@ export function useLeaderboardProfileController({
   }, []);
 
   const handleViewOwnLeaderboardProfile = useCallback(async () => {
-    if (!ownLeaderboardEntry) return;
+    if (!scopedOwnLeaderboardEntry) return;
     await handleSelectLeaderboardProfile({
-      rank: ownLeaderboardEntry.rank ?? 0,
+      rank: scopedOwnLeaderboardEntry.rank ?? 0,
       public_id: profile?.public_id ?? null,
       display_name: leaderboardProfileDisplayName,
       avatar_url: profile?.avatar_url ?? "",
-      period: ownLeaderboardEntry.period,
-      focus_seconds: ownLeaderboardEntry.focus_seconds,
-      focus_seconds_7d: ownLeaderboardEntry.focus_seconds_7d,
-      window_start_date: ownLeaderboardEntry.window_start_date,
-      window_end_date: ownLeaderboardEntry.window_end_date,
-      updated_at: ownLeaderboardEntry.updated_at,
+      period: scopedOwnLeaderboardEntry.period,
+      focus_seconds: scopedOwnLeaderboardEntry.focus_seconds,
+      focus_seconds_7d: scopedOwnLeaderboardEntry.focus_seconds_7d,
+      window_start_date: scopedOwnLeaderboardEntry.window_start_date,
+      window_end_date: scopedOwnLeaderboardEntry.window_end_date,
+      updated_at: scopedOwnLeaderboardEntry.updated_at,
     });
-  }, [handleSelectLeaderboardProfile, leaderboardProfileDisplayName, ownLeaderboardEntry, profile?.avatar_url, profile?.public_id]);
+  }, [handleSelectLeaderboardProfile, leaderboardProfileDisplayName, profile?.avatar_url, profile?.public_id, scopedOwnLeaderboardEntry]);
+
+  const leaderboardBlockingLoading = leaderboardRefreshing && !leaderboardHasResolvedOnce;
+  const leaderboardBlockingError = leaderboardHasLoadedOnce ? null : leaderboardError;
+  const leaderboardRefreshStatus = leaderboardRefreshing && leaderboardHasResolvedOnce ? "Refreshing leaderboard" : null;
+  const leaderboardBackgroundError = leaderboardHasLoadedOnce ? leaderboardError : null;
+  const leaderboardInlineStatus = leaderboardActionError ?? leaderboardBackgroundError ?? leaderboardRefreshStatus;
 
   return {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
     isProfileEditorOpen,
-    leaderboardActionError,
+    leaderboardActionError: leaderboardInlineStatus,
     leaderboardActionLoading,
-    leaderboardError,
-    leaderboardLoading,
+    leaderboardError: leaderboardBlockingError,
+    leaderboardLoading: leaderboardBlockingLoading,
     leaderboardProfileBio,
     leaderboardProfileDisplayName,
     leaderboardProfileGithubUrl,
@@ -532,7 +589,7 @@ export function useLeaderboardProfileController({
     leaderboardWindowEndDay,
     leaderboardWindowStartDay,
     localRollingFocusSeconds,
-    ownLeaderboardEntry,
+    ownLeaderboardEntry: scopedOwnLeaderboardEntry,
     profile,
     profileDraft,
     profileError,

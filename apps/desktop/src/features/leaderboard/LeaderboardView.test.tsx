@@ -160,6 +160,55 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText("alex@example.com")).toBeNull();
   });
 
+  it("renders join and leave participation controls in the same persistent hero action slot", () => {
+    const { rerender } = renderView({
+      isOptedIn: false,
+      profileDisplayName: "Alex",
+      email: "alex@example.com",
+      onOptOut: vi.fn(),
+      onViewOwnProfile: vi.fn(),
+      onShareProfile: vi.fn(),
+    });
+
+    const optedOutHero = screen.getByLabelText(/your leaderboard profile/i);
+    const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
+    const joinActions = joinButton.closest(".leaderboard-hero__actions");
+
+    expect(joinButton.classList.contains("leaderboard-hero__participation")).toBe(true);
+    expect(joinActions).not.toBeNull();
+
+    rerender(
+      <LeaderboardView
+        isSupabaseEnabled
+        isSignedIn
+        isLoading={false}
+        error={null}
+        isOptedIn
+        activePeriod="weekly"
+        leaderboard={[]}
+        focusSeconds7d={0}
+        windowStartDay="2026-04-01"
+        windowEndDay="2026-04-07"
+        profileDisplayName="Alex"
+        email="alex@example.com"
+        isActionLoading={false}
+        actionError={null}
+        onOptIn={vi.fn()}
+        onOptOut={vi.fn()}
+        onViewOwnProfile={vi.fn()}
+        onShareProfile={vi.fn()}
+      />,
+    );
+
+    const optedInHero = screen.getByLabelText(/your leaderboard profile/i);
+    const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
+    const leaveActions = leaveButton.closest(".leaderboard-hero__actions");
+
+    expect(leaveButton.classList.contains("leaderboard-hero__participation")).toBe(true);
+    expect(leaveActions).not.toBeNull();
+    expect(joinActions?.className).toBe(leaveActions?.className);
+  });
+
   it("falls back to the email prefix in the opted-out preview when no profile name is provided", () => {
     renderView({
       isOptedIn: false,

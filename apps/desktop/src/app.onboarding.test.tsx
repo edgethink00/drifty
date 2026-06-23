@@ -68,6 +68,7 @@ const {
   },
   appFeatureSwitches: {
     devOnboardingBypassEnabled: false,
+    replayOnboardingDevToolEnabled: true,
   },
   startupSettingsClient: {
     isAvailable: vi.fn(),
@@ -160,6 +161,9 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
   IS_PRODUCTION_BUILD: false,
   RELEASE_CHANNEL: "dev",
+  get REPLAY_ONBOARDING_DEV_TOOL_ENABLED() {
+    return appFeatureSwitches.replayOnboardingDevToolEnabled;
+  },
   WATCHER_PEEK_PROTOTYPE_ENABLED: true,
   isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
 }));
@@ -369,6 +373,7 @@ describe("App onboarding", () => {
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null, data: null });
     optOutLeaderboard.mockResolvedValue({ success: true, error: null });
     appFeatureSwitches.devOnboardingBypassEnabled = false;
+    appFeatureSwitches.replayOnboardingDevToolEnabled = true;
   });
 
   it("opens onboarding on the welcome step for an authenticated user without local completion", async () => {
@@ -743,6 +748,29 @@ describe("App onboarding", () => {
     });
   });
 
+  it("completes onboarding when login startup cannot be enabled", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    startupSettingsClient.isAvailable.mockReturnValue(true);
+    startupSettingsClient.setOpenAtLoginEnabled.mockRejectedValue(new Error("Autostart denied"));
+
+    try {
+      render(<App />);
+
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+      });
+
+      expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
+      expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeTruthy();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("stores onboarding completion under the v2 drifty key and ignores the legacy keys", async () => {
     render(<App />);
 
@@ -1036,6 +1064,76 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
+  });
+
+  it("keeps completed onboarding hidden until Dev Settings replays it without clearing completion", async () => {
+    const onboardingStorageKey = getUserOnboardingStorageKey("user-1");
+    const completedOnboardingRecord = JSON.stringify({
+      version: 2,
+      completed: true,
+      displayName: "Alex",
+      workType: "Design",
+      workTypeOther: "",
+      workDomain: "Tech",
+      workDomainOther: "",
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: null,
+      completedAt: "2026-05-08T00:00:00.000Z",
+    });
+    window.localStorage.setItem(onboardingStorageKey, completedOnboardingRecord);
+    window.localStorage.setItem("drifty.dev.mode", "1");
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
+    expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
+
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    fireEvent.click(within(settingsNav).getByRole("button", { name: /^Dev$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Open onboarding$/i }));
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
+  });
+
+  it("hides replay onboarding controls from Dev Settings when the replay dev tool is disabled", async () => {
+    appFeatureSwitches.replayOnboardingDevToolEnabled = false;
+    window.localStorage.setItem(
+      getUserOnboardingStorageKey("user-1"),
+      JSON.stringify({
+        version: 2,
+        completed: true,
+        displayName: "Alex",
+        workType: "Design",
+        workTypeOther: "",
+        workDomain: "Tech",
+        workDomainOther: "",
+        focusGoalHours: null,
+        driftThresholdMinutes: null,
+        purpose: null,
+        completedAt: "2026-05-08T00:00:00.000Z",
+      }),
+    );
+    window.localStorage.setItem("drifty.dev.mode", "1");
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
+    expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
+
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    fireEvent.click(within(settingsNav).getByRole("button", { name: /^Dev$/i }));
+
+    expect(screen.queryByText(/^Replay onboarding$/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Open onboarding$/i })).toBeNull();
   });
 
   it("does not show local onboarding when local completion state already exists", async () => {
