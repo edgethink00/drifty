@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { PrivacySettingsSection } from "./PrivacySettingsSection";
+
+const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
+const REMOVED_PRIVACY_HELPER_COPY = [
+  `Helps distinguish work from ${"drift."}`,
+  `Needed for a useful category ${"result."}`,
+  `Useful for personalized work ${"categories."}`,
+] as const;
 
 const { testCloudAiConnectionMock } = vi.hoisted(() => ({
   testCloudAiConnectionMock: vi.fn(),
@@ -18,6 +26,7 @@ describe("AiSetupPanel", () => {
     resetManagedStatusMock();
     revealItemInDirMock.mockClear();
     testCloudAiConnectionMock.mockClear();
+    window.localStorage.clear();
     testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
   });
 
@@ -232,27 +241,73 @@ describe("AiSetupPanel", () => {
     expect(onLocalAiConnectionTestResult).not.toHaveBeenCalled();
   });
 
-  it("shows the same privacy review inside AI setup", () => {
+  it("persists shared AI privacy request controls across AI setup and privacy settings", () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
     expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
-    const sharedFields = screen.getByRole("list", { name: /Fields shared with AI classification/i });
-    expect(within(sharedFields).getByText(/App name and basic app context/i)).toBeTruthy();
-    expect(within(sharedFields).getByText(/Activity duration/i)).toBeTruthy();
-    expect(within(sharedFields).getByRole("switch", { name: /Browser or site domain/i })).toBeTruthy();
-    expect(within(sharedFields).getByRole("switch", { name: /Page title or window title/i })).toBeTruthy();
-    const optionalSwitches = within(sharedFields).getAllByRole("switch");
+    const requiredFields = screen.getByRole("list", { name: /Required AI classification fields/i });
+    const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
+    expect(within(requiredFields).getByText(/App name and basic app context/i)).toBeTruthy();
+    expect(within(requiredFields).getByText(/Activity duration/i)).toBeTruthy();
+    expect(within(requiredFields).getByText(/Browser or site domain/i)).toBeTruthy();
+    expect(within(requiredFields).queryByRole("switch", { name: /Browser or site domain/i })).toBeNull();
+    expect(within(requiredFields).getAllByText(/Required/i)).toHaveLength(3);
+    expect(within(optionalFields).getByRole("switch", { name: /Site URL/i })).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /Page title or window title/i })).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /Your saved work profile/i })).toBeTruthy();
+    const optionalSwitches = within(optionalFields).getAllByRole("switch");
     expect(optionalSwitches).toHaveLength(3);
     for (const optionalSwitch of optionalSwitches) {
       if (!(optionalSwitch instanceof HTMLInputElement)) throw new Error("Optional privacy controls should render as switches.");
       expect(optionalSwitch.checked).toBe(true);
     }
+    for (const helperCopy of REMOVED_PRIVACY_HELPER_COPY) {
+      expect(screen.queryByText(helperCopy)).toBeNull();
+    }
+
+    const siteUrlSwitch = within(optionalFields).getByRole("switch", { name: /Site URL/i });
+    fireEvent.click(siteUrlSwitch);
+    expect(JSON.parse(window.localStorage.getItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY) ?? "{}")).toMatchObject({
+      version: 1,
+      optional: {
+        siteUrl: false,
+        title: true,
+        workProfile: true,
+      },
+    });
+
+    render(<PrivacySettingsSection />);
+    const optionalFieldLists = screen.getAllByRole("list", { name: /Optional AI classification fields/i });
+    const privacyOptionalFields = optionalFieldLists[optionalFieldLists.length - 1];
+    if (!privacyOptionalFields) throw new Error("Privacy settings should render optional AI classification fields.");
+    const sharedSiteUrlSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Site URL/i });
+    const sharedTitleSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Page title or window title/i });
+    if (!(sharedSiteUrlSwitch instanceof HTMLInputElement) || !(sharedTitleSwitch instanceof HTMLInputElement)) {
+      throw new Error("Shared privacy controls should render as checkbox switches.");
+    }
+    expect(sharedSiteUrlSwitch.checked).toBe(false);
+    expect(sharedTitleSwitch.checked).toBe(true);
+
     expect(screen.queryByRole("button", { name: /Save selection/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Reset optional/i })).toBeNull();
-    expect(within(screen.getByRole("list", { name: /Fields kept on device/i })).getByText(/Raw timeline rows/i)).toBeTruthy();
+    expect(screen.getAllByText(/Raw timeline rows/i)).toHaveLength(2);
+  });
+
+  it("falls back to enabled optional AI privacy controls when persisted settings are malformed", () => {
+    window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, "{broken json");
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
+
+    const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
+    for (const optionalSwitch of within(optionalFields).getAllByRole("switch")) {
+      if (!(optionalSwitch instanceof HTMLInputElement)) throw new Error("Optional privacy controls should render as switches.");
+      expect(optionalSwitch.checked).toBe(true);
+    }
   });
 });
 

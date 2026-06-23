@@ -18,6 +18,7 @@ import {
 } from "./managedLocalAiChat";
 import { toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
+import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -26,7 +27,7 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v2-work-profile";
+const AI_CLASSIFICATION_PROMPT_VERSION = "v3-privacy-controls";
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
 const KNOWN_BROWSER_APP_NAMES = new Set(["arc", "brave browser", "chromium", "firefox", "google chrome", "google chrome canary", "microsoft edge", "safari"]);
@@ -206,8 +207,9 @@ export function diffAiClassificationUsageSummary(
 export async function runAiClassification(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = Math.min(query.limit ?? batchSize, EDGE_MAX_BATCH_SIZE);
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
-  const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
-  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile)));
+  const privacySettings = readAiPrivacyRequestSettings();
+  const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile, privacySettings)));
 
   if (payload.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
@@ -307,8 +309,9 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
 export async function runAiClassificationForUnknownThreshold(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = EDGE_MAX_BATCH_SIZE;
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
-  const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
-  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile)));
+  const privacySettings = readAiPrivacyRequestSettings();
+  const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile, privacySettings)));
   const deterministicRecords = toDeterministicClassificationRecords(segments, payload);
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
   const deterministicSaveResult = deterministicRecords.length > 0
@@ -414,8 +417,9 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
 
 export async function classifyLiveActivityWithAi(segment: ActivitySegment, options: AiClassificationRunOptions = {}): Promise<LiveAiClassificationResult> {
   try {
-    const workProfile = await readClassificationWorkProfile(Boolean(options.localProvider));
-    const payload = await toMinimizedPayload(segment, workProfile);
+    const privacySettings = readAiPrivacyRequestSettings();
+    const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
+    const payload = await toMinimizedPayload(segment, workProfile, privacySettings);
     const systemRecord = toSystemSkippedClassificationRecord(segment, payload, new Date().toISOString());
     if (systemRecord) {
       await saveLiveClassificationIfRequested(systemRecord, options.persistLiveResult);
@@ -560,29 +564,41 @@ export async function getAiClassificationUsageSummary(day: string): Promise<AiCl
   };
 }
 
-async function toMinimizedPayload(segment: ActivitySegment, workProfile: string | null): Promise<MinimizedActivityPayload> {
-  const input = {
+async function toMinimizedPayload(segment: ActivitySegment, workProfile: string | null, privacySettings: AiPrivacyRequestSettings): Promise<MinimizedActivityPayload> {
+  const siteUrl = privacySettings.optional.siteUrl ? sanitizeProviderSiteUrl(segment.siteUrl) : null;
+  const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
+  const titleEnabled = privacySettings.optional.title;
+  const windowTitle = titleEnabled ? cleanText(segment.windowTitle) : null;
+  const title = titleEnabled ? cleanText(segment.siteTitle) ?? cleanText(segment.youtubeTitle) : null;
+  const providerInput = {
     fingerprintVersion: AI_CLASSIFICATION_PROMPT_VERSION,
-    workProfile,
     appName: cleanText(segment.appName) ?? "Unknown",
-    bundleId: cleanText(segment.bundleId),
-    browserName: cleanText(segment.browserName),
-    siteDomain: cleanText(segment.siteDomain),
-    siteTitle: cleanText(segment.siteTitle),
-    windowTitle: cleanText(segment.windowTitle),
-    youtubeTitle: cleanText(segment.youtubeTitle),
-    youtubeChannelName: cleanText(segment.youtubeChannelName),
-    youtubeCategory: cleanText(segment.youtubeCategory),
-    youtubeIsShorts: segment.youtubeIsShorts ?? null,
+    domain: siteDomain,
+    urlHost: siteDomain,
+    ...(siteUrl ? { siteUrl } : {}),
+    ...(windowTitle ? { windowTitle } : {}),
+    ...(title ? { title } : {}),
+    durationSeconds: segment.durationSeconds,
+    ...(workProfile ? { workProfile } : {}),
   };
 
   return {
     segmentId: segment.id,
-    inputFingerprint: await fingerprint(JSON.stringify(input)),
+    inputFingerprint: await fingerprint(JSON.stringify(providerInput)),
     startedAt: segment.startedAt,
     endedAt: segment.endedAt,
     durationSeconds: segment.durationSeconds,
-    ...input,
+    appName: providerInput.appName,
+    bundleId: cleanText(segment.bundleId),
+    browserName: cleanText(segment.browserName),
+    siteDomain,
+    siteUrl,
+    siteTitle: titleEnabled ? cleanText(segment.siteTitle) : null,
+    windowTitle,
+    youtubeTitle: titleEnabled ? cleanText(segment.youtubeTitle) : null,
+    youtubeChannelName: null,
+    youtubeCategory: null,
+    youtubeIsShorts: null,
   };
 }
 
@@ -592,20 +608,53 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
   appName: string;
   domain: string | null;
   urlHost: string | null;
-  windowTitle: string | null;
-  title: string | null;
+  siteUrl?: string;
+  windowTitle?: string;
+  title?: string;
   durationSeconds: number;
 }> {
-  return payload.map((item) => ({
-    id: item.segmentId,
-    inputFingerprint: item.inputFingerprint,
-    appName: item.appName,
-    domain: item.siteDomain,
-    urlHost: item.siteDomain,
-    windowTitle: item.windowTitle,
-    title: item.siteTitle ?? item.youtubeTitle,
-    durationSeconds: item.durationSeconds,
-  }));
+  return payload.map((item) => {
+    const title = item.siteTitle ?? item.youtubeTitle;
+    return {
+      id: item.segmentId,
+      inputFingerprint: item.inputFingerprint,
+      appName: item.appName,
+      domain: item.siteDomain,
+      urlHost: item.siteDomain,
+      ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
+      ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
+      ...(title ? { title } : {}),
+      durationSeconds: item.durationSeconds,
+    };
+  });
+}
+
+function sanitizeProviderSiteUrl(value: string | null | undefined): string | null {
+  const parsedUrl = providerUrlFromRaw(value);
+  if (!parsedUrl) return null;
+  parsedUrl.username = "";
+  parsedUrl.password = "";
+  parsedUrl.search = "";
+  parsedUrl.hash = "";
+  return `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`;
+}
+
+function hostnameFromUrl(value: string | null | undefined): string | null {
+  const parsedUrl = providerUrlFromRaw(value);
+  return parsedUrl ? cleanText(parsedUrl.hostname) : null;
+}
+
+function providerUrlFromRaw(value: string | null | undefined): URL | null {
+  if (!value) return null;
+  try {
+    const parsedUrl = new URL(value);
+    if ((parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") || !parsedUrl.hostname) return null;
+    return parsedUrl;
+  } catch (error) {
+    if (error instanceof TypeError) return null;
+    if (error instanceof Error) return null;
+    return null;
+  }
 }
 
 function toDeterministicClassificationRecords(segments: ActivitySegment[], payload: MinimizedActivityPayload[]): ActivityClassificationRecord[] {
@@ -1170,7 +1219,7 @@ async function fingerprint(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `drifty-v2-${hex}`;
+  return `drifty-v3-${hex}`;
 }
 
 function emptyUsageSummary(): AiClassificationUsageSummary {
