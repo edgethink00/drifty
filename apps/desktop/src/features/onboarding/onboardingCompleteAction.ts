@@ -54,8 +54,7 @@ export async function completeOnboardingAction({
     try {
       await startupSettingsClient.setOpenAtLoginEnabled(openAtLoginEnabled);
     } catch (error) {
-      setSetupError(error instanceof Error ? error.message : "Unable to update start at login.");
-      return;
+      console.warn("Unable to update start at login during onboarding.", error);
     }
   }
   try {
