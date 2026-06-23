@@ -9,6 +9,9 @@ import {
 
 type PreReleaseUpdateStatus = "idle" | "checking" | "available" | "none" | "installing" | "installed" | "unavailable" | "error";
 
+const MISSING_PRE_RELEASE_MANIFEST_ERROR = "Could not fetch a valid release JSON from the remote";
+const MISSING_PRE_RELEASE_MANIFEST_MESSAGE = "No pre-release manifest is published yet.";
+
 export function DeveloperPreReleaseUpdateRow() {
   const [status, setStatus] = useState<PreReleaseUpdateStatus>(() => (
     isDeveloperPreReleaseUpdaterAvailable() ? "idle" : "unavailable"
@@ -50,9 +53,16 @@ export function DeveloperPreReleaseUpdateRow() {
       setStatus("none");
       setMessage(`No pre-release update is available. Current version ${nextUpdate.currentVersion}.`);
     } catch (nextError) {
+      const errorMessage = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       setUpdate(null);
+      if (isMissingPreReleaseManifestError(errorMessage)) {
+        setStatus("none");
+        setMessage(MISSING_PRE_RELEASE_MANIFEST_MESSAGE);
+        return;
+      }
+
       setStatus("error");
-      setError(`Pre-release update check failed: ${toErrorMessage(nextError)}`);
+      setError(`Pre-release update check failed: ${errorMessage}`);
     }
   }
 
@@ -74,8 +84,9 @@ export function DeveloperPreReleaseUpdateRow() {
       setStatus("installed");
       setMessage("Pre-release update installed. Relaunching...");
     } catch (nextError) {
+      const errorMessage = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       setStatus("available");
-      setError(`Pre-release update install failed: ${toErrorMessage(nextError)}`);
+      setError(`Pre-release update install failed: ${errorMessage}`);
     }
   }
 
@@ -100,4 +111,8 @@ export function DeveloperPreReleaseUpdateRow() {
       </div>
     </div>
   );
+}
+
+function isMissingPreReleaseManifestError(errorMessage: string): boolean {
+  return errorMessage.includes(MISSING_PRE_RELEASE_MANIFEST_ERROR);
 }
