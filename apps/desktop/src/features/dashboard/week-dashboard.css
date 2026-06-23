@@ -778,6 +778,23 @@
   background: color-mix(in srgb, var(--bg-2) 72%, transparent);
 }
 
+.week-v2-summary__meta .week-v2-summary__refresh {
+  min-width: 5.2rem;
+  border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  text-align: center;
+}
+
+.week-v2-summary__refresh--loading {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 54%, transparent);
+}
+
+.week-v2-summary__refresh--error {
+  color: var(--warn);
+  border-color: var(--danger-line);
+  background: var(--warn-soft);
+}
+
 .week-v2-summary__actions {
   display: flex;
   justify-content: flex-end;
@@ -786,6 +803,39 @@
 
 .week-v2-summary__actions .day-nav {
   justify-content: flex-end;
+}
+
+@media (max-width: 1120px) {
+  .week-v2-summary--compact {
+    grid-template-columns: minmax(8rem, auto) auto minmax(0, 1fr);
+  }
+
+  .week-v2-summary--compact .week-v2-summary__meta {
+    min-width: 0;
+  }
+
+  .week-v2-summary__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 840px) {
+  .week-v2-summary--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .week-v2-summary--compact > * + * {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .week-v2-summary--compact .week-v2-summary__meta,
+  .week-v2-summary__actions,
+  .week-v2-summary__actions .day-nav {
+    justify-content: flex-start;
+  }
 }
 
 .week-v2-summary--integrated {

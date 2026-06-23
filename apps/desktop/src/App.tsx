@@ -191,6 +191,7 @@ import type { ClassificationPanelStyle } from "./features/classification/Classif
 import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardRefreshInputs } from "./features/dashboard/dashboardRefreshPolicy";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
@@ -241,6 +242,13 @@ type CompactHistoryRange = {
 type DashboardPreviousWeekFocusLoad = {
   readonly key: string;
   readonly focusSeconds: number;
+};
+
+type DashboardWeekRefreshStatus = "idle" | "loading" | "error";
+
+type DashboardWeekRefreshState = {
+  readonly key: string | null;
+  readonly status: DashboardWeekRefreshStatus;
 };
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
@@ -294,8 +302,9 @@ function extremeNudgeErrorDiagnostic(error: unknown): string | null {
 
 function scheduleIdleWork(callback: () => void): () => void {
   if (typeof window.requestIdleCallback === "function" && typeof window.cancelIdleCallback === "function") {
+    const cancelIdleCallback = window.cancelIdleCallback;
     const handle = window.requestIdleCallback(callback, { timeout: 1200 });
-    return () => window.cancelIdleCallback(handle);
+    return () => cancelIdleCallback(handle);
   }
 
   const handle = window.setTimeout(callback, 1);
@@ -471,7 +480,9 @@ export default function App() {
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
+  const [historySegmentsLoadedRange, setHistorySegmentsLoadedRange] = useState<DashboardHistoryRange | null>(null);
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
+  const [dashboardWeekRefreshState, setDashboardWeekRefreshState] = useState<DashboardWeekRefreshState>({ key: null, status: "idle" });
   const [hourly, setHourly] = useState<HourBucket[]>([]);
   const [insightHourly, setInsightHourly] = useState<HourBucket[]>([]);
   const [insightTopSites, setInsightTopSites] = useState<SiteDuration[]>([]);
@@ -1438,6 +1449,10 @@ export default function App() {
       trendsRange,
     });
     const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (shouldLoadHistory && activeTab === "trends" && trendsRange === "Week");
+    const dashboardWeekRefreshKey = shouldLoadDashboardWeekHistory ? compactHistoryRangeKey(historyTimelineRange) : null;
+    if (dashboardWeekRefreshKey && !findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange)) {
+      setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "loading" });
+    }
 
     try {
       const archiveTimelineRequest: Promise<BuiltInHeuristicClassificationMaterialization | null> = shouldLoadHistory
@@ -1495,7 +1510,11 @@ export default function App() {
       }
       setSegments(materializedTimeline.segments);
       setSegmentsLoadedDay(day);
-      if (materializedArchiveTimelines !== null) setHistorySegments(materializedArchiveTimelines.segments);
+      if (materializedArchiveTimelines !== null && !shouldLoadDashboardWeekHistory) {
+        setHistorySegments(materializedArchiveTimelines.segments);
+        setHistorySegmentsLoadedRange(historyTimelineRange);
+      }
+      if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "idle" });
       setHourly(buildHourlySummary(materializedTimeline.segments));
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
@@ -1534,7 +1553,9 @@ export default function App() {
       return true;
     } catch (nextError) {
       if (refreshRequestRef.current !== requestId) return false;
-      setError(toErrorMessage(nextError));
+      const message = toErrorMessage(nextError);
+      if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "error" });
+      setError(message);
       return false;
     } finally {
       if (isRequiredCurrentSnapshotRefresh) {
@@ -1579,6 +1600,10 @@ export default function App() {
       trendsRange,
     });
     const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (activeTab === "trends" && trendsRange === "Week");
+    const dashboardWeekRefreshKey = shouldLoadDashboardWeekHistory ? compactHistoryRangeKey(historyTimelineRange) : null;
+    if (dashboardWeekRefreshKey && !findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange)) {
+      setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "loading" });
+    }
     const loadMissingHistoryIcons = (segmentsToInspect: readonly ActivitySegment[]) => {
       void (async () => {
         try {
@@ -1604,6 +1629,7 @@ export default function App() {
         if (historyRefreshRequestRef.current !== requestId) return false;
 
         setHistorySegments(materializedRecentTimeline.segments);
+        setHistorySegmentsLoadedRange(historyRecentTimelineRange);
         scheduleBuiltInHeuristicClassificationPersistence(materializedRecentTimeline.classifications);
         loadMissingHistoryIcons(materializedRecentTimeline.segments);
 
@@ -1622,6 +1648,7 @@ export default function App() {
             if (historyRefreshRequestRef.current !== requestId) return;
 
             setHistorySegments(materializedArchiveTimelines.segments);
+            setHistorySegmentsLoadedRange(historyTimelineRange);
             if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
             if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
             scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
@@ -1649,8 +1676,12 @@ export default function App() {
 
       if (historyRefreshRequestRef.current !== requestId) return false;
 
-      setHistorySegments(materializedArchiveTimelines.segments);
+      if (!shouldLoadDashboardWeekHistory) {
+        setHistorySegments(materializedArchiveTimelines.segments);
+        setHistorySegmentsLoadedRange(historyTimelineRange);
+      }
       updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
+      if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "idle" });
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
       scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
@@ -1658,7 +1689,9 @@ export default function App() {
       return true;
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return false;
-      setError(toErrorMessage(nextError));
+      const message = toErrorMessage(nextError);
+      if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "error" });
+      setError(message);
       return false;
     }
   }
@@ -1680,7 +1713,6 @@ export default function App() {
       const { materialized: materializedArchiveTimelines } = await loadCompactHistoryRange(historyTimelineRange);
       if (dashboardWeekPrefetchRequestRef.current !== requestId) return false;
 
-      setHistorySegments(materializedArchiveTimelines.segments);
       updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
       scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
       return true;
@@ -1817,6 +1849,8 @@ export default function App() {
     compactHistoryCacheRef.current.clear();
     compactHistoryInFlightRef.current.clear();
     setCompactHistoryCacheRevision((revision) => revision + 1);
+    setHistorySegmentsLoadedRange(null);
+    setDashboardWeekRefreshState({ key: null, status: "idle" });
   }, [classificationRules, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
@@ -2963,6 +2997,20 @@ export default function App() {
 
   const dashboardRange = useMemo(() => getDashboardPeriodRange(selectedDay, dashPeriod, startOfDayMinutes, startOfWeek), [dashPeriod, selectedDay, startOfDayMinutes, startOfWeek]);
   const dashboardWeekRange = useMemo(() => getDashboardPeriodRange(selectedDay, "Week", startOfDayMinutes, startOfWeek), [selectedDay, startOfDayMinutes, startOfWeek]);
+  const dashboardWeekHistoryRange = useMemo<DashboardHistoryRange>(() => {
+    return buildActivityRefreshPlan({
+      activeTab: "dashboard",
+      dashPeriod: "Week",
+      day: selectedDay,
+      shouldLoadHistory: true,
+      startOfDayMinutes,
+      startOfWeek,
+      trendsRange,
+    }).historyTimelineRange;
+  }, [selectedDay, startOfDayMinutes, startOfWeek, trendsRange]);
+  const dashboardWeekCompactHistoryLoad = dashPeriod === "Week"
+    ? findFreshCompactHistoryLoad(compactHistoryCacheRef.current, dashboardWeekHistoryRange)
+    : null;
   const dashboardPreviousWeekRange = useMemo(() => {
     const startDay = shiftIsoDate(dashboardWeekRange.startDay, -7);
     const endDay = shiftIsoDate(dashboardWeekRange.startDay, -1);
@@ -2973,11 +3021,34 @@ export default function App() {
     };
   }, [dashboardWeekRange.startDay, startOfDayMinutes]);
   const dashboardPreviousWeekFocusKey = `${dashboardPreviousWeekRange.start}:${dashboardPreviousWeekRange.end}:${showAiClassificationImpact}`;
+  const dashboardWeekCompactSource = useMemo<DashboardSegmentSource | null>(() => (
+    dashboardWeekCompactHistoryLoad
+      ? {
+          range: { start: dashboardWeekCompactHistoryLoad.start, end: dashboardWeekCompactHistoryLoad.end },
+          segments: dashboardWeekCompactHistoryLoad.materialized.segments,
+        }
+      : null
+  ), [dashboardWeekCompactHistoryLoad]);
+  const dashboardHistorySource = useMemo<DashboardSegmentSource>(() => ({
+    range: historySegmentsLoadedRange,
+    segments: historySegments,
+  }), [historySegments, historySegmentsLoadedRange]);
   const dashboardSegments = useMemo(() => {
-    const source = dashPeriod === "Today" ? segments : historySegments;
-    const rangeSegments = filterSegmentsForRange(source, dashboardRange.start, dashboardRange.end);
-    return dashPeriod === "Week" ? mergeActivitySegments(rangeSegments, filterSegmentsForRange(segments, dashboardRange.start, dashboardRange.end)) : rangeSegments;
-  }, [dashPeriod, dashboardRange.end, dashboardRange.start, historySegments, segments]);
+    return selectDashboardSegments({
+      compactHistorySource: dashboardWeekCompactSource,
+      dashPeriod,
+      historySource: dashboardHistorySource,
+      requiredHistoryRange: dashPeriod === "Week" ? dashboardWeekHistoryRange : dashboardRange,
+      selectedDaySegments: segments,
+      visibleRange: dashboardRange,
+    });
+  }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments]);
+  const dashboardWeekRefreshKey = compactHistoryRangeKey(dashboardWeekHistoryRange);
+  const weekRefreshStatus: DashboardWeekRefreshStatus = dashPeriod !== "Week" || dashboardWeekCompactHistoryLoad
+    ? "idle"
+    : dashboardWeekRefreshState.key === dashboardWeekRefreshKey
+      ? dashboardWeekRefreshState.status
+      : "loading";
   const dashboardClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: dashboardSegments, includeAiClassifications: showAiClassificationImpact }),
     [dashboardSegments, showAiClassificationImpact],
@@ -3018,6 +3089,12 @@ export default function App() {
   const historyClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact }),
     [historySegments, showAiClassificationImpact],
+  );
+  const weekDashboardPrewarmSegments = dashboardWeekCompactHistoryLoad?.materialized.segments ?? historySegments;
+  const shouldPrewarmWeekDashboard = dashboardWeekCompactHistoryLoad !== null || historySegments.length > 0;
+  const weekDashboardPrewarmClassificationOptions = useMemo<ClassificationOptions>(
+    () => ({ fallbackCandidates: weekDashboardPrewarmSegments, includeAiClassifications: showAiClassificationImpact }),
+    [showAiClassificationImpact, weekDashboardPrewarmSegments],
   );
   useEffect(() => {
     if (activeTab !== "dashboard" || dashPeriod !== "Week") return undefined;
@@ -3080,16 +3157,16 @@ export default function App() {
     { includeAiClassifications: showAiClassificationImpact, startOfDayMinutes },
   );
   useEffect(() => {
-    if (historySegments.length === 0) return undefined;
+    if (!shouldPrewarmWeekDashboard) return undefined;
 
     let cancelled = false;
     const cancelIdleWork = scheduleIdleWork(() => {
       if (cancelled) return;
       const warmedDays = prewarmClosedWeekDashboardDays({
         cache: weekDashboardDayModelCache,
-        classificationOptions: historyClassificationOptions,
+        classificationOptions: weekDashboardPrewarmClassificationOptions,
         endDay: dashboardWeekRange.endDay,
-        segments: historySegments,
+        segments: weekDashboardPrewarmSegments,
         startDay: dashboardWeekRange.startDay,
         startOfDayMinutes,
         todayDay,
@@ -3104,11 +3181,12 @@ export default function App() {
   }, [
     dashboardWeekRange.endDay,
     dashboardWeekRange.startDay,
-    historyClassificationOptions,
-    historySegments,
+    shouldPrewarmWeekDashboard,
     startOfDayMinutes,
     todayDay,
+    weekDashboardPrewarmClassificationOptions,
     weekDashboardDayModelCache,
+    weekDashboardPrewarmSegments,
   ]);
   const dashboardPeriodLabel = formatDashboardPeriodLabel(dashPeriod, dashboardRange.startDay, dashboardRange.endDay);
   const totalSeconds = useMemo(() => totalDurationSeconds(dashboardSegments), [dashboardSegments]);
@@ -4124,6 +4202,7 @@ export default function App() {
             totalSeconds={totalSeconds}
             weekCalendarEvents={weekCalendarEvents}
             weekFocusDeltaPercent={weekFocusDeltaPercent}
+            weekRefreshStatus={weekRefreshStatus}
             weekRows={weekRows}
             onDashboardAiUnavailableAction={handleDashboardAiUnavailableAction}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
