@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { CLOUD_API_CLIENT_VERSION, CLOUD_API_CONTRACT_VERSION } from "../../lib/cloudContract";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, estimateAiClassificationCostUsd, projectAiClassificationCost, type AiClassificationUsageSummary } from "./aiClassificationService";
 
+const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
+
 const baseUsage: AiClassificationUsageSummary = {
   requests: 1,
   llmRequests: 1,
@@ -301,6 +303,18 @@ describe("runAiClassification cloud contract", () => {
       purpose: null,
       completedAt: "2026-05-20T12:00:00.000Z",
       ...overrides,
+    }));
+  }
+
+  function writeAiPrivacyRequestSettings(optional: {
+    readonly siteUrl: boolean;
+    readonly title: boolean;
+    readonly workProfile: boolean;
+  }) {
+    ensureTestWindow();
+    window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      optional,
     }));
   }
 
@@ -633,6 +647,7 @@ describe("runAiClassification cloud contract", () => {
         "durationSeconds",
         "id",
         "inputFingerprint",
+        "siteUrl",
         "title",
         "urlHost",
         "windowTitle",
@@ -642,6 +657,7 @@ describe("runAiClassification cloud contract", () => {
         appName: "MysteryApp",
         domain: "example.com",
         urlHost: "example.com",
+        siteUrl: "https://example.com/private/raw-url",
         title: "Example private page",
         windowTitle: "Unmapped task 1",
         durationSeconds: 300,
@@ -651,8 +667,170 @@ describe("runAiClassification cloud contract", () => {
       expect(body.items[0]).not.toHaveProperty("bundleId");
       expect(body.items[0]).not.toHaveProperty("browserName");
       expect(JSON.stringify(body)).not.toContain("raw youtube description must stay local");
-      expect(JSON.stringify(body)).not.toContain("private/raw-url");
       expect(JSON.stringify(body)).not.toContain("keywords");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("removes disabled site URL, titles, work profile, and unsent values from cloud requests and cache fingerprints", async () => {
+    const firstSegment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: null,
+      siteTitle: "Private docs",
+      siteUrl: "https://user:pass@example.com/work/plan?token=secret#section",
+      windowTitle: "Private window",
+      youtubeTitle: "Private YouTube title",
+      youtubeChannelName: "Raw channel metadata",
+      youtubeCategory: "Education",
+      youtubeIsShorts: false,
+    });
+    const secondSegment = createUnknownSegment(2, {
+      ...firstSegment,
+      id: "segment-2",
+      siteTitle: "Changed private docs",
+      siteUrl: "https://example.com/work/plan?token=changed#other",
+      windowTitle: "Changed private window",
+      youtubeTitle: "Changed private YouTube title",
+      youtubeChannelName: "Changed channel metadata",
+      youtubeCategory: "People & Blogs",
+      youtubeIsShorts: true,
+    });
+
+    writeAiPrivacyRequestSettings({ siteUrl: false, title: false, workProfile: false });
+    writeOnboardingState("user-1", { workType: "Software Development", workDomain: "AI" });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications } = await importServiceWithSegments([firstSegment, secondSegment], {
+        session: { access_token: "token", user: { id: "user-1" } },
+      });
+      await runAiClassification({ day: "2026-05-22" });
+
+      const reusableFingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(reusableFingerprints).toHaveLength(1);
+      expect(reusableFingerprints[0]).toMatch(/^drifty-v3-/);
+
+      const body = invoke.mock.calls[0]?.[1]?.body as { workProfile?: unknown; items: Array<Record<string, unknown>> };
+      expect(body.workProfile).toBeUndefined();
+      expect(body.items).toHaveLength(2);
+      expect(body.items[0]).toEqual(expect.objectContaining({
+        id: "segment-1",
+        domain: "example.com",
+        urlHost: "example.com",
+        durationSeconds: 300,
+      }));
+      expect(body.items[0]).not.toHaveProperty("siteUrl");
+      expect(body.items[0]).not.toHaveProperty("windowTitle");
+      expect(body.items[0]).not.toHaveProperty("title");
+      expect(JSON.stringify(body)).not.toContain("secret");
+      expect(JSON.stringify(body)).not.toContain("Private docs");
+      expect(JSON.stringify(body)).not.toContain("Private window");
+      expect(JSON.stringify(body)).not.toContain("Software Development in AI");
+      expect(JSON.stringify(body)).not.toContain("Raw channel metadata");
+      expect(JSON.stringify(body)).not.toContain("People & Blogs");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("sends sanitized site URL when enabled and fingerprints path changes but not query or hash", async () => {
+    const matchingQuerySegment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: null,
+      siteUrl: "https://user:pass@example.com/work/plan?token=secret#section",
+      siteTitle: "Ignored title one",
+      windowTitle: "Ignored window one",
+    });
+    const matchingPathSegment = createUnknownSegment(2, {
+      ...matchingQuerySegment,
+      id: "segment-2",
+      siteUrl: "https://example.com/work/plan?token=changed#other",
+      siteTitle: "Ignored title two",
+      windowTitle: "Ignored window two",
+    });
+    const differentPathSegment = createUnknownSegment(3, {
+      ...matchingQuerySegment,
+      id: "segment-3",
+      siteUrl: "https://example.com/work/spec?token=secret#section",
+      siteTitle: "Ignored title three",
+      windowTitle: "Ignored window three",
+    });
+
+    writeAiPrivacyRequestSettings({ siteUrl: true, title: false, workProfile: false });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications } = await importServiceWithSegments([
+        matchingQuerySegment,
+        matchingPathSegment,
+        differentPathSegment,
+      ]);
+      await runAiClassification({ day: "2026-05-22" });
+
+      const reusableFingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(reusableFingerprints).toHaveLength(2);
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items[0]).toEqual(expect.objectContaining({
+        domain: "example.com",
+        urlHost: "example.com",
+        siteUrl: "https://example.com/work/plan",
+      }));
+      expect(body.items[1]).toEqual(expect.objectContaining({
+        siteUrl: "https://example.com/work/plan",
+      }));
+      expect(body.items[2]).toEqual(expect.objectContaining({
+        siteUrl: "https://example.com/work/spec",
+      }));
+      expect(JSON.stringify(body)).not.toContain("user:pass");
+      expect(JSON.stringify(body)).not.toContain("token=");
+      expect(JSON.stringify(body)).not.toContain("#section");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("removes disabled titles and work profile from local prompts and local reusable fingerprints", async () => {
+    const firstSegment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "example.com",
+      siteTitle: "Private page title",
+      siteUrl: "https://example.com/work",
+      windowTitle: "Private window title",
+      youtubeTitle: "Private YouTube title",
+      youtubeChannelName: "Private channel",
+      youtubeCategory: "Education",
+    });
+    const secondSegment = createUnknownSegment(2, {
+      ...firstSegment,
+      id: "segment-2",
+      siteTitle: "Changed private page title",
+      windowTitle: "Changed private window title",
+      youtubeTitle: "Changed private YouTube title",
+      youtubeChannelName: "Changed private channel",
+      youtubeCategory: "Music",
+    });
+
+    writeAiPrivacyRequestSettings({ siteUrl: false, title: false, workProfile: false });
+    writeOnboardingState("local", { workType: "Software Development", workDomain: "AI" });
+
+    try {
+      const { runAiClassification, nativeInvoke, getReusableAiClassifications } = await importServiceWithSegments([firstSegment, secondSegment], { session: null });
+      await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
+      });
+
+      const reusableFingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(reusableFingerprints).toHaveLength(1);
+      const request = nativeInvoke.mock.calls[0]?.[1]?.request as { messages: Array<{ content: string }> };
+      expect(request.messages[0].content).not.toContain("User work profile:");
+      expect(request.messages[0].content).not.toContain("Private page title");
+      expect(request.messages[0].content).not.toContain("Private window title");
+      expect(request.messages[0].content).not.toContain("Private YouTube title");
+      expect(request.messages[0].content).not.toContain("Private channel");
+      expect(request.messages[0].content).not.toContain("Education");
+      expect(request.messages[0].content).not.toContain("https://example.com/work");
     } finally {
       cleanupServiceMocks();
     }
@@ -700,8 +878,8 @@ describe("runAiClassification cloud contract", () => {
       });
       const secondFingerprint = secondImport.getReusableAiClassifications.mock.calls[0]?.[0]?.[0];
 
-      expect(firstFingerprint).toMatch(/^drifty-v2-/);
-      expect(secondFingerprint).toMatch(/^drifty-v2-/);
+      expect(firstFingerprint).toMatch(/^drifty-v3-/);
+      expect(secondFingerprint).toMatch(/^drifty-v3-/);
       expect(firstFingerprint).not.toBe(secondFingerprint);
     } finally {
       cleanupServiceMocks();
@@ -1124,7 +1302,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v2-work-profile" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v3-privacy-controls" })]);
     } finally {
       cleanupServiceMocks();
     }
