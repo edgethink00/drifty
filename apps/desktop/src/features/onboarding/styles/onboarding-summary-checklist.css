@@ -1,0 +1,165 @@
+.onboarding-card .onb-summary__item {
+  display: flex;
+  align-items: center;
+  gap: var(--onb-space-3);
+  font-size: 14px;
+  color: var(--onb-text-muted);
+  min-height: 28px;
+}
+
+.onboarding-card .onb-summary__item--stacked {
+  align-items: flex-start;
+}
+
+.onboarding-card .onb-summary__item--stacked > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.onboarding-card .onb-summary__item small {
+  color: var(--onb-text-soft);
+  font-family: var(--onb-font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-card .onb-summary__check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--onb-surface) 72%, var(--onb-accent-soft));
+  border: 1px solid rgba(var(--onb-accent-rgb), 0.3);
+  position: relative;
+}
+
+.onboarding-card .onb-checklist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-2);
+  margin: var(--onb-content-gap) 0 0;
+  padding: 0;
+}
+
+.onboarding-card .onb-checklist__row {
+  display: flex;
+  align-items: center;
+  gap: var(--onb-space-3);
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--onb-line-strong);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-surface);
+  color: var(--onb-text-muted);
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), color var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-checklist__icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--onb-line-strong);
+  border-radius: 50%;
+  background: var(--onb-surface);
+}
+
+.onboarding-card .onb-checklist__label {
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.onboarding-card .onb-checklist__row--loading {
+  border-color: rgba(var(--onb-accent-rgb), 0.24);
+  background: color-mix(in oklch, var(--onb-surface) 86%, var(--onb-accent-soft));
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-checklist__row--loading .onb-checklist__icon {
+  border-color: rgba(var(--onb-accent-rgb), 0.22);
+  border-top-color: var(--onb-accent);
+  animation: onb-spin 0.72s linear infinite;
+}
+
+.onboarding-card .onb-checklist__row--success {
+  border-color: rgba(var(--onb-accent-rgb), 0.2);
+  background: color-mix(in oklch, var(--onb-surface) 88%, var(--onb-accent-soft));
+  color: var(--onb-accent-strong);
+}
+
+.onboarding-card .onb-checklist__row--success .onb-checklist__icon {
+  border-color: rgba(var(--onb-accent-rgb), 0.28);
+  background: var(--onb-accent-soft);
+}
+
+.onboarding-card .onb-checklist__row--success .onb-checklist__icon::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--onb-accent-strong);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.onboarding-card .onb-checklist__row--error {
+  border-color: color-mix(in oklch, var(--onb-warn) 32%, transparent);
+  background: color-mix(in oklch, var(--onb-warn-soft) 78%, var(--onb-surface));
+  color: var(--onb-warn);
+}
+
+.onboarding-card .onb-checklist__row--error .onb-checklist__icon {
+  border-color: color-mix(in oklch, var(--onb-warn) 42%, transparent);
+  background: var(--onb-warn-soft);
+}
+
+.onboarding-card .onb-checklist__row--error .onb-checklist__icon::before,
+.onboarding-card .onb-checklist__row--error .onb-checklist__icon::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 4px;
+  width: 8px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--onb-warn);
+}
+
+.onboarding-card .onb-checklist__row--error .onb-checklist__icon::before {
+  transform: rotate(45deg);
+}
+
+.onboarding-card .onb-checklist__row--error .onb-checklist__icon::after {
+  transform: rotate(-45deg);
+}
+
+.onboarding-card .onb-checklist__fixes {
+  margin: var(--onb-space-4) 0 0;
+  padding: var(--onb-space-4) var(--onb-space-4) var(--onb-space-4) 34px;
+  border: 1px solid var(--onb-line);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-surface);
+}
+
+.onboarding-card .onb-checklist__fixes li {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--onb-text-muted);
+}
+
+.onboarding-card .onb-summary__check::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--onb-accent-strong);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}

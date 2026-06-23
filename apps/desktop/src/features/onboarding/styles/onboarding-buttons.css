@@ -1,0 +1,144 @@
+/* ── Buttons (scoped) ── */
+.onboarding-card .onb-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--onb-control-height);
+  padding: 0 var(--onb-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--onb-radius-sm);
+  cursor: pointer;
+  font-family: var(--onb-font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), box-shadow var(--onb-transition-fast), color var(--onb-transition-fast);
+  letter-spacing: -0.01em;
+}
+
+.onboarding-card .onb-button--primary {
+  background: var(--onb-primary-bg);
+  color: #fff;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+.onboarding-card .onb-button--primary:hover:not(:disabled) {
+  background: var(--onb-primary-bg-hover);
+  box-shadow: none;
+}
+.onboarding-card .onb-button--primary:active:not(:disabled) {
+  box-shadow: none;
+}
+.onboarding-card .onb-button--primary:disabled {
+  background: color-mix(in oklch, var(--onb-text) 20%, var(--onb-bg-2));
+  color: rgba(255, 255, 255, 0.86);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--primary {
+  color: var(--onb-canvas);
+  border-color: var(--onb-primary-bg);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--primary:hover:not(:disabled) {
+  color: var(--onb-canvas);
+  border-color: var(--onb-primary-bg-hover);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--primary:disabled {
+  background: color-mix(in oklch, var(--onb-surface-strong) 88%, var(--onb-bg-2));
+  color: var(--onb-text-soft);
+  border-color: var(--onb-line);
+}
+
+.onboarding-card .onb-button--ghost {
+  background: var(--onb-surface);
+  border: 1px solid var(--onb-line-strong);
+  color: var(--onb-text-muted);
+}
+.onboarding-card .onb-button--ghost:hover:not(:disabled) {
+  background: var(--onb-bg-2);
+  color: var(--onb-text);
+  border-color: rgba(28, 28, 25, 0.18);
+}
+.onboarding-card .onb-button--ghost:disabled {
+  background: var(--onb-bg-2);
+  color: var(--onb-text-soft);
+  border-color: var(--onb-line);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.onboarding-card .onb-button--google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--onb-space-3);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--onb-text);
+  border: 1px solid rgba(55, 53, 47, 0.18);
+  box-shadow: none;
+  font-weight: 650;
+}
+
+.onboarding-card .onb-button--google:hover:not(:disabled) {
+  background: #fff;
+  color: var(--onb-text);
+  border-color: rgba(55, 53, 47, 0.28);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--google {
+  background: var(--onb-surface);
+  border-color: var(--onb-line-strong);
+  color: var(--onb-text);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-button--google:hover:not(:disabled) {
+  background: var(--onb-surface-strong);
+  border-color: oklch(0.86 0.014 100 / 0.24);
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-button--google:active:not(:disabled) {
+  box-shadow: none;
+}
+
+.onboarding-card .onb-google-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.onboarding-card .onb-google-mark svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.onboarding-card .onb-email-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+.onboarding-card .onb-setup-card__actions .onb-button {
+  min-height: 40px;
+  padding: 0 var(--onb-space-4);
+  font-size: 13px;
+  border-radius: var(--onb-radius-sm);
+}
+
+.onboarding-card .onb-button:focus-visible,
+.onboarding-card .onb-actions__back:focus-visible,
+.onboarding-card .onb-setup-choice__card:focus-visible,
+.onboarding-card .onb-secure-field__toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--onb-accent-rgb), 0.16);
+}

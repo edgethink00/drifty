@@ -1,0 +1,50 @@
+.privacy-review-concepts {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 42%, transparent), transparent 34rem),
+    var(--canvas);
+  color: var(--text);
+  min-height: 100dvh;
+  padding: var(--space-6);
+}
+
+.privacy-review-concepts__shell {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0 auto;
+  max-width: 62rem;
+}
+
+.privacy-review-concepts__header h1 {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.privacy-review-concepts__stage {
+  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  display: grid;
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+@media (max-width: 760px) {
+  .privacy-review-concepts {
+    padding: var(--space-4);
+  }
+}
+
+@media (max-width: 520px) {
+  .privacy-review-concepts {
+    padding: var(--space-3);
+  }
+
+  .privacy-review-concepts__stage {
+    padding: var(--space-3);
+  }
+}

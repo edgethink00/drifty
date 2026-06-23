@@ -1,5 +1,6 @@
 mod accessibility;
 mod ai;
+mod developer_updates;
 mod drift_alarm;
 mod extreme_nudge;
 mod managed_ai;
@@ -10,6 +11,7 @@ mod watcher_extreme_nudge;
 
 pub use accessibility::*;
 pub use ai::*;
+pub use developer_updates::*;
 pub use drift_alarm::*;
 pub use extreme_nudge::*;
 pub use managed_ai::*;

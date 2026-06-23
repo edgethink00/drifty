@@ -1,0 +1,126 @@
+/* ── 24-hour focus goal bar ── */
+.onboarding-card .onb-focus-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-2);
+  margin-top: var(--onb-space-4);
+}
+
+.onboarding-card .onb-focus-bar__track {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-bg-2);
+  border: 1px solid var(--onb-line);
+  overflow: hidden;
+}
+
+.onboarding-card .onb-focus-bar__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--onb-accent);
+  border-radius: var(--onb-radius-sm);
+  transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.onboarding-card .onb-focus-bar__labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+}
+
+.onboarding-card .onb-focus-bar__label {
+  font-family: var(--onb-font-sans);
+  font-size: 11px;
+  color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-summary {
+  font-size: 14px;
+  color: var(--onb-text-muted);
+  line-height: 1.5;
+  margin-top: var(--onb-content-gap);
+  padding: 0;
+}
+
+.onboarding-card .onb-summary strong {
+  color: var(--onb-text);
+  font-weight: 600;
+}
+
+/* ── Radio cards (drift reminders) ── */
+.onboarding-card .onb-radio-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-2);
+  margin-top: var(--onb-content-gap);
+}
+
+.onboarding-card .onb-radio-card {
+  display: flex;
+  align-items: center;
+  gap: var(--onb-space-4);
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--onb-line-strong);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-surface);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), box-shadow var(--onb-transition-fast);
+  text-align: left;
+}
+
+.onboarding-card .onb-radio-card:hover {
+  background: color-mix(in oklch, var(--onb-surface) 78%, var(--onb-bg-2));
+  border-color: rgba(28, 28, 25, 0.2);
+}
+
+.onboarding-card .onb-radio-card--selected {
+  background: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-accent-soft));
+  border-color: var(--onb-accent);
+  box-shadow: inset 3px 0 0 var(--onb-accent);
+}
+
+.onboarding-card .onb-radio-card--selected:hover {
+  background: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-accent-soft));
+}
+
+.onboarding-card .onb-radio-card__radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--onb-line-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color var(--onb-transition-fast), background var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-radio-card--selected .onb-radio-card__radio {
+  border-color: var(--onb-accent);
+}
+
+.onboarding-card .onb-radio-card--selected .onb-radio-card__radio::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--onb-accent);
+}
+
+.onboarding-card .onb-radio-card__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--onb-text-muted);
+  letter-spacing: -0.01em;
+}
+
+.onboarding-card .onb-radio-card--selected .onb-radio-card__label {
+  color: var(--onb-accent-strong);
+  font-weight: 600;
+}

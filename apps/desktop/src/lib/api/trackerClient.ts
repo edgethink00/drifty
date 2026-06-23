@@ -9,6 +9,7 @@ import type {
   ClassificationRule,
   ClassificationRuleApplyResult,
   ClassificationRuleCandidate,
+  ClassificationRuleCandidateQuery,
   ClassificationRuleInput,
   DeveloperDiagnosticsSettings,
   DriftAlarmTrayStatus,
@@ -232,8 +233,8 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke<{ deleted: number }>("tracker_delete_activity_segments", { query: { ids } });
     return result ?? { deleted: 0 };
   },
-  async searchClassificationRuleCandidates(query: string) {
-    const result = await safeInvoke<ClassificationRuleCandidate[]>("tracker_search_classification_rule_candidates", { query: { query } });
+  async searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery) {
+    const result = await safeInvoke<ClassificationRuleCandidate[]>("tracker_search_classification_rule_candidates", { query });
     return result ?? [];
   },
   async applyClassificationRules(query?: ClassificationQuery) {

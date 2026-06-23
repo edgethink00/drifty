@@ -16,21 +16,21 @@ describe("resolveAiConnectionStatus", () => {
     expect(status).toMatchObject({
       tone: "ok",
       label: "Connected",
-      providerLabel: "Cloud AI",
+      providerLabel: "Drifty Cloud",
     });
   });
 
   it("returns running with a green light while classification is active", () => {
     const status = resolveAiConnectionStatus(statusInput({
       localProviderStatus: { kind: "connected" },
-      localProviderLabel: "BYOK AI",
+      localProviderLabel: "DeepSeek V4 Flash BYOK",
       classificationRunning: true,
     }));
 
     expect(status).toMatchObject({
       tone: "ok",
       label: "Running",
-      providerLabel: "BYOK AI",
+      providerLabel: "DeepSeek V4 Flash BYOK",
     });
   });
 
@@ -43,7 +43,7 @@ describe("resolveAiConnectionStatus", () => {
     expect(status).toMatchObject({
       tone: "error",
       label: "Issue",
-      providerLabel: "Cloud AI",
+      providerLabel: "Drifty Cloud",
     });
   });
 
@@ -55,33 +55,33 @@ describe("resolveAiConnectionStatus", () => {
     expect(status).toMatchObject({
       tone: "warning",
       label: "Connection issue",
-      providerLabel: "Cloud AI",
+      providerLabel: "Drifty Cloud",
     });
   });
 
-  it("returns test needed when local provider settings have not been verified", () => {
+  it("returns checking while local provider settings are being verified", () => {
     const status = resolveAiConnectionStatus(statusInput({
-      localProviderStatus: { kind: "test_needed" },
-      localProviderLabel: "Local AI",
+      localProviderStatus: { kind: "checking" },
+      localProviderLabel: "Gemma 4 12B local",
     }));
 
     expect(status).toMatchObject({
       tone: "neutral",
-      label: "Test needed",
-      providerLabel: "Local AI",
+      label: "Checking",
+      providerLabel: "Gemma 4 12B local",
     });
   });
 
   it("returns provider issue when a tested local provider failed for a non-network reason", () => {
     const status = resolveAiConnectionStatus(statusInput({
       localProviderStatus: { kind: "failed", issueKind: "provider" },
-      localProviderLabel: "BYOK AI",
+      localProviderLabel: "OpenAI GPT 4o Mini BYOK",
     }));
 
     expect(status).toMatchObject({
       tone: "error",
       label: "Issue",
-      providerLabel: "BYOK AI",
+      providerLabel: "OpenAI GPT 4o Mini BYOK",
     });
   });
 
@@ -104,7 +104,7 @@ describe("AiConnectionStatusBar", () => {
         status={{
           tone: "error",
           label: "Issue",
-          providerLabel: "BYOK AI",
+          providerLabel: "Gemma 4 12B local",
         }}
         onOpenSettings={onOpenSettings}
       />,
@@ -113,7 +113,7 @@ describe("AiConnectionStatusBar", () => {
     const status = screen.getByRole("button", { name: /ai connection/i });
 
     expect(status.textContent).toContain("Issue");
-    expect(status.textContent).toContain("BYOK AI");
+    expect(status.textContent).toContain("Gemma 4 12B local");
     expect(status.getAttribute("data-tone")).toBe("error");
   });
 
@@ -124,7 +124,7 @@ describe("AiConnectionStatusBar", () => {
         status={{
           tone: "warning",
           label: "Connection issue",
-          providerLabel: "Cloud AI",
+          providerLabel: "Drifty Cloud",
         }}
         onOpenSettings={onOpenSettings}
       />,

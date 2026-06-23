@@ -1,0 +1,277 @@
+/* =========================================================
+   Drifty — design system  ·  light/dark · olive green
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
+
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-serif: "Iowan Old Style", "Georgia", serif;
+  --font-mono: "SF Mono", ui-monospace, "Fira Code", monospace;
+  --font-ui: var(--font-sans);
+  --type-overline-size: 0.5625rem;
+  --type-control-size: 0.6875rem;
+  --type-setting-label-size: 0.8125rem;
+  --type-setting-desc-size: 0.72rem;
+  --type-setting-value-size: 0.72rem;
+  --type-metric-size: 1.125rem;
+  --type-caption-size: 0.65625rem;
+  --type-chip-size: var(--type-caption-size);
+  --type-input-size: var(--type-setting-value-size);
+  --type-mode-label-size: 0.75rem;
+  --type-section-title-size: 1rem;
+  --type-empty-title-size: var(--type-section-title-size);
+  --window-chrome-height: 32px;
+  --window-control-center-y: 17px;
+  --window-nav-offset-x: 100px;
+  --sidebar-expanded-width: 220px;
+  --sidebar-collapsed-width: 54px;
+  --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --sidebar-duration: 380ms;
+  --sidebar-fade-duration: 180ms;
+  --sidebar-fade-delay: 120ms;
+  --content-panel-gap: 10px;
+  --content-panel-radius: 18px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --block-gap: 0.625rem;
+  --block-gap-compact: var(--space-2);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --transition-fast: 140ms ease-out;
+  --transition-base: 220ms ease-out;
+  --z-settings-popover: 70;
+  --z-drift-alarm-browser: 50;
+  font-family: var(--font-sans);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --canvas: #f2f1ed;
+  --bg-2: #e7e5df;
+  --surface: #fafaf8;
+  --surface-strong: #f4f3ef;
+  --line: rgba(28,28,25,.08);
+  --line-strong: rgba(28,28,25,.16);
+  --text: #1c1c19;
+  --text-muted: #383834;
+  --text-soft: #79776f;
+  --window-chrome-icon: #383834;
+  --window-chrome-icon-hover: #1c1c19;
+  --accent: #5f7f31;
+  --accent-mid: #789645;
+  --accent-soft: #e1ead5;
+  --accent-strong: #486924;
+  --on-accent: #ffffff;
+  --warn: #9e4238;
+  --warn-soft: #f0deda;
+  --productivity-focus: #4f751e;
+  --productivity-focus-soft: #e1ead5;
+  --productivity-neutral: #9b968b;
+  --productivity-drift: #a34139;
+  --productivity-drift-soft: #f0deda;
+  --blue: #486078;
+  --blue-soft: #d8e4ec;
+  --gold: #7a6438;
+  --gold-soft: #ece4d2;
+  --purple: #6b4fa8;
+  --purple-soft: #e6e0f4;
+  --gray-seg: #ccc9c0;
+  --flow-tone-focus: var(--productivity-focus);
+  --flow-tone-neutral: var(--productivity-neutral);
+  --flow-tone-drift: var(--productivity-drift);
+  --category-workspace: #5f7f31;
+  --category-learning: #2f7f78;
+  --category-communication: #476f8f;
+  --category-music: #7b5ea7;
+  --category-game: #9a6530;
+  --category-social-media: #b9565b;
+  --category-entertainment: #c05d48;
+  --category-shopping: #a1792f;
+  --category-utility: #66707a;
+  --category-unknown: #4d4b45;
+  --danger-soft: #f0deda;
+  --danger-line: rgba(158,66,56,.3);
+  --shadow: 0 10px 24px rgba(38, 38, 32, 0.05);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0f0f0d;
+  --bg-2: #1a1a17;
+  --surface: #141412;
+  --surface-strong: #1e1e1b;
+  --line: rgba(232,230,223,.08);
+  --line-strong: rgba(232,230,223,.16);
+  --text: #e8e6df;
+  --text-muted: #c8c5bc;
+  --text-soft: #8a8780;
+  --window-chrome-icon: #f1efe7;
+  --window-chrome-icon-hover: #fffaf0;
+  --accent: #9bbf5a;
+  --accent-mid: #abc96d;
+  --accent-soft: #26321d;
+  --accent-strong: #b6d779;
+  --on-accent: #0f0f0d;
+  --warn: #c85a4e;
+  --warn-soft: #2e1a18;
+  --productivity-focus: #b7d96b;
+  --productivity-focus-soft: #29361f;
+  --productivity-neutral: #8f897d;
+  --productivity-drift: #e87568;
+  --productivity-drift-soft: #3a211f;
+  --blue: #6888a8;
+  --blue-soft: #1a2430;
+  --gold: #a88850;
+  --gold-soft: #2a2418;
+  --purple: #8a72c0;
+  --purple-soft: #1e1a2e;
+  --gray-seg: #4a4840;
+  --flow-tone-focus: var(--productivity-focus);
+  --flow-tone-neutral: var(--productivity-neutral);
+  --flow-tone-drift: var(--productivity-drift);
+  --category-workspace: #9bbf5a;
+  --category-learning: #5fb7ad;
+  --category-communication: #7fa2c2;
+  --category-music: #a48bd2;
+  --category-game: #c0864d;
+  --category-social-media: #dc777b;
+  --category-entertainment: #e67b65;
+  --category-shopping: #caa04e;
+  --category-utility: #8a98a4;
+  --category-unknown: #6a665d;
+  --danger-soft: #2e1a18;
+  --danger-line: rgba(200,90,78,.3);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+html[data-surface="watcher"],
+html[data-surface="watcher"] body,
+html[data-surface="watcher"] #root,
+html[data-surface="drift-alarm"],
+html[data-surface="drift-alarm"] body,
+html[data-surface="drift-alarm"] #root {
+  background: transparent;
+}
+
+html[data-surface="watcher"] body,
+html[data-surface="drift-alarm"] body {
+  color: var(--text);
+}
+
+html[data-surface="drift-alarm"] .bootstrap-error {
+  --drift-alarm-debug-edge: var(--space-4);
+  --drift-alarm-debug-width: 22rem;
+  --drift-alarm-debug-max-height: 8.75rem;
+  background: color-mix(in srgb, var(--warn) 82%, black);
+  border: 1px solid color-mix(in srgb, var(--danger-line) 72%, var(--warn));
+  border-radius: var(--radius-sm);
+  bottom: var(--drift-alarm-debug-edge);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), 0 0 0 1px color-mix(in srgb, var(--warn) 40%, black) inset;
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  left: var(--drift-alarm-debug-edge);
+  line-height: 1.4;
+  max-height: min(var(--drift-alarm-debug-max-height), calc(100vh - (var(--drift-alarm-debug-edge) * 2)));
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: var(--block-gap) var(--space-3);
+  position: fixed;
+  right: auto;
+  transform: none;
+  white-space: pre-wrap;
+  width: min(var(--drift-alarm-debug-width), calc(100vw - (var(--drift-alarm-debug-edge) * 2)));
+  z-index: 2147483647;
+}
+
+html[data-surface="drift-alarm"] .bootstrap-error h1 {
+  font-size: var(--type-setting-label-size);
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: var(--space-1);
+}
+
+html[data-surface="drift-alarm"] .bootstrap-error pre {
+  font: inherit;
+  white-space: inherit;
+}
+
+html[data-surface="watcher"] .bootstrap-error {
+  --watcher-debug-edge: var(--space-3);
+  --watcher-debug-width: 20rem;
+  --watcher-debug-max-height: 7.5rem;
+  background: color-mix(in srgb, var(--warn) 82%, black);
+  border: 1px solid color-mix(in srgb, var(--danger-line) 72%, var(--warn));
+  border-radius: var(--radius-sm);
+  bottom: var(--watcher-debug-edge);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), 0 0 0 1px color-mix(in srgb, var(--warn) 40%, black) inset;
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  left: var(--watcher-debug-edge);
+  line-height: 1.4;
+  max-height: min(var(--watcher-debug-max-height), calc(100vh - (var(--watcher-debug-edge) * 2)));
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: var(--block-gap) var(--space-3);
+  position: fixed;
+  right: auto;
+  top: auto;
+  transform: none;
+  white-space: pre-wrap;
+  width: min(var(--watcher-debug-width), calc(100vw - (var(--watcher-debug-edge) * 2)));
+  z-index: 2147483647;
+}
+
+html[data-surface="watcher"] .bootstrap-error h1 {
+  font-size: var(--type-setting-label-size);
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: var(--space-1);
+}
+
+html[data-surface="watcher"] .bootstrap-error pre {
+  font: inherit;
+  white-space: inherit;
+}
+
+button, input, textarea { font: inherit; }
+button {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+button:hover { transform: translateY(-1px); }
+button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+input, textarea { color: inherit; }

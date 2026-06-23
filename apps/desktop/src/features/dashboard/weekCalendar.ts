@@ -68,7 +68,16 @@ export type WeekCalendarNowMarkerStyle = CSSProperties & {
   "--week-calendar-now-line-end": string;
 };
 
-export function buildWeekDayRows(segments: ActivitySegment[], startDay: string, endDay: string, classificationOptions?: ClassificationOptions, startOfDayMinutes = 0): WeekDayRow[] {
+export type WeekSegmentClassification = ReturnType<typeof classifyActivityDetailed>;
+
+export function buildWeekDayRows(
+  segments: ActivitySegment[],
+  startDay: string,
+  endDay: string,
+  classificationOptions?: ClassificationOptions,
+  startOfDayMinutes = 0,
+  classificationBySegmentId?: ReadonlyMap<string, WeekSegmentClassification>,
+): WeekDayRow[] {
   const days = buildIsoDayList(startDay, endDay);
 
   const rows = new Map<string, { totalSeconds: number; focusSeconds: number; categories: Map<ActivityCategory, number> }>();
@@ -77,7 +86,7 @@ export function buildWeekDayRows(segments: ActivitySegment[], startDay: string, 
   }
 
   for (const segment of segments) {
-    const classification = classifyActivityDetailed(segment, classificationOptions);
+    const classification = classificationBySegmentId?.get(segment.id) ?? classifyActivityDetailed(segment, classificationOptions);
     for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
       const row = rows.get(overlap.day);
       if (!row) continue;
@@ -134,7 +143,16 @@ export function splitSegmentIntoDayOverlaps(segment: ActivitySegment, startDay: 
   });
 }
 
-export function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: string, endDay: string, startHour: number, endHour: number, classificationOptions?: ClassificationOptions, startOfDayMinutes = 0): Map<string, WeekCalendarEvent[]> {
+export function buildWeekCalendarEvents(
+  segments: ActivitySegment[],
+  startDay: string,
+  endDay: string,
+  startHour: number,
+  endHour: number,
+  classificationOptions?: ClassificationOptions,
+  startOfDayMinutes = 0,
+  classificationBySegmentId?: ReadonlyMap<string, WeekSegmentClassification>,
+): Map<string, WeekCalendarEvent[]> {
   const days = buildIsoDayList(startDay, endDay);
 
   const eventsByDay = new Map<string, WeekCalendarEvent[]>(days.map((day) => [day, []]));
@@ -319,7 +337,7 @@ export function buildWeekCalendarEvents(segments: ActivitySegment[], startDay: s
   }
 
   for (const segment of segments) {
-    const classification = classifyActivityDetailed(segment, classificationOptions);
+    const classification = classificationBySegmentId?.get(segment.id) ?? classifyActivityDetailed(segment, classificationOptions);
     const identity = weekCalendarSegmentIdentity(segment);
     for (const overlap of splitSegmentIntoDayOverlaps(segment, startDay, endDay, startOfDayMinutes)) {
       const buckets = bucketsByDay.get(overlap.day);

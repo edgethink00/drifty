@@ -1,0 +1,75 @@
+/* ── Setup cards (tracker / accessibility / notifications) ── */
+.onboarding-card .onb-step-desc {
+  font-size: 14px;
+  color: color-mix(in oklch, var(--onb-text-muted) 78%, var(--onb-text-soft));
+  line-height: 1.52;
+  margin: 0;
+  max-width: 48ch;
+  text-wrap: pretty;
+}
+
+.onboarding-card .onb-step-desc + :where(
+  .onb-setup-choice,
+  .onb-account,
+  .onb-job__compact,
+  .onb-data-rows,
+  .onb-server-form,
+  .onb-perms,
+  .onb-summary,
+  .onb-privacy,
+  .onb-instructions,
+  .onb-setup-card__actions,
+  .onb-activity-picker,
+  .onb-job__question,
+  .onb-data-cards,
+  .onb-checklist
+) {
+  margin-top: var(--onb-content-gap);
+}
+
+.onboarding-card .onb-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-2);
+  padding-left: var(--onb-space-4);
+  margin: 0;
+}
+
+.onboarding-card .onb-instructions li {
+  font-size: 13px;
+  color: var(--onb-text-muted);
+  line-height: 1.5;
+}
+
+.onboarding-card .onb-setup-card__note {
+  font-family: var(--onb-font-mono);
+  font-size: 11px;
+  color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-setup-card__actions {
+  display: flex;
+  gap: var(--onb-space-3);
+  flex-wrap: wrap;
+  margin-top: var(--onb-space-4);
+}
+
+.onboarding-card .onb-status-pill {
+  width: max-content;
+  padding: var(--onb-space-1) var(--onb-space-3);
+  border: 1px solid var(--onb-line-strong);
+  border-radius: 999px;
+  color: var(--onb-text-soft);
+  background: color-mix(in oklch, var(--onb-surface) 70%, var(--onb-bg-2));
+  font-family: var(--onb-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.onboarding-card .onb-status-pill--ready {
+  border-color: rgba(var(--onb-accent-rgb), 0.2);
+  color: var(--onb-accent-strong);
+  background: var(--onb-accent-soft);
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-reveal-main-window"
+description = "Enables the app_reveal_main_window command without any pre-configured scope."
+commands.allow = ["app_reveal_main_window"]
+
+[[permission]]
+identifier = "deny-app-reveal-main-window"
+description = "Denies the app_reveal_main_window command without any pre-configured scope."
+commands.deny = ["app_reveal_main_window"]

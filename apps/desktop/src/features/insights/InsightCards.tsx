@@ -633,6 +633,8 @@ export function ProductivityPersonaCard({
 }) {
   const content = PERSONA_CONTENT[report.personaId] ?? PERSONA_CONTENT.balanced_builder;
   const activeDays = report.metrics.activeDays;
+  const rubricVersionLabel = report.rubricVersion.match(/v\d+$/)?.[0] ?? report.rubricVersion;
+  const fixedRubricLabel = `Scored with Drifty fixed rubric ${rubricVersionLabel}`;
   const tagPills = content.tags.split(" · ");
   const radarCenter = { x: 150, y: 116 };
   const radarRadius = 86;
@@ -679,6 +681,7 @@ export function ProductivityPersonaCard({
         <div className="persona-radar-card">
           <div className="persona-radar-card__head">
             <span className="label-mono insight-section__label">Focus profile</span>
+            <span className="chip green productivity-persona-card__badge">{fixedRubricLabel}</span>
             <span className="persona-radar-card__help-wrap">
               <button type="button" className="persona-radar-card__help" aria-label="Focus profile help" aria-describedby="focus-profile-help-tooltip">?</button>
               <span className="persona-radar-card__tooltip" id="focus-profile-help-tooltip" role="tooltip">{FOCUS_PROFILE_HELP}</span>
@@ -711,7 +714,8 @@ export function ProductivityPersonaCard({
               <div className="persona-profile-card__tags" aria-label="Persona traits">
                 {tagPills.map((tag) => <span className="persona-profile-card__tag" key={tag}>{tag}</span>)}
               </div>
-              <span className="chip green productivity-persona-card__badge">Based on {activeDays} active {activeDays === 1 ? "day" : "days"}</span>
+              <span className="chip green productivity-persona-card__badge">{fixedRubricLabel}</span>
+              <span className="chip productivity-persona-card__badge">Analyzing {activeDays} active {activeDays === 1 ? "day" : "days"} in this window</span>
             </div>
           </div>
           <div className="persona-radar-card">

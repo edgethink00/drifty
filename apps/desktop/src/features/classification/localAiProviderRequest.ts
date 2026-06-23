@@ -1,6 +1,10 @@
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
+const OPENROUTER_PRIVACY_PROVIDER = {
+  data_collection: "deny",
+  zdr: true,
+} as const;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 4096;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS = 180_000;
 export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
@@ -73,6 +77,7 @@ export function toLocalProviderRequest(
           baseUrl: OPENROUTER_BASE_URL,
           apiKey,
           ...modelRequestShape,
+          provider: OPENROUTER_PRIVACY_PROVIDER,
           headers: {
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",

@@ -1,0 +1,99 @@
+/* ── Quick start: account ── */
+.onboarding-card .onb-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-3);
+  align-items: center;
+  margin-top: var(--onb-content-gap);
+}
+
+.onboarding-card .onb-account .onb-button--google,
+.onboarding-card .onb-account .onb-button--primary,
+.onboarding-card .onb-account .onb-button--ghost {
+  min-height: var(--onb-control-height);
+  justify-content: center;
+  background: var(--onb-surface);
+  border: 1px solid rgba(23, 23, 21, 0.24);
+  color: var(--onb-text);
+  box-shadow: none;
+  font-weight: 650;
+}
+
+.onboarding-card .onb-account .onb-button--google:hover:not(:disabled),
+.onboarding-card .onb-account .onb-button--primary:hover:not(:disabled),
+.onboarding-card .onb-account .onb-button--ghost:hover:not(:disabled) {
+  background: #fff;
+  border-color: rgba(23, 23, 21, 0.38);
+  color: var(--onb-text);
+  box-shadow: none;
+}
+
+.onboarding-card .onb-account .onb-button--google:active:not(:disabled),
+.onboarding-card .onb-account .onb-button--primary:active:not(:disabled),
+.onboarding-card .onb-account .onb-button--ghost:active:not(:disabled) {
+  background: color-mix(in oklch, var(--onb-surface) 84%, var(--onb-bg-2));
+  border-color: rgba(23, 23, 21, 0.46);
+  color: var(--onb-text);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--google,
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--primary,
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--ghost {
+  background: var(--onb-surface);
+  border-color: var(--onb-line-strong);
+  color: var(--onb-text);
+}
+
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--google:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--primary:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--ghost:hover:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--google:active:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--primary:active:not(:disabled),
+:root[data-theme="dark"] .onboarding-card .onb-account .onb-button--ghost:active:not(:disabled) {
+  background: var(--onb-surface-strong);
+  border-color: oklch(0.86 0.014 100 / 0.26);
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-account__provider {
+  position: relative;
+  width: 100%;
+  gap: 10px;
+  padding-inline: var(--onb-space-4);
+  text-align: center;
+}
+
+.onboarding-card .onb-account__provider .onb-google-mark,
+.onboarding-card .onb-account__provider .onb-email-mark {
+  flex: 0 0 18px;
+}
+
+.onboarding-card .onb-account__provider .onb-email-mark {
+  flex-basis: 20px;
+}
+
+.onboarding-card .onb-account__helper {
+  margin: var(--onb-space-3) 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-account__legal {
+  margin: var(--onb-space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-account__legal a {
+  color: var(--onb-text);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.onboarding-card .onb-account__legal a:hover {
+  color: var(--onb-accent);
+}

@@ -1,3 +1,4 @@
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ from app.tracker.macos_workspace import (
     _browser_metadata,
     _browser_script,
     _browser_automation_status_from_error,
+    _frontmost_via_lsappinfo,
     _youtube_ids,
     current_snapshot,
 )
@@ -198,6 +200,33 @@ class MacosWorkspaceTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertEqual(_youtube_ids(url), expected)
 
+    def test_frontmost_lsappinfo_parses_real_quoted_header_name(self) -> None:
+        info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'
+        with patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]):
+            app_name, bundle_id, fallback_error = _frontmost_via_lsappinfo()
+
+        self.assertEqual(app_name, 'Google Chrome')
+        self.assertEqual(bundle_id, 'com.google.Chrome')
+        self.assertIsNone(fallback_error)
+
+    def test_frontmost_lsappinfo_still_parses_name_field(self) -> None:
+        info = '"name"="Notes"\n"bundleID"="com.apple.Notes"\n'
+        with patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x2345:', info]):
+            app_name, bundle_id, fallback_error = _frontmost_via_lsappinfo()
+
+        self.assertEqual(app_name, 'Notes')
+        self.assertEqual(bundle_id, 'com.apple.Notes')
+        self.assertIsNone(fallback_error)
+
+    def test_frontmost_lsappinfo_keeps_error_when_name_is_missing(self) -> None:
+        info = 'bundleID="com.google.Chrome"\n'
+        with patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]):
+            app_name, bundle_id, fallback_error = _frontmost_via_lsappinfo()
+
+        self.assertIsNone(app_name)
+        self.assertEqual(bundle_id, 'com.google.Chrome')
+        self.assertEqual(fallback_error, 'lsappinfo info returned no parseable app name.')
+
     def test_current_snapshot_preserves_app_tracking_without_window_title(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
              patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=[]), \
@@ -301,7 +330,7 @@ class MacosWorkspaceTests(unittest.TestCase):
 
     def test_current_snapshot_falls_back_to_lsappinfo_when_system_events_lookup_fails(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events lookup failed')) as mock_run, \
-             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes')) as mock_lsappinfo, \
+             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes', None)) as mock_lsappinfo, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
              patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
             snapshot = current_snapshot()
@@ -310,8 +339,64 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.bundle_id, 'com.apple.Notes')
         self.assertIsNone(snapshot.window_title)
         self.assertEqual(snapshot.source, 'nsworkspace')
+        self.assertEqual(snapshot.frontmost_capture_source, 'lsappinfo')
+        self.assertEqual(snapshot.frontmost_capture_error, 'System Events lookup failed')
+        self.assertIsNone(snapshot.frontmost_fallback_error)
         mock_run.assert_called_once()
         mock_lsappinfo.assert_called_once()
+
+    def test_current_snapshot_recovers_app_name_from_real_lsappinfo_shape(self) -> None:
+        info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'
+        with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events denied')) as mock_run, \
+             patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]), \
+             patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.app_name, 'Google Chrome')
+        self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
+        self.assertEqual(snapshot.frontmost_capture_source, 'lsappinfo')
+        self.assertEqual(snapshot.frontmost_capture_error, 'System Events denied')
+        self.assertIsNone(snapshot.frontmost_fallback_error)
+        mock_run.assert_called_once()
+        mock_browser_metadata.assert_called_once_with('Google Chrome')
+
+    def test_current_snapshot_can_force_frontmost_lsappinfo_fallback_for_developer_diagnostics(self) -> None:
+        info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'
+        with patch.dict(os.environ, {'DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE': '1'}), \
+             patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]), \
+             patch('app.tracker.macos_workspace.read_front_window_title', return_value='Chrome window'), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()) as mock_browser_metadata:
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.app_name, 'Google Chrome')
+        self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
+        self.assertEqual(snapshot.window_title, 'Chrome window')
+        self.assertEqual(snapshot.frontmost_capture_source, 'lsappinfo')
+        self.assertEqual(snapshot.frontmost_capture_error, 'System Events frontmost capture skipped by developer diagnostics.')
+        self.assertIsNone(snapshot.frontmost_fallback_error)
+        mock_run.assert_not_called()
+        mock_browser_metadata.assert_called_once_with('Google Chrome')
+
+    def test_current_snapshot_records_frontmost_diagnostics_when_all_app_capture_fails(self) -> None:
+        with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('osascript timed out')), \
+             patch(
+                 'app.tracker.macos_workspace._frontmost_via_lsappinfo',
+                 return_value=(None, None, 'lsappinfo info returned no parseable app name.'),
+             ), \
+             patch('app.tracker.macos_workspace.read_front_window_title') as mock_window_title, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.app_name, 'Unavailable')
+        self.assertIsNone(snapshot.bundle_id)
+        self.assertIsNone(snapshot.window_title)
+        self.assertEqual(snapshot.source, 'nsworkspace')
+        self.assertEqual(snapshot.frontmost_capture_source, 'unavailable')
+        self.assertEqual(snapshot.frontmost_capture_error, 'osascript timed out')
+        self.assertEqual(snapshot.frontmost_fallback_error, 'lsappinfo info returned no parseable app name.')
+        mock_window_title.assert_not_called()
 
     def test_current_snapshot_prefers_ax_title_from_browser_pass(self) -> None:
         metadata = BrowserMetadata(

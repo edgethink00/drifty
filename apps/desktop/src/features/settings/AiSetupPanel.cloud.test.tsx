@@ -38,7 +38,7 @@ describe("AiSetupPanel Cloud setup", () => {
     expect(screen.queryByRole("button", { name: /continue on drifty\.so/i })).toBeNull();
     expect(screen.queryByRole("article", { name: /individual plan/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /set up drifty cloud/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upgrade to individual/i }));
 
     expect(onStartCloudSetup).toHaveBeenCalledWith();
   });
@@ -52,12 +52,13 @@ describe("AiSetupPanel Cloud setup", () => {
     expect(onRefreshCloudStatus).not.toHaveBeenCalled();
   });
 
-  it("refreshes Cloud status from the trialing Cloud row", () => {
-    const { onRefreshCloudStatus } = renderPanel({ billingEntitlementStatus: "trialing" });
+  it("opens checkout from the trialing Cloud row", () => {
+    const { onRefreshCloudStatus, onStartCloudSetup } = renderPanel({ billingEntitlementStatus: "trialing" });
 
-    fireEvent.click(screen.getByRole("button", { name: /refresh drifty cloud/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upgrade to individual/i }));
 
-    expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1);
+    expect(onStartCloudSetup).toHaveBeenCalledWith();
+    expect(onRefreshCloudStatus).not.toHaveBeenCalled();
   });
 
   it("shows active trial copy in the Cloud row", () => {

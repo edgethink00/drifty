@@ -1,4 +1,11 @@
-import { isManagedLocalAiRoute, type LocalAiProvider, type LocalAiSetupState } from "../settings/localAiSetup";
+import {
+  isManagedLocalAiRoute,
+  normalizeOpenRouterPrimaryModel,
+  OPENROUTER_RECOMMENDED_MODELS,
+  type LocalAiProvider,
+  type LocalAiSetupState,
+} from "../settings/localAiSetup";
+import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "../settings/managedLocalAiCatalog";
 
 export type AiConnectionIssueKind = "network" | "provider";
 
@@ -36,8 +43,18 @@ export function aiConnectionIssueKindFromMessage(message: string | null): AiConn
   return NETWORK_ERROR_PATTERNS.some((pattern) => normalizedMessage.includes(pattern)) ? "network" : "provider";
 }
 
-export function localAiProviderLabel(setup: LocalAiSetupState): "BYOK AI" | "Local AI" {
-  return setup.provider === "openrouter_byok" ? "BYOK AI" : "Local AI";
+export function localAiProviderLabel(setup: LocalAiSetupState): string {
+  switch (setup.provider) {
+    case "managed_local":
+      if (!isManagedLocalAiRoute(setup)) return "Drifty Cloud";
+      return managedLocalModelStatusLabel(setup);
+    case "openrouter_byok":
+      return `${openRouterModelStatusLabel(setup)} BYOK`;
+    case "self_hosted":
+      return selfHostedModelStatusLabel(setup);
+    default:
+      return assertNever(setup.provider);
+  }
 }
 
 export function localAiSetupFingerprint(setup: LocalAiSetupState): string | null {
@@ -78,6 +95,22 @@ function hashSecretForFingerprint(value: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
+}
+
+function managedLocalModelStatusLabel(setup: LocalAiSetupState): string {
+  const catalogModel = MANAGED_LOCAL_AI_FALLBACK_CATALOG.find((model) => model.id === setup.managedLocalModelId);
+  const modelLabel = catalogModel?.label ?? setup.managedLocalModel.trim();
+  return modelLabel ? `${modelLabel} local` : "Local AI";
+}
+
+function openRouterModelStatusLabel(setup: LocalAiSetupState): string {
+  const modelId = normalizeOpenRouterPrimaryModel(setup.openRouterModel);
+  return OPENROUTER_RECOMMENDED_MODELS.find((model) => model.id === modelId)?.label ?? modelId;
+}
+
+function selfHostedModelStatusLabel(setup: LocalAiSetupState): string {
+  const model = setup.selfHostedModel.trim();
+  return model ? `${model} local` : "Local AI";
 }
 
 class AiConnectionHealthError extends Error {

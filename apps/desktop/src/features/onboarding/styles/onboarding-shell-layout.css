@@ -1,0 +1,135 @@
+/* ── Centered single-column layout shell ── */
+.onboarding-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, var(--onb-content-width));
+  height: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.onboarding-copy-column {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--onb-content-width);
+  height: auto;
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+@media (max-width: 920px) {
+  .onboarding-screen .onboarding-card {
+    width: min(100%, var(--onb-content-width));
+  }
+
+  .onboarding-screen .onboarding-copy-column {
+    min-height: 0;
+  }
+}
+
+/* ── Title / body ── */
+.onboarding-card .onboarding-middle {
+  display: flex;
+  flex: 0 0 var(--onb-step-frame-baseline);
+  flex-direction: column;
+  justify-content: safe center;
+  width: 100%;
+  height: var(--onb-step-frame-baseline);
+  min-height: var(--onb-step-frame-baseline);
+  max-height: var(--onb-step-frame-baseline);
+  overflow: visible;
+}
+
+.onboarding-card .onboarding-middle--account,
+.onboarding-card .onboarding-middle--connect_server,
+.onboarding-card .onboarding-middle--choose_setup,
+.onboarding-card .onboarding-middle--job,
+.onboarding-card .onboarding-middle--ready,
+.onboarding-card .onboarding-middle--self_data_review,
+.onboarding-card .onboarding-middle--work_profile {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  justify-content: flex-start;
+}
+
+.onboarding-card .onboarding-middle--account .onboarding-body,
+.onboarding-card .onboarding-middle--account .onboarding-viewport,
+.onboarding-card .onboarding-middle--connect_server .onboarding-body,
+.onboarding-card .onboarding-middle--connect_server .onboarding-viewport,
+.onboarding-card .onboarding-middle--choose_setup .onboarding-body,
+.onboarding-card .onboarding-middle--choose_setup .onboarding-viewport,
+.onboarding-card .onboarding-middle--job .onboarding-body,
+.onboarding-card .onboarding-middle--job .onboarding-viewport,
+.onboarding-card .onboarding-middle--ready .onboarding-body,
+.onboarding-card .onboarding-middle--ready .onboarding-viewport,
+.onboarding-card .onboarding-middle--self_data_review .onboarding-body,
+.onboarding-card .onboarding-middle--self_data_review .onboarding-viewport,
+.onboarding-card .onboarding-middle--work_profile .onboarding-body,
+.onboarding-card .onboarding-middle--work_profile .onboarding-viewport {
+  max-height: none;
+  overflow: visible;
+  contain: none;
+}
+
+.onboarding-card .onboarding-title {
+  font-family: var(--onb-font-display);
+  font-size: clamp(24px, 2.7vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  color: var(--onb-text);
+  text-align: left;
+  margin: 0 0 var(--onb-header-gap);
+  outline: none;
+  text-wrap: balance;
+}
+
+.onboarding-card .onboarding-subtitle {
+  margin: 0 0 var(--onb-content-gap);
+}
+
+.onboarding-card .onboarding-body--choose_setup {
+  margin-top: 10px;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: base body styles sit after step modifiers in the imported onboarding prototype cascade. */
+.onboarding-card .onboarding-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: var(--onb-step-content-baseline);
+  contain: layout;
+}
+
+.onboarding-card .onboarding-body--choose_setup .onboarding-viewport {
+  overflow: visible;
+}
+
+.onboarding-card .onboarding-body--nudges {
+  contain: none;
+  overflow: visible;
+}
+
+.onboarding-card .onboarding-body--nudges .onboarding-viewport {
+  overflow: visible;
+}
+
+.onboarding-card .onboarding-body--ready .onboarding-viewport {
+  max-height: none;
+  overflow-y: visible;
+}

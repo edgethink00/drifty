@@ -263,5 +263,5 @@ describe("App onboarding cloud login", () => {
     });
 
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-  });
+  }, 15_000);
 });

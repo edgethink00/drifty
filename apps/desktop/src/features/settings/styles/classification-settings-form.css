@@ -1,0 +1,140 @@
+.settings-section--classification {
+  --classification-rule-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  --classification-rule-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
+  --classification-rule-control-height: 2.35rem;
+}
+
+.settings-section--classification .classification-rule-form {
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.classification-rule-form__grid {
+  align-items: end;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: minmax(15rem, 1.4fr) minmax(10rem, 0.8fr) minmax(10rem, 0.8fr) minmax(10rem, auto);
+  width: 100%;
+}
+
+.classification-rule-form__grid--app {
+  grid-template-columns: minmax(15rem, 1.35fr) minmax(10rem, 0.8fr) minmax(10rem, 0.8fr) minmax(10rem, auto);
+}
+
+.classification-rule-field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.classification-rule-field span,
+.classification-rule-hint,
+.classification-rule-copy,
+.classification-rule-selected,
+.classification-rule-candidates__heading {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-desc-size);
+}
+
+.classification-rule-field .settings-input,
+.classification-rule-field .settings-select-control__trigger {
+  min-height: var(--classification-rule-control-height);
+  width: 100%;
+}
+
+.classification-rule-picker-field {
+  position: relative;
+}
+
+.classification-rule-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.classification-rule-picker-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.75rem 1fr 1rem;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--classification-rule-control-height);
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--classification-rule-control-border);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--surface-strong) 30%, transparent)),
+    var(--classification-rule-control-bg);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.classification-rule-picker-shell::after {
+  content: "";
+  justify-self: end;
+  width: 0.44rem;
+  height: 0.44rem;
+  border-right: 1.5px solid var(--text-soft);
+  border-bottom: 1.5px solid var(--text-soft);
+  transform: rotate(45deg) translateY(-0.12rem);
+}
+
+.classification-rule-picker-shell:hover {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
+}
+
+.classification-rule-picker-shell:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
+}
+
+.classification-rule-picker-shell__dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, var(--line));
+  border-radius: 999px;
+  background: var(--settings-swatch-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--settings-swatch-color) 14%, transparent);
+}
+
+.classification-rule-picker-shell__label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classification-rule-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.classification-rule-form__grid .settings-btn {
+  min-height: var(--classification-rule-control-height);
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.classification-rule-selected {
+  margin: 0;
+}
+
+.classification-rule-candidates {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.classification-rule-candidates__heading {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

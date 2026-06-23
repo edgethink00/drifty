@@ -41,13 +41,6 @@ const INDIVIDUAL_PLAN_FEATURES = [
   "Local tracking remains local-first",
 ] as const;
 
-const PRO_PLAN_FEATURES = [
-  "Pro model access",
-  "Longer context analysis",
-  "Priority AI experiments",
-  "Advanced weekly review workflows",
-] as const;
-
 function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
   return (
     <ul className="individual-plan-card__feature-list">
@@ -173,25 +166,6 @@ export function IndividualPlanCards({
             {individualContent}
           </article>
         )}
-        <article className="individual-plan-card individual-plan-card--pro individual-plan-card--coming-soon" aria-label="Pro plan">
-          <span className="individual-plan-card__top">
-            <span className="individual-plan-card__topline">
-              <span>Pro</span>
-              <small className="individual-plan-card__badge">Soon</small>
-            </span>
-            <span className="individual-plan-card__note">For heavier AI workflows and deeper review loops.</span>
-            <span className="individual-plan-card__price-row individual-plan-card__price-row--soon">
-              <span className="individual-plan-card__price-stack">
-                <span className="individual-plan-card__price-line">
-                  <strong>Launch pricing</strong>
-                </span>
-                <span className="individual-plan-card__price-cadence">coming soon</span>
-              </span>
-            </span>
-          </span>
-          <PlanFeatureList items={PRO_PLAN_FEATURES} />
-          <span className="individual-plan-card__cta individual-plan-card__cta--muted" aria-disabled="true">Coming soon</span>
-        </article>
       </div>
     </div>
   );

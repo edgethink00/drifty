@@ -10,6 +10,8 @@ pub struct TrayDriftAlarmStatus {
     last_checked_label: String,
     result_label: String,
     detail_label: Option<String>,
+    #[serde(default)]
+    tracker_running: Option<bool>,
 }
 
 impl Default for TrayDriftAlarmStatus {
@@ -21,7 +23,18 @@ impl Default for TrayDriftAlarmStatus {
             last_checked_label: "Off".to_string(),
             result_label: "Alerts disabled".to_string(),
             detail_label: None,
+            tracker_running: None,
         }
+    }
+}
+
+impl TrayDriftAlarmStatus {
+    pub(super) fn tracker_running(&self) -> Option<bool> {
+        self.tracker_running
+    }
+
+    pub(super) fn set_tracker_running(&mut self, running: Option<bool>) {
+        self.tracker_running = running;
     }
 }
 
@@ -75,6 +88,7 @@ mod tests {
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "Suppressed: AI unavailable".to_string(),
             detail_label: Some("youtube.com - 2m".to_string()),
+            tracker_running: None,
         };
 
         assert_eq!(
@@ -92,6 +106,7 @@ mod tests {
             last_checked_label: "Never".to_string(),
             result_label: "No eligible drift".to_string(),
             detail_label: None,
+            tracker_running: None,
         };
         let disabled_status = TrayDriftAlarmStatus {
             enabled: false,
@@ -100,6 +115,7 @@ mod tests {
             last_checked_label: "Off".to_string(),
             result_label: "Alerts disabled".to_string(),
             detail_label: None,
+            tracker_running: None,
         };
 
         assert_eq!(
@@ -130,6 +146,22 @@ mod tests {
     }
 
     #[test]
+    fn tray_status_deserializes_cached_tracker_running_state() {
+        let status: TrayDriftAlarmStatus = serde_json::from_value(serde_json::json!({
+            "enabled": true,
+            "statusLabel": "Drift alerts: Monitoring",
+            "lastCheckedAt": null,
+            "lastCheckedLabel": "Never",
+            "resultLabel": "No eligible drift",
+            "detailLabel": null,
+            "trackerRunning": true,
+        }))
+        .expect("tray status with cached tracker state should deserialize");
+
+        assert_eq!(status.tracker_running(), Some(true));
+    }
+
+    #[test]
     fn drift_detail_label_omits_blank_details() {
         let status = TrayDriftAlarmStatus {
             enabled: true,
@@ -138,6 +170,7 @@ mod tests {
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "No eligible drift".to_string(),
             detail_label: Some(" ".to_string()),
+            tracker_running: None,
         };
 
         assert_eq!(drift_detail_label(&status), None);
@@ -152,6 +185,7 @@ mod tests {
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "Suppressed: AI low confidence".to_string(),
             detail_label: Some("youtube.com - 2m".to_string()),
+            tracker_running: None,
         };
 
         assert_eq!(
