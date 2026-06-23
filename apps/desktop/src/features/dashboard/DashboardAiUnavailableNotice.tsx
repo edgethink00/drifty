@@ -49,13 +49,13 @@ const CONNECT_AI_STATE = {
 } satisfies DashboardAiUnavailableState;
 
 export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailableInput): DashboardAiUnavailableState | null {
+  if (input.localAiReady && !input.observedAiClassificationFailure) return null;
+  if (input.canUseCloudAiClassification) return null;
+  if (input.localAiReady && input.observedAiClassificationFailure) return PROVIDER_DISCONNECTED_STATE;
   if (input.billingEntitlement?.status === "locked") {
     return input.billingEntitlement.lockedReason === "trial_expired" ? TRIAL_ENDED_STATE : CLOUD_BILLING_STATE;
   }
-  if (input.canUseCloudAiClassification) return null;
-  if (input.localAiReady && !input.observedAiClassificationFailure) return null;
   if (input.billingEntitlementLoading && input.isSupabaseConfigured && input.hasRequiredAccountAuth) return null;
-  if (input.localAiReady && input.observedAiClassificationFailure) return PROVIDER_DISCONNECTED_STATE;
   if (input.billingEntitlementError) return CONNECT_AI_STATE;
   if (!input.isSupabaseConfigured || !input.hasRequiredAccountAuth) return CONNECT_AI_STATE;
   return CONNECT_AI_STATE;
@@ -70,17 +70,18 @@ export function DashboardAiUnavailableNotice({
 }) {
   return (
     <section className={`dashboard-ai-notice dashboard-ai-notice--${state.variant}`} aria-label="AI unavailable notice" role="status">
-      <span className="dashboard-ai-notice__signal" aria-hidden="true">
-        <span className="dashboard-ai-notice__signal-dot" />
-      </span>
-      <div className="dashboard-ai-notice__copy">
-        <span className="label-mono">{isCloudBillingVariant(state.variant) ? "Cloud AI paused" : "AI setup needed"}</span>
-        <strong>{state.title}</strong>
-        <p>{state.body}</p>
+      <div className="dashboard-ai-notice__heading">
+        <div className="dashboard-ai-notice__title-row">
+          <span className="dashboard-ai-notice__signal" aria-hidden="true">
+            <span className="dashboard-ai-notice__signal-dot" />
+          </span>
+          <strong>{state.title}</strong>
+        </div>
+        <p className="dashboard-ai-notice__body">{state.body}</p>
+        <button type="button" className="settings-btn settings-btn--primary" onClick={() => onAction(state.variant)}>
+          {state.ctaLabel}
+        </button>
       </div>
-      <button type="button" className="settings-btn settings-btn--primary" onClick={() => onAction(state.variant)}>
-        {state.ctaLabel}
-      </button>
     </section>
   );
 }

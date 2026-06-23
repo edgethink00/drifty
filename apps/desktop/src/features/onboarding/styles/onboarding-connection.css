@@ -1,0 +1,167 @@
+/* ── Self-host: connect server form ── */
+.onboarding-card .onb-connection-method {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--onb-space-2);
+  margin-top: var(--onb-content-gap);
+  padding: var(--onb-space-1);
+  border: 1px solid var(--onb-line-strong);
+  border-radius: var(--onb-radius-sm);
+  background: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-bg-2));
+  box-shadow: none;
+}
+
+.onboarding-card .onb-connection-method__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--onb-space-1);
+  min-width: 0;
+  min-height: 54px;
+  padding: var(--onb-space-2) var(--onb-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--onb-radius-sm);
+  background: transparent;
+  color: var(--onb-text-muted);
+  font-family: var(--onb-font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), color var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-connection-method__option:hover {
+  background: var(--onb-surface);
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-connection-method__option--selected {
+  border-color: var(--onb-accent);
+  background: color-mix(in oklch, var(--onb-surface) 88%, var(--onb-accent-soft));
+  color: var(--onb-text);
+  box-shadow: inset 0 0 0 1px rgba(var(--onb-accent-rgb), 0.08);
+}
+
+.onboarding-card .onb-connection-method__option:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--onb-accent) 72%, white);
+  outline-offset: 2px;
+}
+
+.onboarding-card .onb-connection-method__title {
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-connection-method__desc {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--onb-text-soft);
+}
+
+.onboarding-card .onb-server-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-4);
+  margin-top: var(--onb-content-gap);
+  min-height: calc(var(--onb-control-height) + 22px);
+}
+
+.onboarding-card .onb-connection-method + .onb-server-form {
+  margin-top: var(--onb-space-2);
+}
+
+.onboarding-card .onb-server-form .onb-field {
+  min-height: calc(var(--onb-control-height) + 22px);
+}
+
+.onboarding-card .onb-field__hint {
+  font-size: 12px;
+  color: var(--onb-text-soft);
+  line-height: 1.45;
+}
+
+.onboarding-card .onb-field__hint:empty {
+  display: none;
+}
+
+.onboarding-card .onb-field__hint--error {
+  color: var(--onb-warn);
+  font-weight: 600;
+}
+
+.onboarding-card .onb-secure-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--onb-control-height);
+}
+
+.onboarding-card .onb-field input.onb-secure-field__input {
+  padding-right: calc(var(--onb-space-7) + var(--onb-space-7));
+  font-family: var(--onb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  letter-spacing: 0.02em;
+}
+
+.onboarding-card .onb-secure-field__toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  color: var(--onb-accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  width: 64px;
+  min-height: 34px;
+  padding: 0 var(--onb-space-2);
+  border-radius: var(--onb-radius-sm);
+  cursor: pointer;
+  transition: background var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-secure-field__toggle:hover {
+  background: var(--onb-accent-soft);
+}
+
+@keyframes onb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.onboarding-card .onb-button--loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0.86;
+}
+
+.onboarding-card .onb-button--loading::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in oklab, currentColor 34%, transparent);
+  border-top-color: currentColor;
+  animation: onb-spin 0.72s linear infinite;
+}
+
+.onboarding-card .onb-connection-error {
+  margin: 0;
+  padding: var(--onb-space-3);
+  border: 1px solid rgba(196, 85, 77, 0.2);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-warn-soft);
+  color: var(--onb-warn);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.onboarding-card .onb-server-form + .onb-connection-error {
+  margin-top: var(--onb-space-4);
+}

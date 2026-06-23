@@ -45,6 +45,7 @@ pub struct TopSitesQuery {
 #[serde(rename_all = "camelCase")]
 pub struct DeveloperDiagnosticsQuery {
     pub force_chromium_ax_capture: bool,
+    pub force_frontmost_fallback_capture: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +85,23 @@ pub struct DeleteActivitySegmentsQuery {
 #[serde(rename_all = "camelCase")]
 pub struct ClassificationRuleCandidateQuery {
     pub query: String,
+    pub target_kind: Option<ClassificationRuleTargetKind>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClassificationRuleTargetKind {
+    Site,
+    App,
+}
+
+impl ClassificationRuleTargetKind {
+    const fn as_tracker_payload(&self) -> &'static str {
+        match self {
+            ClassificationRuleTargetKind::Site => "site",
+            ClassificationRuleTargetKind::App => "app",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -214,7 +232,11 @@ pub async fn tracker_set_developer_diagnostics(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .set_developer_diagnostics(&app, query.force_chromium_ax_capture)
+            .set_developer_diagnostics(
+                &app,
+                query.force_chromium_ax_capture,
+                query.force_frontmost_fallback_capture,
+            )
             .map_err(|error| error.to_string())
     })
     .await
@@ -395,7 +417,15 @@ pub async fn tracker_search_classification_rule_candidates(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .search_classification_rule_candidates(&app, query.query)
+            .search_classification_rule_candidates(
+                &app,
+                query.query,
+                query
+                    .target_kind
+                    .as_ref()
+                    .map(ClassificationRuleTargetKind::as_tracker_payload)
+                    .map(str::to_owned),
+            )
             .map_err(|error| error.to_string())
     })
     .await

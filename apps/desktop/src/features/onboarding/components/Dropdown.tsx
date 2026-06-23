@@ -6,6 +6,8 @@ type DropdownProps = {
   value: string | null;
   onChange: (value: string | null) => void;
   placeholder: string;
+  disabled?: boolean;
+  keepOpenForOther?: boolean;
   otherText?: string;
   onOtherTextChange?: (value: string) => void;
   searchable?: boolean;
@@ -25,6 +27,8 @@ export function Dropdown({
   value,
   onChange,
   placeholder,
+  disabled = false,
+  keepOpenForOther = true,
   otherText = "",
   onOtherTextChange,
   searchable = false,
@@ -41,6 +45,10 @@ export function Dropdown({
   useEffect(() => {
     if (!open) setSearch("");
   }, [open]);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,7 +139,7 @@ export function Dropdown({
       setOpen(false);
     } else {
       onChange(option);
-      if (option !== "Other") {
+      if (option !== "Other" || !keepOpenForOther) {
         setOpen(false);
       }
     }
@@ -146,6 +154,7 @@ export function Dropdown({
   }
 
   function openMenu() {
+    if (disabled) return;
     setOpen(true);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -190,9 +199,11 @@ export function Dropdown({
         className={`onb-dropdown__trigger${open ? " onb-dropdown__trigger--open" : ""}`}
         onClick={openMenu}
         role="combobox"
+        aria-disabled={disabled}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={ariaLabel ?? placeholder}
+        data-disabled={disabled ? "true" : undefined}
       >
         <input
           ref={inputRef}
@@ -200,6 +211,7 @@ export function Dropdown({
           type="text"
           placeholder={displayValue || placeholder}
           value={open ? search : ""}
+          disabled={disabled}
           readOnly={!searchable}
           onChange={(event) => {
             setSearch(event.target.value);

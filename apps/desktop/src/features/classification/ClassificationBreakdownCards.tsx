@@ -6,6 +6,7 @@ import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel 
 import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/formatting";
 import type { AppIconMap, CategoryDuration, ClassificationSource } from "@drifty/domain";
 import type { CSSProperties } from "react";
+import "./classificationBreakdownCards.css";
 
 export type CategoryBreakdownCardStyle = CSSProperties & {
   "--category-breakdown-tone": string;

@@ -887,7 +887,7 @@ dependencies = [
 
 [[package]]
 name = "drifty"
-version = "1.0.9"
+version = "1.0.14"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -913,6 +913,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "thiserror 2.0.18",
+ "url",
 ]
 
 [[package]]

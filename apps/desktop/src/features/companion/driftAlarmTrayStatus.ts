@@ -20,12 +20,12 @@ export type DriftAlarmTrayStatusInput = {
   readonly enabled: boolean;
   readonly checkedAt: Date | null;
   readonly result: DriftAlarmTrayResult;
+  readonly trackerRunning?: boolean | null;
 };
 
 export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): DriftAlarmTrayStatus {
   const checkedAt = checkedAtOrNull(input.checkedAt);
-
-  return {
+  const baseStatus = {
     enabled: input.enabled,
     statusLabel: statusLabel(input.enabled, input.result),
     lastCheckedAt: checkedAt?.toISOString() ?? null,
@@ -33,6 +33,10 @@ export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): Dri
     resultLabel: resultLabel(input.result),
     detailLabel: resultDetailLabel(input.result),
   };
+
+  return input.trackerRunning === undefined
+    ? baseStatus
+    : { ...baseStatus, trackerRunning: input.trackerRunning };
 }
 
 export function buildDriftAlarmTrayCandidateDetail(contextLabel: string, durationSeconds: number): string {

@@ -1,0 +1,428 @@
+/* Visual parity pass: mock-visible shell and non-settings surfaces */
+.content > .theme-toggle { display: none; }
+
+.content--classification .clf-stat--with-icon {
+  gap: 6px;
+}
+
+.content--classification .clf-stat__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.content--classification .clf-stat__row strong {
+  flex: 1;
+  min-width: 0;
+}
+
+.persona-radar-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.persona-radar-card__head .insight-section__label {
+  flex: 0 1 auto;
+  margin-bottom: 0;
+}
+
+.persona-radar-card__head .productivity-persona-card__badge {
+  flex: 1 1 11rem;
+  min-width: 0;
+  white-space: normal;
+}
+
+/* Visual parity correction: beta explainer/window is product-only, not part of mock review surface. */
+
+/* Visual parity correction: mock leaderboard has hero -> toolbar -> list only. */
+
+
+/* Corrected Drifty prototype parity: Insights top focus/drift graph */
+
+/* Corrected Drifty prototype parity: Insights chart panel exact inset */
+
+
+/* Corrected Drifty prototype parity: hide non-mock Insights support/copy blocks */
+
+
+/* Corrected Drifty prototype parity: Day flow header has no explanatory copy. */
+.flow-chart-copy {
+  display: none;
+}
+
+/* Corrected Drifty prototype parity: Week calendar header lives inside the scroller. */
+
+/* Corrected Drifty prototype parity: Week calendar event cards are solid category blocks. */
+
+/* Corrected Drifty prototype parity: compact Classification, Insights analysis, and quiet leaderboard ledger. */
+.content--classification .clf-stat {
+  min-width: 0;
+  min-height: 0;
+  padding: 5px 10px;
+  gap: 3px;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.content--classification .clf-stat strong {
+  overflow: hidden;
+  font-size: 1rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--classification .clf-stat__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.content--classification .clf-stat__row strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+
+
+/* Drifty prototype parity: tighter Your Day app usage ranking. */
+
+
+/* Drifty prototype exact stat footer sizing for top app card. */
+
+
+/* Sidebar collapse rail */
+.brand,
+.brand__logo,
+.brand .dot,
+.nav-label,
+.nav-item,
+.nav-item span,
+.live-pill,
+.live-pill .k,
+.live-pill .app-name,
+.live-pill .app-class,
+.sidebar-tracker-toggle,
+.account-trigger,
+.account-trigger__copy,
+.account-trigger__status,
+.account-trigger__chevrons {
+  transition:
+    opacity var(--sidebar-fade-duration) ease-out,
+    transform var(--sidebar-duration) var(--sidebar-ease),
+    width var(--sidebar-duration) var(--sidebar-ease),
+    max-width var(--sidebar-duration) var(--sidebar-ease),
+    max-height var(--sidebar-duration) var(--sidebar-ease),
+    padding var(--sidebar-duration) var(--sidebar-ease),
+    margin var(--sidebar-duration) var(--sidebar-ease),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.sidebar--collapsed {
+  align-items: center;
+  gap: 0.24rem;
+  padding: var(--window-chrome-height) 9px 18px;
+  scrollbar-width: none;
+}
+
+.sidebar--collapsed::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell:not(.app-shell--sidebar-collapsed) .brand .dot,
+.app-shell:not(.app-shell--sidebar-collapsed) .nav-label,
+.app-shell:not(.app-shell--sidebar-collapsed) .nav-item span,
+.app-shell:not(.app-shell--sidebar-collapsed) .live-pill .k,
+.app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-name,
+.app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-class,
+.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__copy,
+.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__status,
+.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevrons {
+  transition-delay: var(--sidebar-fade-delay);
+}
+
+.sidebar--collapsed .brand .dot,
+.sidebar--collapsed .nav-label,
+.sidebar--collapsed .nav-item span,
+.sidebar--collapsed .live-pill .k,
+.sidebar--collapsed .live-pill .app-name,
+.sidebar--collapsed .live-pill .app-class,
+.sidebar--collapsed .account-trigger__copy,
+.sidebar--collapsed .account-trigger__status,
+.sidebar--collapsed .account-trigger__chevrons {
+  transition-delay: 0ms;
+}
+
+.sidebar--collapsed .brand {
+  gap: 0;
+  width: 100%;
+  padding: 10px 0;
+  margin: 0 0 12px;
+}
+
+  .sidebar--collapsed .brand .dot {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-4px);
+  }
+
+  .sidebar--collapsed .brand .dot {
+    margin-left: 0;
+  }
+
+  /* Show the standalone icon while collapsed. */
+  .sidebar--collapsed .brand__logo {
+    width: 28px;
+    height: 28px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .sidebar--collapsed .nav-label {
+    width: 100%;
+    padding: 4px 0;
+    overflow: hidden;
+    color: transparent;
+  }
+
+  .sidebar--collapsed .sidebar-nav {
+    width: 100%;
+    justify-items: center;
+    gap: 0.34rem;
+  }
+
+  .sidebar--collapsed .sidebar-nav--periods {
+    width: 100%;
+    margin-bottom: 10px;
+    padding-bottom: 12px;
+  }
+
+  .sidebar--collapsed .nav-item {
+    gap: 0;
+    justify-content: center;
+    width: 100%;
+    height: 2.25rem;
+    padding: 0;
+    border-radius: 10px;
+  }
+
+  .sidebar--collapsed .nav-item span {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translateX(-6px);
+  }
+
+  .sidebar--collapsed .nav-item svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sidebar--collapsed .sidebar-foot {
+    width: 100%;
+    display: grid;
+    align-items: stretch;
+    justify-items: center;
+    padding-top: 14px;
+    gap: 10px;
+  }
+
+  .sidebar--collapsed .live-pill,
+  .sidebar--collapsed .sidebar-tracker-toggle,
+  .sidebar--collapsed .account-menu-shell,
+  .sidebar--collapsed .account-trigger {
+    width: 2.25rem;
+    max-width: 2.25rem;
+  }
+
+  .sidebar--collapsed .live-pill {
+    max-height: 2.25rem;
+    min-height: 2.25rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    overflow: hidden;
+    margin-inline: auto;
+  }
+
+  .sidebar--collapsed .live-pill .k {
+    width: 100%;
+    gap: 0;
+    justify-content: center;
+    margin: 0;
+    max-width: none;
+    height: 100%;
+    max-height: 2.25rem;
+    opacity: 1;
+    color: transparent;
+    font-size: 0;
+    letter-spacing: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: none;
+  }
+
+  .sidebar--collapsed .live-pill .k::before {
+    width: 8px;
+    height: 8px;
+  }
+
+  .sidebar--collapsed .live-pill .app-name,
+  .sidebar--collapsed .live-pill .app-class {
+    max-width: 0;
+    max-height: 0;
+    margin: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-4px);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle {
+    height: 2.25rem;
+    display: grid;
+    place-items: center;
+    margin: 0 auto;
+    padding: 0;
+    border-color: color-mix(in srgb, var(--accent) 26%, var(--line-strong));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface-strong));
+    color: var(--text);
+    font-size: 0;
+    position: relative;
+    overflow: visible;
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle:disabled {
+    display: grid;
+    cursor: not-allowed;
+    opacity: 0.64;
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle::before {
+    content: "▶";
+    display: block;
+    font-size: 0.74rem;
+    line-height: 1;
+    transform: translateY(-2px);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle::after {
+    content: "";
+    position: absolute;
+    right: auto;
+    bottom: 5px;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: block;
+    transform: translateX(-50%);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle[data-state="resume"]::before {
+    transform: translate(1px, -2px);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle[data-state="pause"]::before {
+    content: "";
+    width: 6.3px;
+    height: 9px;
+    background: linear-gradient(to right, currentColor 0 34%, transparent 34% 66%, currentColor 66% 100%);
+    border-radius: 1px;
+    transform: translateY(-1px);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle[data-state="unavailable"]::before {
+    content: "!";
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle[data-state="unavailable"]::after {
+    background: var(--gray-seg);
+    display: block;
+  }
+
+  .sidebar--collapsed .account-menu-shell {
+    display: grid;
+    justify-items: center;
+  }
+
+  .sidebar--collapsed .account-trigger {
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-inline: auto;
+    padding: 0;
+    border-radius: 10px;
+  }
+
+  .sidebar--collapsed .account-avatar {
+    width: 1.7rem;
+    height: 1.7rem;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    line-height: 1;
+    font-size: 0.78rem;
+  }
+
+  .sidebar--collapsed .account-trigger__copy,
+  .sidebar--collapsed .account-trigger__status,
+  .sidebar--collapsed .account-trigger__chevrons {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-4px);
+  }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .window-nav-controls,
+  .window-sidebar-toggle,
+  .sidebar,
+  .content,
+  .brand,
+  .brand__logo,
+  .brand .dot,
+  .nav-label,
+  .nav-item,
+  .nav-item span,
+  .live-pill,
+  .live-pill .k,
+  .live-pill .app-name,
+  .live-pill .app-class,
+  .sidebar-tracker-toggle,
+  .account-trigger,
+  .account-trigger__copy,
+  .account-trigger__status,
+  .account-trigger__chevrons {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}

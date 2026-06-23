@@ -56,12 +56,12 @@ describe("trackerClient", () => {
 
   it("persists developer diagnostics through the tracker command", async () => {
     const { trackerClient } = await import("./trackerClient");
-    invoke.mockResolvedValueOnce({ forceChromiumAxCapture: true });
+    invoke.mockResolvedValueOnce({ forceChromiumAxCapture: true, forceFrontmostFallbackCapture: true });
 
-    await trackerClient.setDeveloperDiagnostics({ forceChromiumAxCapture: true });
+    await trackerClient.setDeveloperDiagnostics({ forceChromiumAxCapture: true, forceFrontmostFallbackCapture: true });
 
     expect(invoke).toHaveBeenCalledWith("tracker_set_developer_diagnostics", {
-      query: { forceChromiumAxCapture: true },
+      query: { forceChromiumAxCapture: true, forceFrontmostFallbackCapture: true },
     });
   });
 

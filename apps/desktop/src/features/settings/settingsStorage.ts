@@ -16,11 +16,11 @@ export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 
-export const AUTO_UPDATE_CHECKS_STORAGE_KEY = "drifty.updates.autoCheckOnLaunch";
-
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 
 export const FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY = "drifty.dev.forceChromiumAxCapture";
+
+export const FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY = "drifty.dev.forceFrontmostFallbackCapture";
 
 export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
 
@@ -168,11 +168,6 @@ export function resolveInitialAiClassificationVisibility(): boolean {
   return window.localStorage.getItem(AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY) !== "0";
 }
 
-export function resolveInitialAutoUpdateChecksEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(AUTO_UPDATE_CHECKS_STORAGE_KEY) === "1";
-}
-
 export function resolveInitialDevModeEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
@@ -181,6 +176,11 @@ export function resolveInitialDevModeEnabled(): boolean {
 export function resolveInitialForceChromiumAxCaptureEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialForceFrontmostFallbackCaptureEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialForceChromiumAxExtremeNudgeEnabled(): boolean {

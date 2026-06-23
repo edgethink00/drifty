@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FocusEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { BreakDurationPicker } from "./BreakDurationPicker";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
 import { useDelayedDriftAlarmAction } from "./useDelayedDriftAlarmAction";
@@ -33,13 +33,14 @@ export function ExtremeNudgeToast({
   const [phase, setPhase] = useState<ToastPhase>("visible");
   const [selectedBreakMinutes, setSelectedBreakMinutes] = useState<number | null>(null);
   const [isFocusHoldingTimer, setIsFocusHoldingTimer] = useState(false);
-  const [isPointerHoldingTimer, setIsPointerHoldingTimer] = useState(false);
+  const [isHoverHoldingTimer, setIsHoverHoldingTimer] = useState(false);
   const dismissTimerRef = useRef<number | null>(null);
+  const isPointerOriginFocusRef = useRef(false);
   const remainingVisibleMsRef = useRef(EXTREME_NUDGE_TOAST_VISIBLE_MS);
   const visibleTimerRef = useRef<number | null>(null);
   const visibleTimerStartedAtMsRef = useRef<number | null>(null);
   const breakOptions = event.breakOptions ?? [];
-  const isTimerPaused = isFocusHoldingTimer || isPointerHoldingTimer;
+  const isTimerPaused = isFocusHoldingTimer || isHoverHoldingTimer;
   const handleAction = useCallback((action: DriftAlarmAction) => {
     onAction?.(action);
   }, [onAction]);
@@ -75,7 +76,8 @@ export function ExtremeNudgeToast({
     setPhase("visible");
     setSelectedBreakMinutes(null);
     setIsFocusHoldingTimer(false);
-    setIsPointerHoldingTimer(false);
+    setIsHoverHoldingTimer(false);
+    isPointerOriginFocusRef.current = false;
     clearPendingDriftAlarmAction();
     return clearToastTimers;
   }, [clearPendingDriftAlarmAction, clearToastTimers, event.id]);
@@ -103,10 +105,32 @@ export function ExtremeNudgeToast({
     runDriftAlarmAction({ type: "start_break", minutes });
   };
 
+  const pauseHoverTimer = useCallback(() => {
+    setIsHoverHoldingTimer(true);
+  }, []);
+
+  const resumeHoverTimer = useCallback(() => {
+    setIsHoverHoldingTimer(false);
+  }, []);
+
+  const markPointerOriginFocus = useCallback(() => {
+    isPointerOriginFocusRef.current = true;
+  }, []);
+
+  const handleFocus = () => {
+    if (isPointerOriginFocusRef.current) return;
+    setIsFocusHoldingTimer(true);
+  };
+
   const handleBlur = (focusEvent: FocusEvent<HTMLElement>) => {
     const nextTarget = focusEvent.relatedTarget;
     if (nextTarget instanceof Node && focusEvent.currentTarget.contains(nextTarget)) return;
+    isPointerOriginFocusRef.current = false;
     setIsFocusHoldingTimer(false);
+  };
+
+  const handleKeyDownCapture = (keyboardEvent: KeyboardEvent<HTMLElement>) => {
+    if (keyboardEvent.key === "Tab") isPointerOriginFocusRef.current = false;
   };
 
   return (
@@ -118,9 +142,14 @@ export function ExtremeNudgeToast({
       aria-live={isPreview ? undefined : "polite"}
       aria-atomic={isPreview ? undefined : "true"}
       onBlur={handleBlur}
-      onFocus={() => setIsFocusHoldingTimer(true)}
-      onPointerEnter={() => setIsPointerHoldingTimer(true)}
-      onPointerLeave={() => setIsPointerHoldingTimer(false)}
+      onFocus={handleFocus}
+      onKeyDownCapture={handleKeyDownCapture}
+      onMouseDownCapture={markPointerOriginFocus}
+      onMouseEnter={pauseHoverTimer}
+      onMouseLeave={resumeHoverTimer}
+      onPointerDownCapture={markPointerOriginFocus}
+      onPointerEnter={pauseHoverTimer}
+      onPointerLeave={resumeHoverTimer}
     >
       <div className="extreme-nudge-toast__mark" aria-hidden="true">
         <ExtremeNudgeScissorsIcon />

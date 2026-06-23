@@ -1,6 +1,10 @@
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
+const OPENROUTER_PRIVACY_PROVIDER = {
+  data_collection: "deny",
+  zdr: true,
+} as const;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 4096;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS = 180_000;
 export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
@@ -15,6 +19,7 @@ export type MinimizedActivityPayload = {
   readonly bundleId: string | null;
   readonly browserName: string | null;
   readonly siteDomain: string | null;
+  readonly siteUrl: string | null;
   readonly siteTitle: string | null;
   readonly windowTitle: string | null;
   readonly youtubeTitle: string | null;
@@ -73,6 +78,7 @@ export function toLocalProviderRequest(
           baseUrl: OPENROUTER_BASE_URL,
           apiKey,
           ...modelRequestShape,
+          provider: OPENROUTER_PRIVACY_PROVIDER,
           headers: {
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
@@ -142,19 +148,23 @@ function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[],
           "Use the user's work profile as context when deciding whether an activity is work-related.",
         ]
       : []),
-    "Use the observed app, site, window title, page title, and duration as the primary evidence.",
+    "Use the observed app, site, optional URL path, window title, page title, and duration as the primary evidence.",
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
-    JSON.stringify(payload.map((item) => ({
-      id: item.segmentId,
-      appName: item.appName,
-      domain: item.siteDomain,
-      urlHost: item.siteDomain,
-      windowTitle: item.windowTitle,
-      title: item.siteTitle ?? item.youtubeTitle,
-      durationSeconds: item.durationSeconds,
-    }))),
+    JSON.stringify(payload.map((item) => {
+      const title = item.siteTitle ?? item.youtubeTitle;
+      return {
+        id: item.segmentId,
+        appName: item.appName,
+        domain: item.siteDomain,
+        urlHost: item.siteDomain,
+        ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
+        ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
+        ...(title ? { title } : {}),
+        durationSeconds: item.durationSeconds,
+      };
+    })),
   ].join("\n");
 }
 

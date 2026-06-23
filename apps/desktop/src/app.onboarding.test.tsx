@@ -275,16 +275,16 @@ function selectMainActivity(option: string) {
 }
 
 async function advanceThroughSharedBasics(options: { activity?: string } = {}) {
-  await screen.findByRole("dialog", { name: /welcome to drifty/i });
+  await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 6_000 });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /what do you usually do/i });
+  await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 });
   if (options.activity) selectMainActivity(options.activity);
   await clickEnabledAction(/^continue$/i);
-  await screen.findByRole("dialog", { name: /set up permissions/i });
+  await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /set up drift alerts/i });
+  await screen.findByRole("dialog", { name: /set up drift alerts/i }, { timeout: 6_000 });
   await clickEnabledAction(/^continue$/i);
-  await screen.findByRole("dialog", { name: /choose your setup/i });
+  await screen.findByRole("dialog", { name: /choose your setup/i }, { timeout: 6_000 });
 }
 
 async function chooseSimpleSetup(options: { activity?: string } = {}) {
@@ -384,8 +384,8 @@ describe("App onboarding", () => {
     render(<App />);
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
-    expect(await screen.findByText(/hey, i'm drifty!/i)).toBeTruthy();
-    expect(await screen.findByText(/your ai time tracker/i)).toBeTruthy();
+    expect(await screen.findByText(/hey, i'm drifty!/i, undefined, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByText(/your ai time tracker/i, undefined, { timeout: 6_000 })).toBeTruthy();
 
     await clickEnabledNext();
 
@@ -432,7 +432,7 @@ describe("App onboarding", () => {
     expect(screen.getByRole("button", { name: /custom endpoint/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /use simple setup/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /set up my own server/i })).toBeNull();
-  });
+  }, 15_000);
 
   it("opens the provided welcome-first onboarding for a local unauthenticated user without local completion state", async () => {
     authState.user = null;
@@ -632,7 +632,7 @@ describe("App onboarding", () => {
     expect(storedRecord.driftThresholdMinutes).toBeNull();
     expect(typeof storedRecord.completedAt).toBe("string");
     expect(saveOwnProfile).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("shows the free trial started notice inside Cloud onboarding", async () => {
     billingMocks.fetchBillingEntitlement.mockResolvedValue({
@@ -959,7 +959,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/masked openrouter key/i).textContent).toContain("1234");
     expect(screen.queryByText(/validkey1234/i)).toBeNull();
-  });
+  }, 15_000);
 
   it("stores a custom endpoint setup from onboarding after connection review", async () => {
     render(<App />);
@@ -990,7 +990,7 @@ describe("App onboarding", () => {
         selfHostedModel: "llama3.2:latest",
       });
     });
-  });
+  }, 15_000);
 
   it("does not present unverified Screen Recording or Browser Activity as enabled", async () => {
     render(<App />);

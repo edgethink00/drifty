@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment, ClassificationMetrics, ClassificationQuery, CurrentActivitySnapshot } from "@drifty/domain";
 import { logicalDayIsoDateForDate, todayIsoDate } from "@drifty/domain";
@@ -8,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 
-const styles = readFileSync("src/styles.css", "utf8");
+const styles = readAppStyles();
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -185,6 +184,7 @@ vi.mock("./features/profile/profileService", () => ({
 }));
 
 import App from "./App";
+import { readAppStyles } from "./test/readStyles";
 
 const selectedDayMetrics: ClassificationMetrics = {
   totalSegments: 100,
@@ -984,6 +984,53 @@ describe("App AI classification controls", () => {
     expect(trackerClient.getStatus).not.toHaveBeenCalled();
     expect(trackerClient.getTopSites).not.toHaveBeenCalled();
     expect(trackerClient.getClassificationMetrics).not.toHaveBeenCalled();
+  });
+
+  it("continues today drift alarm polling while browsing a previous dashboard day", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    const today = "2026-06-16";
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    mockAutoAiClassificationEmpty();
+    setRendererFocus(true);
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T01:00:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalledWith({ start: `${today}T04:00:00`, end: "2026-06-17T03:59:59" }));
+    await flushInitialDashboardWeekPrefetch();
+
+    fireEvent.click(screen.getByRole("button", { name: /show previous today/i }));
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalledWith({ start: "2026-06-15T04:00:00", end: "2026-06-16T03:59:59" }));
+
+    trackerClient.getTimeline.mockClear();
+    trackerClient.getCurrentSnapshot.mockClear();
+    trackerClient.getStatus.mockClear();
+
+    act(() => {
+      setRendererFocus(false);
+      window.dispatchEvent(new Event("blur"));
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_POLL_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(trackerClient.getCurrentSnapshot).toHaveBeenCalled());
+    expect(trackerClient.getTimeline).toHaveBeenCalledWith(expect.objectContaining({
+      start: "2026-06-16T09:30:15",
+      end: "2026-06-16T10:00:15",
+    }));
+    expect(trackerClient.getTimeline).not.toHaveBeenCalledWith(expect.objectContaining({
+      start: "2026-06-15T04:00:00",
+      end: "2026-06-16T03:59:59",
+    }));
+    expect(trackerClient.getStatus).not.toHaveBeenCalled();
   });
 
   it("uses lightweight live tail instead of full refresh while the renderer is focused", async () => {

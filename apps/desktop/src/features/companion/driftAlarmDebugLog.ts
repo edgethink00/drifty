@@ -83,6 +83,9 @@ export type DriftAlarmDebugSegmentSummary = {
   readonly siteSource: string | null;
   readonly browserAutomationStatus: string | null;
   readonly hasBrowserAutomationError: boolean;
+  readonly frontmostCaptureSource?: string | null;
+  readonly frontmostCaptureError?: string | null;
+  readonly frontmostFallbackError?: string | null;
   readonly classification: DriftAlarmDebugClassificationSummary | null;
 };
 
@@ -99,6 +102,9 @@ export type DriftAlarmDebugSnapshotSummary = {
   readonly browserAutomationStatus: string | null;
   readonly hasBrowserAutomationError: boolean;
   readonly systemTransientActivity: SystemTransientActivity;
+  readonly frontmostCaptureSource?: string | null;
+  readonly frontmostCaptureError?: string | null;
+  readonly frontmostFallbackError?: string | null;
   readonly source: string;
 };
 
@@ -229,6 +235,9 @@ export function summarizeDriftAlarmSegment(segment: ActivitySegment, sourceSegme
     siteSource: normalizeText(segment.siteSource),
     browserAutomationStatus: normalizeText(segment.browserAutomationStatus),
     hasBrowserAutomationError: Boolean(segment.browserAutomationError?.trim()),
+    frontmostCaptureSource: normalizeText(segment.frontmostCaptureSource),
+    frontmostCaptureError: normalizeDiagnosticText(segment.frontmostCaptureError),
+    frontmostFallbackError: normalizeDiagnosticText(segment.frontmostFallbackError),
     classification: segment.classification
       ? {
           category: segment.classification.category,
@@ -259,6 +268,9 @@ export function summarizeDriftAlarmSnapshot(snapshot: CurrentActivitySnapshot | 
     browserAutomationStatus: normalizeText(snapshot.browserAutomationStatus),
     hasBrowserAutomationError: Boolean(snapshot.browserAutomationError?.trim()),
     systemTransientActivity: snapshot.systemTransientActivity ?? null,
+    frontmostCaptureSource: normalizeText(snapshot.frontmostCaptureSource),
+    frontmostCaptureError: normalizeDiagnosticText(snapshot.frontmostCaptureError),
+    frontmostFallbackError: normalizeDiagnosticText(snapshot.frontmostFallbackError),
     source: snapshot.source,
   };
 }
@@ -430,6 +442,10 @@ function isNullableString(value: unknown): value is string | null {
   return typeof value === "string" || value === null;
 }
 
+function isOptionalNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || isNullableString(value);
+}
+
 function isNullableNumber(value: unknown): value is number | null {
   return typeof value === "number" || value === null;
 }
@@ -477,6 +493,9 @@ function isNullableSegmentSummary(value: unknown): value is DriftAlarmDebugSegme
     && isNullableString(value.siteSource)
     && isNullableString(value.browserAutomationStatus)
     && typeof value.hasBrowserAutomationError === "boolean"
+    && isOptionalNullableString(value.frontmostCaptureSource)
+    && isOptionalNullableString(value.frontmostCaptureError)
+    && isOptionalNullableString(value.frontmostFallbackError)
     && isNullableClassificationSummary(value.classification);
 }
 
@@ -507,6 +526,9 @@ function isNullableSnapshotSummary(value: unknown): value is DriftAlarmDebugSnap
     && isNullableString(value.browserAutomationStatus)
     && typeof value.hasBrowserAutomationError === "boolean"
     && (typeof value.systemTransientActivity === "string" || value.systemTransientActivity === null)
+    && isOptionalNullableString(value.frontmostCaptureSource)
+    && isOptionalNullableString(value.frontmostCaptureError)
+    && isOptionalNullableString(value.frontmostFallbackError)
     && typeof value.source === "string";
 }
 

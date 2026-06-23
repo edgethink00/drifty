@@ -25,6 +25,10 @@ import {
   serializeDesktopAuthSession,
   type SaveDesktopSessionOptions,
 } from "./desktopAuthSession";
+import {
+  AUTH_INITIALIZATION_TIMEOUT_MS,
+  type AuthConnectionStatus,
+} from "./authConnectionStatus";
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
@@ -46,6 +50,7 @@ export interface AuthState {
   user: User | null;
   session: Session | null;
   status: AuthStatus;
+  cloudConnectionStatus: AuthConnectionStatus;
   callbackStatus: OAuthCallbackStatus | null;
   isEnabled: boolean;
   authMode: DriftyAuthMode;
@@ -107,16 +112,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
+  const [cloudConnectionStatus, setCloudConnectionStatus] = useState<AuthConnectionStatus>(
+    isSupabaseEnabled() ? "checking" : "disabled",
+  );
   const [callbackStatus, setCallbackStatus] = useState<OAuthCallbackStatus | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const tauriInvokeRef = useRef<TauriInvoke | null>(null);
   const saveSequenceRef = useRef(0);
 
-  function applySessionState(nextSession: Session | null) {
+  function applySessionState(nextSession: Session | null, nextCloudConnectionStatus: AuthConnectionStatus = "online") {
     sessionRef.current = nextSession;
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
     setStatus(nextSession?.user ? "authenticated" : "unauthenticated");
+    setCloudConnectionStatus(nextCloudConnectionStatus);
     recordPostHogAuthState(nextSession?.user ?? null);
   }
 
@@ -170,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseEnabled() || !supabase) {
       setStatus("unauthenticated");
+      setCloudConnectionStatus("disabled");
       return;
     }
 
@@ -178,7 +188,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const appliedSessionCallbacks = new Set<string>();
     let isActive = true;
     let isInitializingAuth = true;
+    let initializationTimeout: number | null = null;
     let preserveNativeSessionAfterRestoreFailure = false;
+
+    setCloudConnectionStatus("checking");
 
     recordAuthDiagnostic("auth.provider.start", {
       authMode: authModePolicy.mode,
@@ -248,17 +261,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const applySession = (nextSession: Session | null) => {
+    const applySession = (nextSession: Session | null, nextCloudConnectionStatus: AuthConnectionStatus = "online") => {
       if (!isActive) {
         return;
       }
 
-      applySessionState(nextSession);
+      applySessionState(nextSession, nextCloudConnectionStatus);
     };
 
-    const clearSession = () => {
-      applySession(null);
+    const clearSession = (nextCloudConnectionStatus: AuthConnectionStatus = "online") => {
+      applySession(null, nextCloudConnectionStatus);
     };
+
+    const clearInitializationTimeout = () => {
+      if (initializationTimeout === null) {
+        return;
+      }
+
+      window.clearTimeout(initializationTimeout);
+      initializationTimeout = null;
+    };
+
+    initializationTimeout = window.setTimeout(() => {
+      if (!isActive || !isInitializingAuth || sessionRef.current) {
+        return;
+      }
+
+      recordAuthDiagnostic("auth.init.timeout", {
+        reason: "initialization-timeout",
+        timeoutMs: AUTH_INITIALIZATION_TIMEOUT_MS,
+      });
+      clearSession("offline");
+    }, AUTH_INITIALIZATION_TIMEOUT_MS);
 
     const setCallbackReceived = () => {
       setCallbackStatus({
@@ -490,11 +524,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         recordAuthDiagnostic("auth.init.error", getAuthDiagnosticError(error));
         console.warn("Unable to initialize auth.", error);
         if (isActive) {
-          clearSession();
+          clearSession("offline");
         }
       })
       .finally(() => {
         isInitializingAuth = false;
+        clearInitializationTimeout();
       });
 
     const { data: { subscription } } = client.auth.onAuthStateChange(
@@ -525,6 +560,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (pendingDeepLinkInterval !== null) {
         window.clearInterval(pendingDeepLinkInterval);
       }
+      clearInitializationTimeout();
       subscription.unsubscribe();
     };
   }, []);
@@ -708,6 +744,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         session,
         status,
+        cloudConnectionStatus,
         callbackStatus,
         isEnabled: isSupabaseEnabled(),
         authMode: authModePolicy.mode,
