@@ -748,6 +748,29 @@ describe("App onboarding", () => {
     });
   });
 
+  it("completes onboarding when login startup cannot be enabled", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    startupSettingsClient.isAvailable.mockReturnValue(true);
+    startupSettingsClient.setOpenAtLoginEnabled.mockRejectedValue(new Error("Autostart denied"));
+
+    try {
+      render(<App />);
+
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+      });
+
+      expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
+      expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeTruthy();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("stores onboarding completion under the v2 drifty key and ignores the legacy keys", async () => {
     render(<App />);
 
