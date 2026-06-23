@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { readAppStyles } from "../test/readStyles";
+import { readCssWithImports } from "../test/readStyles";
 
-const baseStyles = readAppStyles();
+const baseStyles = readCssWithImports("src/styles.css");
 const motionStyles = readFileSync("src/features/chartHoverMotion.css", "utf8");
 
 function cssRule(source: string, selector: string): string {

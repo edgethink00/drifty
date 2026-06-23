@@ -1,0 +1,112 @@
+/*
+ * Ported from docs/prototypes/onboarding/drifty-onboarding.html
+ * All selectors are scoped under `.onboarding-screen` to avoid leaking
+ * prototype tokens (e.g. accent, surface) into the rest of the app.
+ */
+
+.onboarding-screen {
+  /* prototype token overrides — scoped to onboarding only */
+  --onb-font-sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+  --onb-font-display: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif);
+  --onb-font-mono: var(--font-mono, "SF Mono", ui-monospace, 'Fira Code', Menlo, monospace);
+
+  --onb-space-1: 0.25rem;
+  --onb-space-2: 0.5rem;
+  --onb-space-3: 0.75rem;
+  --onb-space-4: 1rem;
+  --onb-space-5: 1.5rem;
+  --onb-space-6: 2rem;
+  --onb-space-7: 3rem;
+
+  --onb-radius-sm: 8px;
+  --onb-radius-md: 10px;
+  --onb-radius-lg: 12px;
+
+  --onb-transition-fast: 160ms ease-out;
+  --onb-transition-base: 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  --onb-control-height: 44px;
+  --onb-header-gap: 0.625rem;
+  --onb-content-gap: 1rem;
+  --onb-field-gap: var(--onb-space-2);
+  --onb-stack-gap: var(--onb-space-4);
+  --onb-action-gap: 20px;
+  --onb-step-content-baseline: 300px;
+  --onb-step-frame-baseline: calc(var(--onb-step-content-baseline) + 44px);
+  --onb-content-width: 464px;
+
+  --onb-canvas: var(--canvas, #f2f1ed);
+  --onb-bg-2: var(--bg-2, #e7e5df);
+  --onb-surface: var(--surface, #fafaf8);
+  --onb-surface-strong: var(--surface-strong, #f4f3ef);
+  --onb-line: var(--line, rgba(28, 28, 25, 0.08));
+  --onb-line-strong: var(--line-strong, rgba(28, 28, 25, 0.16));
+  --onb-text: var(--text, #1c1c19);
+  --onb-text-muted: var(--text-muted, #383834);
+  --onb-text-soft: var(--text-soft, #79776f);
+  --onb-accent: #171715;
+  --onb-accent-rgb: 23, 23, 21;
+  --onb-accent-mid: #2a2a26;
+  --onb-accent-soft: #ececea;
+  --onb-accent-strong: #0f0f0e;
+  --onb-primary-bg: #171715;
+  --onb-primary-bg-hover: #000;
+  --onb-continue-bg: var(--onb-primary-bg);
+  --onb-continue-bg-hover: var(--onb-primary-bg-hover);
+  --onb-action-bg: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-accent-soft));
+  --onb-action-bg-hover: color-mix(in oklch, var(--onb-surface) 68%, var(--onb-accent-soft));
+  --onb-action-border: rgba(var(--onb-accent-rgb), 0.24);
+  --onb-warn: var(--warn, #9e4238);
+  --onb-warn-soft: var(--warn-soft, #f0deda);
+  --onb-danger-line: var(--danger-line, rgba(158, 66, 56, 0.3));
+  --onb-blue: #416d98;
+  --onb-blue-soft: #eaf4fb;
+  --onb-shadow-soft: 0 1px 2px rgba(38, 38, 32, 0.035);
+  --onb-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: safe center;
+  background: linear-gradient(180deg, #fff 0%, var(--onb-surface) 54%, var(--onb-canvas) 100%);
+  overflow-y: auto;
+  font-family: var(--onb-font-sans);
+  color: var(--onb-text);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="dark"] .onboarding-screen {
+  --onb-canvas: oklch(0.145 0.01 120);
+  --onb-bg-2: oklch(0.18 0.012 120);
+  --onb-surface: oklch(0.205 0.012 120);
+  --onb-surface-strong: oklch(0.25 0.014 120);
+  --onb-line: oklch(0.86 0.014 100 / 0.08);
+  --onb-line-strong: oklch(0.86 0.014 100 / 0.17);
+  --onb-text: oklch(0.93 0.012 100);
+  --onb-text-muted: oklch(0.78 0.014 100);
+  --onb-text-soft: oklch(0.62 0.012 100);
+  --onb-accent: oklch(0.73 0.086 136);
+  --onb-accent-rgb: 170, 203, 105;
+  --onb-accent-mid: oklch(0.65 0.072 136);
+  --onb-accent-soft: oklch(0.265 0.04 136);
+  --onb-accent-strong: oklch(0.84 0.085 136);
+  --onb-primary-bg: oklch(0.72 0.086 136);
+  --onb-primary-bg-hover: oklch(0.78 0.09 136);
+  --onb-action-bg: color-mix(in oklch, var(--onb-surface) 72%, var(--onb-accent-soft));
+  --onb-action-bg-hover: color-mix(in oklch, var(--onb-surface-strong) 68%, var(--onb-accent-soft));
+  --onb-action-border: oklch(0.78 0.08 136 / 0.28);
+  --onb-warn: oklch(0.68 0.13 32);
+  --onb-warn-soft: oklch(0.235 0.04 32);
+  --onb-danger-line: rgba(200, 90, 78, 0.32);
+  --onb-blue: oklch(0.7 0.055 245);
+  --onb-blue-soft: oklch(0.235 0.028 245);
+  --onb-shadow-soft: 0 1px 2px oklch(0 0 0 / 0.16);
+  --onb-shadow-card: inset 0 1px 0 oklch(1 0 0 / 0.045);
+
+  background:
+    linear-gradient(180deg, oklch(0.2 0.012 120) 0%, oklch(0.165 0.01 120) 48%, var(--onb-canvas) 100%),
+    var(--onb-canvas);
+}

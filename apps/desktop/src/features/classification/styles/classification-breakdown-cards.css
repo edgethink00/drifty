@@ -1,0 +1,143 @@
+.classification-category-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+  align-items: start;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.classification-category-breakdowns__head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0;
+}
+
+.classification-category-card {
+  --category-breakdown-tone: var(--accent);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--category-breakdown-tone) 18%, var(--line));
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--category-breakdown-tone) 10%, transparent) 0, transparent 34%),
+    linear-gradient(150deg, color-mix(in srgb, var(--surface) 92%, var(--category-breakdown-tone)), var(--surface));
+  box-shadow: var(--shadow);
+}
+
+.classification-category-card__header,
+.classification-category-card__identity,
+.classification-category-card__total,
+.classification-category-card__section-head,
+.classification-category-card__mixlegend,
+.category-usage-list li {
+  min-width: 0;
+}
+
+.classification-category-card__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.classification-category-card__identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.classification-category-card__identity .category-dot {
+  width: 0.72rem;
+  height: 0.72rem;
+  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--category-breakdown-tone) 12%, transparent);
+}
+
+.classification-category-card__identity h2 {
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: clamp(1.08rem, 1.5vw, 1.42rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classification-category-card__total {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.classification-category-card__total strong {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.35vw, 1.28rem);
+  font-weight: 650;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.classification-category-card__total span,
+.classification-category-card__section-head span:last-child,
+.category-usage-list__empty,
+.category-usage-list__identity span,
+.category-usage-list__measure span {
+  color: var(--text-soft);
+}
+
+.classification-category-card__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--line);
+}
+
+.classification-category-card__stats div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.classification-category-card__stats dt {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.classification-category-card__stats dd {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.classification-category-card__stats small {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: 0.58rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

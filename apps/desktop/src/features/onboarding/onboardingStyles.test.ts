@@ -2,7 +2,19 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-const styles = readFileSync(new URL("./onboarding.css", import.meta.url), "utf8");
+function readCssWithImports(url: URL, seen = new Set<string>()): string {
+  const key = url.href;
+  if (seen.has(key)) return "";
+  seen.add(key);
+
+  const css = readFileSync(url, "utf8");
+
+  return css.replace(/^@import\s+"(?<path>[^"]+)";$/gmu, (_match, path: string) =>
+    readCssWithImports(new URL(path, url), seen),
+  );
+}
+
+const styles = readCssWithImports(new URL("./onboarding.css", import.meta.url));
 
 function cssRule(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
