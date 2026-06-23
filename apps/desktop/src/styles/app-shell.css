@@ -153,12 +153,12 @@
   cursor: pointer;
   display: inline-grid;
   font: inherit;
-  gap: 6px;
-  grid-template-columns: 7px auto minmax(0, auto);
-  height: 22px;
+  gap: 7px;
+  grid-template-columns: 8px auto minmax(0, auto);
+  height: 26px;
   max-width: min(36vw, 280px);
   min-width: 0;
-  padding: 0 9px;
+  padding: 0 12px;
 }
 
 .ai-connection-status:hover {
@@ -192,13 +192,13 @@
   background: var(--ai-connection-dot);
   border-radius: 999px;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ai-connection-dot) 12%, transparent);
-  height: 7px;
-  width: 7px;
+  height: 8px;
+  width: 8px;
 }
 
 .ai-connection-status__label,
 .ai-connection-status__provider {
-  font-size: var(--type-caption-size);
+  font-size: var(--type-mode-label-size);
   line-height: 1;
   min-width: 0;
   overflow: hidden;
