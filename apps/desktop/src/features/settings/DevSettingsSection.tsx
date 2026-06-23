@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { DRIFT_ALARM_PREVIEW_OPTIONS } from "../companion/driftAlarmData";
 import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, type WatcherMode } from "../companion/watcherData";
@@ -27,6 +27,7 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onOpenDebugLogs: () => void;
+  readonly onOpenReplayOnboarding: () => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onShowWatcherPeek: (force?: boolean) => void;
@@ -54,6 +55,7 @@ export function DevSettingsSection({
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
   onOpenDebugLogs,
+  onOpenReplayOnboarding,
   onPreviewDashboardAiUnavailableCase,
   onPreviewDriftAlarm,
   onShowWatcherPeek,
@@ -109,6 +111,17 @@ export function DevSettingsSection({
       <div className="settings-block settings-block--dev-preview">
         <h3>Dev</h3>
         <DeveloperPreReleaseUpdateRow />
+        {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
+          <div className="settings-row">
+            <div>
+              <div className="lbl">Replay onboarding</div>
+              <div className="desc">Open the setup flow again without clearing saved onboarding state.</div>
+            </div>
+            <div className="ctrl">
+              <button type="button" className="settings-btn" onClick={onOpenReplayOnboarding}>Open onboarding</button>
+            </div>
+          </div>
+        ) : null}
         {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
           <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}>
             <div>
