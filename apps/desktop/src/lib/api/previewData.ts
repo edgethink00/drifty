@@ -1,5 +1,5 @@
 import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelineQuery, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelinePage, TimelinePageQuery, TimelineQuery, TrackerStatus } from "@drifty/domain";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
 type PreviewSegmentSpec = readonly [
@@ -236,6 +236,34 @@ export function previewTimeline(query: TimelineQuery): ActivitySegment[] {
   return previewSegments().filter((segment) => inRange(segment, query));
 }
 
+export function previewTimelinePage(query: TimelinePageQuery): TimelinePage {
+  const limit = clampTimelinePageLimit(query.limit);
+  const beforeEndedAtMs = query.beforeEndedAt ? Date.parse(query.beforeEndedAt) : null;
+  const beforeSegmentId = query.beforeSegmentId ?? null;
+  const rows = previewSegments()
+    .filter((segment) => inTimelinePageRange(segment, query))
+    .filter((segment) => {
+      if (beforeEndedAtMs === null || !Number.isFinite(beforeEndedAtMs) || beforeSegmentId === null) return true;
+      const endedAtMs = Date.parse(segment.endedAt);
+      return endedAtMs < beforeEndedAtMs || (endedAtMs === beforeEndedAtMs && segment.id < beforeSegmentId);
+    })
+    .sort(compareTimelinePageSegmentsDescending);
+  const pageRows = rows.slice(0, limit);
+  const items = [...pageRows].reverse();
+  const hasMore = rows.length > limit;
+  const cursorRow = hasMore ? pageRows[pageRows.length - 1] : null;
+  return {
+    items,
+    hasMore,
+    nextCursor: cursorRow
+      ? {
+          beforeEndedAt: cursorRow.endedAt,
+          beforeSegmentId: cursorRow.id,
+        }
+      : null,
+  };
+}
+
 export function previewHourlySummary(query: TimelineQuery): HourBucket[] {
   return buildHourlySummary(previewTimeline(query));
 }
@@ -267,4 +295,23 @@ export function shouldUsePreviewData() {
     return false;
   }
   return false;
+}
+
+function clampTimelinePageLimit(limit: number | undefined): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) return 200;
+  return Math.min(500, Math.max(1, Math.floor(limit)));
+}
+
+function inTimelinePageRange(segment: PreviewActivitySegment, query: TimelinePageQuery): boolean {
+  if (query.day) return segment.startedAt.slice(0, 10) === query.day;
+  const startedAt = new Date(segment.startedAt).getTime();
+  const start = query.start ? new Date(query.start).getTime() : Number.NEGATIVE_INFINITY;
+  const end = query.end ? new Date(query.end).getTime() : Number.POSITIVE_INFINITY;
+  return startedAt >= start && startedAt <= end;
+}
+
+function compareTimelinePageSegmentsDescending(left: ActivitySegment, right: ActivitySegment): number {
+  const endedAtDelta = Date.parse(right.endedAt) - Date.parse(left.endedAt);
+  if (endedAtDelta !== 0) return endedAtDelta;
+  return right.id.localeCompare(left.id);
 }

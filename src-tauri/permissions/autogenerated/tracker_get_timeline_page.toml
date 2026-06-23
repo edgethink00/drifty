@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-timeline-page"
+description = "Enables the tracker_get_timeline_page command without any pre-configured scope."
+commands.allow = ["tracker_get_timeline_page"]
+
+[[permission]]
+identifier = "deny-tracker-get-timeline-page"
+description = "Denies the tracker_get_timeline_page command without any pre-configured scope."
+commands.deny = ["tracker_get_timeline_page"]

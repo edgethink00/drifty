@@ -25,6 +25,99 @@ class TrackerDatabaseTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
+    def _insert_activity_segment(
+        self,
+        index: int,
+        *,
+        started_at: str | None = None,
+        ended_at: str | None = None,
+    ) -> None:
+        default_started_at = datetime(2026, 4, 6, 9, 0, 0) + timedelta(minutes=index)
+        default_ended_at = default_started_at + timedelta(seconds=30)
+        self.database.insert_segment(
+            {
+                "started_at": started_at or f"{default_started_at.isoformat(timespec='seconds')}+00:00",
+                "ended_at": ended_at or f"{default_ended_at.isoformat(timespec='seconds')}+00:00",
+                "duration_seconds": 30,
+                "app_name": "Code",
+                "bundle_id": "com.microsoft.VSCode",
+                "window_title": f"Window {index}",
+                "platform": "macos",
+                "source": "accessibility",
+                "confidence": None,
+                "raw_context_json": "{}",
+            }
+        )
+
+    def test_timeline_page_defaults_to_200_rows_and_returns_cursor(self) -> None:
+        for index in range(205):
+            self._insert_activity_segment(index)
+
+        page = self.database.timeline_page(
+            start="2026-04-06T00:00:00+00:00",
+            end="2026-04-06T23:59:59+00:00",
+        )
+
+        self.assertEqual(len(page["items"]), 200)
+        self.assertTrue(page["hasMore"])
+        self.assertEqual(page["items"][0]["windowTitle"], "Window 5")
+        self.assertEqual(page["items"][-1]["windowTitle"], "Window 204")
+        self.assertEqual(
+            page["nextCursor"],
+            {
+                "beforeEndedAt": page["items"][0]["endedAt"],
+                "beforeSegmentId": page["items"][0]["id"],
+            },
+        )
+
+    def test_timeline_page_clamps_limit_between_1_and_500(self) -> None:
+        for index in range(505):
+            self._insert_activity_segment(index)
+
+        tiny_page = self.database.timeline_page(
+            start="2026-04-06T00:00:00+00:00",
+            end="2026-04-06T23:59:59+00:00",
+            limit=0,
+        )
+        large_page = self.database.timeline_page(
+            start="2026-04-06T00:00:00+00:00",
+            end="2026-04-06T23:59:59+00:00",
+            limit=999,
+        )
+
+        self.assertEqual(len(tiny_page["items"]), 1)
+        self.assertTrue(tiny_page["hasMore"])
+        self.assertEqual(len(large_page["items"]), 500)
+        self.assertTrue(large_page["hasMore"])
+
+    def test_timeline_page_cursor_handles_duplicate_ended_at_without_gaps(self) -> None:
+        duplicate_ended_at = "2026-04-06T10:00:00+00:00"
+        for index in range(4):
+            self._insert_activity_segment(
+                index,
+                started_at=f"2026-04-06T09:{index:02d}:00+00:00",
+                ended_at=duplicate_ended_at,
+            )
+
+        first_page = self.database.timeline_page(
+            start="2026-04-06T00:00:00+00:00",
+            end="2026-04-06T23:59:59+00:00",
+            limit=2,
+        )
+        second_page = self.database.timeline_page(
+            start="2026-04-06T00:00:00+00:00",
+            end="2026-04-06T23:59:59+00:00",
+            before_ended_at=first_page["nextCursor"]["beforeEndedAt"],
+            before_segment_id=first_page["nextCursor"]["beforeSegmentId"],
+            limit=2,
+        )
+
+        observed_ids = [item["id"] for item in second_page["items"]] + [item["id"] for item in first_page["items"]]
+        full_timeline_ids = [item["id"] for item in self.database.fetch_timeline("2026-04-06")]
+        self.assertEqual(observed_ids, full_timeline_ids)
+        self.assertFalse(second_page["hasMore"])
+        self.assertIsNone(second_page["nextCursor"])
+
     def test_record_snapshot_does_not_merge_same_activity_after_long_gap(self) -> None:
         self.database.record_snapshot(
             Snapshot(

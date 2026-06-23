@@ -5,6 +5,7 @@ export type TrackerCommand =
   | "tracker_start"
   | "tracker_stop"
   | "tracker_get_timeline"
+  | "tracker_get_timeline_page"
   | "tracker_get_dashboard_week_timeline"
   | "tracker_get_live_tail"
   | "tracker_get_current_snapshot"
@@ -37,6 +38,23 @@ export interface DateRangeQuery {
 }
 
 export type TimelineQuery = DayQuery | DateRangeQuery;
+
+export interface TimelinePageCursor {
+  beforeEndedAt: string;
+  beforeSegmentId: string;
+}
+
+export interface TimelinePageQuery extends Partial<DayQuery>, Partial<DateRangeQuery> {
+  beforeEndedAt?: string | null;
+  beforeSegmentId?: string | null;
+  limit?: number;
+}
+
+export interface TimelinePage {
+  items: ActivitySegment[];
+  hasMore: boolean;
+  nextCursor: TimelinePageCursor | null;
+}
 
 export interface LiveTailQuery extends Partial<DateRangeQuery> {
   afterSegmentId?: string | null;
@@ -170,6 +188,7 @@ export interface TrackerApi {
   start(): Promise<TrackerStatus>;
   stop(): Promise<TrackerStatus>;
   getTimeline(query: TimelineQuery): Promise<ActivitySegment[]>;
+  getTimelinePage(query: TimelinePageQuery): Promise<TimelinePage>;
   getDashboardWeekTimeline(query: DateRangeQuery): Promise<ActivitySegment[]>;
   getLiveTail(query: LiveTailQuery): Promise<TrackerLiveTail>;
   getCurrentSnapshot(): Promise<CurrentActivitySnapshot | null>;

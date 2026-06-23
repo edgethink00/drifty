@@ -91,6 +91,22 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_timeline", build_period_payload(day, start, end))
     }
 
+    pub fn get_timeline_page(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+        before_segment_id: Option<String>,
+        before_ended_at: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_timeline_page",
+            build_timeline_page_payload(start, end, before_segment_id, before_ended_at, limit),
+        )
+    }
+
     pub fn get_dashboard_week_timeline(
         &self,
         app: &AppHandle,
@@ -418,11 +434,7 @@ fn parse_envelope<T: for<'de> Deserialize<'de>>(raw: &[u8]) -> Result<T, Tracker
     envelope.data.ok_or(TrackerError::MissingData)
 }
 
-fn invoke_one_shot(
-    script: &Path,
-    db: &Path,
-    request: &Value,
-) -> Result<Vec<u8>, TrackerError> {
+fn invoke_one_shot(script: &Path, db: &Path, request: &Value) -> Result<Vec<u8>, TrackerError> {
     let output = Command::new(resolve_python_bin())
         .arg(script)
         .arg("--db")
@@ -495,7 +507,9 @@ fn kill_serve_process(mut proc: ServeProcess) {
 }
 
 fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, TrackerError> {
-    proc.stdin.write_all(line.as_bytes()).map_err(serve_io_err)?;
+    proc.stdin
+        .write_all(line.as_bytes())
+        .map_err(serve_io_err)?;
     proc.stdin.write_all(b"\n").map_err(serve_io_err)?;
     proc.stdin.flush().map_err(serve_io_err)?;
 
@@ -597,6 +611,28 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
 
 fn build_dashboard_week_timeline_payload(start: Option<String>, end: Option<String>) -> Value {
     build_period_payload(None, start, end)
+}
+
+fn build_timeline_page_payload(
+    start: Option<String>,
+    end: Option<String>,
+    before_segment_id: Option<String>,
+    before_ended_at: Option<String>,
+    limit: Option<u32>,
+) -> Value {
+    let mut payload = build_period_payload(None, start, end);
+
+    if let Some(payload_object) = payload.as_object_mut() {
+        if let Some(before_segment_id) = before_segment_id {
+            payload_object.insert("beforeSegmentId".into(), json!(before_segment_id));
+        }
+        if let Some(before_ended_at) = before_ended_at {
+            payload_object.insert("beforeEndedAt".into(), json!(before_ended_at));
+        }
+        payload_object.insert("limit".into(), json!(limit.unwrap_or(200)));
+    }
+
+    payload
 }
 
 fn build_live_tail_payload(
@@ -782,6 +818,28 @@ mod tests {
                 "afterSegmentId": "42",
                 "afterEndedAt": "2026-04-06T09:05:00+00:00",
                 "limit": 8
+            })
+        );
+    }
+
+    #[test]
+    fn timeline_page_payload_preserves_range_cursor_and_default_limit() {
+        let payload = build_timeline_page_payload(
+            Some("2026-04-06T00:00:00".into()),
+            Some("2026-04-06T23:59:59".into()),
+            Some("42".into()),
+            Some("2026-04-06T09:05:00+00:00".into()),
+            None,
+        );
+
+        assert_eq!(
+            payload,
+            json!({
+                "start": "2026-04-06T00:00:00",
+                "end": "2026-04-06T23:59:59",
+                "beforeSegmentId": "42",
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "limit": 200
             })
         );
     }

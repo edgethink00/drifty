@@ -134,6 +134,36 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.get_timeline({"start": "2026-04-01T00:00:00", "end": "2026-04-07T23:59:59"})
         mock_db.timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
 
+    def test_get_timeline_page_forwards_range_cursor_and_limit(self) -> None:
+        mock_db = MagicMock()
+        mock_db.timeline_page.return_value = {
+            "items": [{"id": "42"}],
+            "hasMore": True,
+            "nextCursor": {
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "beforeSegmentId": "42",
+            },
+        }
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_timeline_page({
+                "start": "2026-04-01T00:00:00",
+                "end": "2026-04-07T23:59:59",
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "beforeSegmentId": "42",
+                "limit": 200,
+            })
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["items"], [{"id": "42"}])
+        mock_db.timeline_page.assert_called_once_with(
+            start="2026-04-01T00:00:00",
+            end="2026-04-07T23:59:59",
+            before_ended_at="2026-04-06T09:05:00+00:00",
+            before_segment_id="42",
+            limit=200,
+        )
+
     def test_get_dashboard_week_timeline_uses_compact_range_filter(self) -> None:
         mock_db = MagicMock()
         mock_db.dashboard_week_timeline.return_value = []

@@ -18,12 +18,14 @@ import type {
   ProductivityShareMix,
   RawEventsQuery,
   SiteDuration,
+  TimelinePage,
+  TimelinePageQuery,
   TimelineQuery,
   TrackerApi,
   TrackerLiveTail,
   TrackerStatus,
 } from "@drifty/domain";
-import { previewAppIcons, previewHourlySummary, previewStatus, previewTimeline, previewTopSites, shouldUsePreviewData } from "./previewData";
+import { previewAppIcons, previewHourlySummary, previewStatus, previewTimeline, previewTimelinePage, previewTopSites, shouldUsePreviewData } from "./previewData";
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -112,6 +114,11 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return previewTimeline(query);
     const result = await safeInvoke<ActivitySegment[]>("tracker_get_timeline", { query });
     return result ?? [];
+  },
+  async getTimelinePage(query: TimelinePageQuery) {
+    if (shouldUsePreviewData()) return previewTimelinePage(query);
+    const result = await safeInvoke<TimelinePage>("tracker_get_timeline_page", { query });
+    return result ?? { items: [], hasMore: false, nextCursor: null };
   },
   async getDashboardWeekTimeline(query) {
     if (shouldUsePreviewData()) return previewTimeline(query);
