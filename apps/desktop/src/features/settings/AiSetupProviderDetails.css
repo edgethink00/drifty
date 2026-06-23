@@ -89,7 +89,7 @@
 }
 
 .ai-setup-cloud-route {
-  --cloud-action: #31411f;
+  --cloud-action: #344622;
   align-items: start;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -103,7 +103,7 @@
 }
 
 :root[data-theme="dark"] .ai-setup-cloud-route {
-  --cloud-action: #566b3d;
+  --cloud-action: #5a7042;
 }
 
 .ai-setup-cloud-route__copy {
@@ -139,19 +139,22 @@
   text-wrap: pretty;
 }
 
-.ai-setup-cloud-route .settings-btn--primary {
-  --settings-control-height: 2.5875rem;
+.ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action {
   background: var(--cloud-action);
   border-color: var(--cloud-action);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);
   color: var(--canvas);
+  font-size: 0.756rem;
+  font-weight: 520;
+  height: 2.25rem;
   max-width: 100%;
+  min-height: 2.25rem;
   white-space: normal;
 }
 
-.ai-setup-cloud-route .settings-btn--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--cloud-action) 88%, black);
-  border-color: color-mix(in srgb, var(--cloud-action) 88%, black);
+.ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cloud-action) 94%, black);
+  border-color: color-mix(in srgb, var(--cloud-action) 94%, black);
   color: var(--canvas);
 }
 
