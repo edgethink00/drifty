@@ -239,6 +239,29 @@ type NavigationHistoryState = {
   index: number;
 };
 
+const EMPTY_ACTIVITY_SEGMENTS: ActivitySegment[] = [];
+
+function shouldDeferTabBody(tabId: TabId): boolean {
+  return tabId === "history" || tabId === "trends";
+}
+
+function useDeferredTabBodyReady(activeTab: TabId): boolean {
+  const [readyTab, setReadyTab] = useState<TabId | null>(() => (shouldDeferTabBody(activeTab) ? null : activeTab));
+
+  useEffect(() => {
+    if (!shouldDeferTabBody(activeTab)) {
+      setReadyTab(activeTab);
+      return undefined;
+    }
+
+    setReadyTab(null);
+    const timeoutId = window.setTimeout(() => setReadyTab(activeTab), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [activeTab]);
+
+  return readyTab === activeTab;
+}
+
 const commandBarTabs = [
   { id: "dashboard", label: "Dashboard", sub: "Today at a glance" },
   { id: "classification", label: "Classification", sub: "Activity breakdown" },
@@ -523,6 +546,14 @@ function MainContentShell({ activeTab, loading, hasLoadedOnce, error, contentRef
   );
 }
 
+function DeferredTabBodyFallback({ label }: { readonly label: string }) {
+  return (
+    <div className="history-empty" role="status" aria-live="polite">
+      <strong>Loading {label}...</strong>
+    </div>
+  );
+}
+
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
@@ -533,6 +564,7 @@ export default function App() {
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const activeTab = activeSnapshot.tabId;
   const dashPeriod = activeSnapshot.dashPeriod;
+  const isDeferredTabBodyReady = useDeferredTabBodyReady(activeTab);
   const canNavigateBack = navigationHistory.index > 0;
   const canNavigateForward = navigationHistory.index < navigationHistory.entries.length - 1;
   const [theme, setTheme] = useState<ThemeMode>(resolveInitialTheme);
@@ -3143,17 +3175,19 @@ export default function App() {
     () => filterSegmentsForRange(historySegments, insightRange.start, insightRange.end),
     [historySegments, insightRange.end, insightRange.start],
   );
+  const isTrendsBodyReady = activeTab === "trends" && isDeferredTabBodyReady;
+  const activeInsightSegments = isTrendsBodyReady ? insightSegments : EMPTY_ACTIVITY_SEGMENTS;
   const insightWeekVisibility = useMemo(
     () => trendsRange === "Week" ? { startDay: insightRange.startDay } : undefined,
     [insightRange.startDay, trendsRange],
   );
   const insightClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: insightSegments, includeAiClassifications: showAiClassificationImpact }),
-    [insightSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact }),
+    [activeInsightSegments, showAiClassificationImpact],
   );
   const productivityPersonaReport = useMemo(
-    () => buildProductivityPersona(insightSegments, insightClassificationOptions),
-    [insightClassificationOptions, insightSegments],
+    () => buildProductivityPersona(activeInsightSegments, insightClassificationOptions),
+    [activeInsightSegments, insightClassificationOptions],
   );
   const historyClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact }),
@@ -3388,28 +3422,28 @@ export default function App() {
     });
   }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
-  const insightCategoryTotals = useMemo(() => buildCategoryDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
+  const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
     () => insightCategoryTotals.filter((entry) => entry.totalSeconds > 0).sort((left, right) => right.totalSeconds - left.totalSeconds),
     [insightCategoryTotals],
   );
-  const insightProductivityTotals = useMemo(() => buildProductivityDurations(insightSegments, insightClassificationOptions), [insightClassificationOptions, insightSegments]);
+  const insightProductivityTotals = useMemo(() => buildProductivityDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightProductivityTotals = useMemo(() => insightProductivityTotals.filter((entry) => entry.totalSeconds > 0), [insightProductivityTotals]);
   const weeklyBreakdown = useMemo(
-    () => buildWeeklyBreakdown(insightSegments, insightClassificationOptions, insightWeekVisibility),
-    [insightClassificationOptions, insightSegments, insightWeekVisibility],
+    () => buildWeeklyBreakdown(activeInsightSegments, insightClassificationOptions, insightWeekVisibility),
+    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility],
   );
   const attentionRhythm = useMemo(
-    () => buildAttentionRhythm(insightSegments, insightClassificationOptions, insightWeekVisibility),
-    [insightClassificationOptions, insightSegments, insightWeekVisibility],
+    () => buildAttentionRhythm(activeInsightSegments, insightClassificationOptions, insightWeekVisibility),
+    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility],
   );
   const driftSourceLists = useMemo(
-    () => buildInsightSourceLists(insightSegments, "drift", insightClassificationOptions),
-    [insightClassificationOptions, insightSegments],
+    () => buildInsightSourceLists(activeInsightSegments, "drift", insightClassificationOptions),
+    [activeInsightSegments, insightClassificationOptions],
   );
   const focusSourceLists = useMemo(
-    () => buildInsightSourceLists(insightSegments, "focus", insightClassificationOptions),
-    [insightClassificationOptions, insightSegments],
+    () => buildInsightSourceLists(activeInsightSegments, "focus", insightClassificationOptions),
+    [activeInsightSegments, insightClassificationOptions],
   );
   const breakRecoveryInsight = useMemo(
     () => buildBreakRecoveryInsight({
@@ -5084,12 +5118,16 @@ export default function App() {
 
         {activeTab === "history" ? (
           <div className="page page--history">
-            <HistoryView
-              appIcons={appIcons}
-              deleting={historyDeleting}
-              segments={historySegments}
-              onDeleteSelected={handleDeleteHistorySegments}
-            />
+            {isDeferredTabBodyReady ? (
+              <HistoryView
+                appIcons={appIcons}
+                deleting={historyDeleting}
+                segments={historySegments}
+                onDeleteSelected={handleDeleteHistorySegments}
+              />
+            ) : (
+              <DeferredTabBodyFallback label="history records" />
+            )}
           </div>
         ) : null}
 
@@ -5132,41 +5170,47 @@ export default function App() {
               </div>
             </div>
 
-            <WeeklyCategoryRow
-              weekly={weeklyBreakdown}
-              categoryTotals={activeInsightCategoryTotals}
-              segments={insightSegments}
-              classificationOptions={insightClassificationOptions}
-              appIcons={appIcons}
-              productivityTotals={{
-                focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
-                neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
-                drift: activeInsightProductivityTotals.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0,
-              }}
-            />
+            {isDeferredTabBodyReady ? (
+              <>
+                <WeeklyCategoryRow
+                  weekly={weeklyBreakdown}
+                  categoryTotals={activeInsightCategoryTotals}
+                  segments={activeInsightSegments}
+                  classificationOptions={insightClassificationOptions}
+                  appIcons={appIcons}
+                  productivityTotals={{
+                    focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
+                    neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
+                    drift: activeInsightProductivityTotals.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0,
+                  }}
+                />
 
-            <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
-              <ProductivityPersonaCard
-                classificationOptions={insightClassificationOptions}
-                hasData={insightSegments.length > 0}
-                report={productivityPersonaReport}
-                segments={insightSegments}
-                variant="radar"
-              />
-              <AttentionRhythmCard
-                appIcons={appIcons}
-                cells={attentionRhythm}
-                classificationOptions={insightClassificationOptions}
-                segments={insightSegments}
-              />
-            </div>
+                <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
+                  <ProductivityPersonaCard
+                    classificationOptions={insightClassificationOptions}
+                    hasData={activeInsightSegments.length > 0}
+                    report={productivityPersonaReport}
+                    segments={activeInsightSegments}
+                    variant="radar"
+                  />
+                  <AttentionRhythmCard
+                    appIcons={appIcons}
+                    cells={attentionRhythm}
+                    classificationOptions={insightClassificationOptions}
+                    segments={activeInsightSegments}
+                  />
+                </div>
 
-            <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
-              <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
-              <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
-            </div>
+                <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
+                  <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
+                  <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
+                </div>
 
-            <BreakRecoveryCard summary={breakRecoveryInsight} />
+                <BreakRecoveryCard summary={breakRecoveryInsight} />
+              </>
+            ) : (
+              <DeferredTabBodyFallback label="trend analysis" />
+            )}
           </div>
         ) : null}
 
