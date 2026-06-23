@@ -27,6 +27,7 @@
     "allow-tracker-start",
     "allow-tracker-stop",
     "allow-tracker-get-timeline",
+    "allow-tracker-get-timeline-page",
     "allow-tracker-get-dashboard-week-timeline",
     "allow-tracker-get-live-tail",
     "allow-tracker-get-current-snapshot",

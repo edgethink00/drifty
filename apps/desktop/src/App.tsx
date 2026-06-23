@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityShareMix, SiteDuration, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityShareMix, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -50,6 +50,7 @@ import {
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { HistoryView } from "./features/history/HistoryView";
+import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import {
   aiConnectionIssueKindFromMessage,
@@ -481,6 +482,10 @@ export default function App() {
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
   const [historySegmentsLoadedRange, setHistorySegmentsLoadedRange] = useState<DashboardHistoryRange | null>(null);
+  const [historyNextCursor, setHistoryNextCursor] = useState<TimelinePageCursor | null>(null);
+  const [historyHasMoreSegments, setHistoryHasMoreSegments] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyLoadMoreError, setHistoryLoadMoreError] = useState<string | null>(null);
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
   const [dashboardWeekRefreshState, setDashboardWeekRefreshState] = useState<DashboardWeekRefreshState>({ key: null, status: "idle" });
   const [hourly, setHourly] = useState<HourBucket[]>([]);
@@ -1455,10 +1460,32 @@ export default function App() {
     }
 
     try {
-      const archiveTimelineRequest: Promise<BuiltInHeuristicClassificationMaterialization | null> = shouldLoadHistory
-        ? shouldLoadCompactHistory
-          ? loadCompactHistoryRange(historyTimelineRange).then((load) => load.materialized)
-          : trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline))
+      const archiveTimelineRequest: Promise<{
+        readonly hasMore: boolean;
+        readonly loadedRange: DashboardHistoryRange;
+        readonly materialized: BuiltInHeuristicClassificationMaterialization;
+        readonly nextCursor: TimelinePageCursor | null;
+      } | null> = shouldLoadHistory
+        ? activeTab === "history"
+          ? trackerClient.getTimelinePage({ ...historyTimelineRange, limit: HISTORY_TIMELINE_PAGE_SIZE }).then((page) => ({
+              hasMore: page.hasMore,
+              loadedRange: historyTimelineRange,
+              materialized: materializeBuiltInHeuristicTimeline(page.items),
+              nextCursor: page.nextCursor,
+            }))
+          : shouldLoadCompactHistory
+            ? loadCompactHistoryRange(historyTimelineRange).then((load) => ({
+                hasMore: false,
+                loadedRange: historyTimelineRange,
+                materialized: load.materialized,
+                nextCursor: null,
+              }))
+            : trackerClient.getTimeline(historyTimelineRange).then((timeline) => ({
+                hasMore: false,
+                loadedRange: historyTimelineRange,
+                materialized: materializeBuiltInHeuristicTimeline(timeline),
+                nextCursor: null,
+              }))
         : Promise.resolve(null);
       const historyHourlySummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getHourlySummary(historySummaryRange)
@@ -1482,7 +1509,7 @@ export default function App() {
           : trackerClient.getCurrentSnapshot().catch(() => null)
         : Promise.resolve(currentSnapshot);
 
-      const [timeline, archiveTimelines, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
+      const [timeline, archiveTimelineLoad, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
         trackerClient.getTimeline(selectedDayRange),
         archiveTimelineRequest,
         historyHourlySummaryRequest,
@@ -1496,7 +1523,7 @@ export default function App() {
       if (refreshRequestRef.current !== requestId) return false;
 
       const materializedTimeline = materializeBuiltInHeuristicTimeline(timeline);
-      const materializedArchiveTimelines = archiveTimelines;
+      const materializedArchiveTimelines = archiveTimelineLoad?.materialized ?? null;
       const alarmDay = currentDriftAlarmDay();
       const isAlarmDayRefresh = day === alarmDay;
 
@@ -1510,9 +1537,13 @@ export default function App() {
       }
       setSegments(materializedTimeline.segments);
       setSegmentsLoadedDay(day);
-      if (materializedArchiveTimelines !== null && !shouldLoadDashboardWeekHistory) {
-        setHistorySegments(materializedArchiveTimelines.segments);
-        setHistorySegmentsLoadedRange(historyTimelineRange);
+      if (archiveTimelineLoad !== null && !shouldLoadDashboardWeekHistory) {
+        setHistorySegments(archiveTimelineLoad.materialized.segments);
+        setHistorySegmentsLoadedRange(archiveTimelineLoad.loadedRange);
+        setHistoryNextCursor(archiveTimelineLoad.nextCursor);
+        setHistoryHasMoreSegments(archiveTimelineLoad.hasMore);
+        setHistoryLoadingMore(false);
+        setHistoryLoadMoreError(null);
       }
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "idle" });
       setHourly(buildHourlySummary(materializedTimeline.segments));
@@ -1571,21 +1602,23 @@ export default function App() {
   async function refreshHistoryData(day = selectedDay): Promise<boolean> {
     if (shouldBlockLocalTrackerAccess) {
       historyRefreshRequestRef.current += 1;
+      setHistoryLoadingMore(false);
       return false;
     }
 
     const shouldLoadHistory = shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange);
     if (!shouldLoadHistory) {
       historyRefreshRequestRef.current += 1;
+      setHistoryLoadingMore(false);
       return false;
     }
 
     const requestId = historyRefreshRequestRef.current + 1;
     historyRefreshRequestRef.current = requestId;
+    setHistoryLoadingMore(false);
     setError(null);
 
     const {
-      historyRecentTimelineRange,
       historySummaryRange,
       historyTimelineRange,
       shouldLoadDashboardWeekHistory,
@@ -1621,22 +1654,26 @@ export default function App() {
     };
 
     try {
-      if (historyRecentTimelineRange !== null) {
-        const materializedRecentTimeline = await trackerClient
-          .getTimeline(historyRecentTimelineRange)
-          .then((timeline) => materializeBuiltInHeuristicTimeline(timeline));
+      if (activeTab === "history") {
+        const timelinePage = await trackerClient.getTimelinePage({
+          ...historyTimelineRange,
+          limit: HISTORY_TIMELINE_PAGE_SIZE,
+        });
+        const materializedRecentTimeline = materializeBuiltInHeuristicTimeline(timelinePage.items);
 
         if (historyRefreshRequestRef.current !== requestId) return false;
 
         setHistorySegments(materializedRecentTimeline.segments);
-        setHistorySegmentsLoadedRange(historyRecentTimelineRange);
+        setHistorySegmentsLoadedRange(historyTimelineRange);
+        setHistoryNextCursor(timelinePage.nextCursor);
+        setHistoryHasMoreSegments(timelinePage.hasMore);
+        setHistoryLoadMoreError(null);
         scheduleBuiltInHeuristicClassificationPersistence(materializedRecentTimeline.classifications);
         loadMissingHistoryIcons(materializedRecentTimeline.segments);
 
         void (async () => {
           try {
-            const [materializedArchiveTimelines, historyHourlySummary, historySiteSummary] = await Promise.all([
-              trackerClient.getTimeline(historyTimelineRange).then((timeline) => materializeBuiltInHeuristicTimeline(timeline)),
+            const [historyHourlySummary, historySiteSummary] = await Promise.all([
               shouldLoadHistorySummaries
                 ? trackerClient.getHourlySummary(historySummaryRange)
                 : Promise.resolve<HourBucket[] | null>(null),
@@ -1647,15 +1684,11 @@ export default function App() {
 
             if (historyRefreshRequestRef.current !== requestId) return;
 
-            setHistorySegments(materializedArchiveTimelines.segments);
-            setHistorySegmentsLoadedRange(historyTimelineRange);
             if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
             if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
-            scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
-            loadMissingHistoryIcons(materializedArchiveTimelines.segments);
           } catch (nextError) {
             if (historyRefreshRequestRef.current !== requestId) return;
-            setError(toErrorMessage(nextError));
+            setError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
           }
         })();
 
@@ -1679,6 +1712,10 @@ export default function App() {
       if (!shouldLoadDashboardWeekHistory) {
         setHistorySegments(materializedArchiveTimelines.segments);
         setHistorySegmentsLoadedRange(historyTimelineRange);
+        setHistoryNextCursor(null);
+        setHistoryHasMoreSegments(false);
+        setHistoryLoadingMore(false);
+        setHistoryLoadMoreError(null);
       }
       updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "idle" });
@@ -1689,12 +1726,65 @@ export default function App() {
       return true;
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return false;
-      const message = toErrorMessage(nextError);
+      const message = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "error" });
       setError(message);
       return false;
     }
   }
+
+  const loadMoreHistorySegments = useCallback(async (): Promise<void> => {
+    if (historyLoadingMore || !historyHasMoreSegments || historyNextCursor === null || historySegmentsLoadedRange === null) return;
+
+    const requestId = historyRefreshRequestRef.current;
+    setHistoryLoadingMore(true);
+    setHistoryLoadMoreError(null);
+
+    try {
+      const timelinePage = await trackerClient.getTimelinePage({
+        start: historySegmentsLoadedRange.start,
+        end: historySegmentsLoadedRange.end,
+        beforeEndedAt: historyNextCursor.beforeEndedAt,
+        beforeSegmentId: historyNextCursor.beforeSegmentId,
+        limit: HISTORY_TIMELINE_PAGE_SIZE,
+      });
+      const materializedPage = materializeBuiltInHeuristicTimeline(timelinePage.items);
+
+      if (historyRefreshRequestRef.current !== requestId) return;
+
+      setHistorySegments((currentSegments) => mergeHistoryTimelinePages(currentSegments, materializedPage.segments));
+      setHistoryNextCursor(timelinePage.nextCursor);
+      setHistoryHasMoreSegments(timelinePage.hasMore);
+      scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
+
+      void (async () => {
+        try {
+          const missingIconRequests = collectMissingAppIconRequests(materializedPage.segments, appIconsRef.current);
+          if (missingIconRequests.length === 0) return;
+          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
+          if (historyRefreshRequestRef.current !== requestId) return;
+          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
+        } catch (error) {
+          if (historyRefreshRequestRef.current !== requestId) return;
+          const message = error instanceof Error ? error.message : "unknown error";
+          console.warn("Failed to load additional history app icons", message);
+        }
+      })();
+    } catch (nextError) {
+      if (historyRefreshRequestRef.current !== requestId) return;
+      setHistoryLoadMoreError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
+    } finally {
+      if (historyRefreshRequestRef.current === requestId) {
+        setHistoryLoadingMore(false);
+      }
+    }
+  }, [
+    historyHasMoreSegments,
+    historyLoadingMore,
+    historyNextCursor,
+    historySegmentsLoadedRange,
+    materializeBuiltInHeuristicTimeline,
+  ]);
 
   const prefetchCurrentWeekHistory = useCallback(async (day: string): Promise<boolean> => {
     if (shouldBlockLocalTrackerAccess) return false;
@@ -4269,9 +4359,13 @@ export default function App() {
               <HistoryView
                 appIcons={appIcons}
                 deleting={historyDeleting}
+                hasMoreSegments={historyHasMoreSegments}
+                loadingMore={historyLoadingMore}
+                loadMoreError={historyLoadMoreError}
                 segments={historySegments}
                 startOfDayMinutes={startOfDayMinutes}
                 onDeleteSelected={handleDeleteHistorySegments}
+                onLoadMore={loadMoreHistorySegments}
               />
             ) : (
               <DeferredTabBodyFallback label="history records" />

@@ -9,17 +9,29 @@ import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
   readonly deleting: boolean;
+  readonly hasMoreSegments?: boolean;
+  readonly loadMoreError?: string | null;
+  readonly loadingMore?: boolean;
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
+  readonly onLoadMore?: () => Promise<void> | void;
   readonly segments: readonly ActivitySegment[];
   readonly startOfDayMinutes?: number;
 };
 
-// History loads ~90 days of segments (easily 10k+); rendering them all at once
-// blocks the main thread, so the list grows in pages instead.
 const HISTORY_RENDER_STEP = 200;
 const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
 
-export function HistoryView({ appIcons, deleting, onDeleteSelected, segments, startOfDayMinutes = 0 }: HistoryViewProps) {
+export function HistoryView({
+  appIcons,
+  deleting,
+  hasMoreSegments = false,
+  loadMoreError = null,
+  loadingMore = false,
+  onDeleteSelected,
+  onLoadMore,
+  segments,
+  startOfDayMinutes = 0,
+}: HistoryViewProps) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -44,9 +56,13 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments, st
 
   const renderedRows = isSearching && visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
   const hiddenCount = isSearching ? visibleRows.length - renderedRows.length : 0;
-  const hasMoreRows = isSearching ? hiddenCount > 0 : recentHistoryWindow?.hasMore === true;
+  const hasLocalRowsToReveal = isSearching ? hiddenCount > 0 : recentHistoryWindow?.hasMore === true;
+  const canLoadBackendRows = !isSearching && !hasLocalRowsToReveal && hasMoreSegments && onLoadMore !== undefined;
+  const hasMoreRows = hasLocalRowsToReveal || canLoadBackendRows;
   const showMoreLabel = isSearching && hiddenCount > 0
     ? `Show more (${hiddenCount.toLocaleString("en-US")} older ${hiddenCount === 1 ? "record" : "records"})`
+    : loadingMore
+      ? "Loading older records..."
     : "Show more older records";
 
   const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
@@ -127,10 +143,17 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments, st
             <button
               type="button"
               className="settings-btn history-show-more"
-              onClick={() => setRenderLimit((current) => current + HISTORY_RENDER_STEP)}
+              disabled={loadingMore}
+              onClick={() => {
+                setRenderLimit((current) => current + HISTORY_RENDER_STEP);
+                if (canLoadBackendRows) void onLoadMore();
+              }}
             >
               {showMoreLabel}
             </button>
+          ) : null}
+          {loadMoreError ? (
+            <p className="history-load-more-error" role="alert">{loadMoreError}</p>
           ) : null}
         </div>
       )}
