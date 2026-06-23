@@ -48,6 +48,7 @@ type DashboardPageProps = {
   readonly totalSeconds: number;
   readonly weekCalendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly weekFocusDeltaPercent: number | null;
+  readonly weekRefreshStatus: "idle" | "loading" | "error";
   readonly weekRows: WeekDayRow[];
   readonly onDashboardAiUnavailableAction: (variant: DashboardAiUnavailableVariant) => void;
   readonly onDismissDashboardAiRecovery: () => void;
@@ -87,6 +88,7 @@ export function DashboardPage({
   totalSeconds,
   weekCalendarEvents,
   weekFocusDeltaPercent,
+  weekRefreshStatus,
   weekRows,
   onDashboardAiUnavailableAction,
   onDismissDashboardAiRecovery,
@@ -139,6 +141,7 @@ export function DashboardPage({
           productivityEntries={dashboardProductivityTotals}
           totalSeconds={totalSeconds}
           focusDeltaPercent={isPreviewSurface ? 21 : weekFocusDeltaPercent}
+          refreshStatus={weekRefreshStatus}
           isPreviewSurface={isPreviewSurface}
           startOfDayMinutes={startOfDayMinutes}
           dateNavigator={dashboardDateNavigator}
