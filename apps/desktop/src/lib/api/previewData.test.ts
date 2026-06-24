@@ -58,6 +58,9 @@ describe("previewData", () => {
       Date.parse(segment.startedAt) - Date.parse(day[index]?.endedAt ?? segment.startedAt) >= 5 * 60 * 1000
     );
     const longSessions = day.filter((segment) => segment.durationSeconds > 30 * 60);
+    const driftSegments = day.filter((segment) => classifyActivity(segment).productivity === "drift");
+    const shortDrifts = driftSegments.filter((segment) => segment.durationSeconds <= 9 * 60);
+    const mediumDrifts = driftSegments.filter((segment) => segment.durationSeconds >= 12 * 60 && segment.durationSeconds <= 20 * 60);
     const futureSegments = day.filter((segment) => segment.startedAt > "2026-05-08T20:30:00");
     const eveningBreak = day.some((segment, index) =>
       segment.startedAt >= "2026-05-08T18:39:00"
@@ -68,6 +71,8 @@ describe("previewData", () => {
     expect(day.length).toBeGreaterThan(30);
     expect(sessionGaps.length).toBeGreaterThan(4);
     expect(eveningBreak).toBe(true);
+    expect(shortDrifts.length).toBeGreaterThanOrEqual(2);
+    expect(mediumDrifts.length).toBeGreaterThanOrEqual(2);
     expect(longSessions).toEqual([]);
     expect(futureSegments).toEqual([]);
     expect(unknownClassifications).toEqual([]);
