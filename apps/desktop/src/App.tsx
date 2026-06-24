@@ -518,6 +518,7 @@ export default function App() {
     updaterMessage,
   } = useUpdateController();
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
+  const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
   const [forceChromiumAxExtremeNudgeEnabled, setForceChromiumAxExtremeNudgeEnabled] = useState(resolveInitialForceChromiumAxExtremeNudgeEnabled);
@@ -677,12 +678,12 @@ export default function App() {
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
-    if (!devModeEnabled) return;
+    if (!isDevModeActive) return;
     shouldFocusEndOfDayReviewSettingsRef.current = true;
     setSettingsSection("dev");
     navigateToTab("settings");
     setAccountMenuOpen(false);
-  }, [devModeEnabled, navigateToTab]);
+  }, [isDevModeActive, navigateToTab]);
 
   const openEndOfDayReviewDashboard = useCallback(() => {
     setEndOfDayReviewEvent(null);
@@ -1168,6 +1169,7 @@ export default function App() {
 
   const handleEndOfDayReviewPreview = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
+    if (!isDevModeActive) return;
     const previewSegments = segments.length > 0 ? segments : buildMockEndOfDayReviewSegments(selectedDay);
     void buildEndOfDayReviewEvent({
       day: selectedDay,
@@ -1175,7 +1177,7 @@ export default function App() {
       segments: previewSegments,
       isMock: true,
     }).then(showEndOfDayReview);
-  }, [buildEndOfDayReviewEvent, segments, selectedDay, showEndOfDayReview]);
+  }, [buildEndOfDayReviewEvent, isDevModeActive, segments, selectedDay, showEndOfDayReview]);
 
   const recordDriftInteraction = useCallback((interaction: DriftAlarmInteraction) => {
     setDriftAlarmInteractions(recordDriftAlarmInteraction(interaction));
@@ -3438,10 +3440,11 @@ export default function App() {
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
-  const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
+  const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && isDevModeActive && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
 
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
+    if (!isDevModeActive) return;
     if (!hasLoadedOnce) return;
     if (endOfDayReviewQueryPreviewShownRef.current) return;
     if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
@@ -3453,7 +3456,7 @@ export default function App() {
       segments: buildMockEndOfDayReviewSegments(todayDay),
       isMock: true,
     }).then(showEndOfDayReview);
-  }, [buildEndOfDayReviewEvent, hasLoadedOnce, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
+  }, [buildEndOfDayReviewEvent, hasLoadedOnce, isDevModeActive, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
