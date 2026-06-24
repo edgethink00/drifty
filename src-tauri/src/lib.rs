@@ -14,7 +14,8 @@ use commands::{
     extreme_nudge_apply, focus_target_activate_browser_tab, focus_target_browser_tab_exists,
     focus_target_open_app, managed_ai_catalog, managed_ai_delete, managed_ai_install,
     managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
-    setup_drift_alarm_window, setup_watcher_window, system_open_settings_pane,
+    setup_drift_alarm_window, setup_watcher_window, startup_get_open_at_login_status,
+    startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_get_app_icons, tracker_get_classification_metrics,
     tracker_get_classification_rules, tracker_get_current_snapshot,
@@ -179,10 +180,6 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::AppleScript,
-            None,
-        ))
         .manage(TrackerController::default());
 
     builder
@@ -239,6 +236,8 @@ pub fn run() {
             managed_ai_install,
             managed_ai_start,
             managed_ai_delete,
+            startup_get_open_at_login_status,
+            startup_set_open_at_login_enabled,
             system_open_settings_pane,
             watcher_peek_show,
             watcher_peek_hide,

@@ -52,8 +52,18 @@ export async function completeOnboardingAction({
   setSetupError(null);
   if (startupSettingsClient.isAvailable()) {
     try {
-      await startupSettingsClient.setOpenAtLoginEnabled(openAtLoginEnabled);
+      const startupResult = await startupSettingsClient.setOpenAtLoginEnabled(openAtLoginEnabled);
+      console.debug("Start at login update completed during onboarding.", {
+        requested: openAtLoginEnabled,
+        ...startupResult,
+      });
     } catch (error) {
+      console.debug("Start at login update failed during onboarding.", {
+        requested: openAtLoginEnabled,
+        error: error instanceof Error
+          ? { name: error.name, message: error.message }
+          : { message: String(error) },
+      });
       console.warn("Unable to update start at login during onboarding.", error);
     }
   }

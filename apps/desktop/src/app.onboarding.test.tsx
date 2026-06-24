@@ -362,7 +362,12 @@ describe("App onboarding", () => {
     accessibilityGetStatus.mockResolvedValue({ granted: false });
     accessibilityRequestAccess.mockResolvedValue({ granted: false });
     startupSettingsClient.isAvailable.mockReturnValue(false);
-    startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue(true);
+    startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue({
+      success: true,
+      enabled: true,
+      status: "enabled",
+      backend: "smAppService",
+    });
     configureManagedAiMocks();
     trackerGetHourlySummary.mockResolvedValue([]);
     openSystemSettingsPane.mockResolvedValue(true);
@@ -718,38 +723,71 @@ describe("App onboarding", () => {
   });
 
   it("enables login startup by default when onboarding completes in the Mac app", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
     startupSettingsClient.isAvailable.mockReturnValue(true);
-    render(<App />);
 
-    await advanceToReadyStep({ activity: "Coding" });
-    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-    const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
+    try {
+      render(<App />);
 
-    expect(startupToggle.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
 
-    await waitFor(() => {
-      expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
-    });
+      expect(startupToggle.getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+      await waitFor(() => {
+        expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
+      });
+      expect(debugSpy).toHaveBeenCalledWith("Start at login update completed during onboarding.", {
+        requested: true,
+        success: true,
+        enabled: true,
+        status: "enabled",
+        backend: "smAppService",
+      });
+    } finally {
+      debugSpy.mockRestore();
+    }
   });
 
   it("honors the opt-out login startup choice from onboarding", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
     startupSettingsClient.isAvailable.mockReturnValue(true);
-    render(<App />);
-
-    await advanceToReadyStep({ activity: "Coding" });
-    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-    const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
-    fireEvent.click(startupToggle);
-    expect(startupToggle.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
-
-    await waitFor(() => {
-      expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(false);
+    startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValueOnce({
+      success: true,
+      enabled: false,
+      status: "notRegistered",
+      backend: "smAppService",
     });
+
+    try {
+      render(<App />);
+
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      const startupToggle = within(readyDialog).getByRole("button", { name: /start drifty at login/i });
+      fireEvent.click(startupToggle);
+      expect(startupToggle.getAttribute("aria-pressed")).toBe("false");
+      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+      await waitFor(() => {
+        expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(false);
+      });
+      expect(debugSpy).toHaveBeenCalledWith("Start at login update completed during onboarding.", {
+        requested: false,
+        success: true,
+        enabled: false,
+        status: "notRegistered",
+        backend: "smAppService",
+      });
+    } finally {
+      debugSpy.mockRestore();
+    }
   });
 
   it("completes onboarding when login startup cannot be enabled", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     startupSettingsClient.isAvailable.mockReturnValue(true);
     startupSettingsClient.setOpenAtLoginEnabled.mockRejectedValue(new Error("Autostart denied"));
@@ -766,8 +804,13 @@ describe("App onboarding", () => {
       });
 
       expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledWith(true);
+      expect(debugSpy).toHaveBeenCalledWith("Start at login update failed during onboarding.", {
+        requested: true,
+        error: { name: "Error", message: "Autostart denied" },
+      });
       expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeTruthy();
     } finally {
+      debugSpy.mockRestore();
       warnSpy.mockRestore();
     }
   });

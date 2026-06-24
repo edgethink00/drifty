@@ -43,6 +43,8 @@ fn main() {
             "focus_target_activate_browser_tab",
             "focus_target_browser_tab_exists",
             "focus_target_open_app",
+            "startup_get_open_at_login_status",
+            "startup_set_open_at_login_enabled",
             "system_open_settings_pane",
             "watcher_peek_show",
             "watcher_peek_hide",

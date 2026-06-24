@@ -29,7 +29,12 @@ describe("StartupSettingsRow", () => {
     vi.clearAllMocks();
     startupSettingsClient.isAvailable.mockReturnValue(true);
     startupSettingsClient.isOpenAtLoginEnabled.mockResolvedValue(false);
-    startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue(true);
+    startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue({
+      success: true,
+      enabled: true,
+      status: "enabled",
+      backend: "smAppService",
+    });
   });
 
   it("shows the saved login startup state when the native API is available", async () => {

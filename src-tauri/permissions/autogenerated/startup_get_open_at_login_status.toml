@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-startup-get-open-at-login-status"
+description = "Enables the startup_get_open_at_login_status command without any pre-configured scope."
+commands.allow = ["startup_get_open_at_login_status"]
+
+[[permission]]
+identifier = "deny-startup-get-open-at-login-status"
+description = "Denies the startup_get_open_at_login_status command without any pre-configured scope."
+commands.deny = ["startup_get_open_at_login_status"]
