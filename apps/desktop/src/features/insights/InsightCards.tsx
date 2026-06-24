@@ -533,7 +533,6 @@ export function InsightSourceGroup({
   appIcons: AppIconMap;
 }) {
   const tone = variant === "drift" ? "var(--warn)" : "var(--accent)";
-  const label = variant === "drift" ? "Drift patterns" : "Focus patterns";
   const topicsLabel = variant === "drift" ? "Drift after focus" : "Focus before drift";
   const transitionsLabel = variant === "drift" ? "Top drift after focus transitions" : "Top focus before drift transitions";
   const appsLabel = variant === "drift" ? "Drift apps" : "Focus apps";
@@ -573,7 +572,6 @@ export function InsightSourceGroup({
 
   return (
     <section className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${variant}`} aria-label={`${variant === "drift" ? "Drift" : "Focus"} patterns`}>
-      <div className="productivity-insight-group__head"><span className="label-mono insight-section__label">{label}</span></div>
       <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section" aria-label={transitionsLabel} style={toneStyle}>
         <div className="trend-topics-card__columns">
           {renderSourceList("apps", appsLabel, `No ${variant} apps yet`, "Apps appear after classified activity is recorded.")}
