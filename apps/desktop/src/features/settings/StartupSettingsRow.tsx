@@ -44,9 +44,9 @@ export function StartupSettingsRow() {
     setError(null);
 
     try {
-      const didUpdate = await startupSettingsClient.setOpenAtLoginEnabled(nextEnabled);
-      setStatus(didUpdate ? "ready" : "unavailable");
-      if (!didUpdate) setEnabled(false);
+      const result = await startupSettingsClient.setOpenAtLoginEnabled(nextEnabled);
+      setStatus(result.success ? "ready" : "unavailable");
+      if (!result.success) setEnabled(false);
     } catch (nextError) {
       setEnabled(previousEnabled);
       setStatus("ready");
