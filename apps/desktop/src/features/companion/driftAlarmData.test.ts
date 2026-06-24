@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildDriftAlarmCandidates, canApplyExtremeNudgeToCategory, normalizeDriftAlertDelaySeconds } from "./driftAlarmData";
-import type { ActivitySegment, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
+import type { ActivitySegment, ClassificationOptions, CurrentActivitySnapshot, StoredActivityClassification } from "@drifty/domain";
 
 const driftSegment: ActivitySegment = {
   id: "seg-1",
@@ -141,6 +141,74 @@ describe("buildDriftAlarmCandidates", () => {
     expect(withRule).toEqual([]);
   });
 
+  it("suppresses live app LLM drift outliers when app history is dominantly focus", () => {
+    const currentAppSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "obsidian-current",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:10:00.000Z",
+      durationSeconds: 600,
+      appName: "Obsidian",
+      bundleId: "md.obsidian",
+      windowTitle: "Instagram reels notes",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+      classification: storedClassification("social_media", "drift", 0.96),
+    };
+    const appSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      observedAt: "2026-06-11T09:10:00.000Z",
+      appName: "Obsidian",
+      bundleId: "md.obsidian",
+      windowTitle: "Instagram reels notes",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [...obsidianFocusHistorySegments(), currentAppSegment],
+      currentSnapshot: appSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([]);
+  });
+
+  it("suppresses live app LLM drift during app cold start", () => {
+    const currentAppSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "new-app-current",
+      appName: "Obsidian",
+      bundleId: "md.obsidian",
+      windowTitle: "Instagram reels notes",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+      classification: storedClassification("social_media", "drift", 0.96),
+    };
+    const appSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      appName: "Obsidian",
+      bundleId: "md.obsidian",
+      windowTitle: "Instagram reels notes",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [currentAppSegment],
+      currentSnapshot: appSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([]);
+  });
+
   it("suppresses live YouTube radio playlist drift alarms from the matching history URL", () => {
     const playlistSegment: ActivitySegment = {
       ...driftSegment,
@@ -247,3 +315,40 @@ describe("canApplyExtremeNudgeToCategory", () => {
     expect(canApplyExtremeNudgeToCategory("game")).toBe(true);
   });
 });
+
+function obsidianFocusHistorySegments(): ActivitySegment[] {
+  const segments: ActivitySegment[] = [];
+  for (let index = 0; index < 6; index += 1) {
+    const startedAtMs = Date.UTC(2026, 5, 11, 7, index * 10, 0, 0);
+    segments.push({
+      ...driftSegment,
+      id: `obsidian-focus-${index}`,
+      startedAt: new Date(startedAtMs).toISOString(),
+      endedAt: new Date(startedAtMs + 10 * 60 * 1000).toISOString(),
+      durationSeconds: 10 * 60,
+      appName: "Obsidian",
+      bundleId: "md.obsidian",
+      windowTitle: "Project notes",
+      browserName: null,
+      siteDomain: null,
+      siteTitle: null,
+      classification: storedClassification("workspace", "focus", 0.94),
+    });
+  }
+  return segments;
+}
+
+function storedClassification(
+  category: StoredActivityClassification["category"],
+  productivity: StoredActivityClassification["productivity"],
+  confidence: number,
+): StoredActivityClassification {
+  return {
+    source: "llm",
+    category,
+    productivity,
+    confidence,
+    reason: "test classification",
+    aiResult: true,
+  };
+}
