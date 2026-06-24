@@ -58,11 +58,13 @@ describe("previewData", () => {
       Date.parse(segment.startedAt) - Date.parse(day[index]?.endedAt ?? segment.startedAt) >= 5 * 60 * 1000
     );
     const longSessions = day.filter((segment) => segment.durationSeconds > 30 * 60);
+    const futureSegments = day.filter((segment) => segment.startedAt > "2026-05-08T18:40:00");
     const unknownClassifications = day.filter((segment) => classifyActivity(segment).category === "unknown");
 
     expect(day.length).toBeGreaterThan(18);
     expect(sessionGaps.length).toBeGreaterThan(10);
     expect(longSessions).toEqual([]);
+    expect(futureSegments).toEqual([]);
     expect(unknownClassifications).toEqual([]);
   });
 

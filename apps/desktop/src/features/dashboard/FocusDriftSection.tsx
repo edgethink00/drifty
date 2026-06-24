@@ -70,10 +70,14 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     () => chart.points.filter((point) => point.totalSeconds > 0 && !point.isFuture),
     [chart.points],
   );
+  const measuredPoints = useMemo(
+    () => chart.points.filter((point) => !point.isFuture),
+    [chart.points],
+  );
   const liveStyle = liveStyleForChart(chart);
   const driftMistAreaPath = useMemo(
-    () => buildFocusDriftAreaPath(chart.points, chart.driftPath),
-    [chart.driftPath, chart.points],
+    () => buildFocusDriftAreaPath(measuredPoints, chart.driftPath),
+    [chart.driftPath, measuredPoints],
   );
 
   function readChartBounds(event: MouseEvent<SVGRectElement>): DOMRect | null {
