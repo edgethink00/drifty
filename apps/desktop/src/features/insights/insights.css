@@ -1607,6 +1607,10 @@
   padding: 0.42rem 0.46rem;
 }
 
+.top-categories-breakdown {
+  padding: 0.58rem 0.64rem 0.52rem;
+}
+
 .weekly-breakdown-analytical__eyebrow {
   color: var(--text-soft);
   font-family: var(--font-mono);
@@ -1678,6 +1682,7 @@
 .top-categories-breakdown__list {
   display: grid;
   gap: 0.34rem;
+  margin-top: 0.27rem;
 }
 
 .top-categories-breakdown__row {
