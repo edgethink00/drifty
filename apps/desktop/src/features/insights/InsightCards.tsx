@@ -1,7 +1,7 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildDonutView, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./insightData";
-import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./insightData";
+import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartMode, WeeklyChartSegment } from "./insightData";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
 import { buildProductivityPersona, classifyActivity, logicalDayIsoDateForDate } from "@drifty/domain";
@@ -12,6 +12,7 @@ import { CompactClassificationHoverCard, formatSharePercent } from "../dashboard
 import type { CompactClassificationHoverPayload, CompactClassificationHoverState } from "../dashboard/HoverCards";
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
+import { WeeklyTrendChart } from "./WeeklyTrendChart";
 
 export const PERSONA_CONTENT: Record<string, { tags: string; copy: [string, string] }> = {
   deep_diver: {
@@ -250,7 +251,7 @@ export function WeeklyCategoryRow({
     setHoveredSegment({ ...payload, x, y });
   }
 
-  function showWeeklySegmentHover(segment: WeeklyChartColumn["segments"][number], weekdayIndex: number, columnSeconds: number, x: number, y: number) {
+  function showWeeklySegmentHover(segment: WeeklyChartSegment, weekdayIndex: number, columnSeconds: number, x: number, y: number) {
     const payload = hoverPayloads.get(segment.key);
     if (!payload) return;
     const weekdayDates = new Set<string>();
@@ -280,50 +281,15 @@ export function WeeklyCategoryRow({
 
   return (
     <div className="insights-row--weekly-categories">
-      <section className="editorial-panel editorial-panel--soft insight-section productivity-insight-groups__weekly-trend weekly-productivity-trend-card" aria-label="Weekly focus and drift trend">
-        <div className="weekly-productivity-trend-card__head">
-          <div><span className="label-mono insight-section__label">Weekly Breakdown</span></div>
-          <div className="wt-toggle" role="tablist">
-            <button type="button" className={`wt-toggle-btn${mode === "productivity" ? " is-active" : ""}`} data-mode="productivity" onClick={() => setMode("productivity")}>Productivity</button>
-            <button type="button" className={`wt-toggle-btn${mode === "category" ? " is-active" : ""}`} data-mode="category" onClick={() => setMode("category")}>Category</button>
-          </div>
-        </div>
-        {hasData ? (
-          <div className="wt-plot">
-            <div className="wt-grid">
-              {chart.gridlines.map((line) => (
-                <div className="wt-gridline" style={{ top: `${line.topPct}%` }} key={`gl-${line.label}-${line.topPct}`}><span className="wt-gridlabel">{line.label}</span></div>
-              ))}
-              {[14.2857, 28.5714, 42.8571, 57.1429, 71.4286, 85.7143].map((left) => (
-                <div className="wt-vline" style={{ left: `${left}%` }} key={`vl-${left}`} />
-              ))}
-            </div>
-            <div className="wt-cols">
-              {chart.columns.map((column, index) => (
-                <div className={`wt-col${column.off ? " wt-col--off" : ""}`} key={`${column.weekday}-${index}`}>
-                  <div className="wt-bars-zone">
-                    {column.off ? null : (
-                      <div className="wt-bar" style={{ height: `${column.barHeightPct}%` }}>
-                        {column.segments.map((segment) => (
-                          <div
-                            className="wt-seg"
-                            style={{ height: `${segment.heightPct}%`, background: segment.color }}
-                            key={segment.key}
-                            onMouseEnter={(event: MouseEvent<HTMLDivElement>) => showWeeklySegmentHover(segment, column.weekdayIndex, column.totalSeconds, event.clientX, event.clientY)}
-                            onMouseMove={(event: MouseEvent<HTMLDivElement>) => moveSegmentHover(event.clientX, event.clientY)}
-                            onMouseLeave={() => setHoveredSegment(null)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="wt-daylabel">{column.weekday}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : <EmptyState title="No weekly trend yet" detail="Weekly focus and drift totals appear after activity is recorded." />}
-      </section>
+      <WeeklyTrendChart
+        chart={chart}
+        hasData={hasData}
+        mode={mode}
+        onHideSegmentHover={() => setHoveredSegment(null)}
+        onModeChange={setMode}
+        onMoveSegmentHover={moveSegmentHover}
+        onShowSegmentHover={showWeeklySegmentHover}
+      />
       <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail weekly-breakdown-analytical is-linked" aria-label="Insight weekly summaries">
         {productivityDonut.rows.length > 0 || categoryDonut.rows.length > 0 ? (
           <div className="weekly-summary-rail__stack weekly-breakdown-analytical__stack">
