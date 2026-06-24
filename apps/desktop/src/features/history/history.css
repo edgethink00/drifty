@@ -104,6 +104,19 @@
   justify-self: center;
 }
 
+.history-loading-more {
+  justify-self: center;
+  margin: 0;
+  padding: var(--space-2) 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+}
+
+.history-scroll-sentinel {
+  width: 100%;
+  height: 1px;
+}
+
 .history-load-more-error {
   justify-self: center;
   margin: 0;
