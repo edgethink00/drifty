@@ -382,7 +382,7 @@
   flex-shrink: 0;
 }
 
-.nav-item--period span {
+.nav-item--period > span:not(.nav-item__hover-label) {
   display: grid;
   gap: 0;
   line-height: 1.05;

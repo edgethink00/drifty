@@ -898,7 +898,7 @@ export default function App() {
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
     setObservedAiClassificationFailure(false);
   }, [aiClassificationProviderKey]);
-  const isSidebarVisuallyCollapsed = activeTab !== "settings" && sidebarCollapsed;
+  const isSidebarVisuallyCollapsed = sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
@@ -4188,6 +4188,7 @@ export default function App() {
             >
               <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
               <span>{item.label}<small>{item.detail}</small></span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
             </button>
           ))}
         </nav>
@@ -4197,6 +4198,7 @@ export default function App() {
           {activityNav.map((item) => (
             <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} onClick={() => navigateToTab(item.id)}>
               <NavIcon type={item.icon} /><span>{item.label}</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
             </button>
           ))}
         </nav>

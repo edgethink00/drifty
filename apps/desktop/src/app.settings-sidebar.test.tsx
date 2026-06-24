@@ -182,4 +182,20 @@ describe("App settings sidebar", () => {
     await waitFor(() => expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull());
     expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
   });
+
+  it("keeps settings navigation collapsed when the sidebar preference is collapsed", async () => {
+    window.localStorage.setItem("drifty.sidebar.collapsed", "1");
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
+
+    const settingsSidebar = await screen.findByRole("complementary", { name: /settings navigation/i });
+    const settingsNav = within(settingsSidebar).getByRole("navigation", { name: /settings sections/i });
+    const generalButton = within(settingsNav).getByRole("button", { name: /^General$/ });
+
+    expect(settingsSidebar.classList.contains("sidebar--collapsed")).toBe(true);
+    expect(generalButton.querySelector(".nav-item__hover-label")?.textContent).toBe("General");
+    expect(generalButton.querySelector(".nav-item__hover-label")?.getAttribute("aria-hidden")).toBe("true");
+  });
 });
