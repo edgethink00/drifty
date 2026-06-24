@@ -23,4 +23,15 @@ describe("SettingsSidebar", () => {
 
     expect(onSectionChange).toHaveBeenCalledWith("dev");
   });
+
+  it("keeps collapsed settings nav items labeled for hover without changing accessible names", () => {
+    render(<SettingsSidebar activeSection="general" isCollapsed={true} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    const generalButton = within(settingsNav).getByRole("button", { name: /^General$/ });
+    const hoverLabel = generalButton.querySelector(".nav-item__hover-label");
+
+    expect(hoverLabel?.textContent).toBe("General");
+    expect(hoverLabel?.getAttribute("aria-hidden")).toBe("true");
+  });
 });

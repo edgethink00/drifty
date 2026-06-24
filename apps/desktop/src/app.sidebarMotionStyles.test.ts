@@ -25,9 +25,9 @@ describe("sidebar motion styles", () => {
 
   it("collapses sidebar text and footer copy with max-size transitions", () => {
     const styles = readStyles();
-    const navTextBlock = cssBlock(styles, ".nav-item span");
+    const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)");
     const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
-    const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item span");
+    const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > span:not(.nav-item__hover-label)");
     const collapsedLivePillBlock = cssBlock(styles, ".sidebar--collapsed .live-pill");
     const collapsedLiveStatusBlock = cssBlock(styles, ".sidebar--collapsed .live-pill .k");
     const collapsedLiveCopyBlock =
@@ -56,5 +56,48 @@ describe("sidebar motion styles", () => {
     expect(collapsedTrackerPauseIconBlock).toContain("height: 9px;");
     expect(collapsedAccountTriggerBlock).toContain("display: flex;");
     expect(collapsedAccountTriggerBlock).toContain("justify-content: center;");
+  });
+
+  it("reveals collapsed sidebar hover labels with matching borderless typography", () => {
+    const styles = readStyles();
+    const hoverLabelBlock = cssBlock(styles, ".nav-item__hover-label");
+    const collapsedHoverBlock = cssBlock(styles, ".sidebar--collapsed .nav-item:hover .nav-item__hover-label");
+    const collapsedFocusBlock = cssBlock(styles, ".sidebar--collapsed .nav-item:focus-visible .nav-item__hover-label");
+    const settingsHoverBlock = cssBlock(styles, ".sidebar--collapsed .settings-nav-item:hover .nav-item__hover-label");
+    const settingsFocusBlock = cssBlock(styles, ".sidebar--collapsed .settings-nav-item:focus-visible .nav-item__hover-label");
+    const reducedMotionBlock = styles.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.nav-item__hover-label[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(hoverLabelBlock).toContain("position: absolute;");
+    expect(hoverLabelBlock).toContain("pointer-events: none;");
+    expect(hoverLabelBlock).toContain("border: none;");
+    expect(hoverLabelBlock).toContain("box-shadow:");
+    expect(hoverLabelBlock).toContain("0 12px 26px");
+    expect(hoverLabelBlock).toContain("font-family: var(--font-sans);");
+    expect(hoverLabelBlock).toContain("letter-spacing: 0;");
+    expect(hoverLabelBlock).toContain("text-transform: none;");
+    expect(hoverLabelBlock).toContain("opacity: 0;");
+    expect(hoverLabelBlock).toMatch(/transition:\s*opacity var\(--transition-fast\),\s*transform var\(--transition-fast\);/);
+    expect(hoverLabelBlock).not.toMatch(/transition:[^;]*(?:width|height|top|left|margin|padding)/);
+    expect(collapsedHoverBlock).toContain("opacity: 1;");
+    expect(collapsedHoverBlock).toContain("transform: translate3d(0, -50%, 0);");
+    expect(collapsedFocusBlock).toContain("opacity: 1;");
+    expect(settingsHoverBlock).toContain("opacity: 1;");
+    expect(settingsFocusBlock).toContain("opacity: 1;");
+    expect(reducedMotionBlock).toContain(".nav-item__hover-label");
+  });
+
+  it("keeps collapsed settings sidebar chrome inside the rail", () => {
+    const styles = readStyles();
+    const collapsedBackBlock = cssBlock(styles, ".sidebar--collapsed .settings-sidebar-back");
+    const collapsedBackCopyBlock = cssBlock(styles, ".sidebar--collapsed .settings-sidebar-back span");
+    const collapsedHeadingBlock = cssBlock(styles, ".sidebar--collapsed .settings-sidebar-heading");
+
+    expect(collapsedBackBlock).toContain("justify-content: center;");
+    expect(collapsedBackBlock).toContain("padding: 0;");
+    expect(collapsedBackCopyBlock).toContain("max-width: 0;");
+    expect(collapsedBackCopyBlock).toContain("opacity: 0;");
+    expect(collapsedHeadingBlock).toContain("max-height: 0;");
+    expect(collapsedHeadingBlock).toContain("opacity: 0;");
+    expect(collapsedHeadingBlock).toContain("pointer-events: none;");
   });
 });

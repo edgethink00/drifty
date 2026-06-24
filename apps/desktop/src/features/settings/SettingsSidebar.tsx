@@ -41,9 +41,11 @@ export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, on
             key={item.id}
             type="button"
             className={`settings-nav-item${activeSection === item.id ? " on" : ""}`}
+            data-rail-label={item.label.slice(0, 1)}
             onClick={() => onSectionChange(item.id)}
           >
-            {item.label}
+            <span className="settings-nav-item__label">{item.label}</span>
+            {isCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
           </button>
         ))}
       </nav>
