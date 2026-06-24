@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActivitySegment, AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
@@ -59,11 +59,37 @@ export function HistoryView({
   const hasLocalRowsToReveal = isSearching ? hiddenCount > 0 : recentHistoryWindow?.hasMore === true;
   const canLoadBackendRows = !isSearching && !hasLocalRowsToReveal && hasMoreSegments && onLoadMore !== undefined;
   const hasMoreRows = hasLocalRowsToReveal || canLoadBackendRows;
-  const showMoreLabel = isSearching && hiddenCount > 0
-    ? `Show more (${hiddenCount.toLocaleString("en-US")} older ${hiddenCount === 1 ? "record" : "records"})`
-    : loadingMore
-      ? "Loading older records..."
-    : "Show more older records";
+
+  // Auto-load the next page once the user scrolls near the bottom, like a
+  // browser history list. Reveals locally buffered rows and, when those run out,
+  // pulls the next cursor page from the backend (guarded against re-entry there).
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const loadMore = useCallback(() => {
+    setRenderLimit((current) => current + HISTORY_RENDER_STEP);
+    if (canLoadBackendRows) void onLoadMore?.();
+  }, [canLoadBackendRows, onLoadMore]);
+
+  useEffect(() => {
+    if (!hasMoreRows || loadMoreError) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const root = scrollRootRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (loadingMore) return;
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      },
+      { root, rootMargin: "400px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+    // renderedRows.length re-arms the observer after each reveal so a tall
+    // viewport keeps filling until the sentinel is pushed out of view.
+  }, [hasMoreRows, loadMoreError, loadingMore, loadMore, renderedRows.length]);
 
   const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
   const selectedCount = selectedIds.size;
@@ -122,7 +148,7 @@ export function HistoryView({
           <span>{query ? "Try another search." : "Activity appears here after the local tracker records segments."}</span>
         </div>
       ) : (
-        <div className="history-groups">
+        <div className="history-groups" ref={scrollRootRef}>
           {groups.map((group) => (
             <section className="history-group" key={group.dayKey} aria-labelledby={`history-day-${group.dayKey}`}>
               <h2 id={`history-day-${group.dayKey}`}>{group.label}</h2>
@@ -139,21 +165,24 @@ export function HistoryView({
               </div>
             </section>
           ))}
-          {hasMoreRows ? (
-            <button
-              type="button"
-              className="settings-btn history-show-more"
-              disabled={loadingMore}
-              onClick={() => {
-                setRenderLimit((current) => current + HISTORY_RENDER_STEP);
-                if (canLoadBackendRows) void onLoadMore();
-              }}
-            >
-              {showMoreLabel}
-            </button>
+          {loadingMore ? (
+            <p className="history-loading-more" role="status">Loading older records...</p>
           ) : null}
           {loadMoreError ? (
-            <p className="history-load-more-error" role="alert">{loadMoreError}</p>
+            <>
+              <p className="history-load-more-error" role="alert">{loadMoreError}</p>
+              <button
+                type="button"
+                className="settings-btn history-show-more"
+                disabled={loadingMore}
+                onClick={() => loadMore()}
+              >
+                Retry
+              </button>
+            </>
+          ) : null}
+          {hasMoreRows && !loadMoreError ? (
+            <div ref={sentinelRef} className="history-scroll-sentinel" aria-hidden="true" />
           ) : null}
         </div>
       )}
