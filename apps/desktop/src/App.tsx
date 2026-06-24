@@ -28,7 +28,7 @@ import {
   todayIsoDate,
   totalDurationSeconds,
 } from "@drifty/domain";
-import logoUrl from "./assets/drifty-icon.png";
+import logoUrl from "./assets/drifty-mark.svg";
 import {
   isCloudBillingVariant,
   resolveDashboardAiUnavailableState,

@@ -25,14 +25,14 @@
   --window-chrome-height: 32px;
   --window-control-center-y: 17px;
   --window-nav-offset-x: 100px;
-  --sidebar-expanded-width: 220px;
+  --sidebar-expanded-width: 205px;
   --sidebar-collapsed-width: 54px;
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 380ms;
   --sidebar-fade-duration: 180ms;
   --sidebar-fade-delay: 120ms;
-  --content-panel-gap: 10px;
-  --content-panel-radius: 18px;
+  --content-panel-gap: 8px;
+  --content-panel-radius: 14px;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -66,6 +66,9 @@
   --text-soft: #79776f;
   --window-chrome-icon: #383834;
   --window-chrome-icon-hover: #1c1c19;
+  --shell-glass-bg: rgba(237, 239, 236, 0.78);
+  --shell-glass-control: #fafaf8;
+  --shell-glass-control-strong: #fafaf8;
   --accent: #5f7f31;
   --accent-mid: #789645;
   --accent-soft: #e1ead5;
@@ -116,6 +119,9 @@
   --text-soft: #8a8780;
   --window-chrome-icon: #f1efe7;
   --window-chrome-icon-hover: #fffaf0;
+  --shell-glass-bg: rgba(32, 33, 30, 0.74);
+  --shell-glass-control: #141412;
+  --shell-glass-control-strong: #141412;
   --accent: #9bbf5a;
   --accent-mid: #abc96d;
   --accent-soft: #26321d;
@@ -158,11 +164,12 @@
 html, body, #root {
   height: 100%;
   min-height: 100%;
+  background: transparent;
 }
 
 body {
   margin: 0;
-  background: var(--canvas);
+  background: transparent;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 13px;

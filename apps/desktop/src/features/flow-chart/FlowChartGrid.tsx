@@ -64,13 +64,14 @@ export function FlowChartGrid({
             : currentMinuteOffset;
           const isCurrentTimeLabelRow = minuteOffset === nearestLabelMinuteOffset;
           const isTerminalCurrentMinuteRow = isCurrentMinuteRow && minuteOffset + intervalMinutes >= 60;
+          const isTerminalCurrentHourRow = isCurrentMinuteRow && currentHourIndex === HOURS.length - 1;
           const currentHourStyle: FlowCurrentHourStyle | undefined = isCurrentMinuteRow && currentHourIndex !== null
             ? { "--flow-current-hour": currentHourIndex }
             : undefined;
 
           return (
             <div
-              className={`flow-chart-row${isCurrentMinuteRow ? " flow-chart-row--now" : ""}${isTerminalCurrentMinuteRow ? " flow-chart-row--now-terminal" : ""}${isCurrentTimeLabelRow ? " flow-chart-row--time-label" : ""}`}
+              className={`flow-chart-row${isCurrentMinuteRow ? " flow-chart-row--now" : ""}${isTerminalCurrentMinuteRow ? " flow-chart-row--now-terminal" : ""}${isTerminalCurrentHourRow ? " flow-chart-row--now-terminal-hour" : ""}${isCurrentTimeLabelRow ? " flow-chart-row--time-label" : ""}`}
               key={minuteOffset}
               style={currentHourStyle}
             >

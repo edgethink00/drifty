@@ -85,7 +85,7 @@
   min-height: 2.2rem;
   padding: 0.56rem 0.72rem;
   border-radius: 12px;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text) 78%, transparent);
   font-size: 0.72rem;
   letter-spacing: 0.02em;
   text-transform: none;
@@ -93,7 +93,7 @@
 
 .content--settings .settings-nav-item.on {
   background: var(--accent);
-  color: color-mix(in srgb, var(--surface) 94%, white);
+  color: var(--on-accent);
 }
 
 .content--settings .settings-section {

@@ -76,9 +76,17 @@
 
 .app-usage-feature__identity {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 0.62rem;
   align-items: center;
+}
+
+.app-usage-feature .usage-identity-icon--md,
+.app-usage-feature .usage-identity-icon--md .app-glyph--md,
+.app-usage-feature .usage-identity-icon--md .app-icon--md,
+.app-usage-feature .usage-identity-icon--md .site-favicon {
+  width: 48px;
+  height: 48px;
 }
 
 .app-usage-kicker,
@@ -126,7 +134,7 @@
 .app-usage-feature__identity p {
   margin: 2px 0 0;
   color: var(--text-soft);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   line-height: 1.25;
 }
 
@@ -193,7 +201,7 @@
 .app-usage-feature__meter-copy strong {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.73rem;
   font-weight: 560;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -265,7 +273,7 @@
 
 .app-usage-row {
   display: grid;
-  grid-template-columns: 2.35ch minmax(11rem, 1.45fr) minmax(7.5rem, 0.72fr) max-content;
+  grid-template-columns: 2.7ch minmax(11.5rem, 1.42fr) minmax(7rem, 0.68fr) max-content;
   column-gap: 0.62rem;
   row-gap: 0.35rem;
   align-items: center;
@@ -276,6 +284,8 @@
 
 .app-usage-row > .app-usage-rank {
   justify-self: end;
+  font-size: 0.625rem;
+  line-height: 1;
   text-align: right;
 }
 
@@ -297,7 +307,7 @@
   display: block;
   overflow: hidden;
   color: var(--text);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 620;
   line-height: 1.12;
   text-overflow: ellipsis;
@@ -308,7 +318,7 @@
 .app-usage-row__figures span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -328,7 +338,7 @@
 .app-usage-row__figures strong {
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   font-variant-numeric: tabular-nums;
   font-weight: 620;
 }
@@ -1000,7 +1010,7 @@
 }
 
 .app-usage-feature {
-  gap: 8px;
+  gap: 1px;
   padding: 10px;
   border-color: color-mix(in srgb, var(--accent) 12%, var(--line));
   border-radius: var(--radius-sm);
@@ -1013,7 +1023,7 @@
 }
 
 .app-usage-feature__identity {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 0.42rem;
 }
 
@@ -1036,12 +1046,12 @@
 
 .app-usage-feature__identity p {
   margin: 1px 0 0;
-  font-size: 0.52rem;
+  font-size: 0.64rem;
 }
 
 .app-usage-feature__measure strong {
   font-family: var(--font-display);
-  font-size: clamp(0.82rem, 1.05vw, 0.96rem);
+  font-size: clamp(0.98rem, 1.26vw, 1.15rem);
   font-weight: 540;
   letter-spacing: -0.03em;
   line-height: 1.02;
@@ -1073,21 +1083,35 @@
 .app-usage-row {
   column-gap: 0.5rem;
   row-gap: 0.25rem;
+  box-sizing: border-box;
+  height: 2.4rem;
   min-height: 2.4rem;
-  padding: 0.3rem 0;
+  padding: 0.18rem 0;
   border-bottom: none;
 }
 
+.app-usage-row__copy,
+.app-usage-row__figures {
+  gap: 1px;
+}
+
 .app-usage-row__title strong {
-  font-size: 0.7rem;
+  font-size: 0.76rem;
   font-weight: 540;
-  line-height: 1.14;
+  line-height: 1.04;
+}
+
+.app-usage-row__copy small,
+.app-usage-row__figures span {
+  font-size: 0.61rem;
+  line-height: 1.05;
 }
 
 .app-usage-row__figures strong {
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: 0.74rem;
   font-weight: 540;
+  line-height: 1.02;
 }
 
 

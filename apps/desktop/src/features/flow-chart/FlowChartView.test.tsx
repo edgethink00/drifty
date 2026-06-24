@@ -183,6 +183,25 @@ describe("FlowChartView", () => {
     expect(currentRow.classList.contains("flow-chart-row--now-terminal")).toBe(true);
   });
 
+  it("pulls the current-time arrow inside the terminal logical hour", () => {
+    render(
+      <FlowChartView
+        blocks={[makeFlowBlock({ minuteOfDay: 3 * 60 + 9 })]}
+        appIcons={{}}
+        intervalMinutes={3}
+        currentMinuteOfDay={3 * 60 + 9}
+        startOfDayMinutes={4 * 60}
+      />,
+    );
+
+    const currentRow = document.querySelector(".flow-chart-row--now") as HTMLElement;
+    const terminalHourRule = cssRule(".flow-chart-row--now-terminal-hour::after");
+
+    expect(currentRow.querySelector(".flow-chart-row-label")?.textContent).toBe(":09");
+    expect(currentRow.classList.contains("flow-chart-row--now-terminal-hour")).toBe(true);
+    expect(terminalHourRule).toContain("transform: translate(calc(-0.08rem - 5px), -50%);");
+  });
+
   it("draws the current hour pill without shifting or clipping the hour-axis label", () => {
     render(<FlowChartView blocks={[makeFlowBlock({ minuteOfDay: 14 * 60 + 6 })]} appIcons={{}} intervalMinutes={3} currentMinuteOfDay={14 * 60 + 6} />);
 

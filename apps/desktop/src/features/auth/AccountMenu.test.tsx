@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_LOCAL_AI_SETUP } from "../settings/localAiSetup";
-import { AccountMenu } from "./AccountMenu";
+import { ACCOUNT_POPOVER_EXPANDED_GAP_PX, AccountMenu } from "./AccountMenu";
 import type { AuthConnectionStatus } from "./authConnectionStatus";
 
 function renderAccountMenu({
@@ -44,6 +44,10 @@ function renderAccountMenu({
 }
 
 describe("AccountMenu", () => {
+  it("keeps the expanded account popover close to the trigger", () => {
+    expect(ACCOUNT_POPOVER_EXPANDED_GAP_PX).toBe(5);
+  });
+
   it("keeps the account trigger chevrons fixed while aria-expanded changes", () => {
     const { container } = renderAccountMenu();
     const trigger = screen.getByRole("button", { name: /account ai not connected/i });
