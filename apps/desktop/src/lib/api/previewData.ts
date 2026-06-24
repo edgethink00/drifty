@@ -79,6 +79,15 @@ function makeSegment(
 ): PreviewActivitySegment {
   const startedAt = at(day, startHour, startMinute);
   const endedAt = at(day, endHour, endMinute);
+  const classification: PreviewActivitySegment["classification"] = overrides.classification ?? {
+    category,
+    productivity,
+    source: "manual",
+    confidence: 0.96,
+    reason: "Preview fixture classification",
+    classifiedAt: endedAt,
+  };
+
   return {
     id,
     startedAt,
@@ -92,6 +101,7 @@ function makeSegment(
     siteTitle: overrides.siteTitle ?? null,
     category,
     productivity,
+    classification,
     platform: "macos",
     source: "manual",
     confidence: 0.96,
@@ -100,28 +110,44 @@ function makeSegment(
 }
 
 function todaySegments(day: string): PreviewActivitySegment[] {
-  return [
-    makeSegment("preview-t1", day, 8, 42, 8, 58, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }),
-    makeSegment("preview-t2", day, 9, 2, 9, 18, "Mail", "communication", "neutral", { windowTitle: "Inbox" }),
-    makeSegment("preview-t3", day, 9, 21, 10, 33, "Visual Studio Code", "workspace", "focus", { windowTitle: "App.tsx — Drifty" }),
-    makeSegment("preview-t4", day, 10, 34, 10, 41, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }),
-    makeSegment("preview-t5", day, 10, 42, 11, 56, "Visual Studio Code", "workspace", "focus", { windowTitle: "styles.css — Drifty" }),
-    makeSegment("preview-t6", day, 11, 56, 12, 14, "Arc", "workspace", "focus", { siteDomain: "github.com", siteTitle: "Pull request #284", browserName: "Arc", windowTitle: "github.com/drifty/desktop · PR #284" }),
-    makeSegment("preview-t7", day, 12, 15, 12, 28, "Arc", "learning", "focus", { siteDomain: "stackoverflow.com", siteTitle: "How to type useMemo result", browserName: "Arc" }),
-    makeSegment("preview-t8", day, 12, 30, 12, 58, "Spotify", "music", "neutral", { windowTitle: "Lo-fi beats" }),
-    makeSegment("preview-t9", day, 12, 32, 13, 5, "Arc", "social_media", "drift", { siteDomain: "x.com", siteTitle: "X — Home", browserName: "Arc" }),
-    makeSegment("preview-t10", day, 13, 8, 13, 14, "Messages", "communication", "neutral", { windowTitle: "Maria" }),
-    makeSegment("preview-t11", day, 13, 22, 14, 41, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
-    makeSegment("preview-t12", day, 14, 42, 14, 51, "Arc", "learning", "focus", { siteDomain: "react.dev", siteTitle: "useMemo – React", browserName: "Arc" }),
-    makeSegment("preview-t13", day, 14, 52, 15, 38, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
-    makeSegment("preview-t14", day, 15, 39, 15, 47, "Slack", "communication", "neutral", { windowTitle: "#standups" }),
-    makeSegment("preview-t15", day, 15, 48, 16, 12, "Figma", "workspace", "focus", { windowTitle: "Drifty — Insights v3" }),
-    makeSegment("preview-t16", day, 16, 12, 16, 33, "Linear", "workspace", "focus", { windowTitle: "DTM-208 · Leaderboard ranks" }),
-    makeSegment("preview-t17", day, 16, 33, 17, 12, "Visual Studio Code", "workspace", "focus", { windowTitle: "LeaderboardView.tsx" }),
-    makeSegment("preview-t18", day, 17, 13, 17, 32, "Arc", "workspace", "focus", { siteDomain: "github.com", siteTitle: "PR review · #284", browserName: "Arc" }),
-    makeSegment("preview-t19", day, 17, 52, 18, 21, "Arc", "entertainment", "drift", { siteDomain: "youtube.com", siteTitle: "MKBHD — phone reviews", browserName: "Arc" }),
-    makeSegment("preview-t20", day, 18, 23, 18, 40, "Arc", "social_media", "drift", { siteDomain: "reddit.com", siteTitle: "r/programming", browserName: "Arc" }),
+  const specs: readonly PreviewSegmentSpec[] = [
+    ["preview-t1", 9, 27, 9, 30, "Mail", "communication", "neutral", { windowTitle: "Inbox" }],
+    ["preview-t2", 9, 51, 10, 15, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "calendar.google.com", siteTitle: "Daily plan" }],
+    ["preview-t3", 10, 15, 10, 18, "Visual Studio Code", "workspace", "focus", { windowTitle: "DashboardPage.tsx" }],
+    ["preview-t4", 10, 18, 10, 27, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Pull request #284" }],
+    ["preview-t5", 10, 36, 10, 42, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }],
+    ["preview-t6", 10, 42, 10, 48, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Review checks" }],
+    ["preview-t7", 10, 48, 10, 57, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }],
+    ["preview-t8", 11, 15, 11, 42, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }],
+    ["preview-t9", 11, 42, 11, 54, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "linear.app", siteTitle: "Dashboard polish" }],
+    ["preview-t10", 12, 0, 12, 9, "Visual Studio Code", "workspace", "focus", { windowTitle: "previewData.ts" }],
+    ["preview-t11", 12, 9, 12, 33, "Figma", "workspace", "focus", { windowTitle: "Homepage crop options" }],
+    ["preview-t12", 12, 33, 12, 42, "Mail", "communication", "neutral", { windowTitle: "Feedback digest" }],
+    ["preview-t13", 12, 42, 13, 0, "Visual Studio Code", "workspace", "focus", { windowTitle: "previewData.ts" }],
+    ["preview-t14", 13, 0, 13, 12, "Figma", "workspace", "focus", { windowTitle: "Category rhythm" }],
+    ["preview-t15", 13, 30, 13, 42, "Visual Studio Code", "workspace", "focus", { windowTitle: "AppUsagePanel.tsx" }],
+    ["preview-t16", 13, 42, 14, 0, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Actions run" }],
+    ["preview-t17", 14, 0, 14, 15, "Visual Studio Code", "workspace", "focus", { windowTitle: "AppUsagePanel.tsx" }],
+    ["preview-t18", 14, 24, 14, 33, "Mail", "communication", "neutral", { windowTitle: "Feedback digest" }],
+    ["preview-t19", 14, 33, 14, 45, "Visual Studio Code", "workspace", "focus", { windowTitle: "AppUsagePanel.tsx" }],
+    ["preview-t20", 15, 0, 15, 27, "Visual Studio Code", "workspace", "focus", { windowTitle: "Dashboard QA" }],
+    ["preview-t21", 15, 27, 15, 36, "Arc", "learning", "focus", { browserName: "Arc", siteDomain: "react.dev", siteTitle: "Grid layout" }],
+    ["preview-t22", 15, 36, 15, 45, "Messages", "communication", "neutral", { windowTitle: "Min" }],
+    ["preview-t23", 15, 45, 15, 54, "Visual Studio Code", "workspace", "focus", { windowTitle: "DashboardPage.tsx" }],
+    ["preview-t24", 18, 39, 18, 45, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "drifty.so", siteTitle: "Homepage preview" }],
+    ["preview-t25", 18, 45, 19, 0, "Visual Studio Code", "workspace", "focus", { windowTitle: "Homepage demo" }],
+    ["preview-t26", 19, 0, 19, 18, "Visual Studio Code", "workspace", "focus", { windowTitle: "Homepage demo" }],
+    ["preview-t27", 19, 18, 19, 30, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Visual QA" }],
+    ["preview-t28", 19, 30, 19, 36, "Linear", "workspace", "focus", { windowTitle: "Demo follow-up" }],
+    ["preview-t29", 19, 36, 19, 51, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Visual QA" }],
+    ["preview-t30", 19, 51, 20, 0, "Visual Studio Code", "workspace", "focus", { windowTitle: "Homepage demo" }],
+    ["preview-t31", 20, 0, 20, 9, "Figma", "workspace", "focus", { windowTitle: "Flow silhouette" }],
+    ["preview-t32", 20, 9, 20, 21, "Arc", "utility", "neutral", { browserName: "Arc", siteDomain: "github.com", siteTitle: "Visual QA" }],
+    ["preview-t33", 20, 21, 20, 30, "Slack", "communication", "neutral", { windowTitle: "#launch-room" }],
   ];
+  return specs.map(([id, startHour, startMinute, endHour, endMinute, appName, category, productivity, overrides]) =>
+    makeSegment(id, day, startHour, startMinute, endHour, endMinute, appName, category, productivity, overrides),
+  );
 }
 
 function weekSegments(today: string): PreviewActivitySegment[] {
@@ -223,7 +249,7 @@ export function previewStatus(): TrackerStatus {
   return {
     running: true,
     accessibilityGranted: true,
-    lastEventAt: at(todayIsoDate(), 18, 40),
+    lastEventAt: at(todayIsoDate(), 20, 30),
     databasePath: "browser-preview",
     trackerMode: "preview",
     idleSeconds: 0,
