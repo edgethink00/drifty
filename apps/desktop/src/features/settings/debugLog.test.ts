@@ -89,7 +89,7 @@ const driftAlarmDebugEvent: DriftAlarmDebugEvent = {
 };
 
 describe("buildDebugLogPayload", () => {
-  it("keeps browser fallback diagnostics concise", () => {
+  it("includes browser automation diagnostics without raw activity rows", () => {
     const unavailableSegment = segment({
       browserAutomationStatus: "unavailable",
       browserAutomationError: "Google Chrome reported no scriptable browser window.",
@@ -98,6 +98,11 @@ describe("buildDebugLogPayload", () => {
       id: "segment-empty",
       browserAutomationStatus: "empty_result",
       browserAutomationError: "Google Chrome returned an empty browser automation result.",
+    });
+    const deniedSegment = segment({
+      id: "segment-denied",
+      browserAutomationStatus: "denied",
+      browserAutomationError: "Not authorized to send Apple events to Google Chrome.",
     });
     const grantedSegment = segment({
       id: "segment-2",
@@ -125,6 +130,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: true,
         forceChromiumAxCapture: true,
+        forceFrontmostFallbackCapture: true,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,
@@ -132,26 +138,138 @@ describe("buildDebugLogPayload", () => {
       currentSnapshot: null,
       driftAlarm,
       driftAlarmDebugEvents: [],
-      segments: [unavailableSegment, emptyResultSegment, grantedSegment, accessibilitySegment],
+      segments: [unavailableSegment, emptyResultSegment, deniedSegment, grantedSegment, accessibilitySegment],
       historySegments: [],
       leaderboardSegments: [],
       ai: baseAiDebug,
       error: null,
     });
 
+    expect(payload.tracker.browserCaptureDiagnostics.today).toMatchObject({
+      browserAutomationStatusCounts: {
+        unavailable: 1,
+        empty_result: 1,
+        denied: 1,
+        granted: 2,
+      },
+      browserAutomationErrorCounts: {
+        "Google Chrome reported no scriptable browser window.": 1,
+        "Google Chrome returned an empty browser automation result.": 1,
+        "Not authorized to send Apple events to Google Chrome.": 1,
+      },
+      browserAutomationErrorSegments: 3,
+      browserAutomationDeniedSegments: 1,
+    });
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).toMatchObject({
       browserName: "Google Chrome",
       accessibilityAddressBarFallbackSegments: 1,
-      accessibilityAddressBarFallbackRatio: 0.25,
+      accessibilityAddressBarFallbackRatio: 0.2,
       siteSourceCounts: {
         "accessibility-address-bar": 1,
         applescript: 1,
-        missing: 2,
+        missing: 3,
+      },
+      browserAutomationStatusCounts: {
+        unavailable: 1,
+        empty_result: 1,
+        denied: 1,
+        granted: 2,
+      },
+      browserAutomationErrorCounts: {
+        "Google Chrome reported no scriptable browser window.": 1,
+        "Google Chrome returned an empty browser automation result.": 1,
+        "Not authorized to send Apple events to Google Chrome.": 1,
+      },
+      browserAutomationErrorSegments: 3,
+      browserAutomationDeniedSegments: 1,
+    });
+    expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("segments");
+    expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("rawActivityRows");
+    expect(payload.settings.developerDiagnostics.forceChromiumAxCapture).toBe(true);
+    expect(payload.settings.developerDiagnostics.forceFrontmostFallbackCapture).toBe(true);
+  });
+
+  it("summarizes frontmost app capture diagnostics for unavailable history", () => {
+    const unavailableSegment = segment({
+      appName: "Unavailable",
+      browserName: null,
+      durationSeconds: 120,
+      source: "nsworkspace",
+      frontmostCaptureSource: "unavailable",
+      frontmostCaptureError: "osascript timed out",
+      frontmostFallbackError: "lsappinfo info returned no parseable app name.",
+    });
+    const fallbackSegment = segment({
+      id: "fallback-segment",
+      appName: "Notes",
+      browserName: null,
+      bundleId: "com.apple.Notes",
+      durationSeconds: 30,
+      frontmostCaptureSource: "lsappinfo",
+      frontmostCaptureError: "System Events lookup failed",
+    });
+
+    const payload = buildDebugLogPayload({
+      selectedDay: "2026-06-13",
+      startOfDayMinutes: 240,
+      startOfWeek: "monday",
+      theme: "light",
+      categoryColorOverrides: {},
+      appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: true,
+        forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: true,
+        forceChromiumAxExtremeNudge: true,
+      },
+      status: null,
+      accessibilityGranted: true,
+      currentSnapshot: {
+        observedAt: "2026-06-13T15:05:00.000Z",
+        appName: "Unavailable",
+        source: "nsworkspace",
+        frontmostCaptureSource: "unavailable",
+        frontmostCaptureError: "osascript timed out",
+        frontmostFallbackError: "lsappinfo info returned no parseable app name.",
+      },
+      driftAlarm,
+      driftAlarmDebugEvents: [],
+      segments: [unavailableSegment, fallbackSegment],
+      historySegments: [],
+      leaderboardSegments: [],
+      ai: baseAiDebug,
+      error: null,
+    });
+
+    expect(payload.tracker.currentSnapshot).toMatchObject({
+      appName: "Unavailable",
+      frontmostCaptureSource: "unavailable",
+      frontmostCaptureError: "osascript timed out",
+      frontmostFallbackError: "lsappinfo info returned no parseable app name.",
+      hasFrontmostCaptureError: true,
+      hasFrontmostFallbackError: true,
+    });
+    expect(payload.tracker.frontmostCaptureDiagnostics.today).toMatchObject({
+      unavailableSegments: 1,
+      unavailableSeconds: 120,
+      unavailableRatio: 0.5,
+      systemEventsSegments: 0,
+      lsappinfoSegments: 1,
+      missingCaptureSourceSegments: 0,
+      captureErrorSegments: 2,
+      fallbackErrorSegments: 1,
+      captureSourceCounts: {
+        unavailable: 1,
+        lsappinfo: 1,
+      },
+      captureErrorCounts: {
+        "osascript timed out": 1,
+        "System Events lookup failed": 1,
+      },
+      fallbackErrorCounts: {
+        "lsappinfo info returned no parseable app name.": 1,
       },
     });
-    expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("automationErrorCounts");
-    expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("automationStatusCounts");
-    expect(payload.settings.developerDiagnostics.forceChromiumAxCapture).toBe(true);
   });
 
   it("records cloud AI issue diagnostics without raw provider payloads", () => {
@@ -165,6 +283,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: false,
         forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: false,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,
@@ -294,6 +413,7 @@ describe("buildDebugLogPayload", () => {
       developerDiagnostics: {
         devModeEnabled: false,
         forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: false,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,

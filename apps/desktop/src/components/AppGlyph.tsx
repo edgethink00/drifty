@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
 const APP_COLORS = [
@@ -37,10 +38,23 @@ export function AppGlyph({
   size?: "sm" | "md" | "lg";
   iconSrc?: string | null;
 }) {
+  const [iconFailed, setIconFailed] = useState(false);
   const style = { ["--app-glyph-color" as const]: colorForApp(appName) } as CSSProperties;
 
-  if (iconSrc) {
-    return <img className={`app-icon app-icon--${size}`} src={iconSrc} alt="" aria-hidden="true" />;
+  useEffect(() => {
+    setIconFailed(false);
+  }, [iconSrc]);
+
+  if (iconSrc && !iconFailed) {
+    return (
+      <img
+        className={`app-icon app-icon--${size}`}
+        src={iconSrc}
+        alt=""
+        aria-hidden="true"
+        onError={() => setIconFailed(true)}
+      />
+    );
   }
 
   return (

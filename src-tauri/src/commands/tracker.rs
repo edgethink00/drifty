@@ -24,6 +24,16 @@ pub struct LiveTailQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TimelinePageQuery {
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub before_segment_id: Option<String>,
+    pub before_ended_at: Option<String>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RawEventsQuery {
     pub day: Option<String>,
     pub start: Option<String>,
@@ -45,6 +55,7 @@ pub struct TopSitesQuery {
 #[serde(rename_all = "camelCase")]
 pub struct DeveloperDiagnosticsQuery {
     pub force_chromium_ax_capture: bool,
+    pub force_frontmost_fallback_capture: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +95,23 @@ pub struct DeleteActivitySegmentsQuery {
 #[serde(rename_all = "camelCase")]
 pub struct ClassificationRuleCandidateQuery {
     pub query: String,
+    pub target_kind: Option<ClassificationRuleTargetKind>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClassificationRuleTargetKind {
+    Site,
+    App,
+}
+
+impl ClassificationRuleTargetKind {
+    const fn as_tracker_payload(&self) -> &'static str {
+        match self {
+            ClassificationRuleTargetKind::Site => "site",
+            ClassificationRuleTargetKind::App => "app",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -145,6 +173,29 @@ pub async fn tracker_get_timeline(
     async_runtime::spawn_blocking(move || {
         controller
             .get_timeline(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_timeline_page(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: TimelinePageQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_timeline_page(
+                &app,
+                query.start,
+                query.end,
+                query.before_segment_id,
+                query.before_ended_at,
+                query.limit,
+            )
             .map_err(|error| error.to_string())
     })
     .await
@@ -214,7 +265,11 @@ pub async fn tracker_set_developer_diagnostics(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .set_developer_diagnostics(&app, query.force_chromium_ax_capture)
+            .set_developer_diagnostics(
+                &app,
+                query.force_chromium_ax_capture,
+                query.force_frontmost_fallback_capture,
+            )
             .map_err(|error| error.to_string())
     })
     .await
@@ -395,7 +450,15 @@ pub async fn tracker_search_classification_rule_candidates(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .search_classification_rule_candidates(&app, query.query)
+            .search_classification_rule_candidates(
+                &app,
+                query.query,
+                query
+                    .target_kind
+                    .as_ref()
+                    .map(ClassificationRuleTargetKind::as_tracker_payload)
+                    .map(str::to_owned),
+            )
             .map_err(|error| error.to_string())
     })
     .await

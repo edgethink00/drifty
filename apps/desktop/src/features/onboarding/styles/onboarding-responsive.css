@@ -1,0 +1,33 @@
+/* ── Responsive ── */
+@media (max-width: 560px) {
+  .onboarding-screen .onboarding-card .onb-privacy { grid-template-columns: 1fr; }
+  .onboarding-screen .onboarding-card .onb-setup-choice { grid-template-columns: 1fr; }
+  .onboarding-screen .onboarding-card .onb-data-row { grid-template-columns: 1fr; gap: 4px; }
+  .onboarding-screen .onboarding-card .onb-job__grid { grid-template-columns: 1fr; }
+  .onboarding-screen .onboarding-card .onb-perms__row { flex-direction: column; align-items: flex-start; }
+  .onboarding-screen .onboarding-card .onb-perms__control { width: 100%; justify-content: space-between; }
+  .onboarding-screen .onboarding-flow-mark { gap: var(--onb-space-5); }
+  .onboarding-screen .onboarding-logo { font-size: 13px; }
+  .onboarding-screen .onboarding-logo--image { width: 68px; }
+  .onboarding-screen .onboarding-content-area { padding: 18px var(--onb-space-3) var(--onb-space-4); }
+  .onboarding-screen .onboarding-card { width: min(100%, var(--onb-content-width)); }
+  .onboarding-screen .onboarding-card .onboarding-title { font-size: 24px; }
+  .onboarding-screen .onboarding-card .onb-typewriter .tw-title { font-size: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-screen .onboarding-progress-bar__fill,
+  .onboarding-screen .onboarding-step,
+  .onboarding-screen .onb-focus-bar__fill,
+  .onboarding-screen .onb-typewriter .tw-line,
+  .onboarding-screen .onb-button--loading::before,
+  .onboarding-screen .onb-checklist__row--loading .onb-checklist__icon {
+    transition: none;
+    animation: none;
+  }
+
+  .onboarding-screen .onb-typewriter .tw-line {
+    opacity: 1;
+    transform: none;
+  }
+}

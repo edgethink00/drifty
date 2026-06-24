@@ -132,6 +132,87 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(bridge.hideNativeWatcherPeek).toHaveBeenCalledTimes(1);
   });
 
+  it("pauses extreme nudge toast dismissal while the mouse is hovered", async () => {
+    vi.useFakeTimers();
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+
+    render(<WatcherWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.showHandler?.(extremeNudgeToastEvent);
+    });
+
+    const toast = screen.getByRole("status");
+    act(() => {
+      vi.advanceTimersByTime(4_000);
+    });
+
+    fireEvent.mouseEnter(toast);
+    expect(toast.getAttribute("data-timer-paused")).toBe("true");
+
+    act(() => {
+      vi.advanceTimersByTime(8_000);
+    });
+    expect(toast.getAttribute("data-phase")).toBe("visible");
+    expect(bridge.hideNativeWatcherPeek).not.toHaveBeenCalled();
+
+    fireEvent.mouseLeave(toast);
+    expect(toast.hasAttribute("data-timer-paused")).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(3_999);
+    });
+    expect(toast.getAttribute("data-phase")).toBe("visible");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(toast.getAttribute("data-phase")).toBe("leaving");
+  });
+
+  it("does not keep the timer paused after mouse-created focus leaves the toast", async () => {
+    vi.useFakeTimers();
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+
+    render(<WatcherWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.showHandler?.(extremeNudgeToastEvent);
+    });
+
+    const toast = screen.getByRole("status");
+    const breakTrigger = screen.getByRole("button", { name: "Take a break" });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    fireEvent.mouseEnter(toast);
+    fireEvent.mouseDown(breakTrigger);
+    fireEvent.focus(breakTrigger);
+    expect(toast.getAttribute("data-timer-paused")).toBe("true");
+
+    fireEvent.mouseLeave(toast);
+    expect(toast.hasAttribute("data-timer-paused")).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(5_999);
+    });
+    expect(toast.getAttribute("data-phase")).toBe("visible");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(toast.getAttribute("data-phase")).toBe("leaving");
+  });
+
   it("sends take-a-break actions from extreme nudge toasts", async () => {
     vi.useFakeTimers();
     bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {

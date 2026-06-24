@@ -5,6 +5,7 @@ export type TrackerCommand =
   | "tracker_start"
   | "tracker_stop"
   | "tracker_get_timeline"
+  | "tracker_get_timeline_page"
   | "tracker_get_dashboard_week_timeline"
   | "tracker_get_live_tail"
   | "tracker_get_current_snapshot"
@@ -24,7 +25,8 @@ export type TrackerCommand =
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
-  | "tray_update_productivity_icon";
+  | "tray_update_productivity_icon"
+  | "tray_update_drift_alarm_status";
 
 export interface DayQuery {
   day: string;
@@ -36,6 +38,23 @@ export interface DateRangeQuery {
 }
 
 export type TimelineQuery = DayQuery | DateRangeQuery;
+
+export interface TimelinePageCursor {
+  beforeEndedAt: string;
+  beforeSegmentId: string;
+}
+
+export interface TimelinePageQuery extends Partial<DayQuery>, Partial<DateRangeQuery> {
+  beforeEndedAt?: string | null;
+  beforeSegmentId?: string | null;
+  limit?: number;
+}
+
+export interface TimelinePage {
+  items: ActivitySegment[];
+  hasMore: boolean;
+  nextCursor: TimelinePageCursor | null;
+}
 
 export interface LiveTailQuery extends Partial<DateRangeQuery> {
   afterSegmentId?: string | null;
@@ -98,6 +117,11 @@ export interface ClassificationRuleCandidate {
   lastSeenAt?: string | null;
 }
 
+export interface ClassificationRuleCandidateQuery {
+  readonly query: string;
+  readonly targetKind?: ClassificationRuleTargetKind;
+}
+
 export interface ClassificationRuleApplyResult {
   matchedCount: number;
   appliedCount: number;
@@ -147,6 +171,7 @@ export interface DriftAlarmTrayStatus {
   readonly lastCheckedLabel: string;
   readonly resultLabel: string;
   readonly detailLabel: string | null;
+  readonly trackerRunning?: boolean | null;
 }
 
 export type AppIconMap = Record<string, string | null>;
@@ -163,6 +188,7 @@ export interface TrackerApi {
   start(): Promise<TrackerStatus>;
   stop(): Promise<TrackerStatus>;
   getTimeline(query: TimelineQuery): Promise<ActivitySegment[]>;
+  getTimelinePage(query: TimelinePageQuery): Promise<TimelinePage>;
   getDashboardWeekTimeline(query: DateRangeQuery): Promise<ActivitySegment[]>;
   getLiveTail(query: LiveTailQuery): Promise<TrackerLiveTail>;
   getCurrentSnapshot(): Promise<CurrentActivitySnapshot | null>;
@@ -177,7 +203,7 @@ export interface TrackerApi {
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
   deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
-  searchClassificationRuleCandidates(query: string): Promise<ClassificationRuleCandidate[]>;
+  searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery): Promise<ClassificationRuleCandidate[]>;
   applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
@@ -188,4 +214,5 @@ export interface TrackerApi {
 
 export interface DeveloperDiagnosticsSettings {
   forceChromiumAxCapture: boolean;
+  forceFrontmostFallbackCapture: boolean;
 }

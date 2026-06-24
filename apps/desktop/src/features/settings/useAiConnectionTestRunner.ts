@@ -11,9 +11,10 @@ type UseAiConnectionTestRunnerOptions = {
   readonly onLocalAiConnectionTestResult: (setup: LocalAiSetupState, result: AiConnectionTestResult) => void;
 };
 
-type UseAiConnectionTestRunnerResult = {
+export type UseAiConnectionTestRunnerResult = {
   readonly result: AiConnectionTestResult | null;
   readonly running: boolean;
+  readonly runningFingerprint: string | null;
   readonly clearResult: () => void;
   readonly run: () => Promise<void>;
 };
@@ -24,6 +25,7 @@ export function useAiConnectionTestRunner({
 }: UseAiConnectionTestRunnerOptions): UseAiConnectionTestRunnerResult {
   const [result, setResult] = useState<AiConnectionTestResult | null>(null);
   const [running, setRunning] = useState(false);
+  const [runningFingerprint, setRunningFingerprint] = useState<string | null>(null);
   const runningRef = useRef(false);
   const latestSetupRef = useRef(localAiSetup);
   const completedAutoFingerprintRef = useRef<string | null>(null);
@@ -38,8 +40,10 @@ export function useAiConnectionTestRunner({
 
   const runForSetup = useCallback(async (setupSnapshot: LocalAiSetupState): Promise<boolean> => {
     if (runningRef.current) return false;
+    const fingerprint = localAiSetupFingerprint(setupSnapshot);
     runningRef.current = true;
     setRunning(true);
+    setRunningFingerprint(fingerprint);
     setResult(null);
     try {
       const isCloudRoute = setupSnapshot.provider === "managed_local" && setupSnapshot.driftyRoute === "cloud";
@@ -51,11 +55,11 @@ export function useAiConnectionTestRunner({
     } finally {
       runningRef.current = false;
       setRunning(false);
+      setRunningFingerprint(null);
     }
   }, [onLocalAiConnectionTestResult]);
 
   const autoFingerprint = useMemo(() => {
-    if (localAiSetup.provider !== "managed_local" || localAiSetup.driftyRoute !== "local") return null;
     if (!isActiveProviderTestable(localAiSetup)) return null;
     return localAiSetupFingerprint(localAiSetup);
   }, [localAiSetup]);
@@ -72,7 +76,7 @@ export function useAiConnectionTestRunner({
     await runForSetup(localAiSetup);
   }, [localAiSetup, runForSetup]);
 
-  return { result, running, clearResult, run };
+  return { result, running, runningFingerprint, clearResult, run };
 }
 
 function isConnectionTestResultCurrent(

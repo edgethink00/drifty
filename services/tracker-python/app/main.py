@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -10,19 +11,19 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 APP_DIR = Path(__file__).resolve().parent
 PACKAGE_ROOT = APP_DIR.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from app.permissions.accessibility import accessibility_granted
 from app.storage.db import TrackerDatabase
-from app.storage.live_tail import fetch_live_tail
-from app.tracker.idle import seconds_since_last_input
-from app.tracker.macos_workspace import current_snapshot
-from app.tracker.power_state import PowerStateSample, current_power_state
-from app.tracker.youtube_metadata import fetch_youtube_metadata
+
+if TYPE_CHECKING:
+    from app.tracker.macos_workspace import Snapshot
+    from app.tracker.power_state import PowerStateSample
+    from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
@@ -30,6 +31,9 @@ IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "18
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
 FORCE_CHROMIUM_AX_CAPTURE_META_KEY = "developer_diagnostics_force_chromium_ax_capture"
 FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
+FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY = "developer_diagnostics_force_frontmost_fallback_capture"
+FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
+TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 
@@ -54,9 +58,54 @@ def database() -> TrackerDatabase:
     return TrackerDatabase(DB_PATH)
 
 
+def accessibility_granted() -> bool:
+    from app.permissions.accessibility import accessibility_granted as read_accessibility_granted
+
+    return read_accessibility_granted()
+
+
+def seconds_since_last_input() -> float | None:
+    from app.tracker.idle import seconds_since_last_input as read_seconds_since_last_input
+
+    return read_seconds_since_last_input()
+
+
+def current_snapshot(include_system_transient: bool = True) -> Snapshot:
+    from app.tracker.macos_workspace import current_snapshot as read_current_snapshot
+
+    return read_current_snapshot(include_system_transient=include_system_transient)
+
+
+def current_power_state() -> PowerStateSample:
+    from app.tracker.power_state import current_power_state as read_current_power_state
+
+    return read_current_power_state()
+
+
+def fetch_youtube_metadata(site_url: str, video_id: str, timeout_seconds: float) -> YouTubeVideoMetadata:
+    from app.tracker.youtube_metadata import fetch_youtube_metadata as read_youtube_metadata
+
+    return read_youtube_metadata(site_url, video_id, timeout_seconds=timeout_seconds)
+
+
+def fetch_live_tail(
+    db: TrackerDatabase,
+    start: str | None,
+    end: str | None,
+    after_segment_id: str | None,
+    after_ended_at: str | None,
+    limit: int | str | None = 8,
+) -> list[dict[str, object]]:
+    from app.storage.live_tail import fetch_live_tail as read_fetch_live_tail
+
+    return read_fetch_live_tail(db, start, end, after_segment_id, after_ended_at, limit)
+
+
 def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
-    enabled = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
-    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if enabled else "0"
+    force_chromium_ax_capture = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
+    force_frontmost_fallback_capture = db.get_meta(FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY) == "true"
+    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if force_chromium_ax_capture else "0"
+    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if force_frontmost_fallback_capture else "0"
 
 
 def _bool_meta(value: str | None) -> bool | None:
@@ -126,6 +175,24 @@ def _current_script_path() -> str:
     return str(Path(__file__).resolve())
 
 
+def _tracker_runtime_source_files() -> list[Path]:
+    return [
+        path
+        for path in APP_DIR.rglob("*.py")
+        if "__pycache__" not in path.parts
+    ]
+
+
+def _tracker_runtime_fingerprint() -> str:
+    digest = hashlib.sha256()
+    for path in sorted(_tracker_runtime_source_files()):
+        digest.update(str(path.relative_to(APP_DIR)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def _running_daemon_matches_current_script(pid: int) -> bool:
     command = _process_command(pid)
     if not command:
@@ -136,6 +203,12 @@ def _running_daemon_matches_current_script(pid: int) -> bool:
     if "tracker-python" in command and "main.py" in command:
         return False
     return True
+
+
+def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bool:
+    if not _running_daemon_matches_current_script(pid):
+        return False
+    return db.get_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY) == _tracker_runtime_fingerprint()
 
 
 def _stop_stale_tracker_daemon(pid: int) -> None:
@@ -150,7 +223,7 @@ def start_tracking():
     ensure_state_dir()
     if is_running():
         pid = _read_tracker_pid()
-        if pid is None or _running_daemon_matches_current_script(pid):
+        if pid is None or _running_daemon_matches_current_runtime(pid, database()):
             return response(True, get_status()["data"])
         _stop_stale_tracker_daemon(pid)
         time.sleep(0.25)
@@ -219,6 +292,22 @@ def get_timeline(payload: dict):
     return response(True, items)
 
 
+def get_timeline_page(payload: dict):
+    safe_payload = payload if isinstance(payload, dict) else {}
+    db = database()
+    start, end = day_bounds(safe_payload)
+    return response(
+        True,
+        db.timeline_page(
+            start=start,
+            end=end,
+            before_ended_at=safe_payload.get("beforeEndedAt"),
+            before_segment_id=safe_payload.get("beforeSegmentId"),
+            limit=safe_payload.get("limit"),
+        ),
+    )
+
+
 def get_dashboard_week_timeline(payload: dict):
     db = database()
     start, end = day_bounds(payload)
@@ -231,6 +320,7 @@ def get_live_tail(payload: dict):
     start, end = day_bounds(safe_payload)
     running = is_running()
     tracker_mode = db.get_meta("tracker_mode") if running else None
+
     segments = fetch_live_tail(
         db,
         start,
@@ -339,7 +429,12 @@ def search_classification_rule_candidates(payload: dict):
     query = payload.get("query", "")
     if not isinstance(query, str):
         return response(False, error="query must be a string")
-    return response(True, database().search_classification_rule_candidates(query))
+    target_kind = payload.get("targetKind")
+    if target_kind is not None and not isinstance(target_kind, str):
+        return response(False, error="targetKind must be site or app")
+    if target_kind is not None and target_kind not in {"site", "app"}:
+        return response(False, error="targetKind must be site or app")
+    return response(True, database().search_classification_rule_candidates(query, target_kind=target_kind))
 
 
 def apply_classification_rules(payload: dict):
@@ -360,10 +455,21 @@ def get_classification_metrics(payload: dict):
 
 def set_developer_diagnostics(payload: dict):
     force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
+    force_frontmost_fallback_capture = _bool_payload(payload.get("forceFrontmostFallbackCapture"))
     db = database()
     db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true" if force_chromium_ax_capture else "false")
+    db.set_meta(
+        FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
+        "true" if force_frontmost_fallback_capture else "false",
+    )
     _apply_developer_diagnostics_env(db)
-    return response(True, {"forceChromiumAxCapture": force_chromium_ax_capture})
+    return response(
+        True,
+        {
+            "forceChromiumAxCapture": force_chromium_ax_capture,
+            "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
+        },
+    )
 
 
 def get_current_snapshot():
@@ -389,6 +495,9 @@ def get_current_snapshot():
             "browserAutomationStatus": snapshot.browser_automation_status,
             "browserAutomationError": snapshot.browser_automation_error,
             "systemTransientActivity": snapshot.system_transient_activity,
+            "frontmostCaptureSource": snapshot.frontmost_capture_source,
+            "frontmostCaptureError": snapshot.frontmost_capture_error,
+            "frontmostFallbackError": snapshot.frontmost_fallback_error,
         },
     )
 
@@ -472,6 +581,7 @@ COMMANDS = {
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
     "get_timeline": get_timeline,
+    "get_timeline_page": get_timeline_page,
     "get_dashboard_week_timeline": get_dashboard_week_timeline,
     "get_live_tail": get_live_tail,
     "get_current_snapshot": lambda payload: get_current_snapshot(),
@@ -498,6 +608,7 @@ def daemon():
     pid_path().write_text(str(os.getpid()))
     db = database()
     db.set_meta("tracker_script_path", _current_script_path())
+    db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
     last_capture_tick: float | None = None
 
     try:
@@ -527,15 +638,46 @@ def daemon():
         pid_path().unlink(missing_ok=True)
 
 
+def _dispatch(request: dict):
+    command = request["command"]
+    payload = request.get("payload", {})
+    handler = COMMANDS[command]
+    return handler(payload)
+
+
 def handle_request(raw_request: str):
     try:
         request = json.loads(raw_request)
-        command = request["command"]
-        payload = request.get("payload", {})
-        handler = COMMANDS[command]
-        print(json.dumps(handler(payload)))
+        print(json.dumps(_dispatch(request)))
     except Exception as exc:
         print(json.dumps(response(False, error=str(exc))))
+
+
+def serve():
+    """Persistent request server (one JSON request per stdin line, one JSON
+    response per stdout line).
+
+    Keeps the interpreter warm and modules imported so each query avoids the
+    ~200-400ms cold-start cost of spawning a fresh ``python main.py`` process.
+    Errors are returned per request and never break the loop; EOF on stdin
+    (parent process exit / closed pipe) ends the loop cleanly.
+    """
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
+        if not line:
+            continue
+        request_id = None
+        try:
+            request = json.loads(line)
+            request_id = request.get("id")
+            envelope = _dispatch(request)
+        except Exception as exc:  # never let a single bad request kill the server
+            envelope = response(False, error=str(exc))
+        if request_id is not None:
+            envelope = {**envelope, "id": request_id}
+        sys.stdout.write(json.dumps(envelope))
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def main():
@@ -551,6 +693,10 @@ def main():
 
     if args.mode == "daemon":
         daemon()
+        return
+
+    if args.mode == "serve":
+        serve()
         return
 
     if args.request_json:

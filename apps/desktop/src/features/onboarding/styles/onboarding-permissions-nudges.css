@@ -1,0 +1,173 @@
+/* ── Quick start: permissions ── */
+.onboarding-card .onb-perms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-2);
+  margin-top: var(--onb-content-gap);
+}
+
+.onboarding-card .onb-perms__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--onb-space-4);
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--onb-line-strong);
+  border-radius: var(--onb-radius-sm);
+  background: var(--onb-surface);
+  box-shadow: none;
+  transition: border-color var(--onb-transition-fast), background var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-perms__row:hover {
+  border-color: rgba(55, 53, 47, 0.18);
+  background: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-bg-2));
+}
+
+.onboarding-card .onb-perms__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.onboarding-card .onb-perms__name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-perms__desc {
+  font-size: 13px;
+  line-height: 1.42;
+  color: var(--onb-text-muted);
+}
+
+.onboarding-card .onb-perms__control {
+  display: flex;
+  align-items: center;
+  gap: var(--onb-space-2);
+  flex-shrink: 0;
+}
+
+.onboarding-card .onb-perms__action {
+  min-width: 84px;
+  min-height: 36px;
+  padding: 0 var(--onb-space-4);
+  font-size: 13px;
+  border-radius: var(--onb-radius-sm);
+}
+
+.onboarding-card .onb-nudges {
+  margin-top: var(--onb-content-gap);
+}
+
+.onboarding-card .onb-nudges-copy {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.onboarding-card .onb-nudge-row .onb-perms__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--onb-space-2);
+}
+
+.onboarding-card .onb-nudge-row--extreme {
+  border-color: var(--onb-line-strong);
+  background: var(--onb-surface);
+}
+
+.onboarding-card .onb-nudge-row--extreme:hover {
+  border-color: rgba(28, 28, 25, 0.2);
+  background: color-mix(in oklch, var(--onb-surface) 78%, var(--onb-bg-2));
+}
+
+.onboarding-card .onb-nudge-row--extreme .onb-perms__name {
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-nudge-row--extreme .onb-perms__desc {
+  max-width: 320px;
+}
+
+.onboarding-card .onb-status-pill--beta {
+  min-height: 20px;
+  padding: 2px 7px;
+  border-color: color-mix(in oklch, var(--onb-blue) 28%, transparent);
+  background: color-mix(in oklch, var(--onb-blue-soft) 62%, var(--onb-surface));
+  color: var(--onb-blue);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.onboarding-card .onb-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--onb-space-2);
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--onb-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.onboarding-card .onb-toggle__track {
+  width: 42px;
+  height: 24px;
+  padding: 3px;
+  border: 1px solid var(--onb-line-strong);
+  border-radius: 999px;
+  background: var(--onb-bg-2);
+  transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-toggle__thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--onb-surface);
+  box-shadow: 0 1px 2px rgba(39, 37, 31, 0.14);
+  transition: transform var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-toggle__label {
+  min-width: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--onb-text-muted);
+}
+
+.onboarding-card .onb-toggle--on .onb-toggle__track {
+  border-color: var(--onb-accent);
+  background: var(--onb-accent);
+}
+
+.onboarding-card .onb-toggle--extreme.onb-toggle--on .onb-toggle__track {
+  border-color: color-mix(in oklch, var(--onb-warn) 74%, var(--onb-line-strong));
+  background: color-mix(in oklch, var(--onb-warn) 78%, var(--onb-accent));
+}
+
+.onboarding-card .onb-toggle--on .onb-toggle__thumb {
+  transform: translateX(18px);
+}
+
+.onboarding-card .onb-toggle--on .onb-toggle__label {
+  color: var(--onb-accent-strong);
+}
+
+.onboarding-card .onb-toggle--extreme.onb-toggle--on .onb-toggle__label {
+  color: var(--onb-warn);
+}

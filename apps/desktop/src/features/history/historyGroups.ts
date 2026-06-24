@@ -1,4 +1,4 @@
-import { classifyActivityDetailed } from "@drifty/domain";
+import { classifyActivityDetailed, logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 
@@ -30,6 +30,11 @@ export type HistoryDayGroup = {
   readonly dayKey: string;
   readonly label: string;
   readonly rows: readonly HistoryRow[];
+};
+
+export type HistoryRowsWindow = {
+  readonly rows: readonly HistoryRow[];
+  readonly hasMore: boolean;
 };
 
 type MutableHistoryRow = {
@@ -77,10 +82,46 @@ export function buildHistoryRows(segments: readonly ActivitySegment[]): readonly
   return rows.sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 }
 
-export function buildHistoryDayGroups(rows: readonly HistoryRow[]): readonly HistoryDayGroup[] {
+export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], limit: number): HistoryRowsWindow {
+  const rowLimit = Math.max(0, Math.floor(limit));
+  if (rowLimit === 0 || segments.length === 0) return { rows: [], hasMore: segments.length > 0 };
+
+  const rows: HistoryRow[] = [];
+  let currentRow: MutableHistoryRow | null = null;
+
+  // Tracker timelines arrive in chronological order. Walk backward so History
+  // can show the newest rows without materializing the full 90-day archive.
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    if (!segment) continue;
+
+    if (currentRow === null) {
+      currentRow = startHistoryRow(segment);
+      continue;
+    }
+
+    if (canPrependIntoHistoryRow(currentRow, segment)) {
+      prependIntoHistoryRow(currentRow, segment);
+      continue;
+    }
+
+    rows.push(finishHistoryRow(currentRow));
+    if (rows.length >= rowLimit) return { rows, hasMore: true };
+    currentRow = startHistoryRow(segment);
+  }
+
+  if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
+
+  return {
+    rows,
+    hasMore: false,
+  };
+}
+
+export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMinutes = 0): readonly HistoryDayGroup[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of rows) {
-    const dayKey = row.startedAt.slice(0, 10);
+    const dayKey = logicalDayIsoDateForDate(new Date(row.startedAt), startOfDayMinutes);
     const dayRows = groups.get(dayKey) ?? [];
     dayRows.push(row);
     groups.set(dayKey, dayRows);
@@ -142,6 +183,28 @@ function canMergeIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment
   return sameApp(row, segment) &&
     (row.windowTitle ?? null) === (segment.windowTitle ?? null) &&
     Date.parse(row.endedAt) === Date.parse(segment.startedAt);
+}
+
+function canPrependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment): boolean {
+  return sameApp(row, segment) &&
+    (row.windowTitle ?? null) === (segment.windowTitle ?? null) &&
+    Date.parse(segment.endedAt) === Date.parse(row.startedAt);
+}
+
+function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment): void {
+  const classification = historyClassification(segment);
+  row.segmentIds.unshift(segment.id);
+  row.startedAt = segment.startedAt;
+  row.durationSeconds += segment.durationSeconds;
+  row.appName = segment.appName;
+  row.bundleId = segment.bundleId;
+  row.browserName = segment.browserName;
+  row.siteDomain = segment.siteDomain;
+  row.siteTitle = segment.siteTitle;
+  row.siteUrl = segment.siteUrl;
+  row.windowTitle = segment.windowTitle;
+  row.classification = classification;
+  row.searchParts.push(...historySearchParts(segment), classification.categoryLabel, classification.productivityLabel);
 }
 
 function sameApp(row: MutableHistoryRow, segment: ActivitySegment): boolean {

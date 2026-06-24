@@ -84,7 +84,11 @@ export function CloudSetupPanel({
     isSupabaseConfigured,
   });
   const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
-  const handlePrimaryAction = isCurrentPaidPlan ? onManageCloudBilling : isCurrentCloudPlan ? onRefreshCloudStatus : () => onStartCloudSetup();
+  const handlePrimaryAction = isCurrentPaidPlan
+    ? onManageCloudBilling
+    : isCurrentTrial || !isCurrentCloudPlan
+      ? () => onStartCloudSetup()
+      : onRefreshCloudStatus;
 
   return (
     <div className="ai-setup-detail ai-setup-detail--cloud" role="group" aria-label="Drifty Cloud settings">
@@ -234,7 +238,8 @@ function cloudActionLabel({
   if (billingCheckoutLoadingInterval !== null) return "Opening checkout...";
   if (billingPortalLoading) return "Opening billing...";
   if (cloudStatusRefreshing) return "Checking...";
-  if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Set up Drifty Cloud";
+  if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Upgrade to Individual";
+  if (billingEntitlementStatus === "trialing") return "Upgrade to Individual";
   if (billingEntitlementStatus === "active") return "Manage billing";
   return "Refresh Drifty Cloud";
 }

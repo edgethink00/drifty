@@ -6,7 +6,7 @@ import uuid
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from app.storage.activity_segment_serialization import (
@@ -15,12 +15,16 @@ from app.storage.activity_segment_serialization import (
     serialize_dashboard_week_activity_row,
 )
 from app.storage.timestamps import parse_iso_datetime
-from app.tracker.macos_workspace import Snapshot
-from app.tracker.youtube_metadata import YouTubeVideoMetadata
+
+if TYPE_CHECKING:
+    from app.tracker.macos_workspace import Snapshot
+    from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 
 VALID_RULE_TARGET_KINDS = {"app", "site"}
 DEFAULT_RULE_CONFIDENCE = 1.0
+DEFAULT_TIMELINE_PAGE_LIMIT = 200
+MAX_TIMELINE_PAGE_LIMIT = 500
 
 
 class TrackerDatabase:
@@ -692,111 +696,115 @@ class TrackerDatabase:
             )
             return cursor.rowcount
 
-    def search_classification_rule_candidates(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    def search_classification_rule_candidates(self, query: str, target_kind: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         needle = query.strip().lower()
+        include_sites = target_kind is None or target_kind == "site"
+        include_apps = target_kind is None or target_kind == "app"
         candidates: list[dict[str, Any]] = []
         with self.connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT
-                    normalized_site,
-                    site_title,
-                    browser_name,
-                    category,
-                    productivity,
-                    segment_count,
-                    total_seconds,
-                    first_seen_at,
-                    last_seen_at
-                FROM (
+            if include_sites:
+                rows = conn.execute(
+                    """
                     SELECT
-                        lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, ''))) AS raw_site,
+                        normalized_site,
                         site_title,
                         browser_name,
+                        category,
+                        productivity,
+                        segment_count,
+                        total_seconds,
+                        first_seen_at,
+                        last_seen_at
+                    FROM (
+                        SELECT
+                            lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, ''))) AS raw_site,
+                            site_title,
+                            browser_name,
+                            activity_classifications.category AS category,
+                            activity_classifications.productivity AS productivity,
+                            COUNT(*) AS segment_count,
+                            SUM(duration_seconds) AS total_seconds,
+                            MIN(started_at) AS first_seen_at,
+                            MAX(ended_at) AS last_seen_at,
+                            COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) AS normalized_site
+                        FROM activity_segments
+                        LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
+                        WHERE COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) IS NOT NULL
+                        GROUP BY lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')))
+                    )
+                    ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
+                    """
+                ).fetchall()
+                for row in rows:
+                    domain = self._normalize_site_target(row["normalized_site"])
+                    if not domain or (needle and needle not in domain.lower() and needle not in str(row["site_title"] or "").lower()):
+                        continue
+                    candidates.append(
+                        {
+                            "id": f"site:{domain}",
+                            "targetKind": "site",
+                            "targetValue": domain,
+                            "displayName": domain,
+                            "appName": None,
+                            "bundleId": None,
+                            "siteDomain": domain,
+                            "siteTitle": row["site_title"],
+                            "browserName": row["browser_name"],
+                            "category": row["category"],
+                            "productivity": row["productivity"],
+                            "segmentCount": int(row["segment_count"] or 0),
+                            "totalSeconds": int(row["total_seconds"] or 0),
+                            "firstSeenAt": row["first_seen_at"],
+                            "lastSeenAt": row["last_seen_at"],
+                        }
+                    )
+
+            if include_apps:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        app_name,
+                        bundle_id,
                         activity_classifications.category AS category,
                         activity_classifications.productivity AS productivity,
                         COUNT(*) AS segment_count,
                         SUM(duration_seconds) AS total_seconds,
                         MIN(started_at) AS first_seen_at,
-                        MAX(ended_at) AS last_seen_at,
-                        COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) AS normalized_site
+                        MAX(ended_at) AS last_seen_at
                     FROM activity_segments
                     LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
-                    WHERE COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')) IS NOT NULL
-                    GROUP BY lower(COALESCE(NULLIF(site_domain, ''), NULLIF(site_url, '')))
-                )
-                ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
-                """
-            ).fetchall()
-            for row in rows:
-                domain = self._normalize_site_target(row["normalized_site"])
-                if not domain or (needle and needle not in domain.lower() and needle not in str(row["site_title"] or "").lower()):
-                    continue
-                candidates.append(
-                    {
-                        "id": f"site:{domain}",
-                        "targetKind": "site",
-                        "targetValue": domain,
-                        "displayName": domain,
-                        "appName": None,
-                        "bundleId": None,
-                        "siteDomain": domain,
-                        "siteTitle": row["site_title"],
-                        "browserName": row["browser_name"],
-                        "category": row["category"],
-                        "productivity": row["productivity"],
-                        "segmentCount": int(row["segment_count"] or 0),
-                        "totalSeconds": int(row["total_seconds"] or 0),
-                        "firstSeenAt": row["first_seen_at"],
-                        "lastSeenAt": row["last_seen_at"],
-                    }
-                )
-
-            rows = conn.execute(
-                """
-                SELECT
-                    app_name,
-                    bundle_id,
-                    activity_classifications.category AS category,
-                    activity_classifications.productivity AS productivity,
-                    COUNT(*) AS segment_count,
-                    SUM(duration_seconds) AS total_seconds,
-                    MIN(started_at) AS first_seen_at,
-                    MAX(ended_at) AS last_seen_at
-                FROM activity_segments
-                LEFT JOIN activity_classifications ON activity_classifications.segment_id = activity_segments.id
-                GROUP BY app_name, bundle_id
-                ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
-                """
-            ).fetchall()
-            for row in rows:
-                app_name = row["app_name"] or ""
-                bundle_id = row["bundle_id"]
-                searchable = f"{app_name} {bundle_id or ''}".lower()
-                if needle and needle not in searchable:
-                    continue
-                target_value = bundle_id if bundle_id else app_name
-                if not target_value:
-                    continue
-                candidates.append(
-                    {
-                        "id": f"app:{target_value}",
-                        "targetKind": "app",
-                        "targetValue": target_value,
-                        "displayName": app_name,
-                        "appName": app_name,
-                        "bundleId": bundle_id,
-                        "siteDomain": None,
-                        "siteTitle": None,
-                        "browserName": None,
-                        "category": row["category"],
-                        "productivity": row["productivity"],
-                        "segmentCount": int(row["segment_count"] or 0),
-                        "totalSeconds": int(row["total_seconds"] or 0),
-                        "firstSeenAt": row["first_seen_at"],
-                        "lastSeenAt": row["last_seen_at"],
-                    }
-                )
+                    GROUP BY app_name, bundle_id
+                    ORDER BY total_seconds DESC, segment_count DESC, last_seen_at DESC
+                    """
+                ).fetchall()
+                for row in rows:
+                    app_name = row["app_name"] or ""
+                    bundle_id = row["bundle_id"]
+                    searchable = f"{app_name} {bundle_id or ''}".lower()
+                    if needle and needle not in searchable:
+                        continue
+                    target_value = bundle_id if bundle_id else app_name
+                    if not target_value:
+                        continue
+                    candidates.append(
+                        {
+                            "id": f"app:{target_value}",
+                            "targetKind": "app",
+                            "targetValue": target_value,
+                            "displayName": app_name,
+                            "appName": app_name,
+                            "bundleId": bundle_id,
+                            "siteDomain": None,
+                            "siteTitle": None,
+                            "browserName": None,
+                            "category": row["category"],
+                            "productivity": row["productivity"],
+                            "segmentCount": int(row["segment_count"] or 0),
+                            "totalSeconds": int(row["total_seconds"] or 0),
+                            "firstSeenAt": row["first_seen_at"],
+                            "lastSeenAt": row["last_seen_at"],
+                        }
+                    )
         return candidates[:limit]
 
     def apply_classification_rules(self, start: str | None = None, end: str | None = None) -> dict[str, int]:
@@ -1117,6 +1125,86 @@ class TrackerDatabase:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [dict(row) for row in rows]
 
+    def timeline_page(
+        self,
+        start: str | None = None,
+        end: str | None = None,
+        before_ended_at: str | None = None,
+        before_segment_id: str | int | None = None,
+        limit: int | str | None = None,
+    ) -> dict[str, Any]:
+        page_limit = self._clamp_timeline_page_limit(limit)
+        query = """
+            SELECT
+                activity_segments.*,
+                youtube_video_metadata.category AS youtube_category,
+                youtube_video_metadata.channel_id AS youtube_channel_id,
+                youtube_video_metadata.channel_name AS youtube_channel_name,
+                youtube_video_metadata.title AS youtube_title,
+                youtube_video_metadata.description AS youtube_description,
+                youtube_video_metadata.keywords_json AS youtube_keywords_json,
+                youtube_video_metadata.duration_seconds AS youtube_duration_seconds,
+                youtube_video_metadata.view_count AS youtube_view_count,
+                youtube_video_metadata.is_live AS youtube_is_live,
+                youtube_video_metadata.is_unlisted AS youtube_is_unlisted,
+                youtube_video_metadata.publish_date AS youtube_publish_date,
+                youtube_video_metadata.upload_date AS youtube_upload_date,
+                activity_classifications.category AS classification_category,
+                activity_classifications.productivity AS classification_productivity,
+                activity_classifications.source AS classification_source,
+                activity_classifications.confidence AS classification_confidence,
+                activity_classifications.reason AS classification_reason,
+                activity_classifications.model AS classification_model,
+                activity_classifications.prompt_version AS classification_prompt_version,
+                activity_classifications.taxonomy_version AS classification_taxonomy_version,
+                activity_classifications.input_fingerprint AS classification_input_fingerprint,
+                activity_classifications.classified_at AS classification_classified_at,
+                activity_classifications.ai_result AS classification_ai_result,
+                activity_classifications.stale AS classification_stale,
+                activity_classifications.request_id AS classification_request_id,
+                activity_classifications.latency_ms AS classification_latency_ms,
+                activity_classifications.classification_rule_id AS classification_rule_id
+            FROM activity_segments
+            LEFT JOIN youtube_video_metadata
+              ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
+            LEFT JOIN activity_classifications
+              ON activity_classifications.segment_id = activity_segments.id
+            WHERE 1=1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end, "activity_segments")
+        cursor_segment_id = self._parse_timeline_page_cursor_segment_id(before_segment_id)
+        if before_ended_at and cursor_segment_id is not None:
+            normalized_before_ended_at = self._normalize_range_bound(before_ended_at)
+            query += """
+                AND (
+                  datetime(activity_segments.ended_at) < datetime(?)
+                  OR (
+                    datetime(activity_segments.ended_at) = datetime(?)
+                    AND activity_segments.id < ?
+                  )
+                )
+            """
+            params.extend([normalized_before_ended_at, normalized_before_ended_at, cursor_segment_id])
+        query += " ORDER BY datetime(activity_segments.ended_at) DESC, activity_segments.id DESC LIMIT ?"
+        params.append(page_limit + 1)
+
+        with self.connect() as conn:
+            rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
+
+        page_rows = rows[:page_limit]
+        has_more = len(rows) > page_limit
+        items = [self._serialize_row(row) for row in reversed(page_rows)]
+        cursor_row = page_rows[-1] if has_more and page_rows else None
+        return {
+            "items": items,
+            "hasMore": has_more,
+            "nextCursor": {
+                "beforeEndedAt": cursor_row["ended_at"],
+                "beforeSegmentId": str(cursor_row["id"]),
+            } if cursor_row else None,
+        }
+
     def dashboard_week_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
         query = """
             SELECT
@@ -1354,6 +1442,26 @@ class TrackerDatabase:
     @staticmethod
     def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
         return serialize_activity_row(row)
+
+    @staticmethod
+    def _clamp_timeline_page_limit(limit: int | str | None) -> int:
+        if limit is None:
+            return DEFAULT_TIMELINE_PAGE_LIMIT
+        try:
+            parsed = int(limit)
+        except (TypeError, ValueError):
+            return DEFAULT_TIMELINE_PAGE_LIMIT
+        return max(1, min(parsed, MAX_TIMELINE_PAGE_LIMIT))
+
+    @staticmethod
+    def _parse_timeline_page_cursor_segment_id(segment_id: str | int | None) -> int | None:
+        if segment_id is None:
+            return None
+        try:
+            parsed = int(segment_id)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed >= 0 else None
 
     @staticmethod
     def _local_day(value: str) -> str:

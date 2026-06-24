@@ -54,14 +54,46 @@ describe("trackerClient", () => {
     });
   });
 
+  it("invokes tracker_get_timeline_page with the selected range and cursor", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const page = {
+      items: [{ id: "history-segment" }],
+      hasMore: true,
+      nextCursor: {
+        beforeEndedAt: "2026-04-06T09:05:00+00:00",
+        beforeSegmentId: "42",
+      },
+    };
+    invoke.mockResolvedValueOnce(page);
+
+    const result = await trackerClient.getTimelinePage({
+      start: "2026-04-01T00:00:00",
+      end: "2026-04-07T23:59:59",
+      beforeEndedAt: "2026-04-06T09:05:00+00:00",
+      beforeSegmentId: "42",
+      limit: 200,
+    });
+
+    expect(result).toEqual(page);
+    expect(invoke).toHaveBeenCalledWith("tracker_get_timeline_page", {
+      query: {
+        start: "2026-04-01T00:00:00",
+        end: "2026-04-07T23:59:59",
+        beforeEndedAt: "2026-04-06T09:05:00+00:00",
+        beforeSegmentId: "42",
+        limit: 200,
+      },
+    });
+  });
+
   it("persists developer diagnostics through the tracker command", async () => {
     const { trackerClient } = await import("./trackerClient");
-    invoke.mockResolvedValueOnce({ forceChromiumAxCapture: true });
+    invoke.mockResolvedValueOnce({ forceChromiumAxCapture: true, forceFrontmostFallbackCapture: true });
 
-    await trackerClient.setDeveloperDiagnostics({ forceChromiumAxCapture: true });
+    await trackerClient.setDeveloperDiagnostics({ forceChromiumAxCapture: true, forceFrontmostFallbackCapture: true });
 
     expect(invoke).toHaveBeenCalledWith("tracker_set_developer_diagnostics", {
-      query: { forceChromiumAxCapture: true },
+      query: { forceChromiumAxCapture: true, forceFrontmostFallbackCapture: true },
     });
   });
 

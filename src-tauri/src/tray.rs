@@ -89,10 +89,13 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     .get_status(app)
                     .map(|status| status.running)
                     .unwrap_or(false);
-                if is_running {
-                    let _ = controller.stop(app);
+                let next_status = if is_running {
+                    controller.stop(app)
                 } else {
-                    let _ = controller.start(app);
+                    controller.start(app)
+                };
+                if let Ok(status) = next_status {
+                    update_cached_tracker_running(app, Some(status.running));
                 }
                 let _ = refresh_tray_menu(app);
                 update_tray_icon(app);
@@ -177,7 +180,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .text(MENU_OPEN, "Open Dashboard")
         .text(
             MENU_TRACKING_TOGGLE,
-            tracking_action_label(tracker_running_state(app)),
+            tracking_action_label(drift_status.tracker_running()),
         )
         .separator()
         .items(&[&drift_alerts_status, &drift_last_check, &drift_result]);
@@ -205,11 +208,6 @@ fn refresh_tray_menu(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn tracker_running_state(app: &AppHandle) -> Option<bool> {
-    app.try_state::<TrackerController>()
-        .and_then(|controller| controller.get_status(app).ok().map(|status| status.running))
-}
-
 fn app_version_label(version: &str) -> String {
     format!("Drifty {version}")
 }
@@ -223,6 +221,14 @@ fn tracking_action_label(running: Option<bool>) -> &'static str {
         "Pause Tracking"
     } else {
         "Start Tracking"
+    }
+}
+
+fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
+    if let Some(state) = app.try_state::<TrayDriftAlarmState>() {
+        if let Ok(mut latest) = state.0.lock() {
+            latest.set_tracker_running(running);
+        }
     }
 }
 

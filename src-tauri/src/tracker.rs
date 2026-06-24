@@ -1,7 +1,10 @@
 #[cfg(target_os = "macos")]
 use core_foundation::base::Boolean;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -88,6 +91,22 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_timeline", build_period_payload(day, start, end))
     }
 
+    pub fn get_timeline_page(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+        before_segment_id: Option<String>,
+        before_ended_at: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_timeline_page",
+            build_timeline_page_payload(start, end, before_segment_id, before_ended_at, limit),
+        )
+    }
+
     pub fn get_dashboard_week_timeline(
         &self,
         app: &AppHandle,
@@ -125,11 +144,15 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         force_chromium_ax_capture: bool,
+        force_frontmost_fallback_capture: bool,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "set_developer_diagnostics",
-            json!({ "forceChromiumAxCapture": force_chromium_ax_capture }),
+            json!({
+                "forceChromiumAxCapture": force_chromium_ax_capture,
+                "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
+            }),
         )
     }
 
@@ -242,11 +265,12 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         query: String,
+        target_kind: Option<String>,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "search_classification_rule_candidates",
-            json!({ "query": query }),
+            json!({ "query": query, "targetKind": target_kind }),
         )
     }
 
@@ -375,39 +399,195 @@ impl TrackerController {
                 script_path.display().to_string(),
             ));
         }
+        let db_path = resolve_db_path(app);
 
         let request = json!({
             "command": command,
             "payload": payload,
         });
 
-        let output = Command::new(resolve_python_bin())
-            .arg(script_path)
-            .arg("--db")
-            .arg(resolve_db_path(app))
-            .arg("--request-json")
-            .arg(request.to_string())
-            .output()
-            .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
+        // Fast path: reuse a long-lived `serve` process so each query avoids the
+        // ~160ms interpreter/import cold-start (and the contention of spawning
+        // several interpreters at once during a refresh burst). Fall back to a
+        // one-shot invocation if the persistent process is unavailable.
+        let raw = match serve_request(&script_path, &db_path, &request) {
+            Ok(line) => line.into_bytes(),
+            Err(_) => invoke_one_shot(&script_path, &db_path, &request)?,
+        };
 
-        if !output.status.success() {
-            return Err(TrackerError::CommandFailed(
-                String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            ));
+        parse_envelope::<T>(&raw)
+    }
+}
+
+fn parse_envelope<T: for<'de> Deserialize<'de>>(raw: &[u8]) -> Result<T, TrackerError> {
+    let envelope = serde_json::from_slice::<SidecarEnvelope<T>>(raw)
+        .map_err(|err| TrackerError::ParseFailed(err.to_string()))?;
+
+    if !envelope.ok {
+        return Err(TrackerError::TrackerReturnedError(
+            envelope
+                .error
+                .unwrap_or_else(|| "unknown tracker error".into()),
+        ));
+    }
+
+    envelope.data.ok_or(TrackerError::MissingData)
+}
+
+fn invoke_one_shot(script: &Path, db: &Path, request: &Value) -> Result<Vec<u8>, TrackerError> {
+    let output = Command::new(resolve_python_bin())
+        .arg(script)
+        .arg("--db")
+        .arg(db)
+        .arg("--request-json")
+        .arg(request.to_string())
+        .output()
+        .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
+
+    if !output.status.success() {
+        return Err(TrackerError::CommandFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+
+    Ok(output.stdout)
+}
+
+/// A long-lived `python main.py ... serve` process. Requests and responses are
+/// newline-delimited JSON; access is serialized through a mutex so request and
+/// response order always match (the server processes one line at a time).
+struct ServeProcess {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    script_path: PathBuf,
+    db_path: PathBuf,
+}
+
+static SERVE_PROCESS: OnceLock<Mutex<Option<ServeProcess>>> = OnceLock::new();
+static SERVE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+fn serve_slot() -> &'static Mutex<Option<ServeProcess>> {
+    SERVE_PROCESS.get_or_init(|| Mutex::new(None))
+}
+
+fn spawn_serve_process(script: &Path, db: &Path) -> Result<ServeProcess, TrackerError> {
+    let mut child = Command::new(resolve_python_bin())
+        .arg(script)
+        .arg("--db")
+        .arg(db)
+        .arg("serve")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
+
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| TrackerError::CommandFailed("serve stdin unavailable".into()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| TrackerError::CommandFailed("serve stdout unavailable".into()))?;
+
+    Ok(ServeProcess {
+        child,
+        stdin,
+        stdout: BufReader::new(stdout),
+        script_path: script.to_path_buf(),
+        db_path: db.to_path_buf(),
+    })
+}
+
+fn kill_serve_process(mut proc: ServeProcess) {
+    let _ = proc.child.kill();
+    let _ = proc.child.wait();
+}
+
+fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, TrackerError> {
+    proc.stdin
+        .write_all(line.as_bytes())
+        .map_err(serve_io_err)?;
+    proc.stdin.write_all(b"\n").map_err(serve_io_err)?;
+    proc.stdin.flush().map_err(serve_io_err)?;
+
+    let mut response = String::new();
+    let read = proc.stdout.read_line(&mut response).map_err(serve_io_err)?;
+    if read == 0 {
+        return Err(TrackerError::CommandFailed(
+            "serve process closed its output".into(),
+        ));
+    }
+    Ok(response)
+}
+
+fn serve_io_err(err: std::io::Error) -> TrackerError {
+    TrackerError::CommandFailed(err.to_string())
+}
+
+fn serve_request(script: &Path, db: &Path, request: &Value) -> Result<String, TrackerError> {
+    let slot = serve_slot();
+    let mut guard = slot
+        .lock()
+        .map_err(|_| TrackerError::CommandFailed("serve lock poisoned".into()))?;
+
+    // Discard a process spawned for a different script/db (paths can change
+    // between dev runs); it will be respawned below.
+    let stale = guard
+        .as_ref()
+        .map(|proc| proc.script_path != script || proc.db_path != db)
+        .unwrap_or(false);
+    if stale {
+        if let Some(proc) = guard.take() {
+            kill_serve_process(proc);
+        }
+    }
+
+    // Two attempts: the first may discover a dead process (broken pipe), the
+    // second runs against a freshly spawned one.
+    let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
+    for _ in 0..2 {
+        if guard.is_none() {
+            *guard = Some(spawn_serve_process(script, db)?);
         }
 
-        let envelope = serde_json::from_slice::<SidecarEnvelope<T>>(&output.stdout)
-            .map_err(|err| TrackerError::ParseFailed(err.to_string()))?;
-
-        if !envelope.ok {
-            return Err(TrackerError::TrackerReturnedError(
-                envelope
-                    .error
-                    .unwrap_or_else(|| "unknown tracker error".into()),
-            ));
+        let id = SERVE_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+        let mut framed = request.clone();
+        if let Some(object) = framed.as_object_mut() {
+            object.insert("id".into(), json!(id));
         }
+        let line = framed.to_string();
 
-        envelope.data.ok_or(TrackerError::MissingData)
+        let attempt = {
+            let proc = guard.as_mut().expect("serve process present");
+            serve_round_trip(proc, &line)
+        };
+
+        match attempt {
+            Ok(response) => return Ok(response),
+            Err(err) => {
+                last_err = err;
+                if let Some(proc) = guard.take() {
+                    kill_serve_process(proc);
+                }
+            }
+        }
+    }
+
+    Err(last_err)
+}
+
+/// Terminate the long-lived serve process (called on app exit). The process also
+/// exits on its own when its stdin reaches EOF, so this is a best-effort cleanup.
+pub fn shutdown_serve_process() {
+    if let Some(slot) = SERVE_PROCESS.get() {
+        if let Ok(mut guard) = slot.lock() {
+            if let Some(proc) = guard.take() {
+                kill_serve_process(proc);
+            }
+        }
     }
 }
 
@@ -431,6 +611,28 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
 
 fn build_dashboard_week_timeline_payload(start: Option<String>, end: Option<String>) -> Value {
     build_period_payload(None, start, end)
+}
+
+fn build_timeline_page_payload(
+    start: Option<String>,
+    end: Option<String>,
+    before_segment_id: Option<String>,
+    before_ended_at: Option<String>,
+    limit: Option<u32>,
+) -> Value {
+    let mut payload = build_period_payload(None, start, end);
+
+    if let Some(payload_object) = payload.as_object_mut() {
+        if let Some(before_segment_id) = before_segment_id {
+            payload_object.insert("beforeSegmentId".into(), json!(before_segment_id));
+        }
+        if let Some(before_ended_at) = before_ended_at {
+            payload_object.insert("beforeEndedAt".into(), json!(before_ended_at));
+        }
+        payload_object.insert("limit".into(), json!(limit.unwrap_or(200)));
+    }
+
+    payload
 }
 
 fn build_live_tail_payload(
@@ -616,6 +818,28 @@ mod tests {
                 "afterSegmentId": "42",
                 "afterEndedAt": "2026-04-06T09:05:00+00:00",
                 "limit": 8
+            })
+        );
+    }
+
+    #[test]
+    fn timeline_page_payload_preserves_range_cursor_and_default_limit() {
+        let payload = build_timeline_page_payload(
+            Some("2026-04-06T00:00:00".into()),
+            Some("2026-04-06T23:59:59".into()),
+            Some("42".into()),
+            Some("2026-04-06T09:05:00+00:00".into()),
+            None,
+        );
+
+        assert_eq!(
+            payload,
+            json!({
+                "start": "2026-04-06T00:00:00",
+                "end": "2026-04-06T23:59:59",
+                "beforeSegmentId": "42",
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "limit": 200
             })
         );
     }

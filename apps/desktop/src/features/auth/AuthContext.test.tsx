@@ -160,6 +160,7 @@ describe("AuthContext", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     clearAuthDiagnostics({ mirrorToConsole: false });
     window.history.replaceState({}, "", "/");
@@ -730,6 +731,7 @@ describe("AuthContext", () => {
     await waitFor(() => {
       expect(latestAuth.current?.status).toBe("unauthenticated");
       expect(latestAuth.current?.session).toBeNull();
+      expect(latestAuth.current?.cloudConnectionStatus).toBe("online");
     });
   });
 
@@ -781,6 +783,37 @@ describe("AuthContext", () => {
     expect(latestAuth.current.session).toBeNull();
     expect(latestAuth.current.user).toBeNull();
     expect(latestAuth.current.status).toBe("unauthenticated");
+  });
+
+  it("keeps the local app available when saved auth loading does not resolve", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getSession.mockReturnValue(new Promise(() => undefined));
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          latestAuth.current = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(latestAuth.current?.status).toBe("loading");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+
+    await waitFor(() => {
+      expect(latestAuth.current?.status).toBe("unauthenticated");
+      expect(latestAuth.current?.session).toBeNull();
+      expect(latestAuth.current?.cloudConnectionStatus).toBe("offline");
+    });
+
+    const events = readAuthDiagnostics().map((entry) => entry.event);
+    expect(events).toContain("auth.init.timeout");
   });
 
   it("does not start an anonymous session when auth mode requires sign-in", async () => {

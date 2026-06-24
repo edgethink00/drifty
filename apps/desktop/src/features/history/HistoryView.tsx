@@ -3,39 +3,69 @@ import type { ActivitySegment, AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
-import { buildHistoryDayGroups, buildHistoryRows, historyRowTitle } from "./historyGroups";
+import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow, historyRowTitle } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
   readonly deleting: boolean;
+  readonly hasMoreSegments?: boolean;
+  readonly loadMoreError?: string | null;
+  readonly loadingMore?: boolean;
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
+  readonly onLoadMore?: () => Promise<void> | void;
   readonly segments: readonly ActivitySegment[];
+  readonly startOfDayMinutes?: number;
 };
 
-// History loads ~90 days of segments (easily 10k+); rendering them all at once
-// blocks the main thread, so the list grows in pages instead.
 const HISTORY_RENDER_STEP = 200;
+const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
 
-export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: HistoryViewProps) {
+export function HistoryView({
+  appIcons,
+  deleting,
+  hasMoreSegments = false,
+  loadMoreError = null,
+  loadingMore = false,
+  onDeleteSelected,
+  onLoadMore,
+  segments,
+  startOfDayMinutes = 0,
+}: HistoryViewProps) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
   const normalizedQuery = query.trim().toLowerCase();
+  const isSearching = normalizedQuery.length > 0;
 
-  const historyRows = useMemo(() => buildHistoryRows(segments), [segments]);
+  const recentHistoryWindow = useMemo(
+    () => isSearching ? null : buildHistoryRowsWindow(segments, renderLimit),
+    [isSearching, renderLimit, segments],
+  );
+  const searchableRows = useMemo(
+    () => isSearching ? buildHistoryRows(segments) : EMPTY_HISTORY_ROWS,
+    [isSearching, segments],
+  );
 
   const visibleRows = useMemo(() => (
-    normalizedQuery
-      ? historyRows.filter((row) => row.searchText.includes(normalizedQuery))
-      : historyRows
-  ), [historyRows, normalizedQuery]);
+    isSearching
+      ? searchableRows.filter((row) => row.searchText.includes(normalizedQuery))
+      : recentHistoryWindow?.rows ?? EMPTY_HISTORY_ROWS
+  ), [isSearching, normalizedQuery, recentHistoryWindow, searchableRows]);
 
-  const renderedRows = visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
-  const hiddenCount = visibleRows.length - renderedRows.length;
+  const renderedRows = isSearching && visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
+  const hiddenCount = isSearching ? visibleRows.length - renderedRows.length : 0;
+  const hasLocalRowsToReveal = isSearching ? hiddenCount > 0 : recentHistoryWindow?.hasMore === true;
+  const canLoadBackendRows = !isSearching && !hasLocalRowsToReveal && hasMoreSegments && onLoadMore !== undefined;
+  const hasMoreRows = hasLocalRowsToReveal || canLoadBackendRows;
+  const showMoreLabel = isSearching && hiddenCount > 0
+    ? `Show more (${hiddenCount.toLocaleString("en-US")} older ${hiddenCount === 1 ? "record" : "records"})`
+    : loadingMore
+      ? "Loading older records..."
+    : "Show more older records";
 
-  const groups = useMemo(() => buildHistoryDayGroups(renderedRows), [renderedRows]);
+  const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
   const selectedCount = selectedIds.size;
   const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
 
@@ -109,14 +139,21 @@ export function HistoryView({ appIcons, deleting, onDeleteSelected, segments }: 
               </div>
             </section>
           ))}
-          {hiddenCount > 0 ? (
+          {hasMoreRows ? (
             <button
               type="button"
               className="settings-btn history-show-more"
-              onClick={() => setRenderLimit((current) => current + HISTORY_RENDER_STEP)}
+              disabled={loadingMore}
+              onClick={() => {
+                setRenderLimit((current) => current + HISTORY_RENDER_STEP);
+                if (canLoadBackendRows) void onLoadMore();
+              }}
             >
-              Show more ({hiddenCount.toLocaleString("en-US")} older {hiddenCount === 1 ? "record" : "records"})
+              {showMoreLabel}
             </button>
+          ) : null}
+          {loadMoreError ? (
+            <p className="history-load-more-error" role="alert">{loadMoreError}</p>
           ) : null}
         </div>
       )}

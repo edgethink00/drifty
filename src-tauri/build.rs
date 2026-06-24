@@ -6,11 +6,14 @@ fn main() {
     println!("cargo:rerun-if-changed=icons/32x32.png");
     println!("cargo:rerun-if-changed=icons/128x128.png");
     println!("cargo:rerun-if-changed=icons/128x128@2x.png");
+    println!("cargo:rerun-if-env-changed=VITE_DRIFTY_CHANNEL");
 
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "accessibility_get_status",
             "accessibility_request_access",
+            "developer_check_pre_release_update",
+            "developer_install_pre_release_update",
             "tracker_get_status",
             "tracker_start",
             "tracker_stop",
@@ -36,6 +39,7 @@ fn main() {
             "auth_load_saved_session",
             "auth_save_session",
             "auth_clear_saved_session",
+            "app_reveal_main_window",
             "focus_target_activate_browser_tab",
             "focus_target_browser_tab_exists",
             "focus_target_open_app",
