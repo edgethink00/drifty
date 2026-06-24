@@ -54,17 +54,27 @@ describe("previewData", () => {
     vi.setSystemTime(new Date("2026-05-08T18:40:00"));
 
     const day = previewTimeline({ day: "2026-05-08" });
+    const logicalDay = previewTimeline({
+      start: "2026-05-08T04:00:00",
+      end: "2026-05-09T03:59:59",
+    });
     const sessionGaps = day.slice(1).filter((segment, index) =>
       Date.parse(segment.startedAt) - Date.parse(day[index]?.endedAt ?? segment.startedAt) >= 5 * 60 * 1000
     );
-    const longSessions = day.filter((segment) => segment.durationSeconds > 30 * 60);
-    const futureSegments = day.filter((segment) => segment.startedAt > "2026-05-08T18:40:00");
-    const unknownClassifications = day.filter((segment) => classifyActivity(segment).category === "unknown");
+    const longSessions = logicalDay.filter((segment) => segment.durationSeconds > 30 * 60);
+    const overnightSegments = logicalDay.filter((segment) => segment.startedAt >= "2026-05-09T00:00:00");
+    const eveningBreak = day.some((segment, index) =>
+      segment.startedAt >= "2026-05-08T18:39:00"
+      && Date.parse(segment.startedAt) - Date.parse(day[index - 1]?.endedAt ?? segment.startedAt) >= 90 * 60 * 1000
+    );
+    const unknownClassifications = logicalDay.filter((segment) => classifyActivity(segment).category === "unknown");
 
-    expect(day.length).toBeGreaterThan(18);
-    expect(sessionGaps.length).toBeGreaterThan(10);
+    expect(day.length).toBeGreaterThan(45);
+    expect(logicalDay.length).toBeGreaterThan(65);
+    expect(sessionGaps.length).toBeGreaterThan(4);
+    expect(eveningBreak).toBe(true);
     expect(longSessions).toEqual([]);
-    expect(futureSegments).toEqual([]);
+    expect(overnightSegments.length).toBeGreaterThan(10);
     expect(unknownClassifications).toEqual([]);
   });
 
