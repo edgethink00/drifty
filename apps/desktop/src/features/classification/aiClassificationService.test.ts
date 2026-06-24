@@ -673,6 +673,37 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("sends derived Reddit community context when optional URL or title evidence is enabled", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "reddit.com",
+      siteTitle: "r/productivityapp - app recommendations",
+      siteUrl: "https://www.reddit.com/r/productivityapp/comments/private-thread?utm_source=raw#comments",
+      windowTitle: "r/productivityapp - Reddit",
+    });
+
+    try {
+      const { runAiClassification, invoke } = await importServiceWithSegments([segment]);
+      await runAiClassification({ day: "2026-05-22" });
+
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items).toHaveLength(1);
+      expect(body.items[0]).toEqual(expect.objectContaining({
+        domain: "reddit.com",
+        urlHost: "reddit.com",
+        siteUrl: "https://www.reddit.com/r/productivityapp/comments/private-thread",
+        title: "r/productivityapp - app recommendations",
+        windowTitle: "r/productivityapp - Reddit",
+        redditCommunity: "productivityapp",
+      }));
+      expect(JSON.stringify(body)).not.toContain("utm_source");
+      expect(JSON.stringify(body)).not.toContain("#comments");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("removes disabled site URL, titles, work profile, and unsent values from cloud requests and cache fingerprints", async () => {
     const firstSegment = createUnknownSegment(1, {
       appName: "Google Chrome",
@@ -729,6 +760,37 @@ describe("runAiClassification cloud contract", () => {
       expect(JSON.stringify(body)).not.toContain("Software Development in AI");
       expect(JSON.stringify(body)).not.toContain("Raw channel metadata");
       expect(JSON.stringify(body)).not.toContain("People & Blogs");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("omits Reddit community context when optional URL and title evidence are disabled", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "reddit.com",
+      siteTitle: "r/productivityapp - app recommendations",
+      siteUrl: "https://www.reddit.com/r/productivityapp/comments/private-thread?utm_source=raw",
+      windowTitle: "r/productivityapp - Reddit",
+    });
+
+    writeAiPrivacyRequestSettings({ siteUrl: false, title: false, workProfile: false });
+
+    try {
+      const { runAiClassification, invoke } = await importServiceWithSegments([segment]);
+      await runAiClassification({ day: "2026-05-22" });
+
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items[0]).toEqual(expect.objectContaining({
+        domain: "reddit.com",
+        urlHost: "reddit.com",
+        durationSeconds: 300,
+      }));
+      expect(body.items[0]).not.toHaveProperty("redditCommunity");
+      expect(body.items[0]).not.toHaveProperty("siteUrl");
+      expect(body.items[0]).not.toHaveProperty("title");
+      expect(body.items[0]).not.toHaveProperty("windowTitle");
     } finally {
       cleanupServiceMocks();
     }
@@ -1302,7 +1364,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v3-privacy-controls" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v4-privacy-reddit-context" })]);
     } finally {
       cleanupServiceMocks();
     }
