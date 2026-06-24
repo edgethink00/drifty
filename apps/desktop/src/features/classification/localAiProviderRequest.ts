@@ -26,6 +26,7 @@ export type MinimizedActivityPayload = {
   readonly youtubeChannelName: string | null;
   readonly youtubeCategory: string | null;
   readonly youtubeIsShorts: boolean | null;
+  readonly redditCommunity?: string;
 };
 
 export type LocalAiProviderConfig =
@@ -149,23 +150,35 @@ function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[],
         ]
       : []),
     "Use the observed app, site, optional URL path, window title, page title, and duration as the primary evidence.",
+    ...redditPromptGuidance(payload),
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
-    JSON.stringify(payload.map((item) => {
-      const title = item.siteTitle ?? item.youtubeTitle;
-      return {
-        id: item.segmentId,
-        appName: item.appName,
-        domain: item.siteDomain,
-        urlHost: item.siteDomain,
-        ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
-        ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
-        ...(title ? { title } : {}),
-        durationSeconds: item.durationSeconds,
-      };
-    })),
+    JSON.stringify(payload.map(promptItem)),
   ].join("\n");
+}
+
+function redditPromptGuidance(payload: readonly MinimizedActivityPayload[]): readonly string[] {
+  if (!payload.some((item) => item.redditCommunity)) return [];
+  return [
+    "Reddit-specific guidance: apply only to items with redditCommunity. Do not classify Reddit as social_media from the domain alone; prioritize the community, title, optional URL path, and apparent task intent.",
+    "For Reddit items, use social_media only for casual feeds, memes, personal updates, or general scrolling. Work, tool, study, or product-research communities may be workspace, learning, utility, neutral, or unknown.",
+  ];
+}
+
+function promptItem(item: MinimizedActivityPayload): Record<string, unknown> {
+  const title = item.siteTitle ?? item.youtubeTitle;
+  return {
+    id: item.segmentId,
+    appName: item.appName,
+    domain: item.siteDomain,
+    urlHost: item.siteDomain,
+    ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
+    ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
+    ...(title ? { title } : {}),
+    ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
+    durationSeconds: item.durationSeconds,
+  };
 }
 
 class LocalAiProviderRequestError extends Error {

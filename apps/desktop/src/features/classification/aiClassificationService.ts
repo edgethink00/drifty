@@ -27,9 +27,12 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v3-privacy-controls";
+const AI_CLASSIFICATION_PROMPT_VERSION = "v4-privacy-reddit-context";
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
+const REDDIT_COMMUNITY_PATTERN = /\br\/([A-Za-z0-9_]{2,32})\b/i;
+const REDDIT_DOMAIN_PATTERN = /(^|\.)reddit\.com$/i;
+const VALID_REDDIT_COMMUNITY_PATTERN = /^[a-z0-9_]{2,32}$/;
 const KNOWN_BROWSER_APP_NAMES = new Set(["arc", "brave browser", "chromium", "firefox", "google chrome", "google chrome canary", "microsoft edge", "safari"]);
 const KNOWN_BROWSER_BUNDLE_IDS = new Set(["com.apple.safari", "com.brave.browser", "com.google.chrome", "com.google.chrome.canary", "com.microsoft.edgemac", "company.thebrowser.browser", "org.chromium.chromium", "org.mozilla.firefox"]);
 
@@ -570,6 +573,7 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
   const titleEnabled = privacySettings.optional.title;
   const windowTitle = titleEnabled ? cleanText(segment.windowTitle) : null;
   const title = titleEnabled ? cleanText(segment.siteTitle) ?? cleanText(segment.youtubeTitle) : null;
+  const redditCommunity = redditCommunityForSegment(segment, siteUrl, titleEnabled);
   const providerInput = {
     fingerprintVersion: AI_CLASSIFICATION_PROMPT_VERSION,
     appName: cleanText(segment.appName) ?? "Unknown",
@@ -578,6 +582,7 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     ...(siteUrl ? { siteUrl } : {}),
     ...(windowTitle ? { windowTitle } : {}),
     ...(title ? { title } : {}),
+    ...(redditCommunity ? { redditCommunity } : {}),
     durationSeconds: segment.durationSeconds,
     ...(workProfile ? { workProfile } : {}),
   };
@@ -599,6 +604,7 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     youtubeChannelName: null,
     youtubeCategory: null,
     youtubeIsShorts: null,
+    ...(redditCommunity ? { redditCommunity } : {}),
   };
 }
 
@@ -611,6 +617,7 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
   siteUrl?: string;
   windowTitle?: string;
   title?: string;
+  redditCommunity?: string;
   durationSeconds: number;
 }> {
   return payload.map((item) => {
@@ -624,6 +631,7 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
       ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
       ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
       ...(title ? { title } : {}),
+      ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
       durationSeconds: item.durationSeconds,
     };
   });
@@ -655,6 +663,38 @@ function providerUrlFromRaw(value: string | null | undefined): URL | null {
     if (error instanceof Error) return null;
     return null;
   }
+}
+
+function redditCommunityForSegment(segment: ActivitySegment, siteUrl: string | null, titleEnabled: boolean): string | null {
+  const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
+  if (!siteDomain || !REDDIT_DOMAIN_PATTERN.test(siteDomain)) return null;
+
+  return extractRedditCommunityFromUrl(siteUrl)
+    ?? (titleEnabled ? extractRedditCommunityFromText(segment.siteTitle) ?? extractRedditCommunityFromText(segment.windowTitle) : null);
+}
+
+function extractRedditCommunityFromUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!REDDIT_DOMAIN_PATTERN.test(url.hostname)) return null;
+    const pathParts = url.pathname.split("/").filter(Boolean);
+    if (pathParts[0]?.toLowerCase() !== "r") return null;
+    return normalizeRedditCommunity(pathParts[1]);
+  } catch (error) {
+    if (error instanceof TypeError) return null;
+    throw error;
+  }
+}
+
+function extractRedditCommunityFromText(value: string | null | undefined): string | null {
+  const match = cleanText(value)?.match(REDDIT_COMMUNITY_PATTERN);
+  return normalizeRedditCommunity(match?.[1]);
+}
+
+function normalizeRedditCommunity(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && VALID_REDDIT_COMMUNITY_PATTERN.test(normalized) ? normalized : null;
 }
 
 function toDeterministicClassificationRecords(segments: ActivitySegment[], payload: MinimizedActivityPayload[]): ActivityClassificationRecord[] {
