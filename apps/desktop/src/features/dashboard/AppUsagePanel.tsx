@@ -154,7 +154,6 @@ export function AppUsagePanel({
               </div>
               <div className="app-usage-feature__measure">
                 <strong>{formatDuration(primaryItem.totalSeconds)}</strong>
-                <span>{formatShare(primaryItem.shareOfTotal)} tracked</span>
               </div>
             </div>
             <div className="app-usage-feature__meter-block">

@@ -76,9 +76,17 @@
 
 .app-usage-feature__identity {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 0.62rem;
   align-items: center;
+}
+
+.app-usage-feature .usage-identity-icon--md,
+.app-usage-feature .usage-identity-icon--md .app-glyph--md,
+.app-usage-feature .usage-identity-icon--md .app-icon--md,
+.app-usage-feature .usage-identity-icon--md .site-favicon {
+  width: 48px;
+  height: 48px;
 }
 
 .app-usage-kicker,
@@ -126,7 +134,7 @@
 .app-usage-feature__identity p {
   margin: 2px 0 0;
   color: var(--text-soft);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   line-height: 1.25;
 }
 
@@ -193,7 +201,7 @@
 .app-usage-feature__meter-copy strong {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.73rem;
   font-weight: 560;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -1000,7 +1008,7 @@
 }
 
 .app-usage-feature {
-  gap: 8px;
+  gap: 1px;
   padding: 10px;
   border-color: color-mix(in srgb, var(--accent) 12%, var(--line));
   border-radius: var(--radius-sm);
@@ -1013,7 +1021,7 @@
 }
 
 .app-usage-feature__identity {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 0.42rem;
 }
 
@@ -1036,12 +1044,12 @@
 
 .app-usage-feature__identity p {
   margin: 1px 0 0;
-  font-size: 0.52rem;
+  font-size: 0.64rem;
 }
 
 .app-usage-feature__measure strong {
   font-family: var(--font-display);
-  font-size: clamp(0.82rem, 1.05vw, 0.96rem);
+  font-size: clamp(0.98rem, 1.26vw, 1.15rem);
   font-weight: 540;
   letter-spacing: -0.03em;
   line-height: 1.02;

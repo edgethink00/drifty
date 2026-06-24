@@ -56,7 +56,8 @@ describe("AppUsagePanel", () => {
     const code = within(screen.getByLabelText("Most used app: Code"));
     expect(code.getByText("#1")).toBeTruthy();
     expect(code.getByText("1h 30m")).toBeTruthy();
-    expect(code.getByText("75% tracked")).toBeTruthy();
+    expect(code.queryByText("75% tracked")).toBeNull();
+    expect(code.getByText("75%")).toBeTruthy();
     expect(code.getByText("Sessions")).toBeTruthy();
     expect(code.getByText("3")).toBeTruthy();
     expect(code.getByText("Average")).toBeTruthy();
