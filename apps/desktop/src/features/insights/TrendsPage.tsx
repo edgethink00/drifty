@@ -54,8 +54,6 @@ export function TrendsPage({
   onTodayInsightRange,
   onTrendsRangeChange,
 }: TrendsPageProps) {
-  const activeInsightRangeOption = INSIGHT_RANGE_OPTIONS.find((option) => option.range === trendsRange);
-  const insightDateContext = activeInsightRangeOption?.context ?? "Weekly window";
   const productivityTotals = {
     focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
     neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
@@ -86,7 +84,6 @@ export function TrendsPage({
           </div>
           <DateNavigator
             ariaLabel="Insight window selector"
-            context={insightDateContext}
             label={insightDateLabel}
             todayLabel="Latest"
             isTodayDisabled={isTodaySelected}

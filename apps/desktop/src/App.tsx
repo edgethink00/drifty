@@ -3424,7 +3424,6 @@ export default function App() {
   const canShiftClassificationForward = classificationRange === "Week"
     ? getDashboardPeriodRange(rawNextClassificationDay, "Week", startOfDayMinutes, startOfWeek).startDay <= todayDay
     : rawNextClassificationDay <= todayDay;
-  const classificationDateContext = classificationRange === "Week" ? "Selected week" : selectedDayContext;
   const classificationDateLabel = classificationRange === "Week" ? formatDateRangeLabel(classificationWeekRange.startDay, classificationWeekRange.endDay) : selectedDayLabel;
   const isCurrentDashboardPeriod = dashPeriod === "Week"
     ? dashboardRange.startDay <= todayDay && todayDay <= dashboardRange.endDay
@@ -3435,7 +3434,6 @@ export default function App() {
     : nextDashboardDay <= todayDay;
   const nextInsightDay = shiftInsightPeriodDay(selectedDay, trendsRange, 1);
   const canShiftInsightForward = nextInsightDay <= todayDay;
-  const dashboardDateContext = dashPeriod === "Week" ? "Selected week" : selectedDayContext;
   const dashboardDateLabel = dashPeriod === "Week" ? formatDateRangeLabel(dashboardRange.startDay, dashboardRange.endDay) : selectedDayLabel;
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
   const liveClock = isTodaySelected ? new Date() : null;
@@ -4068,7 +4066,6 @@ export default function App() {
   const dashboardDateNavigator = (
     <DateNavigator
       ariaLabel={`${dashPeriod} date selector`}
-      context={dashboardDateContext}
       label={dashboardDateLabel}
       todayLabel={getDashboardCurrentPeriodLabel(dashPeriod)}
       isTodayDisabled={isCurrentDashboardPeriod}
@@ -4315,7 +4312,6 @@ export default function App() {
             classificationActivityPeakSeconds={classificationActivityPeakSeconds}
             classificationActivityRows={classificationActivityRows}
             classificationCategoryBreakdowns={classificationCategoryBreakdowns}
-            classificationDateContext={classificationDateContext}
             classificationDateLabel={classificationDateLabel}
             classificationOptions={classificationOptions}
             classificationPanelStyle={classificationPanelStyle}
