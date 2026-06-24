@@ -7,6 +7,7 @@ import { getLatestWatcherSegment } from "./watcherData";
 import { getActiveDriftAlarmSegment } from "./driftAlarmCurrentSegment";
 import { EXTREME_NUDGE_STORAGE_KEY } from "./extremeNudgeData";
 import { segmentForLiveDriftAlarmClassification } from "./liveDriftAlarmClassification";
+import { calibrateAppLlmClassificationWithHistory } from "./driftAlarmClassificationCalibration";
 export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export type DriftAlarmBreakSnooze = {
@@ -109,7 +110,12 @@ export function buildDriftAlarmCandidates({
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],
     } satisfies ClassificationOptions;
-    const currentClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(currentSegment, segments), currentClassificationOptions);
+    const currentClassification = classifyDriftAlarmSegmentWithHistory({
+      segment: currentSegment,
+      sourceSegmentId,
+      segments,
+      classificationOptions: currentClassificationOptions,
+    });
 
     if (
       currentClassification.productivity === "drift"
@@ -136,7 +142,12 @@ export function buildDriftAlarmCandidates({
   const latestSegment = getLatestWatcherSegment(segments);
   if (!latestSegment) return [];
 
-  const latestClassification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(latestSegment, segments), classificationOptions);
+  const latestClassification = classifyDriftAlarmSegmentWithHistory({
+    segment: latestSegment,
+    sourceSegmentId: latestSegment.id,
+    segments,
+    classificationOptions,
+  });
   if (
     latestClassification.productivity !== "drift"
     || !classificationConfidenceAllowsDriftAlarm(latestClassification)
@@ -160,6 +171,27 @@ export function buildDriftAlarmCandidates({
 function classificationConfidenceAllowsDriftAlarm(classification: ReturnType<typeof classifyActivityDetailed>): boolean {
   if (classification.source !== "llm") return true;
   return classification.confidence >= AI_DRIFT_ALARM_MINIMUM_CONFIDENCE;
+}
+
+function classifyDriftAlarmSegmentWithHistory({
+  segment,
+  sourceSegmentId,
+  segments,
+  classificationOptions,
+}: {
+  segment: ActivitySegment;
+  sourceSegmentId: string;
+  segments: ActivitySegment[];
+  classificationOptions: ClassificationOptions;
+}): ReturnType<typeof classifyActivityDetailed> {
+  const classification = classifyActivityDetailed(segmentForLiveDriftAlarmClassification(segment, segments), classificationOptions);
+  return calibrateAppLlmClassificationWithHistory({
+    segment,
+    classification,
+    historySegments: segments,
+    classificationOptions,
+    excludeSegmentIds: new Set([sourceSegmentId]),
+  }).classification;
 }
 
 function driftAlarmDurationMeetsThreshold({
