@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-peek-cursor-inside"
+description = "Enables the watcher_peek_cursor_inside command without any pre-configured scope."
+commands.allow = ["watcher_peek_cursor_inside"]
+
+[[permission]]
+identifier = "deny-watcher-peek-cursor-inside"
+description = "Denies the watcher_peek_cursor_inside command without any pre-configured scope."
+commands.deny = ["watcher_peek_cursor_inside"]

@@ -10,6 +10,7 @@
     "allow-watcher-peek-hide",
     "allow-watcher-peek-dismiss",
     "allow-watcher-peek-set-interactive",
+    "allow-watcher-peek-cursor-inside",
     "allow-watcher-peek-respond",
     "allow-watcher-peek-end-of-day-review-action",
     "allow-watcher-peek-extreme-nudge-action"

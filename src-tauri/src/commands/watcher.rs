@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, PhysicalPosition as Point,
+    PhysicalSize as Size, WebviewUrl, WebviewWindowBuilder,
 };
 
 use super::watcher_extreme_nudge::{
@@ -125,6 +125,23 @@ pub fn watcher_peek_set_interactive(app: AppHandle, interactive: bool) -> Result
 }
 
 #[tauri::command]
+pub fn watcher_peek_cursor_inside(app: AppHandle) -> bool {
+    let Some(window) = app.get_webview_window(WATCHER_PEEK_WINDOW_LABEL) else {
+        return false;
+    };
+
+    matches!(window.is_visible(), Ok(true))
+        && matches!(
+            (
+                app.cursor_position(),
+                window.outer_position(),
+                window.outer_size(),
+            ),
+            (Ok(cursor), Ok(position), Ok(size)) if is_cursor_inside_watcher_rect(cursor, (position, size))
+        )
+}
+
+#[tauri::command]
 pub fn watcher_peek_respond(app: AppHandle, response: String) -> Result<(), String> {
     watcher_peek_hide(app.clone())?;
 
@@ -216,6 +233,13 @@ fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
 
 fn should_ignore_cursor_events_for_payload(payload: &Value) -> bool {
     !(is_end_of_day_review_payload(payload) || is_extreme_nudge_toast_payload(payload))
+}
+
+fn is_cursor_inside_watcher_rect(cursor: Point<f64>, rect: (Point<i32>, Size<u32>)) -> bool {
+    let (rect_position, rect_size) = rect;
+    let (left, top) = (f64::from(rect_position.x), f64::from(rect_position.y));
+    (left..=left + f64::from(rect_size.width)).contains(&cursor.x)
+        && (top..=top + f64::from(rect_size.height)).contains(&cursor.y)
 }
 
 fn calculate_watcher_window_position(
