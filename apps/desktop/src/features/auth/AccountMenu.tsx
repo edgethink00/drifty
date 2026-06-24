@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 
 export const ACCOUNT_POPOVER_EXPANDED_EDGE_OFFSET_PX = 6;
 
-export const ACCOUNT_POPOVER_EXPANDED_GAP_PX = 8;
+export const ACCOUNT_POPOVER_EXPANDED_GAP_PX = 5;
 
 export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
