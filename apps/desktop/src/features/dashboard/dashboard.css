@@ -379,6 +379,22 @@
   width: 100%;
 }
 
+.dashboard-page-head__title {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: calc(var(--space-1) * 1.5);
+}
+
+.dashboard-page-head__title-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-page-head__title-meta {
+  font-size: var(--type-mode-label-size);
+  font-weight: 475;
+}
+
 .dashboard-page-head--today {
   margin-bottom: var(--space-2);
 }

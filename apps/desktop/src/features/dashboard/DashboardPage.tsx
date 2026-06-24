@@ -32,6 +32,7 @@ type DashboardPageProps = {
     readonly endDay: string;
   };
   readonly dashboardTitle: string;
+  readonly dashboardTitleMeta: string | null;
   readonly dashPeriod: DashboardPeriod;
   readonly flowBlocks: FlowBlock[];
   readonly flowIntervalMinutes: FlowIntervalMinutes;
@@ -71,6 +72,7 @@ export function DashboardPage({
   dashboardProductivityTotals,
   dashboardRange,
   dashboardTitle,
+  dashboardTitleMeta,
   dashPeriod,
   flowBlocks,
   flowIntervalMinutes,
@@ -120,7 +122,15 @@ export function DashboardPage({
         <div className={`pg-head dashboard-page-head${dashPeriod === "Today" ? " dashboard-page-head--today" : ""}`}>
           <div className="dashboard-page-head__row">
             <div>
-              <h1>{dashboardTitle}</h1>
+              <h1
+                aria-label={dashboardTitleMeta ? `${dashboardTitle} ${dashboardTitleMeta}` : undefined}
+                className="dashboard-page-head__title"
+              >
+                <span className="dashboard-page-head__title-value">{dashboardTitle}</span>
+                {dashboardTitleMeta ? (
+                  <span className="dashboard-page-head__title-meta">{dashboardTitleMeta}</span>
+                ) : null}
+              </h1>
             </div>
             {dashboardDateNavigator}
           </div>
