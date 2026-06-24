@@ -1,4 +1,5 @@
 import { getAccountDisplayName } from "./accountDisplay";
+import desktopPackage from "../../../package.json";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { aiConnectionStatusLabel } from "../ai-connection/aiStatusLabels";
@@ -14,6 +15,9 @@ export const ACCOUNT_POPOVER_EXPANDED_GAP_PX = 5;
 export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
+
+const ACCOUNT_MENU_VERSION_LABEL = "Version";
+const ACCOUNT_MENU_VERSION_VALUE = desktopPackage.version;
 
 function accountStatusLabel({
   billingEntitlement,
@@ -123,6 +127,10 @@ export function AccountMenu({
       role="menu"
       aria-label="Account menu"
     >
+      <div className="account-menu-version" aria-label={`Drifty ${ACCOUNT_MENU_VERSION_LABEL} ${ACCOUNT_MENU_VERSION_VALUE}`}>
+        <span>{ACCOUNT_MENU_VERSION_LABEL}</span>
+        <span className="account-menu-version__value">{ACCOUNT_MENU_VERSION_VALUE}</span>
+      </div>
       {userEmail ? <div className="account-popover__email" title={userEmail}>{userEmail}</div> : null}
       <button type="button" className="account-menu-item" onClick={onUpgrade} role="menuitem">
         <span className="account-menu-icon" aria-hidden="true">✦</span>

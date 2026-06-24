@@ -64,6 +64,7 @@ describe("AccountMenu", () => {
 
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll(".account-trigger__chevron-mark")).toHaveLength(2);
+    expect(screen.getByLabelText(/^Drifty Version /).textContent).toMatch(/^Version\d+\.\d+\.\d+$/);
     expect(screen.getByRole("menuitem", { name: /^AI Setting$/ })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /^Settings$/ })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: /^Drifty Cloud$/ })).toBeNull();
