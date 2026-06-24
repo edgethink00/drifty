@@ -87,7 +87,6 @@ export function ClassificationPage({
     <div className="page">
       <div className="pg-head">
         <div>
-          <div className="eyebrow">Classification</div>
           <h1>Activity breakdown</h1>
         </div>
         <div className="classification-range-controls">

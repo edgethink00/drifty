@@ -26,7 +26,6 @@ type DashboardPageProps = {
   readonly dashboardAppUsage: AppUsagePanelItem[];
   readonly dashboardCategoryTotals: CategoryDuration[];
   readonly dashboardDateNavigator: ReactNode;
-  readonly dashboardPeriodLabel: string;
   readonly dashboardProductivityTotals: ProductivityDuration[];
   readonly dashboardRange: {
     readonly startDay: string;
@@ -69,7 +68,6 @@ export function DashboardPage({
   dashboardAppUsage,
   dashboardCategoryTotals,
   dashboardDateNavigator,
-  dashboardPeriodLabel,
   dashboardProductivityTotals,
   dashboardRange,
   dashboardTitle,
@@ -122,7 +120,6 @@ export function DashboardPage({
         <div className={`pg-head dashboard-page-head${dashPeriod === "Today" ? " dashboard-page-head--today" : ""}`}>
           <div className="dashboard-page-head__row">
             <div>
-              {dashPeriod === "Today" ? null : <div className="eyebrow">{dashboardPeriodLabel}</div>}
               <h1>{dashboardTitle}</h1>
             </div>
             {dashboardDateNavigator}
