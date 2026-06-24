@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { classifyActivity } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { previewAppIcons, previewTimeline, shouldUsePreviewData } from "./previewData";
 
@@ -46,6 +47,23 @@ describe("previewData", () => {
 
     expect(oldRepeatedBlocks.length).toBeLessThan(2);
     expect(weekdayPlans.size).toBeGreaterThan(12);
+  });
+
+  it("keeps today preview sessions broken up and fully classified", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T18:40:00"));
+
+    const day = previewTimeline({ day: "2026-05-08" });
+    const sessionGaps = day.slice(1).filter((segment, index) =>
+      Date.parse(segment.startedAt) - Date.parse(day[index]?.endedAt ?? segment.startedAt) >= 5 * 60 * 1000
+    );
+    const longSessions = day.filter((segment) => segment.durationSeconds > 30 * 60);
+    const unknownClassifications = day.filter((segment) => classifyActivity(segment).category === "unknown");
+
+    expect(day.length).toBeGreaterThan(18);
+    expect(sessionGaps.length).toBeGreaterThan(10);
+    expect(longSessions).toEqual([]);
+    expect(unknownClassifications).toEqual([]);
   });
 
   it("returns real preview app icon references for native app identities", () => {

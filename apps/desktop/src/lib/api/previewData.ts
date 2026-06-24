@@ -79,6 +79,15 @@ function makeSegment(
 ): PreviewActivitySegment {
   const startedAt = at(day, startHour, startMinute);
   const endedAt = at(day, endHour, endMinute);
+  const classification: PreviewActivitySegment["classification"] = overrides.classification ?? {
+    category,
+    productivity,
+    source: "manual",
+    confidence: 0.96,
+    reason: "Preview fixture classification",
+    classifiedAt: endedAt,
+  };
+
   return {
     id,
     startedAt,
@@ -92,6 +101,7 @@ function makeSegment(
     siteTitle: overrides.siteTitle ?? null,
     category,
     productivity,
+    classification,
     platform: "macos",
     source: "manual",
     confidence: 0.96,
@@ -101,26 +111,28 @@ function makeSegment(
 
 function todaySegments(day: string): PreviewActivitySegment[] {
   return [
-    makeSegment("preview-t1", day, 8, 42, 8, 58, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }),
-    makeSegment("preview-t2", day, 9, 2, 9, 18, "Mail", "communication", "neutral", { windowTitle: "Inbox" }),
-    makeSegment("preview-t3", day, 9, 21, 10, 33, "Visual Studio Code", "workspace", "focus", { windowTitle: "App.tsx — Drifty" }),
-    makeSegment("preview-t4", day, 10, 34, 10, 41, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }),
-    makeSegment("preview-t5", day, 10, 42, 11, 56, "Visual Studio Code", "workspace", "focus", { windowTitle: "styles.css — Drifty" }),
-    makeSegment("preview-t6", day, 11, 56, 12, 14, "Arc", "workspace", "focus", { siteDomain: "github.com", siteTitle: "Pull request #284", browserName: "Arc", windowTitle: "github.com/drifty/desktop · PR #284" }),
-    makeSegment("preview-t7", day, 12, 15, 12, 28, "Arc", "learning", "focus", { siteDomain: "stackoverflow.com", siteTitle: "How to type useMemo result", browserName: "Arc" }),
-    makeSegment("preview-t8", day, 12, 30, 12, 58, "Spotify", "music", "neutral", { windowTitle: "Lo-fi beats" }),
-    makeSegment("preview-t9", day, 12, 32, 13, 5, "Arc", "social_media", "drift", { siteDomain: "x.com", siteTitle: "X — Home", browserName: "Arc" }),
-    makeSegment("preview-t10", day, 13, 8, 13, 14, "Messages", "communication", "neutral", { windowTitle: "Maria" }),
-    makeSegment("preview-t11", day, 13, 22, 14, 41, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
-    makeSegment("preview-t12", day, 14, 42, 14, 51, "Arc", "learning", "focus", { siteDomain: "react.dev", siteTitle: "useMemo – React", browserName: "Arc" }),
-    makeSegment("preview-t13", day, 14, 52, 15, 38, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
-    makeSegment("preview-t14", day, 15, 39, 15, 47, "Slack", "communication", "neutral", { windowTitle: "#standups" }),
-    makeSegment("preview-t15", day, 15, 48, 16, 12, "Figma", "workspace", "focus", { windowTitle: "Drifty — Insights v3" }),
-    makeSegment("preview-t16", day, 16, 12, 16, 33, "Linear", "workspace", "focus", { windowTitle: "DTM-208 · Leaderboard ranks" }),
-    makeSegment("preview-t17", day, 16, 33, 17, 12, "Visual Studio Code", "workspace", "focus", { windowTitle: "LeaderboardView.tsx" }),
-    makeSegment("preview-t18", day, 17, 13, 17, 32, "Arc", "workspace", "focus", { siteDomain: "github.com", siteTitle: "PR review · #284", browserName: "Arc" }),
-    makeSegment("preview-t19", day, 17, 52, 18, 21, "Arc", "entertainment", "drift", { siteDomain: "youtube.com", siteTitle: "MKBHD — phone reviews", browserName: "Arc" }),
-    makeSegment("preview-t20", day, 18, 23, 18, 40, "Arc", "social_media", "drift", { siteDomain: "reddit.com", siteTitle: "r/programming", browserName: "Arc" }),
+    makeSegment("preview-t1", day, 8, 42, 8, 56, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }),
+    makeSegment("preview-t2", day, 9, 3, 9, 16, "Mail", "communication", "neutral", { windowTitle: "Inbox" }),
+    makeSegment("preview-t3", day, 9, 24, 9, 52, "Visual Studio Code", "workspace", "focus", { windowTitle: "App.tsx — Drifty" }),
+    makeSegment("preview-t4", day, 9, 58, 10, 21, "Visual Studio Code", "workspace", "focus", { windowTitle: "App.tsx — Drifty" }),
+    makeSegment("preview-t5", day, 10, 27, 10, 35, "Slack", "communication", "neutral", { windowTitle: "#design-engineering" }),
+    makeSegment("preview-t6", day, 10, 42, 11, 8, "Visual Studio Code", "workspace", "focus", { windowTitle: "styles.css — Drifty" }),
+    makeSegment("preview-t7", day, 11, 16, 11, 38, "Arc", "workspace", "focus", { siteDomain: "github.com", siteTitle: "Pull request #284", browserName: "Arc", windowTitle: "github.com/drifty/desktop · PR #284" }),
+    makeSegment("preview-t8", day, 11, 47, 12, 2, "Arc", "learning", "focus", { siteDomain: "stackoverflow.com", siteTitle: "How to type useMemo result", browserName: "Arc" }),
+    makeSegment("preview-t9", day, 12, 12, 12, 38, "Spotify", "music", "neutral", { windowTitle: "Lo-fi beats" }),
+    makeSegment("preview-t10", day, 12, 42, 13, 2, "Arc", "social_media", "drift", { siteDomain: "x.com", siteTitle: "X — Home", browserName: "Arc" }),
+    makeSegment("preview-t11", day, 13, 10, 13, 18, "Messages", "communication", "neutral", { windowTitle: "Maria" }),
+    makeSegment("preview-t12", day, 13, 28, 13, 55, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
+    makeSegment("preview-t13", day, 14, 6, 14, 28, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
+    makeSegment("preview-t14", day, 14, 36, 14, 47, "Arc", "learning", "focus", { siteDomain: "react.dev", siteTitle: "useMemo – React", browserName: "Arc" }),
+    makeSegment("preview-t15", day, 14, 56, 15, 20, "Visual Studio Code", "workspace", "focus", { windowTitle: "FlowChartView.tsx" }),
+    makeSegment("preview-t16", day, 15, 29, 15, 38, "Slack", "communication", "neutral", { windowTitle: "#standups" }),
+    makeSegment("preview-t17", day, 15, 45, 16, 5, "Figma", "workspace", "focus", { windowTitle: "Drifty — Insights v3" }),
+    makeSegment("preview-t18", day, 16, 13, 16, 29, "Linear", "workspace", "focus", { windowTitle: "DTM-208 · Leaderboard ranks" }),
+    makeSegment("preview-t19", day, 16, 37, 16, 58, "Visual Studio Code", "workspace", "focus", { windowTitle: "LeaderboardView.tsx" }),
+    makeSegment("preview-t20", day, 17, 9, 17, 28, "Arc", "workspace", "focus", { siteDomain: "github.com", siteTitle: "PR review · #284", browserName: "Arc" }),
+    makeSegment("preview-t21", day, 17, 43, 18, 5, "Arc", "entertainment", "drift", { siteDomain: "youtube.com", siteTitle: "MKBHD — phone reviews", browserName: "Arc" }),
+    makeSegment("preview-t22", day, 18, 19, 18, 40, "Arc", "social_media", "drift", { siteDomain: "reddit.com", siteTitle: "r/programming", browserName: "Arc" }),
   ];
 }
 
