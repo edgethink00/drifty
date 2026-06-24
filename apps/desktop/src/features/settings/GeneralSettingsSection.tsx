@@ -94,7 +94,7 @@ export function GeneralSettingsSection({
       </div>
       {isDevSettingsEnabled ? (
         <div className="settings-block"><h3>Debugging</h3>
-          <div className="settings-row"><div><div className="lbl">Dev mode</div><div className="desc">Show local diagnostics controls for this beta build.</div></div><div className="ctrl"><Toggle checked={devModeEnabled} onChange={onDevModeChange} ariaLabel="Toggle Dev mode" /></div></div>
+          <div className="settings-row"><div><div className="lbl">Dev mode</div><div className="desc">Show local diagnostics controls for this build.</div></div><div className="ctrl"><Toggle checked={devModeEnabled} onChange={onDevModeChange} ariaLabel="Toggle Dev mode" /></div></div>
           <SettingsBuildInfoRow />
         </div>
       ) : null}

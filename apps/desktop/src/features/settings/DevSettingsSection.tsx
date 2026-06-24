@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEVELOPER_PRE_RELEASE_UPDATES_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { DRIFT_ALARM_PREVIEW_OPTIONS } from "../companion/driftAlarmData";
 import { DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES, WATCHER_PEEK_SETTINGS_VISIBLE, WATCHER_PERIODIC_MAX_LIMIT_MINUTES, WATCHER_PERIODIC_MIN_LIMIT_MINUTES, type WatcherMode } from "../companion/watcherData";
@@ -110,7 +110,7 @@ export function DevSettingsSection({
       </div>
       <div className="settings-block settings-block--dev-preview">
         <h3>Dev</h3>
-        <DeveloperPreReleaseUpdateRow />
+        {DEVELOPER_PRE_RELEASE_UPDATES_ENABLED ? <DeveloperPreReleaseUpdateRow /> : null}
         {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
           <div className="settings-row">
             <div>
