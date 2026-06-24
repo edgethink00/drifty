@@ -24,7 +24,6 @@ type ClassificationPageProps = {
   readonly classificationActivityPeakSeconds: number;
   readonly classificationActivityRows: ClassificationActivityRow[];
   readonly classificationCategoryBreakdowns: ClassificationCategoryBreakdown[];
-  readonly classificationDateContext: string;
   readonly classificationDateLabel: string;
   readonly classificationOptions: ClassificationOptions;
   readonly classificationPanelStyle: ClassificationPanelStyle;
@@ -58,7 +57,6 @@ export function ClassificationPage({
   classificationActivityPeakSeconds,
   classificationActivityRows,
   classificationCategoryBreakdowns,
-  classificationDateContext,
   classificationDateLabel,
   classificationOptions,
   classificationPanelStyle,
@@ -109,7 +107,6 @@ export function ClassificationPage({
           </div>
           <DateNavigator
             ariaLabel={`Classification ${classificationRange.toLowerCase()} selector`}
-            context={classificationDateContext}
             label={classificationDateLabel}
             todayLabel="Today"
             isTodayDisabled={isCurrentClassificationRange}

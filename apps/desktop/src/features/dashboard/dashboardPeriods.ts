@@ -9,9 +9,9 @@ export type DashboardPeriod = "Today" | "Week" | "Month";
 export type ClassificationRange = "Day" | "Week";
 
 export const INSIGHT_RANGE_OPTIONS = [
-  { range: "Week", label: "Week", context: "Weekly window", days: 7 },
-  { range: "Month", label: "Month", context: "Monthly window", days: 30 },
-  { range: "90Day", label: "90 days", context: "90-day window", days: 90 },
+  { range: "Week", label: "Week", days: 7 },
+  { range: "Month", label: "Month", days: 30 },
+  { range: "90Day", label: "90 days", days: 90 },
 ] as const;
 
 export type InsightRange = (typeof INSIGHT_RANGE_OPTIONS)[number]["range"];
