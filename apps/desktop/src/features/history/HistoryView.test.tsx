@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ActivitySegment } from "@drifty/domain";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryView } from "./HistoryView";
 import { readAppStyles } from "../../test/readStyles";
+import { fireIntersection, installMockIntersectionObserver } from "../../test/intersectionObserverMock";
 
 const styles = readAppStyles();
 
@@ -66,7 +67,11 @@ function manyHistorySegments(count: number): ActivitySegment[] {
 }
 
 describe("HistoryView", () => {
-  afterEach(() => cleanup());
+  beforeEach(() => installMockIntersectionObserver());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   it("renders grouped local history and filters by query", () => {
     const { container } = render(
@@ -135,8 +140,8 @@ describe("HistoryView", () => {
     expect(cssRule(".history-groups")).toMatch(/min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
   });
 
-  it("renders the newest history rows first and reveals older rows on demand", () => {
-    render(
+  it("renders the newest history rows first and reveals older rows when scrolled into view", () => {
+    const { container } = render(
       <HistoryView
         appIcons={{}}
         deleting={false}
@@ -148,12 +153,13 @@ describe("HistoryView", () => {
     expect(screen.getAllByRole("checkbox", { name: /select window/i })).toHaveLength(200);
     expect(screen.getByText("Window 204")).toBeTruthy();
     expect(screen.queryByText("Window 0")).toBeNull();
+    expect(container.querySelector(".history-scroll-sentinel")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /^show more older records$/i }));
+    act(() => fireIntersection(true));
 
     expect(screen.getAllByRole("checkbox", { name: /select window/i })).toHaveLength(205);
     expect(screen.getByText("Window 0")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^show more older records$/i })).toBeNull();
+    expect(container.querySelector(".history-scroll-sentinel")).toBeNull();
   });
 
   it("anchors sparse search results to the top of the scroll region", () => {
