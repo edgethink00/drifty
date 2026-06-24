@@ -50,6 +50,7 @@ fn main() {
             "watcher_peek_hide",
             "watcher_peek_dismiss",
             "watcher_peek_set_interactive",
+            "watcher_peek_cursor_inside",
             "watcher_peek_respond",
             "watcher_peek_end_of_day_review_action",
             "watcher_peek_extreme_nudge_action",

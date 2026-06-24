@@ -94,3 +94,51 @@ fn normal_watcher_payload_ignores_cursor_events() {
 
     assert!(should_ignore_cursor_events_for_payload(&payload));
 }
+
+#[test]
+fn watcher_peek_cursor_inside_detects_inside_point() {
+    let cursor = tauri::PhysicalPosition::new(220.0, 180.0);
+    let rect_position = tauri::PhysicalPosition::new(100, 120);
+    let rect_size = tauri::PhysicalSize::new(240, 160);
+
+    assert!(is_cursor_inside_watcher_rect(
+        cursor,
+        (rect_position, rect_size)
+    ));
+}
+
+#[test]
+fn watcher_peek_cursor_inside_rejects_outside_left_point() {
+    let cursor = tauri::PhysicalPosition::new(99.0, 180.0);
+    let rect_position = tauri::PhysicalPosition::new(100, 120);
+    let rect_size = tauri::PhysicalSize::new(240, 160);
+
+    assert!(!is_cursor_inside_watcher_rect(
+        cursor,
+        (rect_position, rect_size)
+    ));
+}
+
+#[test]
+fn watcher_peek_cursor_inside_rejects_outside_bottom_point() {
+    let cursor = tauri::PhysicalPosition::new(220.0, 281.0);
+    let rect_position = tauri::PhysicalPosition::new(100, 120);
+    let rect_size = tauri::PhysicalSize::new(240, 160);
+
+    assert!(!is_cursor_inside_watcher_rect(
+        cursor,
+        (rect_position, rect_size)
+    ));
+}
+
+#[test]
+fn watcher_peek_cursor_inside_includes_boundary_point() {
+    let cursor = tauri::PhysicalPosition::new(340.0, 280.0);
+    let rect_position = tauri::PhysicalPosition::new(100, 120);
+    let rect_size = tauri::PhysicalSize::new(240, 160);
+
+    assert!(is_cursor_inside_watcher_rect(
+        cursor,
+        (rect_position, rect_size)
+    ));
+}

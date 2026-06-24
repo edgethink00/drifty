@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { BreakDurationPicker } from "./BreakDurationPicker";
+import { FlagIcon } from "./DriftAlarmIcons";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
 import { useDelayedDriftAlarmAction } from "./useDelayedDriftAlarmAction";
+import { isNativeWatcherCursorInside } from "./watcherBridge";
 
 export type ExtremeNudgeToastEvent = {
   kind: "extremeNudgeToast";
@@ -18,6 +20,7 @@ type ToastPhase = "visible" | "leaving";
 
 const EXTREME_NUDGE_TOAST_VISIBLE_MS = 8_000;
 const EXTREME_NUDGE_TOAST_EXIT_MS = 280;
+const EXTREME_NUDGE_HOVER_WATCHDOG_MS = 250;
 
 export function ExtremeNudgeToast({
   event,
@@ -37,6 +40,7 @@ export function ExtremeNudgeToast({
   const dismissTimerRef = useRef<number | null>(null);
   const isPointerOriginFocusRef = useRef(false);
   const remainingVisibleMsRef = useRef(EXTREME_NUDGE_TOAST_VISIBLE_MS);
+  const toastRef = useRef<HTMLElement | null>(null);
   const visibleTimerRef = useRef<number | null>(null);
   const visibleTimerStartedAtMsRef = useRef<number | null>(null);
   const breakOptions = event.breakOptions ?? [];
@@ -105,6 +109,10 @@ export function ExtremeNudgeToast({
     runDriftAlarmAction({ type: "start_break", minutes });
   };
 
+  const markAsNotDrift = () => {
+    runDriftAlarmAction({ type: "manual_correction" });
+  };
+
   const pauseHoverTimer = useCallback(() => {
     setIsHoverHoldingTimer(true);
   }, []);
@@ -112,6 +120,30 @@ export function ExtremeNudgeToast({
   const resumeHoverTimer = useCallback(() => {
     setIsHoverHoldingTimer(false);
   }, []);
+
+  useEffect(() => {
+    const toast = toastRef.current;
+    if (!isHoverHoldingTimer || phase !== "visible" || isPreview || !toast) return undefined;
+
+    let disposed = false;
+    const watchdog = window.setInterval(() => {
+      void isNativeWatcherCursorInside().then((isCursorInside) => {
+        if (disposed) return;
+        if (isCursorInside === true) return;
+        if (isCursorInside === false) {
+          resumeHoverTimer();
+          return;
+        }
+        if (isElementHovered(toast)) return;
+        resumeHoverTimer();
+      });
+    }, EXTREME_NUDGE_HOVER_WATCHDOG_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(watchdog);
+    };
+  }, [isHoverHoldingTimer, isPreview, phase, resumeHoverTimer, event.id]);
 
   const markPointerOriginFocus = useCallback(() => {
     isPointerOriginFocusRef.current = true;
@@ -135,6 +167,7 @@ export function ExtremeNudgeToast({
 
   return (
     <aside
+      ref={toastRef}
       className="extreme-nudge-toast"
       data-phase={phase}
       data-timer-paused={isTimerPaused ? "true" : undefined}
@@ -159,15 +192,21 @@ export function ExtremeNudgeToast({
         <h2>{event.title}</h2>
         <p>{event.focusLabel ? `Focus switched to ${event.focusLabel}` : "Focus target was not available"}</p>
       </div>
-      {onAction && breakOptions.length > 0 ? (
+      {onAction ? (
         <div className="extreme-nudge-toast__actions">
-          <BreakDurationPicker
-            isPending={isBreakActionPending}
-            label="Take a break"
-            options={breakOptions}
-            selectedMinutes={selectedBreakMinutes}
-            onSelect={selectBreakMinutes}
-          />
+          {breakOptions.length > 0 ? (
+            <BreakDurationPicker
+              isPending={isBreakActionPending}
+              label="Take a break"
+              options={breakOptions}
+              selectedMinutes={selectedBreakMinutes}
+              onSelect={selectBreakMinutes}
+            />
+          ) : null}
+          <button className="da__correct" type="button" onClick={markAsNotDrift}>
+            <FlagIcon />
+            Not a drift
+          </button>
         </div>
       ) : null}
     </aside>
@@ -183,4 +222,13 @@ function ExtremeNudgeScissorsIcon() {
       <path d="M8.25 15.55 19 4.8" />
     </svg>
   );
+}
+
+function isElementHovered(element: HTMLElement): boolean {
+  try {
+    return element.matches(":hover");
+  } catch (error: unknown) {
+    if (error instanceof Error) return true;
+    throw error;
+  }
 }

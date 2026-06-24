@@ -131,7 +131,12 @@ html[data-theme="dark"] .extreme-nudge-toast {
 }
 
 .extreme-nudge-toast__actions {
+  --extreme-nudge-action-radius: calc((var(--radius-sm) + var(--radius-md)) / 2);
+
+  display: grid;
+  gap: var(--space-2);
   grid-column: 2;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 8.75rem);
   justify-self: stretch;
   min-width: 0;
 }
@@ -142,13 +147,82 @@ html[data-theme="dark"] .extreme-nudge-toast {
 }
 
 .extreme-nudge-toast .da__break-trigger {
+  border-radius: var(--extreme-nudge-action-radius);
+  border-color: color-mix(in srgb, var(--warn) 18%, var(--line));
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 2rem;
   padding: 0 var(--space-2);
   width: 100%;
 }
 
+.extreme-nudge-toast .da__break-trigger:hover,
+.extreme-nudge-toast .da__break-trigger:focus-visible,
+.extreme-nudge-toast .da__break-trigger.is-selected {
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-strong));
+  transform: none;
+}
+
 .extreme-nudge-toast .da__break-trigger-copy strong {
   font-size: var(--type-setting-label-size);
+}
+
+.extreme-nudge-toast .da__correct {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-strong) 64%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: var(--extreme-nudge-action-radius);
+  color: var(--text-muted);
+  display: grid;
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+  gap: var(--space-1);
+  grid-template-columns: auto minmax(0, max-content);
+  justify-content: center;
+  min-height: var(--space-6);
+  min-width: 0;
+  padding: 0 var(--space-2);
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  width: 100%;
+}
+
+.extreme-nudge-toast .da__correct svg {
+  color: color-mix(in srgb, var(--warn) 68%, var(--text-muted));
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.extreme-nudge-toast .da__correct:hover {
+  background: color-mix(in srgb, var(--warn-soft) 42%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 24%, var(--line-strong));
+  color: var(--text);
+  transform: none;
+}
+
+.extreme-nudge-toast .da__correct:active {
+  background: color-mix(in srgb, var(--warn-soft) 58%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--warn) 32%, var(--line-strong));
+  color: var(--text);
+  transform: none;
+}
+
+.extreme-nudge-toast .da__correct:disabled {
+  background: color-mix(in srgb, var(--surface-strong) 48%, var(--surface));
+  border-color: var(--line);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: .62;
+  transform: none;
+}
+
+.extreme-nudge-toast .da__correct:focus-visible {
+  background: color-mix(in srgb, var(--warn-soft) 46%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 34%, var(--line-strong));
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--text);
+  outline: 2px solid color-mix(in srgb, var(--warn) 68%, var(--line-strong));
+  outline-offset: 2px;
+  transform: none;
 }
 
 .extreme-nudge-toast .da__break-menu {

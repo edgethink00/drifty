@@ -57,6 +57,16 @@ export async function setNativeWatcherInteractive(interactive: boolean): Promise
   await invoke("watcher_peek_set_interactive", { interactive });
 }
 
+export async function isNativeWatcherCursorInside(): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  try {
+    return await invoke<boolean>("watcher_peek_cursor_inside");
+  } catch {
+    return null;
+  }
+}
+
 export async function respondNativeWatcherPeek(response: WatcherPeekResponse): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("watcher_peek_respond", { response });
