@@ -133,7 +133,7 @@
 .sidebar--collapsed {
   align-items: center;
   gap: 0.24rem;
-  padding: var(--window-chrome-height) 9px 18px;
+  padding: var(--window-chrome-height) 9px var(--content-panel-gap);
   scrollbar-width: none;
 }
 

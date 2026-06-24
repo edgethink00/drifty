@@ -11,7 +11,7 @@
   width: 100%;
   padding: 8px 10px;
   border-radius: 8px;
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 78%, transparent);
   font-size: 12.5px;
   font-weight: 500;
   text-align: left;
@@ -19,7 +19,7 @@
   border: none;
   transition: color .15s, background .15s;
 }
-.nav-item:hover { background: var(--bg-2); color: var(--text); transform: none; }
+.nav-item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); transform: none; }
 .nav-item.active { background: var(--accent); color: var(--on-accent); }
 .nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
 .nav-item span {
@@ -45,28 +45,32 @@
 .account-trigger {
   width: 100%;
   display: grid;
-  grid-template-columns: 33px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   padding: 7.5px 8px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-strong);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 62%, transparent);
+  border-radius: 13px;
+  background: var(--shell-glass-control);
   text-align: left;
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--shadow) 9%, transparent);
 }
 
-.account-trigger:hover { background: var(--bg-2); transform: none; }
+.account-trigger:hover { background: var(--shell-glass-control-strong); transform: none; }
 
 .account-avatar {
-  width: 33px;
-  height: 33px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--text);
+  background: color-mix(in srgb, var(--text) 90%, transparent);
   color: var(--canvas);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface) 8%, transparent);
   font-weight: 700;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .account-avatar img {
@@ -82,12 +86,13 @@
   display: grid;
   gap: 2px;
   overflow: hidden;
+  transform: translateY(1px);
 }
 .account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.2; }
 .account-trigger__status {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
   font-size: var(--type-caption-size);
   font-weight: 620;
   letter-spacing: 0;
@@ -102,7 +107,7 @@
   max-width: 16px;
   gap: 2px;
   place-items: center;
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 68%, transparent);
 }
 .account-trigger__chevron-mark {
   width: 7px;
