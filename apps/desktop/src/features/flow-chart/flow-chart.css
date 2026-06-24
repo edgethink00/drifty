@@ -222,6 +222,10 @@
   pointer-events: none;
 }
 
+.flow-chart-row--now-terminal-hour::after {
+  transform: translate(calc(-0.08rem - 5px), -50%);
+}
+
 .flow-chart-row--now-terminal::before,
 .flow-chart-row--now-terminal::after {
   top: calc(100% - 0.24rem);
