@@ -51,7 +51,7 @@
 }
 
 .settings-sidebar-heading span {
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 64%, transparent);
   font-family: var(--font-mono);
   font-size: var(--type-overline-size);
   letter-spacing: 0.08em;
@@ -92,7 +92,7 @@
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 78%, transparent);
   background: transparent;
   border: none;
   text-align: left;
@@ -108,7 +108,7 @@
 
 .settings-nav-item.on {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text);
   font-weight: 600;
 }
 

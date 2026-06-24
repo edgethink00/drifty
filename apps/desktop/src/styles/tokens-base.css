@@ -66,9 +66,9 @@
   --text-soft: #79776f;
   --window-chrome-icon: #383834;
   --window-chrome-icon-hover: #1c1c19;
-  --shell-glass-bg: rgba(232, 230, 224, 0.78);
-  --shell-glass-control: rgba(242, 240, 234, 0.58);
-  --shell-glass-control-strong: rgba(248, 246, 240, 0.74);
+  --shell-glass-bg: rgba(237, 239, 236, 0.78);
+  --shell-glass-control: #fafaf8;
+  --shell-glass-control-strong: #fafaf8;
   --accent: #5f7f31;
   --accent-mid: #789645;
   --accent-soft: #e1ead5;
@@ -119,9 +119,9 @@
   --text-soft: #8a8780;
   --window-chrome-icon: #f1efe7;
   --window-chrome-icon-hover: #fffaf0;
-  --shell-glass-bg: rgba(18, 18, 16, 0.74);
-  --shell-glass-control: rgba(30, 30, 27, 0.58);
-  --shell-glass-control-strong: rgba(36, 36, 32, 0.7);
+  --shell-glass-bg: rgba(32, 33, 30, 0.74);
+  --shell-glass-control: #141412;
+  --shell-glass-control-strong: #141412;
   --accent: #9bbf5a;
   --accent-mid: #abc96d;
   --accent-soft: #26321d;
