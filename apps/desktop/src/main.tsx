@@ -4,6 +4,8 @@ import ReactDOM from "react-dom/client";
 import "./styles.css";
 import "./features/history/history.css";
 import "./features/dashboard/dashboard.css";
+import "./features/dashboard/compact-charts.css";
+import "./features/flow-chart/flow-chart.css";
 import "./features/dashboard/week-dashboard.css";
 import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
