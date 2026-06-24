@@ -33,6 +33,7 @@ const baseAiDebug: AiDebugLogInput = {
     tone: "error",
     label: "Disconnected",
     providerLabel: "Setup needed",
+    memoryLabel: null,
   },
   cloud: {
     isSupabaseConfigured: false,
@@ -301,6 +302,7 @@ describe("buildDebugLogPayload", () => {
           tone: "error",
           label: "Issue",
           providerLabel: "Cloud AI",
+          memoryLabel: null,
         },
         cloud: {
           isSupabaseConfigured: true,

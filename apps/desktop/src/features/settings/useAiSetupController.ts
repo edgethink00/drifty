@@ -12,12 +12,14 @@ import { localAiProviderConfigFromSetup } from "./localAiClassificationOptions";
 import type { LocalAiClassificationOptions } from "./localAiClassificationOptions";
 import { isActiveProviderTestable } from "./aiSetupProviderSelection";
 import {
+  isManagedLocalAiRoute,
   LOCAL_AI_SETUP_STORAGE_KEY,
   resolveInitialLocalAiSetup,
   toPersistedLocalAiSetup,
   type LocalAiSetupState,
 } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
+import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "./managedLocalAiCatalog";
 import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 
 type UseAiSetupControllerResult = {
@@ -26,6 +28,7 @@ type UseAiSetupControllerResult = {
   readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
   readonly localAiConnectionFingerprint: string | null;
   readonly localAiConnectionProviderLabel: ReturnType<typeof localAiProviderLabel>;
+  readonly localAiMemoryLabel: string | null;
   readonly localAiProviderStatus: LocalAiProviderStatus;
   readonly localAiSetup: LocalAiSetupState;
   readonly recordLocalAiClassificationError: (message: string) => void;
@@ -42,6 +45,10 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
   const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
+  const localAiMemoryLabel = useMemo(() => {
+    if (!localAiConnectionFingerprint || !isManagedLocalAiRoute(localAiSetup)) return null;
+    return MANAGED_LOCAL_AI_FALLBACK_CATALOG.find((model) => model.id === localAiSetup.managedLocalModelId)?.minimumMemory ?? null;
+  }, [localAiConnectionFingerprint, localAiSetup]);
 
   const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
     const fingerprint = localAiSetupFingerprint(testedSetup);
@@ -131,6 +138,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionProviderLabel,
+    localAiMemoryLabel,
     localAiProviderStatus,
     localAiSetup,
     recordLocalAiClassificationError,

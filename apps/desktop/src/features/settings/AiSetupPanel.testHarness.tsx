@@ -123,7 +123,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 export function renderPanel({
-  connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI" },
+  connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null },
   currentBillingPlan = "individual",
   billingEntitlementStatus = "active",
   cloudTrialEndsAt = null,

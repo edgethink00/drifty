@@ -27,6 +27,7 @@ describe("AiSetupPanel connection status", () => {
         tone: "ok",
         label: "Connected",
         providerLabel: "Cloud AI",
+        memoryLabel: null,
       },
     });
 
@@ -41,6 +42,7 @@ describe("AiSetupPanel connection status", () => {
         tone: "ok",
         label: "Connected",
         providerLabel: "Cloud AI",
+        memoryLabel: null,
       },
     });
 
@@ -59,6 +61,7 @@ describe("AiSetupPanel connection status", () => {
         tone: "error",
         label: "Disconnected",
         providerLabel: "Setup needed",
+        memoryLabel: null,
       },
     });
 
@@ -71,6 +74,7 @@ describe("AiSetupPanel connection status", () => {
         tone: "ok",
         label: "Connected",
         providerLabel: "Cloud AI",
+        memoryLabel: null,
       });
     });
 

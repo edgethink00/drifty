@@ -17,6 +17,7 @@ describe("resolveAiConnectionStatus", () => {
       tone: "ok",
       label: "Connected",
       providerLabel: "Drifty Cloud",
+      memoryLabel: null,
     });
   });
 
@@ -31,6 +32,7 @@ describe("resolveAiConnectionStatus", () => {
       tone: "ok",
       label: "Running",
       providerLabel: "DeepSeek V4 Flash BYOK",
+      memoryLabel: null,
     });
   });
 
@@ -44,6 +46,7 @@ describe("resolveAiConnectionStatus", () => {
       tone: "error",
       label: "Issue",
       providerLabel: "Drifty Cloud",
+      memoryLabel: null,
     });
   });
 
@@ -56,6 +59,7 @@ describe("resolveAiConnectionStatus", () => {
       tone: "warning",
       label: "Connection issue",
       providerLabel: "Drifty Cloud",
+      memoryLabel: null,
     });
   });
 
@@ -63,12 +67,28 @@ describe("resolveAiConnectionStatus", () => {
     const status = resolveAiConnectionStatus(statusInput({
       localProviderStatus: { kind: "checking" },
       localProviderLabel: "Gemma 4 12B local",
+      localMemoryLabel: "16 GB RAM",
     }));
 
     expect(status).toMatchObject({
       tone: "neutral",
       label: "Checking",
       providerLabel: "Gemma 4 12B local",
+      memoryLabel: "16.0 GB RAM",
+    });
+  });
+
+  it("does not attach memory details to cloud AI status", () => {
+    const status = resolveAiConnectionStatus(statusInput({
+      canUseCloudAi: true,
+      localMemoryLabel: "16 GB RAM",
+    }));
+
+    expect(status).toMatchObject({
+      tone: "ok",
+      label: "Connected",
+      providerLabel: "Drifty Cloud",
+      memoryLabel: null,
     });
   });
 
@@ -82,6 +102,7 @@ describe("resolveAiConnectionStatus", () => {
       tone: "error",
       label: "Issue",
       providerLabel: "OpenAI GPT 4o Mini BYOK",
+      memoryLabel: null,
     });
   });
 
@@ -92,6 +113,7 @@ describe("resolveAiConnectionStatus", () => {
       tone: "error",
       label: "Disconnected",
       providerLabel: "Setup needed",
+      memoryLabel: null,
     });
   });
 });
@@ -105,6 +127,7 @@ describe("AiConnectionStatusBar", () => {
           tone: "error",
           label: "Issue",
           providerLabel: "Gemma 4 12B local",
+          memoryLabel: null,
         }}
         onOpenSettings={onOpenSettings}
       />,
@@ -125,6 +148,7 @@ describe("AiConnectionStatusBar", () => {
           tone: "warning",
           label: "Connection issue",
           providerLabel: "Drifty Cloud",
+          memoryLabel: null,
         }}
         onOpenSettings={onOpenSettings}
       />,
@@ -134,6 +158,24 @@ describe("AiConnectionStatusBar", () => {
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
+
+  it("renders local AI memory when provided", () => {
+    render(
+      <AiConnectionStatusBar
+        status={{
+          tone: "ok",
+          label: "Connected",
+          providerLabel: "Local AI",
+          memoryLabel: "16.0 GB RAM",
+        }}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    const status = screen.getByRole("button", { name: /memory 16\.0 gb ram/i });
+
+    expect(status.textContent).toContain("16.0 GB RAM");
+  });
 });
 
 function statusInput(overrides: Partial<AiConnectionStatusInput> = {}): AiConnectionStatusInput {
@@ -141,6 +183,7 @@ function statusInput(overrides: Partial<AiConnectionStatusInput> = {}): AiConnec
     canUseCloudAi: false,
     localProviderStatus: { kind: "unconfigured" },
     localProviderLabel: null,
+    localMemoryLabel: null,
     classificationRunning: false,
     classificationIssueKind: null,
     cloudIssueKind: null,
