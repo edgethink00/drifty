@@ -74,7 +74,6 @@ export function LeaderboardPage({
     <div className="page">
       <div className="pg-head">
         <div>
-          <div className="eyebrow">Leaderboard</div>
           <h1>Global focus ranking</h1>
         </div>
       </div>

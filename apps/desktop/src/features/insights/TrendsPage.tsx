@@ -64,7 +64,6 @@ export function TrendsPage({
     <div className="page insights-page">
       <div className="pg-head insights-page__head">
         <div>
-          <div className="eyebrow">Trends</div>
           <h1>Patterns and trends</h1>
         </div>
         <div className="classification-range-controls trends-range-controls">

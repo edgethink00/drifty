@@ -157,7 +157,7 @@ import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildM
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
-import { formatDashboardPeriodLabel, getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
+import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, DashboardPeriod, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
@@ -3280,7 +3280,6 @@ export default function App() {
     weekDashboardDayModelCache,
     weekDashboardPrewarmSegments,
   ]);
-  const dashboardPeriodLabel = formatDashboardPeriodLabel(dashPeriod, dashboardRange.startDay, dashboardRange.endDay);
   const totalSeconds = useMemo(() => totalDurationSeconds(dashboardSegments), [dashboardSegments]);
   const activeDashboardAiUnavailablePreviewInput = useMemo(
     () => dashboardAiUnavailablePreview?.appliedDay === selectedDay
@@ -4273,7 +4272,6 @@ export default function App() {
             dashboardAppUsage={dashboardAppUsage}
             dashboardCategoryTotals={dashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
-            dashboardPeriodLabel={dashboardPeriodLabel}
             dashboardProductivityTotals={dashboardProductivityTotals}
             dashboardRange={dashboardRange}
             dashboardTitle={dashboardTitle}
