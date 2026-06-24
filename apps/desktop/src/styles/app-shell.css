@@ -159,9 +159,9 @@
   display: inline-grid;
   font: inherit;
   gap: 7px;
-  grid-template-columns: 8px auto minmax(0, auto);
+  grid-template-columns: 8px auto minmax(0, auto) auto;
   height: 24.5px;
-  max-width: min(36vw, 280px);
+  max-width: min(40vw, 340px);
   min-width: 0;
   padding: 0 12px;
   transform: translateY(0.5px);
@@ -203,7 +203,8 @@
 }
 
 .ai-connection-status__label,
-.ai-connection-status__provider {
+.ai-connection-status__provider,
+.ai-connection-status__memory {
   font-size: var(--type-mode-label-size);
   line-height: 1;
   min-width: 0;
@@ -219,6 +220,16 @@
 
 .ai-connection-status__provider {
   color: color-mix(in srgb, var(--text) 68%, transparent);
+}
+
+.ai-connection-status__memory {
+  color: var(--text-soft);
+  font-size: calc(var(--type-mode-label-size) * 0.95);
+  font-variant-numeric: tabular-nums;
+  font-weight: 620;
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .ai-connection-status[data-tone="warning"] .ai-connection-status__provider,

@@ -233,7 +233,7 @@
   .app-shell:not(.app-shell--sidebar-collapsed) { grid-template-columns: 1fr; }
 
   .ai-connection-status {
-    max-width: 42vw;
+    max-width: 48vw;
   }
 
   .ai-connection-status__provider {
