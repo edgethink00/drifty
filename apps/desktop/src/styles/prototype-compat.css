@@ -63,33 +63,50 @@
 /* Sidebar foot (prototype uses `.sidebar-foot`) */
 .sidebar-foot {
   margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  padding-top: 0;
+  border-top: 0;
   display: flex;
   flex-direction: column;
-  gap: 5.5px;
+  gap: 8.25px;
   position: relative;
 }
 
-.account-menu-shell { position: relative; }
+.account-menu-shell {
+  position: relative;
+  width: 100%;
+  padding-top: 10.5px;
+  border-top: 1px solid var(--line);
+}
 
 .account-trigger {
   width: 100%;
+  min-height: 42px;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  padding: 7.5px 8px;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 62%, transparent);
+  padding: 6px 8px;
+  border: 0;
   border-radius: 12px;
-  background: var(--shell-glass-control);
+  background: transparent;
   text-align: left;
-  backdrop-filter: blur(18px) saturate(1.1);
-  -webkit-backdrop-filter: blur(18px) saturate(1.1);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--shadow) 9%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 
-.account-trigger:hover { background: var(--shell-glass-control-strong); transform: none; }
+.account-trigger:hover,
+.account-trigger:focus-visible {
+  background: var(--shell-floating-surface-strong);
+  backdrop-filter: blur(22px) saturate(1.14);
+  -webkit-backdrop-filter: blur(22px) saturate(1.14);
+  transform: none;
+}
+
+.account-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
 
 .account-avatar {
   width: 27px;
@@ -115,28 +132,16 @@
 .account-trigger__copy {
   max-width: 10rem;
   min-width: 0;
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
   overflow: hidden;
-  transform: translateY(1px);
 }
-.account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.2; }
-.account-trigger__status {
-  min-width: 0;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--text) 70%, transparent);
-  font-size: var(--type-caption-size);
-  font-weight: 620;
-  letter-spacing: 0;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.account-trigger[data-cloud-status="offline"] .account-trigger__status { color: var(--warn); }
+.account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1; }
 .account-trigger__chevrons {
   display: grid;
   width: 16px;
   max-width: 16px;
+  height: 20px;
   gap: 2px;
   place-items: center;
   color: color-mix(in srgb, var(--text) 68%, transparent);
@@ -159,10 +164,14 @@
   position: fixed;
   z-index: 60;
   padding: 8px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent);
   border-radius: 13.5px;
-  background: var(--surface);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+  background: var(--shell-floating-surface-strong);
+  backdrop-filter: blur(24px) saturate(1.16);
+  -webkit-backdrop-filter: blur(24px) saturate(1.16);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
 }
 
 .account-popover--collapsed { width: 14rem; }
@@ -203,19 +212,17 @@
   gap: 9px;
   min-height: 30px;
   padding: 5px 8px;
+  border: 0;
   border-radius: 10px;
+  background: transparent;
   color: var(--text);
   font-size: 12.5px;
   line-height: 1.2;
   text-align: left;
+  box-shadow: none;
 }
 
-.account-popover .account-menu-item:first-of-type {
-  background: var(--surface-strong);
-  font-weight: 500;
-}
-
-.account-menu-item:hover { background: var(--bg-2); transform: none; }
+.account-menu-item:hover { background: color-mix(in srgb, var(--bg-2) 72%, transparent); transform: none; }
 .account-menu-item:disabled { opacity: .42; }
 .account-menu-item--danger { color: var(--warn); }
 .account-menu-icon { width: 19px; text-align: center; color: currentColor; font-size: 16px; line-height: 1; }

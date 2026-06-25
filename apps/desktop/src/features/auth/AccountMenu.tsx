@@ -1,9 +1,5 @@
 import { getAccountDisplayName } from "./accountDisplay";
 import desktopPackage from "../../../package.json";
-import type { BillingEntitlement } from "../billing/billingService";
-import type { LocalAiSetupState } from "../settings/localAiSetup";
-import { aiConnectionStatusLabel } from "../ai-connection/aiStatusLabels";
-import type { AuthConnectionStatus } from "./authConnectionStatus";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
@@ -19,50 +15,22 @@ export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 const ACCOUNT_MENU_VERSION_LABEL = "Version";
 const ACCOUNT_MENU_VERSION_VALUE = desktopPackage.version;
 
-function accountStatusLabel({
-  billingEntitlement,
-  billingEntitlementLoading,
-  cloudConnectionStatus,
-  isSignedIn,
-  localAiSetup,
-}: {
-  billingEntitlement: BillingEntitlement | null;
-  billingEntitlementLoading: boolean;
-  cloudConnectionStatus: AuthConnectionStatus;
-  isSignedIn: boolean;
-  localAiSetup: LocalAiSetupState;
-}) {
-  if (cloudConnectionStatus === "offline") return "Offline mode";
-  if (cloudConnectionStatus === "checking") return "Checking cloud";
-  return aiConnectionStatusLabel(localAiSetup, billingEntitlement, billingEntitlementLoading, isSignedIn);
-}
-
 export function AccountMenu({
-  billingEntitlement,
-  billingEntitlementLoading,
-  cloudConnectionStatus,
   isOpen,
   isSidebarCollapsed,
-  localAiSetup,
   userAvatarUrl,
   userEmail,
   onToggle,
-  onUpgrade,
   onSettings,
   onFeedback,
   onSignIn,
   onSignOut,
 }: {
-  billingEntitlement: BillingEntitlement | null;
-  billingEntitlementLoading: boolean;
-  cloudConnectionStatus: AuthConnectionStatus;
   isOpen: boolean;
   isSidebarCollapsed: boolean;
-  localAiSetup: LocalAiSetupState;
   userAvatarUrl?: string | null;
   userEmail: string | null;
   onToggle: () => void;
-  onUpgrade: () => void;
   onSettings: () => void;
   onFeedback: () => void;
   onSignIn: () => void;
@@ -72,13 +40,6 @@ export function AccountMenu({
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : "Account";
-  const accountStatus = accountStatusLabel({
-    billingEntitlement,
-    billingEntitlementLoading,
-    cloudConnectionStatus,
-    isSignedIn,
-    localAiSetup,
-  });
   const trimmedUserAvatarUrl = userAvatarUrl?.trim();
 
   const updatePopoverPosition = useCallback(() => {
@@ -132,10 +93,6 @@ export function AccountMenu({
         <span className="account-menu-version__value">{ACCOUNT_MENU_VERSION_VALUE}</span>
       </div>
       {userEmail ? <div className="account-popover__email" title={userEmail}>{userEmail}</div> : null}
-      <button type="button" className="account-menu-item" onClick={onUpgrade} role="menuitem">
-        <span className="account-menu-icon" aria-hidden="true">✦</span>
-        <span>AI Setting</span>
-      </button>
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon" aria-hidden="true">⚙</span>
         <span>Settings</span>
@@ -172,16 +129,14 @@ export function AccountMenu({
         ref={triggerRef}
         type="button"
         className="account-trigger"
-        data-cloud-status={cloudConnectionStatus}
         onClick={onToggle}
-        aria-label={`${displayName} ${accountStatus}`}
+        aria-label={displayName}
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
         <span className="account-avatar">{trimmedUserAvatarUrl ? <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" /> : displayName.charAt(0).toUpperCase()}</span>
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
-          <span className="account-trigger__status">{accountStatus}</span>
         </span>
         <span className="account-trigger__chevrons" aria-hidden="true">
           <span className="account-trigger__chevron-mark account-trigger__chevron-mark--up" />
