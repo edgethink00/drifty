@@ -133,30 +133,32 @@ export function ClassificationPage({
             <p>{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
           ) : null}
         </div>
-        <label className="classification-correction__field">
-          <span>Category</span>
-          <select
-            className="classification-correction__select"
-            value={classificationCorrectionDraft.category}
-            onChange={(event) => onClassificationCorrectionCategoryChange(event.currentTarget.value as ActivityCategory)}
-          >
-            {CATEGORY_ORDER.map((category) => (
-              <option key={category} value={category}>{categoryLabel(category)}</option>
-            ))}
-          </select>
-        </label>
-        <label className="classification-correction__field">
-          <span>Productivity</span>
-          <select
-            className="classification-correction__select"
-            value={classificationCorrectionDraft.productivity}
-            onChange={(event) => onClassificationCorrectionProductivityChange(event.currentTarget.value as ProductivityLabel)}
-          >
-            {PRODUCTIVITY_ORDER.map((productivity) => (
-              <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>
-            ))}
-          </select>
-        </label>
+        <div className="classification-correction__fields">
+          <label className="classification-correction__field">
+            <span className="label-mono">Category</span>
+            <select
+              className="classification-correction__select"
+              value={classificationCorrectionDraft.category}
+              onChange={(event) => onClassificationCorrectionCategoryChange(event.currentTarget.value as ActivityCategory)}
+            >
+              {CATEGORY_ORDER.map((category) => (
+                <option key={category} value={category}>{categoryLabel(category)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="classification-correction__field">
+            <span className="label-mono">Productivity</span>
+            <select
+              className="classification-correction__select"
+              value={classificationCorrectionDraft.productivity}
+              onChange={(event) => onClassificationCorrectionProductivityChange(event.currentTarget.value as ProductivityLabel)}
+            >
+              {PRODUCTIVITY_ORDER.map((productivity) => (
+                <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="classification-correction__actions">
           <button type="button" className="classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>Cancel</button>
           <button type="button" className="classification-correction__save-button" onClick={onSaveClassificationCorrection} disabled={classificationCorrectionSaving}>{classificationCorrectionSaving ? "Saving..." : "Save correction"}</button>
@@ -349,14 +351,14 @@ export function ClassificationPage({
                         className="classification-correction__surface-button"
                         aria-label={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
                         title={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
+                        aria-expanded={classificationCorrectionDraft?.scope === "surface"}
+                        data-active={String(classificationCorrectionDraft?.scope === "surface")}
                         onClick={onStartClassificationSurfaceCorrection}
                       >
-                        <svg className="classification-correction__surface-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                          <path d="M2 4h12M2 8h12M2 12h12" />
-                          <circle cx="6" cy="4" r="1.35" />
-                          <circle cx="11" cy="8" r="1.35" />
-                          <circle cx="4.5" cy="12" r="1.35" />
+                        <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
                         </svg>
+                        <span>Reclassify</span>
                       </button>
                     </div>
                   </header>
@@ -406,17 +408,17 @@ export function ClassificationPage({
                                 className="classification-correction__detail-button"
                                 aria-label={`Correct this detail: ${row.label}`}
                                 title={`Correct this detail: ${row.label}`}
+                                aria-expanded={classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id}
+                                data-active={String(classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id)}
                                 onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
-                                <svg className="classification-correction__surface-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                  <path d="M2 4h12M2 8h12M2 12h12" />
-                                  <circle cx="6" cy="4" r="1.35" />
-                                  <circle cx="11" cy="8" r="1.35" />
-                                  <circle cx="4.5" cy="12" r="1.35" />
+                                <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                  <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
                                 </svg>
+                                <span className="sr-only">Reclassify</span>
                               </button>
-                              {classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id ? renderClassificationCorrection("detail") : null}
                             </div>
+                            {classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id ? renderClassificationCorrection("detail") : null}
                             {isExpanded ? (() => {
                               const surfaceDetails = captureRowSurfaceDetails(row.segments);
                               const summary = classificationRowSummary(row.segments, classificationOptions);
