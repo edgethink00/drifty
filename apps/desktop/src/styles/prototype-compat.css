@@ -67,14 +67,14 @@
   border-top: 0;
   display: flex;
   flex-direction: column;
-  gap: 5.5px;
+  gap: 8.25px;
   position: relative;
 }
 
 .account-menu-shell {
   position: relative;
   width: 100%;
-  padding-top: 7px;
+  padding-top: 10.5px;
   border-top: 1px solid var(--line);
 }
 
