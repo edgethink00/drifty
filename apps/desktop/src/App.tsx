@@ -3571,7 +3571,7 @@ export default function App() {
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
-  const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle due to inactivity" : isDemoMode ? "Preview active" : "Tracking live") : (isDemoMode ? "Preview paused" : "Tracking paused");
+  const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
   const trackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Start tracking";
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
@@ -4381,13 +4381,18 @@ export default function App() {
                   {status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused"}
                 </div>
                 <div className="live-pill__summary-copy">
-                  <span className="live-pill__summary-name">{liveAppLabel}</span>
-                  <span className="live-pill__meta-row">
+                  <span className="live-pill__status-row">
                     <span className="live-pill__status-dot" aria-hidden="true" />
-                    <span className="live-pill__summary-meta">
-                      {liveSiteLabel ? <><span>{liveSiteLabel}</span> &middot; </> : null}
-                      {trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)} &middot; {lastCaptureDistanceLabel}
+                    <span className="live-pill__status-label">
+                      {trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)}
                     </span>
+                  </span>
+                  <span className="live-pill__summary-name">
+                    <span className="live-pill__summary-app">{liveAppLabel}</span>
+                    {liveSiteLabel ? <span className="live-pill__summary-site">{liveSiteLabel}</span> : null}
+                  </span>
+                  <span className="live-pill__summary-meta">
+                    <span className="live-pill__summary-meta-line">Last capture: {lastCaptureDistanceLabel}</span>
                   </span>
                 </div>
               </div>
