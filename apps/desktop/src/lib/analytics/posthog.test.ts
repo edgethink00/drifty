@@ -7,6 +7,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
   it("uses an anonymous session id without account identify calls", () => {
     expect(posthogSource).toContain("const anonymousSessionDistinctId = createDistinctId();");
     expect(posthogSource).toContain("distinct_id: anonymousSessionDistinctId");
+    expect(posthogSource).toContain("\"$process_person_profile\": false");
     expect(posthogSource).not.toContain("drifty.posthog.distinctId");
     expect(posthogSource).not.toContain("window.localStorage");
     expect(posthogSource).not.toContain("\"$identify\"");
