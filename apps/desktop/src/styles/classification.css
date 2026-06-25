@@ -636,9 +636,12 @@
 }
 
 /* Category/Productivity pickers reuse the Settings combobox (signature-color
-   dots), so the reclassify card matches Settings > Classification exactly. */
-.classification-correction__picker {
+   dots), so the reclassify card matches Settings > Classification exactly.
+   The Settings combobox is fixed at 10rem; override so each picker fills its
+   field column (matching the card's prior full-width selects). */
+.classification-correction__fields .classification-correction__picker {
   width: 100%;
+  min-width: 0;
 }
 
 .classification-correction__actions {
