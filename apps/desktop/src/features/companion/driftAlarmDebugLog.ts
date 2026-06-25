@@ -7,6 +7,7 @@ import type {
 } from "@drifty/domain";
 import type { LiveAiClassificationResult } from "../classification/aiClassificationService";
 import type { DriftAlarmEvent } from "./DriftAlarm";
+import { DRIFT_ALARM_CANDIDATE_PROBE_REASONS, type DriftAlarmCandidateProbeReason, type DriftAlarmCandidateProbeSummary } from "./driftAlarmCandidateProbeTypes";
 import type { DriftAlarmCandidate } from "./driftAlarmData";
 import type { DriftAlarmTrayResult } from "./driftAlarmTrayStatus";
 import type { YouTubeDriftAlarmGateResult } from "./youtubeDriftAlarmGate";
@@ -165,6 +166,7 @@ export type DriftAlarmDebugEvent = {
   readonly delivery: DriftAlarmDebugDeliverySummary | null;
   readonly trayResult: DriftAlarmDebugTrayResultSummary | null;
   readonly evaluation: DriftAlarmDebugEvaluationSummary | null;
+  readonly candidateProbe: DriftAlarmCandidateProbeSummary | null;
 };
 
 export type DriftAlarmDebugEventInput = {
@@ -181,6 +183,7 @@ export type DriftAlarmDebugEventInput = {
   readonly delivery?: DriftAlarmDebugDeliverySummary | null;
   readonly trayResult?: DriftAlarmDebugTrayResultSummary | null;
   readonly evaluation?: DriftAlarmDebugEvaluationSummary | null;
+  readonly candidateProbe?: DriftAlarmCandidateProbeSummary | null;
 };
 
 export function recordDriftAlarmDebugEvent(
@@ -386,6 +389,7 @@ function normalizeDriftAlarmDebugEvent(input: DriftAlarmDebugEventInput, now: Da
     delivery: input.delivery ?? null,
     trayResult: input.trayResult ?? null,
     evaluation: input.evaluation ?? null,
+    candidateProbe: input.candidateProbe ?? null,
   };
 }
 
@@ -473,7 +477,8 @@ function isDriftAlarmDebugEvent(value: unknown): value is DriftAlarmDebugEvent {
     && isNullableAiSummary(value.ai)
     && isNullableDeliverySummary(value.delivery)
     && isNullableTrayResultSummary(value.trayResult)
-    && isNullableEvaluationSummary(value.evaluation);
+    && isNullableEvaluationSummary(value.evaluation)
+    && isNullableCandidateProbeSummary(value.candidateProbe ?? null);
 }
 
 function isNullableSegmentSummary(value: unknown): value is DriftAlarmDebugSegmentSummary | null {
@@ -583,6 +588,24 @@ function isNullableEvaluationSummary(value: unknown): value is DriftAlarmDebugEv
     && typeof value.storedSegmentCount === "number"
     && typeof value.minimumDurationSeconds === "number"
     && (typeof value.systemTransientActivity === "string" || value.systemTransientActivity === null);
+}
+
+function isNullableCandidateProbeSummary(value: unknown): value is DriftAlarmCandidateProbeSummary | null {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+  return isCandidateProbeReason(value.reason)
+    && isNullableSegmentSummary(value.latestSegment)
+    && isNullableSegmentSummary(value.activeSegment)
+    && (typeof value.identityMatched === "boolean" || value.identityMatched === null)
+    && isNullableNumber(value.candidateDurationSeconds)
+    && typeof value.minimumDurationSeconds === "number"
+    && isNullableClassificationSummary(value.classification)
+    && typeof value.liveAiAvailable === "boolean"
+    && (typeof value.systemTransientActivity === "string" || value.systemTransientActivity === null);
+}
+
+function isCandidateProbeReason(value: unknown): value is DriftAlarmCandidateProbeReason {
+  return typeof value === "string" && DRIFT_ALARM_CANDIDATE_PROBE_REASONS.some((reason) => reason === value);
 }
 
 function assertNever(value: never): never {

@@ -141,6 +141,7 @@ import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, Timel
 import { DRIFT_ALARM_PREVIEW_OPTIONS, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
+import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
 import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
@@ -2549,6 +2550,14 @@ export default function App() {
       recordDriftAlarmDebugEvent({
         kind: "candidate_missing",
         currentSnapshot: summarizeDriftAlarmSnapshot(alarmSnapshot),
+        candidateProbe: buildDriftAlarmCandidateProbe({
+          segments: driftAlarmSegments,
+          currentSnapshot: alarmSnapshot,
+          classificationOptions: driftAlarmClassificationOptions,
+          minimumDurationSeconds: driftAlertDelaySeconds,
+          liveAiAvailable: Boolean(localAiClassificationOptions || canUseCloudAiClassification),
+          systemTransientActivity,
+        }),
         evaluation,
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
