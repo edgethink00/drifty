@@ -130,6 +130,7 @@
     margin var(--sidebar-duration) var(--sidebar-ease),
     background var(--transition-fast),
     border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
     color var(--transition-fast);
 }
 
