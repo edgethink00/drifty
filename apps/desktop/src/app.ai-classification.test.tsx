@@ -70,12 +70,18 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
     getLiveTail: vi.fn(),
     getCurrentSnapshot: vi.fn(),
     getHourlySummary: vi.fn(),
-    getTopSites: vi.fn(),
-    getAppIcons: vi.fn(),
-    getUnclassifiedSegments: vi.fn(),
-    getClassificationMetrics: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
+	    getTopSites: vi.fn(),
+	    getAppIcons: vi.fn(),
+	    getUnclassifiedSegments: vi.fn(),
+	    getClassificationMetrics: vi.fn(),
+	    getClassificationRules: vi.fn(),
+	    saveClassificationRule: vi.fn(),
+	    deleteClassificationRule: vi.fn(),
+	    searchClassificationRuleCandidates: vi.fn(),
+	    applyClassificationRules: vi.fn(),
+	    saveClassifications: vi.fn(),
+	    start: vi.fn(),
+	    stop: vi.fn(),
     updateTrayProductivityIcon: vi.fn(),
     updateTrayDriftAlarmStatus: vi.fn(),
   },
@@ -398,10 +404,27 @@ describe("App AI classification controls", () => {
     trackerClient.getCurrentSnapshot.mockResolvedValue(null);
     trackerClient.getHourlySummary.mockResolvedValue([]);
     trackerClient.getTopSites.mockResolvedValue([]);
-    trackerClient.getAppIcons.mockResolvedValue({});
-    trackerClient.getUnclassifiedSegments.mockResolvedValue([]);
-    trackerClient.getClassificationMetrics.mockResolvedValue(selectedDayMetrics);
-    trackerClient.start.mockResolvedValue({ running: true, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
+	    trackerClient.getAppIcons.mockResolvedValue({});
+	    trackerClient.getUnclassifiedSegments.mockResolvedValue([]);
+	    trackerClient.getClassificationMetrics.mockResolvedValue(selectedDayMetrics);
+	    trackerClient.getClassificationRules.mockResolvedValue([]);
+	    trackerClient.saveClassificationRule.mockImplementation(async (input) => ({
+	      id: `${input.targetKind}:${input.targetValue}`,
+	      targetKind: input.targetKind,
+	      targetValue: input.targetValue,
+	      matchScope: input.matchScope ?? "surface",
+	      detailKind: input.detailKind ?? null,
+	      detailValue: input.detailValue ?? null,
+	      category: input.category,
+	      productivity: input.productivity,
+	      enabled: input.enabled ?? true,
+	      confidence: input.confidence ?? null,
+	    }));
+	    trackerClient.deleteClassificationRule.mockResolvedValue({ deleted: 1 });
+	    trackerClient.searchClassificationRuleCandidates.mockResolvedValue([]);
+	    trackerClient.applyClassificationRules.mockResolvedValue({ matchedCount: 0, appliedCount: 0, skippedCount: 0 });
+	    trackerClient.saveClassifications.mockResolvedValue({ saved: 1 });
+	    trackerClient.start.mockResolvedValue({ running: true, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.stop.mockResolvedValue({ running: false, accessibilityGranted: true, lastEventAt: null, databasePath: "/tmp/drifty.sqlite3", trackerMode: "tracking" });
     trackerClient.updateTrayProductivityIcon.mockResolvedValue(undefined);
     trackerClient.updateTrayDriftAlarmStatus.mockResolvedValue(undefined);

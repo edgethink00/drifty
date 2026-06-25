@@ -17,6 +17,8 @@ import { Toggle } from "../../components/Toggle";
 import {
   classificationRuleAppIconSrc,
   classificationRuleCandidateAppIconSrc,
+  classificationRuleDetailKindLabel,
+  classificationRuleScopeLabel,
   classificationRuleTargetLabel,
   formatClassificationCandidateUsageLabel,
   formatClassificationRuleApplyResult,
@@ -232,24 +234,30 @@ export function ClassificationSettingsSection({
         ) : null}
         {classificationRules.length > 0 ? (
           <div className="classification-rule-list" aria-label="Saved local classification rules">
-            {classificationRules.map((rule) => (
-              <article className="classification-rule-card" key={rule.id} aria-label={`${classificationRuleTargetLabel(rule.targetKind)} rule ${rule.targetValue}`}>
-                <div className="classification-rule-card__main">
-                  <span className="classification-rule-card__icon">
-                    {rule.targetKind === "site" ? <SiteFavicon domain={rule.targetValue} size={24} /> : <AppGlyph appName={rule.targetValue} iconSrc={classificationRuleAppIconSrc(rule, appIcons)} size="sm" />}
-                  </span>
-                  <span className="chip gray">{classificationRuleTargetLabel(rule.targetKind)}</span>
-                  <div>
-                    <strong>{rule.targetValue}</strong>
-                    <p>{categoryLabel(rule.category)} · {productivityLabel(rule.productivity)} · {rule.enabled ? "Enabled" : "Disabled"}</p>
+            {classificationRules.map((rule) => {
+              const detailLabel = rule.matchScope === "detail" && rule.detailValue
+                ? `${classificationRuleDetailKindLabel(rule.detailKind)}: ${rule.detailValue}`
+                : null;
+              return (
+                <article className="classification-rule-card" key={rule.id} aria-label={`${classificationRuleTargetLabel(rule.targetKind)} rule ${rule.targetValue}`}>
+                  <div className="classification-rule-card__main">
+                    <span className="classification-rule-card__icon">
+                      {rule.targetKind === "site" ? <SiteFavicon domain={rule.targetValue} size={24} /> : <AppGlyph appName={rule.targetValue} iconSrc={classificationRuleAppIconSrc(rule, appIcons)} size="sm" />}
+                    </span>
+                    <span className="chip gray">{rule.matchScope === "detail" ? "Detail" : classificationRuleTargetLabel(rule.targetKind)}</span>
+                    <div>
+                      <strong>{rule.targetValue}</strong>
+                      <p>{classificationRuleScopeLabel(rule)} · {categoryLabel(rule.category)} · {productivityLabel(rule.productivity)} · {rule.enabled ? "Enabled" : "Disabled"}</p>
+                      {detailLabel ? <p className="classification-rule-card__detail">{detailLabel}</p> : null}
+                    </div>
                   </div>
-                </div>
-                <div className="classification-rule-card__actions">
-                  <Toggle checked={rule.enabled} onChange={(enabled) => onToggleClassificationRule(rule, enabled)} ariaLabel={`${rule.enabled ? "Disable" : "Enable"} ${rule.targetValue} rule`} />
-                  <button type="button" className="settings-btn danger" onClick={() => onDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? "Deleting..." : "Delete"}</button>
-                </div>
-              </article>
-            ))}
+                  <div className="classification-rule-card__actions">
+                    <Toggle checked={rule.enabled} onChange={(enabled) => onToggleClassificationRule(rule, enabled)} ariaLabel={`${rule.enabled ? "Disable" : "Enable"} ${rule.targetValue} rule`} />
+                    <button type="button" className="settings-btn danger" onClick={() => onDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? "Deleting..." : "Delete"}</button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : null}
       </div>

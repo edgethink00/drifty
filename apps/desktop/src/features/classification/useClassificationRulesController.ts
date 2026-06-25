@@ -172,6 +172,9 @@ export function useClassificationRulesController({
     await saveClassificationRule({
       targetKind: rule.targetKind,
       targetValue: rule.targetValue,
+      matchScope: rule.matchScope,
+      detailKind: rule.detailKind ?? null,
+      detailValue: rule.detailValue ?? null,
       category: rule.category,
       productivity: rule.productivity,
       enabled,

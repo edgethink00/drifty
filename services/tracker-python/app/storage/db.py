@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 
 VALID_RULE_TARGET_KINDS = {"app", "site"}
+VALID_RULE_MATCH_SCOPES = {"surface", "detail"}
+VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle"}
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
@@ -124,6 +126,10 @@ class TrackerDatabase:
                   target_kind TEXT NOT NULL,
                   target_value TEXT NOT NULL,
                   normalized_target_value TEXT NOT NULL,
+                  match_scope TEXT NOT NULL DEFAULT 'surface',
+                  detail_kind TEXT NOT NULL DEFAULT '',
+                  detail_value TEXT,
+                  normalized_detail_value TEXT NOT NULL DEFAULT '',
                   category TEXT NOT NULL,
                   productivity TEXT NOT NULL,
                   enabled INTEGER NOT NULL DEFAULT 1,
@@ -134,12 +140,6 @@ class TrackerDatabase:
 
                 CREATE INDEX IF NOT EXISTS idx_activity_classifications_reusable_ai
                 ON activity_classifications(input_fingerprint, ai_result, stale, classified_at DESC, segment_id DESC);
-
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_classification_rules_target
-                ON classification_rules(target_kind, normalized_target_value);
-
-                CREATE INDEX IF NOT EXISTS idx_classification_rules_enabled
-                ON classification_rules(enabled, target_kind, normalized_target_value);
                 """
             )
             self._ensure_columns(conn)
@@ -189,6 +189,39 @@ class TrackerDatabase:
         for column, column_type in classification_optional_columns.items():
             if column not in classification_existing:
                 conn.execute(f"ALTER TABLE activity_classifications ADD COLUMN {column} {column_type}")
+
+        rule_existing = {row["name"] for row in conn.execute("PRAGMA table_info(classification_rules)")}
+        rule_optional_columns = {
+            "match_scope": "TEXT NOT NULL DEFAULT 'surface'",
+            "detail_kind": "TEXT NOT NULL DEFAULT ''",
+            "detail_value": "TEXT",
+            "normalized_detail_value": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, column_type in rule_optional_columns.items():
+            if column not in rule_existing:
+                conn.execute(f"ALTER TABLE classification_rules ADD COLUMN {column} {column_type}")
+        conn.execute("UPDATE classification_rules SET match_scope = 'surface' WHERE match_scope IS NULL OR match_scope = ''")
+        conn.execute("UPDATE classification_rules SET detail_kind = '' WHERE match_scope = 'surface'")
+        conn.execute("UPDATE classification_rules SET normalized_detail_value = '' WHERE match_scope = 'surface'")
+        conn.execute("DROP INDEX IF EXISTS idx_classification_rules_target")
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_classification_rules_target_scope
+            ON classification_rules(
+                target_kind,
+                normalized_target_value,
+                match_scope,
+                detail_kind,
+                normalized_detail_value
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_classification_rules_enabled
+            ON classification_rules(enabled, match_scope, target_kind, normalized_target_value)
+            """
+        )
 
     def get_meta(self, key: str, default: str | None = None) -> str | None:
         with self.connect() as conn:
@@ -592,9 +625,21 @@ class TrackerDatabase:
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT id, target_kind, target_value, category, productivity, enabled, confidence, created_at, updated_at
+                SELECT
+                    id,
+                    target_kind,
+                    target_value,
+                    match_scope,
+                    detail_kind,
+                    detail_value,
+                    category,
+                    productivity,
+                    enabled,
+                    confidence,
+                    created_at,
+                    updated_at
                 FROM classification_rules
-                ORDER BY target_kind ASC, target_value ASC
+                ORDER BY target_kind ASC, target_value ASC, match_scope ASC, detail_value ASC
                 """
             ).fetchall()
         return [self._serialize_rule(row) for row in rows]
@@ -608,6 +653,21 @@ class TrackerDatabase:
         normalized_target_value = self._normalize_rule_target(target_kind, raw_target_value)
         if not normalized_target_value:
             raise ValueError("targetValue is required")
+
+        match_scope = str(rule_input.get("matchScope", rule_input.get("match_scope", "surface"))).strip() or "surface"
+        if match_scope not in VALID_RULE_MATCH_SCOPES:
+            raise ValueError("matchScope must be 'surface' or 'detail'")
+
+        detail_kind = ""
+        detail_value = None
+        normalized_detail_value = ""
+        if match_scope == "detail":
+            detail_kind = str(rule_input.get("detailKind", rule_input.get("detail_kind", ""))).strip()
+            raw_detail_value = str(rule_input.get("detailValue", rule_input.get("detail_value", ""))).strip()
+            normalized_detail_value = self._normalize_rule_detail(raw_detail_value)
+            if detail_kind not in VALID_RULE_DETAIL_KINDS or not normalized_detail_value:
+                raise ValueError("detailKind and detailValue are required for detail rules")
+            detail_value = raw_detail_value
 
         target_value = normalized_target_value if target_kind == "site" else raw_target_value
         category = str(rule_input["category"])
@@ -627,15 +687,26 @@ class TrackerDatabase:
                     target_kind,
                     target_value,
                     normalized_target_value,
+                    match_scope,
+                    detail_kind,
+                    detail_value,
+                    normalized_detail_value,
                     category,
                     productivity,
                     enabled,
                     confidence,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(target_kind, normalized_target_value) DO UPDATE SET
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(
+                    target_kind,
+                    normalized_target_value,
+                    match_scope,
+                    detail_kind,
+                    normalized_detail_value
+                ) DO UPDATE SET
                     target_value = excluded.target_value,
+                    detail_value = excluded.detail_value,
                     category = excluded.category,
                     productivity = excluded.productivity,
                     enabled = excluded.enabled,
@@ -647,6 +718,10 @@ class TrackerDatabase:
                     target_kind,
                     target_value,
                     normalized_target_value,
+                    match_scope,
+                    detail_kind,
+                    detail_value,
+                    normalized_detail_value,
                     category,
                     productivity,
                     enabled,
@@ -657,11 +732,27 @@ class TrackerDatabase:
             )
             row = conn.execute(
                 """
-                SELECT id, target_kind, target_value, category, productivity, enabled, confidence, created_at, updated_at
+                SELECT
+                    id,
+                    target_kind,
+                    target_value,
+                    match_scope,
+                    detail_kind,
+                    detail_value,
+                    category,
+                    productivity,
+                    enabled,
+                    confidence,
+                    created_at,
+                    updated_at
                 FROM classification_rules
-                WHERE target_kind = ? AND normalized_target_value = ?
+                WHERE target_kind = ?
+                  AND normalized_target_value = ?
+                  AND match_scope = ?
+                  AND detail_kind = ?
+                  AND normalized_detail_value = ?
                 """,
-                (target_kind, normalized_target_value),
+                (target_kind, normalized_target_value, match_scope, detail_kind, normalized_detail_value),
             ).fetchone()
             if row and not enabled:
                 conn.execute(
@@ -811,16 +902,38 @@ class TrackerDatabase:
         with self.connect() as conn:
             rules = conn.execute(
                 """
-                SELECT id, target_kind, target_value, normalized_target_value, category, productivity, confidence
+                SELECT
+                    id,
+                    target_kind,
+                    target_value,
+                    normalized_target_value,
+                    match_scope,
+                    detail_kind,
+                    detail_value,
+                    normalized_detail_value,
+                    category,
+                    productivity,
+                    confidence
                 FROM classification_rules
                 WHERE enabled = 1
-                ORDER BY updated_at DESC, created_at DESC
+                ORDER BY
+                    CASE WHEN match_scope = 'detail' THEN 0 ELSE 1 END,
+                    updated_at DESC,
+                    created_at DESC
                 """
             ).fetchall()
             if not rules:
                 return {"matchedCount": 0, "appliedCount": 0, "skippedCount": 0}
 
-            query = "SELECT * FROM activity_segments WHERE 1=1"
+            query = """
+                SELECT
+                    activity_segments.*,
+                    youtube_video_metadata.title AS youtube_title
+                FROM activity_segments
+                LEFT JOIN youtube_video_metadata
+                  ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
+                WHERE 1=1
+            """
             params: list[Any] = []
             query = self._append_overlap_filters(query, params, start, end)
             rows = conn.execute(query, tuple(params)).fetchall()
@@ -1378,10 +1491,15 @@ class TrackerDatabase:
 
     @staticmethod
     def _serialize_rule(row: sqlite3.Row) -> dict[str, Any]:
+        match_scope = row["match_scope"] or "surface"
+        detail_kind = row["detail_kind"] or None
         return {
             "id": row["id"],
             "targetKind": row["target_kind"],
             "targetValue": row["target_value"],
+            "matchScope": match_scope,
+            "detailKind": detail_kind,
+            "detailValue": row["detail_value"],
             "category": row["category"],
             "productivity": row["productivity"],
             "enabled": bool(row["enabled"]),
@@ -1414,29 +1532,64 @@ class TrackerDatabase:
         return " ".join((value or "").strip().lower().split())
 
     @staticmethod
+    def _normalize_rule_detail(value: str | None) -> str:
+        return " ".join((value or "").strip().lower().split())
+
+    @staticmethod
     def _looks_like_bundle_id(value: str | None) -> bool:
         text = (value or "").strip()
         return "." in text and " " not in text
 
     def _matching_rule(self, segment: sqlite3.Row, rules: list[sqlite3.Row]) -> sqlite3.Row | None:
         for rule in rules:
-            if rule["target_kind"] == "site":
-                host = self._normalize_site_target(segment["site_domain"] or segment["site_url"])
-                target = rule["normalized_target_value"]
-                if host and (host == target or host.endswith(f".{target}")):
-                    return rule
+            if not self._rule_surface_matches(segment, rule):
                 continue
-
-            bundle_id = segment["bundle_id"]
-            target = rule["target_value"]
-            if (self._looks_like_bundle_id(target) or bundle_id) and bundle_id == target:
-                return rule
-            if self._normalize_app_target(segment["app_name"]) == rule["normalized_target_value"]:
-                return rule
+            if rule["match_scope"] == "detail" and not self._rule_detail_matches(segment, rule):
+                continue
+            return rule
         return None
+
+    def _rule_surface_matches(self, segment: sqlite3.Row, rule: sqlite3.Row) -> bool:
+        if rule["target_kind"] == "site":
+            host = self._normalize_site_target(segment["site_domain"] or segment["site_url"])
+            target = rule["normalized_target_value"]
+            return bool(host and (host == target or host.endswith(f".{target}")))
+
+        bundle_id = segment["bundle_id"]
+        target = rule["target_value"]
+        if (self._looks_like_bundle_id(target) or bundle_id) and bundle_id == target:
+            return True
+        return self._normalize_app_target(segment["app_name"]) == rule["normalized_target_value"]
+
+    def _rule_detail_matches(self, segment: sqlite3.Row, rule: sqlite3.Row) -> bool:
+        normalized_detail_value = rule["normalized_detail_value"]
+        if not normalized_detail_value:
+            return False
+        return normalized_detail_value in self._normalized_segment_rule_details(segment, rule["detail_kind"])
+
+    def _normalized_segment_rule_details(self, segment: sqlite3.Row, detail_kind: str) -> set[str]:
+        detail_columns = {
+            "title": ("youtube_title", "site_title", "window_title"),
+            "windowTitle": ("window_title",),
+            "siteTitle": ("site_title",),
+            "youtubeTitle": ("youtube_title",),
+        }
+        values = [self._row_text(segment, column) for column in detail_columns.get(detail_kind, ())]
+        return {normalized for value in values if (normalized := self._normalize_rule_detail(value))}
+
+    @staticmethod
+    def _row_text(row: sqlite3.Row, column: str) -> str | None:
+        if column not in row.keys():
+            return None
+        value = row[column]
+        if value is None:
+            return None
+        return str(value)
 
     @staticmethod
     def _rule_reason(rule: sqlite3.Row) -> str:
+        if rule["match_scope"] == "detail":
+            return f"Matched local {rule['target_kind']} detail rule: {rule['target_value']} / {rule['detail_value']}"
         return f"Matched local {rule['target_kind']} rule: {rule['target_value']}"
 
     @staticmethod

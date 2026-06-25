@@ -570,6 +570,68 @@ describe('domain helpers', () => {
     })).toMatchObject({ productivity: 'neutral', source: 'rule' });
   });
 
+  it('applies detail rules only inside the matching surface', () => {
+    const rules = [{
+      targetKind: 'site' as const,
+      targetValue: 'example.com',
+      matchScope: 'detail' as const,
+      detailKind: 'title' as const,
+      detailValue: 'Sprint plan',
+      category: 'workspace' as const,
+      productivity: 'focus' as const,
+      enabled: true,
+    }];
+
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'example.com',
+      siteTitle: 'Sprint plan',
+    }, { rules })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'rule' });
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'other.example',
+      siteTitle: 'Sprint plan',
+    }, { rules })).not.toMatchObject({ source: 'rule' });
+    expect(classifyActivityDetailed({
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'example.com',
+      siteTitle: 'Different plan',
+    }, { rules })).not.toMatchObject({ source: 'rule' });
+  });
+
+  it('prefers matching detail rules before broad surface rules', () => {
+    const video = {
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'youtube.com',
+      siteTitle: 'YouTube',
+      youtubeTitle: 'TypeScript deep dive',
+    };
+    const rules = [
+      { targetKind: 'site' as const, targetValue: 'youtube.com', category: 'entertainment' as const, productivity: 'drift' as const, enabled: true },
+      {
+        targetKind: 'site' as const,
+        targetValue: 'youtube.com',
+        matchScope: 'detail' as const,
+        detailKind: 'youtubeTitle' as const,
+        detailValue: 'TypeScript deep dive',
+        category: 'learning' as const,
+        productivity: 'focus' as const,
+        enabled: true,
+      },
+    ];
+
+    expect(classifyActivityDetailed(video, { rules })).toMatchObject({ category: 'learning', productivity: 'focus', source: 'rule' });
+    expect(classifyActivityDetailed({ ...video, youtubeTitle: 'Highlights' }, { rules })).toMatchObject({ category: 'entertainment', productivity: 'drift', source: 'rule' });
+  });
+
   it('lets rules override stored llm classifications but not manual corrections', () => {
     const rules = [{ targetKind: 'site' as const, targetValue: 'youtube.com', category: 'entertainment' as const, productivity: 'neutral' as const, enabled: true }];
     const base = {
