@@ -102,4 +102,16 @@ describe("sidebar motion styles", () => {
     expect(collapsedHeadingBlock).toContain("opacity: 0;");
     expect(collapsedHeadingBlock).toContain("pointer-events: none;");
   });
+
+  it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {
+    const styles = readStyles();
+    const appShellBlock = cssBlock(styles, ".app-shell");
+    const settingsShellBlock = cssBlock(styles, ".app-shell--settings");
+    const settingsNavControlsBlock = cssBlock(styles, ".app-shell--settings .window-nav-controls");
+
+    expect(appShellBlock).toContain("grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);");
+    expect(settingsShellBlock).toContain("grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);");
+    expect(settingsShellBlock).not.toContain("calc(var(--sidebar-expanded-width) + var(--space-7))");
+    expect(settingsNavControlsBlock).toContain("left: calc(var(--sidebar-expanded-width) + 16px);");
+  });
 });
