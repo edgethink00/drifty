@@ -1133,7 +1133,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
 
-    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
     expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
 
@@ -1169,7 +1169,7 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
     expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
 

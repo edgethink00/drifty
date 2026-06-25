@@ -4215,7 +4215,10 @@ export default function App() {
                   <span className="live-pill__summary-name">{liveAppLabel}</span>
                   <span className="live-pill__meta-row">
                     <span className="live-pill__status-dot" aria-hidden="true" />
-                    <span className="live-pill__summary-meta">{trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)} &middot; {lastCaptureDistanceLabel}</span>
+                    <span className="live-pill__summary-meta">
+                      {liveSiteLabel ? <><span>{liveSiteLabel}</span> &middot; </> : null}
+                      {trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)} &middot; {lastCaptureDistanceLabel}
+                    </span>
                   </span>
                 </div>
               </div>
