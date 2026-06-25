@@ -8,10 +8,12 @@ import {
   type ClassificationRuleTargetKind,
   type ProductivityLabel,
 } from "@drifty/domain";
+import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { SettingsSelect } from "../settings/SettingsSelect";
 import { formatCompactDurationFromSeconds, formatDuration, formatTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
@@ -125,38 +127,39 @@ export function ClassificationPage({
     if (!classificationCorrectionDraft) return null;
 
     return (
-      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"}>
+      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"} style={{ "--correction-tone": CATEGORY_COLORS[classificationCorrectionDraft.category] } as CSSProperties}>
         <div className="classification-correction__summary">
-          <span className="label-mono">{classificationCorrectionDraft.scope === "detail" ? "Detail rule" : `${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind)} rule`}</span>
+          <span className="classification-correction__summary-eyebrow label-mono">
+            <span className="classification-correction__summary-dot" aria-hidden="true" />
+            {classificationCorrectionDraft.scope === "detail" ? "Reclassify detail" : `Reclassify ${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind).toLowerCase()}`}
+          </span>
           <strong>{classificationCorrectionDraft.targetValue}</strong>
           {classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailValue ? (
             <p>{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
           ) : null}
         </div>
-        <label className="classification-correction__field">
-          <span>Category</span>
-          <select
-            className="classification-correction__select"
-            value={classificationCorrectionDraft.category}
-            onChange={(event) => onClassificationCorrectionCategoryChange(event.currentTarget.value as ActivityCategory)}
-          >
-            {CATEGORY_ORDER.map((category) => (
-              <option key={category} value={category}>{categoryLabel(category)}</option>
-            ))}
-          </select>
-        </label>
-        <label className="classification-correction__field">
-          <span>Productivity</span>
-          <select
-            className="classification-correction__select"
-            value={classificationCorrectionDraft.productivity}
-            onChange={(event) => onClassificationCorrectionProductivityChange(event.currentTarget.value as ProductivityLabel)}
-          >
-            {PRODUCTIVITY_ORDER.map((productivity) => (
-              <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>
-            ))}
-          </select>
-        </label>
+        <div className="classification-correction__fields">
+          <label className="classification-correction__field">
+            <span className="label-mono">Category</span>
+            <SettingsSelect
+              ariaLabel="Category"
+              className="classification-correction__picker"
+              value={classificationCorrectionDraft.category}
+              options={CATEGORY_ORDER.map((category) => ({ value: category, label: categoryLabel(category), accentColor: CATEGORY_COLORS[category] }))}
+              onChange={onClassificationCorrectionCategoryChange}
+            />
+          </label>
+          <label className="classification-correction__field">
+            <span className="label-mono">Productivity</span>
+            <SettingsSelect
+              ariaLabel="Productivity"
+              className="classification-correction__picker"
+              value={classificationCorrectionDraft.productivity}
+              options={PRODUCTIVITY_ORDER.map((productivity) => ({ value: productivity, label: productivityLabel(productivity), accentColor: PRODUCTIVITY_COLORS[productivity] }))}
+              onChange={onClassificationCorrectionProductivityChange}
+            />
+          </label>
+        </div>
         <div className="classification-correction__actions">
           <button type="button" className="classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>Cancel</button>
           <button type="button" className="classification-correction__save-button" onClick={onSaveClassificationCorrection} disabled={classificationCorrectionSaving}>{classificationCorrectionSaving ? "Saving..." : "Save correction"}</button>
@@ -330,6 +333,7 @@ export function ClassificationPage({
             <section className="classification-panel-view__panel classification-panel-view__panel--detail" aria-label="Activity details">
               {selectedClassificationSourceSummary ? (
                 <>
+                  <div className="classification-panel-view__detail-top">
                   <header className="classification-panel-view__panel-header panel-header">
                     <div className="panel-header__left">
                       <span className="label-mono">Activity details</span>
@@ -349,18 +353,19 @@ export function ClassificationPage({
                         className="classification-correction__surface-button"
                         aria-label={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
                         title={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
+                        aria-expanded={classificationCorrectionDraft?.scope === "surface"}
+                        data-active={String(classificationCorrectionDraft?.scope === "surface")}
                         onClick={onStartClassificationSurfaceCorrection}
                       >
-                        <svg className="classification-correction__surface-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                          <path d="M2 4h12M2 8h12M2 12h12" />
-                          <circle cx="6" cy="4" r="1.35" />
-                          <circle cx="11" cy="8" r="1.35" />
-                          <circle cx="4.5" cy="12" r="1.35" />
+                        <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
                         </svg>
+                        <span className="sr-only">Reclassify</span>
                       </button>
                     </div>
                   </header>
                   {classificationCorrectionDraft?.scope === "surface" ? renderClassificationCorrection("surface") : null}
+                  </div>
                   <div className="classification-panel-view__panel-body">
                     <div className="classification-panel-view__list" role="list">
                       {classificationActivityRows.map((row) => {
@@ -406,17 +411,17 @@ export function ClassificationPage({
                                 className="classification-correction__detail-button"
                                 aria-label={`Correct this detail: ${row.label}`}
                                 title={`Correct this detail: ${row.label}`}
+                                aria-expanded={classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id}
+                                data-active={String(classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id)}
                                 onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
-                                <svg className="classification-correction__surface-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                  <path d="M2 4h12M2 8h12M2 12h12" />
-                                  <circle cx="6" cy="4" r="1.35" />
-                                  <circle cx="11" cy="8" r="1.35" />
-                                  <circle cx="4.5" cy="12" r="1.35" />
+                                <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                  <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
                                 </svg>
+                                <span className="sr-only">Reclassify</span>
                               </button>
-                              {classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id ? renderClassificationCorrection("detail") : null}
                             </div>
+                            {classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id ? renderClassificationCorrection("detail") : null}
                             {isExpanded ? (() => {
                               const surfaceDetails = captureRowSurfaceDetails(row.segments);
                               const summary = classificationRowSummary(row.segments, classificationOptions);
