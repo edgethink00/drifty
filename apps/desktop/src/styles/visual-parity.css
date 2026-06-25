@@ -104,18 +104,21 @@
 /* Sidebar collapse rail */
 .brand,
 .brand__logo,
-.brand .dot,
 .nav-label,
 .nav-item,
 .nav-item > span:not(.nav-item__hover-label),
+.tracker-control,
 .live-pill,
 .live-pill .k,
+.live-pill__summary-copy,
+.live-pill__meta-row,
+.live-pill__status-dot,
 .live-pill .app-name,
 .live-pill .app-class,
 .sidebar-tracker-toggle,
+.sidebar-tracker-toggle span,
 .account-trigger,
 .account-trigger__copy,
-.account-trigger__status,
 .account-trigger__chevrons {
   transition:
     opacity var(--sidebar-fade-duration) ease-out,
@@ -141,28 +144,26 @@
   display: none;
 }
 
-.app-shell:not(.app-shell--sidebar-collapsed) .brand .dot,
 .app-shell:not(.app-shell--sidebar-collapsed) .nav-label,
 .app-shell:not(.app-shell--sidebar-collapsed) .nav-item > span:not(.nav-item__hover-label),
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .k,
+.app-shell:not(.app-shell--sidebar-collapsed) .live-pill__summary-copy,
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-name,
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-class,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__copy,
-.app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__status,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevrons {
   transition-delay: var(--sidebar-fade-delay);
 }
 
-.sidebar--collapsed .brand .dot,
 .sidebar--collapsed .nav-label,
 .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label),
 .sidebar--collapsed .settings-sidebar-back span,
 .sidebar--collapsed .settings-sidebar-heading,
 .sidebar--collapsed .live-pill .k,
+.sidebar--collapsed .live-pill__summary-copy,
 .sidebar--collapsed .live-pill .app-name,
 .sidebar--collapsed .live-pill .app-class,
 .sidebar--collapsed .account-trigger__copy,
-.sidebar--collapsed .account-trigger__status,
 .sidebar--collapsed .account-trigger__chevrons {
   transition-delay: 0ms;
 }
@@ -173,18 +174,6 @@
   padding: 10px 0;
   margin: 0 0 12px;
 }
-
-  .sidebar--collapsed .brand .dot {
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transform: translateX(-4px);
-  }
-
-  .sidebar--collapsed .brand .dot {
-    margin-left: 0;
-  }
 
   /* Show the standalone icon while collapsed. */
   .sidebar--collapsed .brand__logo {
@@ -330,6 +319,12 @@
     gap: 10px;
   }
 
+  .sidebar--collapsed .tracker-control {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+  }
+
   .sidebar--collapsed .live-pill,
   .sidebar--collapsed .sidebar-tracker-toggle,
   .sidebar--collapsed .account-menu-shell,
@@ -351,6 +346,12 @@
     margin-inline: auto;
   }
 
+  .sidebar--collapsed .live-pill__summary {
+    width: 100%;
+    grid-template-columns: 1fr;
+    place-items: center;
+  }
+
   .sidebar--collapsed .live-pill .k {
     width: 100%;
     gap: 0;
@@ -366,6 +367,15 @@
     overflow: hidden;
     pointer-events: none;
     transform: none;
+  }
+
+  .sidebar--collapsed .live-pill__summary-copy {
+    max-width: 0;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-4px);
   }
 
   .sidebar--collapsed .live-pill .k::before {
@@ -392,11 +402,20 @@
     padding: 0;
     border-color: color-mix(in srgb, var(--accent) 26%, var(--line-strong));
     border-radius: 10px;
-    background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface-strong));
+    background: color-mix(in srgb, var(--accent-soft) 54%, var(--shell-floating-surface));
     color: var(--text);
     font-size: 0;
     position: relative;
     overflow: visible;
+    backdrop-filter: blur(18px) saturate(1.1);
+    -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle span {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle:disabled {
@@ -454,6 +473,9 @@
   .sidebar--collapsed .account-menu-shell {
     display: grid;
     justify-items: center;
+    width: auto;
+    padding-top: 0;
+    border-top: 0;
   }
 
   .sidebar--collapsed .account-trigger {
@@ -478,7 +500,6 @@
   }
 
   .sidebar--collapsed .account-trigger__copy,
-  .sidebar--collapsed .account-trigger__status,
   .sidebar--collapsed .account-trigger__chevrons {
     max-width: 0;
     opacity: 0;
@@ -495,20 +516,20 @@
   .content,
   .brand,
   .brand__logo,
-  .brand .dot,
   .nav-label,
   .nav-item,
   .nav-item > span:not(.nav-item__hover-label),
   .nav-item__hover-label,
   .settings-nav-item__label,
+  .tracker-control,
   .live-pill,
   .live-pill .k,
+  .live-pill__summary-copy,
   .live-pill .app-name,
   .live-pill .app-class,
   .sidebar-tracker-toggle,
   .account-trigger,
   .account-trigger__copy,
-  .account-trigger__status,
   .account-trigger__chevrons {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;

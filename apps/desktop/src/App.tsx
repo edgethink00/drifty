@@ -3411,7 +3411,7 @@ export default function App() {
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle due to inactivity" : isDemoMode ? "Preview active" : "Tracking live") : (isDemoMode ? "Preview paused" : "Tracking paused");
-  const trackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Resume tracking";
+  const trackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Start tracking";
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
@@ -4174,9 +4174,8 @@ export default function App() {
         />
       ) : (
         <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
-        <div className="brand" aria-label="Drifty status">
+        <div className="brand" aria-label="Drifty">
           <img className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
-          <div className="dot" aria-hidden="true" />
         </div>
 
         <div className="nav-label">Dashboard</div>
@@ -4206,16 +4205,21 @@ export default function App() {
         </nav>
 
         <div className="sidebar-foot">
-          <div className="live-pill">
-            <div className={`k ${status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable ? "unavailable" : "idle"}`}>
-              {status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused"}
+          <div className="tracker-control" data-state={isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume"}>
+            <div className="live-pill">
+              <div className="live-pill__summary">
+                <div className={`k ${status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable ? "unavailable" : "idle"}`}>
+                  {status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused"}
+                </div>
+                <div className="live-pill__summary-copy">
+                  <span className="live-pill__summary-name">{liveAppLabel}</span>
+                  <span className="live-pill__meta-row">
+                    <span className="live-pill__status-dot" aria-hidden="true" />
+                    <span className="live-pill__summary-meta">{trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)} &middot; {lastCaptureDistanceLabel}</span>
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="app-name">
-              <span>{liveAppLabel}</span>
-              {liveSiteLabel ? <span className="app-name__site">{liveSiteLabel}</span> : null}
-            </div>
-            <div className="app-class">{trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)}</div>
-            <div className="app-class">Last capture: {lastCaptureDistanceLabel}</div>
             <button
               type="button"
               className="sidebar-tracker-toggle"
@@ -4225,24 +4229,15 @@ export default function App() {
               aria-label={trackerActionLabel}
               title={trackerActionLabel}
             >
-              {trackerActionLabel}
+              <span>{trackerActionLabel}</span>
             </button>
           </div>
           <AccountMenu
-            billingEntitlement={billingEntitlement}
-            billingEntitlementLoading={billingEntitlementLoading}
-            cloudConnectionStatus={cloudConnectionStatus}
             isOpen={accountMenuOpen}
             isSidebarCollapsed={isSidebarVisuallyCollapsed}
-            localAiSetup={localAiSetup}
             userAvatarUrl={profile?.avatar_url || profileDraft.avatarUrl || authMetadataAvatarUrl}
             userEmail={user?.email ?? null}
             onToggle={() => setAccountMenuOpen((open) => !open)}
-            onUpgrade={() => {
-              setSettingsSection("aiSetup");
-              navigateToTab("settings");
-              setAccountMenuOpen(false);
-            }}
             onSettings={() => {
               openSettingsTab();
             }}
