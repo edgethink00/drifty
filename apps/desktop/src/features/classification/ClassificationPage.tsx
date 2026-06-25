@@ -12,7 +12,8 @@ import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { SettingsSelect } from "../settings/SettingsSelect";
 import { formatCompactDurationFromSeconds, formatDuration, formatTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
@@ -140,37 +141,23 @@ export function ClassificationPage({
         <div className="classification-correction__fields">
           <label className="classification-correction__field">
             <span className="label-mono">Category</span>
-            <span className="classification-correction__select-wrap">
-              <select
-                className="classification-correction__select"
-                value={classificationCorrectionDraft.category}
-                onChange={(event) => onClassificationCorrectionCategoryChange(event.currentTarget.value as ActivityCategory)}
-              >
-                {CATEGORY_ORDER.map((category) => (
-                  <option key={category} value={category}>{categoryLabel(category)}</option>
-                ))}
-              </select>
-              <svg className="classification-correction__select-chevron" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                <path d="M3 4.5L6 7.5L9 4.5" />
-              </svg>
-            </span>
+            <SettingsSelect
+              ariaLabel="Category"
+              className="classification-correction__picker"
+              value={classificationCorrectionDraft.category}
+              options={CATEGORY_ORDER.map((category) => ({ value: category, label: categoryLabel(category), accentColor: CATEGORY_COLORS[category] }))}
+              onChange={onClassificationCorrectionCategoryChange}
+            />
           </label>
           <label className="classification-correction__field">
             <span className="label-mono">Productivity</span>
-            <span className="classification-correction__select-wrap">
-              <select
-                className="classification-correction__select"
-                value={classificationCorrectionDraft.productivity}
-                onChange={(event) => onClassificationCorrectionProductivityChange(event.currentTarget.value as ProductivityLabel)}
-              >
-                {PRODUCTIVITY_ORDER.map((productivity) => (
-                  <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>
-                ))}
-              </select>
-              <svg className="classification-correction__select-chevron" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                <path d="M3 4.5L6 7.5L9 4.5" />
-              </svg>
-            </span>
+            <SettingsSelect
+              ariaLabel="Productivity"
+              className="classification-correction__picker"
+              value={classificationCorrectionDraft.productivity}
+              options={PRODUCTIVITY_ORDER.map((productivity) => ({ value: productivity, label: productivityLabel(productivity), accentColor: PRODUCTIVITY_COLORS[productivity] }))}
+              onChange={onClassificationCorrectionProductivityChange}
+            />
           </label>
         </div>
         <div className="classification-correction__actions">

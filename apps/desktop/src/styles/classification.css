@@ -635,50 +635,10 @@
   color: var(--text-soft);
 }
 
-.classification-correction__select-wrap {
-  position: relative;
-  display: block;
-  min-width: 0;
-}
-
-.classification-correction__select {
-  appearance: none;
-  -webkit-appearance: none;
+/* Category/Productivity pickers reuse the Settings combobox (signature-color
+   dots), so the reclassify card matches Settings > Classification exactly. */
+.classification-correction__picker {
   width: 100%;
-  min-height: 2.1rem;
-  padding: 0 calc(var(--space-3) + 0.5rem) 0 var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--text) 12%, var(--line));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.classification-correction__select:hover {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 32%, var(--line));
-}
-
-.classification-correction__select:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 52%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--classification-selected-tone) 18%, transparent);
-}
-
-.classification-correction__select-chevron {
-  position: absolute;
-  top: 50%;
-  right: var(--space-2);
-  width: 0.7rem;
-  height: 0.7rem;
-  transform: translateY(-50%);
-  fill: none;
-  stroke: var(--text-soft);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.4;
-  pointer-events: none;
 }
 
 .classification-correction__actions {
