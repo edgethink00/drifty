@@ -14,6 +14,7 @@ fn main() {
             "accessibility_request_access",
             "developer_check_pre_release_update",
             "developer_install_pre_release_update",
+            "update_prompt_show_native",
             "tracker_get_status",
             "tracker_start",
             "tracker_stop",

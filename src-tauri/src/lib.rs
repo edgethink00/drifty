@@ -25,9 +25,10 @@ use commands::{
     tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
     tracker_save_classification_rule, tracker_save_classifications,
     tracker_search_classification_rule_candidates, tracker_set_developer_diagnostics,
-    tracker_start, tracker_stop, watcher_peek_cursor_inside, watcher_peek_dismiss,
-    watcher_peek_end_of_day_review_action, watcher_peek_extreme_nudge_action, watcher_peek_hide,
-    watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show, DriftAlarmState,
+    tracker_start, tracker_stop, update_prompt_show_native, watcher_peek_cursor_inside,
+    watcher_peek_dismiss, watcher_peek_end_of_day_review_action, watcher_peek_extreme_nudge_action,
+    watcher_peek_hide, watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
+    DriftAlarmState,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::TrackerController;
@@ -197,6 +198,7 @@ pub fn run() {
             ai_classification_openai_chat,
             developer_check_pre_release_update,
             developer_install_pre_release_update,
+            update_prompt_show_native,
             tracker_get_status,
             tracker_start,
             tracker_stop,
