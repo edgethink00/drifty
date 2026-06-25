@@ -8,6 +8,7 @@ import {
   type ClassificationRuleTargetKind,
   type ProductivityLabel,
 } from "@drifty/domain";
+import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { SiteFavicon } from "../../components/SiteFavicon";
@@ -125,9 +126,12 @@ export function ClassificationPage({
     if (!classificationCorrectionDraft) return null;
 
     return (
-      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"}>
+      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"} style={{ "--correction-tone": CATEGORY_COLORS[classificationCorrectionDraft.category] } as CSSProperties}>
         <div className="classification-correction__summary">
-          <span className="label-mono">{classificationCorrectionDraft.scope === "detail" ? "Detail rule" : `${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind)} rule`}</span>
+          <span className="classification-correction__summary-eyebrow label-mono">
+            <span className="classification-correction__summary-dot" aria-hidden="true" />
+            {classificationCorrectionDraft.scope === "detail" ? "Reclassify detail" : `Reclassify ${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind).toLowerCase()}`}
+          </span>
           <strong>{classificationCorrectionDraft.targetValue}</strong>
           {classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailValue ? (
             <p>{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
@@ -342,6 +346,7 @@ export function ClassificationPage({
             <section className="classification-panel-view__panel classification-panel-view__panel--detail" aria-label="Activity details">
               {selectedClassificationSourceSummary ? (
                 <>
+                  <div className="classification-panel-view__detail-top">
                   <header className="classification-panel-view__panel-header panel-header">
                     <div className="panel-header__left">
                       <span className="label-mono">Activity details</span>
@@ -373,6 +378,7 @@ export function ClassificationPage({
                     </div>
                   </header>
                   {classificationCorrectionDraft?.scope === "surface" ? renderClassificationCorrection("surface") : null}
+                  </div>
                   <div className="classification-panel-view__panel-body">
                     <div className="classification-panel-view__list" role="list">
                       {classificationActivityRows.map((row) => {

@@ -544,13 +544,13 @@
 
 /* Inline reclassification panel — in normal document flow, no overlay. */
 .classification-correction {
+  --correction-tone: var(--classification-selected-tone);
   display: grid;
   gap: var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--classification-selected-tone) 26%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--correction-tone) 22%, var(--line));
+  border-left: 2px solid color-mix(in srgb, var(--correction-tone) 62%, var(--line));
   border-radius: var(--radius-md);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--classification-selected-tone) 8%, transparent), transparent 10rem),
-    color-mix(in srgb, var(--surface) 96%, transparent);
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
   animation: classification-correction-reveal var(--transition-fast) ease-out;
 }
 
@@ -583,8 +583,19 @@
   min-width: 0;
 }
 
-.classification-correction__summary > .label-mono {
+.classification-correction__summary-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--text-soft);
+}
+
+.classification-correction__summary-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--correction-tone);
+  flex-shrink: 0;
 }
 
 .classification-correction__summary strong,
@@ -672,9 +683,9 @@
 
 .classification-correction__actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-1);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -762,15 +773,24 @@
   transform: none;
 }
 
+/* Quiet Cancel — sits on the left of the action row. */
+.classification-correction__ghost-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+/* Accent Save — primary action, tinted with the live category tone. */
 .classification-correction__save-button {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 48%, var(--line));
-  background: color-mix(in srgb, var(--classification-selected-tone) 20%, var(--surface));
+  border-color: color-mix(in srgb, var(--correction-tone) 55%, var(--line));
+  background: color-mix(in srgb, var(--correction-tone) 26%, var(--surface));
   color: var(--text);
 }
 
 .classification-correction__save-button:hover {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 56%, var(--line));
-  background: color-mix(in srgb, var(--classification-selected-tone) 28%, var(--surface));
+  border-color: color-mix(in srgb, var(--correction-tone) 64%, var(--line));
+  background: color-mix(in srgb, var(--correction-tone) 34%, var(--surface));
 }
 
 .classification-correction__ghost-button:focus-visible,
