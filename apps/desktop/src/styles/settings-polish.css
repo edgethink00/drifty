@@ -101,12 +101,12 @@
 }
 
 .app-shell--settings {
-  grid-template-columns: calc(var(--sidebar-expanded-width) + var(--space-7)) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);
   transition: none;
 }
 
 .app-shell--settings .window-nav-controls {
-  left: calc(var(--sidebar-expanded-width) + var(--space-7) + var(--space-4));
+  left: calc(var(--sidebar-expanded-width) + 16px);
   transition: none;
 }
 
