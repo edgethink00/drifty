@@ -4,6 +4,7 @@ import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
 import { formatQuarterHourLabel } from "../../lib/formatting";
 import type { CSSProperties } from "react";
+import { scoreFocusDriftWindowShare } from "./focusDriftScoring";
 import {
   FOCUS_DRIFT_BUCKET_COUNT,
   FOCUS_DRIFT_BUCKET_MINUTES,
@@ -174,8 +175,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
   const points = buckets.map((entry) => {
     const totalSeconds = entry.focusSeconds + entry.driftSeconds;
     const windowSeconds = FOCUS_DRIFT_BUCKET_MINUTES * 60;
-    const focusScore = scoreWindowShare(entry.focusSeconds, windowSeconds);
-    const driftScore = scoreWindowShare(entry.driftSeconds, windowSeconds);
+    const focusScore = scoreFocusDriftWindowShare(entry.focusSeconds, totalSeconds, windowSeconds);
+    const driftScore = scoreFocusDriftWindowShare(entry.driftSeconds, totalSeconds, windowSeconds);
     const isFuture = currentBucketStartMinute !== null ? entry.bucketStartMinute > currentBucketStartMinute : false;
     const x = currentBucketStartMinute !== null && currentX !== null && entry.bucketStartMinute === currentBucketStartMinute
       ? currentX
@@ -228,11 +229,6 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     currentTimeLabel,
     axisTicks: buildFocusDriftAxisTicks(startOfDayMinutes),
   };
-}
-
-function scoreWindowShare(seconds: number, windowSeconds: number): number {
-  if (windowSeconds <= 0) return 0;
-  return (Math.max(seconds, 0) / windowSeconds) * 100;
 }
 
 function buildAverageFocusScore(points: readonly FocusDriftPoint[]): number {
