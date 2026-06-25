@@ -164,7 +164,7 @@ describe("App settings sidebar", () => {
   it("replaces the app sidebar with settings navigation and returns with Back", async () => {
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
 
     expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
@@ -187,7 +187,7 @@ describe("App settings sidebar", () => {
     window.localStorage.setItem("drifty.sidebar.collapsed", "1");
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
 
     const settingsSidebar = await screen.findByRole("complementary", { name: /settings navigation/i });

@@ -1368,7 +1368,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     aiClassificationMocks.runAiClassificationForUnknownThreshold.mockClear();
 
-    fireEvent.click(await screen.findByRole("button", { name: /alex drifty cloud ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^AI setup$/ }));
     // OpenRouter is expanded by default because it is the saved provider.
