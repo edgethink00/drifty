@@ -69,6 +69,7 @@ export function AiPrivacyReview() {
 
   return (
     <section className="ai-privacy-review" aria-label="AI privacy review">
+      <p className="ai-privacy-review__intro">Manage what information Drifty can send for AI classification.</p>
       <div className="ai-privacy-review__boundary">
         <div className="ai-privacy-review__column">
           <ColumnLabel label="Required for classification" meta="Locked on" />
@@ -140,7 +141,7 @@ function ControlRow({
   if (field.control === "required") {
     return (
       <div className="ai-privacy-review__row ai-privacy-review__row--required" role="listitem">
-        <span>
+        <span className="ai-privacy-review__row-text">
           <strong>{field.detail}</strong>
         </span>
         <em>Required</em>
@@ -150,7 +151,7 @@ function ControlRow({
 
   return (
     <label className="ai-privacy-review__row ai-privacy-review__row--optional" role="listitem">
-      <span>
+      <span className="ai-privacy-review__row-text">
         <strong>{field.detail}</strong>
       </span>
       <ControlSwitch field={field} onOptionalChange={onOptionalChange} />
