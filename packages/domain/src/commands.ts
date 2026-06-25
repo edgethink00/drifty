@@ -77,11 +77,16 @@ export interface AppIdentity {
 }
 
 export type ClassificationRuleTargetKind = "app" | "site";
+export type ClassificationRuleMatchScope = "surface" | "detail";
+export type ClassificationRuleDetailKind = "title" | "windowTitle" | "siteTitle" | "youtubeTitle";
 
 export interface ClassificationRule {
   id: string;
   targetKind: ClassificationRuleTargetKind;
   targetValue: string;
+  matchScope: ClassificationRuleMatchScope;
+  detailKind?: ClassificationRuleDetailKind | null;
+  detailValue?: string | null;
   category: ActivityCategory;
   productivity: ProductivityLabel;
   enabled: boolean;
@@ -93,6 +98,9 @@ export interface ClassificationRule {
 export interface ClassificationRuleInput {
   targetKind: ClassificationRuleTargetKind;
   targetValue: string;
+  matchScope?: ClassificationRuleMatchScope;
+  detailKind?: ClassificationRuleDetailKind | null;
+  detailValue?: string | null;
   category: ActivityCategory;
   productivity: ProductivityLabel;
   enabled?: boolean;

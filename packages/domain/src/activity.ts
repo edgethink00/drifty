@@ -43,6 +43,9 @@ export interface StoredActivityClassification extends ActivityClassification {
 export interface ClassificationRuleOption {
   targetKind: "app" | "site";
   targetValue: string;
+  matchScope?: "surface" | "detail";
+  detailKind?: "title" | "windowTitle" | "siteTitle" | "youtubeTitle" | null;
+  detailValue?: string | null;
   category: ActivityCategory;
   productivity: ProductivityLabel;
   enabled?: boolean;

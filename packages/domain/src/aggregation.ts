@@ -697,22 +697,47 @@ export function findMatchingClassificationRule(segment: ActivitySegment, rules?:
   if (!rules || rules.length === 0) return null;
 
   for (const rule of rules) {
-    if (rule.enabled === false) continue;
+    if (rule.enabled === false || rule.matchScope !== "detail") continue;
+    if (ruleSurfaceMatches(segment, rule) && ruleDetailMatches(segment, rule)) return rule;
+  }
 
-    if (rule.targetKind === "site") {
-      const host = normalizeRuleSiteTarget(segment.siteDomain || segment.siteUrl);
-      const target = normalizeRuleSiteTarget(rule.targetValue);
-      if (host && target && (host === target || host.endsWith(`.${target}`))) return rule;
-      continue;
-    }
-
-    const bundleId = segment.bundleId?.trim() ?? "";
-    if (bundleId && bundleId === rule.targetValue.trim()) return rule;
-    const normalizedTarget = normalizeRuleAppTarget(rule.targetValue);
-    if (normalizedTarget && normalizeRuleAppTarget(segment.appName) === normalizedTarget) return rule;
+  for (const rule of rules) {
+    if (rule.enabled === false || rule.matchScope === "detail") continue;
+    if (ruleSurfaceMatches(segment, rule)) return rule;
   }
 
   return null;
+}
+
+function ruleSurfaceMatches(segment: ActivitySegment, rule: ClassificationRuleOption): boolean {
+  if (rule.targetKind === "site") {
+    const host = normalizeRuleSiteTarget(segment.siteDomain || segment.siteUrl);
+    const target = normalizeRuleSiteTarget(rule.targetValue);
+    return Boolean(host && target && (host === target || host.endsWith(`.${target}`)));
+  }
+
+  const bundleId = segment.bundleId?.trim() ?? "";
+  if (bundleId && bundleId === rule.targetValue.trim()) return true;
+  const normalizedTarget = normalizeRuleAppTarget(rule.targetValue);
+  return Boolean(normalizedTarget && normalizeRuleAppTarget(segment.appName) === normalizedTarget);
+}
+
+function ruleDetailMatches(segment: ActivitySegment, rule: ClassificationRuleOption): boolean {
+  if (!rule.detailKind) return false;
+  const target = normalizeRuleDetailValue(rule.detailValue);
+  if (!target) return false;
+  return ruleDetailValues(segment, rule.detailKind).some((value) => value === target);
+}
+
+function ruleDetailValues(segment: ActivitySegment, detailKind: NonNullable<ClassificationRuleOption["detailKind"]>): string[] {
+  if (detailKind === "title") {
+    return [
+      normalizeRuleDetailValue(segment.youtubeTitle),
+      normalizeRuleDetailValue(segment.siteTitle),
+      normalizeRuleDetailValue(segment.windowTitle),
+    ].filter((value) => value.length > 0);
+  }
+  return [normalizeRuleDetailValue(segment[detailKind])].filter((value) => value.length > 0);
 }
 
 // Mirrors the tracker's _normalize_site_target so live matching agrees with the stored batch.
@@ -729,6 +754,10 @@ function normalizeRuleSiteTarget(value?: string | null): string {
 }
 
 function normalizeRuleAppTarget(value?: string | null): string {
+  return normalizeText(value).split(/\s+/).filter(Boolean).join(" ");
+}
+
+function normalizeRuleDetailValue(value?: string | null): string {
   return normalizeText(value).split(/\s+/).filter(Boolean).join(" ");
 }
 

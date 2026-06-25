@@ -82,6 +82,7 @@
 }
 
 .classification-panel-view__panel--detail {
+  position: relative;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 72%, transparent), transparent 10rem),
     color-mix(in srgb, var(--surface) 92%, var(--canvas));
@@ -91,6 +92,10 @@
   min-height: 0;
   overflow: auto;
   padding: 6px;
+}
+
+.classification-panel-view__panel-body--with-correction {
+  padding-bottom: 7rem;
 }
 
 .classification-panel-view__list {

@@ -1,8 +1,17 @@
-import type { ActivityCategory, AppIconMap, ClassificationOptions } from "@drifty/domain";
+import {
+  CATEGORY_ORDER,
+  PRODUCTIVITY_ORDER,
+  type ActivityCategory,
+  type AppIconMap,
+  type ClassificationOptions,
+  type ClassificationRuleDetailKind,
+  type ClassificationRuleTargetKind,
+  type ProductivityLabel,
+} from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatDuration, formatTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
@@ -11,6 +20,8 @@ import {
   classificationActivityDetailsId,
   classificationActivityLabel,
   classificationRowSummary,
+  classificationRuleDetailKindLabel,
+  classificationRuleTargetLabel,
   classifySourceKey,
   formatClassificationSourceProductivityMix,
   type ClassificationActivityRow,
@@ -39,16 +50,35 @@ type ClassificationPageProps = {
   readonly effectiveClassifySourceId: string | null;
   readonly expandedClassificationActivityRows: ReadonlySet<string>;
   readonly isCurrentClassificationRange: boolean;
+  readonly classificationCorrectionDraft: ClassificationCorrectionDraft | null;
+  readonly classificationCorrectionSaving: boolean;
   readonly selectedClassificationBreakdown: ClassificationCategoryBreakdown | null;
   readonly selectedClassificationSourceSummary: ClassificationSourceSummary | null;
   readonly selectedClassificationTone: string;
   readonly onActivityRowToggle: (rowId: string) => void;
   readonly onCategorySelect: (category: ActivityCategory) => void;
+  readonly onCancelClassificationCorrection: () => void;
+  readonly onClassificationCorrectionCategoryChange: (category: ActivityCategory) => void;
+  readonly onClassificationCorrectionProductivityChange: (productivity: ProductivityLabel) => void;
   readonly onNextClassificationRange: () => void;
   readonly onPreviousClassificationRange: () => void;
   readonly onRangeChange: (range: ClassificationRange) => void;
+  readonly onSaveClassificationCorrection: () => void;
   readonly onSourceSelect: (sourceId: string) => void;
+  readonly onStartClassificationDetailCorrection: (rowId: string) => void;
+  readonly onStartClassificationSurfaceCorrection: () => void;
   readonly onTodayClassificationRange: () => void;
+};
+
+type ClassificationCorrectionDraft = {
+  readonly scope: "surface" | "detail";
+  readonly rowId: string | null;
+  readonly targetKind: ClassificationRuleTargetKind;
+  readonly targetValue: string;
+  readonly detailKind: ClassificationRuleDetailKind | null;
+  readonly detailValue: string | null;
+  readonly category: ActivityCategory;
+  readonly productivity: ProductivityLabel;
 };
 
 export function ClassificationPage({
@@ -72,17 +102,69 @@ export function ClassificationPage({
   effectiveClassifySourceId,
   expandedClassificationActivityRows,
   isCurrentClassificationRange,
+  classificationCorrectionDraft,
+  classificationCorrectionSaving,
   selectedClassificationBreakdown,
   selectedClassificationSourceSummary,
   selectedClassificationTone,
   onActivityRowToggle,
   onCategorySelect,
+  onCancelClassificationCorrection,
+  onClassificationCorrectionCategoryChange,
+  onClassificationCorrectionProductivityChange,
   onNextClassificationRange,
   onPreviousClassificationRange,
   onRangeChange,
+  onSaveClassificationCorrection,
   onSourceSelect,
+  onStartClassificationDetailCorrection,
+  onStartClassificationSurfaceCorrection,
   onTodayClassificationRange,
 }: ClassificationPageProps) {
+  const renderClassificationCorrection = (placement: "surface" | "detail") => {
+    if (!classificationCorrectionDraft) return null;
+
+    return (
+      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"}>
+        <div className="classification-correction__summary">
+          <span className="label-mono">{classificationCorrectionDraft.scope === "detail" ? "Detail rule" : `${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind)} rule`}</span>
+          <strong>{classificationCorrectionDraft.targetValue}</strong>
+          {classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailValue ? (
+            <p>{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
+          ) : null}
+        </div>
+        <label className="classification-correction__field">
+          <span>Category</span>
+          <select
+            className="classification-correction__select"
+            value={classificationCorrectionDraft.category}
+            onChange={(event) => onClassificationCorrectionCategoryChange(event.currentTarget.value as ActivityCategory)}
+          >
+            {CATEGORY_ORDER.map((category) => (
+              <option key={category} value={category}>{categoryLabel(category)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="classification-correction__field">
+          <span>Productivity</span>
+          <select
+            className="classification-correction__select"
+            value={classificationCorrectionDraft.productivity}
+            onChange={(event) => onClassificationCorrectionProductivityChange(event.currentTarget.value as ProductivityLabel)}
+          >
+            {PRODUCTIVITY_ORDER.map((productivity) => (
+              <option key={productivity} value={productivity}>{productivityLabel(productivity)}</option>
+            ))}
+          </select>
+        </label>
+        <div className="classification-correction__actions">
+          <button type="button" className="classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>Cancel</button>
+          <button type="button" className="classification-correction__save-button" onClick={onSaveClassificationCorrection} disabled={classificationCorrectionSaving}>{classificationCorrectionSaving ? "Saving..." : "Save correction"}</button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="page">
       <div className="pg-head">
@@ -255,13 +337,30 @@ export function ClassificationPage({
                         {selectedClassificationSourceSummary.label}
                       </strong>
                     </div>
-                    <div className="panel-header__right classification-panel-view__detail-meta">
-                      <span className="panel-header__meta">
-                        {selectedClassificationSourceSummary.sessionCount} {selectedClassificationSourceSummary.sessionCount === 1 ? "session" : "sessions"}
-                      </span>
-                      <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
+                    <div className="panel-header__right classification-panel-view__detail-header-actions">
+                      <div className="classification-panel-view__detail-meta">
+                        <span className="panel-header__meta">
+                          {selectedClassificationSourceSummary.sessionCount} {selectedClassificationSourceSummary.sessionCount === 1 ? "session" : "sessions"}
+                        </span>
+                        <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="classification-correction__surface-button"
+                        aria-label={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
+                        title={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
+                        onClick={onStartClassificationSurfaceCorrection}
+                      >
+                        <svg className="classification-correction__surface-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M2 4h12M2 8h12M2 12h12" />
+                          <circle cx="6" cy="4" r="1.35" />
+                          <circle cx="11" cy="8" r="1.35" />
+                          <circle cx="4.5" cy="12" r="1.35" />
+                        </svg>
+                      </button>
                     </div>
                   </header>
+                  {classificationCorrectionDraft?.scope === "surface" ? renderClassificationCorrection("surface") : null}
                   <div className="classification-panel-view__panel-body">
                     <div className="classification-panel-view__list" role="list">
                       {classificationActivityRows.map((row) => {
@@ -284,23 +383,40 @@ export function ClassificationPage({
                         );
                         return (
                           <div key={row.id} className="classification-panel-view__activity-row" role="listitem" data-expandable={String(row.hasDetails)} data-expanded={String(isExpanded)}>
-                            {row.hasDetails ? (
+                            <div className="classification-panel-view__activity-head">
+                              {row.hasDetails ? (
+                                <button
+                                  type="button"
+                                  className="classification-panel-view__activity-toggle"
+                                  aria-expanded={isExpanded}
+                                  aria-controls={detailsId}
+                                  onClick={() => onActivityRowToggle(row.id)}
+                                >
+                                  {rowSummary}
+                                  <span className="sr-only">Capture details {isExpanded ? "expanded" : "collapsed"}</span>
+                                  <span className="classification-panel-view__activity-chevron" aria-hidden="true">{isExpanded ? "⌄" : ">"}</span>
+                                </button>
+                              ) : (
+                                <div className="classification-panel-view__activity-summary">
+                                  {rowSummary}
+                                </div>
+                              )}
                               <button
                                 type="button"
-                                className="classification-panel-view__activity-toggle"
-                                aria-expanded={isExpanded}
-                                aria-controls={detailsId}
-                                onClick={() => onActivityRowToggle(row.id)}
+                                className="classification-correction__detail-button"
+                                aria-label={`Correct this detail: ${row.label}`}
+                                title={`Correct this detail: ${row.label}`}
+                                onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
-                                {rowSummary}
-                                <span className="sr-only">Capture details {isExpanded ? "expanded" : "collapsed"}</span>
-                                <span className="classification-panel-view__activity-chevron" aria-hidden="true">{isExpanded ? "⌄" : ">"}</span>
+                                <svg className="classification-correction__surface-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                  <path d="M2 4h12M2 8h12M2 12h12" />
+                                  <circle cx="6" cy="4" r="1.35" />
+                                  <circle cx="11" cy="8" r="1.35" />
+                                  <circle cx="4.5" cy="12" r="1.35" />
+                                </svg>
                               </button>
-                            ) : (
-                              <div className="classification-panel-view__activity-summary">
-                                {rowSummary}
-                              </div>
-                            )}
+                              {classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id ? renderClassificationCorrection("detail") : null}
+                            </div>
                             {isExpanded ? (() => {
                               const surfaceDetails = captureRowSurfaceDetails(row.segments);
                               const summary = classificationRowSummary(row.segments, classificationOptions);

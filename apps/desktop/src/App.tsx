@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityShareMix, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivityClassificationRecord, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleDetailKind, ClassificationRuleInput, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -136,7 +136,7 @@ import { useCloudBillingController } from "./features/billing/useCloudBillingCon
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
-import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
+import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey, normalizeClassificationRuleDetail } from "./features/classification/classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_PREVIEW_OPTIONS, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
@@ -269,6 +269,18 @@ const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 const COMPACT_HISTORY_CACHE_TTL_MS = 5 * 60_000;
 const DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS = 4000;
 const EMPTY_ACTIVITY_SEGMENTS: ActivitySegment[] = [];
+type ClassificationCorrectionScope = "surface" | "detail";
+
+type ClassificationCorrectionDraft = {
+  readonly scope: ClassificationCorrectionScope;
+  readonly rowId: string | null;
+  readonly targetKind: ClassificationRuleInput["targetKind"];
+  readonly targetValue: string;
+  readonly detailKind: ClassificationRuleDetailKind | null;
+  readonly detailValue: string | null;
+  readonly category: ActivityCategory;
+  readonly productivity: ProductivityLabel;
+};
 
 function compactHistoryRangeKey(range: CompactHistoryRange): string {
   return `${range.start}:${range.end}`;
@@ -300,6 +312,76 @@ function extremeNudgeErrorDiagnostic(error: unknown): string | null {
 
   const diagnostic = message.slice(separatorIndex + 2).trim();
   return /^[a-z0-9_]+$/.test(diagnostic) ? diagnostic : null;
+}
+
+function classificationRuleTargetForSegment(segment: ActivitySegment): Pick<ClassificationRuleInput, "targetKind" | "targetValue"> | null {
+  const siteTarget = segment.siteDomain?.trim() || segment.siteUrl?.trim() || "";
+  if (siteTarget) return { targetKind: "site", targetValue: siteTarget };
+
+  const appTarget = segment.bundleId?.trim() || segment.appName.trim();
+  if (appTarget) return { targetKind: "app", targetValue: appTarget };
+
+  return null;
+}
+
+function classificationRuleDetailForSegment(segment: ActivitySegment): Pick<ClassificationCorrectionDraft, "detailKind" | "detailValue"> {
+  if (segment.youtubeTitle?.trim()) return { detailKind: "youtubeTitle", detailValue: segment.youtubeTitle.trim() };
+  if (segment.siteTitle?.trim()) return { detailKind: "siteTitle", detailValue: segment.siteTitle.trim() };
+  if (segment.windowTitle?.trim()) return { detailKind: "windowTitle", detailValue: segment.windowTitle.trim() };
+  return { detailKind: null, detailValue: null };
+}
+
+function buildClassificationCorrectionDraft({
+  rowId,
+  scope,
+  segment,
+  classificationOptions,
+}: {
+  readonly rowId: string | null;
+  readonly scope: ClassificationCorrectionScope;
+  readonly segment: ActivitySegment;
+  readonly classificationOptions: ClassificationOptions;
+}): ClassificationCorrectionDraft | null {
+  const target = classificationRuleTargetForSegment(segment);
+  if (!target) return null;
+  const classification = classifyActivityDetailed(segment, classificationOptions);
+  const detail = scope === "detail" ? classificationRuleDetailForSegment(segment) : { detailKind: null, detailValue: null };
+  if (scope === "detail" && (!detail.detailKind || !normalizeClassificationRuleDetail(detail.detailValue))) return null;
+  return {
+    scope,
+    rowId,
+    targetKind: target.targetKind,
+    targetValue: target.targetValue,
+    detailKind: detail.detailKind,
+    detailValue: detail.detailValue,
+    category: classification.category,
+    productivity: classification.productivity,
+  };
+}
+
+function buildClassificationCorrectionRecord({
+  category,
+  classifiedAt,
+  productivity,
+  segment,
+}: {
+  readonly category: ActivityCategory;
+  readonly classifiedAt: string;
+  readonly productivity: ProductivityLabel;
+  readonly segment: ActivitySegment;
+}): ActivityClassificationRecord {
+  return {
+    segmentId: segment.id,
+    category,
+    productivity,
+    source: "manual",
+    confidence: 1,
+    reason: "Manual classification correction.",
+    inputFingerprint: `manual:classification-correction:${segment.id}:${segment.endedAt}`,
+    aiResult: false,
+    stale: false,
+    classifiedAt,
+  };
 }
 
 function scheduleIdleWork(callback: () => void): () => void {
@@ -503,6 +585,8 @@ export default function App() {
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<ActivityCategory | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
+  const [classificationCorrectionDraft, setClassificationCorrectionDraft] = useState<ClassificationCorrectionDraft | null>(null);
+  const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const {
     autoInstallFutureUpdates,
@@ -1601,6 +1685,73 @@ export default function App() {
         setLoading(false);
         setHasLoadedOnce(true);
       }
+    }
+  }
+
+  function startClassificationCorrection(scope: ClassificationCorrectionScope, rowId: string | null = null) {
+    const sourceSegment = rowId
+      ? classificationActivityRows.find((row) => row.id === rowId)?.segments[0] ?? null
+      : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null;
+    if (!sourceSegment) return;
+    const draft = buildClassificationCorrectionDraft({
+      rowId,
+      scope,
+      segment: sourceSegment,
+      classificationOptions,
+    });
+    if (!draft) return;
+    setClassificationCorrectionDraft(draft);
+    if (scope === "detail" && rowId) {
+      setExpandedClassificationActivityRows((current) => {
+        const next = new Set(current);
+        next.add(rowId);
+        return next;
+      });
+    }
+  }
+
+  function updateClassificationCorrectionDraft(next: Partial<Pick<ClassificationCorrectionDraft, "category" | "productivity">>) {
+    setClassificationCorrectionDraft((current) => current ? { ...current, ...next } : current);
+  }
+
+  async function saveClassificationCorrection() {
+    const draft = classificationCorrectionDraft;
+    if (!draft || classificationCorrectionSaving) return;
+
+    const ruleInput: ClassificationRuleInput = {
+      targetKind: draft.targetKind,
+      targetValue: draft.targetValue,
+      matchScope: draft.scope,
+      detailKind: draft.scope === "detail" ? draft.detailKind : null,
+      detailValue: draft.scope === "detail" ? draft.detailValue : null,
+      category: draft.category,
+      productivity: draft.productivity,
+      enabled: true,
+      confidence: 1,
+    };
+
+    setClassificationCorrectionSaving(true);
+    try {
+      if (draft.scope === "detail" && draft.rowId) {
+        const row = classificationActivityRows.find((item) => item.id === draft.rowId) ?? null;
+        const classifiedAt = new Date().toISOString();
+        if (row && row.segments.length > 0) {
+          await trackerClient.saveClassifications(row.segments.map((segment) => buildClassificationCorrectionRecord({
+            category: draft.category,
+            classifiedAt,
+            productivity: draft.productivity,
+            segment,
+          })));
+        }
+      }
+
+      const saved = await saveClassificationRule(ruleInput);
+      if (saved) {
+        setClassificationCorrectionDraft(null);
+        await refresh(selectedDayRef.current);
+      }
+    } finally {
+      setClassificationCorrectionSaving(false);
     }
   }
 
@@ -3571,6 +3722,7 @@ export default function App() {
   useEffect(() => {
     if (activeTab !== "classification") return;
     setExpandedClassificationActivityRows(new Set());
+    setClassificationCorrectionDraft(null);
   }, [activeTab, classificationRange, selectedDay, effectiveClassifyCategoryId, effectiveClassifySourceId]);
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
@@ -4339,6 +4491,8 @@ export default function App() {
             effectiveClassifySourceId={effectiveClassifySourceId}
             expandedClassificationActivityRows={expandedClassificationActivityRows}
             isCurrentClassificationRange={isCurrentClassificationRange}
+            classificationCorrectionDraft={classificationCorrectionDraft}
+            classificationCorrectionSaving={classificationCorrectionSaving}
             selectedClassificationBreakdown={selectedClassificationBreakdown}
             selectedClassificationSourceSummary={selectedClassificationSourceSummary}
             selectedClassificationTone={selectedClassificationTone}
@@ -4354,12 +4508,18 @@ export default function App() {
               setClassifySelectedCategoryId(category);
               setClassifySelectedSourceId(null);
             }}
+            onCancelClassificationCorrection={() => setClassificationCorrectionDraft(null)}
+            onClassificationCorrectionCategoryChange={(category) => updateClassificationCorrectionDraft({ category })}
+            onClassificationCorrectionProductivityChange={(productivity) => updateClassificationCorrectionDraft({ productivity })}
             onNextClassificationRange={() => {
               if (canShiftClassificationForward) selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, 1, todayDay, startOfDayMinutes, startOfWeek));
             }}
             onPreviousClassificationRange={() => selectDay((p) => getSafeClassificationNavigationDay(p, classificationRange, -1, todayDay, startOfDayMinutes, startOfWeek))}
             onRangeChange={setClassificationRange}
+            onSaveClassificationCorrection={() => void saveClassificationCorrection()}
             onSourceSelect={setClassifySelectedSourceId}
+            onStartClassificationDetailCorrection={(rowId) => startClassificationCorrection("detail", rowId)}
+            onStartClassificationSurfaceCorrection={() => startClassificationCorrection("surface")}
             onTodayClassificationRange={() => selectDay(getSafeClassificationNavigationDay(selectedDay, classificationRange, 0, todayDay, startOfDayMinutes, startOfWeek))}
           />
         ) : null}

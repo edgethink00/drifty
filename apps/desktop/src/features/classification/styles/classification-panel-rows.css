@@ -225,6 +225,13 @@
   text-align: right;
 }
 
+.classification-panel-view__detail-header-actions {
+  display: grid;
+  grid-template-columns: minmax(0, auto) 2rem;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .classification-panel-view__panel-header strong,
 .classification-panel-view__detail-meta strong,
 .classification-panel-view__activity-measure strong,

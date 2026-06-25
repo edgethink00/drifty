@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import sys
 import time
 import unittest
@@ -940,6 +941,342 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(events[0]["classification"]["category"], "learning")
         self.assertEqual(events[0]["classification"]["classificationRuleId"], site_rule["id"])
         self.assertEqual(events[1]["classification"]["category"], "workspace")
+
+    def test_detail_classification_rule_matches_only_exact_detail_on_same_site(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Sprint plan",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Roadmap",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T11:00:00+00:00",
+                "ended_at": "2026-04-06T11:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "calendar.example.com",
+                "site_title": "Sprint plan",
+            }
+        )
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "matchScope": "detail",
+                "detailKind": "title",
+                "detailValue": "Sprint plan",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(rule["matchScope"], "detail")
+        self.assertEqual(rule["detailKind"], "title")
+        self.assertEqual(rule["detailValue"], "Sprint plan")
+        self.assertEqual(result["matchedCount"], 1)
+        self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
+        self.assertNotIn("classification", events[1])
+        self.assertNotIn("classification", events[2])
+
+    def test_detail_classification_rule_uses_exact_normalized_detail(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Sprint plan",
+            }
+        )
+        self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "matchScope": "detail",
+                "detailKind": "title",
+                "detailValue": "Sprint",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(result["matchedCount"], 0)
+        self.assertNotIn("classification", events[0])
+
+    def test_app_detail_classification_rule_matches_only_detail_on_same_app(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Linear",
+                "bundle_id": "com.linear",
+                "window_title": "Sprint plan",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Notes",
+                "bundle_id": "com.apple.Notes",
+                "window_title": "Sprint plan",
+            }
+        )
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "app",
+                "targetValue": "com.linear",
+                "matchScope": "detail",
+                "detailKind": "windowTitle",
+                "detailValue": "Sprint plan",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(result["matchedCount"], 1)
+        self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
+        self.assertNotIn("classification", events[1])
+
+    def test_detail_classification_rule_beats_broad_rule_for_same_site(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Sprint plan",
+            }
+        )
+        broad_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "category": "entertainment",
+                "productivity": "drift",
+            }
+        )
+        detail_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "matchScope": "detail",
+                "detailKind": "title",
+                "detailValue": "Sprint plan",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        event = self.database.fetch_timeline("2026-04-06")[0]
+
+        self.assertNotEqual(detail_rule["id"], broad_rule["id"])
+        self.assertEqual(result["matchedCount"], 1)
+        self.assertEqual(event["classification"]["category"], "workspace")
+        self.assertEqual(event["classification"]["classificationRuleId"], detail_rule["id"])
+
+    def test_disabling_detail_rule_removes_only_its_materialized_classifications(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Sprint plan",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Roadmap",
+            }
+        )
+        detail_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "matchScope": "detail",
+                "detailKind": "title",
+                "detailValue": "Sprint plan",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+        broad_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "category": "learning",
+                "productivity": "focus",
+            }
+        )
+        self.database.apply_classification_rules()
+
+        disabled = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "matchScope": "detail",
+                "detailKind": "title",
+                "detailValue": "Sprint plan",
+                "category": "workspace",
+                "productivity": "focus",
+                "enabled": False,
+            }
+        )
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertFalse(disabled["enabled"])
+        self.assertEqual(disabled["id"], detail_rule["id"])
+        self.assertNotIn("classification", events[0])
+        self.assertEqual(events[1]["classification"]["classificationRuleId"], broad_rule["id"])
+
+    def test_delete_detail_rule_removes_only_its_materialized_classifications(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Sprint plan",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+                "site_title": "Roadmap",
+            }
+        )
+        detail_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "matchScope": "detail",
+                "detailKind": "title",
+                "detailValue": "Sprint plan",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+        broad_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "docs.example.com",
+                "category": "learning",
+                "productivity": "focus",
+            }
+        )
+        self.database.apply_classification_rules()
+
+        deleted = self.database.delete_classification_rule(detail_rule["id"])
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(deleted, 1)
+        self.assertNotIn("classification", events[0])
+        self.assertEqual(events[1]["classification"]["classificationRuleId"], broad_rule["id"])
+
+    def test_surface_classification_rule_rows_serialize_with_surface_match_scope(self) -> None:
+        legacy_path = Path(self.tempdir.name) / "legacy-rules.sqlite3"
+        with sqlite3.connect(legacy_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE classification_rules (
+                  id TEXT PRIMARY KEY,
+                  target_kind TEXT NOT NULL,
+                  target_value TEXT NOT NULL,
+                  normalized_target_value TEXT NOT NULL,
+                  category TEXT NOT NULL,
+                  productivity TEXT NOT NULL,
+                  enabled INTEGER NOT NULL DEFAULT 1,
+                  confidence REAL,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO classification_rules (
+                    id,
+                    target_kind,
+                    target_value,
+                    normalized_target_value,
+                    category,
+                    productivity,
+                    enabled,
+                    confidence,
+                    created_at,
+                    updated_at
+                ) VALUES (?, 'site', 'docs.example.com', 'docs.example.com', 'learning', 'focus', 1, NULL, ?, ?)
+                """,
+                ("legacy-rule", "2026-04-06T09:00:00+00:00", "2026-04-06T09:00:00+00:00"),
+            )
+        legacy_database = TrackerDatabase(legacy_path)
+        serialized = legacy_database.get_classification_rules()[0]
+
+        self.assertEqual(serialized["matchScope"], "surface")
+        self.assertIsNone(serialized["detailKind"])
+        self.assertIsNone(serialized["detailValue"])
+
+    def test_detail_classification_rule_requires_detail_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "detailKind and detailValue are required"):
+            self.database.save_classification_rule(
+                {
+                    "targetKind": "site",
+                    "targetValue": "docs.example.com",
+                    "matchScope": "detail",
+                    "category": "workspace",
+                    "productivity": "focus",
+                }
+            )
 
     def test_delete_classification_rule_removes_materialized_rule_classifications(self) -> None:
         self.database.insert_segment(
