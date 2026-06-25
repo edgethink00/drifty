@@ -87,6 +87,7 @@ const driftAlarmDebugEvent: DriftAlarmDebugEvent = {
   delivery: null,
   trayResult: null,
   evaluation: null,
+  candidateProbe: null,
 };
 
 describe("buildDebugLogPayload", () => {

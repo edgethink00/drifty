@@ -97,7 +97,7 @@ export type DriftAlarmCandidate = {
 
 const SHOPPING_DRIFT_ALARM_MINIMUM_SECONDS = 5 * 60;
 const SHOPPING_DRIFT_ALARM_CONTEXT_WINDOW_MS = 5 * 60 * 1000;
-const AI_DRIFT_ALARM_MINIMUM_CONFIDENCE = 0.85;
+export const AI_DRIFT_ALARM_MINIMUM_CONFIDENCE = 0.85;
 
 export function buildDriftAlarmCandidates({
   segments,

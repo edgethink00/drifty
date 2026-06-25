@@ -126,4 +126,30 @@ describe("drift alarm debug log", () => {
     expect(events).toEqual([]);
     expect(summarizeDriftAlarmSegment(segment()).hasSiteContext).toBe(false);
   });
+
+  it("stores candidate missing probe details", () => {
+    const storage = new MemoryStorage();
+    const now = new Date("2026-06-13T15:06:00.000Z");
+
+    recordDriftAlarmDebugEvent({
+      kind: "candidate_missing",
+      candidateProbe: {
+        reason: "current_snapshot_mismatch",
+        latestSegment: summarizeDriftAlarmSegment(segment({ appName: "Figma" })),
+        activeSegment: null,
+        identityMatched: false,
+        candidateDurationSeconds: null,
+        minimumDurationSeconds: 60,
+        classification: null,
+        liveAiAvailable: true,
+        systemTransientActivity: null,
+      },
+    }, storage, now);
+
+    expect(readRecentDriftAlarmDebugEvents(storage, now.getTime())[0]?.candidateProbe).toMatchObject({
+      reason: "current_snapshot_mismatch",
+      identityMatched: false,
+      minimumDurationSeconds: 60,
+    });
+  });
 });
