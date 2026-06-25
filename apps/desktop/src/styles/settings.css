@@ -13,6 +13,8 @@
 
 .sidebar--settings {
   gap: var(--space-3);
+  overflow-x: visible;
+  padding-inline: var(--space-3);
 }
 
 .settings-sidebar-back {
@@ -77,6 +79,9 @@
   padding: 0.58rem 0.7rem;
   border-radius: var(--radius-sm);
   font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-nav {

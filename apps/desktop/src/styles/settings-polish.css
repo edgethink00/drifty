@@ -100,11 +100,26 @@
   gap: var(--space-4);
 }
 
+.app-shell--settings {
+  grid-template-columns: calc(var(--sidebar-expanded-width) + var(--space-7)) minmax(0, 1fr);
+  transition: none;
+}
+
+.app-shell--settings .window-nav-controls {
+  left: calc(var(--sidebar-expanded-width) + var(--space-7) + var(--space-4));
+  transition: none;
+}
+
 @media (max-width: 760px) {
-  .app-shell:has(.content--settings) {
+  .app-shell:has(.content--settings),
+  .app-shell--settings {
     grid-template-columns: minmax(0, 1fr);
     height: 100vh;
     overflow-y: auto;
+  }
+
+  .app-shell--settings .window-nav-controls {
+    display: none;
   }
 
   .app-shell:has(.content--settings) .sidebar--settings {
@@ -127,12 +142,12 @@
   }
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav {
-    display: flex;
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.35rem;
-    margin: 0 -2px;
-    overflow-x: auto;
-    padding: 0.2rem 2px 0.4rem;
+    margin: 0;
+    overflow: visible;
+    padding: 0.2rem 0 0.4rem;
     scrollbar-width: none;
   }
 
@@ -141,9 +156,10 @@
   }
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav-item {
-    flex: 0 0 auto;
     min-height: 2.05rem;
+    min-width: 0;
     padding: 0.5rem 0.7rem;
+    text-align: center;
     white-space: nowrap;
   }
 

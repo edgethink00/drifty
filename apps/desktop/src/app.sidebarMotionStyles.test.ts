@@ -27,6 +27,7 @@ describe("sidebar motion styles", () => {
     const styles = readStyles();
     const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)");
     const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
+    const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
     const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > span:not(.nav-item__hover-label)");
     const collapsedLivePillBlock = cssBlock(styles, ".sidebar--collapsed .live-pill");
     const collapsedLiveStatusBlock = cssBlock(styles, ".sidebar--collapsed .live-pill .k");
@@ -40,6 +41,7 @@ describe("sidebar motion styles", () => {
     const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
 
     expect(navTextBlock).toContain("max-width: 9rem;");
+    expect(collapsedSidebarBlock).toContain("overflow: visible;");
     expect(collapsedNavLabelBlock).toContain("padding: 4px 0;");
     expect(collapsedNavTextBlock).toContain("max-width: 0;");
     expect(collapsedNavTextBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
