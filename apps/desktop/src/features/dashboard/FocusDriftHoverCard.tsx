@@ -41,6 +41,7 @@ export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProp
   const driftPercent = formatSharePercent(point.driftScore);
   const focusDuration = formatDuration(point.focusSeconds);
   const driftDuration = formatDuration(point.driftSeconds);
+  const trackedDuration = formatCompactDurationFromSeconds(point.trackedSeconds);
   const isFocusHeavy = point.focusScore >= point.driftScore;
   const verdict = isFocusHeavy ? "Focus-heavy" : "Drift-heavy";
   const metrics = buildFocusDriftMetrics(focusDuration, driftDuration, focusPercent, driftPercent);
@@ -75,6 +76,7 @@ export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProp
     focusPercent,
     point.id,
     point.label,
+    point.trackedSeconds,
     point.topDriftSource?.captures,
     point.topDriftSource?.id,
     point.topDriftSource?.seconds,
@@ -91,7 +93,7 @@ export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProp
           <span className="focus-drift-hover-card__eyebrow">{point.label}</span>
           <strong>{verdict}</strong>
         </div>
-        <span className="focus-drift-hover-card__window">{formatCompactDurationFromSeconds(point.totalSeconds)} window</span>
+        <span className="focus-drift-hover-card__window">{trackedDuration} tracked</span>
       </div>
       <span className="sr-only">{focusDuration} focus · {driftDuration} drift</span>
       <div className="focus-drift-hover-card__metrics" aria-hidden="true">
@@ -188,8 +190,9 @@ export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDr
   const focusDuration = formatDuration(point.focusSeconds);
   const driftDuration = formatDuration(point.driftSeconds);
   const verdict = point.focusScore >= point.driftScore ? "focus-heavy" : "drift-heavy";
+  const trackedDuration = formatCompactDurationFromSeconds(point.trackedSeconds);
   const topFocusSource = point.topFocusSource ? ` Top focus source: ${point.topFocusSource.label}, ${formatCompactDurationFromSeconds(point.topFocusSource.seconds)} across ${point.topFocusSource.captures} ${point.topFocusSource.captures === 1 ? "capture" : "captures"}.` : "";
   const topDriftSource = point.topDriftSource ? ` Top drift source: ${point.topDriftSource.label}, ${formatCompactDurationFromSeconds(point.topDriftSource.seconds)} across ${point.topDriftSource.captures} ${point.topDriftSource.captures === 1 ? "capture" : "captures"}.` : "";
 
-  return `${kindLabel} point for ${point.label}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
+  return `${kindLabel} point for ${point.label}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}; tracked time is ${trackedDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
 }

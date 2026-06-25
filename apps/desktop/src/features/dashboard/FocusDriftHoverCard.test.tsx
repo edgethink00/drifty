@@ -16,6 +16,8 @@ const focusDriftPoint: FocusDriftPoint = {
   focusCaptures: 1,
   driftCaptures: 2,
   totalSeconds: 60 * 60,
+  trackedSeconds: 60 * 60,
+  windowSeconds: 30 * 60,
   focusScore: 50,
   driftScore: 50,
   topFocusSource: {
