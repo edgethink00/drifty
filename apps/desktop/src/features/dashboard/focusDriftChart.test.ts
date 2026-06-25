@@ -29,6 +29,8 @@ function makePoint(index: number, x: number, focusY: number): FocusDriftPoint {
     focusCaptures: 0,
     driftCaptures: 0,
     totalSeconds: 0,
+    trackedSeconds: 0,
+    windowSeconds: 30 * 60,
     focusScore: 0,
     driftScore: 0,
     topFocusSource: null,
@@ -36,6 +38,31 @@ function makePoint(index: number, x: number, focusY: number): FocusDriftPoint {
     x,
     focusY,
     driftY: focusY,
+  };
+}
+
+function makeTimedSegment(id: string, startMinute: number, durationMinutes: number): ActivitySegment {
+  const startHour = Math.floor(startMinute / 60);
+  const startRemainderMinute = startMinute % 60;
+  const endedMinute = startMinute + durationMinutes;
+  const endHour = Math.floor(endedMinute / 60);
+  const endRemainderMinute = endedMinute % 60;
+  return {
+    id,
+    startedAt: `2026-06-13T${startHour.toString().padStart(2, "0")}:${startRemainderMinute.toString().padStart(2, "0")}:00`,
+    endedAt: `2026-06-13T${endHour.toString().padStart(2, "0")}:${endRemainderMinute.toString().padStart(2, "0")}:00`,
+    durationSeconds: durationMinutes * 60,
+    appName: "Visual Studio Code",
+    bundleId: "com.microsoft.VSCode",
+    windowTitle: "focusDriftChart.ts",
+    platform: "macos",
+    source: "manual",
+    classification: {
+      category: "workspace",
+      productivity: "focus",
+      source: "manual",
+      confidence: 1,
+    },
   };
 }
 
@@ -160,5 +187,17 @@ describe("buildFocusDriftChart", () => {
     expect(chart.currentTimeLabel).toBe("12:45 PM");
     expect(livePoint.label).toBe("12:30");
     expect(chart.axisTicks.map((tick) => tick.label)).toEqual(["04:00", "07:00", "10:00", "13:00", "16:00", "19:00", "22:00", "01:00", "04:00"]);
+  });
+
+  it("scores sparse focus windows by full window coverage", () => {
+    const chart = buildFocusDriftChart([makeTimedSegment("short-focus", 12 * 60, 3)], "2026-06-13");
+    const sparseFocusPoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
+
+    if (!sparseFocusPoint) throw new Error("Expected sparse focus bucket to exist");
+
+    expect(sparseFocusPoint.focusScore).toBe(10);
+    expect(sparseFocusPoint.driftScore).toBe(0);
+    expect(sparseFocusPoint.trackedSeconds).toBe(3 * 60);
+    expect(chart.focusConsistency).toBe(10);
   });
 });

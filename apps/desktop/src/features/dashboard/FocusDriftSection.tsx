@@ -130,7 +130,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     <>
       <section className="editorial-panel editorial-panel--soft insight-chart-panel">
         <div className="insight-panel-head">
-          <span className="label-mono">Focus vs drift &middot; 30m windows</span>
+          <span className="label-mono">Focus/drift score &middot; 30m windows</span>
           <div className="insight-panel-head__legend">
             <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />Focus</span>
             <span className="chip warn"><span className="sw" style={{ background: "var(--productivity-drift)" }} />Drift</span>
@@ -199,7 +199,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
         <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label="Sessions" value={String(sessionCount)} detail={averageSessionMinutes > 0 ? `${averageSessionMinutes}m avg` : "No sessions"} />
         <MetricTile className="insight-summary__tile insight-summary__tile--peak" label="Peak" value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatCompactDurationFromSeconds(peakTrackedSeconds) : "No peak"} />
         <MetricTile className="insight-summary__tile insight-summary__tile--apps" label="Apps" value={String(uniqueAppsCount)} detail={topAppLabel} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--focus" label="Focus" value={`${chart.focusConsistency}%`} detail="share" />
+        <MetricTile className="insight-summary__tile insight-summary__tile--focus" label="Focus" value={`${chart.focusConsistency}%`} detail="score" />
         {chart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label="Drift" value={chart.peakDriftPoint.label} detail="peak" /> : null}
       </div>
     </>

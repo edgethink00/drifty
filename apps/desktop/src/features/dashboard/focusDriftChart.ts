@@ -38,6 +38,8 @@ export type FocusDriftPoint = {
   focusCaptures: number;
   driftCaptures: number;
   totalSeconds: number;
+  trackedSeconds: number;
+  windowSeconds: number;
   focusScore: number;
   driftScore: number;
   topFocusSource: FocusDriftSourceSummary | null;
@@ -126,6 +128,7 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
   const buckets = Array.from({ length: FOCUS_DRIFT_BUCKET_COUNT }, (_, index) => ({
     focusSeconds: 0,
     driftSeconds: 0,
+    trackedSeconds: 0,
     focusCaptures: 0,
     driftCaptures: 0,
     focusSources: new Map<string, FocusDriftSourceAccumulator>(),
@@ -145,9 +148,7 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
 
   for (const segment of segments) {
     const productivity = categorizeActivity(segment, classificationOptions);
-    if (productivity !== "focus" && productivity !== "drift") continue;
-
-    const sourceIdentity = getInsightSurfaceIdentity(segment);
+    const sourceIdentity = productivity === "focus" || productivity === "drift" ? getInsightSurfaceIdentity(segment) : null;
     const segmentStartMs = new Date(segment.startedAt).getTime();
     const segmentEndMs = new Date(segment.endedAt).getTime();
 
@@ -157,11 +158,12 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
       const overlapSeconds = Math.max(0, Math.round((Math.min(segmentEndMs, bucketEndMs) - Math.max(segmentStartMs, bucketStartMs)) / 1000));
       if (overlapSeconds <= 0) continue;
 
-      if (productivity === "focus") {
+      bucket.trackedSeconds += overlapSeconds;
+      if (productivity === "focus" && sourceIdentity) {
         bucket.focusSeconds += overlapSeconds;
         bucket.focusCaptures += 1;
         addFocusDriftSourceOverlap(bucket.focusSources, sourceIdentity, overlapSeconds);
-      } else {
+      } else if (productivity === "drift" && sourceIdentity) {
         bucket.driftSeconds += overlapSeconds;
         bucket.driftCaptures += 1;
         addFocusDriftSourceOverlap(bucket.driftSources, sourceIdentity, overlapSeconds);
@@ -171,8 +173,9 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
 
   const points = buckets.map((entry) => {
     const totalSeconds = entry.focusSeconds + entry.driftSeconds;
-    const focusScore = totalSeconds > 0 ? (entry.focusSeconds / totalSeconds) * 100 : 0;
-    const driftScore = totalSeconds > 0 ? (entry.driftSeconds / totalSeconds) * 100 : 0;
+    const windowSeconds = FOCUS_DRIFT_BUCKET_MINUTES * 60;
+    const focusScore = scoreWindowShare(entry.focusSeconds, windowSeconds);
+    const driftScore = scoreWindowShare(entry.driftSeconds, windowSeconds);
     const isFuture = currentBucketStartMinute !== null ? entry.bucketStartMinute > currentBucketStartMinute : false;
     const x = currentBucketStartMinute !== null && currentX !== null && entry.bucketStartMinute === currentBucketStartMinute
       ? currentX
@@ -190,6 +193,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
       focusCaptures: entry.focusCaptures,
       driftCaptures: entry.driftCaptures,
       totalSeconds,
+      trackedSeconds: entry.trackedSeconds,
+      windowSeconds,
       focusScore,
       driftScore,
       topFocusSource: getTopFocusDriftSource(entry.focusSources),
@@ -208,8 +213,6 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
   const focusAreaPath = first && last && focusPath ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${focusPath.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z` : "";
   const peakFocusPoint = activePoints.reduce<FocusDriftPoint | null>((current, point) => (!current || point.focusScore > current.focusScore ? point : current), null);
   const peakDriftPoint = activePoints.reduce<FocusDriftPoint | null>((current, point) => (!current || point.driftScore > current.driftScore ? point : current), null);
-  const totalFocus = points.reduce((sum, point) => sum + point.focusSeconds, 0);
-  const totalAll = points.reduce((sum, point) => sum + point.totalSeconds, 0);
 
   return {
     points,
@@ -218,13 +221,23 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     focusAreaPath,
     peakFocusPoint,
     peakDriftPoint,
-    focusConsistency: totalAll > 0 ? Math.round((totalFocus / totalAll) * 100) : 0,
+    focusConsistency: buildAverageFocusScore(activePoints),
     hasData: activePoints.length > 0,
     isLive,
     currentX,
     currentTimeLabel,
     axisTicks: buildFocusDriftAxisTicks(startOfDayMinutes),
   };
+}
+
+function scoreWindowShare(seconds: number, windowSeconds: number): number {
+  if (windowSeconds <= 0) return 0;
+  return (Math.max(seconds, 0) / windowSeconds) * 100;
+}
+
+function buildAverageFocusScore(points: readonly FocusDriftPoint[]): number {
+  if (points.length === 0) return 0;
+  return Math.round(points.reduce((total, point) => total + point.focusScore, 0) / points.length);
 }
 
 export function formatFocusDriftBucketLabel(bucketStartMinute: number, startOfDayMinutes = 0): string {

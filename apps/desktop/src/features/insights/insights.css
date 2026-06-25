@@ -868,6 +868,10 @@
 }
 
 @media (max-width: 520px) {
+  .focus-drift__scale span {
+    right: calc(95% - var(--space-4));
+  }
+
   .focus-drift__axis-tick--dense {
     display: none;
   }
