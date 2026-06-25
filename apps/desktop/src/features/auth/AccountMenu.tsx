@@ -93,6 +93,7 @@ export function AccountMenu({
         <span className="account-menu-version__value">{ACCOUNT_MENU_VERSION_VALUE}</span>
       </div>
       {userEmail ? <div className="account-popover__email" title={userEmail}>{userEmail}</div> : null}
+      <div className="account-menu-separator account-menu-separator--account" role="separator" />
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon" aria-hidden="true">⚙</span>
         <span>Settings</span>
@@ -103,7 +104,7 @@ export function AccountMenu({
       </button>
       {isSignedIn ? (
         <>
-          <div className="account-menu-separator" />
+          <div className="account-menu-separator" role="separator" />
           <button type="button" className="account-menu-item account-menu-item--danger" onClick={onSignOut} role="menuitem">
             <span className="account-menu-icon" aria-hidden="true">↪</span>
             <span>Log out</span>
@@ -111,7 +112,7 @@ export function AccountMenu({
         </>
       ) : (
         <>
-          <div className="account-menu-separator" />
+          <div className="account-menu-separator" role="separator" />
           <button type="button" className="account-menu-item" onClick={onSignIn} role="menuitem">
             <span className="account-menu-icon" aria-hidden="true">↗</span>
             <span>Sign in</span>
