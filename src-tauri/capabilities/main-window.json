@@ -11,6 +11,7 @@
     "updater:allow-check",
     "updater:allow-download-and-install",
     "process:allow-restart",
+    "allow-update-prompt-show-native",
     "allow-startup-get-open-at-login-status",
     "allow-startup-set-open-at-login-enabled",
     "opener:allow-open-url",

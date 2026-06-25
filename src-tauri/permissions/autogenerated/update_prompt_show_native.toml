@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-prompt-show-native"
+description = "Enables the update_prompt_show_native command without any pre-configured scope."
+commands.allow = ["update_prompt_show_native"]
+
+[[permission]]
+identifier = "deny-update-prompt-show-native"
+description = "Denies the update_prompt_show_native command without any pre-configured scope."
+commands.deny = ["update_prompt_show_native"]

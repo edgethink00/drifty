@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { UpdatePolicy } from "./updatePolicy";
 
 type AvailableUpdateDialogUpdate = {
@@ -18,6 +20,25 @@ export type AvailableUpdateDialogProps = {
   onInstall: () => void;
 };
 
+let activeUpdateWindowVersion: string | null = null;
+
+type NativeUpdatePromptResult = {
+  readonly autoInstallFutureUpdates: boolean;
+  readonly confirmed: boolean;
+};
+
+function showNativeUpdatePrompt(
+  version: string,
+  urgent: boolean,
+  autoInstallFutureUpdates: boolean,
+) {
+  return invoke<NativeUpdatePromptResult>("update_prompt_show_native", {
+    autoInstallFutureUpdates,
+    version,
+    urgent,
+  });
+}
+
 export function AvailableUpdateDialog({
   autoInstallFutureUpdates,
   policy,
@@ -29,32 +50,50 @@ export function AvailableUpdateDialog({
   onDismiss,
   onInstall,
 }: AvailableUpdateDialogProps) {
-  return (
-    <div className="auth-modal__overlay" onClick={onDismiss}>
-      <section className="auth-modal profile-modal update-dialog-modal" role="dialog" aria-modal="true" aria-labelledby="available-update-title" onClick={(event) => event.stopPropagation()}>
-        <h2 id="available-update-title" className="update-dialog-title">Drifty {update.version} is available</h2>
-        {update.date ? <p className="capture-recency">Published {new Date(update.date).toLocaleString()}</p> : null}
-        {policy?.urgency === "urgent" ? <p className="capture-recency">Urgent update</p> : null}
-        {policy?.message ? <p className="profile-modal__bio">{policy.message}</p> : null}
-        <section className="update-dialog-summary" aria-label="Change summary">
-          <div className="update-dialog-summary__label">Change summary</div>
-          <p className="update-dialog-summary__body">{update.body?.trim() || "No release notes were provided."}</p>
-        </section>
-        {updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}
-        <label className="update-dialog-checkbox">
-          <input
-            className="update-dialog-checkbox__input"
-            type="checkbox"
-            checked={autoInstallFutureUpdates}
-            onChange={(event) => onAutoInstallFutureUpdatesChange(event.target.checked)}
-          />
-          <span className="update-dialog-checkbox__label">Automatically install and restart future updates</span>
-        </label>
-        <div className="profile-editor-modal__actions">
-          <button type="button" className="ghost-button" onClick={onDismiss} disabled={updaterInstalling}>Not now</button>
-          <button type="button" className="settings-btn" onClick={onInstall} disabled={updaterChecking || updaterInstalling}>{updaterInstalling ? "Installing..." : "Install and restart"}</button>
-        </div>
-      </section>
-    </div>
-  );
+  const urgent = policy?.urgency === "urgent" || updaterError !== null;
+
+  useEffect(() => {
+    if (updaterChecking || updaterInstalling) return;
+    if (activeUpdateWindowVersion === update.version) return;
+
+    activeUpdateWindowVersion = update.version;
+    let disposed = false;
+
+    void showNativeUpdatePrompt(update.version, urgent, autoInstallFutureUpdates).then((result) => {
+      if (disposed) return;
+      activeUpdateWindowVersion = null;
+      onAutoInstallFutureUpdatesChange(result.autoInstallFutureUpdates);
+      if (result.confirmed) {
+        onInstall();
+        onDismiss();
+        return;
+      }
+      onDismiss();
+    }).catch((error: unknown) => {
+      activeUpdateWindowVersion = null;
+      if (disposed) return;
+      if (error instanceof Error) {
+        console.warn(`Failed to show update window: ${error.message}`);
+      } else {
+        console.warn("Failed to show update window.");
+      }
+      onDismiss();
+    });
+
+    return () => {
+      disposed = true;
+      activeUpdateWindowVersion = null;
+    };
+  }, [
+    autoInstallFutureUpdates,
+    onAutoInstallFutureUpdatesChange,
+    onDismiss,
+    onInstall,
+    update.version,
+    urgent,
+    updaterChecking,
+    updaterInstalling,
+  ]);
+
+  return null;
 }
