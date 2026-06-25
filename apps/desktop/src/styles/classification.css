@@ -577,32 +577,28 @@
 
 .classification-correction__summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: var(--space-2);
-  row-gap: 2px;
+  gap: 2px;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--classification-selected-tone) 16%, var(--line));
   min-width: 0;
+}
+
+.classification-correction__summary > .label-mono {
+  color: var(--text-soft);
 }
 
 .classification-correction__summary strong,
 .classification-correction__summary p {
   margin: 0;
-  overflow-wrap: break-word;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .classification-correction__summary strong {
-  overflow: hidden;
   font-size: var(--type-setting-label-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.classification-correction__summary p {
-  display: block;
-  grid-column: 1 / -1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 640;
 }
 
 .classification-correction__summary p {
@@ -628,14 +624,50 @@
   color: var(--text-soft);
 }
 
+.classification-correction__select-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
 .classification-correction__select {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
-  min-height: 2rem;
-  padding: 0 var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--text) 11%, var(--line));
+  min-height: 2.1rem;
+  padding: 0 calc(var(--space-3) + 0.5rem) 0 var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, var(--line));
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.classification-correction__select:hover {
+  border-color: color-mix(in srgb, var(--classification-selected-tone) 32%, var(--line));
+}
+
+.classification-correction__select:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--classification-selected-tone) 52%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--classification-selected-tone) 18%, transparent);
+}
+
+.classification-correction__select-chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  width: 0.7rem;
+  height: 0.7rem;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--text-soft);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+  pointer-events: none;
 }
 
 .classification-correction__actions {
@@ -665,10 +697,12 @@
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-/* "Reclassify" pill that reads as part of the panel header. */
+/* Icon-only reclassify affordance docked in the panel header. */
 .classification-correction__surface-button {
-  padding: 0 var(--space-2);
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 22%, var(--line));
+  width: 1.85rem;
+  min-width: 1.85rem;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--classification-selected-tone) 20%, var(--line));
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   color: var(--text-soft);
 }
@@ -680,8 +714,8 @@
 }
 
 .classification-correction__edit-glyph {
-  width: 0.8rem;
-  height: 0.8rem;
+  width: 0.95rem;
+  height: 0.95rem;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -729,8 +763,23 @@
 }
 
 .classification-correction__save-button {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 42%, var(--line));
-  background: color-mix(in srgb, var(--classification-selected-tone) 16%, var(--surface));
+  border-color: color-mix(in srgb, var(--classification-selected-tone) 48%, var(--line));
+  background: color-mix(in srgb, var(--classification-selected-tone) 20%, var(--surface));
+  color: var(--text);
+}
+
+.classification-correction__save-button:hover {
+  border-color: color-mix(in srgb, var(--classification-selected-tone) 56%, var(--line));
+  background: color-mix(in srgb, var(--classification-selected-tone) 28%, var(--surface));
+}
+
+.classification-correction__ghost-button:focus-visible,
+.classification-correction__save-button:focus-visible,
+.classification-correction__surface-button:focus-visible,
+.classification-correction__detail-button:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--classification-selected-tone) 52%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--classification-selected-tone) 18%, transparent);
 }
 
 .classification-correction__ghost-button:disabled,
