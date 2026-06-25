@@ -47,6 +47,7 @@ function sendPostHogEvent(event: string, properties?: EventProperties) {
     event,
     distinct_id: anonymousSessionDistinctId,
     properties: {
+      "$process_person_profile": false,
       ...getDefaultProperties(),
       ...properties,
     },
