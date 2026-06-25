@@ -16,6 +16,20 @@ type CubicSegment = {
   readonly end: { readonly x: number; readonly y: number };
 };
 
+type FocusDriftTestProductivity = "focus" | "drift";
+
+type TimedSegmentInSeconds = {
+  readonly id: string;
+  readonly startSecond: number;
+  readonly durationSeconds: number;
+  readonly productivity: FocusDriftTestProductivity;
+};
+
+const CATEGORY_BY_TEST_PRODUCTIVITY = {
+  focus: "workspace",
+  drift: "social_media",
+} as const satisfies Record<FocusDriftTestProductivity, "workspace" | "social_media">;
+
 function makePoint(index: number, x: number, focusY: number): FocusDriftPoint {
   return {
     id: `point-${index}`,
@@ -41,29 +55,41 @@ function makePoint(index: number, x: number, focusY: number): FocusDriftPoint {
   };
 }
 
-function makeTimedSegment(id: string, startMinute: number, durationMinutes: number): ActivitySegment {
-  const startHour = Math.floor(startMinute / 60);
-  const startRemainderMinute = startMinute % 60;
-  const endedMinute = startMinute + durationMinutes;
-  const endHour = Math.floor(endedMinute / 60);
-  const endRemainderMinute = endedMinute % 60;
+function formatDateTimeAtSecond(secondOfDay: number): string {
+  const hour = Math.floor(secondOfDay / 3600);
+  const minute = Math.floor((secondOfDay % 3600) / 60);
+  const second = secondOfDay % 60;
+  return `2026-06-13T${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:${second.toString().padStart(2, "0")}`;
+}
+
+function makeTimedSegmentInSeconds(input: TimedSegmentInSeconds): ActivitySegment {
+  const endSecond = input.startSecond + input.durationSeconds;
   return {
-    id,
-    startedAt: `2026-06-13T${startHour.toString().padStart(2, "0")}:${startRemainderMinute.toString().padStart(2, "0")}:00`,
-    endedAt: `2026-06-13T${endHour.toString().padStart(2, "0")}:${endRemainderMinute.toString().padStart(2, "0")}:00`,
-    durationSeconds: durationMinutes * 60,
+    id: input.id,
+    startedAt: formatDateTimeAtSecond(input.startSecond),
+    endedAt: formatDateTimeAtSecond(endSecond),
+    durationSeconds: input.durationSeconds,
     appName: "Visual Studio Code",
     bundleId: "com.microsoft.VSCode",
     windowTitle: "focusDriftChart.ts",
     platform: "macos",
     source: "manual",
     classification: {
-      category: "workspace",
-      productivity: "focus",
+      category: CATEGORY_BY_TEST_PRODUCTIVITY[input.productivity],
+      productivity: input.productivity,
       source: "manual",
       confidence: 1,
     },
   };
+}
+
+function makeTimedSegment(id: string, startMinute: number, durationMinutes: number): ActivitySegment {
+  return makeTimedSegmentInSeconds({
+    id,
+    startSecond: startMinute * 60,
+    durationSeconds: durationMinutes * 60,
+    productivity: "focus",
+  });
 }
 
 function makeFocusSegment(): ActivitySegment {
@@ -189,15 +215,41 @@ describe("buildFocusDriftChart", () => {
     expect(chart.axisTicks.map((tick) => tick.label)).toEqual(["04:00", "07:00", "10:00", "13:00", "16:00", "19:00", "22:00", "01:00", "04:00"]);
   });
 
-  it("scores sparse focus windows by full window coverage", () => {
+  it("keeps sparse focus windows downweighted by scored coverage", () => {
     const chart = buildFocusDriftChart([makeTimedSegment("short-focus", 12 * 60, 3)], "2026-06-13");
     const sparseFocusPoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
 
     if (!sparseFocusPoint) throw new Error("Expected sparse focus bucket to exist");
 
-    expect(sparseFocusPoint.focusScore).toBe(10);
+    expect(sparseFocusPoint.focusScore).toBe(84);
     expect(sparseFocusPoint.driftScore).toBe(0);
     expect(sparseFocusPoint.trackedSeconds).toBe(3 * 60);
-    expect(chart.focusConsistency).toBe(10);
+    expect(chart.focusConsistency).toBe(84);
+  });
+
+  it("scores focus and drift windows with their own ratio and coverage", () => {
+    const bucketStartSecond = 12 * 60 * 60;
+    const chart = buildFocusDriftChart([
+      makeTimedSegmentInSeconds({
+        id: "mostly-focus",
+        startSecond: bucketStartSecond,
+        durationSeconds: 1_152,
+        productivity: "focus",
+      }),
+      makeTimedSegmentInSeconds({
+        id: "some-drift",
+        startSecond: bucketStartSecond + 1_152,
+        durationSeconds: 288,
+        productivity: "drift",
+      }),
+    ], "2026-06-13");
+    const reliableFocusPoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
+
+    if (!reliableFocusPoint) throw new Error("Expected reliable focus bucket to exist");
+
+    expect(reliableFocusPoint.totalSeconds).toBe(24 * 60);
+    expect(reliableFocusPoint.focusScore).toBeCloseTo(81.12, 2);
+    expect(reliableFocusPoint.driftScore).toBeCloseTo(17.68, 2);
+    expect(chart.focusConsistency).toBe(81);
   });
 });
