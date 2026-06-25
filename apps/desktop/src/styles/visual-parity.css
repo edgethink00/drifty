@@ -136,6 +136,7 @@
 .sidebar--collapsed {
   align-items: center;
   gap: 0.24rem;
+  overflow: visible;
   padding: var(--window-chrome-height) 7px var(--content-panel-gap);
   scrollbar-width: none;
 }

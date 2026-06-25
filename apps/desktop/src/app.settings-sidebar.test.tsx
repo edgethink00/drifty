@@ -183,9 +183,12 @@ describe("App settings sidebar", () => {
     expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
   });
 
-  it("keeps settings navigation collapsed when the sidebar preference is collapsed", async () => {
+  it("keeps settings navigation expanded and hides the collapse toggle when the sidebar preference is collapsed", async () => {
     window.localStorage.setItem("drifty.sidebar.collapsed", "1");
     render(<App />);
+
+    expect(await screen.findByRole("button", { name: /^Expand sidebar$/i })).toBeTruthy();
+    expect(document.querySelector(".app-shell")?.classList.contains("app-shell--sidebar-collapsed")).toBe(true);
 
     fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
@@ -194,8 +197,10 @@ describe("App settings sidebar", () => {
     const settingsNav = within(settingsSidebar).getByRole("navigation", { name: /settings sections/i });
     const generalButton = within(settingsNav).getByRole("button", { name: /^General$/ });
 
-    expect(settingsSidebar.classList.contains("sidebar--collapsed")).toBe(true);
-    expect(generalButton.querySelector(".nav-item__hover-label")?.textContent).toBe("General");
-    expect(generalButton.querySelector(".nav-item__hover-label")?.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.queryByRole("button", { name: /^(Expand|Collapse) sidebar$/i })).toBeNull();
+    expect(document.querySelector(".app-shell")?.classList.contains("app-shell--settings")).toBe(true);
+    expect(document.querySelector(".app-shell")?.classList.contains("app-shell--sidebar-collapsed")).toBe(false);
+    expect(settingsSidebar.classList.contains("sidebar--collapsed")).toBe(false);
+    expect(generalButton.querySelector(".nav-item__hover-label")).toBeNull();
   });
 });

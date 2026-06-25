@@ -985,7 +985,8 @@ export default function App() {
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
     setObservedAiClassificationFailure(false);
   }, [aiClassificationProviderKey]);
-  const isSidebarVisuallyCollapsed = sidebarCollapsed;
+  const isSettingsTab = activeTab === "settings";
+  const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
@@ -4281,22 +4282,29 @@ export default function App() {
       : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
         ? "free"
         : null;
+  const shellClassName = [
+    "app-shell",
+    isSettingsTab ? "app-shell--settings" : null,
+    isSidebarVisuallyCollapsed ? "app-shell--sidebar-collapsed" : null,
+  ].filter(Boolean).join(" ");
   return (
-    <div className={isSidebarVisuallyCollapsed ? "app-shell app-shell--sidebar-collapsed" : "app-shell"}>
+    <div className={shellClassName}>
       <div className="window-chrome">
         <div className="window-nav-controls" aria-label="Window navigation">
-          <button
-            type="button"
-            className="window-sidebar-toggle"
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            aria-label={isSidebarVisuallyCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-pressed={isSidebarVisuallyCollapsed}
-          >
-            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="12" height="12" rx="2.5" />
-              <path d="M7 3v12" />
-            </svg>
-          </button>
+          {!isSettingsTab ? (
+            <button
+              type="button"
+              className="window-sidebar-toggle"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              aria-label={isSidebarVisuallyCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-pressed={isSidebarVisuallyCollapsed}
+            >
+              <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="12" height="12" rx="2.5" />
+                <path d="M7 3v12" />
+              </svg>
+            </button>
+          ) : null}
           <button type="button" className="window-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label="Go back">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
           </button>
