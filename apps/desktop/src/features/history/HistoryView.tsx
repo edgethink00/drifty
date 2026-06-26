@@ -239,12 +239,14 @@ const HistoryRow = memo(function HistoryRow({
         <strong>{formatCompactDurationFromSeconds(row.durationSeconds)}</strong>
       </div>
       <div className="history-row__identity">
-        {row.siteDomain ? (
-          <SiteFavicon domain={row.siteDomain} size={20} fallbackIconSrc={appIcons[iconKey] ?? null} />
-        ) : (
-          <AppGlyph appName={row.appName} iconSrc={appIcons[iconKey] ?? null} size="sm" />
-        )}
-        <div>
+        <span className="usage-identity-icon usage-identity-icon--sm history-row__identity-icon">
+          {row.siteDomain ? (
+            <SiteFavicon domain={row.siteDomain} size={20} fallbackIconSrc={appIcons[iconKey] ?? null} />
+          ) : (
+            <AppGlyph appName={row.appName} iconSrc={appIcons[iconKey] ?? null} size="sm" />
+          )}
+        </span>
+        <div className="history-row__identity-copy">
           <strong>{title}</strong>
           <span>{row.siteDomain ?? row.appName}</span>
         </div>

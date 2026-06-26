@@ -102,6 +102,11 @@ describe("HistoryView", () => {
       "history-row__identity",
       "history-row__category",
     ]);
+    const identity = firstRow.querySelector(".history-row__identity");
+    expect(Array.from(identity?.children ?? []).map((child) => child.className)).toEqual([
+      "usage-identity-icon usage-identity-icon--sm history-row__identity-icon",
+      "history-row__identity-copy",
+    ]);
 
     fireEvent.change(screen.getByRole("searchbox", { name: /search history/i }), {
       target: { value: "focus" },
@@ -138,6 +143,12 @@ describe("HistoryView", () => {
     expect(cssRule(".content--history .page--history")).toMatch(/display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".history-view")).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\);[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".history-groups")).toMatch(/min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
+  });
+
+  it("keeps history identity text styles off the icon slot", () => {
+    expect(cssRule(".history-row__identity-copy")).toMatch(/display:\s*grid;[\s\S]*min-width:\s*0;/);
+    expect(styles).toContain(".history-row__identity-copy span {\n  color: var(--text-soft);");
+    expect(cssRule(".history-row__identity span")).toBe("");
   });
 
   it("renders the newest history rows first and reveals older rows when scrolled into view", () => {
