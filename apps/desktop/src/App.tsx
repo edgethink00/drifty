@@ -3315,20 +3315,23 @@ export default function App() {
   );
   const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
   const shouldBuildInsightModels = activeTab === "trends";
+  const cachedInsightWeekHistory = useMemo(
+    () => trendsRange === "Week" ? findFreshCompactHistoryLoad(compactHistoryCacheRef.current, insightRange) : null,
+    [compactHistoryCacheRevision, insightRange, trendsRange],
+  );
+  const isInsightHistoryRangeReady = historySegmentsLoadedRange !== null && compactHistoryRangeContains(historySegmentsLoadedRange, insightRange);
+  const isTrendsDataReady = trendsRange === "Week" ? cachedInsightWeekHistory !== null || isInsightHistoryRangeReady : isInsightHistoryRangeReady;
   const insightSegments = useMemo(
     () => {
-      if (!shouldBuildInsightModels) return EMPTY_ACTIVITY_SEGMENTS;
-      if (trendsRange === "Week") {
-        const cachedWeekHistory = findFreshCompactHistoryLoad(compactHistoryCacheRef.current, insightRange);
-        if (cachedWeekHistory) {
-          return filterSegmentsForRange(cachedWeekHistory.materialized.segments, insightRange.start, insightRange.end);
-        }
+      if (!shouldBuildInsightModels || !isTrendsDataReady) return EMPTY_ACTIVITY_SEGMENTS;
+      if (cachedInsightWeekHistory) {
+        return filterSegmentsForRange(cachedInsightWeekHistory.materialized.segments, insightRange.start, insightRange.end);
       }
       return filterSegmentsForRange(historySegments, insightRange.start, insightRange.end);
     },
-    [compactHistoryCacheRevision, historySegments, insightRange, shouldBuildInsightModels, trendsRange],
+    [cachedInsightWeekHistory, historySegments, insightRange, isTrendsDataReady, shouldBuildInsightModels],
   );
-  const isTrendsBodyReady = activeTab === "trends" && isDeferredTabBodyReady;
+  const isTrendsBodyReady = activeTab === "trends" && isDeferredTabBodyReady && isTrendsDataReady;
   const activeInsightSegments = isTrendsBodyReady ? insightSegments : EMPTY_ACTIVITY_SEGMENTS;
   const insightWeekVisibility = useMemo(
     () => trendsRange === "Week" ? { startDay: insightRange.startDay } : undefined,
@@ -4569,7 +4572,7 @@ export default function App() {
             appIcons={appIcons}
             attentionRhythm={attentionRhythm}
             bodyFallback={<DeferredTabBodyFallback label="trend analysis" />}
-            bodyReady={isDeferredTabBodyReady}
+            bodyReady={isTrendsBodyReady}
             breakRecoveryInsight={breakRecoveryInsight}
             canShiftInsightForward={canShiftInsightForward}
             driftSourceLists={driftSourceLists}
