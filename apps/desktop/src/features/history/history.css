@@ -202,27 +202,27 @@
   min-width: 0;
 }
 
-.history-row__identity > div {
+.history-row__identity-copy {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.history-row__identity strong,
-.history-row__identity span {
+.history-row__identity-copy strong,
+.history-row__identity-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.history-row__identity strong {
+.history-row__identity-copy strong {
   color: var(--text);
   font-size: 0.78rem;
   font-weight: 560;
   line-height: 1.2;
 }
 
-.history-row__identity span {
+.history-row__identity-copy span {
   color: var(--text-soft);
   font-size: 0.66rem;
   line-height: 1.2;

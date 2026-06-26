@@ -246,7 +246,7 @@ const HistoryRow = memo(function HistoryRow({
             <AppGlyph appName={row.appName} iconSrc={appIcons[iconKey] ?? null} size="sm" />
           )}
         </span>
-        <div>
+        <div className="history-row__identity-copy">
           <strong>{title}</strong>
           <span>{row.siteDomain ?? row.appName}</span>
         </div>
