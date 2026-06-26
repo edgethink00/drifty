@@ -26,6 +26,7 @@ describe("sidebar motion styles", () => {
   it("collapses sidebar text and footer copy with max-size transitions", () => {
     const styles = readStyles();
     const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)");
+    const collapsedBrandBlock = cssBlock(styles, ".sidebar--collapsed .brand");
     const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
     const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
     const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > span:not(.nav-item__hover-label)");
@@ -37,12 +38,16 @@ describe("sidebar motion styles", () => {
     const collapsedFooterControlsBlock =
       styles.match(/\.sidebar--collapsed \.live-pill,\s*\.sidebar--collapsed \.sidebar-tracker-toggle,\s*\.sidebar--collapsed \.account-menu-shell,\s*\.sidebar--collapsed \.account-trigger\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
     const collapsedTrackerToggleBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle");
+    const collapsedTrackerToggleLabelBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle span");
+    const collapsedTrackerIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle::before");
     const collapsedTrackerDotBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle::after");
+    const collapsedTrackerResumeIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle[data-state=\"resume\"]::before");
     const collapsedTrackerPauseIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle[data-state=\"pause\"]::before");
     const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
 
     expect(navTextBlock).toContain("max-width: 9rem;");
     expect(collapsedSidebarBlock).toContain("overflow: visible;");
+    expect(collapsedBrandBlock).toContain("justify-content: center;");
     expect(collapsedNavLabelBlock).toContain("padding: 4px 0;");
     expect(collapsedNavTextBlock).toContain("max-width: 0;");
     expect(collapsedNavTextBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
@@ -60,6 +65,12 @@ describe("sidebar motion styles", () => {
     expect(collapsedLiveCopyBlock).toContain("max-height: 0;");
     expect(collapsedLiveCopyBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
     expect(collapsedTrackerToggleBlock).toContain("overflow: visible;");
+    expect(collapsedTrackerToggleBlock).toContain("place-content: center;");
+    expect(collapsedTrackerToggleLabelBlock).toContain("grid-area: 1 / 1;");
+    expect(collapsedTrackerToggleLabelBlock).toContain("width: 0;");
+    expect(collapsedTrackerIconBlock).toContain("grid-area: 1 / 1;");
+    expect(collapsedTrackerIconBlock).toContain("transform: none;");
+    expect(collapsedTrackerResumeIconBlock).toContain("transform: translate(1px, 0.25px);");
     expect(collapsedTrackerDotBlock).toContain("content: none;");
     expect(collapsedTrackerPauseIconBlock).toContain("width: 6.3px;");
     expect(collapsedTrackerPauseIconBlock).toContain("height: 9px;");

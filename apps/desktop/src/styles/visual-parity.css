@@ -173,6 +173,7 @@
 .sidebar--collapsed .brand {
   gap: 0;
   width: 100%;
+  justify-content: center;
   padding: 10px 0;
   margin: 0 0 12px;
 }
@@ -408,6 +409,7 @@
     height: 2.25rem;
     display: grid;
     place-items: center;
+    place-content: center;
     margin: 0 auto;
     padding: 0;
     border-color: color-mix(in srgb, var(--accent) 26%, var(--line-strong));
@@ -422,6 +424,9 @@
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle span {
+    grid-area: 1 / 1;
+    width: 0;
+    height: 0;
     max-width: 0;
     opacity: 0;
     overflow: hidden;
@@ -435,11 +440,12 @@
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle::before {
+    grid-area: 1 / 1;
     content: "▶";
     display: block;
     font-size: 0.74rem;
     line-height: 1;
-    transform: translateY(-2px);
+    transform: none;
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle::after {
@@ -447,7 +453,7 @@
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle[data-state="resume"]::before {
-    transform: translate(1px, -2px);
+    transform: translate(1px, 0.25px);
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle[data-state="pause"]::before {
