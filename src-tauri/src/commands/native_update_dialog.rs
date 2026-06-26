@@ -44,6 +44,8 @@ struct UpdatePromptButtonTargetIvars {
 struct NativeUpdatePrompt {
     panel: Retained<NSPanel>,
     auto_install_checkbox: Retained<NSButton>,
+    _later_target: Retained<UpdatePromptButtonTarget>,
+    _update_target: Retained<UpdatePromptButtonTarget>,
 }
 
 #[cfg(target_os = "macos")]
@@ -223,6 +225,8 @@ fn update_prompt_panel(
     NativeUpdatePrompt {
         panel,
         auto_install_checkbox,
+        _later_target: later_target,
+        _update_target: update_target,
     }
 }
 
@@ -298,4 +302,28 @@ fn show_native_update_prompt_on_main_thread(
 ) -> Result<NativeUpdatePromptResult, String> {
     let _ = auto_install_future_updates;
     Err("Native update prompt is only available on macOS.".to_string())
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_update_prompt_retains_button_targets_until_modal_exits() {
+        fn retained_targets(
+            prompt: &NativeUpdatePrompt,
+        ) -> (
+            &Retained<UpdatePromptButtonTarget>,
+            &Retained<UpdatePromptButtonTarget>,
+        ) {
+            (&prompt._later_target, &prompt._update_target)
+        }
+
+        let _retained_targets: fn(
+            &NativeUpdatePrompt,
+        ) -> (
+            &Retained<UpdatePromptButtonTarget>,
+            &Retained<UpdatePromptButtonTarget>,
+        ) = retained_targets;
+    }
 }

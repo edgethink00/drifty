@@ -20,12 +20,17 @@ export type AvailableUpdateDialogProps = {
   onInstall: () => void;
 };
 
-let activeUpdateWindowVersion: string | null = null;
-
 type NativeUpdatePromptResult = {
   readonly autoInstallFutureUpdates: boolean;
   readonly confirmed: boolean;
 };
+
+type ActiveUpdateWindow = {
+  readonly prompt: Promise<NativeUpdatePromptResult>;
+  readonly version: string;
+};
+
+let activeUpdateWindow: ActiveUpdateWindow | null = null;
 
 function showNativeUpdatePrompt(
   version: string,
@@ -37,6 +42,20 @@ function showNativeUpdatePrompt(
     version,
     urgent,
   });
+}
+
+function getNativeUpdatePrompt(
+  version: string,
+  urgent: boolean,
+  autoInstallFutureUpdates: boolean,
+) {
+  if (activeUpdateWindow?.version === version) return activeUpdateWindow.prompt;
+
+  const prompt = showNativeUpdatePrompt(version, urgent, autoInstallFutureUpdates).finally(() => {
+    if (activeUpdateWindow?.prompt === prompt) activeUpdateWindow = null;
+  });
+  activeUpdateWindow = { prompt, version };
+  return prompt;
 }
 
 export function AvailableUpdateDialog({
@@ -54,14 +73,11 @@ export function AvailableUpdateDialog({
 
   useEffect(() => {
     if (updaterChecking || updaterInstalling) return;
-    if (activeUpdateWindowVersion === update.version) return;
 
-    activeUpdateWindowVersion = update.version;
-    let disposed = false;
+    let subscribed = true;
 
-    void showNativeUpdatePrompt(update.version, urgent, autoInstallFutureUpdates).then((result) => {
-      if (disposed) return;
-      activeUpdateWindowVersion = null;
+    void getNativeUpdatePrompt(update.version, urgent, autoInstallFutureUpdates).then((result) => {
+      if (!subscribed) return;
       onAutoInstallFutureUpdatesChange(result.autoInstallFutureUpdates);
       if (result.confirmed) {
         onInstall();
@@ -70,8 +86,7 @@ export function AvailableUpdateDialog({
       }
       onDismiss();
     }).catch((error: unknown) => {
-      activeUpdateWindowVersion = null;
-      if (disposed) return;
+      if (!subscribed) return;
       if (error instanceof Error) {
         console.warn(`Failed to show update window: ${error.message}`);
       } else {
@@ -81,8 +96,7 @@ export function AvailableUpdateDialog({
     });
 
     return () => {
-      disposed = true;
-      activeUpdateWindowVersion = null;
+      subscribed = false;
     };
   }, [
     autoInstallFutureUpdates,

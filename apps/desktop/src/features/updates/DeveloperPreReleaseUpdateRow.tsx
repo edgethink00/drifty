@@ -6,6 +6,12 @@ import {
   isDeveloperPreReleaseUpdaterAvailable,
   type DeveloperPreReleaseUpdate,
 } from "./preReleaseUpdaterClient";
+import { AvailableUpdateDialog } from "./AvailableUpdateDialog";
+import {
+  fallbackUpdatePolicy,
+  persistAutoInstallFutureUpdates,
+  resolveInitialAutoInstallFutureUpdates,
+} from "./updatePolicy";
 
 type PreReleaseUpdateStatus = "idle" | "checking" | "available" | "none" | "installing" | "installed" | "unavailable" | "error";
 
@@ -21,11 +27,14 @@ export function DeveloperPreReleaseUpdateRow() {
     isDeveloperPreReleaseUpdaterAvailable() ? null : "Pre-release updates are available only inside the desktop runtime."
   ));
   const [error, setError] = useState<string | null>(null);
+  const [promptedUpdateVersion, setPromptedUpdateVersion] = useState<string | null>(null);
+  const [autoInstallFutureUpdates, setAutoInstallFutureUpdates] = useState(resolveInitialAutoInstallFutureUpdates);
 
   const updaterAvailable = status !== "unavailable";
   const busy = status === "checking" || status === "installing";
   const hasPreReleaseUpdate = update?.available === true;
   const canInstallPreReleaseUpdate = status === "available" && hasPreReleaseUpdate;
+  const promptUpdate = update?.available === true && update.version === promptedUpdateVersion ? update : null;
 
   async function handleCheckForPreRelease() {
     if (busy || !updaterAvailable) return;
@@ -33,6 +42,7 @@ export function DeveloperPreReleaseUpdateRow() {
     setStatus("checking");
     setMessage(null);
     setError(null);
+    setPromptedUpdateVersion(null);
 
     try {
       const nextUpdate = await checkDeveloperPreReleaseUpdate();
@@ -40,6 +50,7 @@ export function DeveloperPreReleaseUpdateRow() {
         setUpdate(null);
         setStatus("unavailable");
         setMessage("Pre-release updates are available only inside the desktop runtime.");
+        setPromptedUpdateVersion(null);
         return;
       }
 
@@ -47,14 +58,17 @@ export function DeveloperPreReleaseUpdateRow() {
       if (nextUpdate.available && nextUpdate.version) {
         setStatus("available");
         setMessage(`Drifty ${nextUpdate.version} pre-release is available.`);
+        setPromptedUpdateVersion(nextUpdate.version);
         return;
       }
 
       setStatus("none");
       setMessage(`No pre-release update is available. Current version ${nextUpdate.currentVersion}.`);
+      setPromptedUpdateVersion(null);
     } catch (nextError) {
       const errorMessage = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       setUpdate(null);
+      setPromptedUpdateVersion(null);
       if (isMissingPreReleaseManifestError(errorMessage)) {
         setStatus("none");
         setMessage(MISSING_PRE_RELEASE_MANIFEST_MESSAGE);
@@ -71,6 +85,7 @@ export function DeveloperPreReleaseUpdateRow() {
 
     setStatus("installing");
     setError(null);
+    setPromptedUpdateVersion(null);
 
     try {
       const didInstall = await installAndRelaunchDeveloperPreReleaseUpdate();
@@ -88,6 +103,11 @@ export function DeveloperPreReleaseUpdateRow() {
       setStatus("available");
       setError(`Pre-release update install failed: ${errorMessage}`);
     }
+  }
+
+  function handleAutoInstallFutureUpdatesChange(enabled: boolean) {
+    setAutoInstallFutureUpdates(enabled);
+    persistAutoInstallFutureUpdates(enabled);
   }
 
   return (
@@ -109,6 +129,23 @@ export function DeveloperPreReleaseUpdateRow() {
           </button>
         ) : null}
       </div>
+      {promptUpdate?.version ? (
+        <AvailableUpdateDialog
+          autoInstallFutureUpdates={autoInstallFutureUpdates}
+          policy={fallbackUpdatePolicy(promptUpdate.version)}
+          update={{
+            body: promptUpdate.body,
+            date: promptUpdate.date,
+            version: promptUpdate.version,
+          }}
+          updaterChecking={status === "checking"}
+          updaterError={error}
+          updaterInstalling={status === "installing"}
+          onAutoInstallFutureUpdatesChange={handleAutoInstallFutureUpdatesChange}
+          onDismiss={() => setPromptedUpdateVersion(null)}
+          onInstall={() => void handleInstallPreRelease()}
+        />
+      ) : null}
     </div>
   );
 }
