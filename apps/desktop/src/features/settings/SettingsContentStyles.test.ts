@@ -160,7 +160,7 @@ describe("Settings content styles", () => {
     expect(actionsRule).not.toContain("min-width: 8.8rem;");
     expect(primaryActionRule).toContain("gap: 0.42rem;");
     expect(deleteActionRule).toContain("background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));");
-    expect(deleteActionRule).toContain("border-radius: 999px;");
+    expect(deleteActionRule).toContain("border-radius: var(--radius-pill);");
     expect(deleteActionRule).toContain("min-width: 2rem;");
     expect(deleteActionRule).toContain("width: 2rem;");
   });
@@ -202,6 +202,7 @@ describe("Settings content styles", () => {
     expect(cloudActionRule).toContain("font-weight: 520;");
     expect(cloudActionRule).toContain("height: 2.25rem;");
     expect(cloudActionRule).toContain("min-height: 2.25rem;");
+    expect(cloudActionRule).toContain("border-radius: var(--radius-pill);");
     expect(cloudActionRule).toContain("background: var(--cloud-action);");
     expect(cloudActionRule).toContain("border-color: var(--cloud-action);");
     expect(cloudActionRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);");

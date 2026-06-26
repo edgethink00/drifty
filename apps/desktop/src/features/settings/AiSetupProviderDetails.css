@@ -142,6 +142,7 @@
 .ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action {
   background: var(--cloud-action);
   border-color: var(--cloud-action);
+  border-radius: var(--radius-pill);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);
   color: var(--canvas);
   font-size: 0.756rem;
@@ -394,7 +395,7 @@
 .ai-managed-model__actions .settings-btn.ai-managed-model__delete-action {
   background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
   border-color: color-mix(in srgb, var(--warn) 14%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--warn);
   min-width: 2rem;
   padding-inline: 0;

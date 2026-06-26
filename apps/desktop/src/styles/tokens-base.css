@@ -46,6 +46,7 @@
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 18px;
+  --radius-pill: 999px;
   --week-calendar-event-radius: 5.5px;
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;

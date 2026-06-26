@@ -288,9 +288,9 @@
 
   .sidebar--collapsed .settings-nav-item::before {
     content: attr(data-rail-label);
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    font-weight: 700;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 650;
     line-height: 1;
   }
 
