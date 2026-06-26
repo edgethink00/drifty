@@ -59,6 +59,8 @@
   --bg-2: #e7e5df;
   --surface: #fafaf8;
   --surface-strong: #f4f3ef;
+  --dashboard-plot-surface: #fafaf8;
+  --flow-chart-plot-surface: #fafaf8;
   --line: rgba(28,28,25,.08);
   --line-strong: rgba(28,28,25,.16);
   --text: #1c1c19;
@@ -110,22 +112,24 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: #0f0f0d;
-  --bg-2: #1a1a17;
-  --surface: #141412;
-  --surface-strong: #1e1e1b;
-  --line: rgba(232,230,223,.08);
-  --line-strong: rgba(232,230,223,.16);
+  --canvas: #10100e;
+  --bg-2: #1b1b18;
+  --surface: #151513;
+  --surface-strong: #1f1f1c;
+  --dashboard-plot-surface: #171715;
+  --flow-chart-plot-surface: #191917;
+  --line: rgba(232,230,223,.085);
+  --line-strong: rgba(232,230,223,.165);
   --text: #e8e6df;
   --text-muted: #c8c5bc;
   --text-soft: #8a8780;
   --window-chrome-icon: #f1efe7;
   --window-chrome-icon-hover: #fffaf0;
-  --shell-glass-bg: rgba(32, 33, 30, 0.74);
-  --shell-glass-control: #141412;
-  --shell-glass-control-strong: #141412;
-  --shell-floating-surface: rgba(20,20,18,.62);
-  --shell-floating-surface-strong: rgba(20,20,18,.78);
+  --shell-glass-bg: rgba(33, 34, 31, 0.74);
+  --shell-glass-control: #151513;
+  --shell-glass-control-strong: #171715;
+  --shell-floating-surface: rgba(21,21,19,.62);
+  --shell-floating-surface-strong: rgba(23,23,21,.78);
   --accent: #9bbf5a;
   --accent-mid: #abc96d;
   --accent-soft: #26321d;
@@ -160,7 +164,7 @@
   --category-unknown: #6a665d;
   --danger-soft: #2e1a18;
   --danger-line: rgba(200,90,78,.3);
-  --shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
