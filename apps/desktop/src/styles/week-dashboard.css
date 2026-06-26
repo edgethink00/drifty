@@ -457,7 +457,7 @@
   overflow: hidden;
   padding: 5px 7px;
   border: 1px solid color-mix(in srgb, var(--event-tone, var(--accent)) 72%, var(--line));
-  border-radius: var(--radius-sm);
+  border-radius: var(--week-calendar-event-radius);
   background: var(--event-tone, var(--accent));
   box-shadow:
     0 8px 16px color-mix(in srgb, var(--canvas) 48%, transparent),
@@ -594,7 +594,9 @@
   padding: 1px 5px;
 }
 
-.week-v2-calendar__event--micro .week-v2-calendar__event-label {
+.week-v2-calendar__event--micro strong,
+.week-v2-calendar__event--micro small,
+.week-v2-calendar__event--micro em {
   display: none;
 }
 
@@ -605,6 +607,10 @@
 .week-v2-calendar__event--grouped .week-v2-calendar__identity-strip {
   justify-content: flex-start;
   width: 100%;
+}
+
+.week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) .week-v2-calendar__identity-strip {
+  margin-bottom: 4px;
 }
 
 .week-v2-calendar__event--grouped.week-v2-calendar__event--compact {
