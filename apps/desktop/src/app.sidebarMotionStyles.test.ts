@@ -33,6 +33,7 @@ describe("sidebar motion styles", () => {
     const collapsedLiveStatusBlock = cssBlock(styles, ".sidebar--collapsed .live-pill .k");
     const collapsedLiveCopyBlock =
       styles.match(/\.sidebar--collapsed \.live-pill \.app-name,\s*\.sidebar--collapsed \.live-pill \.app-class\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
+    const collapsedTrackerControlBlock = cssBlock(styles, ".sidebar--collapsed .tracker-control");
     const collapsedFooterControlsBlock =
       styles.match(/\.sidebar--collapsed \.live-pill,\s*\.sidebar--collapsed \.sidebar-tracker-toggle,\s*\.sidebar--collapsed \.account-menu-shell,\s*\.sidebar--collapsed \.account-trigger\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
     const collapsedTrackerToggleBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle");
@@ -45,15 +46,21 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavLabelBlock).toContain("padding: 4px 0;");
     expect(collapsedNavTextBlock).toContain("max-width: 0;");
     expect(collapsedNavTextBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
+    expect(collapsedTrackerControlBlock).toContain("width: 2.25rem;");
+    expect(collapsedTrackerControlBlock).toContain("padding: 0;");
+    expect(collapsedTrackerControlBlock).toContain("background: transparent;");
+    expect(collapsedTrackerControlBlock).toContain("box-shadow: none;");
     expect(collapsedFooterControlsBlock).toContain("width: 2.25rem;");
     expect(collapsedFooterControlsBlock).toContain("max-width: 2.25rem;");
-    expect(collapsedLivePillBlock).toContain("max-height: 2.25rem;");
+    expect(collapsedLivePillBlock).toContain("max-height: 8px;");
     expect(collapsedLivePillBlock).toContain("overflow: hidden;");
+    expect(collapsedLiveStatusBlock).toContain("width: 8px;");
+    expect(collapsedLiveStatusBlock).toContain("height: 8px;");
     expect(collapsedLiveStatusBlock).toContain("opacity: 1;");
     expect(collapsedLiveCopyBlock).toContain("max-height: 0;");
     expect(collapsedLiveCopyBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
     expect(collapsedTrackerToggleBlock).toContain("overflow: visible;");
-    expect(collapsedTrackerDotBlock).toContain("display: block;");
+    expect(collapsedTrackerDotBlock).toContain("content: none;");
     expect(collapsedTrackerPauseIconBlock).toContain("width: 6.3px;");
     expect(collapsedTrackerPauseIconBlock).toContain("height: 9px;");
     expect(collapsedAccountTriggerBlock).toContain("display: flex;");
@@ -101,5 +108,17 @@ describe("sidebar motion styles", () => {
     expect(collapsedHeadingBlock).toContain("max-height: 0;");
     expect(collapsedHeadingBlock).toContain("opacity: 0;");
     expect(collapsedHeadingBlock).toContain("pointer-events: none;");
+  });
+
+  it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {
+    const styles = readStyles();
+    const appShellBlock = cssBlock(styles, ".app-shell");
+    const settingsShellBlock = cssBlock(styles, ".app-shell--settings");
+    const settingsNavControlsBlock = cssBlock(styles, ".app-shell--settings .window-nav-controls");
+
+    expect(appShellBlock).toContain("grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);");
+    expect(settingsShellBlock).toContain("grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);");
+    expect(settingsShellBlock).not.toContain("calc(var(--sidebar-expanded-width) + var(--space-7))");
+    expect(settingsNavControlsBlock).toContain("left: calc(var(--sidebar-expanded-width) + 16px);");
   });
 });
