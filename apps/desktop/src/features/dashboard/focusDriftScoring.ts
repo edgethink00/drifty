@@ -5,6 +5,9 @@ type CoverageMultiplierPoint = {
 
 const ZERO_COVERAGE_MULTIPLIER: CoverageMultiplierPoint = { coverage: 0, multiplier: 0 };
 const MAX_COVERAGE_MULTIPLIER: CoverageMultiplierPoint = { coverage: 1, multiplier: 1.05 };
+const LOW_COVERAGE_SCORE_PENALTY = 10;
+const LOW_COVERAGE_FULL_PENALTY_END = 0.2;
+const LOW_COVERAGE_PENALTY_END = 0.25;
 const FOCUS_DRIFT_COVERAGE_MULTIPLIER_POINTS: readonly CoverageMultiplierPoint[] = [
   ZERO_COVERAGE_MULTIPLIER,
   { coverage: 0.05, multiplier: 0.72 },
@@ -23,7 +26,19 @@ export function scoreFocusDriftWindowShare(seconds: number, scoredSeconds: numbe
   const kindRatio = Math.min(boundedSeconds / boundedScoredSeconds, 1);
   const kindCoverage = Math.min(boundedSeconds / windowSeconds, 1);
   const coverageMultiplier = interpolateFocusDriftCoverageMultiplier(kindCoverage);
-  return Math.min(kindRatio * coverageMultiplier * 100, 100);
+  const windowCoverageScore = kindCoverage * 100;
+  const coverageMultiplierScore = kindRatio * coverageMultiplier * 100;
+  const penaltyTransitionProgress = Math.min(
+    Math.max((kindCoverage - LOW_COVERAGE_FULL_PENALTY_END) / (LOW_COVERAGE_PENALTY_END - LOW_COVERAGE_FULL_PENALTY_END), 0),
+    1,
+  );
+  const smoothedPenaltyTransition = penaltyTransitionProgress * penaltyTransitionProgress * (3 - 2 * penaltyTransitionProgress);
+  const lowCoveragePenaltyScale = kindCoverage < LOW_COVERAGE_PENALTY_END ? 1 - smoothedPenaltyTransition : 0;
+  const scorePenalty = LOW_COVERAGE_SCORE_PENALTY * kindRatio * lowCoveragePenaltyScale;
+  return Math.min(
+    Math.max(coverageMultiplierScore - scorePenalty, windowCoverageScore),
+    100,
+  );
 }
 
 function interpolateFocusDriftCoverageMultiplier(coverage: number): number {
