@@ -74,6 +74,7 @@ import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus"
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
+import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
 import { DataExportSettingsSection } from "./features/settings/DataExportSettingsSection";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
@@ -178,7 +179,7 @@ import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsight
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_ACCENT_COLOR_OPTIONS, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, APP_THEME_PRODUCTIVITY_COLOR_OPTIONS, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
@@ -4415,6 +4416,9 @@ export default function App() {
             userAvatarUrl={profile?.avatar_url || profileDraft.avatarUrl || authMetadataAvatarUrl}
             userEmail={user?.email ?? null}
             onToggle={() => setAccountMenuOpen((open) => !open)}
+            onAiSetting={() => {
+              openAiSetupSettings();
+            }}
             onSettings={() => {
               openSettingsTab();
             }}
@@ -4631,27 +4635,31 @@ export default function App() {
             <div className="settings-panel-stack">
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
-                    appThemeColorOverrides={appThemeColorOverrides}
-                    categoryColorOverrides={categoryColorOverrides}
                     devModeEnabled={devModeEnabled}
                     isDevSettingsEnabled={DEV_SETTINGS_ENABLED}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
-                    theme={theme}
                     updaterChecking={updaterChecking}
                     updaterError={updaterError}
                     updaterInstalling={updaterInstalling}
                     updaterMessage={updaterMessage}
-                    onAppThemeColorChange={handleAppThemeColorChange}
-                    onAppThemeColorReset={handleAppThemeColorReset}
-                    onCategoryColorChange={handleCategoryColorChange}
-                    onCategoryColorReset={handleCategoryColorReset}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
                     onRequestAccessibility={() => void handleRequestAccessibility()}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
-                    onThemeChange={setTheme}
                     onDevModeChange={setDevModeEnabled}
+                  />
+                )}
+                {settingsSection === "appearance" && (
+                  <AppearanceSettingsSection
+                    appThemeColorOverrides={appThemeColorOverrides}
+                    categoryColorOverrides={categoryColorOverrides}
+                    theme={theme}
+                    onAppThemeColorChange={handleAppThemeColorChange}
+                    onAppThemeColorReset={handleAppThemeColorReset}
+                    onCategoryColorChange={handleCategoryColorChange}
+                    onCategoryColorReset={handleCategoryColorReset}
+                    onThemeChange={setTheme}
                   />
                 )}
                 {settingsSection === "classification" && (

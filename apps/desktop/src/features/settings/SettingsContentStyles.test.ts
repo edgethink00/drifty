@@ -74,12 +74,12 @@ describe("Settings content styles", () => {
     const styles = readAppStyles();
     const switchRules = [
       cssRule(styles, ".content--settings .settings-mode-switch"),
-      cssRule(styles, ".content--settings .settings-section--general .settings-mode-switch"),
+      cssRule(styles, ".content--settings .settings-section--appearance .settings-mode-switch"),
       cssRule(styles, ".content--settings .settings-mode-switch--compact"),
     ];
     const activeRules = [
       cssRule(styles, ".content--settings .settings-mode-option.is-active"),
-      cssRule(styles, ".content--settings .settings-section--general .settings-mode-option.is-active"),
+      cssRule(styles, ".content--settings .settings-section--appearance .settings-mode-option.is-active"),
       cssRule(styles, ".content--settings .settings-mode-switch--compact .settings-mode-option.is-active"),
     ];
 

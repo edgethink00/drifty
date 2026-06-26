@@ -15,27 +15,31 @@ export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 const ACCOUNT_MENU_VERSION_LABEL = "Version";
 const ACCOUNT_MENU_VERSION_VALUE = desktopPackage.version;
 
+type AccountMenuProps = {
+  readonly isOpen: boolean;
+  readonly isSidebarCollapsed: boolean;
+  readonly userAvatarUrl?: string | null;
+  readonly userEmail: string | null;
+  readonly onToggle: () => void;
+  readonly onAiSetting: () => void;
+  readonly onSettings: () => void;
+  readonly onFeedback: () => void;
+  readonly onSignIn: () => void;
+  readonly onSignOut: () => void;
+};
+
 export function AccountMenu({
   isOpen,
   isSidebarCollapsed,
   userAvatarUrl,
   userEmail,
   onToggle,
+  onAiSetting,
   onSettings,
   onFeedback,
   onSignIn,
   onSignOut,
-}: {
-  isOpen: boolean;
-  isSidebarCollapsed: boolean;
-  userAvatarUrl?: string | null;
-  userEmail: string | null;
-  onToggle: () => void;
-  onSettings: () => void;
-  onFeedback: () => void;
-  onSignIn: () => void;
-  onSignOut: () => void;
-}) {
+}: AccountMenuProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
@@ -94,6 +98,10 @@ export function AccountMenu({
       </div>
       {userEmail ? <div className="account-popover__email" title={userEmail}>{userEmail}</div> : null}
       <div className="account-menu-separator account-menu-separator--account" role="separator" />
+      <button type="button" className="account-menu-item" onClick={onAiSetting} role="menuitem">
+        <span className="account-menu-icon" aria-hidden="true">✦</span>
+        <span>AI Setting</span>
+      </button>
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon" aria-hidden="true">⚙</span>
         <span>Settings</span>
