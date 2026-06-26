@@ -129,6 +129,20 @@
   object-fit: cover;
 }
 
+.account-avatar--placeholder {
+  background: color-mix(in srgb, var(--text) 9%, var(--surface));
+  color: color-mix(in srgb, var(--text) 44%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 72%, transparent);
+}
+
+.account-avatar--placeholder svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .account-trigger__copy {
   max-width: 10rem;
   min-width: 0;
@@ -136,7 +150,7 @@
   align-items: center;
   overflow: hidden;
 }
-.account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1; }
+.account-trigger__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 1; }
 .account-trigger__chevrons {
   display: grid;
   width: 16px;

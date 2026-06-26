@@ -14,6 +14,7 @@ export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
 const ACCOUNT_MENU_VERSION_LABEL = "Version";
 const ACCOUNT_MENU_VERSION_VALUE = desktopPackage.version;
+const SIGNED_OUT_TRIGGER_LABEL = "Unknown";
 
 type AccountMenuProps = {
   readonly isOpen: boolean;
@@ -43,8 +44,9 @@ export function AccountMenu({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
-  const displayName = isSignedIn ? getAccountDisplayName(userEmail) : "Account";
+  const displayName = isSignedIn ? getAccountDisplayName(userEmail) : SIGNED_OUT_TRIGGER_LABEL;
   const trimmedUserAvatarUrl = userAvatarUrl?.trim();
+  const shouldShowUserAvatar = isSignedIn && Boolean(trimmedUserAvatarUrl);
 
   const updatePopoverPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -143,7 +145,16 @@ export function AccountMenu({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <span className="account-avatar">{trimmedUserAvatarUrl ? <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" /> : displayName.charAt(0).toUpperCase()}</span>
+        <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
+          {shouldShowUserAvatar ? (
+            <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" />
+          ) : (
+            <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
+              <circle cx="14" cy="10.4" r="3.5" />
+              <path d="M7.6 22c1.2-4 3.6-6.1 6.4-6.1s5.2 2.1 6.4 6.1" />
+            </svg>
+          )}
+        </span>
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
         </span>
