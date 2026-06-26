@@ -556,6 +556,8 @@
 }
 
 .focus-drift__svg {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: clamp(15rem, 30vw, 22rem);
   overflow: visible;
@@ -563,7 +565,19 @@
 
 .focus-drift__plot {
   position: relative;
+  isolation: isolate;
   overflow: visible;
+  border-radius: var(--radius-sm);
+}
+
+.focus-drift__plot::before {
+  content: "";
+  position: absolute;
+  inset: 0 var(--focus-drift-right-bleed, 0) 0 var(--focus-drift-left-bleed, 0);
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--dashboard-plot-surface);
+  pointer-events: none;
 }
 
 .focus-drift__grid {
@@ -683,6 +697,7 @@
 .focus-drift__scale {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
 }
 

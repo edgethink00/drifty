@@ -180,6 +180,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 0;
+  background: var(--flow-chart-plot-surface);
 }
 
 .flow-chart-row-label {
@@ -250,8 +251,8 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: color-mix(in srgb, var(--surface) 74%, var(--bg-2));
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface) 32%, transparent);
+  background: var(--flow-chart-plot-surface);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface) 38%, transparent);
   line-height: 0;
   overflow: hidden;
   transition: box-shadow var(--transition-fast), filter var(--transition-fast);
@@ -272,8 +273,8 @@ button.flow-cell:focus {
 }
 
 .flow-cell--empty {
-  background: color-mix(in srgb, var(--bg-2) 62%, var(--surface));
-  opacity: 0.58;
+  background: transparent;
+  opacity: 1;
 }
 
 .flow-cell--focus { background: var(--flow-tone-focus); }
