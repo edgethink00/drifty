@@ -694,7 +694,7 @@
   background: var(--text);
   color: var(--canvas);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
 .settings-btn:hover { transform: translateY(-1px); }

@@ -84,11 +84,13 @@ export function AiSetupPanel({
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   const managedLocalAi = useManagedLocalAiSetup(expandedSection === "drifty", onLocalAiSetupChange);
   const workProfileSettings = useWorkProfileSettings(workProfileUserId);
-  const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
-  const cloudSubscribeActionLabel = isCurrentCloudPlan
+  const canUseCloudModel = currentBillingPlan === "individual"
+    && !shouldShowCloudCheckoutPlans
+    && (billingEntitlementStatus === "active" || billingEntitlementStatus === "trialing");
+  const cloudSubscribeActionLabel = canUseCloudModel
     ? null
     : billingCheckoutLoadingInterval === null
-      ? "Subscribe"
+      ? "Upgrade"
       : "Opening...";
   const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
   const connectionTestKind = connectionTest.result?.kind ?? null;

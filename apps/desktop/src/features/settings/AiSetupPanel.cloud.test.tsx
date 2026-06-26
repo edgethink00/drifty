@@ -10,26 +10,40 @@ describe("AiSetupPanel Cloud setup", () => {
     revealItemInDirMock.mockClear();
   });
 
-  it("shows a subscription action on the Drifty cloud model option for non-subscribers", () => {
-    const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free" });
+  it("locks the Drifty cloud model behind upgrade for non-subscribers", () => {
+    const { onStartCloudSetup } = renderPanel({ currentBillingPlan: "free", billingEntitlementStatus: "locked" });
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
     const cloudOption = within(modelBeingUsed).getByRole("option", { name: /^Drifty Individual \(Cloud\)$/i });
+    if (!(cloudOption instanceof HTMLButtonElement)) throw new Error("Non-subscriber Drifty Cloud option should render as a disabled button.");
+    expect(cloudOption.disabled).toBe(true);
+    expect(cloudOption.getAttribute("aria-disabled")).toBe("true");
+    expect(cloudOption.getAttribute("aria-selected")).toBe("false");
+    expect(cloudOption.className).not.toContain("is-selected");
     expect(cloudOption.querySelector(".settings-select-control__icon")).toBeNull();
 
-    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Subscribe to Drifty Individual Cloud$/i }));
+    fireEvent.click(cloudOption);
+    expect(onStartCloudSetup).not.toHaveBeenCalled();
+
+    const upgradeButton = within(modelBeingUsed).getByRole("button", { name: /^Upgrade Drifty Individual Cloud$/i });
+    expect(upgradeButton.textContent).toBe("Upgrade");
+    fireEvent.click(upgradeButton);
 
     expect(onStartCloudSetup).toHaveBeenCalledWith();
   });
 
-  it("does not show a subscription action on the active Drifty cloud plan", () => {
+  it("keeps the Drifty cloud model selectable on the active Drifty cloud plan", () => {
     renderPanel();
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+    const cloudOption = within(modelBeingUsed).getByRole("option", { name: /^Drifty Individual \(Cloud\)$/i });
+    if (!(cloudOption instanceof HTMLButtonElement)) throw new Error("Active Drifty Cloud option should render as a button.");
 
-    expect(within(modelBeingUsed).queryByRole("button", { name: /^Subscribe to Drifty Individual Cloud$/i })).toBeNull();
+    expect(cloudOption.disabled).toBe(false);
+    expect(cloudOption.getAttribute("aria-disabled")).toBe("false");
+    expect(within(modelBeingUsed).queryByRole("button", { name: /^Upgrade Drifty Individual Cloud$/i })).toBeNull();
   });
 
   it("starts Cloud setup from the Polar CTA without plan cards", () => {

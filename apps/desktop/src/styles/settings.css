@@ -29,8 +29,10 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
-  font-size: var(--type-control-size);
-  font-weight: 560;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .settings-sidebar-back:hover {
@@ -78,7 +80,11 @@
   min-height: 2.28rem;
   padding: 0.58rem 0.7rem;
   border-radius: var(--radius-sm);
-  font-size: 0.72rem;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -95,14 +101,17 @@
 .settings-nav-item {
   padding: 8px 12px;
   border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.1;
   color: color-mix(in srgb, var(--text) 78%, transparent);
   background: transparent;
   border: none;
   text-align: left;
   cursor: pointer;
-  transition: all .15s;
+  transition: color .15s, background .15s;
 }
 
 .settings-nav-item:hover {
@@ -114,7 +123,7 @@
 .settings-nav-item.on {
   background: var(--accent-soft);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .settings-section { display: flex; flex-direction: column; gap: 24px; }
@@ -894,7 +903,7 @@
   letter-spacing: .08em;
   text-transform: uppercase;
   padding: 7px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--line);
   background: transparent;
   cursor: pointer;
