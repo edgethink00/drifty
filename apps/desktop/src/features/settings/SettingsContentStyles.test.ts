@@ -129,6 +129,13 @@ describe("Settings content styles", () => {
     const activeTabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab.is-active");
     const tabPanelRule = cssRule(aiSetupStyles, ".ai-setup-tab-panel");
     const modelSelectRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__trigger");
+    const selectMenuRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__menu");
+    const selectActionRowRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action");
+    const selectOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option");
+    const selectSelectedOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option.is-selected");
+    const selectCheckRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__check");
+    const selectActionOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option");
+    const selectActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action");
 
     expect(tabListRule).toContain("background: color-mix(in srgb, var(--bg-2) 38%, transparent);");
     expect(tabListRule).toContain("gap: 0.16rem;");
@@ -142,6 +149,19 @@ describe("Settings content styles", () => {
     expect(activeTabRule).toContain("color: var(--text);");
     expect(tabPanelRule).toContain("gap: var(--space-4);");
     expect(modelSelectRule).toContain("font-weight: 500;");
+    expect(selectMenuRule).toContain("max-height: 16rem;");
+    expect(selectActionRowRule).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(selectActionRowRule).toContain("position: relative;");
+    expect(selectOptionRule).toContain("display: grid;");
+    expect(selectOptionRule).toContain("font-family: var(--font-display);");
+    expect(selectOptionRule).toContain("font-size: 0.9rem;");
+    expect(selectOptionRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto;");
+    expect(selectOptionRule).toContain("justify-content: start;");
+    expect(selectOptionRule).toContain("min-height: 2.08rem;");
+    expect(selectSelectedOptionRule).toContain("font-weight: 500;");
+    expect(selectCheckRule).toContain("justify-self: end;");
+    expect(selectActionOptionRule).toContain("padding-right: 5.6rem;");
+    expect(selectActionRule).toContain("position: absolute;");
   });
 
   it("places managed local model specs on the right with actions under the copy", () => {

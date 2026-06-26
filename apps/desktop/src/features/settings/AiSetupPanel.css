@@ -244,7 +244,48 @@
 }
 
 .ai-setup-select-control .settings-select-control__menu {
+  max-height: 16rem;
   width: max(100%, 15rem);
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action {
+  grid-template-columns: minmax(0, 1fr);
+  position: relative;
+}
+
+.ai-setup-select-control .settings-select-control__option {
+  display: grid;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 500;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-content: start;
+  min-height: 2.08rem;
+  text-align: left;
+}
+
+.ai-setup-select-control .settings-select-control__option.is-selected {
+  font-weight: 500;
+}
+
+.ai-setup-select-control .settings-select-control__check {
+  justify-self: end;
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option {
+  padding-right: 5.6rem;
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%) translateX(0.18rem);
+}
+
+.ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option-action,
+.ai-setup-select-control .settings-select-control__option-row:focus-within .settings-select-control__option-action {
+  transform: translateY(-50%);
 }
 
 .ai-setup-select-control--model .settings-select-control__menu {
