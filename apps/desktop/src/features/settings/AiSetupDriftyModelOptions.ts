@@ -13,12 +13,19 @@ export function driftyModelOptions(
   onInstallModel: (modelId: string) => void | Promise<void>,
   onStartCloudSetup: () => void | Promise<void>,
 ): readonly SettingsSelectOption<string>[] {
+  const cloudActionAriaLabel = cloudSubscribeActionLabel === null
+    ? undefined
+    : cloudSubscribeActionLabel === "Opening..."
+      ? "Opening Drifty Individual Cloud checkout"
+      : "Upgrade Drifty Individual Cloud";
+
   return [
     {
       value: DRIFTY_CLOUD_MODEL_ID,
       label: DRIFTY_CLOUD_MODEL_LABEL,
+      disabled: cloudSubscribeActionLabel !== null,
       actionLabel: cloudSubscribeActionLabel ?? undefined,
-      actionAriaLabel: cloudSubscribeActionLabel ? "Subscribe to Drifty Individual Cloud" : undefined,
+      actionAriaLabel: cloudActionAriaLabel,
       actionDisabled: cloudSubscribeActionDisabled,
       onAction: cloudSubscribeActionLabel
         ? () => {

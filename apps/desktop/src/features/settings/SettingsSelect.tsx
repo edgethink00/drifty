@@ -150,9 +150,9 @@ export function SettingsSelect<TValue extends string>({
       {isOpen ? (
         <div className="settings-select-control__menu" id={listboxId} role="listbox" aria-label={ariaLabel}>
           {options.map((option, index) => {
-            const isSelected = option.value === value;
-            const isActive = index === activeIndex;
             const optionDisabled = option.disabled === true;
+            const showsSelectedState = option.value === value && !optionDisabled;
+            const isActive = index === activeIndex;
             return (
               <div
                 key={option.value}
@@ -163,9 +163,9 @@ export function SettingsSelect<TValue extends string>({
                   id={optionId(option.value)}
                   type="button"
                   role="option"
-                  aria-selected={isSelected}
+                  aria-selected={showsSelectedState}
                   aria-disabled={optionDisabled}
-                  className={`settings-select-control__option${isSelected ? " is-selected" : ""}${isActive ? " is-active" : ""}${optionDisabled ? " is-disabled" : ""}`}
+                  className={`settings-select-control__option${showsSelectedState ? " is-selected" : ""}${isActive ? " is-active" : ""}${optionDisabled ? " is-disabled" : ""}`}
                   data-has-accent={option.accentColor ? "true" : undefined}
                   disabled={optionDisabled}
                   style={optionStyle(option.accentColor)}

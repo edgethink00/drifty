@@ -367,6 +367,26 @@
   gap: 0.42rem;
 }
 
+.ai-managed-model__primary-action.ai-managed-model__download-action:not(.is-retry) {
+  background: var(--cloud-action);
+  border-color: var(--cloud-action);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--cloud-action) 18%, transparent);
+  color: #fff;
+  font-weight: 650;
+}
+
+.ai-managed-model__primary-action.ai-managed-model__download-action:not(.is-retry):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cloud-action) 90%, black);
+  border-color: color-mix(in srgb, var(--cloud-action) 90%, black);
+  color: #fff;
+}
+
+.ai-managed-model__primary-action.ai-managed-model__download-action:not(.is-retry):disabled {
+  color: #fff;
+  opacity: 0.72;
+}
+
 .ai-managed-model__primary-action.is-retry {
   background: color-mix(in srgb, var(--warn-soft) 70%, var(--surface));
   border-color: color-mix(in srgb, var(--warn) 34%, var(--line));

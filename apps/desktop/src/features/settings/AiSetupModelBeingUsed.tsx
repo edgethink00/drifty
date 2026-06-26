@@ -109,6 +109,7 @@ export function AiSetupModelBeingUsed({
     switch (selectedProvider) {
       case "drifty":
         if (modelId === DRIFTY_CLOUD_MODEL_ID) {
+          if (cloudSubscribeActionLabel !== null) return;
           onDriftyRouteChange("cloud");
           onProviderChange("drifty");
           return;

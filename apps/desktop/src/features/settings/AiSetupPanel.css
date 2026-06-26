@@ -6,7 +6,12 @@
 @import "./AiSetupPanelResponsive.css";
 
 .ai-setup-panel {
+  --cloud-action: #344622;
   gap: var(--space-3);
+}
+
+:root[data-theme="dark"] .ai-setup-panel {
+  --cloud-action: #5a7042;
 }
 
 .ai-setup-panel__header {
@@ -273,14 +278,29 @@
 }
 
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option {
-  padding-right: 5.6rem;
+  padding-right: 6.7rem;
 }
 
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action {
+  background: var(--cloud-action);
+  border-color: var(--cloud-action);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--cloud-action) 22%, transparent);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 650;
+  min-height: 1.58rem;
+  padding: 0 0.68rem;
   position: absolute;
   right: var(--space-2);
   top: 50%;
   transform: translateY(-50%) translateX(0.18rem);
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action:hover {
+  background: color-mix(in srgb, var(--cloud-action) 90%, black);
+  border-color: color-mix(in srgb, var(--cloud-action) 90%, black);
+  color: #fff;
 }
 
 .ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option-action,

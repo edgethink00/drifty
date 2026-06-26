@@ -7,6 +7,10 @@ function cssRule(styles: string, selector: string): string {
   return styles.match(new RegExp(`${escapedSelector}\\s*\\{[\\s\\S]*?\\n\\}`))?.[0] ?? "";
 }
 
+function expectRuleToContain(rule: string, declarations: readonly string[]): void {
+  for (const declaration of declarations) expect(rule).toContain(declaration);
+}
+
 function readAiSetupStyles(): string {
   return [
     "src/features/settings/AiSetupPanel.css",
@@ -128,6 +132,8 @@ describe("Settings content styles", () => {
     const tabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab");
     const activeTabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab.is-active");
     const tabPanelRule = cssRule(aiSetupStyles, ".ai-setup-tab-panel");
+    const panelRule = cssRule(aiSetupStyles, ".ai-setup-panel");
+    const panelDarkRule = cssRule(aiSetupStyles, ':root[data-theme="dark"] .ai-setup-panel');
     const modelSelectRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__trigger");
     const selectMenuRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__menu");
     const selectActionRowRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action");
@@ -137,17 +143,12 @@ describe("Settings content styles", () => {
     const selectActionOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option");
     const selectActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action");
 
-    expect(tabListRule).toContain("background: color-mix(in srgb, var(--bg-2) 38%, transparent);");
-    expect(tabListRule).toContain("gap: 0.16rem;");
-    expect(tabListRule).toContain("padding: 0.16rem;");
-    expect(tabListRule).toContain("width: fit-content;");
-    expect(tabRule).toContain("border: 1px solid transparent;");
-    expect(tabRule).toContain("border-radius: 9px;");
-    expect(tabRule).toContain("font-size: 0.76rem;");
-    expect(tabRule).toContain("min-height: 1.66rem;");
-    expect(activeTabRule).toContain("background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));");
-    expect(activeTabRule).toContain("color: var(--text);");
+    expectRuleToContain(tabListRule, ["background: color-mix(in srgb, var(--bg-2) 38%, transparent);", "gap: 0.16rem;", "padding: 0.16rem;", "width: fit-content;"]);
+    expectRuleToContain(tabRule, ["border: 1px solid transparent;", "border-radius: 9px;", "font-size: 0.76rem;", "min-height: 1.66rem;"]);
+    expectRuleToContain(activeTabRule, ["background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));", "color: var(--text);"]);
     expect(tabPanelRule).toContain("gap: var(--space-4);");
+    expect(panelRule).toContain("--cloud-action: #344622;");
+    expect(panelDarkRule).toContain("--cloud-action: #5a7042;");
     expect(modelSelectRule).toContain("font-weight: 500;");
     expect(selectMenuRule).toContain("max-height: 16rem;");
     expect(selectActionRowRule).toContain("grid-template-columns: minmax(0, 1fr);");
@@ -160,8 +161,8 @@ describe("Settings content styles", () => {
     expect(selectOptionRule).toContain("min-height: 2.08rem;");
     expect(selectSelectedOptionRule).toContain("font-weight: 500;");
     expect(selectCheckRule).toContain("justify-self: end;");
-    expect(selectActionOptionRule).toContain("padding-right: 5.6rem;");
-    expect(selectActionRule).toContain("position: absolute;");
+    expect(selectActionOptionRule).toContain("padding-right: 6.7rem;");
+    expectRuleToContain(selectActionRule, ["background: var(--cloud-action);", "border-radius: var(--radius-pill);", "color: #fff;", "position: absolute;"]);
   });
 
   it("places managed local model specs on the right with actions under the copy", () => {

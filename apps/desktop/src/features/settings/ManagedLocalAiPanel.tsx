@@ -129,7 +129,7 @@ function ManagedLocalAiModelRow({
         ) : (
           <button
             type="button"
-            className={`settings-btn ai-managed-model__primary-action${errorThisModel ? " is-retry" : ""}`}
+            className={`settings-btn ai-managed-model__primary-action ai-managed-model__download-action${errorThisModel ? " is-retry" : ""}`}
             disabled={anyManagedActionRunning}
             onClick={() => void onInstallModel(model.id)}
           >
