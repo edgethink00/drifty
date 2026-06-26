@@ -134,7 +134,7 @@ function markOnboardingCompleted(userId: string) {
 }
 
 async function openAccountMenu() {
-  fireEvent.click(await screen.findByRole("button", { name: /account/i }));
+  fireEvent.click(await screen.findByRole("button", { name: /^unknown$/i }));
   return screen.findByRole("menu", { name: /account menu/i });
 }
 
@@ -181,7 +181,7 @@ describe("App auth modal", () => {
 
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /account/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^unknown$/i })).toBeTruthy();
   });
 
   it("keeps the local workspace available when required auth mode has no signed-in user", async () => {

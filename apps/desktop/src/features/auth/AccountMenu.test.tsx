@@ -5,10 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ACCOUNT_POPOVER_EXPANDED_GAP_PX, AccountMenu } from "./AccountMenu";
 
 type RenderAccountMenuOptions = {
+  readonly userAvatarUrl?: string | null;
   readonly userEmail?: string | null;
 };
 
-function renderAccountMenu({ userEmail = null }: RenderAccountMenuOptions = {}) {
+function renderAccountMenu({ userAvatarUrl = null, userEmail = null }: RenderAccountMenuOptions = {}) {
   const handlers = {
     onSettings: vi.fn(),
     onFeedback: vi.fn(),
@@ -22,7 +23,7 @@ function renderAccountMenu({ userEmail = null }: RenderAccountMenuOptions = {}) 
       <AccountMenu
         isOpen={isOpen}
         isSidebarCollapsed={false}
-        userAvatarUrl={null}
+        userAvatarUrl={userAvatarUrl}
         userEmail={userEmail}
         onToggle={() => setIsOpen((open) => !open)}
         {...handlers}
@@ -41,13 +42,16 @@ describe("AccountMenu", () => {
     expect(ACCOUNT_POPOVER_EXPANDED_GAP_PX).toBe(5);
   });
 
-  it("keeps the account trigger chevrons fixed while aria-expanded changes", () => {
+  it("renders signed-out users with Unknown and the default profile avatar", () => {
     const { container } = renderAccountMenu();
-    const trigger = screen.getByRole("button", { name: /^account$/i });
+    const trigger = screen.getByRole("button", { name: /^unknown$/i });
     const chevrons = container.querySelector(".account-trigger__chevrons");
     const chevronMarks = container.querySelectorAll(".account-trigger__chevron-mark");
 
-    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("Account");
+    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("Unknown");
+    expect(trigger.querySelector(".account-avatar--placeholder svg")).toBeTruthy();
+    expect(trigger.querySelector(".account-avatar img")).toBeNull();
+    expect(trigger.querySelector(".account-trigger__settings-icon")).toBeNull();
     expect(trigger.querySelector(".account-trigger__status")).toBeNull();
 
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
@@ -58,10 +62,20 @@ describe("AccountMenu", () => {
 
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll(".account-trigger__chevron-mark")).toHaveLength(2);
+    expect(screen.getByRole("menu", { name: /account menu/i })).toBeTruthy();
     expect(screen.getByLabelText(/^Drifty Version /).textContent).toMatch(/^Version\d+\.\d+\.\d+$/);
     expect(screen.queryByRole("menuitem", { name: /^AI Setting$/ })).toBeNull();
     expect(screen.getByRole("menuitem", { name: /^Settings$/ })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: /^Drifty Cloud$/ })).toBeNull();
+  });
+
+  it("ignores profile artwork while signed out", () => {
+    const { container } = renderAccountMenu({ userAvatarUrl: "https://example.test/avatar.png" });
+    const trigger = screen.getByRole("button", { name: /^unknown$/i });
+
+    expect(trigger.querySelector(".account-avatar--placeholder svg")).toBeTruthy();
+    expect(container.querySelector(".account-trigger__settings-icon")).toBeNull();
+    expect(container.querySelector(".account-avatar img")).toBeNull();
   });
 
   it("keeps account metadata above the first menu separator", () => {
@@ -80,7 +94,7 @@ describe("AccountMenu", () => {
 
   it("routes account settings without an AI setup menu entry", () => {
     const { handlers } = renderAccountMenu();
-    fireEvent.click(screen.getByRole("button", { name: /^account$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
 
     fireEvent.click(screen.getByRole("menuitem", { name: /^Settings$/ }));
     expect(handlers.onSettings).toHaveBeenCalledTimes(1);
