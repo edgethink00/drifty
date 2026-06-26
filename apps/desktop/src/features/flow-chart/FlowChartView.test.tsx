@@ -113,6 +113,19 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.62rem;/);
   });
 
+  it("keeps light empty flow cells softly visible while preserving the dark plot bed", () => {
+    const emptyCellRule = cssRule(".flow-cell--empty");
+
+    expect(styles).toMatch(/:root\[data-theme="light"\]\s*\{[\s\S]*--flow-chart-plot-surface:\s*#fafaf8;/);
+    expect(styles).toMatch(/:root\[data-theme="light"\]\s*\{[\s\S]*--flow-chart-empty-cell-surface:\s*color-mix\(in srgb,\s*var\(--bg-2\) 62%,\s*var\(--surface\)\);/);
+    expect(styles).toMatch(/:root\[data-theme="light"\]\s*\{[\s\S]*--flow-chart-empty-cell-opacity:\s*0\.58;/);
+    expect(styles).toMatch(/:root\[data-theme="dark"\]\s*\{[\s\S]*--flow-chart-plot-surface:\s*#191917;/);
+    expect(styles).toMatch(/:root\[data-theme="dark"\]\s*\{[\s\S]*--flow-chart-empty-cell-surface:\s*transparent;/);
+    expect(styles).toMatch(/:root\[data-theme="dark"\]\s*\{[\s\S]*--flow-chart-empty-cell-opacity:\s*1;/);
+    expect(emptyCellRule).toContain("background: var(--flow-chart-empty-cell-surface);");
+    expect(emptyCellRule).toContain("opacity: var(--flow-chart-empty-cell-opacity);");
+  });
+
   it("uses compact 12-hour labels on the flow chart hour axis", () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 

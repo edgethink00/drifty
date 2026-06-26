@@ -61,6 +61,8 @@
   --surface-strong: #f4f3ef;
   --dashboard-plot-surface: #fafaf8;
   --flow-chart-plot-surface: #fafaf8;
+  --flow-chart-empty-cell-surface: color-mix(in srgb, var(--bg-2) 62%, var(--surface));
+  --flow-chart-empty-cell-opacity: 0.58;
   --line: rgba(28,28,25,.08);
   --line-strong: rgba(28,28,25,.16);
   --text: #1c1c19;
@@ -118,6 +120,8 @@
   --surface-strong: #1f1f1c;
   --dashboard-plot-surface: #171715;
   --flow-chart-plot-surface: #191917;
+  --flow-chart-empty-cell-surface: transparent;
+  --flow-chart-empty-cell-opacity: 1;
   --line: rgba(232,230,223,.085);
   --line-strong: rgba(232,230,223,.165);
   --text: #e8e6df;
