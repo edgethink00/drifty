@@ -419,22 +419,32 @@
   --dashboard-ai-notice-accent: var(--warn);
   --dashboard-ai-notice-soft: var(--warn-soft);
   --dashboard-ai-notice-line: color-mix(in srgb, var(--warn) 28%, var(--line));
-  --dashboard-ai-notice-panel: color-mix(in srgb, var(--surface) 96%, var(--dashboard-ai-notice-soft));
-  --dashboard-ai-notice-glow: color-mix(in srgb, var(--dashboard-ai-notice-soft) 52%, transparent);
+  --dashboard-ai-notice-panel: color-mix(in srgb, var(--surface) 91%, var(--dashboard-ai-notice-soft));
+  --dashboard-ai-notice-panel-edge: color-mix(in srgb, var(--surface) 94%, var(--dashboard-ai-notice-soft));
+  --dashboard-ai-notice-glow: color-mix(in srgb, var(--dashboard-ai-notice-soft) 64%, transparent);
+  --dashboard-ai-notice-rim: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--dashboard-ai-notice-accent) 34%, var(--line)),
+    color-mix(in srgb, var(--dashboard-ai-notice-accent) 12%, var(--line)) 48%,
+    color-mix(in srgb, var(--surface) 74%, var(--dashboard-ai-notice-line))
+  );
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--block-gap-compact);
   padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
-  border: 1px solid var(--dashboard-ai-notice-line);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background:
-    radial-gradient(58rem 12rem at -10rem -5rem, var(--dashboard-ai-notice-glow) 0%, transparent 72%),
-    linear-gradient(180deg, var(--dashboard-ai-notice-panel), color-mix(in srgb, var(--surface) 98%, var(--bg-2)));
+    radial-gradient(58rem 12rem at -10rem -5rem, var(--dashboard-ai-notice-glow) 0%, transparent 72%) padding-box,
+    linear-gradient(180deg, var(--dashboard-ai-notice-panel), var(--dashboard-ai-notice-panel-edge)) padding-box,
+    var(--dashboard-ai-notice-rim) border-box;
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--surface) 80%, transparent),
-    0 10px 22px color-mix(in srgb, var(--dashboard-ai-notice-accent) 8%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 78%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--dashboard-ai-notice-accent) 5%, transparent),
+    0 6px 14px color-mix(in srgb, var(--text) 4%, transparent),
+    0 3px 8px color-mix(in srgb, var(--dashboard-ai-notice-accent) 5%, transparent);
 }
 
 .dashboard-ai-notice--trial-ended,

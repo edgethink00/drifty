@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { readAppStyles } from "../../test/readStyles";
 import type { BillingEntitlement } from "../billing/billingService";
 import { DashboardAiUnavailableNotice, resolveDashboardAiUnavailableState } from "./DashboardAiUnavailableNotice";
 
@@ -168,5 +169,22 @@ describe("DashboardAiUnavailableNotice", () => {
     expect(titleRow?.querySelector(".dashboard-ai-notice__signal")).toBeTruthy();
     expect(titleRow?.querySelector(".dashboard-ai-notice__signal-dot")).toBeTruthy();
     expect(titleRow?.firstElementChild?.classList.contains("dashboard-ai-notice__signal")).toBe(true);
+  });
+
+  it("keeps the notice surface lightly tinted with an outline rim and outer shadow", () => {
+    const styles = readAppStyles();
+    const noticeBlocks = Array.from(
+      styles.matchAll(/\.dashboard-ai-notice\s*\{(?<body>[\s\S]*?)\n\}/g),
+      (match) => match.groups?.body ?? "",
+    );
+    const surfaceBlocks = noticeBlocks.filter((block) => block.includes("--dashboard-ai-notice-panel:"));
+    const finalNoticeBlock = surfaceBlocks[surfaceBlocks.length - 1] ?? "";
+
+    expect(finalNoticeBlock).toContain("--dashboard-ai-notice-panel: color-mix(in srgb, var(--surface) 91%, var(--dashboard-ai-notice-soft));");
+    expect(finalNoticeBlock).toContain("--dashboard-ai-notice-panel-edge: color-mix(in srgb, var(--surface) 94%, var(--dashboard-ai-notice-soft));");
+    expect(finalNoticeBlock).toContain("border: 1px solid transparent;");
+    expect(finalNoticeBlock).toContain("var(--dashboard-ai-notice-rim) border-box;");
+    expect(finalNoticeBlock).toContain("0 6px 14px color-mix(in srgb, var(--text) 4%, transparent)");
+    expect(finalNoticeBlock).toContain("0 3px 8px color-mix(in srgb, var(--dashboard-ai-notice-accent) 5%, transparent)");
   });
 });
