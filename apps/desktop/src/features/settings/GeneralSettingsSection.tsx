@@ -9,6 +9,7 @@ import {
 } from "./settingsStorage";
 
 type GeneralSettingsSectionProps = {
+  readonly autoInstallFutureUpdates: boolean;
   readonly devModeEnabled: boolean;
   readonly isDevSettingsEnabled: boolean;
   readonly startOfDayValue: string;
@@ -17,6 +18,7 @@ type GeneralSettingsSectionProps = {
   readonly updaterError: string | null;
   readonly updaterInstalling: boolean;
   readonly updaterMessage: string | null;
+  readonly onAutoInstallFutureUpdatesChange: (enabled: boolean) => void;
   readonly onCheckForUpdates: () => void;
   readonly onRequestAccessibility: () => void;
   readonly onStartOfDayChange: (value: string) => void;
@@ -25,6 +27,7 @@ type GeneralSettingsSectionProps = {
 };
 
 export function GeneralSettingsSection({
+  autoInstallFutureUpdates,
   devModeEnabled,
   isDevSettingsEnabled,
   startOfDayValue,
@@ -33,6 +36,7 @@ export function GeneralSettingsSection({
   updaterError,
   updaterInstalling,
   updaterMessage,
+  onAutoInstallFutureUpdatesChange,
   onCheckForUpdates,
   onRequestAccessibility,
   onStartOfDayChange,
@@ -49,7 +53,7 @@ export function GeneralSettingsSection({
         <StartupSettingsRow />
       </div>
       <div className="settings-block"><h3>Updates</h3>
-        <div className="settings-row"><div><div className="lbl">Automatic update checks</div><div className="desc">Drifty checks for signed updates shortly after launch. General releases stay in the titlebar first; urgent releases can prompt immediately.</div></div><div className="ctrl ctrl--value">Always on</div></div>
+        <div className="settings-row"><div><div className="lbl">Automatically install future updates</div><div className="desc">Matches the update popup option. Eligible updates can install and restart automatically after Drifty finds them.</div></div><div className="ctrl"><Toggle checked={autoInstallFutureUpdates} onChange={onAutoInstallFutureUpdatesChange} ariaLabel="Automatically install future updates" /></div></div>
         <div className="settings-row"><div><div className="lbl">Manual update check</div><div className="desc">Drifty checks GitHub Releases for signed update metadata before showing an available download.</div>{updaterMessage ? <p className="capture-recency" role="status">{updaterMessage}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="status">{updaterError}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={onCheckForUpdates} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? "Checking..." : "Check for Updates"}</button></div></div>
       </div>
       <div className="settings-block"><h3>Permissions</h3>
