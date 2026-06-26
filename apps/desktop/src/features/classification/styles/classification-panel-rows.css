@@ -177,6 +177,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
 }
 
 .classification-panel-view__source-copy,
