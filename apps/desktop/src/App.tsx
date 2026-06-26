@@ -4635,6 +4635,7 @@ export default function App() {
             <div className="settings-panel-stack">
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
+                    autoInstallFutureUpdates={autoInstallFutureUpdates}
                     devModeEnabled={devModeEnabled}
                     isDevSettingsEnabled={DEV_SETTINGS_ENABLED}
                     startOfDayValue={startOfDayValue}
@@ -4643,6 +4644,7 @@ export default function App() {
                     updaterError={updaterError}
                     updaterInstalling={updaterInstalling}
                     updaterMessage={updaterMessage}
+                    onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
                     onRequestAccessibility={() => void handleRequestAccessibility()}
                     onStartOfDayChange={handleStartOfDayChange}
