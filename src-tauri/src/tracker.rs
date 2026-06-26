@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, TryLockError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -410,7 +410,12 @@ impl TrackerController {
         // ~160ms interpreter/import cold-start (and the contention of spawning
         // several interpreters at once during a refresh burst). Fall back to a
         // one-shot invocation if the persistent process is unavailable.
-        let raw = match serve_request(&script_path, &db_path, &request) {
+        let serve_result = if should_use_one_shot_when_serve_busy(command) {
+            serve_request_if_idle(&script_path, &db_path, &request)
+        } else {
+            serve_request(&script_path, &db_path, &request)
+        };
+        let raw = match serve_result {
             Ok(line) => line.into_bytes(),
             Err(_) => invoke_one_shot(&script_path, &db_path, &request)?,
         };
@@ -466,6 +471,15 @@ struct ServeProcess {
 
 static SERVE_PROCESS: OnceLock<Mutex<Option<ServeProcess>>> = OnceLock::new();
 static SERVE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+enum ServeLockMode {
+    Wait,
+    SkipIfBusy,
+}
+
+fn should_use_one_shot_when_serve_busy(command: &str) -> bool {
+    command == "get_timeline_page"
+}
 
 fn serve_slot() -> &'static Mutex<Option<ServeProcess>> {
     SERVE_PROCESS.get_or_init(|| Mutex::new(None))
@@ -528,10 +542,38 @@ fn serve_io_err(err: std::io::Error) -> TrackerError {
 }
 
 fn serve_request(script: &Path, db: &Path, request: &Value) -> Result<String, TrackerError> {
+    serve_request_with_lock_mode(script, db, request, ServeLockMode::Wait)
+}
+
+fn serve_request_if_idle(
+    script: &Path,
+    db: &Path,
+    request: &Value,
+) -> Result<String, TrackerError> {
+    serve_request_with_lock_mode(script, db, request, ServeLockMode::SkipIfBusy)
+}
+
+fn serve_request_with_lock_mode(
+    script: &Path,
+    db: &Path,
+    request: &Value,
+    lock_mode: ServeLockMode,
+) -> Result<String, TrackerError> {
     let slot = serve_slot();
-    let mut guard = slot
-        .lock()
-        .map_err(|_| TrackerError::CommandFailed("serve lock poisoned".into()))?;
+    let mut guard = match lock_mode {
+        ServeLockMode::Wait => slot
+            .lock()
+            .map_err(|_| TrackerError::CommandFailed("serve lock poisoned".into()))?,
+        ServeLockMode::SkipIfBusy => match slot.try_lock() {
+            Ok(guard) => guard,
+            Err(TryLockError::WouldBlock) => {
+                return Err(TrackerError::CommandFailed("serve process busy".into()));
+            }
+            Err(TryLockError::Poisoned(_)) => {
+                return Err(TrackerError::CommandFailed("serve lock poisoned".into()));
+            }
+        },
+    };
 
     // Discard a process spawned for a different script/db (paths can change
     // between dev runs); it will be respawned below.
@@ -842,6 +884,13 @@ mod tests {
                 "limit": 200
             })
         );
+    }
+
+    #[test]
+    fn only_timeline_page_uses_one_shot_when_serve_is_busy() {
+        assert!(should_use_one_shot_when_serve_busy("get_timeline_page"));
+        assert!(!should_use_one_shot_when_serve_busy("get_timeline"));
+        assert!(!should_use_one_shot_when_serve_busy("get_status"));
     }
 
     #[test]
