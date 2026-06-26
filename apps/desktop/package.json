@@ -1,6 +1,6 @@
 {
   "name": "@drifty/desktop",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@drifty/charts": "1.1.7",
-    "@drifty/domain": "1.1.7",
+    "@drifty/charts": "1.1.8",
+    "@drifty/domain": "1.1.8",
     "@supabase/supabase-js": "^2.105.0",
     "@tauri-apps/api": "^2.0.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
