@@ -107,10 +107,12 @@ describe("Settings content styles", () => {
     const brandImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark img");
     const driftyRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--drifty");
     const openRouterImageRule = cssRule(aiSetupStyles, ".ai-setup-brand-mark--openrouter img");
+    const titleRule = cssRule(aiSetupStyles, ".ai-setup-choice__title");
 
     expect(toggleRule).toContain("grid-template-columns: 1.8rem minmax(0, 1fr) 0.78rem;");
     expect(toggleRule).toContain("min-height: 3.35rem;");
     expect(toggleRule).toContain("padding: 0.52rem var(--space-3);");
+    expect(titleRule).toContain("font-weight: 500;");
     expect(brandMarkRule).toContain("height: 1.8rem;");
     expect(brandMarkRule).toContain("width: 1.8rem;");
     expect(brandImageRule).toContain("height: 1.3rem;");
@@ -126,6 +128,7 @@ describe("Settings content styles", () => {
     const tabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab");
     const activeTabRule = cssRule(aiSetupStyles, ".ai-setup-panel-tab.is-active");
     const tabPanelRule = cssRule(aiSetupStyles, ".ai-setup-tab-panel");
+    const modelSelectRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__trigger");
 
     expect(tabListRule).toContain("background: color-mix(in srgb, var(--bg-2) 38%, transparent);");
     expect(tabListRule).toContain("gap: 0.16rem;");
@@ -138,12 +141,14 @@ describe("Settings content styles", () => {
     expect(activeTabRule).toContain("background: color-mix(in srgb, var(--surface) 98%, var(--bg-2));");
     expect(activeTabRule).toContain("color: var(--text);");
     expect(tabPanelRule).toContain("gap: var(--space-4);");
+    expect(modelSelectRule).toContain("font-weight: 500;");
   });
 
   it("places managed local model specs on the right with actions under the copy", () => {
     const aiSetupStyles = readAiSetupStyles();
     const modelRule = cssRule(aiSetupStyles, ".ai-managed-model");
     const copyRule = cssRule(aiSetupStyles, ".ai-managed-model__copy");
+    const titleRule = cssRule(aiSetupStyles, ".ai-managed-model strong");
     const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
@@ -154,6 +159,7 @@ describe("Settings content styles", () => {
     expect(copyRule).toContain("display: flex;");
     expect(copyRule).toContain("align-items: baseline;");
     expect(copyRule).toContain("flex-wrap: wrap;");
+    expect(titleRule).toContain("font-weight: 520;");
     expect(metaRule).toContain("justify-items: end;");
     expect(actionsRule).toContain("display: flex;");
     expect(actionsRule).not.toContain("border-top:");
@@ -171,7 +177,7 @@ describe("Settings content styles", () => {
     const currentModelErrorStatusRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error .ai-setup-current-model__status");
 
     expect(currentModelErrorRule).toContain("background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));");
-    expect(currentModelErrorRule).toContain("border-color: color-mix(in srgb, var(--warn) 24%, var(--line));");
+    expect(currentModelErrorRule).toContain("border-color: var(--line);");
     expect(currentModelErrorStatusRule).not.toContain("border-top");
     expect(currentModelErrorStatusRule).toContain("color: var(--warn);");
   });
@@ -193,11 +199,13 @@ describe("Settings content styles", () => {
     const cloudSource = readFileSync("src/features/settings/CloudSetupPanel.tsx", "utf8");
     const cloudRouteRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route");
     const cloudRouteDarkRule = cssRule(aiSetupStyles, ':root[data-theme="dark"] .ai-setup-cloud-route');
+    const cloudRouteTitleRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route strong");
     const cloudActionRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action");
 
     expect(cloudSource).toContain("settings-btn settings-btn--primary ai-setup-cloud-route__action");
     expect(cloudRouteRule).toContain("--cloud-action: #344622;");
     expect(cloudRouteDarkRule).toContain("--cloud-action: #5a7042;");
+    expect(cloudRouteTitleRule).toContain("font-weight: 520;");
     expect(cloudActionRule).toContain("font-size: 0.756rem;");
     expect(cloudActionRule).toContain("font-weight: 520;");
     expect(cloudActionRule).toContain("height: 2.25rem;");
