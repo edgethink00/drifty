@@ -10,6 +10,7 @@ type RenderAccountMenuOptions = {
 
 function renderAccountMenu({ userEmail = null }: RenderAccountMenuOptions = {}) {
   const handlers = {
+    onAiSetting: vi.fn(),
     onSettings: vi.fn(),
     onFeedback: vi.fn(),
     onSignIn: vi.fn(),
@@ -59,7 +60,7 @@ describe("AccountMenu", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll(".account-trigger__chevron-mark")).toHaveLength(2);
     expect(screen.getByLabelText(/^Drifty Version /).textContent).toMatch(/^Version\d+\.\d+\.\d+$/);
-    expect(screen.queryByRole("menuitem", { name: /^AI Setting$/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /^AI Setting$/ })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /^Settings$/ })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: /^Drifty Cloud$/ })).toBeNull();
   });
@@ -78,7 +79,17 @@ describe("AccountMenu", () => {
     expect(firstChildren[2]?.getAttribute("role")).toBe("separator");
   });
 
-  it("routes account settings without an AI setup menu entry", () => {
+  it("routes account AI setting before regular settings", () => {
+    const { handlers } = renderAccountMenu();
+    fireEvent.click(screen.getByRole("button", { name: /^account$/i }));
+    const menuItems = screen.getAllByRole("menuitem").map((item) => item.textContent);
+
+    expect(menuItems.slice(0, 2)).toEqual(["✦AI Setting", "⚙Settings"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: /^AI Setting$/ }));
+    expect(handlers.onAiSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes account settings", () => {
     const { handlers } = renderAccountMenu();
     fireEvent.click(screen.getByRole("button", { name: /^account$/i }));
 
