@@ -131,6 +131,10 @@ function parseCubicSegments(pathData: string): readonly CubicSegment[] {
   return segments;
 }
 
+function parsePathNumbers(pathData: string): readonly number[] {
+  return Array.from(pathData.matchAll(/-?\d+(?:\.\d+)?/g), (match) => Number(match[0]));
+}
+
 describe("buildSmoothPath", () => {
   it("keeps generated control points inside the focus drift chart bounds", () => {
     const bottomY = scaleFocusDriftY(0);
@@ -155,35 +159,37 @@ describe("buildSmoothPath", () => {
     }
   });
 
-  it("enters a full focus plateau with a horizontal tangent", () => {
+  it("starts and ends on the source boundary points", () => {
     const bottomY = scaleFocusDriftY(0);
     const topY = scaleFocusDriftY(100);
     const pathData = buildSmoothPath([
       makePoint(0, 10, bottomY),
       makePoint(1, 20, topY),
-      makePoint(2, 30, topY),
+      makePoint(2, 30, bottomY),
     ], "focusY");
+    const numbers = parsePathNumbers(pathData);
+    const segments = parseCubicSegments(pathData);
+    const lastSegment = segments[segments.length - 1];
 
-    const [riseSegment] = parseCubicSegments(pathData);
-
-    expect(riseSegment?.end.y).toBe(topY);
-    expect(riseSegment?.c2.y).toBe(topY);
+    expect(readNumberAt(numbers, 0)).toBe(10);
+    expect(readNumberAt(numbers, 1)).toBe(bottomY);
+    expect(lastSegment?.end).toEqual({ x: 30, y: bottomY });
   });
 
-  it("leaves a full focus plateau with a horizontal tangent", () => {
+  it("softens sharp interior peaks instead of using them as segment endpoints", () => {
     const bottomY = scaleFocusDriftY(0);
     const topY = scaleFocusDriftY(100);
     const pathData = buildSmoothPath([
-      makePoint(0, 10, topY),
+      makePoint(0, 10, bottomY),
       makePoint(1, 20, topY),
       makePoint(2, 30, bottomY),
     ], "focusY");
 
     const segments = parseCubicSegments(pathData);
-    const fallSegment = segments[1];
+    const interiorEnds = segments.slice(0, -1).map((segment) => segment.end.y);
 
-    expect(fallSegment?.c1.y).toBe(topY);
-    expect(fallSegment?.end.y).toBe(bottomY);
+    expect(interiorEnds.length).toBeGreaterThan(0);
+    expect(interiorEnds.every((y) => y > topY)).toBe(true);
   });
 });
 
@@ -215,16 +221,29 @@ describe("buildFocusDriftChart", () => {
     expect(chart.axisTicks.map((tick) => tick.label)).toEqual(["04:00", "07:00", "10:00", "13:00", "16:00", "19:00", "22:00", "01:00", "04:00"]);
   });
 
-  it("keeps sparse focus windows downweighted by scored coverage", () => {
-    const chart = buildFocusDriftChart([makeTimedSegment("short-focus", 12 * 60, 3)], "2026-06-13");
-    const sparseFocusPoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
+  it.each([
+    { durationSeconds: 90, expectedConsistency: 62, expectedScore: 62, label: "5%" },
+    { durationSeconds: 3 * 60, expectedConsistency: 74, expectedScore: 74, label: "10%" },
+    { durationSeconds: 4 * 60, expectedConsistency: 76, expectedScore: 76.44, label: "13.3%" },
+    { durationSeconds: 270, expectedConsistency: 78, expectedScore: 77.67, label: "15%" },
+  ] as const)("scores $label pure focus coverage with a light early penalty", ({ durationSeconds, expectedConsistency, expectedScore }) => {
+    const bucketStartSecond = 12 * 60 * 60;
+    const chart = buildFocusDriftChart([
+      makeTimedSegmentInSeconds({
+        id: `focus-${durationSeconds}`,
+        startSecond: bucketStartSecond,
+        durationSeconds,
+        productivity: "focus",
+      }),
+    ], "2026-06-13");
+    const focusPoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
 
-    if (!sparseFocusPoint) throw new Error("Expected sparse focus bucket to exist");
+    if (!focusPoint) throw new Error("Expected focus bucket to exist");
 
-    expect(sparseFocusPoint.focusScore).toBe(84);
-    expect(sparseFocusPoint.driftScore).toBe(0);
-    expect(sparseFocusPoint.trackedSeconds).toBe(3 * 60);
-    expect(chart.focusConsistency).toBe(84);
+    expect(focusPoint.focusScore).toBeCloseTo(expectedScore, 2);
+    expect(focusPoint.driftScore).toBe(0);
+    expect(focusPoint.trackedSeconds).toBe(durationSeconds);
+    expect(chart.focusConsistency).toBe(expectedConsistency);
   });
 
   it("scores focus and drift windows with their own ratio and coverage", () => {
@@ -249,7 +268,7 @@ describe("buildFocusDriftChart", () => {
 
     expect(reliableFocusPoint.totalSeconds).toBe(24 * 60);
     expect(reliableFocusPoint.focusScore).toBeCloseTo(81.12, 2);
-    expect(reliableFocusPoint.driftScore).toBeCloseTo(17.68, 2);
+    expect(reliableFocusPoint.driftScore).toBe(16);
     expect(chart.focusConsistency).toBe(81);
   });
 });

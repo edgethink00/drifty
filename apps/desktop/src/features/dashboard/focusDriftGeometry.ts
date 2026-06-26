@@ -5,6 +5,19 @@ type FocusDriftPathPoint = {
   readonly y: number;
 };
 
+type FocusDriftBezierSegment = {
+  readonly controlStart: FocusDriftPathPoint;
+  readonly controlEnd: FocusDriftPathPoint;
+  readonly end: FocusDriftPathPoint;
+};
+
+type FocusDriftBasisWindow = {
+  readonly p0: FocusDriftPathPoint;
+  readonly p1: FocusDriftPathPoint;
+  readonly p2: FocusDriftPathPoint;
+  readonly p3: FocusDriftPathPoint;
+};
+
 export const FOCUS_DRIFT_CHART_BOUNDS = { left: 5, right: 95, top: 8, bottom: 92 } as const;
 
 export const FOCUS_DRIFT_MINUTES_PER_DAY = 24 * 60;
@@ -47,103 +60,47 @@ export function buildSmoothPath(points: readonly FocusDriftPoint[], yKey: "focus
   if (!firstPoint) return "";
   if (pathPoints.length === 1) return `M ${firstPoint.x} ${firstPoint.y}`;
 
-  const tangents = buildMonotoneTangents(pathPoints);
+  const basisPoints = padBasisSplineEndpoints(pathPoints);
   const pathParts = [`M ${firstPoint.x} ${firstPoint.y}`];
 
-  for (let index = 1; index < pathPoints.length; index += 1) {
-    const previousPoint = pathPoints[index - 1];
-    const currentPoint = pathPoints[index];
-    const previousTangent = tangents[index - 1];
-    const currentTangent = tangents[index];
-    if (
-      previousPoint === undefined
-      || currentPoint === undefined
-      || previousTangent === undefined
-      || currentTangent === undefined
-    ) {
-      continue;
-    }
+  for (let index = 0; index <= basisPoints.length - 4; index += 1) {
+    const basisWindow = basisWindowAt(basisPoints, index);
+    if (!basisWindow) continue;
 
-    const deltaX = currentPoint.x - previousPoint.x;
-    const controlStartX = clampFocusDriftChartX(previousPoint.x + deltaX / 3);
-    const controlStartY = clampFocusDriftChartY(previousPoint.y + (previousTangent * deltaX) / 3);
-    const controlEndX = clampFocusDriftChartX(currentPoint.x - deltaX / 3);
-    const controlEndY = clampFocusDriftChartY(currentPoint.y - (currentTangent * deltaX) / 3);
-
-    pathParts.push(`C ${controlStartX} ${controlStartY}, ${controlEndX} ${controlEndY}, ${currentPoint.x} ${currentPoint.y}`);
+    const segment = basisBezierSegment(basisWindow);
+    pathParts.push(`C ${segment.controlStart.x} ${segment.controlStart.y}, ${segment.controlEnd.x} ${segment.controlEnd.y}, ${segment.end.x} ${segment.end.y}`);
   }
 
   return pathParts.join(" ");
 }
 
-function buildMonotoneTangents(points: readonly FocusDriftPathPoint[]): readonly number[] {
-  const slopes = buildSlopes(points);
-  const tangents = points.map((point, index) => initialTangentAt(points, slopes, point, index));
-
-  for (let index = 0; index < slopes.length; index += 1) {
-    const slope = slopes[index];
-    const leftTangent = tangents[index];
-    const rightTangent = tangents[index + 1];
-    if (slope === undefined || leftTangent === undefined || rightTangent === undefined) continue;
-
-    if (isFlatSlope(slope)) {
-      tangents[index] = 0;
-      tangents[index + 1] = 0;
-      continue;
-    }
-
-    const leftRatio = leftTangent / slope;
-    const rightRatio = rightTangent / slope;
-    const magnitude = leftRatio * leftRatio + rightRatio * rightRatio;
-    if (magnitude <= 9) continue;
-
-    const scale = 3 / Math.sqrt(magnitude);
-    tangents[index] = scale * leftRatio * slope;
-    tangents[index + 1] = scale * rightRatio * slope;
-  }
-
-  return tangents;
+function padBasisSplineEndpoints(points: readonly FocusDriftPathPoint[]): readonly FocusDriftPathPoint[] {
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  if (!firstPoint || !lastPoint) return [];
+  return [firstPoint, firstPoint, firstPoint, ...points.slice(1, -1), lastPoint, lastPoint, lastPoint];
 }
 
-function buildSlopes(points: readonly FocusDriftPathPoint[]): readonly number[] {
-  const slopes: number[] = [];
-  for (let index = 1; index < points.length; index += 1) {
-    const previousPoint = points[index - 1];
-    const currentPoint = points[index];
-    if (previousPoint === undefined || currentPoint === undefined) continue;
-
-    const deltaX = currentPoint.x - previousPoint.x;
-    slopes.push(deltaX === 0 ? 0 : (currentPoint.y - previousPoint.y) / deltaX);
-  }
-  return slopes;
+function basisWindowAt(points: readonly FocusDriftPathPoint[], index: number): FocusDriftBasisWindow | null {
+  const p0 = points[index];
+  const p1 = points[index + 1];
+  const p2 = points[index + 2];
+  const p3 = points[index + 3];
+  if (!p0 || !p1 || !p2 || !p3) return null;
+  return { p0, p1, p2, p3 };
 }
 
-function initialTangentAt(
-  points: readonly FocusDriftPathPoint[],
-  slopes: readonly number[],
-  point: FocusDriftPathPoint,
-  index: number,
-): number {
-  if (hasBoundaryPlateau(points, point, index)) return 0;
-
-  const leftSlope = slopes[index - 1];
-  const rightSlope = slopes[index];
-  if (leftSlope === undefined) return rightSlope ?? 0;
-  if (rightSlope === undefined) return leftSlope;
-  if (isFlatSlope(leftSlope) || isFlatSlope(rightSlope)) return 0;
-  if (Math.sign(leftSlope) !== Math.sign(rightSlope)) return 0;
-  return (leftSlope + rightSlope) / 2;
+function basisBezierSegment({ p1, p2, p3 }: FocusDriftBasisWindow): FocusDriftBezierSegment {
+  return {
+    controlStart: basisPoint({ p0: p1, p1: p1, p2 }),
+    controlEnd: basisPoint({ p0: p1, p1: p2, p2 }),
+    end: basisPoint({ p0: p1, p1: p2, p2: p3 }),
+  };
 }
 
-function hasBoundaryPlateau(points: readonly FocusDriftPathPoint[], point: FocusDriftPathPoint, index: number): boolean {
-  if (!isChartBoundaryY(point.y)) return false;
-  return points[index - 1]?.y === point.y || points[index + 1]?.y === point.y;
-}
-
-function isChartBoundaryY(value: number): boolean {
-  return value === FOCUS_DRIFT_CHART_BOUNDS.top || value === FOCUS_DRIFT_CHART_BOUNDS.bottom;
-}
-
-function isFlatSlope(value: number): boolean {
-  return Math.abs(value) <= Number.EPSILON;
+function basisPoint({ p0, p1, p2 }: Omit<FocusDriftBasisWindow, "p3">): FocusDriftPathPoint {
+  return {
+    x: (p0.x + 4 * p1.x + p2.x) / 6,
+    y: (p0.y + 4 * p1.y + p2.y) / 6,
+  };
 }
