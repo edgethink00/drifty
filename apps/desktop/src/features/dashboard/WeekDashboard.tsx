@@ -219,12 +219,15 @@ export function WeekDashboard({
                     ))}
                     {events.map((event) => {
                       const rawEventHeight = (event.durationMinutes / 60) * calendarHourHeight;
-                      const shortEventMinHeight = event.isGroupedCluster ? 22 : 10;
+                      const hidesInlineText = event.durationMinutes < 10;
+                      const shortEventMinHeight = event.isGroupedCluster || hidesInlineText ? 22 : 10;
                       const shortEventMaxHeight = event.isGroupedCluster ? 30 : 26;
                       const eventHeight = event.isShort
                         ? Math.max(shortEventMinHeight, Math.min(shortEventMaxHeight, Math.round(8 + Math.sqrt(event.durationMinutes) * 4)))
                         : Math.max(28, rawEventHeight - 4);
                       const isCompactEvent = event.isShort || eventHeight < 36 || event.laneCount > 2;
+                      const showsIdentityStrip = event.isGroupedCluster || hidesInlineText;
+                      const showsInlineDetail = !isCompactEvent && !event.isGroupedCluster;
                       const eventStyle: WeekCalendarEventStyle = {
                         top: `${(event.topMinutes / 60) * calendarHourHeight}px`,
                         height: `${eventHeight}px`,
@@ -236,7 +239,7 @@ export function WeekDashboard({
                       return (
                         <article
                           aria-label={event.detailTitle.replace(/\n/g, ", ")}
-                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${event.durationMinutes < 10 ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
+                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${hidesInlineText ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
                           key={event.id}
                           tabIndex={0}
                           style={eventStyle}
@@ -257,7 +260,7 @@ export function WeekDashboard({
                           }}
                         >
                           <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
-                          {event.isGroupedCluster ? (
+                          {showsIdentityStrip ? (
                             <span className="week-v2-calendar__identity-strip" aria-hidden="true">
                               {event.identities.map((identity) => (
                                 <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
@@ -269,9 +272,9 @@ export function WeekDashboard({
                               ) : null}
                             </span>
                           ) : null}
-                          <strong className={event.isGroupedCluster ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>
+                          {hidesInlineText ? null : <strong className={event.isGroupedCluster ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
                           {!isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
-                          {!isCompactEvent ? <em>{event.detailSummary}</em> : null}
+                          {showsInlineDetail ? <em>{event.detailSummary}</em> : null}
                         </article>
                       );
                     })}
