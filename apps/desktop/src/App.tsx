@@ -3553,11 +3553,11 @@ export default function App() {
   const dashboardTrackedTimeLabel = totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m";
   const dashboardTitle =
     selectedDayContext === "Today"
-      ? dashboardTrackedTimeLabel
+      ? selectedDayContext
       : selectedDayContext === "Yesterday"
         ? selectedDayContext
         : selectedDayLabel;
-  const dashboardTitleMeta = selectedDayContext === "Today" ? "Tracked" : null;
+  const dashboardTitleDuration = dashboardTrackedTimeLabel;
   const lastCaptureDistanceLabel = status?.lastEventAt ? formatRelativeTime(status.lastEventAt) : "No captures yet";
   const uniqueAppsCount = useMemo(() => new Set(dashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [dashboardSegments]);
   const averageSessionMinutes = dashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / dashboardSegments.length) : 0;
@@ -4453,7 +4453,7 @@ export default function App() {
             dashboardProductivityTotals={dashboardProductivityTotals}
             dashboardRange={dashboardRange}
             dashboardTitle={dashboardTitle}
-            dashboardTitleMeta={dashboardTitleMeta}
+            dashboardTitleDuration={dashboardTitleDuration}
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
             flowIntervalMinutes={flowIntervalMinutes}
