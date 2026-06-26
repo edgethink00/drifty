@@ -390,11 +390,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.dashboard-page-head__title-meta {
-  font-size: var(--type-mode-label-size);
-  font-weight: 475;
-}
-
 .dashboard-page-head--today {
   margin-bottom: var(--space-2);
 }

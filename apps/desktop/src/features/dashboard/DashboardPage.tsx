@@ -32,7 +32,7 @@ type DashboardPageProps = {
     readonly endDay: string;
   };
   readonly dashboardTitle: string;
-  readonly dashboardTitleMeta: string | null;
+  readonly dashboardTitleDuration: string;
   readonly dashPeriod: DashboardPeriod;
   readonly flowBlocks: FlowBlock[];
   readonly flowIntervalMinutes: FlowIntervalMinutes;
@@ -72,7 +72,7 @@ export function DashboardPage({
   dashboardProductivityTotals,
   dashboardRange,
   dashboardTitle,
-  dashboardTitleMeta,
+  dashboardTitleDuration,
   dashPeriod,
   flowBlocks,
   flowIntervalMinutes,
@@ -123,13 +123,11 @@ export function DashboardPage({
           <div className="dashboard-page-head__row">
             <div>
               <h1
-                aria-label={dashboardTitleMeta ? `${dashboardTitle} ${dashboardTitleMeta}` : undefined}
+                aria-label={`${dashboardTitle} ${dashboardTitleDuration}`}
                 className="dashboard-page-head__title"
               >
                 <span className="dashboard-page-head__title-value">{dashboardTitle}</span>
-                {dashboardTitleMeta ? (
-                  <span className="dashboard-page-head__title-meta">{dashboardTitleMeta}</span>
-                ) : null}
+                <span className="dashboard-page-head__title-value dashboard-page-head__title-duration">{dashboardTitleDuration}</span>
               </h1>
             </div>
             {dashboardDateNavigator}
