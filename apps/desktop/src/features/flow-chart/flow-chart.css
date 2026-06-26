@@ -273,8 +273,8 @@ button.flow-cell:focus {
 }
 
 .flow-cell--empty {
-  background: transparent;
-  opacity: 1;
+  background: var(--flow-chart-empty-cell-surface);
+  opacity: var(--flow-chart-empty-cell-opacity);
 }
 
 .flow-cell--focus { background: var(--flow-tone-focus); }
