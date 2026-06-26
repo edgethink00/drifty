@@ -2072,7 +2072,8 @@ export default function App() {
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
-    if (!hasLoadedOnce) return undefined;
+    const isInteractiveHistoryOpen = activeTab === "history";
+    if (!hasLoadedOnce && !isInteractiveHistoryOpen) return undefined;
     if (!shouldRefreshHistoryData(activeTab, dashPeriod, classificationRange)) return undefined;
 
     // This effect fires on view-affecting transitions (tab / dashboard period /
