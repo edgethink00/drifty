@@ -7,6 +7,7 @@ import { logicalMinuteOfDay } from "@drifty/domain";
 import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekCalendarHoverCard } from "./HoverCards";
 import type { WeekCalendarHoverState } from "./HoverCards";
+import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -74,6 +75,7 @@ export function WeekDashboard({
   const calendarHourHeight = 56;
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
+  const canMountIdentityIcons = useDeferredWeekIdentityIcons({ calendarEvents, endDay, startDay });
   const minCalendarMinute = calendarStartHour * 60;
   const maxCalendarMinute = calendarEndHour * 60;
   const isCurrentCalendarWeek = startDay <= todayDay && todayDay <= endDay;
@@ -264,7 +266,7 @@ export function WeekDashboard({
                             <span className="week-v2-calendar__identity-strip" aria-hidden="true">
                               {event.identities.map((identity) => (
                                 <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
-                                  <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} />
+                                  {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} /> : null}
                                 </span>
                               ))}
                               {event.hiddenIdentityCount > 0 ? (
