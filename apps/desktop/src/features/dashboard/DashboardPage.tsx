@@ -26,6 +26,7 @@ type DashboardPageProps = {
   readonly dashboardAppUsage: AppUsagePanelItem[];
   readonly dashboardCategoryTotals: CategoryDuration[];
   readonly dashboardDateNavigator: ReactNode;
+  readonly dashboardEffectiveProductivityTotals: ProductivityDuration[];
   readonly dashboardProductivityTotals: ProductivityDuration[];
   readonly dashboardRange: {
     readonly startDay: string;
@@ -69,6 +70,7 @@ export function DashboardPage({
   dashboardAppUsage,
   dashboardCategoryTotals,
   dashboardDateNavigator,
+  dashboardEffectiveProductivityTotals,
   dashboardProductivityTotals,
   dashboardRange,
   dashboardTitle,
@@ -175,7 +177,7 @@ export function DashboardPage({
               </div>
               <FlowCompactSplitChart
                 categoryEntries={dashboardCategoryTotals}
-                productivityEntries={dashboardProductivityTotals}
+                productivityEntries={dashboardEffectiveProductivityTotals}
                 totalSeconds={totalSeconds}
                 flowBlocks={flowBlocks}
                 appIcons={appIcons}

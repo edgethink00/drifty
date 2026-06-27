@@ -8,6 +8,7 @@ import type {
   FlowBlock,
   HourBucket,
   HourlyBucket,
+  ProductivityBasis,
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
@@ -450,6 +451,7 @@ type FlowBlockCandidate = {
 
 export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
+  const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
   const intervalMs = intervalMinutes * 60 * 1000;
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
 
@@ -458,6 +460,7 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
     const end = new Date(segment.endedAt);
     let cursor = new Date(start);
     const classification = classifyActivityDetailed(segment, options);
+    const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
 
     while (cursor < end) {
       const blockStart = new Date(cursor);
@@ -517,7 +520,9 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
             youtubePublishDate: segment.youtubePublishDate ?? null,
             youtubeUploadDate: segment.youtubeUploadDate ?? null,
             category: classification.category,
-            productivity: classification.productivity,
+            productivity: effectiveProductivity.productivity,
+            sourceProductivity: classification.productivity,
+            productivityBasis: effectiveProductivity.basis,
             classificationSource: classification.source,
             aiClassification: classification.source === "llm",
             aiCachedClassification: classification.aiCached ?? null,
@@ -555,7 +560,9 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
             youtubePublishDate: segment.youtubePublishDate ?? null,
             youtubeUploadDate: segment.youtubeUploadDate ?? null,
             category: classification.category,
-            productivity: classification.productivity,
+            productivity: effectiveProductivity.productivity,
+            sourceProductivity: classification.productivity,
+            productivityBasis: effectiveProductivity.basis,
             classificationSource: classification.source,
             aiClassification: classification.source === "llm",
             aiCachedClassification: classification.aiCached ?? null,
@@ -842,6 +849,31 @@ export function buildProductivityDurations(segments: ActivitySegment[], options?
   for (const segment of segments) {
     const { productivity } = classifyActivity(segment, options);
     const target = totals.find((entry) => entry.productivity === productivity);
+    if (!target) continue;
+    target.totalSeconds += segment.durationSeconds;
+    target.segments += 1;
+  }
+
+  return totals.map((entry) => ({
+    ...entry,
+    ratio: totalSeconds > 0 ? entry.totalSeconds / totalSeconds : 0,
+  }));
+}
+
+export function buildEffectiveProductivityDurations(segments: ActivitySegment[], options?: ClassificationOptions): ProductivityDuration[] {
+  const totals = PRODUCTIVITY_ORDER.map((productivity) => ({
+    productivity,
+    totalSeconds: 0,
+    segments: 0,
+    ratio: 0,
+  }));
+  const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
+  const totalSeconds = totalDurationSeconds(segments);
+
+  for (const segment of segments) {
+    const classification = classifyActivityDetailed(segment, options);
+    const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
+    const target = totals.find((entry) => entry.productivity === effectiveProductivity.productivity);
     if (!target) continue;
     target.totalSeconds += segment.durationSeconds;
     target.segments += 1;
@@ -1183,6 +1215,342 @@ export const CATEGORY_ORDER: ActivityCategory[] = [
 ];
 
 export const PRODUCTIVITY_ORDER: ProductivityLabel[] = ["focus", "neutral", "drift"];
+
+const PRODUCTIVITY_CONTEXT_WINDOW_SECONDS = 5 * 60;
+const MINIMUM_CONTEXT_WINDOW_TRACKED_SECONDS = 2 * 60;
+const CONTEXT_WINDOW_STRONG_SHARE = 0.7;
+const CONTEXTUAL_PRODUCTIVITY_MAX_PASSES = 6;
+const COMMUNICATION_EPISODE_MAX_GAP_SECONDS = 60;
+const MIXED_COMMUNICATION_CONTEXTUAL_FOCUS_SECONDS = 5 * 60;
+const WORK_PRIMARY_COMMUNICATION_SHORT_SECONDS = 8 * 60;
+const WORK_PRIMARY_COMMUNICATION_EXTENDED_SECONDS = 20 * 60;
+const UTILITY_CONTEXTUAL_SECONDS = 90;
+
+type ClassifiedSegment = {
+  readonly segment: ActivitySegment;
+  readonly classification: ActivityClassificationDetail;
+  readonly startMs: number;
+  readonly endMs: number;
+};
+
+type EffectiveProductivityResolution = {
+  readonly productivity: ProductivityLabel;
+  readonly basis: ProductivityBasis;
+};
+
+type CommunicationClass = "work_primary" | "mixed" | "unknown";
+
+type ContextWindowStats = {
+  readonly trackedSeconds: number;
+  readonly strongFocusSeconds: number;
+  readonly driftSeconds: number;
+  readonly strongFocus: boolean;
+  readonly driftDominated: boolean;
+};
+
+const WORK_PRIMARY_COMMUNICATION_APP_NAMES: readonly string[] = [
+  "slack",
+  "microsoft teams",
+  "teams",
+  "zoom",
+  "zoom.us",
+  "gmail",
+  "mail",
+  "microsoft outlook",
+  "outlook",
+  "calendar",
+  "google calendar",
+] as const;
+const WORK_PRIMARY_COMMUNICATION_BUNDLE_IDS: readonly string[] = [
+  "com.tinyspeck.slackmacgap",
+  "com.microsoft.teams",
+  "com.microsoft.teams2",
+  "us.zoom.xos",
+  "com.apple.mail",
+  "com.microsoft.outlook",
+] as const;
+const WORK_PRIMARY_COMMUNICATION_DOMAINS: readonly string[] = [
+  "slack.com",
+  "mail.google.com",
+  "gmail.com",
+  "outlook.live.com",
+  "outlook.office.com",
+  "teams.microsoft.com",
+  "zoom.us",
+  "meet.google.com",
+  "calendar.google.com",
+] as const;
+const MIXED_COMMUNICATION_APP_NAMES: readonly string[] = ["kakaotalk", "discord", "telegram", "whatsapp", "messages"] as const;
+const MIXED_COMMUNICATION_BUNDLE_IDS: readonly string[] = [
+  "com.kakao.kakaotalkmac",
+  "com.hnc.discord",
+  "org.telegram.desktop",
+  "com.apple.messages",
+] as const;
+const MIXED_COMMUNICATION_DOMAINS: readonly string[] = ["discord.com", "whatsapp.com", "web.whatsapp.com", "telegram.org", "web.telegram.org"] as const;
+
+function buildEffectiveProductivityBySegmentId(segments: ActivitySegment[], options?: ClassificationOptions): Map<string, EffectiveProductivityResolution> {
+  const classifiedSegments = classifiedSegmentsInTimeOrder(segments, options);
+  const productivities = new Map<string, EffectiveProductivityResolution>();
+  const episodes = communicationEpisodes(classifiedSegments);
+
+  for (const item of classifiedSegments) {
+    productivities.set(item.segment.id, defaultEffectiveProductivityForClassification(item.classification));
+  }
+
+  for (let pass = 0; pass < CONTEXTUAL_PRODUCTIVITY_MAX_PASSES; pass += 1) {
+    let changed = false;
+
+    for (const episode of episodes) {
+      const productivity = communicationEpisodeProductivity(episode, classifiedSegments, productivities);
+      for (const item of episode) {
+        changed = setEffectiveProductivity(productivities, item, productivity) || changed;
+      }
+    }
+
+    for (const item of classifiedSegments) {
+      if (item.classification.category !== "utility") continue;
+      changed = setEffectiveProductivity(productivities, item, utilityProductivity(item, classifiedSegments, productivities)) || changed;
+    }
+
+    if (!changed) break;
+  }
+
+  return productivities;
+}
+
+function classifiedSegmentsInTimeOrder(segments: ActivitySegment[], options?: ClassificationOptions): ClassifiedSegment[] {
+  return segments.flatMap((segment): ClassifiedSegment[] => {
+    const startMs = new Date(segment.startedAt).getTime();
+    const endMs = new Date(segment.endedAt).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+    return [{
+      segment,
+      classification: classifyActivityDetailed(segment, options),
+      startMs,
+      endMs,
+    }];
+  }).sort((left, right) => left.startMs - right.startMs || left.endMs - right.endMs);
+}
+
+function defaultEffectiveProductivityForClassification(classification: ActivityClassificationDetail): EffectiveProductivityResolution {
+  if (classification.category === "communication" || classification.category === "utility") {
+    return resolveEffectiveProductivity("neutral", classification.productivity);
+  }
+  return directProductivity(classification.productivity);
+}
+
+function directProductivity(productivity: ProductivityLabel): EffectiveProductivityResolution {
+  return { productivity, basis: "direct" };
+}
+
+function resolveEffectiveProductivity(productivity: ProductivityLabel, sourceProductivity: ProductivityLabel): EffectiveProductivityResolution {
+  return {
+    productivity,
+    basis: productivity === sourceProductivity ? "direct" : "contextual",
+  };
+}
+
+function setEffectiveProductivity(
+  productivities: Map<string, EffectiveProductivityResolution>,
+  item: ClassifiedSegment,
+  productivity: ProductivityLabel,
+): boolean {
+  const nextProductivity = resolveEffectiveProductivity(productivity, item.classification.productivity);
+  const currentProductivity = productivities.get(item.segment.id);
+  if (
+    currentProductivity?.productivity === nextProductivity.productivity
+    && currentProductivity.basis === nextProductivity.basis
+  ) {
+    return false;
+  }
+  productivities.set(item.segment.id, nextProductivity);
+  return true;
+}
+
+function communicationEpisodes(classifiedSegments: readonly ClassifiedSegment[]): ClassifiedSegment[][] {
+  const episodes: ClassifiedSegment[][] = [];
+  let current: ClassifiedSegment[] = [];
+
+  for (const item of classifiedSegments) {
+    if (item.classification.category !== "communication") {
+      pushCommunicationEpisode(episodes, current);
+      current = [];
+      continue;
+    }
+
+    const previous = current[current.length - 1];
+    if (previous && item.startMs - previous.endMs > COMMUNICATION_EPISODE_MAX_GAP_SECONDS * 1000) {
+      pushCommunicationEpisode(episodes, current);
+      current = [];
+    }
+    current.push(item);
+  }
+
+  pushCommunicationEpisode(episodes, current);
+  return episodes;
+}
+
+function pushCommunicationEpisode(episodes: ClassifiedSegment[][], episode: ClassifiedSegment[]): void {
+  if (episode.length > 0) episodes.push(episode);
+}
+
+function communicationEpisodeProductivity(
+  episode: readonly ClassifiedSegment[],
+  classifiedSegments: readonly ClassifiedSegment[],
+  productivities: ReadonlyMap<string, EffectiveProductivityResolution>,
+): ProductivityLabel {
+  const first = episode[0];
+  const last = episode[episode.length - 1];
+  if (!first || !last) return "neutral";
+
+  const durationSeconds = Math.round((last.endMs - first.startMs) / 1000);
+  const before = contextWindowStats(classifiedSegments, productivities, first.startMs - PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000, first.startMs);
+  const after = contextWindowStats(classifiedSegments, productivities, last.endMs, last.endMs + PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000);
+  const communicationClass = episodeCommunicationClass(episode);
+
+  if (communicationClass === "mixed") {
+    return durationSeconds <= MIXED_COMMUNICATION_CONTEXTUAL_FOCUS_SECONDS && before.strongFocus && after.strongFocus
+      ? "focus"
+      : "neutral";
+  }
+
+  if (communicationClass !== "work_primary") return "neutral";
+  if (
+    durationSeconds <= WORK_PRIMARY_COMMUNICATION_SHORT_SECONDS
+    && ((before.strongFocus && !after.driftDominated) || (after.strongFocus && !before.driftDominated))
+  ) {
+    return "focus";
+  }
+  if (durationSeconds <= WORK_PRIMARY_COMMUNICATION_EXTENDED_SECONDS && before.strongFocus && after.strongFocus) {
+    return "focus";
+  }
+  return "neutral";
+}
+
+function episodeCommunicationClass(episode: readonly ClassifiedSegment[]): CommunicationClass {
+  let hasWorkPrimary = false;
+
+  for (const item of episode) {
+    const communicationClass = segmentCommunicationClass(item.segment);
+    if (communicationClass === "mixed") return "mixed";
+    if (communicationClass === "work_primary") hasWorkPrimary = true;
+  }
+
+  return hasWorkPrimary ? "work_primary" : "unknown";
+}
+
+function segmentCommunicationClass(segment: ActivitySegment): CommunicationClass {
+  const appName = normalizeText(segment.appName);
+  const bundleId = normalizeText(segment.bundleId);
+  const domain = communicationDomain(segment);
+
+  if (
+    matchesKnownText(appName, MIXED_COMMUNICATION_APP_NAMES)
+    || matchesKnownText(bundleId, MIXED_COMMUNICATION_BUNDLE_IDS)
+    || matchesKnownDomain(domain, MIXED_COMMUNICATION_DOMAINS)
+  ) {
+    return "mixed";
+  }
+
+  if (
+    matchesKnownText(appName, WORK_PRIMARY_COMMUNICATION_APP_NAMES)
+    || matchesKnownText(bundleId, WORK_PRIMARY_COMMUNICATION_BUNDLE_IDS)
+    || matchesKnownDomain(domain, WORK_PRIMARY_COMMUNICATION_DOMAINS)
+  ) {
+    return "work_primary";
+  }
+
+  return "unknown";
+}
+
+function matchesKnownText(value: string, candidates: readonly string[]): boolean {
+  return Boolean(value && candidates.includes(value));
+}
+
+function communicationDomain(segment: ActivitySegment): string {
+  const rawDomain = segment.siteDomain || segment.siteUrl;
+  if (!rawDomain) return "";
+
+  const normalized = normalizeDomain(rawDomain);
+  if (normalized && !normalized.includes("/") && !normalized.includes(":")) return normalized;
+
+  const trimmed = rawDomain.trim();
+  try {
+    return normalizeDomain(new URL(trimmed).hostname);
+  } catch {
+    try {
+      return normalizeDomain(new URL(`https://${trimmed}`).hostname);
+    } catch {
+      return "";
+    }
+  }
+}
+
+function matchesKnownDomain(domain: string, domains: readonly string[]): boolean {
+  return Boolean(domain && domains.some((candidate) => domainMatches(domain, candidate)));
+}
+
+function contextWindowStats(
+  classifiedSegments: readonly ClassifiedSegment[],
+  productivities: ReadonlyMap<string, EffectiveProductivityResolution>,
+  windowStartMs: number,
+  windowEndMs: number,
+): ContextWindowStats {
+  let trackedSeconds = 0;
+  let strongFocusSeconds = 0;
+  let driftSeconds = 0;
+
+  for (const item of classifiedSegments) {
+    const overlapSeconds = clippedOverlapSeconds(item, windowStartMs, windowEndMs);
+    if (overlapSeconds <= 0) continue;
+
+    trackedSeconds += overlapSeconds;
+    const productivity = contextualProductivity(item, productivities);
+    if (productivity === "focus") {
+      strongFocusSeconds += overlapSeconds;
+    }
+    if (productivity === "drift") {
+      driftSeconds += overlapSeconds;
+    }
+  }
+
+  return {
+    trackedSeconds,
+    strongFocusSeconds,
+    driftSeconds,
+    strongFocus: trackedSeconds >= MINIMUM_CONTEXT_WINDOW_TRACKED_SECONDS && strongFocusSeconds / trackedSeconds >= CONTEXT_WINDOW_STRONG_SHARE,
+    driftDominated: trackedSeconds >= MINIMUM_CONTEXT_WINDOW_TRACKED_SECONDS && driftSeconds / trackedSeconds >= CONTEXT_WINDOW_STRONG_SHARE,
+  };
+}
+
+function clippedOverlapSeconds(item: ClassifiedSegment, windowStartMs: number, windowEndMs: number): number {
+  const overlapStartMs = Math.max(item.startMs, windowStartMs);
+  const overlapEndMs = Math.min(item.endMs, windowEndMs);
+  return overlapEndMs > overlapStartMs ? Math.round((overlapEndMs - overlapStartMs) / 1000) : 0;
+}
+
+function contextualProductivity(
+  item: ClassifiedSegment,
+  productivities: ReadonlyMap<string, EffectiveProductivityResolution>,
+): ProductivityLabel {
+  return productivities.get(item.segment.id)?.productivity ?? defaultEffectiveProductivityForClassification(item.classification).productivity;
+}
+
+function utilityProductivity(
+  item: ClassifiedSegment,
+  classifiedSegments: readonly ClassifiedSegment[],
+  productivities: ReadonlyMap<string, EffectiveProductivityResolution>,
+): ProductivityLabel {
+  const durationSeconds = Math.round((item.endMs - item.startMs) / 1000);
+  if (durationSeconds > UTILITY_CONTEXTUAL_SECONDS) return "neutral";
+
+  const before = contextWindowStats(classifiedSegments, productivities, item.startMs - PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000, item.startMs);
+  const after = contextWindowStats(classifiedSegments, productivities, item.endMs, item.endMs + PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000);
+  if (before.strongFocus && after.strongFocus) return "focus";
+  if (before.driftDominated && after.driftDominated) return "drift";
+  return "neutral";
+}
 
 type ClassificationMode = "single-purpose" | "multipurpose";
 

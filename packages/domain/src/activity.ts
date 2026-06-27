@@ -6,6 +6,7 @@ export type FrontmostCaptureSource = "system-events" | "lsappinfo" | "unavailabl
 export const FLOW_INTERVAL_OPTIONS = [3, 5, 10] as const;
 export type FlowIntervalMinutes = typeof FLOW_INTERVAL_OPTIONS[number];
 export type ProductivityLabel = "focus" | "neutral" | "drift";
+export type ProductivityBasis = "direct" | "contextual";
 export type ActivityCategory =
   | "workspace"
   | "learning"
@@ -194,6 +195,8 @@ export interface FlowBlock {
   youtubeUploadDate?: string | null;
   category: ActivityCategory;
   productivity: ProductivityLabel;
+  sourceProductivity?: ProductivityLabel | null;
+  productivityBasis?: ProductivityBasis | null;
   classificationSource?: string | null;
   aiClassification?: boolean | null;
   aiCachedClassification?: boolean | null;
