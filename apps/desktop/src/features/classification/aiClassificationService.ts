@@ -1230,7 +1230,7 @@ async function readEdgeErrorBody(response: Response): Promise<string | null> {
   if (!text) return response.status ? `${response.status} ${response.statusText}`.trim() : null;
 
   try {
-    const parsed = JSON.parse(text) as unknown;
+    const parsed: unknown = JSON.parse(text);
     if (isRecord(parsed)) {
       if (typeof parsed.error === "string") return parsed.error;
       if (typeof parsed.message === "string") return parsed.message;

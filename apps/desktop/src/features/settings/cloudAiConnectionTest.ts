@@ -58,11 +58,11 @@ function providerDisplayName(provider: string | undefined): string {
 
 async function readFunctionError(error: unknown, fallback: string): Promise<string> {
   if (!error || typeof error !== "object" || !("context" in error)) return fallback;
-  const context = (error as { readonly context?: unknown }).context;
+  const context = error.context;
   if (!(context instanceof Response)) return fallback;
 
   try {
-    const body = await context.clone().json() as unknown;
+    const body: unknown = await context.clone().json();
     if (body && typeof body === "object" && "error" in body && typeof body.error === "string") return body.error;
   } catch {
     return context.status ? `${fallback} ${context.status} ${context.statusText}`.trim() : fallback;
