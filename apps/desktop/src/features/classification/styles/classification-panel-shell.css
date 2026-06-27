@@ -100,9 +100,11 @@
 
 .classification-panel-view__list {
   display: grid;
-  gap: 4px;
+  gap: var(--classification-row-gap);
 }
 
 .classification-panel-view {
   --classification-row-height: 48px;
+  --classification-row-radius: 11.2px;
+  --classification-row-gap: 3.2px;
 }
