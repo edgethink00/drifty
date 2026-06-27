@@ -233,7 +233,7 @@ export function WeekDashboard({
                       return (
                         <article
                           aria-label={event.detailTitle.replace(/\n/g, ", ")}
-                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.hidesInlineText ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
+                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
                           key={event.id}
                           tabIndex={0}
                           style={eventStyle}
@@ -266,7 +266,7 @@ export function WeekDashboard({
                               ) : null}
                             </span>
                           ) : null}
-                          {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
+                          {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster && eventLayout.showsIdentityStrip ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
                           {!eventLayout.isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
                           {eventLayout.showsInlineDetail ? <em>{event.detailSummary}</em> : null}
                         </article>

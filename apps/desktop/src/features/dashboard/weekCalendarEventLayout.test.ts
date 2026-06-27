@@ -19,6 +19,7 @@ function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): Week
     classificationSource: "rule",
     aiClassification: false,
     topMinutes: 690,
+    activeDurationMinutes: 45,
     durationMinutes: 45,
     isShort: false,
     lane: 0,
@@ -34,15 +35,38 @@ describe("buildWeekCalendarEventLayout", () => {
     expect(layout.eventHeight).toBe(38);
     expect(layout.isCompactEvent).toBe(false);
     expect(layout.hidesInlineText).toBe(false);
+    expect(layout.isMicroEvent).toBe(false);
+    expect(layout.isTinyEvent).toBe(false);
     expect(layout.showsIdentityStrip).toBe(true);
   });
 
-  it("keeps micro events icon-only inside the event boundary", () => {
-    const layout = buildWeekCalendarEventLayout(makeWeekCalendarEvent({ durationMinutes: 1, isShort: true }), 56);
+  it("renders micro events as color-only strips", () => {
+    const layout = buildWeekCalendarEventLayout(makeWeekCalendarEvent({
+      activeDurationMinutes: 1,
+      durationMinutes: 1,
+      isShort: true,
+    }), 56);
 
-    expect(layout.eventHeight).toBe(22);
+    expect(layout.eventHeight).toBe(6);
     expect(layout.isCompactEvent).toBe(true);
     expect(layout.hidesInlineText).toBe(true);
-    expect(layout.showsIdentityStrip).toBe(true);
+    expect(layout.isMicroEvent).toBe(true);
+    expect(layout.isTinyEvent).toBe(true);
+    expect(layout.showsIdentityStrip).toBe(false);
+  });
+
+  it("renders active time under ten minutes as a short text-only block", () => {
+    const layout = buildWeekCalendarEventLayout(makeWeekCalendarEvent({
+      activeDurationMinutes: 8,
+      durationMinutes: 21,
+      isShort: true,
+    }), 56);
+
+    expect(layout.eventHeight).toBe(12);
+    expect(layout.isCompactEvent).toBe(true);
+    expect(layout.hidesInlineText).toBe(false);
+    expect(layout.isMicroEvent).toBe(false);
+    expect(layout.isTinyEvent).toBe(true);
+    expect(layout.showsIdentityStrip).toBe(false);
   });
 });

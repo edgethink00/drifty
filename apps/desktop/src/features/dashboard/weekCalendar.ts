@@ -53,6 +53,7 @@ export type WeekCalendarEvent = {
   classificationSource: ClassificationSource;
   aiClassification: boolean;
   topMinutes: number;
+  activeDurationMinutes: number;
   durationMinutes: number;
   isShort: boolean;
   lane: number;
@@ -462,6 +463,7 @@ export function buildWeekCalendarEvents(
         classificationSource: dominantSource,
         aiClassification: aiSeconds > totalSeconds / 2,
         topMinutes: startMinute - minMinute,
+        activeDurationMinutes: Math.max(1, Math.ceil(totalSeconds / 60)),
         durationMinutes: Math.max(1, endMinute - startMinute),
         isShort: endMinute - startMinute <= shortEventMinutes,
         lane: 0,
