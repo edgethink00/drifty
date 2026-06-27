@@ -25,6 +25,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
     artifactDir: null,
     progress: null,
     errorKind: null,
+    memoryUsageBytes: null,
   };
   let managedStatus: ManagedLocalAiStatus = defaultManagedStatus;
 
@@ -52,6 +53,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             message: "Managed local model downloaded.",
             artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
             progress: null,
+            memoryUsageBytes: null,
           };
           return Promise.resolve(managedStatus);
         }
@@ -67,6 +69,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             message: "Managed local AI runtime is running.",
             artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
             progress: null,
+            memoryUsageBytes: 2_684_354_560,
           };
           return Promise.resolve(managedStatus);
         }
@@ -82,6 +85,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             artifactDir: null,
             progress: null,
             errorKind: null,
+            memoryUsageBytes: null,
           };
           return Promise.resolve(managedStatus);
         }

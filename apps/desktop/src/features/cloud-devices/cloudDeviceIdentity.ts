@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CLOUD_API_CLIENT_VERSION } from "../../lib/cloudContract";
 
 export type CloudDevicePayload = {
@@ -11,7 +11,7 @@ export type CloudDevicePayload = {
 let cachedCloudDevicePayload: Promise<CloudDevicePayload | null> | null = null;
 
 export async function readCloudDevicePayload(): Promise<CloudDevicePayload | null> {
-  if (!isTauriRuntime()) return null;
+  if (!isTauri()) return null;
   cachedCloudDevicePayload ??= invoke<string>("cloud_device_install_id")
     .then((installId) => ({
       installId,
@@ -26,8 +26,4 @@ export async function readCloudDevicePayload(): Promise<CloudDevicePayload | nul
 export async function withCloudDevicePayload<TBody extends Record<string, unknown>>(body: TBody): Promise<TBody & { readonly cloudDevice?: CloudDevicePayload }> {
   const cloudDevice = await readCloudDevicePayload();
   return cloudDevice ? { ...body, cloudDevice } : body;
-}
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

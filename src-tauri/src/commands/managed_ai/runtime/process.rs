@@ -88,6 +88,16 @@ pub(super) fn server_has_model(runtime_path: &Path, spec: ManagedAiModelSpec) ->
         })
 }
 
+pub(super) fn server_memory_usage_bytes(runtime_path: &Path) -> Option<u64> {
+    let expected = runtime_path.to_str()?;
+    let pids = runtime_listener_pids().ok()?;
+    pids.into_iter()
+        .find_map(|pid| match process_command_contains(pid, expected) {
+            Ok(true) => process_resident_memory_bytes(pid),
+            Ok(false) | Err(_) => None,
+        })
+}
+
 fn runtime_listener_matches(runtime_path: &Path) -> bool {
     let Some(expected) = runtime_path.to_str() else {
         return false;
@@ -204,6 +214,22 @@ fn process_command_contains(pid: u32, expected: &str) -> Result<bool, ManagedAiE
     }
     let command = String::from_utf8_lossy(&output.stdout);
     Ok(command.contains(expected))
+}
+
+fn process_resident_memory_bytes(pid: u32) -> Option<u64> {
+    let output = Command::new("ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("rss=")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let resident_kib = text.split_whitespace().next()?.parse::<u64>().ok()?;
+    resident_kib.checked_mul(1024)
 }
 
 fn kill_process(pid: u32) -> Result<(), ManagedAiError> {

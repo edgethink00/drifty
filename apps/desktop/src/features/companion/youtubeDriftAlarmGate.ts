@@ -13,7 +13,7 @@ import {
   type AiClassificationRunOptions,
 } from "../classification/aiClassificationService";
 
-const DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS = 4_000;
+const DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS = 12_000;
 const AI_DRIFT_ALARM_MINIMUM_CONFIDENCE = 0.85;
 
 export type YouTubeDriftAlarmGateResult =

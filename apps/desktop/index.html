@@ -40,6 +40,9 @@
     <style>
       :root {
         --boot-canvas: #0f0f0d;
+        --boot-surface: #171714;
+        --boot-surface-strong: #1f1e1a;
+        --boot-line: rgba(232, 230, 223, 0.12);
         --boot-text: #e8e6df;
         --boot-text-soft: #8a8780;
         --boot-warn: #c85a4e;
@@ -47,6 +50,9 @@
       }
       :root[data-theme="light"] {
         --boot-canvas: #f2f1ed;
+        --boot-surface: #fbfaf7;
+        --boot-surface-strong: #ebe8df;
+        --boot-line: rgba(28, 28, 25, 0.12);
         --boot-text: #1c1c19;
         --boot-text-soft: #79776f;
         --boot-warn: #9e4238;
@@ -79,11 +85,145 @@
         position: fixed;
         inset: 0;
         display: grid;
-        place-items: center;
-        padding: 24px;
+        grid-template-columns: minmax(0, 1fr);
+        padding: 32px 28px 24px;
+        box-sizing: border-box;
+        background: var(--boot-canvas);
         pointer-events: none;
       }
+      html[data-surface="watcher"] #boot-shell,
+      html[data-surface="drift-alarm"] #boot-shell {
+        display: none;
+      }
+      .boot-chrome {
+        display: grid;
+        grid-template-columns: 205px minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid var(--boot-line);
+        border-radius: 18px;
+        background: var(--boot-surface);
+        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
+      }
+      .boot-sidebar {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 28px;
+        min-width: 0;
+        padding: 18px 14px;
+        border-right: 1px solid var(--boot-line);
+        background: color-mix(in srgb, var(--boot-surface-strong) 66%, var(--boot-canvas));
+      }
+      .boot-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--boot-text);
+        font-size: 14px;
+        font-weight: 650;
+      }
+      .boot-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--boot-text) 18%, var(--boot-surface));
+      }
+      .boot-nav {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .boot-nav-line,
+      .boot-skeleton-line {
+        display: block;
+        overflow: hidden;
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg, transparent, color-mix(in srgb, var(--boot-text) 8%, transparent), transparent),
+          color-mix(in srgb, var(--boot-text-soft) 18%, transparent);
+        background-size: 220% 100%;
+        animation: boot-sheen 1.5s ease-in-out infinite;
+      }
+      .boot-nav-line {
+        height: 34px;
+      }
+      .boot-nav-line:nth-child(1) { width: 92%; }
+      .boot-nav-line:nth-child(2) { width: 76%; }
+      .boot-nav-line:nth-child(3) { width: 82%; }
+      .boot-nav-line:nth-child(4) { width: 68%; }
+      .boot-sidebar-foot {
+        display: grid;
+        gap: 8px;
+      }
+      .boot-main {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 16px;
+        min-width: 0;
+        min-height: 0;
+        padding: 22px;
+      }
+      .boot-main-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .boot-title-stack {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+      .boot-skeleton-line {
+        height: 12px;
+      }
+      .boot-skeleton-line--title {
+        width: 210px;
+        height: 30px;
+      }
+      .boot-skeleton-line--subtitle { width: 144px; }
+      .boot-skeleton-line--control {
+        width: 170px;
+        height: 36px;
+      }
+      .boot-dashboard {
+        display: grid;
+        grid-template-columns: minmax(0, 4fr) minmax(12rem, 1fr);
+        gap: 14px;
+        min-width: 0;
+      }
+      .boot-panel {
+        min-height: 156px;
+        border: 1px solid var(--boot-line);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--boot-surface-strong) 54%, var(--boot-surface));
+      }
+      .boot-panel--chart {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+      }
+      .boot-chart-row {
+        height: 18px;
+        border-radius: 5px;
+      }
+      .boot-chart-row:nth-child(1) { width: 78%; }
+      .boot-chart-row:nth-child(2) { width: 92%; }
+      .boot-chart-row:nth-child(3) { width: 70%; }
+      .boot-chart-row:nth-child(4) { width: 84%; }
+      .boot-side-panels {
+        display: grid;
+        gap: 10px;
+      }
+      .boot-insights {
+        display: grid;
+        grid-template-columns: 1.6fr 0.7fr;
+        gap: 10px;
+        min-width: 0;
+      }
       .boot-loading {
+        justify-self: start;
         font-size: 15px;
         font-weight: 500;
         letter-spacing: 0.01em;
@@ -93,6 +233,32 @@
       @keyframes boot-pulse {
         0%, 100% { opacity: 0.45; }
         50%      { opacity: 0.9; }
+      }
+      @keyframes boot-sheen {
+        0% { background-position: 140% 0; }
+        100% { background-position: -80% 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-loading,
+        .boot-nav-line,
+        .boot-skeleton-line {
+          animation: none;
+        }
+      }
+      @media (max-width: 720px) {
+        #boot-shell {
+          padding: 18px;
+        }
+        .boot-chrome {
+          grid-template-columns: 1fr;
+        }
+        .boot-sidebar {
+          display: none;
+        }
+        .boot-dashboard,
+        .boot-insights {
+          grid-template-columns: 1fr;
+        }
       }
       .boot-error {
         position: fixed;
@@ -163,7 +329,50 @@
   </head>
   <body>
     <div id="boot-shell" aria-busy="true" aria-label="Loading Drifty">
-      <span id="boot-status" class="boot-loading">drifty loading&hellip;</span>
+      <div class="boot-chrome">
+        <aside class="boot-sidebar" aria-hidden="true">
+          <div class="boot-brand">
+            <span class="boot-mark"></span>
+            <span>Drifty</span>
+          </div>
+          <div class="boot-nav">
+            <span class="boot-nav-line"></span>
+            <span class="boot-nav-line"></span>
+            <span class="boot-nav-line"></span>
+            <span class="boot-nav-line"></span>
+          </div>
+          <div class="boot-sidebar-foot">
+            <span class="boot-skeleton-line"></span>
+            <span class="boot-skeleton-line"></span>
+          </div>
+        </aside>
+        <main class="boot-main">
+          <header class="boot-main-head">
+            <div class="boot-title-stack" aria-hidden="true">
+              <span class="boot-skeleton-line boot-skeleton-line--title"></span>
+              <span class="boot-skeleton-line boot-skeleton-line--subtitle"></span>
+            </div>
+            <span class="boot-skeleton-line boot-skeleton-line--control" aria-hidden="true"></span>
+          </header>
+          <span id="boot-status" class="boot-loading">drifty loading&hellip;</span>
+          <section class="boot-dashboard" aria-hidden="true">
+            <div class="boot-panel boot-panel--chart">
+              <span class="boot-skeleton-line boot-chart-row"></span>
+              <span class="boot-skeleton-line boot-chart-row"></span>
+              <span class="boot-skeleton-line boot-chart-row"></span>
+              <span class="boot-skeleton-line boot-chart-row"></span>
+            </div>
+            <div class="boot-side-panels">
+              <div class="boot-panel"></div>
+              <div class="boot-panel"></div>
+            </div>
+          </section>
+          <section class="boot-insights" aria-hidden="true">
+            <div class="boot-panel"></div>
+            <div class="boot-panel"></div>
+          </section>
+        </main>
+      </div>
     </div>
     <div id="boot-error" class="boot-error"></div>
     <div id="root"></div>

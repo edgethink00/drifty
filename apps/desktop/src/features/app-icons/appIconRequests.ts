@@ -39,7 +39,7 @@ function segmentToAppIdentity(segment: ActivitySegment): AppIdentity {
   return { appName: segment.appName, bundleId: bundleId ? bundleId : null };
 }
 
-function appIconIdentityKey(identity: AppIdentity): string {
+export function appIconIdentityKey(identity: AppIdentity): string {
   const bundleId = identity.bundleId?.trim();
   return bundleId ? bundleId : identity.appName;
 }

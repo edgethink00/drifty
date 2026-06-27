@@ -1557,7 +1557,12 @@
 }
 
 .week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) .week-v2-calendar__identity-strip {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) {
+  gap: 0;
+  padding-block: 2px 3px;
 }
 
 .week-v2-calendar__event--grouped.week-v2-calendar__event--compact {

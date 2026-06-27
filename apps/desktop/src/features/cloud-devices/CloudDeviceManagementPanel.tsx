@@ -25,6 +25,7 @@ export function CloudDeviceManagementPanel({
 }: CloudDeviceManagementPanelProps) {
   const refreshLabel = isRefreshing ? "Refreshing Cloud devices" : "Refresh Cloud devices";
   const [pendingRemovalDevice, setPendingRemovalDevice] = useState<CloudDeviceRecord | null>(null);
+  const accessMessage = access && !access.allowed && access.message ? access.message : null;
 
   function confirmDeviceRemoval() {
     if (pendingRemovalDevice === null) return;
@@ -84,7 +85,9 @@ export function CloudDeviceManagementPanel({
               </button>
             )}
           </div>
-        )) : (
+        )) : accessMessage ? (
+          <p className="cloud-device-management__empty cloud-device-management__empty--error" role="status">{accessMessage}</p>
+        ) : (
           <p className="cloud-device-management__empty">Refresh devices to load active Macs for this account.</p>
         )}
       </div>

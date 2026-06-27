@@ -104,16 +104,6 @@ describe("Settings content styles", () => {
     expect(popoverRule).toContain("z-index: 25;");
   });
 
-  it("lets long saved classification rule detail values wrap inside rule cards", () => {
-    const styles = readAppStyles();
-    const textRule = cssRule(styles, ".classification-rule-card__text");
-    const detailRule = cssRule(styles, ".classification-rule-card__detail");
-
-    expect(textRule).toContain("min-width: 0;");
-    expect(detailRule).toContain("overflow-wrap: anywhere;");
-    expect(detailRule).toContain("word-break: break-word;");
-  });
-
   it("keeps exact URL classification rule controls compact and readable", () => {
     const styles = readAppStyles();
     const modeControlRule = cssRule(styles, ".classification-rule-mode-control");

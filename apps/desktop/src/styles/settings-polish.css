@@ -1905,43 +1905,74 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   font-style: normal;
 }
 
+.classification-rule-saved-block {
+  display: grid;
+}
+
+.content--settings .classification-rule-list-section.settings-row {
+  align-items: stretch;
+  display: grid;
+  gap: var(--space-3);
+}
+
 .classification-rule-list-head {
   align-items: start;
-  border-bottom: 1px solid var(--line);
   display: flex;
   gap: var(--space-3);
   justify-content: space-between;
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-3);
+  margin: 0;
 }
 
-.classification-rule-list-head h3 {
-  border-bottom: 0;
-  margin-bottom: var(--space-1);
-  padding-bottom: 0;
+.classification-rule-list-shell {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
+  overflow: hidden;
 }
 
 .classification-rule-list {
   display: grid;
-  gap: var(--space-2);
+  gap: 0;
+  max-height: min(14.75rem, 42vh);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .classification-rule-card {
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-strong) 58%, transparent);
-  display: flex;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  display: grid;
   gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
   justify-content: space-between;
-  padding: var(--space-3);
+  min-height: 3.45rem;
+  padding: 0.55rem var(--space-3);
 }
 
-.classification-rule-card__main,
+.classification-rule-card:first-child {
+  border-top: 0;
+}
+
+.classification-rule-card:hover {
+  background: color-mix(in srgb, var(--surface-strong) 56%, transparent);
+}
+
+.classification-rule-card__main {
+  align-items: center;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: 1.6rem auto minmax(0, 1fr);
+  min-width: 0;
+}
+
 .classification-rule-card__actions {
   align-items: center;
   display: flex;
   gap: var(--space-2);
+  justify-content: end;
   min-width: 0;
 }
 
@@ -1960,20 +1991,57 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 
 .classification-rule-card__main > div,
 .classification-rule-card__text {
+  display: grid;
+  gap: 0.12rem;
   min-width: 0;
 }
 
+.classification-rule-card strong {
+  line-height: 1.15;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .classification-rule-card p {
-  margin: var(--space-1) 0 0;
+  line-height: 1.25;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .classification-rule-card__detail {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--settings .classification-rule-card__delete.settings-btn {
+  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  height: 2rem;
+  min-height: 2rem;
+  min-width: 6.25rem;
+  padding-inline: var(--space-3);
+}
+
+.content--settings .classification-rule-card__delete.settings-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
+  color: var(--warn);
 }
 
 .classification-rule-empty {
-  margin-top: var(--space-3);
+  margin: 0;
+}
+
+.classification-rule-list-shell .classification-rule-hint {
+  margin: 0;
+  padding: var(--space-3);
 }
 
 @media (max-width: 1100px) {
@@ -1992,8 +2060,12 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
     grid-column: 1 / -1;
   }
 
-  .classification-rule-list-head,
   .classification-rule-card {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .classification-rule-list-head {
     align-items: stretch;
     flex-direction: column;
   }

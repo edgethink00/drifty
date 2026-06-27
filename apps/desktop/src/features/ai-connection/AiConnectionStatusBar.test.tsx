@@ -63,25 +63,25 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
-  it("returns checking while local provider settings are being verified", () => {
+  it("returns checking with actual local memory usage while local provider settings are being verified", () => {
     const status = resolveAiConnectionStatus(statusInput({
       localProviderStatus: { kind: "checking" },
       localProviderLabel: "Gemma 4 12B local",
-      localMemoryLabel: "16 GB RAM",
+      localMemoryUsageBytes: 2_684_354_560,
     }));
 
     expect(status).toMatchObject({
       tone: "neutral",
       label: "Checking",
       providerLabel: "Gemma 4 12B local",
-      memoryLabel: "16.0 GB RAM",
+      memoryLabel: "2.5 GB RAM",
     });
   });
 
   it("does not attach memory details to cloud AI status", () => {
     const status = resolveAiConnectionStatus(statusInput({
       canUseCloudAi: true,
-      localMemoryLabel: "16 GB RAM",
+      localMemoryUsageBytes: 2_684_354_560,
     }));
 
     expect(status).toMatchObject({
@@ -166,15 +166,15 @@ describe("AiConnectionStatusBar", () => {
           tone: "ok",
           label: "Connected",
           providerLabel: "Local AI",
-          memoryLabel: "16.0 GB RAM",
+          memoryLabel: "2.5 GB RAM",
         }}
         onOpenSettings={vi.fn()}
       />,
     );
 
-    const status = screen.getByRole("button", { name: /memory 16\.0 gb ram/i });
+    const status = screen.getByRole("button", { name: /memory in use 2\.5 gb ram/i });
 
-    expect(status.textContent).toContain("16.0 GB RAM");
+    expect(status.textContent).toContain("2.5 GB RAM");
   });
 });
 
@@ -183,7 +183,7 @@ function statusInput(overrides: Partial<AiConnectionStatusInput> = {}): AiConnec
     canUseCloudAi: false,
     localProviderStatus: { kind: "unconfigured" },
     localProviderLabel: null,
-    localMemoryLabel: null,
+    localMemoryUsageBytes: null,
     classificationRunning: false,
     classificationIssueKind: null,
     cloudIssueKind: null,

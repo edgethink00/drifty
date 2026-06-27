@@ -58,7 +58,7 @@ import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-
 import {
   aiConnectionIssueKindFromMessage,
 } from "./features/ai-connection/aiConnectionHealth";
-import { collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
+import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
@@ -200,6 +200,7 @@ import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardRefreshInputs } from "./features/dashboard/dashboardRefreshPolicy";
+import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
@@ -258,6 +259,12 @@ type DashboardWeekRefreshState = {
   readonly status: DashboardWeekRefreshStatus;
 };
 
+type AppIconLoadRequest = {
+  readonly segments: readonly ActivitySegment[];
+  readonly shouldReportFailure?: () => boolean;
+  readonly failureMessage: string;
+};
+
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const APP_REFRESH_INTERVAL_MS = 30_000;
@@ -284,6 +291,7 @@ type ClassificationCorrectionDraft = {
   readonly targetValue: string;
   readonly detailKind: ClassificationRuleDetailKind | null;
   readonly detailValue: string | null;
+  readonly detailDisplayLabel: string | null;
   readonly category: ActivityCategory;
   readonly productivity: ProductivityLabel;
 };
@@ -371,11 +379,13 @@ function buildClassificationCorrectionDraft({
   scope,
   segment,
   classificationOptions,
+  detailDisplayLabel,
 }: {
   readonly rowId: string | null;
   readonly scope: ClassificationCorrectionScope;
   readonly segment: ActivitySegment;
   readonly classificationOptions: ClassificationOptions;
+  readonly detailDisplayLabel: string | null;
 }): ClassificationCorrectionDraft | null {
   const target = classificationRuleTargetForSegment(segment);
   if (!target) return null;
@@ -390,6 +400,7 @@ function buildClassificationCorrectionDraft({
     targetValue: urlDetail?.targetValue ?? target.targetValue,
     detailKind: detail.detailKind,
     detailValue: detail.detailValue,
+    detailDisplayLabel: scope === "detail" ? detailDisplayLabel : null,
     category: classification.category,
     productivity: classification.productivity,
   };
@@ -569,14 +580,6 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
 }
 
-function DeferredTabBodyFallback({ label }: { readonly label: string }) {
-  return (
-    <div className="history-empty" role="status" aria-live="polite">
-      <strong>Loading {label}...</strong>
-    </div>
-  );
-}
-
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
@@ -683,7 +686,7 @@ export default function App() {
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionProviderLabel,
-    localAiMemoryLabel,
+    localAiMemoryUsageBytes,
     localAiProviderStatus,
     localAiSetup,
     recordLocalAiClassificationError,
@@ -1018,7 +1021,7 @@ export default function App() {
     canUseCloudAi: canUseCloudAiClassification,
     localProviderStatus: localAiProviderStatus,
     localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
-    localMemoryLabel: localAiMemoryLabel,
+    localMemoryUsageBytes: localAiMemoryUsageBytes,
     classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
     classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
     cloudIssueKind: billingEntitlementError
@@ -1067,6 +1070,7 @@ export default function App() {
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
+  const appIconRequestsInFlightRef = useRef<Set<string>>(new Set());
   const driftAlarmRequestInFlightRef = useRef(false);
   const liveDriftAlarmRefreshInFlightRef = useRef(false);
   const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
@@ -1111,6 +1115,30 @@ export default function App() {
     compactHistoryInFlightRef.current.set(key, { range: historyTimelineRange, promise });
     return promise;
   }, [materializeBuiltInHeuristicTimeline]);
+  const loadMissingAppIcons = useCallback(({ segments: segmentsToInspect, shouldReportFailure, failureMessage }: AppIconLoadRequest) => {
+    void (async () => {
+      const missingIconRequests = collectMissingAppIconRequests(segmentsToInspect, appIconsRef.current).filter((identity) => {
+        const identityKey = appIconIdentityKey(identity);
+        if (appIconRequestsInFlightRef.current.has(identityKey)) return false;
+        appIconRequestsInFlightRef.current.add(identityKey);
+        return true;
+      });
+      if (missingIconRequests.length === 0) return;
+
+      try {
+        const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
+        setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
+      } catch (error) {
+        if (shouldReportFailure?.() === false) return;
+        const message = error instanceof Error ? error.message : "unknown error";
+        console.warn(failureMessage, message);
+      } finally {
+        for (const identity of missingIconRequests) {
+          appIconRequestsInFlightRef.current.delete(appIconIdentityKey(identity));
+        }
+      }
+    })();
+  }, []);
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
     const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
@@ -1729,20 +1757,13 @@ export default function App() {
         }
       })();
 
-      void (async () => {
-        try {
-          const iconSegments = materializedArchiveTimelines === null
-            ? materializedTimeline.segments
-            : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments];
-          const missingIconRequests = collectMissingAppIconRequests(iconSegments, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (refreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch {
-          if (refreshRequestRef.current !== requestId) return;
-        }
-      })();
+      loadMissingAppIcons({
+        segments: materializedArchiveTimelines === null
+          ? materializedTimeline.segments
+          : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments],
+        shouldReportFailure: () => refreshRequestRef.current === requestId,
+        failureMessage: "Failed to load dashboard app icons",
+      });
       return true;
     } catch (nextError) {
       if (refreshRequestRef.current !== requestId) return false;
@@ -1762,15 +1783,16 @@ export default function App() {
   }
 
   function startClassificationCorrection(scope: ClassificationCorrectionScope, rowId: string | null = null) {
-    const sourceSegment = rowId
-      ? classificationActivityRows.find((row) => row.id === rowId)?.segments[0] ?? null
-      : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null;
+    const sourceRow = rowId ? classificationActivityRows.find((row) => row.id === rowId) ?? null : null;
+    const sourceSegment = sourceRow?.segments[0]
+      ?? (rowId ? null : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null);
     if (!sourceSegment) return;
     const draft = buildClassificationCorrectionDraft({
       rowId,
       scope,
       segment: sourceSegment,
       classificationOptions,
+      detailDisplayLabel: sourceRow?.label ?? null,
     });
     if (!draft) return;
     setClassificationCorrectionDraft(draft);
@@ -1867,19 +1889,11 @@ export default function App() {
       setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "loading" });
     }
     const loadMissingHistoryIcons = (segmentsToInspect: readonly ActivitySegment[]) => {
-      void (async () => {
-        try {
-          const missingIconRequests = collectMissingAppIconRequests(segmentsToInspect, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (historyRefreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch (error) {
-          if (historyRefreshRequestRef.current !== requestId) return;
-          const message = error instanceof Error ? error.message : "unknown error";
-          console.warn("Failed to load history app icons", message);
-        }
-      })();
+      loadMissingAppIcons({
+        segments: segmentsToInspect,
+        shouldReportFailure: () => historyRefreshRequestRef.current === requestId,
+        failureMessage: "Failed to load history app icons",
+      });
     };
 
     try {
@@ -1986,19 +2000,11 @@ export default function App() {
       setHistoryHasMoreSegments(timelinePage.hasMore);
       scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
 
-      void (async () => {
-        try {
-          const missingIconRequests = collectMissingAppIconRequests(materializedPage.segments, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (historyRefreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch (error) {
-          if (historyRefreshRequestRef.current !== requestId) return;
-          const message = error instanceof Error ? error.message : "unknown error";
-          console.warn("Failed to load additional history app icons", message);
-        }
-      })();
+      loadMissingAppIcons({
+        segments: materializedPage.segments,
+        shouldReportFailure: () => historyRefreshRequestRef.current === requestId,
+        failureMessage: "Failed to load additional history app icons",
+      });
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return;
       setHistoryLoadMoreError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
@@ -2012,6 +2018,7 @@ export default function App() {
     historyLoadingMore,
     historyNextCursor,
     historySegmentsLoadedRange,
+    loadMissingAppIcons,
     materializeBuiltInHeuristicTimeline,
   ]);
 
@@ -3373,6 +3380,16 @@ export default function App() {
       visibleRange: dashboardRange,
     });
   }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments]);
+  useEffect(() => {
+    if (shouldBlockLocalTrackerAccess) return;
+    if (activeTab !== "dashboard" || dashPeriod !== "Week") return;
+    if (dashboardSegments.length === 0) return;
+
+    loadMissingAppIcons({
+      segments: dashboardSegments,
+      failureMessage: "Failed to load visible week app icons",
+    });
+  }, [activeTab, dashPeriod, dashboardSegments, loadMissingAppIcons, shouldBlockLocalTrackerAccess]);
   const dashboardWeekRefreshKey = compactHistoryRangeKey(dashboardWeekHistoryRange);
   const weekRefreshStatus: DashboardWeekRefreshStatus = dashPeriod !== "Week" || dashboardWeekCompactHistoryLoad
     ? "idle"
@@ -3530,7 +3547,7 @@ export default function App() {
   );
   const dashboardAiUnavailableState = activeDashboardAiUnavailablePreviewInput
     ? resolveDashboardAiUnavailableState(activeDashboardAiUnavailablePreviewInput)
-    : totalSeconds > 0
+    : totalSeconds > 0 || (loading && !hasLoadedOnce)
       ? resolveDashboardAiUnavailableState({
         billingEntitlement,
         billingEntitlementError,
@@ -3615,6 +3632,15 @@ export default function App() {
       ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
   ), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, shouldBuildClassificationModels]);
+  const classificationRuleSegments = useMemo(() => {
+    if (classificationSegments.length === 0) return segments;
+    if (segments.length === 0) return classificationSegments;
+    const seenIds = new Set(classificationSegments.map((segment) => segment.id));
+    return [
+      ...classificationSegments,
+      ...segments.filter((segment) => !seenIds.has(segment.id)),
+    ];
+  }, [classificationSegments, segments]);
   const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
   const classificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact }),
@@ -4553,6 +4579,7 @@ export default function App() {
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
+            initialDataLoading={loading && !hasLoadedOnce}
             isPreviewSurface={shouldUsePreviewData()}
             selectedDay={selectedDay}
             selectedDayLabel={selectedDayLabel}
@@ -4644,7 +4671,7 @@ export default function App() {
                 onLoadMore={loadMoreHistorySegments}
               />
             ) : (
-              <DeferredTabBodyFallback label="history records" />
+              <DeferredTabBodyFallback label="history records" variant="history" />
             )}
           </div>
         ) : null}
@@ -4656,7 +4683,7 @@ export default function App() {
             activeInsightProductivityTotals={activeInsightProductivityTotals}
             appIcons={appIcons}
             attentionRhythm={attentionRhythm}
-            bodyFallback={<DeferredTabBodyFallback label="trend analysis" />}
+            bodyFallback={<DeferredTabBodyFallback label="trend analysis" variant="trends" />}
             bodyReady={isTrendsBodyReady}
             breakRecoveryInsight={breakRecoveryInsight}
             canShiftInsightForward={canShiftInsightForward}
@@ -4795,6 +4822,7 @@ export default function App() {
                     classificationRuleDeletingId={classificationRuleDeletingId}
                     classificationRuleMessage={classificationRuleMessage}
                     classificationRuleSavingKind={classificationRuleSavingKind}
+                    classificationRuleSegments={classificationRuleSegments}
                     classificationRules={classificationRules}
                     classificationRulesError={classificationRulesError}
                     classificationRulesLoading={classificationRulesLoading}

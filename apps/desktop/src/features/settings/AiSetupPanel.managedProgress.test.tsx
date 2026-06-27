@@ -25,6 +25,7 @@ describe("AiSetupPanel managed local progress", () => {
         totalBytes: 2_740_937_888,
       },
       errorKind: null,
+      memoryUsageBytes: null,
     });
     renderPanel();
 
@@ -48,6 +49,7 @@ describe("AiSetupPanel managed local progress", () => {
       artifactDir: null,
       progress: null,
       errorKind: "download_failed",
+      memoryUsageBytes: null,
     });
     renderPanel();
 
@@ -74,6 +76,7 @@ describe("AiSetupPanel managed local progress", () => {
       artifactDir: null,
       progress: null,
       errorKind: null,
+      memoryUsageBytes: null,
     });
     renderPanel();
 
