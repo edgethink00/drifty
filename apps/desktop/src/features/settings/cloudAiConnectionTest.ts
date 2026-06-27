@@ -1,5 +1,6 @@
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
+import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 
 type CloudFunctionResult<TData> = {
@@ -9,7 +10,7 @@ type CloudFunctionResult<TData> = {
 
 type CloudAiConnectionTestClient = {
   readonly functions: {
-    invoke: <TData>(functionName: string, options: { readonly body: Record<string, string> }) => Promise<CloudFunctionResult<TData>>;
+    invoke: <TData>(functionName: string, options: { readonly body: Record<string, unknown> }) => Promise<CloudFunctionResult<TData>>;
   };
 } | null;
 
@@ -25,8 +26,9 @@ export async function testCloudAiConnection(client: CloudAiConnectionTestClient 
   if (!client) return { kind: "error", message: "Supabase is not configured." };
 
   try {
+    const body = await withCloudDevicePayload({ ...cloudApiClientMetadata });
     const { data, error } = await client.functions.invoke<CloudAiConnectionTestResponse>("test-ai-connection", {
-      body: cloudApiClientMetadata,
+      body,
     });
     if (error) return { kind: "error", message: await readFunctionError(error, "Cloud AI connection test failed.") };
     if (data?.error) return { kind: "error", message: data.error };

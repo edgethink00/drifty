@@ -95,7 +95,7 @@ describe("AccountMenu", () => {
 
   it("routes account AI setting before regular settings", () => {
     const { handlers } = renderAccountMenu();
-    fireEvent.click(screen.getByRole("button", { name: /^account$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
     const menuItems = screen.getAllByRole("menuitem").map((item) => item.textContent);
 
     expect(menuItems.slice(0, 2)).toEqual(["✦AI Setting", "⚙Settings"]);

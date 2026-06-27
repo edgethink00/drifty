@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readAppStyles } from "../../test/readStyles";
 import type { BillingEntitlement } from "../billing/billingService";
 import { DashboardAiUnavailableNotice, resolveDashboardAiUnavailableState } from "./DashboardAiUnavailableNotice";
+import { buildDashboardAiUnavailablePreviewInput } from "./dashboardAiUnavailablePreview";
 
 const trialExpiredEntitlement = {
   plan: "individual",
@@ -53,6 +54,27 @@ describe("resolveDashboardAiUnavailableState", () => {
     })).toMatchObject({
       variant: "cloud-billing",
       ctaLabel: "Review plans",
+    });
+  });
+
+  it("routes Cloud device limits to device management", () => {
+    const deviceLimitEntitlement = {
+      ...trialExpiredEntitlement,
+      lockedReason: "device_limit_reached",
+    } satisfies BillingEntitlement;
+
+    expect(resolveDashboardAiUnavailableState({
+      billingEntitlement: deviceLimitEntitlement,
+      billingEntitlementError: null,
+      billingEntitlementLoading: false,
+      canUseCloudAiClassification: false,
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      localAiReady: false,
+      observedAiClassificationFailure: false,
+    })).toMatchObject({
+      variant: "device-limit",
+      ctaLabel: "Manage devices",
     });
   });
 
@@ -186,5 +208,15 @@ describe("DashboardAiUnavailableNotice", () => {
     expect(finalNoticeBlock).toContain("var(--dashboard-ai-notice-rim) border-box;");
     expect(finalNoticeBlock).toContain("0 6px 14px color-mix(in srgb, var(--text) 4%, transparent)");
     expect(finalNoticeBlock).toContain("0 3px 8px color-mix(in srgb, var(--dashboard-ai-notice-accent) 5%, transparent)");
+  });
+});
+
+describe("buildDashboardAiUnavailablePreviewInput", () => {
+  it("marks one preview Cloud device as the current Mac for device-limit QA", () => {
+    const input = buildDashboardAiUnavailablePreviewInput("device-limit");
+    const devices = input.billingEntitlement?.cloudDevices ?? [];
+
+    expect(devices.filter((device) => device.isCurrent)).toHaveLength(1);
+    expect(devices.find((device) => device.label === "Studio Mac")?.isCurrent).toBe(true);
   });
 });

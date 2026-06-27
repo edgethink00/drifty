@@ -30,6 +30,7 @@ export type AiSetupPanelProps = {
   readonly aiServerStatusLabel: string;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
+  readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly billingPortalLoading: boolean;
@@ -47,6 +48,7 @@ export type AiSetupPanelProps = {
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
+  readonly onManageCloudDevices: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
 };
@@ -55,6 +57,7 @@ export function AiSetupPanel({
   aiServerStatusLabel,
   billingCheckoutLoadingInterval,
   billingEntitlementError,
+  billingEntitlementLockedReason,
   billingEntitlementStatus,
   billingPlansDisabled,
   billingPortalLoading,
@@ -72,6 +75,7 @@ export function AiSetupPanel({
   onDialogOpenChange,
   onLocalAiSetupChange,
   onManageCloudBilling,
+  onManageCloudDevices,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
@@ -189,6 +193,7 @@ export function AiSetupPanel({
                 aiServerStatusLabel={aiServerStatusLabel}
                 billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                 billingEntitlementError={billingEntitlementError}
+                billingEntitlementLockedReason={billingEntitlementLockedReason}
                 billingEntitlementStatus={billingEntitlementStatus}
                 billingPlansDisabled={billingPlansDisabled}
                 billingPortalLoading={billingPortalLoading}
@@ -207,6 +212,7 @@ export function AiSetupPanel({
                 onDeleteModel={managedLocalAi.deleteModel}
                 onInstallModel={managedLocalAi.installModel}
                 onManageCloudBilling={onManageCloudBilling}
+                onManageCloudDevices={onManageCloudDevices}
                 onRefreshCloudStatus={onRefreshCloudStatus}
                 onStartCloudSetup={onStartCloudSetup}
               />

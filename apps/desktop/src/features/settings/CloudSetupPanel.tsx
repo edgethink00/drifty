@@ -6,6 +6,7 @@ export type CloudSetupPanelProps = {
   readonly aiServerStatusLabel: string;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementError: string | null;
+  readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly billingPortalLoading: boolean;
@@ -17,6 +18,7 @@ export type CloudSetupPanelProps = {
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly onManageCloudBilling: () => void | Promise<void>;
+  readonly onManageCloudDevices: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
 };
@@ -25,6 +27,7 @@ export function CloudSetupPanel({
   aiServerStatusLabel,
   billingCheckoutLoadingInterval,
   billingEntitlementError,
+  billingEntitlementLockedReason,
   billingEntitlementStatus,
   billingPlansDisabled,
   billingPortalLoading,
@@ -36,9 +39,11 @@ export function CloudSetupPanel({
   shouldShowCloudCheckoutPlans,
   userEmail,
   onManageCloudBilling,
+  onManageCloudDevices,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: CloudSetupPanelProps) {
+  const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
   const isCurrentPaidPlan = isCurrentCloudPlan && billingEntitlementStatus === "active";
   const isCurrentTrial = isCurrentCloudPlan && billingEntitlementStatus === "trialing";
@@ -47,23 +52,32 @@ export function CloudSetupPanel({
     billingCheckoutLoadingInterval,
     billingPortalLoading,
     billingEntitlementStatus,
+    billingEntitlementLockedReason,
     cloudStatusRefreshing,
     isCurrentCloudPlan,
     isSupabaseConfigured,
   });
-  const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
-  const handlePrimaryAction = isCurrentPaidPlan
+  const primaryActionDisabled = isDeviceLimitLocked
+    ? cloudStatusRefreshing
+    : billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
+  const handlePrimaryAction = isDeviceLimitLocked
+    ? onManageCloudDevices
+    : isCurrentPaidPlan
     ? onManageCloudBilling
     : isCurrentTrial || !isCurrentCloudPlan
       ? () => onStartCloudSetup()
       : onRefreshCloudStatus;
   const statusHeadline = isCurrentTrial
     ? "1-week free trial is active"
+    : isDeviceLimitLocked
+      ? "Device limit reached"
     : isCurrentCloudPlan
       ? "Cloud AI is active"
       : [aiServerStatusLabel, cloudStatusLabel].filter(Boolean).join(" · ");
   const statusDetail = isCurrentTrial
     ? formatCloudTrialStartedDetail(cloudTrialEndsAt)
+    : isDeviceLimitLocked
+      ? "Individual includes 2 active Macs. Manage active Macs in Account settings to use Cloud AI here."
     : isCurrentCloudPlan
       ? "Manage your subscription, invoices, and payment method in Polar."
       : null;
@@ -88,6 +102,7 @@ export function CloudSetupPanel({
 
 function cloudActionLabel({
   billingCheckoutLoadingInterval,
+  billingEntitlementLockedReason,
   billingEntitlementStatus,
   billingPortalLoading,
   cloudStatusRefreshing,
@@ -95,6 +110,7 @@ function cloudActionLabel({
   isSupabaseConfigured,
 }: {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPortalLoading: boolean;
   readonly cloudStatusRefreshing: boolean;
@@ -105,6 +121,7 @@ function cloudActionLabel({
   if (billingPortalLoading) return "Opening billing...";
   if (cloudStatusRefreshing) return "Checking...";
   if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Upgrade to Individual";
+  if (billingEntitlementLockedReason === "device_limit_reached") return "Manage devices";
   if (billingEntitlementStatus === "trialing") return "Upgrade to Individual";
   if (billingEntitlementStatus === "active") return "Manage billing";
   return "Refresh Drifty Cloud";

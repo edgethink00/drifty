@@ -1,0 +1,174 @@
+.cloud-device-management {
+  background: color-mix(in srgb, var(--bg-2) 42%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.content--settings .settings-row--cloud-devices {
+  align-items: stretch;
+}
+
+.content--settings .settings-row--cloud-devices > .cloud-device-management {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cloud-device-management__header {
+  align-items: start;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.cloud-device-management__header strong {
+  color: var(--text);
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.cloud-device-management__header p,
+.cloud-device-management__empty,
+.cloud-device-management__message {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.cloud-device-management__message {
+  color: var(--warn);
+  margin-top: 0;
+}
+
+.content--settings .settings-btn.cloud-device-management__refresh {
+  background: color-mix(in srgb, var(--surface) 78%, var(--bg-2));
+  border-color: color-mix(in srgb, var(--text) 10%, var(--line));
+  color: var(--text-muted);
+  height: 2rem;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
+.content--settings .settings-btn.cloud-device-management__refresh:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-2) 54%, var(--surface));
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  color: var(--text);
+}
+
+.cloud-device-management__refresh-icon {
+  fill: none;
+  height: 0.9rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+  transform-origin: center;
+  width: 0.9rem;
+}
+
+.cloud-device-management__refresh-icon.is-spinning {
+  animation: cloud-device-refresh-spin 900ms linear infinite;
+}
+
+.cloud-device-management__list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cloud-device-row {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 3.25rem;
+  padding: 0.62rem var(--space-3);
+}
+
+.cloud-device-row__copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.cloud-device-row__name {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-device-row__meta {
+  color: var(--text-soft);
+  font-size: var(--type-control-size);
+  overflow-wrap: anywhere;
+}
+
+.cloud-device-row__badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--cloud-action) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--cloud-action) 24%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 1.7rem;
+  padding: 0 var(--space-3);
+}
+
+.cloud-device-row__remove {
+  justify-content: center;
+  min-width: 5.9rem;
+}
+
+.content--settings .settings-btn.cloud-device-row__remove {
+  background: color-mix(in srgb, var(--warn-soft) 58%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 32%, var(--line));
+  color: var(--warn);
+}
+
+.content--settings .settings-btn.cloud-device-row__remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 82%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 46%, var(--line-strong));
+  color: var(--warn);
+}
+
+@keyframes cloud-device-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .cloud-device-management__header,
+  .cloud-device-row {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-device-management__header {
+    display: grid;
+  }
+
+  .cloud-device-row__remove,
+  .cloud-device-management__header .settings-btn:not(.cloud-device-management__refresh) {
+    width: 100%;
+  }
+}

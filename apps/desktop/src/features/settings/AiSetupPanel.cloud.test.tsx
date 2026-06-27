@@ -95,4 +95,20 @@ describe("AiSetupPanel Cloud setup", () => {
     expect(within(cloudSettings).getByText("al***@example.com")).toBeTruthy();
     expect(within(cloudSettings).queryByText("alex@example.com")).toBeNull();
   });
+
+  it("links device-limit Cloud setup to Account device management", () => {
+    const { onManageCloudDevices, onRefreshCloudStatus } = renderPanel({
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "device_limit_reached",
+    });
+
+    const cloudSettings = screen.getByRole("group", { name: /Drifty Cloud settings/i });
+    expect(within(cloudSettings).getByText(/Manage active Macs in Account settings/i)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: /Cloud devices/i })).toBeNull();
+
+    fireEvent.click(within(cloudSettings).getByRole("button", { name: /^Manage devices$/i }));
+
+    expect(onManageCloudDevices).toHaveBeenCalledTimes(1);
+    expect(onRefreshCloudStatus).not.toHaveBeenCalled();
+  });
 });

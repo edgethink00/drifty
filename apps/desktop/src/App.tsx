@@ -74,6 +74,7 @@ import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus"
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
+import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
 import { DataExportSettingsSection } from "./features/settings/DataExportSettingsSection";
@@ -588,7 +589,7 @@ export default function App() {
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [classificationCorrectionDraft, setClassificationCorrectionDraft] = useState<ClassificationCorrectionDraft | null>(null);
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("account");
   const {
     autoInstallFutureUpdates,
     availableUpdate,
@@ -739,12 +740,17 @@ export default function App() {
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const openSettingsTab = useCallback(() => {
-    setSettingsSection("general");
+    setSettingsSection("account");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
   const openAiSetupSettings = useCallback(() => {
     setSettingsSection("aiSetup");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
+  const openAccountSettings = useCallback(() => {
+    setSettingsSection("account");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -759,9 +765,11 @@ export default function App() {
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
   const handleTrayCheckForUpdates = useCallback(() => {
-    openSettingsTab();
+    setSettingsSection("general");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
     void handleCheckForUpdates();
-  }, [handleCheckForUpdates, openSettingsTab]);
+  }, [handleCheckForUpdates, navigateToTab]);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -885,9 +893,13 @@ export default function App() {
     billingEntitlementError,
     billingEntitlementLoading,
     billingPortalLoading,
+    cloudDeviceActionError,
+    cloudDeviceRevokingId,
+    cloudDevices,
     cloudTrialStartedNotice,
     dismissCloudTrialStartedNotice,
     handleManageCloudBilling,
+    handleRevokeCloudDevice,
     handleStartDriftyCloudSetup,
     openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,
@@ -973,7 +985,11 @@ export default function App() {
     localMemoryLabel: localAiMemoryLabel,
     classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
     classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
-    cloudIssueKind: billingEntitlementError ? aiConnectionIssueKindFromMessage(billingEntitlementError) : null,
+    cloudIssueKind: billingEntitlementError
+      ? aiConnectionIssueKindFromMessage(billingEntitlementError)
+      : billingEntitlement?.lockedReason === "device_limit_reached"
+        ? "provider"
+        : null,
   });
   const previousAiClassificationProviderKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -2225,7 +2241,7 @@ export default function App() {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
-    if (settingsSection === "dev") setSettingsSection("general");
+    if (settingsSection === "dev") setSettingsSection("account");
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
@@ -3888,8 +3904,13 @@ export default function App() {
       return;
     }
 
+    if (variant === "device-limit") {
+      openAccountSettings();
+      return;
+    }
+
     openDashboardAiSetup();
-  }, [openDashboardAiSetup]);
+  }, [openAccountSettings, openDashboardAiSetup]);
 
   const handleDismissDashboardAiRecovery = useCallback(() => {
     if (dashboardAiRecoveryKey === null) return;
@@ -4268,6 +4289,7 @@ export default function App() {
   const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
   const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
+  const isDeviceLimitLocked = effectiveBillingEntitlement?.lockedReason === "device_limit_reached";
   const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
   const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
   const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
@@ -4280,9 +4302,9 @@ export default function App() {
     : effectiveCloudConnectionStatus === "checking"
       ? "Checking"
       : aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
-  const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked";
+  const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked" && !isDeviceLimitLocked;
   const currentBillingPlan =
-    effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing"
+    effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing" || isDeviceLimitLocked
       ? "individual"
       : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
         ? "free"
@@ -4637,6 +4659,30 @@ export default function App() {
           <div className="page">
             <h1 className="sr-only">Settings</h1>
             <div className="settings-panel-stack">
+                {settingsSection === "account" && (
+                  <AccountSettingsSection
+                    billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+                    billingEntitlementError={effectiveBillingEntitlementError}
+                    billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
+                    billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
+                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                    billingPortalLoading={billingPortalLoading}
+                    cloudDeviceAccess={effectiveBillingEntitlement?.deviceAccess ?? null}
+                    cloudDeviceActionError={cloudDeviceActionError}
+                    cloudDeviceRevokingId={cloudDeviceRevokingId}
+                    cloudDevices={effectiveBillingEntitlement?.cloudDevices ?? cloudDevices}
+                    cloudStatusRefreshing={effectiveBillingEntitlementLoading}
+                    currentBillingPlan={currentBillingPlan}
+                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
+                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+                    userEmail={user?.email ?? null}
+                    onManageCloudBilling={handleManageCloudBilling}
+                    onRefreshCloudStatus={refreshBillingEntitlement}
+                    onRevokeCloudDevice={handleRevokeCloudDevice}
+                    onSignIn={() => setAuthModalOpen(true)}
+                    onStartCloudSetup={handleStartDriftyCloudSetup}
+                  />
+                )}
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
                     autoInstallFutureUpdates={autoInstallFutureUpdates}
@@ -4722,6 +4768,7 @@ export default function App() {
                     aiServerStatusLabel={aiServerStatusLabel}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementError={effectiveBillingEntitlementError}
+                    billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
                     billingPortalLoading={billingPortalLoading}
@@ -4739,6 +4786,7 @@ export default function App() {
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}
+                    onManageCloudDevices={openAccountSettings}
                     onRefreshCloudStatus={refreshBillingEntitlement}
                     onStartCloudSetup={handleStartDriftyCloudSetup}
                   />

@@ -1,6 +1,7 @@
-export type SettingsSection = "general" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "data" | "dev";
+export type SettingsSection = "account" | "general" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "data" | "dev";
 
 const SETTINGS_NAV_ITEMS = [
+  { id: "account", label: "Account" },
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "classification", label: "Classification" },
@@ -32,7 +33,6 @@ export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, on
       </button>
 
       <div className="settings-sidebar-heading">
-        <span>Account</span>
         <strong>Settings</strong>
       </div>
 

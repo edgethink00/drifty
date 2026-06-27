@@ -1,5 +1,6 @@
 mod app_icons;
 mod auth_session_store;
+mod cloud_device_store;
 mod commands;
 mod donut_icon;
 mod tracker;
@@ -64,6 +65,11 @@ fn auth_save_session(_app: AppHandle, value: String) -> Result<(), String> {
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
     auth_session_store::clear_saved_session(&app)
+}
+
+#[tauri::command]
+fn cloud_device_install_id() -> Result<String, String> {
+    cloud_device_store::load_or_create_install_id()
 }
 
 fn remember_auth_deep_links<R: Runtime>(
@@ -229,6 +235,7 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            cloud_device_install_id,
             app_reveal_main_window,
             focus_target_activate_browser_tab,
             focus_target_browser_tab_exists,

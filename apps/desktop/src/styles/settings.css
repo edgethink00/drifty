@@ -49,17 +49,8 @@
 
 .settings-sidebar-heading {
   display: grid;
-  gap: 0.18rem;
-  padding: 0.25rem 0.68rem 0.62rem;
+  padding: 0.38rem 0.68rem 0.62rem;
   border-bottom: 1px solid var(--line);
-}
-
-.settings-sidebar-heading span {
-  color: color-mix(in srgb, var(--text) 64%, transparent);
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .settings-sidebar-heading strong {
