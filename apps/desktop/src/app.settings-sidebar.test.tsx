@@ -161,6 +161,19 @@ describe("App settings sidebar", () => {
     accessibilityClient.requestAccess.mockResolvedValue({ granted: true });
   });
 
+  it("shows dashboard period sidebar labels without secondary copy", async () => {
+    render(<App />);
+
+    const dashboardNav = await screen.findByRole("navigation", { name: /dashboard views/i });
+    const dayButton = within(dashboardNav).getByRole("button", { name: /^Your Day$/i });
+    const weekButton = within(dashboardNav).getByRole("button", { name: /^Your Week$/i });
+
+    expect(dayButton.querySelector("small")).toBeNull();
+    expect(weekButton.querySelector("small")).toBeNull();
+    expect(within(dashboardNav).queryByText(/live timeline/i)).toBeNull();
+    expect(within(dashboardNav).queryByText(/calendar week/i)).toBeNull();
+  });
+
   it("replaces the app sidebar with settings navigation and returns with Back", async () => {
     render(<App />);
 
