@@ -290,6 +290,7 @@ type ClassificationCorrectionDraft = {
   readonly targetValue: string;
   readonly detailKind: ClassificationRuleDetailKind | null;
   readonly detailValue: string | null;
+  readonly detailDisplayLabel: string | null;
   readonly category: ActivityCategory;
   readonly productivity: ProductivityLabel;
 };
@@ -377,11 +378,13 @@ function buildClassificationCorrectionDraft({
   scope,
   segment,
   classificationOptions,
+  detailDisplayLabel,
 }: {
   readonly rowId: string | null;
   readonly scope: ClassificationCorrectionScope;
   readonly segment: ActivitySegment;
   readonly classificationOptions: ClassificationOptions;
+  readonly detailDisplayLabel: string | null;
 }): ClassificationCorrectionDraft | null {
   const target = classificationRuleTargetForSegment(segment);
   if (!target) return null;
@@ -396,6 +399,7 @@ function buildClassificationCorrectionDraft({
     targetValue: urlDetail?.targetValue ?? target.targetValue,
     detailKind: detail.detailKind,
     detailValue: detail.detailValue,
+    detailDisplayLabel: scope === "detail" ? detailDisplayLabel : null,
     category: classification.category,
     productivity: classification.productivity,
   };
@@ -1786,15 +1790,16 @@ export default function App() {
   }
 
   function startClassificationCorrection(scope: ClassificationCorrectionScope, rowId: string | null = null) {
-    const sourceSegment = rowId
-      ? classificationActivityRows.find((row) => row.id === rowId)?.segments[0] ?? null
-      : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null;
+    const sourceRow = rowId ? classificationActivityRows.find((row) => row.id === rowId) ?? null : null;
+    const sourceSegment = sourceRow?.segments[0]
+      ?? (rowId ? null : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null);
     if (!sourceSegment) return;
     const draft = buildClassificationCorrectionDraft({
       rowId,
       scope,
       segment: sourceSegment,
       classificationOptions,
+      detailDisplayLabel: sourceRow?.label ?? null,
     });
     if (!draft) return;
     setClassificationCorrectionDraft(draft);
@@ -3634,6 +3639,15 @@ export default function App() {
       ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
   ), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, shouldBuildClassificationModels]);
+  const classificationRuleSegments = useMemo(() => {
+    if (classificationSegments.length === 0) return segments;
+    if (segments.length === 0) return classificationSegments;
+    const seenIds = new Set(classificationSegments.map((segment) => segment.id));
+    return [
+      ...classificationSegments,
+      ...segments.filter((segment) => !seenIds.has(segment.id)),
+    ];
+  }, [classificationSegments, segments]);
   const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
   const classificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact }),
@@ -4814,6 +4828,7 @@ export default function App() {
                     classificationRuleDeletingId={classificationRuleDeletingId}
                     classificationRuleMessage={classificationRuleMessage}
                     classificationRuleSavingKind={classificationRuleSavingKind}
+                    classificationRuleSegments={classificationRuleSegments}
                     classificationRules={classificationRules}
                     classificationRulesError={classificationRulesError}
                     classificationRulesLoading={classificationRulesLoading}
