@@ -221,7 +221,7 @@ describe("runAiClassification cloud contract", () => {
         functions: { invoke },
       },
     }));
-    vi.doMock("@tauri-apps/api/core", () => ({ invoke: nativeInvoke }));
+    vi.doMock("@tauri-apps/api/core", () => ({ invoke: nativeInvoke, isTauri: () => false }));
     vi.doMock("../../lib/api/trackerClient", () => ({
       trackerClient: {
         getUnclassifiedSegments,
