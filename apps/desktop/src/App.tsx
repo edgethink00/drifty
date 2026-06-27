@@ -607,7 +607,7 @@ export default function App() {
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [classificationCorrectionDraft, setClassificationCorrectionDraft] = useState<ClassificationCorrectionDraft | null>(null);
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("account");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const {
     autoInstallFutureUpdates,
     availableUpdate,
@@ -758,7 +758,7 @@ export default function App() {
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const openSettingsTab = useCallback(() => {
-    setSettingsSection("account");
+    setSettingsSection("general");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -2279,7 +2279,7 @@ export default function App() {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
-    if (settingsSection === "dev") setSettingsSection("account");
+    if (settingsSection === "dev") setSettingsSection("general");
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);

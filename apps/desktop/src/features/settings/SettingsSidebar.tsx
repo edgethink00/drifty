@@ -1,8 +1,8 @@
 export type SettingsSection = "account" | "general" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "data" | "dev";
 
 const SETTINGS_NAV_ITEMS = [
-  { id: "account", label: "Account" },
   { id: "general", label: "General" },
+  { id: "account", label: "Account" },
   { id: "appearance", label: "Appearance" },
   { id: "classification", label: "Classification" },
   { id: "aiSetup", label: "AI setup" },
