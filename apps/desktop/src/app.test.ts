@@ -223,15 +223,48 @@ describe('domain helpers', () => {
     ];
 
     expect(effectiveProductivityDuration(communicationSegments, 'focus')).toBe(93 * 60);
-    expect(effectiveProductivityDuration(communicationSegments, 'neutral')).toBe(13 * 60);
-    expect(effectiveProductivityDuration(communicationSegments, 'drift')).toBe(10 * 60);
+    expect(effectiveProductivityDuration(communicationSegments, 'neutral')).toBe(6 * 60);
+    expect(effectiveProductivityDuration(communicationSegments, 'drift')).toBe(17 * 60);
 
     const blocks = buildFlowBlocks(communicationSegments, '2026-04-06', 5);
     expect(blocks.filter((block) => block.appName === 'KakaoTalk').every((block) => block.productivity === 'focus' && block.productivityBasis === 'contextual')).toBe(true);
     expect(blocks.filter((block) => block.appName === 'Slack' && block.minuteOfDay < 11 * 60).every((block) => block.productivity === 'focus' && block.productivityBasis === 'contextual')).toBe(true);
     expect(blocks.filter((block) => block.appName === 'Discord').every((block) => block.productivity === 'neutral' && block.productivityBasis === 'direct')).toBe(true);
-    expect(blocks.filter((block) => block.appName === 'Slack' && block.minuteOfDay >= 11 * 60).every((block) => block.productivity === 'neutral' && block.productivityBasis === 'contextual')).toBe(true);
+    expect(blocks.filter((block) => block.appName === 'Slack' && block.minuteOfDay >= 11 * 60).every((block) => block.productivity === 'drift' && block.productivityBasis === 'direct')).toBe(true);
     expect(blocks.filter((block) => block.appName === 'Slack').every((block) => block.sourceProductivity !== null)).toBe(true);
+  });
+
+  it('preserves non-neutral communication and utility classifications in effective productivity', () => {
+    const nonNeutralSegments = [
+      classifiedSegment({ id: 'communication-drift', startHour: 9, startMinute: 0, durationMinutes: 5, appName: 'Slack', category: 'communication', productivity: 'drift' }),
+      classifiedSegment({ id: 'utility-focus', startHour: 9, startMinute: 10, durationMinutes: 2, appName: 'Finder', category: 'utility', productivity: 'focus' }),
+    ];
+
+    expect(effectiveProductivityDuration(nonNeutralSegments, 'focus')).toBe(2 * 60);
+    expect(effectiveProductivityDuration(nonNeutralSegments, 'neutral')).toBe(0);
+    expect(effectiveProductivityDuration(nonNeutralSegments, 'drift')).toBe(5 * 60);
+
+    const blocks = buildFlowBlocks(nonNeutralSegments, '2026-04-06', 5);
+    expect(blocks.find((block) => block.appName === 'Slack')?.productivityBasis).toBe('direct');
+    expect(blocks.find((block) => block.appName === 'Finder')?.productivityBasis).toBe('direct');
+  });
+
+  it('uses nearby active focus time for sparse mixed communication context', () => {
+    const sparseContextSegments = [
+      classifiedSegment({ id: 'focus-before-older', startHour: 8, startMinute: 50, durationMinutes: 2, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'focus-before-near', startHour: 8, startMinute: 56, durationMinutes: 1, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'mixed-short', startHour: 9, startMinute: 0, durationMinutes: 1, appName: 'KakaoTalk', category: 'communication', productivity: 'neutral' }),
+      classifiedSegment({ id: 'focus-after-near', startHour: 9, startMinute: 3, durationMinutes: 1, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'focus-after-later', startHour: 9, startMinute: 8, durationMinutes: 2, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+    ];
+
+    expect(effectiveProductivityDuration(sparseContextSegments, 'focus')).toBe(7 * 60);
+    expect(effectiveProductivityDuration(sparseContextSegments, 'neutral')).toBe(0);
+
+    const blocks = buildFlowBlocks(sparseContextSegments, '2026-04-06', 5);
+    const kakaoBlock = blocks.find((block) => block.appName === 'KakaoTalk');
+    expect(kakaoBlock?.productivity).toBe('focus');
+    expect(kakaoBlock?.productivityBasis).toBe('contextual');
   });
 
   it('uses contextual focus when evaluating nearby work-primary communication windows', () => {
