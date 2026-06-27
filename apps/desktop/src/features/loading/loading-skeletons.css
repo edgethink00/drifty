@@ -1,0 +1,363 @@
+.page--loading-skeleton {
+  min-height: 0;
+}
+
+.loading-skeleton-line,
+.loading-skeleton-dot,
+.loading-skeleton-icon,
+.loading-skeleton-checkbox,
+.loading-skeleton-avatar,
+.loading-skeleton-fill,
+.dashboard-skeleton-flow-bed,
+.dashboard-skeleton-panel-bed,
+.dashboard-skeleton-month-cell,
+.deferred-tab-skeleton__block {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--text) 7%, transparent),
+      transparent
+    ),
+    color-mix(in srgb, var(--text-soft) 11%, var(--surface));
+  background-size: 220% 100%;
+  animation: loading-skeleton-sheen 1.45s ease-in-out infinite;
+}
+
+.loading-skeleton-line {
+  display: block;
+  width: 100%;
+  height: 0.68rem;
+  border-radius: 999px;
+}
+
+.loading-skeleton-line--label { width: 6.5rem; height: 0.52rem; }
+.loading-skeleton-line--control { width: 8.2rem; height: 1.42rem; }
+.loading-skeleton-line--search { width: min(100%, 18rem); height: 0.8rem; }
+.loading-skeleton-line--title { width: min(100%, 12rem); height: 0.82rem; }
+.loading-skeleton-line--detail { width: min(100%, 10rem); height: 0.56rem; }
+.loading-skeleton-line--value { width: 3.8rem; height: 0.64rem; }
+.loading-skeleton-line--metric { width: 5.6rem; height: 1.34rem; }
+.loading-skeleton-line--rank { width: 1.6rem; height: 0.62rem; }
+.loading-skeleton-line--time { width: 6.8rem; height: 0.58rem; }
+.loading-skeleton-line--duration { width: 3.2rem; height: 0.58rem; }
+.loading-skeleton-line--category { width: 5.2rem; height: 0.58rem; }
+
+.loading-skeleton-dot,
+.loading-skeleton-checkbox {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.loading-skeleton-dot {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+}
+
+.loading-skeleton-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+}
+
+.loading-skeleton-checkbox {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 4px;
+}
+
+.loading-skeleton-avatar {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+}
+
+.loading-skeleton-avatar--sm {
+  width: 28px;
+  height: 28px;
+}
+
+.loading-skeleton-avatar--md {
+  width: 48px;
+  height: 48px;
+}
+
+.loading-skeleton-fill {
+  display: block;
+  width: 100%;
+  height: 0.24rem;
+  border-radius: var(--radius-sm);
+}
+
+.dashboard-page-head__title-duration--loading {
+  display: inline-flex;
+  align-items: center;
+  min-width: 5.6rem;
+  transform: translateY(0.05rem);
+}
+
+.dashboard-loading-skeleton {
+  --skeleton-panel-bg: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.dashboard-skeleton-panel {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 38%, transparent), transparent 72%),
+    var(--skeleton-panel-bg);
+}
+
+.dashboard-skeleton-flow-head,
+.dashboard-skeleton-legend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.dashboard-skeleton-panel--flow {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.dashboard-loading-skeleton--today .flow-breakdown-layout__chart {
+  min-height: 19.25rem;
+}
+
+.dashboard-skeleton-flow-chart {
+  display: block;
+  min-height: 15.65rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-2) 52%, transparent);
+}
+
+.dashboard-skeleton-flow-bed,
+.dashboard-skeleton-panel-bed,
+.deferred-tab-skeleton__block {
+  display: block;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 36%, transparent);
+  border-radius: var(--radius-sm);
+  opacity: 0.72;
+}
+
+.dashboard-skeleton-flow-bed {
+  min-height: 14.15rem;
+  height: 100%;
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--line) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--line) 24%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--flow-chart-plot-surface, var(--surface)) 78%, var(--surface));
+  background-size: calc(100% / 24) 100%, 100% calc(100% / 8), auto;
+}
+
+.dashboard-skeleton-panel-bed {
+  background-color: color-mix(in srgb, var(--text-soft) 9%, var(--surface));
+}
+
+.dashboard-skeleton-panel-bed--circle,
+.dashboard-skeleton-panel-bed--list {
+  min-height: 5.5rem;
+}
+
+.dashboard-skeleton-panel-bed--tile {
+  flex: 1 1 auto;
+  min-height: 2.9rem;
+}
+
+.dashboard-loading-skeleton__insights .insight-summary__tile {
+  display: flex;
+  min-height: 3.3rem;
+}
+
+.dashboard-loading-skeleton__insights > .dashboard-skeleton-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.dashboard-skeleton-panel-bed--score {
+  height: 100%;
+  min-height: 6.725rem;
+}
+
+.app-usage-panel--loading .app-usage-feature,
+.app-usage-panel--loading .app-usage-row {
+  pointer-events: none;
+}
+
+.app-usage-panel--loading .app-usage-row__bar span {
+  width: 100%;
+  background: color-mix(in srgb, var(--text-soft) 14%, var(--surface));
+}
+
+.dashboard-loading-skeleton--week .week-v2-calendar__body {
+  min-height: 39rem;
+}
+
+.dashboard-skeleton-week-event {
+  display: block;
+  left: 7%;
+  right: 7%;
+  width: auto;
+  min-height: 1.35rem;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.dashboard-skeleton-month-cell {
+  pointer-events: none;
+  cursor: default;
+}
+
+.dashboard-skeleton-month-cell:hover {
+  transform: none;
+}
+
+.deferred-tab-skeleton {
+  min-width: 0;
+}
+
+.deferred-tab-skeleton__status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.deferred-tab-skeleton--history.history-view {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.history-row--skeleton {
+  pointer-events: none;
+}
+
+.history-row--skeleton .history-row__identity-copy,
+.history-row--skeleton .history-row__time {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.deferred-tab-skeleton--trends {
+  display: grid;
+  gap: var(--block-gap);
+}
+
+.deferred-tab-skeleton--trends .weekly-breakdown-analytical {
+  min-height: 0;
+}
+
+.deferred-trends-weekly-chart {
+  min-height: 0;
+}
+
+.deferred-trends-weekly-chart .wt-toggle {
+  min-width: 9.2rem;
+}
+
+.deferred-trends-weekly-chart .loading-skeleton-line--control {
+  height: 1.34rem;
+  width: 8.6rem;
+}
+
+.deferred-tab-skeleton__block {
+  background-color: color-mix(in srgb, var(--text-soft) 9%, var(--surface));
+}
+
+.deferred-tab-skeleton__block--weekly-chart {
+  height: 10.35rem;
+  min-height: 10.35rem;
+  margin-top: 0.22rem;
+}
+
+.deferred-tab-skeleton__block--weekly-summary {
+  min-height: 11.4rem;
+  height: 100%;
+}
+
+.deferred-tab-skeleton__block--radar,
+.deferred-tab-skeleton__block--rhythm {
+  min-height: 12.25rem;
+  height: 100%;
+}
+
+.deferred-tab-skeleton__block--source-group {
+  min-height: 12.85rem;
+  height: 100%;
+}
+
+.deferred-tab-skeleton__block--source-group-compact {
+  min-height: 8rem;
+}
+
+.deferred-tab-skeleton__block--source-group-tall {
+  min-height: 12.85rem;
+}
+
+.deferred-tab-skeleton--trends .productivity-insight-group {
+  min-height: 0;
+  padding: 0.64rem 0.76rem;
+}
+
+.deferred-tab-skeleton--trends .productivity-insight-group--drift {
+  min-height: 9.35rem;
+}
+
+.deferred-tab-skeleton--trends .productivity-insight-group--focus {
+  min-height: 14.15rem;
+}
+
+@keyframes loading-skeleton-sheen {
+  0% { background-position: 140% 0; }
+  100% { background-position: -80% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-skeleton-line,
+  .loading-skeleton-dot,
+  .loading-skeleton-icon,
+  .loading-skeleton-checkbox,
+  .loading-skeleton-avatar,
+  .loading-skeleton-fill,
+  .dashboard-skeleton-flow-bed,
+  .dashboard-skeleton-panel-bed,
+  .dashboard-skeleton-month-cell,
+  .deferred-tab-skeleton__block {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-skeleton-flow-chart {
+    min-height: 10.8rem;
+  }
+
+  .dashboard-loading-skeleton--today .flow-breakdown-layout__chart {
+    min-height: 14.25rem;
+  }
+
+  .dashboard-skeleton-flow-bed {
+    min-height: 9.3rem;
+  }
+
+  .dashboard-loading-skeleton--week .week-v2-calendar__body {
+    min-height: 32rem;
+  }
+
+  .deferred-tab-skeleton__block--weekly-chart,
+  .deferred-tab-skeleton__block--weekly-summary,
+  .deferred-tab-skeleton__block--radar,
+  .deferred-tab-skeleton__block--rhythm {
+    min-height: 8.75rem;
+  }
+}
