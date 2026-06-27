@@ -58,7 +58,7 @@ import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-
 import {
   aiConnectionIssueKindFromMessage,
 } from "./features/ai-connection/aiConnectionHealth";
-import { collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
+import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
@@ -256,6 +256,12 @@ type DashboardWeekRefreshStatus = "idle" | "loading" | "error";
 type DashboardWeekRefreshState = {
   readonly key: string | null;
   readonly status: DashboardWeekRefreshStatus;
+};
+
+type AppIconLoadRequest = {
+  readonly segments: readonly ActivitySegment[];
+  readonly shouldReportFailure?: () => boolean;
+  readonly failureMessage: string;
 };
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
@@ -1067,6 +1073,7 @@ export default function App() {
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
+  const appIconRequestsInFlightRef = useRef<Set<string>>(new Set());
   const driftAlarmRequestInFlightRef = useRef(false);
   const liveDriftAlarmRefreshInFlightRef = useRef(false);
   const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
@@ -1111,6 +1118,30 @@ export default function App() {
     compactHistoryInFlightRef.current.set(key, { range: historyTimelineRange, promise });
     return promise;
   }, [materializeBuiltInHeuristicTimeline]);
+  const loadMissingAppIcons = useCallback(({ segments: segmentsToInspect, shouldReportFailure, failureMessage }: AppIconLoadRequest) => {
+    void (async () => {
+      const missingIconRequests = collectMissingAppIconRequests(segmentsToInspect, appIconsRef.current).filter((identity) => {
+        const identityKey = appIconIdentityKey(identity);
+        if (appIconRequestsInFlightRef.current.has(identityKey)) return false;
+        appIconRequestsInFlightRef.current.add(identityKey);
+        return true;
+      });
+      if (missingIconRequests.length === 0) return;
+
+      try {
+        const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
+        setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
+      } catch (error) {
+        if (shouldReportFailure?.() === false) return;
+        const message = error instanceof Error ? error.message : "unknown error";
+        console.warn(failureMessage, message);
+      } finally {
+        for (const identity of missingIconRequests) {
+          appIconRequestsInFlightRef.current.delete(appIconIdentityKey(identity));
+        }
+      }
+    })();
+  }, []);
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
     const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
@@ -1729,20 +1760,13 @@ export default function App() {
         }
       })();
 
-      void (async () => {
-        try {
-          const iconSegments = materializedArchiveTimelines === null
-            ? materializedTimeline.segments
-            : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments];
-          const missingIconRequests = collectMissingAppIconRequests(iconSegments, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (refreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch {
-          if (refreshRequestRef.current !== requestId) return;
-        }
-      })();
+      loadMissingAppIcons({
+        segments: materializedArchiveTimelines === null
+          ? materializedTimeline.segments
+          : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments],
+        shouldReportFailure: () => refreshRequestRef.current === requestId,
+        failureMessage: "Failed to load dashboard app icons",
+      });
       return true;
     } catch (nextError) {
       if (refreshRequestRef.current !== requestId) return false;
@@ -1867,19 +1891,11 @@ export default function App() {
       setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "loading" });
     }
     const loadMissingHistoryIcons = (segmentsToInspect: readonly ActivitySegment[]) => {
-      void (async () => {
-        try {
-          const missingIconRequests = collectMissingAppIconRequests(segmentsToInspect, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (historyRefreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch (error) {
-          if (historyRefreshRequestRef.current !== requestId) return;
-          const message = error instanceof Error ? error.message : "unknown error";
-          console.warn("Failed to load history app icons", message);
-        }
-      })();
+      loadMissingAppIcons({
+        segments: segmentsToInspect,
+        shouldReportFailure: () => historyRefreshRequestRef.current === requestId,
+        failureMessage: "Failed to load history app icons",
+      });
     };
 
     try {
@@ -1986,19 +2002,11 @@ export default function App() {
       setHistoryHasMoreSegments(timelinePage.hasMore);
       scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
 
-      void (async () => {
-        try {
-          const missingIconRequests = collectMissingAppIconRequests(materializedPage.segments, appIconsRef.current);
-          if (missingIconRequests.length === 0) return;
-          const rawIconMap = await trackerClient.getAppIcons(missingIconRequests);
-          if (historyRefreshRequestRef.current !== requestId) return;
-          setAppIcons((current) => mergeAppIconResults(current, missingIconRequests, rawIconMap));
-        } catch (error) {
-          if (historyRefreshRequestRef.current !== requestId) return;
-          const message = error instanceof Error ? error.message : "unknown error";
-          console.warn("Failed to load additional history app icons", message);
-        }
-      })();
+      loadMissingAppIcons({
+        segments: materializedPage.segments,
+        shouldReportFailure: () => historyRefreshRequestRef.current === requestId,
+        failureMessage: "Failed to load additional history app icons",
+      });
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return;
       setHistoryLoadMoreError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
@@ -2012,6 +2020,7 @@ export default function App() {
     historyLoadingMore,
     historyNextCursor,
     historySegmentsLoadedRange,
+    loadMissingAppIcons,
     materializeBuiltInHeuristicTimeline,
   ]);
 
@@ -3373,6 +3382,16 @@ export default function App() {
       visibleRange: dashboardRange,
     });
   }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments]);
+  useEffect(() => {
+    if (shouldBlockLocalTrackerAccess) return;
+    if (activeTab !== "dashboard" || dashPeriod !== "Week") return;
+    if (dashboardSegments.length === 0) return;
+
+    loadMissingAppIcons({
+      segments: dashboardSegments,
+      failureMessage: "Failed to load visible week app icons",
+    });
+  }, [activeTab, dashPeriod, dashboardSegments, loadMissingAppIcons, shouldBlockLocalTrackerAccess]);
   const dashboardWeekRefreshKey = compactHistoryRangeKey(dashboardWeekHistoryRange);
   const weekRefreshStatus: DashboardWeekRefreshStatus = dashPeriod !== "Week" || dashboardWeekCompactHistoryLoad
     ? "idle"
