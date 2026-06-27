@@ -7,6 +7,7 @@ import { logicalMinuteOfDay } from "@drifty/domain";
 import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekCalendarHoverCard } from "./HoverCards";
 import type { WeekCalendarHoverState } from "./HoverCards";
+import { buildWeekCalendarEventLayout } from "./weekCalendarEventLayout";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
@@ -220,19 +221,10 @@ export function WeekDashboard({
                       <span className="week-v2-calendar__line" key={`${row.day}-${hour}`} style={{ top: `${(hour - calendarStartHour) * calendarHourHeight}px` }} />
                     ))}
                     {events.map((event) => {
-                      const rawEventHeight = (event.durationMinutes / 60) * calendarHourHeight;
-                      const hidesInlineText = event.durationMinutes < 10;
-                      const shortEventMinHeight = event.isGroupedCluster || hidesInlineText ? 22 : 10;
-                      const shortEventMaxHeight = event.isGroupedCluster ? 30 : 26;
-                      const eventHeight = event.isShort
-                        ? Math.max(shortEventMinHeight, Math.min(shortEventMaxHeight, Math.round(8 + Math.sqrt(event.durationMinutes) * 4)))
-                        : Math.max(28, rawEventHeight - 4);
-                      const isCompactEvent = event.isShort || eventHeight < 36 || event.laneCount > 2;
-                      const showsIdentityStrip = event.isGroupedCluster || hidesInlineText;
-                      const showsInlineDetail = !isCompactEvent && event.sessionCount <= 1;
+                      const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight);
                       const eventStyle: WeekCalendarEventStyle = {
                         top: `${(event.topMinutes / 60) * calendarHourHeight}px`,
-                        height: `${eventHeight}px`,
+                        height: `${eventLayout.eventHeight}px`,
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 4px)` : "4px",
                         width: event.laneCount > 1 ? "calc(100% - 32px)" : "calc(100% - 8px)",
                         zIndex: activeWeekEventId === event.id ? ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX : event.laneCount > 1 ? 10 + event.lane : 3,
@@ -241,7 +233,7 @@ export function WeekDashboard({
                       return (
                         <article
                           aria-label={event.detailTitle.replace(/\n/g, ", ")}
-                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${hidesInlineText ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
+                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.hidesInlineText ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
                           key={event.id}
                           tabIndex={0}
                           style={eventStyle}
@@ -262,7 +254,7 @@ export function WeekDashboard({
                           }}
                         >
                           <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
-                          {showsIdentityStrip ? (
+                          {eventLayout.showsIdentityStrip ? (
                             <span className="week-v2-calendar__identity-strip" aria-hidden="true">
                               {event.identities.map((identity) => (
                                 <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
@@ -274,9 +266,9 @@ export function WeekDashboard({
                               ) : null}
                             </span>
                           ) : null}
-                          {hidesInlineText ? null : <strong className={event.isGroupedCluster ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
-                          {!isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
-                          {showsInlineDetail ? <em>{event.detailSummary}</em> : null}
+                          {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
+                          {!eventLayout.isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
+                          {eventLayout.showsInlineDetail ? <em>{event.detailSummary}</em> : null}
                         </article>
                       );
                     })}
