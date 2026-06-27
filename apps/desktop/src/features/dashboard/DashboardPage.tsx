@@ -9,6 +9,7 @@ import { FlowCompactSplitChart } from "./CompactCharts";
 import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
+import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
 import {
   DashboardAiUnavailableNotice,
   type DashboardAiUnavailableState,
@@ -41,6 +42,7 @@ type DashboardPageProps = {
   readonly hasTimelineData: boolean;
   readonly historyClassificationOptions: ClassificationOptions;
   readonly historySegments: ActivitySegment[];
+  readonly initialDataLoading: boolean;
   readonly isPreviewSurface: boolean;
   readonly selectedDay: string;
   readonly selectedDayLabel: string;
@@ -82,6 +84,7 @@ export function DashboardPage({
   hasTimelineData,
   historyClassificationOptions,
   historySegments,
+  initialDataLoading,
   isPreviewSurface,
   selectedDay,
   selectedDayLabel,
@@ -100,8 +103,14 @@ export function DashboardPage({
   onSelectBillingPlan,
   onSelectDay,
 }: DashboardPageProps) {
+  const pageClassName = [
+    "page",
+    dashPeriod === "Week" ? "page--week-dashboard" : null,
+    initialDataLoading ? "page--loading-skeleton" : null,
+  ].filter(Boolean).join(" ");
+
   return (
-    <div className={`page${dashPeriod === "Week" ? " page--week-dashboard" : ""}`}>
+    <div className={pageClassName}>
       {dashboardAiUnavailableState ? (
         <DashboardAiUnavailableNotice
           state={dashboardAiUnavailableState}
@@ -125,11 +134,13 @@ export function DashboardPage({
           <div className="dashboard-page-head__row">
             <div>
               <h1
-                aria-label={`${dashboardTitle} ${dashboardTitleDuration}`}
+                aria-label={initialDataLoading ? "Loading dashboard data" : `${dashboardTitle} ${dashboardTitleDuration}`}
                 className="dashboard-page-head__title"
               >
                 <span className="dashboard-page-head__title-value">{dashboardTitle}</span>
-                <span className="dashboard-page-head__title-value dashboard-page-head__title-duration">{dashboardTitleDuration}</span>
+                <span className={`dashboard-page-head__title-value dashboard-page-head__title-duration${initialDataLoading ? " dashboard-page-head__title-duration--loading" : ""}`}>
+                  {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : dashboardTitleDuration}
+                </span>
               </h1>
             </div>
             {dashboardDateNavigator}
@@ -137,7 +148,9 @@ export function DashboardPage({
         </div>
       )}
 
-      {dashPeriod === "Week" ? (
+      {initialDataLoading ? (
+        <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={dashboardDateNavigator} />
+      ) : dashPeriod === "Week" ? (
         <WeekDashboard
           rows={weekRows}
           calendarEvents={weekCalendarEvents}
@@ -189,7 +202,7 @@ export function DashboardPage({
         </>
       )}
 
-      {dashPeriod === "Today" ? (
+      {dashPeriod === "Today" && !initialDataLoading ? (
         <>
           <div className="dashboard-insight-stack">
             {focusDriftSection}

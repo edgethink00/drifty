@@ -9,6 +9,7 @@ import "./features/flow-chart/flow-chart.css";
 import "./features/dashboard/week-dashboard.css";
 import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
+import "./features/loading/loading-skeletons.css";
 import "./features/leaderboard/leaderboard.css";
 import "./features/chartHoverMotion.css";
 

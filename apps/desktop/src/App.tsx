@@ -200,6 +200,7 @@ import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardRefreshInputs } from "./features/dashboard/dashboardRefreshPolicy";
+import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
@@ -577,14 +578,6 @@ type DriftAlarmTrayPublishOptions = {
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
-}
-
-function DeferredTabBodyFallback({ label }: { readonly label: string }) {
-  return (
-    <div className="history-empty" role="status" aria-live="polite">
-      <strong>Loading {label}...</strong>
-    </div>
-  );
 }
 
 export default function App() {
@@ -3554,7 +3547,7 @@ export default function App() {
   );
   const dashboardAiUnavailableState = activeDashboardAiUnavailablePreviewInput
     ? resolveDashboardAiUnavailableState(activeDashboardAiUnavailablePreviewInput)
-    : totalSeconds > 0
+    : totalSeconds > 0 || (loading && !hasLoadedOnce)
       ? resolveDashboardAiUnavailableState({
         billingEntitlement,
         billingEntitlementError,
@@ -4586,6 +4579,7 @@ export default function App() {
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
+            initialDataLoading={loading && !hasLoadedOnce}
             isPreviewSurface={shouldUsePreviewData()}
             selectedDay={selectedDay}
             selectedDayLabel={selectedDayLabel}
@@ -4677,7 +4671,7 @@ export default function App() {
                 onLoadMore={loadMoreHistorySegments}
               />
             ) : (
-              <DeferredTabBodyFallback label="history records" />
+              <DeferredTabBodyFallback label="history records" variant="history" />
             )}
           </div>
         ) : null}
@@ -4689,7 +4683,7 @@ export default function App() {
             activeInsightProductivityTotals={activeInsightProductivityTotals}
             appIcons={appIcons}
             attentionRhythm={attentionRhythm}
-            bodyFallback={<DeferredTabBodyFallback label="trend analysis" />}
+            bodyFallback={<DeferredTabBodyFallback label="trend analysis" variant="trends" />}
             bodyReady={isTrendsBodyReady}
             breakRecoveryInsight={breakRecoveryInsight}
             canShiftInsightForward={canShiftInsightForward}
