@@ -4428,7 +4428,7 @@ export default function App() {
               onClick={() => navigateToTab("dashboard", item.period)}
             >
               <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
-              <span>{item.label}<small>{item.detail}</small></span>
+              <span>{item.label}</span>
               {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
             </button>
           ))}

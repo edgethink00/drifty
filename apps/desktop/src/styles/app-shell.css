@@ -393,19 +393,6 @@
   padding-block: 7px;
 }
 
-.nav-item--period small {
-  color: currentColor;
-  font-family: var(--font-mono);
-  font-size: 7px;
-  font-weight: 500;
-  letter-spacing: .08em;
-  line-height: 1;
-  opacity: .64;
-  text-transform: uppercase;
-}
-
-.nav-item--period.active small { opacity: .78; }
-
 .sidebar-nav--periods {
   margin-bottom: 16px;
   padding-bottom: 14px;
