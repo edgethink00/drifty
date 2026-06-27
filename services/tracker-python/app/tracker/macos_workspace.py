@@ -18,11 +18,17 @@ from app.tracker.browser_automation import (
     is_supported_browser_app,
     youtube_ids,
 )
+from app.tracker.browser_history import (
+    browser_history_metadata,
+    is_browser_history_supported_app,
+)
 
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
 FrontmostCaptureSource = Literal["system-events", "lsappinfo", "unavailable"]
 OSASCRIPT_TIMEOUT_SECONDS: Final = 3.0
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
+FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: Final = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
+_BROWSER_HISTORY_FALLBACK_STATUSES: Final = frozenset({"denied", "empty_result", "stale", "unavailable"})
 
 
 class OnScreenWindowRow(TypedDict):
@@ -53,6 +59,12 @@ class Snapshot:
     capture_confidence: float = 1.0
     browser_automation_status: BrowserAutomationStatus | None = None
     browser_automation_error: str | None = None
+    browser_history_status: str | None = None
+    browser_history_reason: str | None = None
+    browser_history_database_found: bool | None = None
+    browser_history_profile_count: int | None = None
+    browser_history_candidate_count: int | None = None
+    browser_history_error_count: int | None = None
     system_transient_activity: SystemTransientActivity | None = None
     frontmost_capture_source: FrontmostCaptureSource | None = None
     frontmost_capture_error: str | None = None
@@ -213,11 +225,28 @@ def _system_transient_activity() -> SystemTransientActivity | None:
 _browser_script = browser_script
 _browser_automation_status_from_error = browser_automation_status_from_error
 _is_supported_browser_app = is_supported_browser_app
+_is_browser_history_supported_app = is_browser_history_supported_app
 _youtube_ids = youtube_ids
 
 
 def _browser_metadata(app_name: str | None) -> BrowserMetadata:
     return browser_metadata(app_name, _run_osascript)
+
+
+def _browser_history_metadata(app_name: str | None, window_title: str | None) -> BrowserMetadata:
+    return browser_history_metadata(app_name, window_title)
+
+
+def _force_browser_history_url_fallback() -> bool:
+    return os.environ.get(FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV) == "1"
+
+
+def _should_try_browser_history_url_fallback(app_name: str | None, browser: BrowserMetadata) -> bool:
+    return (
+        browser.site_url is None
+        and browser.browser_automation_status in _BROWSER_HISTORY_FALLBACK_STATUSES
+        and _is_browser_history_supported_app(app_name)
+    )
 
 
 def _frontmost_via_system_events() -> tuple[str | None, str | None, str | None]:
@@ -310,17 +339,42 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         frontmost_capture_source = "unavailable"
         app_name = "Unavailable"
 
-    browser = _browser_metadata(app_name)
+    force_browser_history_url_fallback = _force_browser_history_url_fallback()
+    if force_browser_history_url_fallback:
+        if _is_browser_history_supported_app(app_name):
+            browser = _browser_history_metadata(app_name, window_title)
+        elif _browser_script(app_name):
+            browser = BrowserMetadata(
+                browser_name=app_name,
+                browser_automation_status="unavailable",
+                browser_automation_error=f"Browser history URL fallback is not supported for {app_name}.",
+                browser_history_status="unsupported",
+                browser_history_reason="unsupported_browser",
+            )
+        else:
+            browser = BrowserMetadata()
+        browser_history = browser
+    else:
+        browser = _browser_metadata(app_name)
+        browser_history = None
 
     # Prefer the AX title captured in the same osascript pass as the tab read,
     # so window_title and site_* cannot describe two different moments.
     if browser.ax_window_title:
         window_title = browser.ax_window_title
+    if not force_browser_history_url_fallback and _should_try_browser_history_url_fallback(app_name, browser):
+        history_browser = _browser_history_metadata(app_name, window_title)
+        browser_history = history_browser
+        if history_browser.site_url:
+            browser = history_browser
 
     site_source = None
     capture_confidence = 1.0
     if browser.site_domain:
-        if browser.match_state == "front-fallback":
+        if browser.match_state == "browser-history-title":
+            site_source = "browser-history-title"
+            capture_confidence = 0.45
+        elif browser.match_state == "front-fallback":
             # No window's active tab matched the focused window's title, so the
             # tab data may belong to a window other than the one on screen.
             site_source = "applescript-front-window"
@@ -355,6 +409,12 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         capture_confidence=capture_confidence,
         browser_automation_status=browser_automation_status,
         browser_automation_error=browser.browser_automation_error,
+        browser_history_status=browser_history.browser_history_status if browser_history else None,
+        browser_history_reason=browser_history.browser_history_reason if browser_history else None,
+        browser_history_database_found=browser_history.browser_history_database_found if browser_history else None,
+        browser_history_profile_count=browser_history.browser_history_profile_count if browser_history else None,
+        browser_history_candidate_count=browser_history.browser_history_candidate_count if browser_history else None,
+        browser_history_error_count=browser_history.browser_history_error_count if browser_history else None,
         system_transient_activity=system_transient_activity,
         frontmost_capture_source=frontmost_capture_source,
         frontmost_capture_error=frontmost_capture_error,

@@ -1,6 +1,7 @@
 export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "unknown";
-export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "window-title" | "unknown" | null;
+export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "browser-history-title" | "window-title" | "unknown" | null;
 export type BrowserAutomationStatus = "granted" | "denied" | "unavailable" | "stale" | "empty_result" | "not_applicable";
+export type BrowserHistoryStatus = "unsupported" | "no_profile_root" | "no_readable_database" | "no_match" | "matched";
 export type SystemTransientActivity = "mission_control" | "app_switcher" | "launchpad" | "spotlight" | "system_overlay" | null;
 export type FrontmostCaptureSource = "system-events" | "lsappinfo" | "unavailable";
 export const FLOW_INTERVAL_OPTIONS = [3, 5, 10] as const;
@@ -89,6 +90,12 @@ export interface ActivitySegment {
   siteSource?: SiteSource;
   browserAutomationStatus?: BrowserAutomationStatus | null;
   browserAutomationError?: string | null;
+  browserHistoryStatus?: BrowserHistoryStatus | null;
+  browserHistoryReason?: string | null;
+  browserHistoryDatabaseFound?: boolean | null;
+  browserHistoryProfileCount?: number | null;
+  browserHistoryCandidateCount?: number | null;
+  browserHistoryErrorCount?: number | null;
   frontmostCaptureSource?: FrontmostCaptureSource | null;
   frontmostCaptureError?: string | null;
   frontmostFallbackError?: string | null;
@@ -114,6 +121,12 @@ export interface CurrentActivitySnapshot {
   captureConfidence?: number | null;
   browserAutomationStatus?: BrowserAutomationStatus | null;
   browserAutomationError?: string | null;
+  browserHistoryStatus?: BrowserHistoryStatus | null;
+  browserHistoryReason?: string | null;
+  browserHistoryDatabaseFound?: boolean | null;
+  browserHistoryProfileCount?: number | null;
+  browserHistoryCandidateCount?: number | null;
+  browserHistoryErrorCount?: number | null;
   systemTransientActivity?: SystemTransientActivity;
   frontmostCaptureSource?: FrontmostCaptureSource | null;
   frontmostCaptureError?: string | null;

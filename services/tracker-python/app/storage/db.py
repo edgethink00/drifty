@@ -355,7 +355,23 @@ class TrackerDatabase:
                 """
             ).fetchone()
 
-            if (
+            last_site_fields_empty = bool(
+                last
+                and last["app_name"] == snapshot.app_name
+                and last["window_title"] == snapshot.window_title
+                and last["site_domain"] is None
+                and last["site_title"] is None
+                and last["site_url"] is None
+                and last["youtube_video_id"] is None
+                and last["youtube_playlist_id"] is None
+                and last["youtube_is_shorts"] is None
+            )
+            history_enrichment = (
+                last_site_fields_empty
+                and snapshot.site_source == "browser-history-title"
+                and snapshot.site_url is not None
+            )
+            exact_context_match = (
                 last
                 and last["app_name"] == snapshot.app_name
                 and last["window_title"] == snapshot.window_title
@@ -365,6 +381,11 @@ class TrackerDatabase:
                 and last["youtube_video_id"] == snapshot.youtube_video_id
                 and last["youtube_playlist_id"] == snapshot.youtube_playlist_id
                 and last["youtube_is_shorts"] == snapshot.youtube_is_shorts
+            )
+
+            if (
+                last
+                and (exact_context_match or history_enrichment)
                 and self._within_merge_gap(last["ended_at"], snapshot.observed_at, max_merge_gap_seconds)
             ):
                 conn.execute(
@@ -374,6 +395,12 @@ class TrackerDatabase:
                         duration_seconds = duration_seconds + ?,
                         bundle_id = ?,
                         browser_name = ?,
+                        site_domain = ?,
+                        site_title = ?,
+                        site_url = ?,
+                        youtube_video_id = ?,
+                        youtube_playlist_id = ?,
+                        youtube_is_shorts = ?,
                         site_source = ?,
                         source = ?,
                         confidence = ?,
@@ -385,6 +412,12 @@ class TrackerDatabase:
                         sample_seconds,
                         snapshot.bundle_id,
                         snapshot.browser_name,
+                        snapshot.site_domain,
+                        snapshot.site_title,
+                        snapshot.site_url,
+                        snapshot.youtube_video_id,
+                        snapshot.youtube_playlist_id,
+                        snapshot.youtube_is_shorts,
                         snapshot.site_source,
                         snapshot.source,
                         getattr(snapshot, "capture_confidence", 1.0),

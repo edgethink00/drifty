@@ -108,6 +108,12 @@ class TrackerMainTests(unittest.TestCase):
             window_title="workspace",
             source="accessibility",
             browser_automation_status="not_applicable",
+            browser_history_status="no_readable_database",
+            browser_history_reason="missing_database",
+            browser_history_database_found=False,
+            browser_history_profile_count=0,
+            browser_history_candidate_count=0,
+            browser_history_error_count=0,
         )
 
         with patch.object(tracker_main, "current_snapshot", return_value=snapshot):
@@ -119,6 +125,12 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["bundleId"], "dev.cmux")
         self.assertEqual(result["data"]["browserAutomationStatus"], "not_applicable")
         self.assertIsNone(result["data"]["browserAutomationError"])
+        self.assertEqual(result["data"]["browserHistoryStatus"], "no_readable_database")
+        self.assertEqual(result["data"]["browserHistoryReason"], "missing_database")
+        self.assertFalse(result["data"]["browserHistoryDatabaseFound"])
+        self.assertEqual(result["data"]["browserHistoryProfileCount"], 0)
+        self.assertEqual(result["data"]["browserHistoryCandidateCount"], 0)
+        self.assertEqual(result["data"]["browserHistoryErrorCount"], 0)
 
     def test_get_timeline_uses_day_filter(self) -> None:
         mock_db = MagicMock()
@@ -320,6 +332,7 @@ class TrackerMainTests(unittest.TestCase):
             result = tracker_main.set_developer_diagnostics({
                 "forceChromiumAxCapture": True,
                 "forceFrontmostFallbackCapture": True,
+                "forceBrowserHistoryUrlFallback": True,
             })
 
         self.assertTrue(result["ok"])
@@ -328,10 +341,12 @@ class TrackerMainTests(unittest.TestCase):
             {
                 "forceChromiumAxCapture": True,
                 "forceFrontmostFallbackCapture": True,
+                "forceBrowserHistoryUrlFallback": True,
             },
         )
         mock_db.set_meta.assert_any_call(tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true")
         mock_db.set_meta.assert_any_call(tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY, "true")
+        mock_db.set_meta.assert_any_call(tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY, "true")
         apply_env.assert_called_once_with(mock_db)
 
     def test_apply_developer_diagnostics_env_sets_frontmost_fallback_capture_env(self) -> None:
@@ -339,6 +354,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.get_meta.side_effect = lambda key, default=None: {
             tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY: "false",
             tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY: "true",
+            tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY: "true",
         }.get(key, default)
 
         with patch.dict(tracker_main.os.environ, {}, clear=True):
@@ -346,6 +362,7 @@ class TrackerMainTests(unittest.TestCase):
 
             self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_CHROMIUM_AX_CAPTURE_ENV], "0")
             self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV], "1")
+            self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV], "1")
 
     def test_delete_activity_segments_forwards_string_ids_to_database(self) -> None:
         mock_db = MagicMock()

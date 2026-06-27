@@ -66,6 +66,44 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         self.assertEqual(segment["browserAutomationStatus"], "empty_result")
         self.assertEqual(segment["browserAutomationError"], "Google Chrome returned an empty browser automation result.")
 
+    def test_fetch_timeline_includes_browser_history_diagnostics(self) -> None:
+        started_at = "2026-06-13T00:00:00+00:00"
+        with TemporaryDirectory() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": "2026-06-13T00:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": "Google Chrome",
+                    "browser_name": "Google Chrome",
+                    "site_source": "browser-history-title",
+                    "platform": "macos",
+                    "source": "accessibility",
+                    "confidence": 0.45,
+                    "raw_context_json": json.dumps(
+                        {
+                            "browser_history_status": "matched",
+                            "browser_history_reason": "matched",
+                            "browser_history_database_found": True,
+                            "browser_history_profile_count": 1,
+                            "browser_history_candidate_count": 7,
+                            "browser_history_error_count": 0,
+                        }
+                    ),
+                }
+            )
+
+            local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+            segment = database.fetch_timeline(local_day)[0]
+
+        self.assertEqual(segment["browserHistoryStatus"], "matched")
+        self.assertEqual(segment["browserHistoryReason"], "matched")
+        self.assertTrue(segment["browserHistoryDatabaseFound"])
+        self.assertEqual(segment["browserHistoryProfileCount"], 1)
+        self.assertEqual(segment["browserHistoryCandidateCount"], 7)
+        self.assertEqual(segment["browserHistoryErrorCount"], 0)
+
     def test_fetch_timeline_includes_frontmost_capture_diagnostics(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
         with TemporaryDirectory() as tempdir:
