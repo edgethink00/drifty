@@ -65,6 +65,8 @@ pub struct ManagedAiStatus {
     pub(super) progress: Option<ManagedAiDownloadProgress>,
     #[serde(default)]
     pub(super) error_kind: Option<ManagedAiStatusErrorKind>,
+    #[serde(default)]
+    pub(super) memory_usage_bytes: Option<u64>,
 }
 
 pub(super) fn status_for_spec(
@@ -83,6 +85,7 @@ pub(super) fn status_for_spec(
         artifact_dir: artifact_dir.map(|path| path.to_string_lossy().into_owned()),
         progress: None,
         error_kind: None,
+        memory_usage_bytes: None,
     }
 }
 
@@ -102,6 +105,7 @@ pub(super) fn status_for_model_error(
         artifact_dir: artifact_dir.map(|path| path.to_string_lossy().into_owned()),
         progress: None,
         error_kind: Some(error_kind),
+        memory_usage_bytes: None,
     }
 }
 
@@ -116,6 +120,7 @@ pub(super) fn status_for_global_error(message: &str) -> ManagedAiStatus {
         artifact_dir: None,
         progress: None,
         error_kind: None,
+        memory_usage_bytes: None,
     }
 }
 
@@ -133,6 +138,7 @@ pub(super) fn status_for_download_progress(
         artifact_dir: None,
         progress: Some(progress),
         error_kind: None,
+        memory_usage_bytes: None,
     }
 }
 
@@ -165,6 +171,7 @@ pub(super) fn default_status() -> ManagedAiStatus {
         artifact_dir: None,
         progress: None,
         error_kind: None,
+        memory_usage_bytes: None,
     }
 }
 

@@ -239,6 +239,27 @@ fn read_status_downgrades_stale_running_without_runtime_process() {
 }
 
 #[test]
+fn status_serializes_runtime_memory_usage_bytes() {
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let mut status = status_for_spec(
+        ManagedAiInstallState::Running,
+        spec,
+        None,
+        "Managed local AI runtime is running.",
+    );
+    status.memory_usage_bytes = Some(2_684_354_560);
+
+    let value = serde_json::to_value(&status).expect("serialize status");
+
+    assert_eq!(
+        value
+            .get("memoryUsageBytes")
+            .and_then(serde_json::Value::as_u64),
+        Some(2_684_354_560)
+    );
+}
+
+#[test]
 #[ignore]
 fn qa_starts_real_runtime_from_existing_managed_ai_root() {
     let root = std::env::var("DRIFTY_MANAGED_AI_QA_ROOT")

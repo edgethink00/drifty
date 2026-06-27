@@ -20,7 +20,7 @@ pub(super) fn start_runtime(
     process::stop_unrelated_child(spec.id)?;
     let runtime_path = install::require_runtime_path(root)?;
     if process::server_has_model(&runtime_path, spec) {
-        return Ok(running_status(spec, artifact_dir));
+        return Ok(running_status(&runtime_path, spec, artifact_dir));
     }
 
     process::stop_stale_runtime_server(&runtime_path)?;
@@ -36,7 +36,7 @@ pub(super) fn start_runtime(
 
     process::start_child(root, &runtime_path, &model_path, spec)?;
     if process::wait_for_ready(&runtime_path, spec) {
-        Ok(running_status(spec, artifact_dir))
+        Ok(running_status(&runtime_path, spec, artifact_dir))
     } else {
         Ok(status_for_spec(
             ManagedAiInstallState::Starting,
@@ -55,12 +55,14 @@ pub(super) fn normalize_runtime_status(
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     let runtime_path = install::expected_runtime_path(root);
     if process::server_has_model(&runtime_path, spec) {
-        return Ok(status_for_spec(
+        let mut running = status_for_spec(
             ManagedAiInstallState::Running,
             spec,
             artifact_dir,
             "Managed local AI runtime is running.",
-        ));
+        );
+        running.memory_usage_bytes = process::server_memory_usage_bytes(&runtime_path);
+        return Ok(running);
     }
 
     if process::child_alive_for_model(spec.id)? {
@@ -95,13 +97,19 @@ pub(super) fn stop_runtime() -> Result<(), ManagedAiError> {
     process::stop_runtime()
 }
 
-fn running_status(spec: ManagedAiModelSpec, artifact_dir: &Path) -> ManagedAiStatus {
-    status_for_spec(
+fn running_status(
+    runtime_path: &Path,
+    spec: ManagedAiModelSpec,
+    artifact_dir: &Path,
+) -> ManagedAiStatus {
+    let mut status = status_for_spec(
         ManagedAiInstallState::Running,
         spec,
         Some(artifact_dir.to_path_buf()),
         "Managed local AI runtime is running.",
-    )
+    );
+    status.memory_usage_bytes = process::server_memory_usage_bytes(runtime_path);
+    status
 }
 
 #[cfg(test)]

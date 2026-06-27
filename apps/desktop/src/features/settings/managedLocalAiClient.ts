@@ -30,6 +30,7 @@ export type ManagedLocalAiStatus = {
   readonly artifactDir: string | null;
   readonly progress: ManagedLocalAiDownloadProgress | null;
   readonly errorKind: ManagedLocalAiStatusErrorKind | null;
+  readonly memoryUsageBytes: number | null;
 };
 
 export async function listManagedLocalAiModels(): Promise<readonly ManagedLocalAiModel[]> {
@@ -54,7 +55,7 @@ export async function deleteManagedLocalAiModel(modelId: string): Promise<Manage
 }
 
 export function fallbackManagedLocalAiStatus(message: string): ManagedLocalAiStatus {
-  return { state: "error", selectedModelId: null, installedModels: [], baseUrl: null, model: null, message, artifactDir: null, progress: null, errorKind: null };
+  return { state: "error", selectedModelId: null, installedModels: [], baseUrl: null, model: null, message, artifactDir: null, progress: null, errorKind: null, memoryUsageBytes: null };
 }
 
 export function installingManagedLocalAiStatus(modelId: string, installedModels: readonly ManagedLocalAiInstalledModel[] = []): ManagedLocalAiStatus {
@@ -68,6 +69,7 @@ export function installingManagedLocalAiStatus(modelId: string, installedModels:
     artifactDir: null,
     progress: null,
     errorKind: null,
+    memoryUsageBytes: null,
   };
 }
 
@@ -99,7 +101,13 @@ function parseManagedStatus(value: unknown): ManagedLocalAiStatus {
     artifactDir: nullableString(value.artifactDir),
     progress: parseProgress(value.progress),
     errorKind: parseErrorKind(value.errorKind),
+    memoryUsageBytes: parseMemoryUsageBytes(value.memoryUsageBytes),
   };
+}
+
+function parseMemoryUsageBytes(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value);
 }
 
 function parseInstalledModels(value: unknown): readonly ManagedLocalAiInstalledModel[] {

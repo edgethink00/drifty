@@ -215,6 +215,7 @@ function installManagedModel(modelId: string): ManagedLocalAiStatus {
     artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
     progress: null,
     errorKind: null,
+    memoryUsageBytes: null,
   };
 }
 
@@ -229,6 +230,7 @@ function configureManagedAiMocks() {
     artifactDir: null,
     progress: null,
     errorKind: null,
+    memoryUsageBytes: null,
   };
   invokeMock.mockImplementation((command: string, args?: unknown) => {
     switch (command) {
@@ -932,6 +934,7 @@ describe("App onboarding", () => {
       artifactDir: null,
       progress: null,
       errorKind: null,
+      memoryUsageBytes: null,
     };
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       switch (command) {
@@ -951,6 +954,7 @@ describe("App onboarding", () => {
             artifactDir: null,
             progress: null,
             errorKind: null,
+            memoryUsageBytes: null,
           };
           return installDeferred.promise;
         }
