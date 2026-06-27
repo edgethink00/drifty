@@ -262,6 +262,7 @@ const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
+const DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT = 20;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
@@ -306,6 +307,22 @@ function findFreshCompactHistoryLoad(cache: ReadonlyMap<string, CompactHistoryLo
     if (isFreshCompactHistoryLoad(load) && compactHistoryRangeContains(load, range)) return load;
   }
   return null;
+}
+
+function rememberDriftAlarmSourceSegment(
+  cache: Map<string, ActivitySegment>,
+  sourceSegmentId: string | null,
+  segment: ActivitySegment,
+): void {
+  if (!sourceSegmentId) return;
+  cache.delete(sourceSegmentId);
+  cache.set(sourceSegmentId, segment);
+
+  while (cache.size > DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT) {
+    const oldest = cache.keys().next();
+    if (oldest.done) return;
+    cache.delete(oldest.value);
+  }
 }
 
 function extremeNudgeErrorDiagnostic(error: unknown): string | null {
@@ -1031,6 +1048,7 @@ export default function App() {
   const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
   const driftAlarmRequestInFlightRef = useRef(false);
   const liveDriftAlarmRefreshInFlightRef = useRef(false);
   const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
@@ -1425,10 +1443,28 @@ export default function App() {
 
   async function applyDriftAlarmManualCorrection(event: DriftAlarmEvent | null): Promise<void> {
     const sourceSegmentId = event?.sourceSegmentId?.trim();
-    if (!sourceSegmentId) return;
+    if (!sourceSegmentId) {
+      recordDriftAlarmDebugEvent({
+        kind: "manual_correction_failed",
+        alertKey: event?.id ?? null,
+        reason: "source_segment_id_missing",
+        delivery: event ? summarizeDriftAlarmEvent(event) : null,
+      });
+      return;
+    }
 
-    const sourceSegment = segmentsRef.current.find((segment) => segment.id === sourceSegmentId);
-    if (!sourceSegment) return;
+    const sourceSegment = segmentsRef.current.find((segment) => segment.id === sourceSegmentId)
+      ?? driftAlarmSourceSegmentsRef.current.get(sourceSegmentId)
+      ?? null;
+    if (!sourceSegment) {
+      recordDriftAlarmDebugEvent({
+        kind: "manual_correction_failed",
+        alertKey: event?.id ?? null,
+        reason: "source_segment_missing",
+        delivery: event ? summarizeDriftAlarmEvent(event) : null,
+      });
+      return;
+    }
 
     await trackerClient.saveClassifications([
       buildDriftAlarmManualCorrectionRecord({
@@ -1444,6 +1480,7 @@ export default function App() {
     });
     if (ruleInput) await saveClassificationRule(ruleInput);
 
+    driftAlarmSourceSegmentsRef.current.delete(sourceSegmentId);
     await refresh(selectedDayRef.current);
   }
 
@@ -2812,6 +2849,8 @@ export default function App() {
       const sourceAppName = segment.appName.trim() || "Unknown app";
       const sourceIconKey = segment.bundleId?.trim() ?? sourceAppName;
       const sourceIconSrc = appIconsRef.current[sourceIconKey] ?? appIconsRef.current[sourceAppName] ?? null;
+      const sourceSegmentId = latestDrift.sourceSegmentId ?? segment.id;
+      rememberDriftAlarmSourceSegment(driftAlarmSourceSegmentsRef.current, sourceSegmentId, segment);
 
       return buildDriftAlarmEvent({
         id: alertKey,
@@ -2824,7 +2863,7 @@ export default function App() {
         sourceAppName,
         sourceIconSrc,
         copySettings: driftAlarmCopy,
-        sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
+        sourceSegmentId,
       });
     };
     const showCurrentDriftAlarm = () => {
