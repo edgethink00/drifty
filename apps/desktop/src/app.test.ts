@@ -6,6 +6,7 @@ import {
   buildFlowBlocks,
   buildDailyTotals,
   buildHourlyBuckets,
+  buildEffectiveProductivityDurations,
   buildProductivityPersona,
   computePreservedFocusStrikeSeconds,
   DRIFTY_PRODUCTIVITY_RUBRIC_VERSION,
@@ -15,6 +16,8 @@ import {
   scoreDriftyProductivityRubricV1,
   topSites,
   type ActivitySegment,
+  type ActivityCategory,
+  type ProductivityLabel,
   type ProductivityPersonaId,
   type ProductivityRubricMetricInput,
 } from '@drifty/domain';
@@ -128,6 +131,46 @@ function segment(input: {
   };
 }
 
+function storedClassification(category: ActivityCategory, productivity: ProductivityLabel): ActivitySegment['classification'] {
+  return {
+    category,
+    productivity,
+    source: 'manual',
+    confidence: 1,
+    reason: 'Test classification',
+  };
+}
+
+function classifiedSegment(input: {
+  id: string;
+  startHour: number;
+  startMinute: number;
+  durationMinutes: number;
+  appName: string;
+  category: ActivityCategory;
+  productivity: ProductivityLabel;
+  bundleId?: string | null;
+  browserName?: string | null;
+  siteDomain?: string | null;
+}): ActivitySegment {
+  const start = localIso(input.startHour, input.startMinute);
+  const end = new Date(new Date(start).getTime() + input.durationMinutes * 60 * 1000).toISOString();
+  return segment({
+    id: input.id,
+    start,
+    end,
+    appName: input.appName,
+    bundleId: input.bundleId,
+    browserName: input.browserName,
+    siteDomain: input.siteDomain,
+    classification: storedClassification(input.category, input.productivity),
+  });
+}
+
+function effectiveProductivityDuration(segments: ActivitySegment[], productivity: ProductivityLabel): number {
+  return buildEffectiveProductivityDurations(segments).find((entry) => entry.productivity === productivity)?.totalSeconds ?? 0;
+}
+
 describe('domain helpers', () => {
   it('groups segments by app', () => {
     const groups = groupSegmentsByApp(segments);
@@ -159,6 +202,68 @@ describe('domain helpers', () => {
     expect(sites[0].siteDomain).toBe('tauri.app');
     expect(blocks).toHaveLength(6);
     expect(blocks[0].siteDomain).toBe('tauri.app');
+  });
+
+  it('folds contextual communication productivity into the three user-facing labels', () => {
+    const communicationSegments = [
+      classifiedSegment({ id: 'mixed-focus-before', startHour: 9, startMinute: 0, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'mixed-short', startHour: 9, startMinute: 10, durationMinutes: 5, appName: 'KakaoTalk', category: 'communication', productivity: 'neutral' }),
+      classifiedSegment({ id: 'mixed-focus-after', startHour: 9, startMinute: 15, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'work-focus-before', startHour: 9, startMinute: 40, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'work-extended', startHour: 9, startMinute: 50, durationMinutes: 18, appName: 'Slack', category: 'communication', productivity: 'neutral' }),
+      classifiedSegment({ id: 'work-focus-after', startHour: 10, startMinute: 8, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'mixed-long-focus-before', startHour: 10, startMinute: 30, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'mixed-long', startHour: 10, startMinute: 40, durationMinutes: 6, appName: 'Discord', category: 'communication', productivity: 'neutral' }),
+      classifiedSegment({ id: 'mixed-long-focus-after', startHour: 10, startMinute: 46, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'work-drift-focus-before', startHour: 11, startMinute: 10, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'work-drift-blocked', startHour: 11, startMinute: 20, durationMinutes: 7, appName: 'Slack', category: 'communication', productivity: 'drift' }),
+      classifiedSegment({ id: 'work-drift-after', startHour: 11, startMinute: 27, durationMinutes: 10, appName: 'Steam', category: 'game', productivity: 'drift' }),
+    ];
+
+    expect(effectiveProductivityDuration(communicationSegments, 'focus')).toBe(93 * 60);
+    expect(effectiveProductivityDuration(communicationSegments, 'neutral')).toBe(13 * 60);
+    expect(effectiveProductivityDuration(communicationSegments, 'drift')).toBe(10 * 60);
+
+    const blocks = buildFlowBlocks(communicationSegments, '2026-04-06', 5);
+    expect(blocks.filter((block) => block.appName === 'KakaoTalk').every((block) => block.productivity === 'focus' && block.productivityBasis === 'contextual')).toBe(true);
+    expect(blocks.filter((block) => block.appName === 'Slack' && block.minuteOfDay < 11 * 60).every((block) => block.productivity === 'focus' && block.productivityBasis === 'contextual')).toBe(true);
+    expect(blocks.filter((block) => block.appName === 'Discord').every((block) => block.productivity === 'neutral' && block.productivityBasis === 'direct')).toBe(true);
+    expect(blocks.filter((block) => block.appName === 'Slack' && block.minuteOfDay >= 11 * 60).every((block) => block.productivity === 'neutral' && block.productivityBasis === 'contextual')).toBe(true);
+    expect(blocks.filter((block) => block.appName === 'Slack').every((block) => block.sourceProductivity !== null)).toBe(true);
+  });
+
+  it('uses contextual focus when evaluating nearby work-primary communication windows', () => {
+    const communicationSegments = [
+      classifiedSegment({ id: 'seed-focus-before', startHour: 9, startMinute: 0, durationMinutes: 2, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'seed-slack', startHour: 9, startMinute: 2, durationMinutes: 2, appName: 'Slack', category: 'communication', productivity: 'neutral' }),
+      classifiedSegment({ id: 'seed-focus-after', startHour: 9, startMinute: 4, durationMinutes: 2, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'extended-teams', startHour: 9, startMinute: 8, durationMinutes: 9, appName: 'Microsoft Teams', category: 'communication', productivity: 'neutral' }),
+      classifiedSegment({ id: 'extended-focus-after', startHour: 9, startMinute: 17, durationMinutes: 2, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+    ];
+
+    expect(effectiveProductivityDuration(communicationSegments, 'focus')).toBe(17 * 60);
+    expect(effectiveProductivityDuration(communicationSegments, 'neutral')).toBe(0);
+
+    const blocks = buildFlowBlocks(communicationSegments, '2026-04-06', 5);
+    expect(blocks.filter((block) => block.appName === 'Microsoft Teams').every((block) => block.productivity === 'focus' && block.productivityBasis === 'contextual')).toBe(true);
+  });
+
+  it('folds contextual utility productivity into focus or drift', () => {
+    const utilitySegments = [
+      classifiedSegment({ id: 'utility-focus-before', startHour: 9, startMinute: 0, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'utility-focus-finder', startHour: 9, startMinute: 10, durationMinutes: 1, appName: 'Finder', category: 'utility', productivity: 'neutral' }),
+      classifiedSegment({ id: 'utility-focus-after', startHour: 9, startMinute: 11, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'utility-drift-before', startHour: 9, startMinute: 30, durationMinutes: 10, appName: 'Steam', category: 'game', productivity: 'drift' }),
+      classifiedSegment({ id: 'utility-drift-finder', startHour: 9, startMinute: 40, durationMinutes: 1, appName: 'Finder', category: 'utility', productivity: 'neutral' }),
+      classifiedSegment({ id: 'utility-drift-after', startHour: 9, startMinute: 41, durationMinutes: 10, appName: 'Steam', category: 'game', productivity: 'drift' }),
+      classifiedSegment({ id: 'utility-long-before', startHour: 10, startMinute: 0, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'utility-long', startHour: 10, startMinute: 10, durationMinutes: 2, appName: 'Finder', category: 'utility', productivity: 'neutral' }),
+      classifiedSegment({ id: 'utility-long-after', startHour: 10, startMinute: 12, durationMinutes: 10, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+    ];
+
+    expect(effectiveProductivityDuration(utilitySegments, 'focus')).toBe(41 * 60);
+    expect(effectiveProductivityDuration(utilitySegments, 'neutral')).toBe(120);
+    expect(effectiveProductivityDuration(utilitySegments, 'drift')).toBe(21 * 60);
   });
 
   it('assigns pre-4am activity to the previous logical day', () => {

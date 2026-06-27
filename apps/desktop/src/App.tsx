@@ -9,6 +9,7 @@ import {
   categorizeActivity,
   buildCategoryDurations,
   buildProductivityDurations,
+  buildEffectiveProductivityDurations,
   computePreservedFocusStrikeSeconds,
   classifyActivity,
   classifyActivityDetailed,
@@ -3749,6 +3750,10 @@ export default function App() {
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
+  const dashboardEffectiveProductivityTotals = useMemo(
+    () => buildEffectiveProductivityDurations(dashboardSegments, dashboardClassificationOptions),
+    [dashboardClassificationOptions, dashboardSegments],
+  );
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const previousWeekFocusSeconds = dashPeriod === "Week" && dashboardPreviousWeekFocusLoad?.key === dashboardPreviousWeekFocusKey
     ? dashboardPreviousWeekFocusLoad.focusSeconds
@@ -4480,6 +4485,7 @@ export default function App() {
             dashboardAppUsage={dashboardAppUsage}
             dashboardCategoryTotals={dashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
+            dashboardEffectiveProductivityTotals={dashboardEffectiveProductivityTotals}
             dashboardProductivityTotals={dashboardProductivityTotals}
             dashboardRange={dashboardRange}
             dashboardTitle={dashboardTitle}
