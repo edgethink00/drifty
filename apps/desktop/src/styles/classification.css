@@ -100,11 +100,13 @@
 
 .classification-panel-view__list {
   display: grid;
-  gap: 4px;
+  gap: var(--classification-row-gap);
 }
 
 .classification-panel-view {
   --classification-row-height: 48px;
+  --classification-row-radius: 11.2px;
+  --classification-row-gap: 3.2px;
 }
 
 .classification-panel-view__category-row,
@@ -116,7 +118,7 @@
   min-width: 0;
   padding: 5px 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--classification-row-radius);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -366,7 +368,7 @@
   display: grid;
   gap: var(--space-1);
   border: 1px solid color-mix(in srgb, var(--classification-selected-tone) 18%, var(--line));
-  border-radius: var(--radius-md);
+  border-radius: var(--classification-row-radius);
   background: color-mix(in srgb, var(--surface) 96%, transparent);
 }
 
@@ -398,7 +400,7 @@
   min-width: 0;
   padding: 5px 8px;
   border: 0;
-  border-radius: calc(var(--radius-md) - 1px);
+  border-radius: calc(var(--classification-row-radius) - 1px);
   background: transparent;
   color: inherit;
   text-align: left;
