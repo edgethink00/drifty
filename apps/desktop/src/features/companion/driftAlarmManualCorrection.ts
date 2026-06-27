@@ -4,6 +4,8 @@ import {
   type ActivitySegment,
   type ClassificationOptions,
   type ClassificationRuleInput,
+  canonicalizeClassificationRuleSiteUrl,
+  siteTargetFromCanonicalUrl,
 } from "@drifty/domain";
 
 const DRIFT_ALARM_MANUAL_CORRECTION_REASON = "Marked not drift from drift alarm.";
@@ -48,6 +50,9 @@ export function buildDriftAlarmManualCorrectionRuleInput({
   return {
     targetKind: target.targetKind,
     targetValue: target.targetValue,
+    matchScope: target.matchScope,
+    detailKind: target.detailKind,
+    detailValue: target.detailValue,
     category: classification.category,
     productivity: "neutral",
     enabled: true,
@@ -57,12 +62,41 @@ export function buildDriftAlarmManualCorrectionRuleInput({
 
 function getDriftAlarmManualCorrectionRuleTarget(
   segment: ActivitySegment,
-): Pick<ClassificationRuleInput, "targetKind" | "targetValue"> | null {
-  const siteTarget = segment.siteDomain?.trim() || segment.siteUrl?.trim() || "";
-  if (siteTarget) return { targetKind: "site", targetValue: siteTarget };
+): Pick<ClassificationRuleInput, "targetKind" | "targetValue" | "matchScope" | "detailKind" | "detailValue"> | null {
+  const canonicalUrl = canonicalizeClassificationRuleSiteUrl(segment.siteUrl);
+  if (canonicalUrl) {
+    const siteTarget = siteTargetFromCanonicalUrl(canonicalUrl);
+    if (siteTarget) {
+      return {
+        targetKind: "site",
+        targetValue: siteTarget,
+        matchScope: "detail",
+        detailKind: "siteUrl",
+        detailValue: canonicalUrl,
+      };
+    }
+  }
 
   const appTarget = segment.bundleId?.trim() || segment.appName.trim();
-  if (appTarget) return { targetKind: "app", targetValue: appTarget };
+  const windowTitle = segment.windowTitle?.trim() ?? "";
+  if (appTarget && windowTitle) {
+    return {
+      targetKind: "app",
+      targetValue: appTarget,
+      matchScope: "detail",
+      detailKind: "windowTitle",
+      detailValue: windowTitle,
+    };
+  }
+  if (appTarget) {
+    return {
+      targetKind: "app",
+      targetValue: appTarget,
+      matchScope: "surface",
+      detailKind: null,
+      detailValue: null,
+    };
+  }
 
   return null;
 }

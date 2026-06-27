@@ -13,8 +13,17 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app.storage.db import TrackerDatabase
+from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
+
+
+class ClassificationRuleUrlTests(unittest.TestCase):
+    def test_canonicalizes_bare_hosts_with_ports_like_the_desktop_helper(self) -> None:
+        self.assertEqual(
+            canonicalize_classification_rule_site_url("example.com:8443/work/plan?token=secret&view=compact#section"),
+            "https://example.com:8443/work/plan?view=compact",
+        )
 
 
 class TrackerDatabaseTests(unittest.TestCase):
@@ -1069,6 +1078,130 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
         self.assertNotIn("classification", events[1])
 
+    def test_site_url_detail_classification_rule_matches_only_same_canonical_url(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "lichess.org",
+                "site_url": "https://lichess.org/training/123",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "lichess.org",
+                "site_url": "https://lichess.org/training/456",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T11:00:00+00:00",
+                "ended_at": "2026-04-06T11:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "chess.com",
+                "site_url": "https://lichess.org/training/123",
+            }
+        )
+        rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "https://www.lichess.org",
+                "matchScope": "detail",
+                "detailKind": "siteUrl",
+                "detailValue": "https://user:pass@www.lichess.org/training/123?utm_source=x&token=secret#comments",
+                "category": "learning",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(rule["targetValue"], "lichess.org")
+        self.assertEqual(rule["detailKind"], "siteUrl")
+        self.assertEqual(rule["detailValue"], "https://lichess.org/training/123")
+        self.assertEqual(result["matchedCount"], 1)
+        self.assertEqual(events[0]["classification"]["classificationRuleId"], rule["id"])
+        self.assertNotIn("classification", events[1])
+        self.assertNotIn("classification", events[2])
+
+    def test_site_url_detail_rule_beats_broad_rule_and_disabling_removes_only_its_rows(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "youtube.com",
+                "site_url": "https://youtu.be/ABC123?si=sharetoken",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T10:00:00+00:00",
+                "ended_at": "2026-04-06T10:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "youtube.com",
+                "site_url": "https://youtube.com/watch?v=OTHER",
+            }
+        )
+        broad_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "youtube.com",
+                "category": "entertainment",
+                "productivity": "drift",
+            }
+        )
+        detail_rule = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "youtube.com",
+                "matchScope": "detail",
+                "detailKind": "siteUrl",
+                "detailValue": "https://www.youtube.com/watch?v=ABC123&t=90s&utm_source=share",
+                "category": "learning",
+                "productivity": "focus",
+            }
+        )
+        self.database.apply_classification_rules()
+        initial_events = self.database.fetch_timeline("2026-04-06")
+
+        disabled = self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "youtube.com",
+                "matchScope": "detail",
+                "detailKind": "siteUrl",
+                "detailValue": "https://youtube.com/watch?v=ABC123",
+                "category": "learning",
+                "productivity": "focus",
+                "enabled": False,
+            }
+        )
+        disabled_events = self.database.fetch_timeline("2026-04-06")
+
+        self.assertEqual(detail_rule["detailValue"], "https://youtube.com/watch?v=ABC123")
+        self.assertEqual(initial_events[0]["classification"]["classificationRuleId"], detail_rule["id"])
+        self.assertEqual(initial_events[1]["classification"]["classificationRuleId"], broad_rule["id"])
+        self.assertFalse(disabled["enabled"])
+        self.assertEqual(disabled["id"], detail_rule["id"])
+        self.assertNotIn("classification", disabled_events[0])
+        self.assertEqual(disabled_events[1]["classification"]["classificationRuleId"], broad_rule["id"])
+
     def test_detail_classification_rule_beats_broad_rule_for_same_site(self) -> None:
         self.database.insert_segment(
             {
@@ -1274,6 +1407,18 @@ class TrackerDatabaseTests(unittest.TestCase):
                     "targetValue": "docs.example.com",
                     "matchScope": "detail",
                     "category": "workspace",
+                    "productivity": "focus",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "detailKind and detailValue are required"):
+            self.database.save_classification_rule(
+                {
+                    "targetKind": "site",
+                    "targetValue": "example.com",
+                    "matchScope": "detail",
+                    "detailKind": "siteUrl",
+                    "detailValue": "https://example.com:bad/work?token=secret#fragment",
+                    "category": "learning",
                     "productivity": "focus",
                 }
             )

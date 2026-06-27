@@ -12,6 +12,7 @@ import type {
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
+import { canonicalizeClassificationRuleSiteUrl } from "./classificationRuleUrl";
 import {
   DRIFTY_PRODUCTIVITY_RUBRIC_V1,
   scoreDriftyProductivityRubricV1,
@@ -731,12 +732,16 @@ function ruleSurfaceMatches(segment: ActivitySegment, rule: ClassificationRuleOp
 
 function ruleDetailMatches(segment: ActivitySegment, rule: ClassificationRuleOption): boolean {
   if (!rule.detailKind) return false;
-  const target = normalizeRuleDetailValue(rule.detailValue);
+  const target = normalizeRuleDetailTarget(rule.detailKind, rule.detailValue);
   if (!target) return false;
   return ruleDetailValues(segment, rule.detailKind).some((value) => value === target);
 }
 
 function ruleDetailValues(segment: ActivitySegment, detailKind: NonNullable<ClassificationRuleOption["detailKind"]>): string[] {
+  if (detailKind === "siteUrl") {
+    const normalized = canonicalizeClassificationRuleSiteUrl(segment.siteUrl);
+    return normalized ? [normalized] : [];
+  }
   if (detailKind === "title") {
     return [
       normalizeRuleDetailValue(segment.youtubeTitle),
@@ -766,6 +771,14 @@ function normalizeRuleAppTarget(value?: string | null): string {
 
 function normalizeRuleDetailValue(value?: string | null): string {
   return normalizeText(value).split(/\s+/).filter(Boolean).join(" ");
+}
+
+function normalizeRuleDetailTarget(
+  detailKind: NonNullable<ClassificationRuleOption["detailKind"]>,
+  value?: string | null,
+): string {
+  if (detailKind === "siteUrl") return canonicalizeClassificationRuleSiteUrl(value) ?? "";
+  return normalizeRuleDetailValue(value);
 }
 
 export function categorizeActivity(segment: ActivitySegment, options?: ClassificationOptions): ProductivityLabel {

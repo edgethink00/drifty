@@ -104,6 +104,29 @@ describe("Settings content styles", () => {
     expect(popoverRule).toContain("z-index: 25;");
   });
 
+  it("lets long saved classification rule detail values wrap inside rule cards", () => {
+    const styles = readAppStyles();
+    const textRule = cssRule(styles, ".classification-rule-card__text");
+    const detailRule = cssRule(styles, ".classification-rule-card__detail");
+
+    expect(textRule).toContain("min-width: 0;");
+    expect(detailRule).toContain("overflow-wrap: anywhere;");
+    expect(detailRule).toContain("word-break: break-word;");
+  });
+
+  it("keeps exact URL classification rule controls compact and readable", () => {
+    const styles = readAppStyles();
+    const modeControlRule = cssRule(styles, ".classification-rule-mode-control");
+    const selectedUrlRule = cssRule(styles, ".classification-rule-selected--url");
+    const correctionDetailRule = cssRule(styles, ".classification-correction__summary .classification-correction__detail-value");
+
+    expect(modeControlRule).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(modeControlRule).toContain("width: 100%;");
+    expect(selectedUrlRule).toContain("overflow-wrap: anywhere;");
+    expect(correctionDetailRule).toContain("overflow-wrap: anywhere;");
+    expect(correctionDetailRule).toContain("white-space: normal;");
+  });
+
   it("keeps AI setup provider rows compact", () => {
     const aiSetupStyles = readAiSetupStyles();
     const toggleRule = cssRule(aiSetupStyles, ".ai-setup-choice__toggle");

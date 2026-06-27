@@ -1,4 +1,4 @@
-import { buildAppUsageSummaries, classifyActivityDetailed, formatTimelineItems, PRODUCTIVITY_ORDER, secondsToLabel } from "@drifty/domain";
+import { buildAppUsageSummaries, canonicalizeClassificationRuleSiteUrl, classifyActivityDetailed, formatTimelineItems, PRODUCTIVITY_ORDER, secondsToLabel } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, ClassificationRule, ClassificationRuleApplyResult, ClassificationRuleCandidate, ClassificationRuleDetailKind, ClassificationRuleInput, ClassificationRuleTargetKind, ClassificationSource, ProductivityLabel } from "@drifty/domain";
 import { FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
@@ -438,8 +438,13 @@ export function classificationRuleTargetLabel(targetKind: ClassificationRuleTarg
   return targetKind === "site" ? "Domain" : "App";
 }
 
-export function classificationRuleScopeLabel(rule: Pick<ClassificationRule, "matchScope">): string {
-  return rule.matchScope === "detail" ? "Detail" : "Surface";
+export function classificationRuleSurfaceLabel(rule: Pick<ClassificationRule, "targetKind">): string {
+  return rule.targetKind === "site" ? "Site" : "App";
+}
+
+export function classificationRuleScopeLabel(rule: Pick<ClassificationRule, "matchScope" | "targetKind" | "detailKind">): string {
+  if (rule.matchScope === "detail") return classificationRuleDetailKindLabel(rule.detailKind);
+  return classificationRuleTargetLabel(rule.targetKind);
 }
 
 export function classificationRuleDetailKindLabel(detailKind?: ClassificationRuleDetailKind | null): string {
@@ -448,6 +453,7 @@ export function classificationRuleDetailKindLabel(detailKind?: ClassificationRul
     case "windowTitle": return "Window title";
     case "siteTitle": return "Page title";
     case "youtubeTitle": return "YouTube title";
+    case "siteUrl": return "URL";
     default: return "Detail";
   }
 }
@@ -489,17 +495,22 @@ export function normalizeClassificationRuleDetail(value: string | null | undefin
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function normalizeClassificationRuleDetailForKind(detailKind: ClassificationRuleDetailKind | null | undefined, value: string | null | undefined): string {
+  if (detailKind === "siteUrl") return canonicalizeClassificationRuleSiteUrl(value) ?? "";
+  return normalizeClassificationRuleDetail(value);
+}
+
 export function hasDuplicateClassificationRule(rules: ClassificationRule[], targetKind: ClassificationRuleTargetKind, targetValue: string, input?: Pick<ClassificationRuleInput, "matchScope" | "detailKind" | "detailValue">): boolean {
   const normalizedTargetValue = normalizeClassificationRuleTarget(targetKind, targetValue);
   const matchScope = input?.matchScope ?? "surface";
   const detailKind = input?.detailKind ?? null;
-  const detailValue = normalizeClassificationRuleDetail(input?.detailValue);
+  const detailValue = normalizeClassificationRuleDetailForKind(detailKind, input?.detailValue);
   return rules.some((rule) => {
     if (rule.targetKind !== targetKind || normalizeClassificationRuleTarget(rule.targetKind, rule.targetValue) !== normalizedTargetValue) return false;
     const ruleMatchScope = rule.matchScope ?? "surface";
     if (ruleMatchScope !== matchScope) return false;
     if (matchScope !== "detail") return true;
-    return rule.detailKind === detailKind && normalizeClassificationRuleDetail(rule.detailValue) === detailValue;
+    return rule.detailKind === detailKind && normalizeClassificationRuleDetailForKind(rule.detailKind, rule.detailValue) === detailValue;
   });
 }
 

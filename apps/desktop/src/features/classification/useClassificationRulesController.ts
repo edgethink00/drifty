@@ -9,13 +9,16 @@ import type {
   ClassificationRuleTargetKind,
   ProductivityLabel,
 } from "@drifty/domain";
+import { canonicalizeClassificationRuleSiteUrl, siteTargetFromCanonicalUrl } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { toErrorMessage } from "../../lib/formatting";
 import {
-  classificationRuleTargetLabel,
+  classificationRuleScopeLabel,
   hasDuplicateClassificationRule,
   normalizeDomainRuleInput,
 } from "./classificationViewData";
+
+type DomainRuleMode = "domain" | "url";
 
 type UseClassificationRulesControllerInput = {
   readonly activeTab: string;
@@ -45,6 +48,7 @@ type UseClassificationRulesControllerResult = {
   readonly domainRuleCandidatesLoading: boolean;
   readonly domainRuleCategory: ActivityCategory;
   readonly domainRuleInput: string;
+  readonly domainRuleMode: DomainRuleMode;
   readonly domainRuleProductivity: ProductivityLabel;
   readonly domainRuleSearchPanelOpen: boolean;
   readonly domainRuleSearchRef: RefObject<HTMLDivElement>;
@@ -64,6 +68,7 @@ type UseClassificationRulesControllerResult = {
   readonly setAppRuleCategory: Dispatch<SetStateAction<ActivityCategory>>;
   readonly setAppRuleProductivity: Dispatch<SetStateAction<ProductivityLabel>>;
   readonly setDomainRuleCategory: Dispatch<SetStateAction<ActivityCategory>>;
+  readonly setDomainRuleMode: Dispatch<SetStateAction<DomainRuleMode>>;
   readonly setDomainRuleProductivity: Dispatch<SetStateAction<ProductivityLabel>>;
   readonly updateAppRuleSearch: (value: string) => void;
   readonly updateDomainRuleInput: (value: string) => void;
@@ -87,6 +92,7 @@ export function useClassificationRulesController({
   const [domainRuleCandidatesLoading, setDomainRuleCandidatesLoading] = useState(false);
   const [domainRuleSearchPanelOpen, setDomainRuleSearchPanelOpen] = useState(false);
   const [domainRuleCategory, setDomainRuleCategory] = useState<ActivityCategory>("workspace");
+  const [domainRuleMode, setDomainRuleMode] = useState<DomainRuleMode>("domain");
   const [domainRuleProductivity, setDomainRuleProductivity] = useState<ProductivityLabel>("focus");
   const [appRuleSearch, setAppRuleSearch] = useState("");
   const [appRuleTargetValue, setAppRuleTargetValue] = useState("");
@@ -120,7 +126,7 @@ export function useClassificationRulesController({
       const savedRule = await trackerClient.saveClassificationRule(input);
       const applyResult = await trackerClient.applyClassificationRules();
       setClassificationRuleApplyResult(applyResult);
-      setClassificationRuleMessage(`${classificationRuleTargetLabel(savedRule.targetKind)} rule saved locally.`);
+      setClassificationRuleMessage(`${classificationRuleScopeLabel(savedRule)} rule saved locally.`);
       setClassificationRules(await trackerClient.getClassificationRules());
       await onRefreshSelectedDay();
       return true;
@@ -133,6 +139,34 @@ export function useClassificationRulesController({
   }, [onRefreshSelectedDay]);
 
   const handleSaveDomainRule = useCallback(async () => {
+    if (domainRuleMode === "url") {
+      const detailValue = canonicalizeClassificationRuleSiteUrl(domainRuleInput);
+      const targetValue = detailValue ? siteTargetFromCanonicalUrl(detailValue) : null;
+      if (!detailValue || !targetValue) {
+        setClassificationRulesError("Paste a valid http or https URL before saving an Exact URL rule.");
+        return;
+      }
+      const detailInput = { matchScope: "detail" as const, detailKind: "siteUrl" as const, detailValue };
+      if (hasDuplicateClassificationRule(classificationRules, "site", targetValue, detailInput)) {
+        setClassificationRulesError("An Exact URL rule for this URL already exists. Edit or delete the existing rule first.");
+        return;
+      }
+      const saved = await saveClassificationRule({
+        targetKind: "site",
+        targetValue,
+        ...detailInput,
+        category: domainRuleCategory,
+        productivity: domainRuleProductivity,
+        enabled: true,
+      });
+      if (saved) {
+        setDomainRuleInput("");
+        setDomainRuleCandidates([]);
+        setDomainRuleMode("domain");
+      }
+      return;
+    }
+
     const targetValue = normalizeDomainRuleInput(domainRuleInput);
     if (!targetValue) {
       setClassificationRulesError("Enter a domain or URL, like example.com.");
@@ -147,7 +181,7 @@ export function useClassificationRulesController({
       setDomainRuleInput("");
       setDomainRuleCandidates([]);
     }
-  }, [classificationRules, domainRuleCategory, domainRuleInput, domainRuleProductivity, saveClassificationRule]);
+  }, [classificationRules, domainRuleCategory, domainRuleInput, domainRuleMode, domainRuleProductivity, saveClassificationRule]);
 
   const handleSaveAppRule = useCallback(async () => {
     const targetValue = appRuleTargetValue.trim();
@@ -189,7 +223,7 @@ export function useClassificationRulesController({
     setClassificationRuleApplyResult(null);
     try {
       await trackerClient.deleteClassificationRule(rule.id);
-      setClassificationRuleMessage(`${classificationRuleTargetLabel(rule.targetKind)} rule deleted locally.`);
+      setClassificationRuleMessage(`${classificationRuleScopeLabel(rule)} rule deleted locally.`);
       setClassificationRules(await trackerClient.getClassificationRules());
       await onRefreshSelectedDay();
     } catch (nextError) {
@@ -227,6 +261,7 @@ export function useClassificationRulesController({
   const handleSelectDomainRuleCandidate = useCallback((candidate: ClassificationRuleCandidate) => {
     const targetValue = candidate.targetValue || candidate.siteDomain || candidate.displayName;
     setDomainRuleInput(targetValue);
+    setDomainRuleMode("domain");
     setDomainRuleSearchPanelOpen(false);
     if (candidate.category) setDomainRuleCategory(candidate.category);
     if (candidate.productivity) setDomainRuleProductivity(candidate.productivity);
@@ -278,6 +313,7 @@ export function useClassificationRulesController({
 
   const updateDomainRuleInput = useCallback((value: string) => {
     setDomainRuleInput(value);
+    if (!canonicalizeClassificationRuleSiteUrl(value)) setDomainRuleMode("domain");
   }, []);
 
   useEffect(() => {
@@ -383,6 +419,7 @@ export function useClassificationRulesController({
     domainRuleCandidatesLoading,
     domainRuleCategory,
     domainRuleInput,
+    domainRuleMode,
     domainRuleProductivity,
     domainRuleSearchPanelOpen,
     domainRuleSearchRef,
@@ -402,6 +439,7 @@ export function useClassificationRulesController({
     setAppRuleCategory,
     setAppRuleProductivity,
     setDomainRuleCategory,
+    setDomainRuleMode,
     setDomainRuleProductivity,
     updateAppRuleSearch,
     updateDomainRuleInput,

@@ -11,6 +11,7 @@ import {
   buildProductivityDurations,
   buildEffectiveProductivityDurations,
   computePreservedFocusStrikeSeconds,
+  canonicalizeClassificationRuleSiteUrl,
   classifyActivity,
   classifyActivityDetailed,
   isYouTubeBrowsePage,
@@ -26,6 +27,7 @@ import {
   type ProductivityDuration,
   formatTimelineItems,
   shiftIsoDate,
+  siteTargetFromCanonicalUrl,
   todayIsoDate,
   totalDurationSeconds,
 } from "@drifty/domain";
@@ -351,6 +353,19 @@ function classificationRuleDetailForSegment(segment: ActivitySegment): Pick<Clas
   return { detailKind: null, detailValue: null };
 }
 
+function classificationRuleUrlDetailForSegment(segment: ActivitySegment): Pick<ClassificationCorrectionDraft, "targetKind" | "targetValue" | "detailKind" | "detailValue"> | null {
+  const canonicalUrl = canonicalizeClassificationRuleSiteUrl(segment.siteUrl);
+  if (!canonicalUrl) return null;
+  const siteTarget = siteTargetFromCanonicalUrl(canonicalUrl);
+  if (!siteTarget) return null;
+  return {
+    targetKind: "site",
+    targetValue: siteTarget,
+    detailKind: "siteUrl",
+    detailValue: canonicalUrl,
+  };
+}
+
 function buildClassificationCorrectionDraft({
   rowId,
   scope,
@@ -365,13 +380,14 @@ function buildClassificationCorrectionDraft({
   const target = classificationRuleTargetForSegment(segment);
   if (!target) return null;
   const classification = classifyActivityDetailed(segment, classificationOptions);
-  const detail = scope === "detail" ? classificationRuleDetailForSegment(segment) : { detailKind: null, detailValue: null };
+  const urlDetail = scope === "detail" ? classificationRuleUrlDetailForSegment(segment) : null;
+  const detail = urlDetail ?? (scope === "detail" ? classificationRuleDetailForSegment(segment) : { detailKind: null, detailValue: null });
   if (scope === "detail" && (!detail.detailKind || !normalizeClassificationRuleDetail(detail.detailValue))) return null;
   return {
     scope,
     rowId,
-    targetKind: target.targetKind,
-    targetValue: target.targetValue,
+    targetKind: urlDetail?.targetKind ?? target.targetKind,
+    targetValue: urlDetail?.targetValue ?? target.targetValue,
     detailKind: detail.detailKind,
     detailValue: detail.detailValue,
     category: classification.category,
@@ -697,6 +713,7 @@ export default function App() {
     domainRuleCandidatesLoading,
     domainRuleCategory,
     domainRuleInput,
+    domainRuleMode,
     domainRuleProductivity,
     domainRuleSearchPanelOpen,
     domainRuleSearchRef,
@@ -716,6 +733,7 @@ export default function App() {
     setAppRuleCategory,
     setAppRuleProductivity,
     setDomainRuleCategory,
+    setDomainRuleMode,
     setDomainRuleProductivity,
     updateAppRuleSearch,
     updateDomainRuleInput,
@@ -1530,7 +1548,6 @@ export default function App() {
           const message = error instanceof Error ? error.message : String(error);
           console.warn("Failed to save drift alarm manual correction", message);
         });
-        navigateToTab("classification");
         return;
       case "return_to_focus": {
         const target = currentAlarmEvent?.focusTargets.find((focusTarget) => focusTarget.targetId === action.targetId) ?? null;
@@ -4785,6 +4802,7 @@ export default function App() {
                     domainRuleCandidatesLoading={domainRuleCandidatesLoading}
                     domainRuleCategory={domainRuleCategory}
                     domainRuleInput={domainRuleInput}
+                    domainRuleMode={domainRuleMode}
                     domainRuleProductivity={domainRuleProductivity}
                     domainRuleSearchPanelOpen={domainRuleSearchPanelOpen}
                     domainRuleSearchRef={domainRuleSearchRef}
@@ -4797,6 +4815,7 @@ export default function App() {
                     onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
                     onDomainRuleCategoryChange={setDomainRuleCategory}
                     onDomainRuleInputChange={updateDomainRuleInput}
+                    onDomainRuleModeChange={setDomainRuleMode}
                     onDomainRuleProductivityChange={setDomainRuleProductivity}
                     onDomainRuleSearchBlur={handleDomainRuleSearchBlur}
                     onDomainRuleSearchFocus={handleDomainRuleSearchFocus}

@@ -2,6 +2,7 @@ import type { FocusEvent, RefObject } from "react";
 import {
   CATEGORY_ORDER,
   PRODUCTIVITY_ORDER,
+  canonicalizeClassificationRuleSiteUrl,
   secondsToLabel,
   type ActivityCategory,
   type AppIconMap,
@@ -19,6 +20,7 @@ import {
   classificationRuleCandidateAppIconSrc,
   classificationRuleDetailKindLabel,
   classificationRuleScopeLabel,
+  classificationRuleSurfaceLabel,
   classificationRuleTargetLabel,
   formatClassificationCandidateUsageLabel,
   formatClassificationRuleApplyResult,
@@ -32,6 +34,8 @@ import {
   type CategoryColorOverrides,
 } from "./settingsStorage";
 import { ClassificationPicker } from "./SettingsColorControls";
+
+type DomainRuleMode = "domain" | "url";
 
 type ClassificationSettingsSectionProps = {
   readonly appIcons: AppIconMap;
@@ -58,6 +62,7 @@ type ClassificationSettingsSectionProps = {
   readonly domainRuleCandidatesLoading: boolean;
   readonly domainRuleCategory: ActivityCategory;
   readonly domainRuleInput: string;
+  readonly domainRuleMode: DomainRuleMode;
   readonly domainRuleProductivity: ProductivityLabel;
   readonly domainRuleSearchPanelOpen: boolean;
   readonly domainRuleSearchRef: RefObject<HTMLDivElement>;
@@ -70,6 +75,7 @@ type ClassificationSettingsSectionProps = {
   readonly onDeleteClassificationRule: (rule: ClassificationRule) => void;
   readonly onDomainRuleCategoryChange: (category: ActivityCategory) => void;
   readonly onDomainRuleInputChange: (value: string) => void;
+  readonly onDomainRuleModeChange: (mode: DomainRuleMode) => void;
   readonly onDomainRuleProductivityChange: (productivity: ProductivityLabel) => void;
   readonly onDomainRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
   readonly onDomainRuleSearchFocus: () => void;
@@ -106,6 +112,7 @@ export function ClassificationSettingsSection({
   domainRuleCandidatesLoading,
   domainRuleCategory,
   domainRuleInput,
+  domainRuleMode,
   domainRuleProductivity,
   domainRuleSearchPanelOpen,
   domainRuleSearchRef,
@@ -118,6 +125,7 @@ export function ClassificationSettingsSection({
   onDeleteClassificationRule,
   onDomainRuleCategoryChange,
   onDomainRuleInputChange,
+  onDomainRuleModeChange,
   onDomainRuleProductivityChange,
   onDomainRuleSearchBlur,
   onDomainRuleSearchFocus,
@@ -128,6 +136,11 @@ export function ClassificationSettingsSection({
   onSelectDomainRuleCandidate,
   onToggleClassificationRule,
 }: ClassificationSettingsSectionProps) {
+  const exactUrlValue = canonicalizeClassificationRuleSiteUrl(domainRuleInput);
+  const exactUrlAvailable = Boolean(exactUrlValue);
+  const effectiveDomainRuleMode = domainRuleMode === "url" && exactUrlAvailable ? "url" : "domain";
+  const domainRuleSaveLabel = effectiveDomainRuleMode === "url" ? "Save URL rule" : "Save Domain rule";
+
   return (
     <div className="settings-section settings-section--classification">
       <div className="settings-block cloud-overview">
@@ -142,7 +155,7 @@ export function ClassificationSettingsSection({
         <div className="settings-row settings-row--fallback classification-rule-form">
           <div>
             <div className="lbl">Add Domain rule</div>
-            <div className="desc">Type a domain or paste a URL. Drifty stores the normalized domain locally.</div>
+            <div className="desc">Type a domain for a whole-site rule, or paste a URL and choose Exact URL for a one-page rule.</div>
           </div>
           <div className="ctrl classification-rule-form__grid">
             <div ref={domainRuleSearchRef} className="classification-rule-field classification-rule-field--wide classification-rule-search" onFocus={onDomainRuleSearchFocus} onBlur={onDomainRuleSearchBlur}>
@@ -169,15 +182,27 @@ export function ClassificationSettingsSection({
                 </div>
               ) : null}
             </div>
+            <div className="classification-rule-field classification-rule-mode-field">
+              <span>Rule type</span>
+              <div className="settings-mode-switch settings-mode-switch--compact classification-rule-mode-control" role="radiogroup" aria-label="Domain rule type">
+                <button type="button" className={`settings-mode-option${effectiveDomainRuleMode === "domain" ? " is-active" : ""}`} role="radio" aria-checked={effectiveDomainRuleMode === "domain"} onClick={() => onDomainRuleModeChange("domain")}>
+                  <span>Domain</span>
+                </button>
+                <button type="button" className={`settings-mode-option${effectiveDomainRuleMode === "url" ? " is-active" : ""}`} role="radio" aria-checked={effectiveDomainRuleMode === "url"} onClick={() => onDomainRuleModeChange("url")} disabled={!exactUrlAvailable}>
+                  <span>Exact URL</span>
+                </button>
+              </div>
+            </div>
             <ClassificationPicker label="Category" ariaLabel="Domain rule category" value={domainRuleCategory} options={CATEGORY_ORDER} getLabel={categoryLabel} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={onDomainRuleCategoryChange} />
             <ClassificationPicker label="Productivity" ariaLabel="Domain rule productivity" value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={productivityLabel} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onDomainRuleProductivityChange} />
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveDomainRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? "Saving..." : "Save Domain rule"}</button>
+            <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveDomainRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? "Saving..." : domainRuleSaveLabel}</button>
           </div>
+          {effectiveDomainRuleMode === "url" && exactUrlValue ? <p className="classification-rule-selected classification-rule-selected--url" role="status">Exact URL: {exactUrlValue}</p> : null}
         </div>
         <div className="settings-row settings-row--fallback settings-row--group-end classification-rule-form">
           <div>
             <div className="lbl">Add App rule</div>
-            <div className="desc">Search app names Drifty has recorded locally, then choose category and productivity.</div>
+            <div className="desc">Search app names Drifty has recorded locally. This creates a broad App rule, not a window-title detail rule.</div>
           </div>
           <div className="ctrl classification-rule-form__grid classification-rule-form__grid--app">
             <div ref={appRuleSearchRef} className="classification-rule-field classification-rule-field--wide classification-rule-search" onFocus={onAppRuleSearchFocus} onBlur={onAppRuleSearchBlur}>
@@ -235,18 +260,18 @@ export function ClassificationSettingsSection({
         {classificationRules.length > 0 ? (
           <div className="classification-rule-list" aria-label="Saved local classification rules">
             {classificationRules.map((rule) => {
-              const detailLabel = rule.matchScope === "detail" && rule.detailValue
-                ? `${classificationRuleDetailKindLabel(rule.detailKind)}: ${rule.detailValue}`
-                : null;
+              const detailKindLabel = classificationRuleDetailKindLabel(rule.detailKind);
+              const detailLabel = rule.matchScope === "detail" && rule.detailValue ? `${detailKindLabel}: ${rule.detailValue}` : null;
+              const surfaceLabel = `${classificationRuleSurfaceLabel(rule)}: ${rule.targetValue}`;
               return (
                 <article className="classification-rule-card" key={rule.id} aria-label={`${classificationRuleTargetLabel(rule.targetKind)} rule ${rule.targetValue}`}>
                   <div className="classification-rule-card__main">
                     <span className="classification-rule-card__icon">
                       {rule.targetKind === "site" ? <SiteFavicon domain={rule.targetValue} size={24} /> : <AppGlyph appName={rule.targetValue} iconSrc={classificationRuleAppIconSrc(rule, appIcons)} size="sm" />}
                     </span>
-                    <span className="chip gray">{rule.matchScope === "detail" ? "Detail" : classificationRuleTargetLabel(rule.targetKind)}</span>
-                    <div>
-                      <strong>{rule.targetValue}</strong>
+                    <span className="chip gray">{classificationRuleScopeLabel(rule)}</span>
+                    <div className="classification-rule-card__text">
+                      <strong>{surfaceLabel}</strong>
                       <p>{classificationRuleScopeLabel(rule)} · {categoryLabel(rule.category)} · {productivityLabel(rule.productivity)} · {rule.enabled ? "Enabled" : "Disabled"}</p>
                       {detailLabel ? <p className="classification-rule-card__detail">{detailLabel}</p> : null}
                     </div>
