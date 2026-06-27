@@ -45,6 +45,7 @@ const DRIFT_ALARM_DEBUG_EVENT_KINDS = [
   "extreme_nudge_started",
   "extreme_nudge_result",
   "extreme_nudge_error",
+  "manual_correction_failed",
 ] as const;
 
 const DRIFT_ALARM_DEBUG_AI_RESULT_KINDS = [
