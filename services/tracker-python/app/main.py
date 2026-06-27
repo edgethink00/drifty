@@ -33,6 +33,8 @@ FORCE_CHROMIUM_AX_CAPTURE_META_KEY = "developer_diagnostics_force_chromium_ax_ca
 FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
 FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY = "developer_diagnostics_force_frontmost_fallback_capture"
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
+FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY = "developer_diagnostics_force_browser_history_url_fallback"
+FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
@@ -104,8 +106,10 @@ def fetch_live_tail(
 def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
     force_chromium_ax_capture = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
     force_frontmost_fallback_capture = db.get_meta(FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY) == "true"
+    force_browser_history_url_fallback = db.get_meta(FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY) == "true"
     os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if force_chromium_ax_capture else "0"
     os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if force_frontmost_fallback_capture else "0"
+    os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "1" if force_browser_history_url_fallback else "0"
 
 
 def _bool_meta(value: str | None) -> bool | None:
@@ -456,11 +460,16 @@ def get_classification_metrics(payload: dict):
 def set_developer_diagnostics(payload: dict):
     force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
     force_frontmost_fallback_capture = _bool_payload(payload.get("forceFrontmostFallbackCapture"))
+    force_browser_history_url_fallback = _bool_payload(payload.get("forceBrowserHistoryUrlFallback"))
     db = database()
     db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true" if force_chromium_ax_capture else "false")
     db.set_meta(
         FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
         "true" if force_frontmost_fallback_capture else "false",
+    )
+    db.set_meta(
+        FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY,
+        "true" if force_browser_history_url_fallback else "false",
     )
     _apply_developer_diagnostics_env(db)
     return response(
@@ -468,6 +477,7 @@ def set_developer_diagnostics(payload: dict):
         {
             "forceChromiumAxCapture": force_chromium_ax_capture,
             "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
+            "forceBrowserHistoryUrlFallback": force_browser_history_url_fallback,
         },
     )
 
@@ -494,6 +504,12 @@ def get_current_snapshot():
             "captureConfidence": snapshot.capture_confidence,
             "browserAutomationStatus": snapshot.browser_automation_status,
             "browserAutomationError": snapshot.browser_automation_error,
+            "browserHistoryStatus": snapshot.browser_history_status,
+            "browserHistoryReason": snapshot.browser_history_reason,
+            "browserHistoryDatabaseFound": snapshot.browser_history_database_found,
+            "browserHistoryProfileCount": snapshot.browser_history_profile_count,
+            "browserHistoryCandidateCount": snapshot.browser_history_candidate_count,
+            "browserHistoryErrorCount": snapshot.browser_history_error_count,
             "systemTransientActivity": snapshot.system_transient_activity,
             "frontmostCaptureSource": snapshot.frontmost_capture_source,
             "frontmostCaptureError": snapshot.frontmost_capture_error,

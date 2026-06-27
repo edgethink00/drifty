@@ -379,6 +379,154 @@ class MacosWorkspaceTests(unittest.TestCase):
         mock_run.assert_not_called()
         mock_browser_metadata.assert_called_once_with('Google Chrome')
 
+    def test_current_snapshot_can_force_browser_history_url_fallback_for_developer_diagnostics(self) -> None:
+        metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            site_domain='youtube.com',
+            site_title='Lecture - YouTube',
+            site_url='https://www.youtube.com/watch?v=lecture',
+            youtube_video_id='lecture',
+            match_state='browser-history-title',
+            browser_automation_status='granted',
+            browser_history_status='matched',
+            browser_history_reason='matched',
+            browser_history_database_found=True,
+            browser_history_profile_count=1,
+            browser_history_candidate_count=1,
+            browser_history_error_count=0,
+        )
+        with patch.dict(os.environ, {'DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK': '1'}), \
+             patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata') as mock_browser_metadata, \
+             patch('app.tracker.macos_workspace._browser_history_metadata', return_value=metadata) as mock_history_metadata:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nLecture - YouTube - Google Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.site_url, 'https://www.youtube.com/watch?v=lecture')
+        self.assertEqual(snapshot.site_source, 'browser-history-title')
+        self.assertEqual(snapshot.capture_confidence, 0.45)
+        self.assertEqual(snapshot.youtube_video_id, 'lecture')
+        self.assertEqual(snapshot.browser_history_status, 'matched')
+        self.assertEqual(snapshot.browser_history_reason, 'matched')
+        self.assertTrue(snapshot.browser_history_database_found)
+        self.assertEqual(snapshot.browser_history_profile_count, 1)
+        self.assertEqual(snapshot.browser_history_candidate_count, 1)
+        self.assertEqual(snapshot.browser_history_error_count, 0)
+        mock_browser_metadata.assert_not_called()
+        mock_history_metadata.assert_called_once_with('Google Chrome', 'Lecture - YouTube - Google Chrome')
+
+    def test_current_snapshot_forced_browser_history_unsupported_browser_keeps_no_site_data(self) -> None:
+        with patch.dict(os.environ, {'DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK': '1'}), \
+             patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata') as mock_browser_metadata, \
+             patch('app.tracker.macos_workspace._browser_history_metadata') as mock_history_metadata:
+            mock_run.return_value = 'Safari\ncom.apple.Safari\nDocs - Safari'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertIsNone(snapshot.site_url)
+        self.assertIsNone(snapshot.site_source)
+        self.assertEqual(snapshot.browser_automation_status, 'unavailable')
+        self.assertEqual(snapshot.browser_automation_error, 'Browser history URL fallback is not supported for Safari.')
+        self.assertEqual(snapshot.browser_history_status, 'unsupported')
+        self.assertEqual(snapshot.browser_history_reason, 'unsupported_browser')
+        self.assertIsNone(snapshot.browser_history_database_found)
+        mock_browser_metadata.assert_not_called()
+        mock_history_metadata.assert_not_called()
+
+    def test_current_snapshot_uses_browser_history_after_browser_automation_fails(self) -> None:
+        automation_metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            browser_automation_status='denied',
+            browser_automation_error='Not authorized to send Apple events to Google Chrome.',
+        )
+        history_metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            site_domain='docs.example.test',
+            site_title='Fallback plan',
+            site_url='https://docs.example.test/fallback',
+            match_state='browser-history-title',
+            browser_automation_status='granted',
+            browser_history_status='matched',
+            browser_history_reason='matched',
+            browser_history_database_found=True,
+            browser_history_profile_count=1,
+            browser_history_candidate_count=4,
+            browser_history_error_count=0,
+        )
+        with patch.dict(os.environ, {'DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK': '0'}), \
+             patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=automation_metadata) as mock_browser_metadata, \
+             patch('app.tracker.macos_workspace._browser_history_metadata', return_value=history_metadata) as mock_history_metadata:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nFallback plan - Google Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.site_url, 'https://docs.example.test/fallback')
+        self.assertEqual(snapshot.site_source, 'browser-history-title')
+        self.assertEqual(snapshot.capture_confidence, 0.45)
+        self.assertEqual(snapshot.browser_automation_status, 'granted')
+        self.assertEqual(snapshot.browser_history_status, 'matched')
+        self.assertEqual(snapshot.browser_history_candidate_count, 4)
+        mock_browser_metadata.assert_called_once_with('Google Chrome')
+        mock_history_metadata.assert_called_once_with('Google Chrome', 'Fallback plan - Google Chrome')
+
+    def test_current_snapshot_keeps_direct_browser_url_without_history_lookup(self) -> None:
+        metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            site_domain='example.com',
+            site_title='Example',
+            site_url='https://example.com/',
+            match_state='matched',
+            browser_automation_status='granted',
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata), \
+             patch('app.tracker.macos_workspace._browser_history_metadata') as mock_history_metadata:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nExample - Google Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.site_url, 'https://example.com/')
+        self.assertEqual(snapshot.site_source, 'applescript')
+        self.assertIsNone(snapshot.browser_history_status)
+        mock_history_metadata.assert_not_called()
+
+    def test_current_snapshot_preserves_automation_error_when_history_has_no_match(self) -> None:
+        automation_metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            browser_automation_status='unavailable',
+            browser_automation_error='Google Chrome returned an empty browser automation result.',
+        )
+        history_metadata = BrowserMetadata(
+            browser_name='Google Chrome',
+            browser_automation_status='unavailable',
+            browser_automation_error='Google Chrome browser history fallback found no unique browser history title match: no_match.',
+            browser_history_status='no_match',
+            browser_history_reason='no_match',
+            browser_history_database_found=True,
+            browser_history_profile_count=1,
+            browser_history_candidate_count=3,
+            browser_history_error_count=0,
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=automation_metadata), \
+             patch('app.tracker.macos_workspace._browser_history_metadata', return_value=history_metadata) as mock_history_metadata:
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nMissing page - Google Chrome'
+
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertIsNone(snapshot.site_url)
+        self.assertIsNone(snapshot.site_source)
+        self.assertEqual(snapshot.browser_automation_status, 'unavailable')
+        self.assertEqual(snapshot.browser_automation_error, 'Google Chrome returned an empty browser automation result.')
+        self.assertEqual(snapshot.browser_history_status, 'no_match')
+        self.assertEqual(snapshot.browser_history_reason, 'no_match')
+        self.assertTrue(snapshot.browser_history_database_found)
+        self.assertEqual(snapshot.browser_history_candidate_count, 3)
+        mock_history_metadata.assert_called_once_with('Google Chrome', 'Missing page - Google Chrome')
+
     def test_current_snapshot_records_frontmost_diagnostics_when_all_app_capture_fails(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('osascript timed out')), \
              patch(

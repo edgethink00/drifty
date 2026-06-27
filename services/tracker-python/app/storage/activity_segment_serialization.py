@@ -48,6 +48,12 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "siteSource": row.get("site_source"),
         "browserAutomationStatus": browser_automation_status(row),
         "browserAutomationError": raw_context_text(row, "browser_automation_error"),
+        "browserHistoryStatus": raw_context_text(row, "browser_history_status"),
+        "browserHistoryReason": raw_context_text(row, "browser_history_reason"),
+        "browserHistoryDatabaseFound": raw_context_bool(row, "browser_history_database_found"),
+        "browserHistoryProfileCount": raw_context_int(row, "browser_history_profile_count"),
+        "browserHistoryCandidateCount": raw_context_int(row, "browser_history_candidate_count"),
+        "browserHistoryErrorCount": raw_context_int(row, "browser_history_error_count"),
         "frontmostCaptureSource": raw_context_text(row, "frontmost_capture_source"),
         "frontmostCaptureError": raw_context_text(row, "frontmost_capture_error"),
         "frontmostFallbackError": raw_context_text(row, "frontmost_fallback_error"),
@@ -169,6 +175,36 @@ def browser_automation_status(row: Mapping[str, RowValue]) -> str | None:
 
 
 def raw_context_text(row: Mapping[str, RowValue], key: str) -> str | None:
+    parsed = raw_context_mapping(row)
+    if parsed is None:
+        return None
+
+    value = parsed.get(key)
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def raw_context_bool(row: Mapping[str, RowValue], key: str) -> bool | None:
+    parsed = raw_context_mapping(row)
+    if parsed is None:
+        return None
+
+    value = parsed.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def raw_context_int(row: Mapping[str, RowValue], key: str) -> int | None:
+    parsed = raw_context_mapping(row)
+    if parsed is None:
+        return None
+
+    value = parsed.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def raw_context_mapping(row: Mapping[str, RowValue]) -> dict[str, SerializedValue] | None:
     raw_context = row.get("raw_context_json")
     if not isinstance(raw_context, str) or not raw_context:
         return None
@@ -178,12 +214,7 @@ def raw_context_text(row: Mapping[str, RowValue], key: str) -> str | None:
         return None
     if not isinstance(parsed, dict):
         return None
-
-    value = parsed.get(key)
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
+    return parsed
 
 
 def json_list(value: RowValue) -> list[str] | None:

@@ -22,6 +22,8 @@ export const FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY = "drifty.dev.forceChromiumAx
 
 export const FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY = "drifty.dev.forceFrontmostFallbackCapture";
 
+export const FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY = "drifty.dev.forceBrowserHistoryUrlFallback";
+
 export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
 
 export const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
@@ -181,6 +183,11 @@ export function resolveInitialForceChromiumAxCaptureEnabled(): boolean {
 export function resolveInitialForceFrontmostFallbackCaptureEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialForceBrowserHistoryUrlFallbackEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialForceChromiumAxExtremeNudgeEnabled(): boolean {

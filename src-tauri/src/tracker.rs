@@ -145,14 +145,16 @@ impl TrackerController {
         app: &AppHandle,
         force_chromium_ax_capture: bool,
         force_frontmost_fallback_capture: bool,
+        force_browser_history_url_fallback: bool,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "set_developer_diagnostics",
-            json!({
-                "forceChromiumAxCapture": force_chromium_ax_capture,
-                "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
-            }),
+            build_developer_diagnostics_payload(
+                force_chromium_ax_capture,
+                force_frontmost_fallback_capture,
+                force_browser_history_url_fallback,
+            ),
         )
     }
 
@@ -703,6 +705,18 @@ fn build_delete_activity_segments_payload(ids: &[String]) -> Value {
     json!({ "ids": ids })
 }
 
+fn build_developer_diagnostics_payload(
+    force_chromium_ax_capture: bool,
+    force_frontmost_fallback_capture: bool,
+    force_browser_history_url_fallback: bool,
+) -> Value {
+    json!({
+        "forceChromiumAxCapture": force_chromium_ax_capture,
+        "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
+        "forceBrowserHistoryUrlFallback": force_browser_history_url_fallback,
+    })
+}
+
 fn merged_accessibility_granted(python_granted: bool, native_granted: Option<bool>) -> bool {
     match native_granted {
         Some(value) => value,
@@ -840,6 +854,20 @@ mod tests {
         let payload = build_delete_activity_segments_payload(&["42".into(), "43".into()]);
 
         assert_eq!(payload, json!({ "ids": ["42", "43"] }));
+    }
+
+    #[test]
+    fn developer_diagnostics_payload_preserves_browser_history_fallback_flag() {
+        let payload = build_developer_diagnostics_payload(true, false, true);
+
+        assert_eq!(
+            payload,
+            json!({
+                "forceChromiumAxCapture": true,
+                "forceFrontmostFallbackCapture": false,
+                "forceBrowserHistoryUrlFallback": true,
+            })
+        );
     }
 
     #[test]

@@ -13,6 +13,7 @@ type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
   readonly endOfDayReviewSettingsRowRef: RefObject<HTMLDivElement>;
+  readonly forceBrowserHistoryUrlFallbackEnabled: boolean;
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
@@ -23,6 +24,7 @@ type DevSettingsSectionProps = {
   readonly onClearDashboardAiUnavailablePreview: () => void;
   readonly onDashboardAiUnavailablePreviewCaseChange: (previewCase: DashboardAiUnavailablePreviewCase) => void;
   readonly onEndOfDayReviewPreview: () => void;
+  readonly onForceBrowserHistoryUrlFallbackChange: (enabled: boolean) => void;
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
@@ -41,6 +43,7 @@ export function DevSettingsSection({
   dashboardAiUnavailablePreview,
   dashboardAiUnavailablePreviewCase,
   endOfDayReviewSettingsRowRef,
+  forceBrowserHistoryUrlFallbackEnabled,
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
@@ -51,6 +54,7 @@ export function DevSettingsSection({
   onClearDashboardAiUnavailablePreview,
   onDashboardAiUnavailablePreviewCaseChange,
   onEndOfDayReviewPreview,
+  onForceBrowserHistoryUrlFallbackChange,
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
@@ -104,6 +108,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={forceFrontmostFallbackCaptureEnabled} onChange={onForceFrontmostFallbackCaptureChange} ariaLabel="Force frontmost fallback tracking" />
+          </div>
+        </div>
+        <div className="settings-row settings-row--fallback">
+          <div>
+            <div className="lbl">Force browser history URL fallback</div>
+            <div className="desc">Skip AppleScript and AX site capture so tracker samples test title-to-history URL matching only.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={forceBrowserHistoryUrlFallbackEnabled} onChange={onForceBrowserHistoryUrlFallbackChange} ariaLabel="Force browser history URL fallback" />
           </div>
         </div>
         <div className="settings-row settings-row--fallback">

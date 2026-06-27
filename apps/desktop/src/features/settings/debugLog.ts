@@ -20,6 +20,13 @@ export type BrowserCaptureSummary = {
   readonly browserAutomationErrorCounts: Readonly<Record<string, number>>;
   readonly browserAutomationErrorSegments: number;
   readonly browserAutomationDeniedSegments: number;
+  readonly browserHistoryStatusCounts: Readonly<Record<string, number>>;
+  readonly browserHistoryReasonCounts: Readonly<Record<string, number>>;
+  readonly browserHistoryAttemptSegments: number;
+  readonly browserHistoryDatabaseFoundSegments: number;
+  readonly browserHistoryFallbackSegments: number;
+  readonly browserHistoryFallbackRatio: number | null;
+  readonly browserHistoryErrorSegments: number;
 };
 
 export type BrowserCaptureDiagnostics = {
@@ -33,6 +40,12 @@ export type BrowserCaptureDiagnostics = {
   readonly browserAutomationErrorCounts: Readonly<Record<string, number>>;
   readonly browserAutomationErrorSegments: number;
   readonly browserAutomationDeniedSegments: number;
+  readonly browserHistoryStatusCounts: Readonly<Record<string, number>>;
+  readonly browserHistoryReasonCounts: Readonly<Record<string, number>>;
+  readonly browserHistoryAttemptSegments: number;
+  readonly browserHistoryDatabaseFoundSegments: number;
+  readonly browserHistoryFallbackSegments: number;
+  readonly browserHistoryErrorSegments: number;
   readonly byBrowser: readonly BrowserCaptureSummary[];
 };
 
@@ -63,6 +76,12 @@ type BrowserCaptureAccumulator = {
   browserAutomationErrorCounts: Record<string, number>;
   browserAutomationErrorSegments: number;
   browserAutomationDeniedSegments: number;
+  browserHistoryStatusCounts: Record<string, number>;
+  browserHistoryReasonCounts: Record<string, number>;
+  browserHistoryAttemptSegments: number;
+  browserHistoryDatabaseFoundSegments: number;
+  browserHistoryFallbackSegments: number;
+  browserHistoryErrorSegments: number;
 };
 
 type BuildDebugLogPayloadInput = {
@@ -76,6 +95,7 @@ type BuildDebugLogPayloadInput = {
     readonly devModeEnabled: boolean;
     readonly forceChromiumAxCapture: boolean;
     readonly forceFrontmostFallbackCapture: boolean;
+    readonly forceBrowserHistoryUrlFallback: boolean;
     readonly forceChromiumAxExtremeNudge: boolean;
   };
   readonly status: TrackerStatus | null;
@@ -161,6 +181,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
             hasSiteContext: currentSnapshot.hasSiteContext,
           }
         : null,
+      browserHistoryFallback: buildBrowserHistoryFallbackSummary(currentSnapshot),
       frontmostCapture: currentSnapshot
         ? {
             source: currentSnapshot.frontmostCaptureSource,
@@ -255,11 +276,30 @@ function buildCurrentSnapshotSummary(snapshot: CurrentActivitySnapshot | null) {
     browserAutomationStatus: snapshot.browserAutomationStatus ?? null,
     browserAutomationError: browserAutomationError(snapshot.browserAutomationError),
     hasBrowserAutomationError: Boolean(cleanText(snapshot.browserAutomationError)),
+    browserHistoryStatus: snapshot.browserHistoryStatus ?? null,
+    browserHistoryReason: cleanText(snapshot.browserHistoryReason) ?? null,
+    browserHistoryDatabaseFound: snapshot.browserHistoryDatabaseFound ?? null,
+    browserHistoryProfileCount: snapshot.browserHistoryProfileCount ?? null,
+    browserHistoryCandidateCount: snapshot.browserHistoryCandidateCount ?? null,
+    browserHistoryErrorCount: snapshot.browserHistoryErrorCount ?? null,
     frontmostCaptureSource: snapshot.frontmostCaptureSource ?? null,
     frontmostCaptureError: diagnosticError(snapshot.frontmostCaptureError),
     frontmostFallbackError: diagnosticError(snapshot.frontmostFallbackError),
     hasFrontmostCaptureError: Boolean(cleanText(snapshot.frontmostCaptureError)),
     hasFrontmostFallbackError: Boolean(cleanText(snapshot.frontmostFallbackError)),
+  };
+}
+
+function buildBrowserHistoryFallbackSummary(currentSnapshot: ReturnType<typeof buildCurrentSnapshotSummary>) {
+  if (!currentSnapshot?.browserHistoryStatus) return null;
+
+  return {
+    status: currentSnapshot.browserHistoryStatus,
+    reason: currentSnapshot.browserHistoryReason,
+    databaseFound: currentSnapshot.browserHistoryDatabaseFound,
+    profileCount: currentSnapshot.browserHistoryProfileCount,
+    candidateCount: currentSnapshot.browserHistoryCandidateCount,
+    errorCount: currentSnapshot.browserHistoryErrorCount,
   };
 }
 
@@ -330,8 +370,14 @@ function buildBrowserCaptureDiagnostics(
   let missingSiteContextSegments = 0;
   let browserAutomationErrorSegments = 0;
   let browserAutomationDeniedSegments = 0;
+  let browserHistoryAttemptSegments = 0;
+  let browserHistoryDatabaseFoundSegments = 0;
+  let browserHistoryFallbackSegments = 0;
+  let browserHistoryErrorSegments = 0;
   const browserAutomationStatusCounts: Record<string, number> = {};
   const browserAutomationErrorCounts: Record<string, number> = {};
+  const browserHistoryStatusCounts: Record<string, number> = {};
+  const browserHistoryReasonCounts: Record<string, number> = {};
 
   for (const segment of segments) {
     const browserName = resolveBrowserName(segment);
@@ -353,6 +399,12 @@ function buildBrowserCaptureDiagnostics(
       browserAutomationErrorCounts: {},
       browserAutomationErrorSegments: 0,
       browserAutomationDeniedSegments: 0,
+      browserHistoryStatusCounts: {},
+      browserHistoryReasonCounts: {},
+      browserHistoryAttemptSegments: 0,
+      browserHistoryDatabaseFoundSegments: 0,
+      browserHistoryFallbackSegments: 0,
+      browserHistoryErrorSegments: 0,
     };
 
     accumulator.totalSegments += 1;
@@ -363,6 +415,10 @@ function buildBrowserCaptureDiagnostics(
     incrementCount(accumulator.siteSourceCounts, siteSource);
     if (siteSource === "accessibility-address-bar") {
       accumulator.accessibilityAddressBarFallbackSegments += 1;
+    }
+    if (siteSource === "browser-history-title") {
+      browserHistoryFallbackSegments += 1;
+      accumulator.browserHistoryFallbackSegments += 1;
     }
 
     const automationStatus = segment.browserAutomationStatus ?? MISSING_DIAGNOSTIC_VALUE;
@@ -381,6 +437,30 @@ function buildBrowserCaptureDiagnostics(
       incrementCount(accumulator.browserAutomationErrorCounts, automationError);
     }
 
+    const historyStatus = segment.browserHistoryStatus ?? MISSING_DIAGNOSTIC_VALUE;
+    incrementCount(browserHistoryStatusCounts, historyStatus);
+    incrementCount(accumulator.browserHistoryStatusCounts, historyStatus);
+    if (segment.browserHistoryStatus) {
+      browserHistoryAttemptSegments += 1;
+      accumulator.browserHistoryAttemptSegments += 1;
+    }
+
+    const historyReason = cleanText(segment.browserHistoryReason);
+    if (historyReason) {
+      incrementCount(browserHistoryReasonCounts, historyReason);
+      incrementCount(accumulator.browserHistoryReasonCounts, historyReason);
+    }
+
+    if (segment.browserHistoryDatabaseFound === true) {
+      browserHistoryDatabaseFoundSegments += 1;
+      accumulator.browserHistoryDatabaseFoundSegments += 1;
+    }
+
+    if ((segment.browserHistoryErrorCount ?? 0) > 0) {
+      browserHistoryErrorSegments += 1;
+      accumulator.browserHistoryErrorSegments += 1;
+    }
+
     byBrowser.set(browserName, accumulator);
   }
 
@@ -393,11 +473,18 @@ function buildBrowserCaptureDiagnostics(
       siteContextRatio: ratio(summary.siteContextSegments, summary.totalSegments),
       accessibilityAddressBarFallbackSegments: summary.accessibilityAddressBarFallbackSegments,
       accessibilityAddressBarFallbackRatio: ratio(summary.accessibilityAddressBarFallbackSegments, summary.totalSegments),
+      browserHistoryFallbackSegments: summary.browserHistoryFallbackSegments,
+      browserHistoryFallbackRatio: ratio(summary.browserHistoryFallbackSegments, summary.totalSegments),
       siteSourceCounts: { ...summary.siteSourceCounts },
       browserAutomationStatusCounts: { ...summary.browserAutomationStatusCounts },
       browserAutomationErrorCounts: { ...summary.browserAutomationErrorCounts },
       browserAutomationErrorSegments: summary.browserAutomationErrorSegments,
       browserAutomationDeniedSegments: summary.browserAutomationDeniedSegments,
+      browserHistoryStatusCounts: { ...summary.browserHistoryStatusCounts },
+      browserHistoryReasonCounts: { ...summary.browserHistoryReasonCounts },
+      browserHistoryAttemptSegments: summary.browserHistoryAttemptSegments,
+      browserHistoryDatabaseFoundSegments: summary.browserHistoryDatabaseFoundSegments,
+      browserHistoryErrorSegments: summary.browserHistoryErrorSegments,
     }))
     .sort((left, right) => right.totalSegments - left.totalSegments || left.browserName.localeCompare(right.browserName));
 
@@ -412,6 +499,12 @@ function buildBrowserCaptureDiagnostics(
     browserAutomationErrorCounts,
     browserAutomationErrorSegments,
     browserAutomationDeniedSegments,
+    browserHistoryStatusCounts,
+    browserHistoryReasonCounts,
+    browserHistoryAttemptSegments,
+    browserHistoryDatabaseFoundSegments,
+    browserHistoryFallbackSegments,
+    browserHistoryErrorSegments,
     byBrowser: summaries,
   };
 }

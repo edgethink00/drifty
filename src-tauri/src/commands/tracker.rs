@@ -56,6 +56,7 @@ pub struct TopSitesQuery {
 pub struct DeveloperDiagnosticsQuery {
     pub force_chromium_ax_capture: bool,
     pub force_frontmost_fallback_capture: bool,
+    pub force_browser_history_url_fallback: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,6 +270,7 @@ pub async fn tracker_set_developer_diagnostics(
                 &app,
                 query.force_chromium_ax_capture,
                 query.force_frontmost_fallback_capture,
+                query.force_browser_history_url_fallback,
             )
             .map_err(|error| error.to_string())
     })

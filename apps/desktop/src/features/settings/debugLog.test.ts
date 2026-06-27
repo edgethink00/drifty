@@ -121,6 +121,19 @@ describe("buildDebugLogPayload", () => {
       siteSource: "accessibility-address-bar",
       browserAutomationStatus: "granted",
     });
+    const historySegment = segment({
+      id: "segment-history",
+      siteDomain: "docs.example.test",
+      siteUrl: "https://docs.example.test/fallback",
+      siteSource: "browser-history-title",
+      browserAutomationStatus: "granted",
+      browserHistoryStatus: "matched",
+      browserHistoryReason: "matched",
+      browserHistoryDatabaseFound: true,
+      browserHistoryProfileCount: 1,
+      browserHistoryCandidateCount: 7,
+      browserHistoryErrorCount: 0,
+    });
 
     const payload = buildDebugLogPayload({
       selectedDay: "2026-06-13",
@@ -133,14 +146,28 @@ describe("buildDebugLogPayload", () => {
         devModeEnabled: true,
         forceChromiumAxCapture: true,
         forceFrontmostFallbackCapture: true,
+        forceBrowserHistoryUrlFallback: true,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,
       accessibilityGranted: true,
-      currentSnapshot: null,
+      currentSnapshot: {
+        observedAt: "2026-06-13T15:05:00.000Z",
+        appName: "Google Chrome",
+        browserName: "Google Chrome",
+        siteSource: "browser-history-title",
+        captureConfidence: 0.45,
+        source: "accessibility",
+        browserHistoryStatus: "matched",
+        browserHistoryReason: "matched",
+        browserHistoryDatabaseFound: true,
+        browserHistoryProfileCount: 1,
+        browserHistoryCandidateCount: 7,
+        browserHistoryErrorCount: 0,
+      },
       driftAlarm,
       driftAlarmDebugEvents: [],
-      segments: [unavailableSegment, emptyResultSegment, deniedSegment, grantedSegment, accessibilitySegment],
+      segments: [unavailableSegment, emptyResultSegment, deniedSegment, grantedSegment, accessibilitySegment, historySegment],
       historySegments: [],
       leaderboardSegments: [],
       ai: baseAiDebug,
@@ -152,7 +179,7 @@ describe("buildDebugLogPayload", () => {
         unavailable: 1,
         empty_result: 1,
         denied: 1,
-        granted: 2,
+        granted: 3,
       },
       browserAutomationErrorCounts: {
         "Google Chrome reported no scriptable browser window.": 1,
@@ -161,21 +188,30 @@ describe("buildDebugLogPayload", () => {
       },
       browserAutomationErrorSegments: 3,
       browserAutomationDeniedSegments: 1,
+      browserHistoryStatusCounts: {
+        matched: 1,
+        missing: 5,
+      },
+      browserHistoryDatabaseFoundSegments: 1,
+      browserHistoryAttemptSegments: 1,
     });
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).toMatchObject({
       browserName: "Google Chrome",
       accessibilityAddressBarFallbackSegments: 1,
-      accessibilityAddressBarFallbackRatio: 0.2,
+      accessibilityAddressBarFallbackRatio: 0.1667,
+      browserHistoryFallbackSegments: 1,
+      browserHistoryFallbackRatio: 0.1667,
       siteSourceCounts: {
         "accessibility-address-bar": 1,
         applescript: 1,
+        "browser-history-title": 1,
         missing: 3,
       },
       browserAutomationStatusCounts: {
         unavailable: 1,
         empty_result: 1,
         denied: 1,
-        granted: 2,
+        granted: 3,
       },
       browserAutomationErrorCounts: {
         "Google Chrome reported no scriptable browser window.": 1,
@@ -184,11 +220,37 @@ describe("buildDebugLogPayload", () => {
       },
       browserAutomationErrorSegments: 3,
       browserAutomationDeniedSegments: 1,
+      browserHistoryStatusCounts: {
+        matched: 1,
+        missing: 5,
+      },
+      browserHistoryReasonCounts: {
+        matched: 1,
+      },
+      browserHistoryDatabaseFoundSegments: 1,
+      browserHistoryAttemptSegments: 1,
+    });
+    expect(payload.tracker.currentSnapshot).toMatchObject({
+      browserHistoryStatus: "matched",
+      browserHistoryReason: "matched",
+      browserHistoryDatabaseFound: true,
+      browserHistoryProfileCount: 1,
+      browserHistoryCandidateCount: 7,
+      browserHistoryErrorCount: 0,
+    });
+    expect(payload.tracker.browserHistoryFallback).toMatchObject({
+      status: "matched",
+      reason: "matched",
+      databaseFound: true,
+      profileCount: 1,
+      candidateCount: 7,
+      errorCount: 0,
     });
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("segments");
     expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).not.toHaveProperty("rawActivityRows");
     expect(payload.settings.developerDiagnostics.forceChromiumAxCapture).toBe(true);
     expect(payload.settings.developerDiagnostics.forceFrontmostFallbackCapture).toBe(true);
+    expect(payload.settings.developerDiagnostics.forceBrowserHistoryUrlFallback).toBe(true);
   });
 
   it("summarizes frontmost app capture diagnostics for unavailable history", () => {
@@ -222,6 +284,7 @@ describe("buildDebugLogPayload", () => {
         devModeEnabled: true,
         forceChromiumAxCapture: false,
         forceFrontmostFallbackCapture: true,
+        forceBrowserHistoryUrlFallback: false,
         forceChromiumAxExtremeNudge: true,
       },
       status: null,
@@ -286,6 +349,7 @@ describe("buildDebugLogPayload", () => {
         devModeEnabled: false,
         forceChromiumAxCapture: false,
         forceFrontmostFallbackCapture: false,
+        forceBrowserHistoryUrlFallback: false,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,
@@ -417,6 +481,7 @@ describe("buildDebugLogPayload", () => {
         devModeEnabled: false,
         forceChromiumAxCapture: false,
         forceFrontmostFallbackCapture: false,
+        forceBrowserHistoryUrlFallback: false,
         forceChromiumAxExtremeNudge: false,
       },
       status: null,

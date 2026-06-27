@@ -13,6 +13,7 @@ from app.tracker.accessibility_address_bar import (
 )
 
 BrowserAutomationStatus = Literal["granted", "denied", "unavailable", "stale", "empty_result", "not_applicable"]
+BrowserHistoryStatus = Literal["unsupported", "no_profile_root", "no_readable_database", "no_match", "matched"]
 
 _NO_SCRIPTABLE_WINDOW = "NO_SCRIPTABLE_WINDOW"
 _FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
@@ -31,6 +32,12 @@ class BrowserMetadata:
     match_state: str | None = None
     browser_automation_status: BrowserAutomationStatus | None = None
     browser_automation_error: str | None = None
+    browser_history_status: BrowserHistoryStatus | None = None
+    browser_history_reason: str | None = None
+    browser_history_database_found: bool | None = None
+    browser_history_profile_count: int | None = None
+    browser_history_candidate_count: int | None = None
+    browser_history_error_count: int | None = None
 
 
 def normalize_domain(url: str | None) -> str | None:
