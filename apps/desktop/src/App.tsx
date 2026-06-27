@@ -3639,6 +3639,15 @@ export default function App() {
       ? filterSegmentsForRange(historySegments, classificationWeekRange.start, classificationWeekRange.end)
       : shouldBuildClassificationModels ? segments : EMPTY_ACTIVITY_SEGMENTS
   ), [classificationRange, classificationWeekRange.end, classificationWeekRange.start, historySegments, segments, shouldBuildClassificationModels]);
+  const classificationRuleSegments = useMemo(() => {
+    if (classificationSegments.length === 0) return segments;
+    if (segments.length === 0) return classificationSegments;
+    const seenIds = new Set(classificationSegments.map((segment) => segment.id));
+    return [
+      ...classificationSegments,
+      ...segments.filter((segment) => !seenIds.has(segment.id)),
+    ];
+  }, [classificationSegments, segments]);
   const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
   const classificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact }),
@@ -4819,6 +4828,7 @@ export default function App() {
                     classificationRuleDeletingId={classificationRuleDeletingId}
                     classificationRuleMessage={classificationRuleMessage}
                     classificationRuleSavingKind={classificationRuleSavingKind}
+                    classificationRuleSegments={classificationRuleSegments}
                     classificationRules={classificationRules}
                     classificationRulesError={classificationRulesError}
                     classificationRulesLoading={classificationRulesLoading}
