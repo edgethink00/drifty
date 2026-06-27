@@ -18,7 +18,7 @@ function desktopSourcePath(relativePath: string): string {
 }
 
 describe("AccountSettingsSection", () => {
-  it("shows Cloud active Macs in Account settings and removes a non-current Mac", () => {
+  it("shows Cloud active Macs in Account settings and confirms before removing a non-current Mac", () => {
     const onRevokeCloudDevice = vi.fn();
     const onRefreshCloudStatus = vi.fn();
 
@@ -90,6 +90,20 @@ describe("AccountSettingsSection", () => {
     fireEvent.click(within(cloudDevices).getByRole("button", { name: /^Remove$/i }));
 
     expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1);
+    expect(onRevokeCloudDevice).not.toHaveBeenCalled();
+
+    const cancelDialog = screen.getByRole("alertdialog", { name: /^Remove this Mac\?$/i });
+    expect(within(cancelDialog).getAllByText(/Old MacBook/).length).toBeGreaterThan(0);
+
+    fireEvent.click(within(cancelDialog).getByRole("button", { name: /^Cancel$/i }));
+
+    expect(screen.queryByRole("alertdialog", { name: /^Remove this Mac\?$/i })).toBeNull();
+
+    fireEvent.click(within(cloudDevices).getByRole("button", { name: /^Remove$/i }));
+
+    const confirmDialog = screen.getByRole("alertdialog", { name: /^Remove this Mac\?$/i });
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: /^Remove device$/i }));
+
     expect(onRevokeCloudDevice).toHaveBeenCalledWith("device-old");
   });
 
@@ -132,6 +146,8 @@ describe("AccountSettingsSection", () => {
     const badgeRule = cssRule(styles, ".cloud-device-row__badge");
     const refreshRule = cssRule(styles, ".content--settings .settings-btn.cloud-device-management__refresh");
     const removeRule = cssRule(styles, ".content--settings .settings-btn.cloud-device-row__remove");
+    const confirmOverlayRule = cssRule(styles, ".cloud-device-confirm");
+    const confirmRemoveRule = cssRule(styles, ".content--settings .settings-btn.cloud-device-confirm__remove");
 
     expect(badgeRule).toContain("border-radius: var(--radius-pill);");
     expect(badgeRule).not.toContain("border-radius: 999px;");
@@ -140,6 +156,10 @@ describe("AccountSettingsSection", () => {
     expect(refreshRule).toContain("width: 2rem;");
     expect(removeRule).toContain("var(--warn-soft)");
     expect(removeRule).toContain("var(--warn)");
+    expect(confirmOverlayRule).toContain("position: fixed;");
+    expect(confirmOverlayRule).toContain("z-index: var(--z-settings-popover);");
+    expect(confirmRemoveRule).toContain("background: var(--warn);");
+    expect(confirmRemoveRule).toContain("color: var(--canvas);");
   });
 
   it("stacks Account section actions under their descriptions", () => {

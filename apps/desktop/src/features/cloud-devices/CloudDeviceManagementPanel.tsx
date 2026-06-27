@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { BillingEntitlement } from "../billing/billingService";
 import type { CloudDeviceRecord } from "./cloudDeviceService";
 import "./CloudDeviceManagementPanel.css";
@@ -22,6 +24,14 @@ export function CloudDeviceManagementPanel({
   onRevoke,
 }: CloudDeviceManagementPanelProps) {
   const refreshLabel = isRefreshing ? "Refreshing Cloud devices" : "Refresh Cloud devices";
+  const [pendingRemovalDevice, setPendingRemovalDevice] = useState<CloudDeviceRecord | null>(null);
+
+  function confirmDeviceRemoval() {
+    if (pendingRemovalDevice === null) return;
+    const deviceId = pendingRemovalDevice.id;
+    setPendingRemovalDevice(null);
+    void onRevoke(deviceId);
+  }
 
   return (
     <section className="cloud-device-management" aria-label="Cloud devices">
@@ -68,7 +78,7 @@ export function CloudDeviceManagementPanel({
                 type="button"
                 className="settings-btn settings-btn--compact cloud-device-row__remove"
                 disabled={revokingId !== null}
-                onClick={() => void onRevoke(device.id)}
+                onClick={() => setPendingRemovalDevice(device)}
               >
                 {revokingId === device.id ? "Removing..." : "Remove"}
               </button>
@@ -79,6 +89,41 @@ export function CloudDeviceManagementPanel({
         )}
       </div>
       {actionError ? <p className="cloud-device-management__message" role="status">{actionError}</p> : null}
+      {pendingRemovalDevice ? (
+        <div
+          className="cloud-device-confirm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="cloud-device-confirm-title"
+          aria-describedby="cloud-device-confirm-description"
+        >
+          <div className="cloud-device-confirm__panel">
+            <p className="cloud-device-confirm__eyebrow">Cloud device</p>
+            <h2 id="cloud-device-confirm-title">Remove this Mac?</h2>
+            <p id="cloud-device-confirm-description">
+              This removes {pendingRemovalDevice.label} from your active Drifty Cloud devices. Cloud AI will stop working on
+              that Mac until it reconnects to this account.
+            </p>
+            <div className="cloud-device-confirm__device">
+              <span>{pendingRemovalDevice.label}</span>
+              <small>{formatCloudDeviceLastSeen(pendingRemovalDevice.lastSeenAt)}</small>
+            </div>
+            <div className="cloud-device-confirm__actions">
+              <button type="button" className="settings-btn" onClick={() => setPendingRemovalDevice(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="settings-btn cloud-device-confirm__remove"
+                disabled={revokingId !== null}
+                onClick={confirmDeviceRemoval}
+              >
+                Remove device
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
