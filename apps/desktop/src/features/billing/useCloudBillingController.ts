@@ -129,7 +129,9 @@ export function useCloudBillingController({
       return;
     }
 
-    if (billingEntitlement?.status !== "active") {
+    const canOpenBillingPortal = billingEntitlement?.status === "active"
+      || billingEntitlement?.lockedReason === "device_limit_reached";
+    if (!canOpenBillingPortal) {
       void refreshBillingEntitlement();
       return;
     }
@@ -149,7 +151,7 @@ export function useCloudBillingController({
     } finally {
       setBillingPortalLoading(false);
     }
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
+  }, [billingEntitlement?.lockedReason, billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
 
   const dismissCloudTrialStartedNotice = useCallback(() => {
     setCloudTrialStartedNotice(null);

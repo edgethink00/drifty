@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 
 describe("AiSetupPanel Cloud setup", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     invokeMock.mockClear();
     resetManagedStatusMock();
