@@ -11,6 +11,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { readUserOnboardingState } from "../onboarding/onboardingState";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
+import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import { saveLiveClassificationIfRequested } from "./liveAiClassificationPersistence";
 import {
   invokeOpenAiChatWithManagedLocalRetry,
@@ -274,11 +275,11 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
   }
 
   const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-    body: {
+    body: await withCloudDevicePayload({
       ...cloudApiClientMetadata,
       ...(workProfile ? { workProfile } : {}),
       items: toEdgeClassificationRequestItems(reusableResult.misses),
-    },
+    }),
   });
 
   if (error) {
@@ -383,11 +384,11 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   }
 
   const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-    body: {
+    body: await withCloudDevicePayload({
       ...cloudApiClientMetadata,
       ...(workProfile ? { workProfile } : {}),
       items: toEdgeClassificationRequestItems(reusableResult.misses),
-    },
+    }),
   });
 
   if (error) {
@@ -1050,11 +1051,11 @@ async function classifyLivePayloadWithCloudAi(payload: MinimizedActivityPayload,
 
   try {
     const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-      body: {
+      body: await withCloudDevicePayload({
         ...cloudApiClientMetadata,
         ...(workProfile ? { workProfile } : {}),
         items: toEdgeClassificationRequestItems([payload]),
-      },
+      }),
     });
 
     if (error) return unavailableLiveClassification(await edgeFunctionErrorMessage(error));
@@ -1229,7 +1230,7 @@ async function readEdgeErrorBody(response: Response): Promise<string | null> {
   if (!text) return response.status ? `${response.status} ${response.statusText}`.trim() : null;
 
   try {
-    const parsed = JSON.parse(text) as unknown;
+    const parsed: unknown = JSON.parse(text);
     if (isRecord(parsed)) {
       if (typeof parsed.error === "string") return parsed.error;
       if (typeof parsed.message === "string") return parsed.message;

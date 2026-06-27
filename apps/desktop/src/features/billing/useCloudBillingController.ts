@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthState } from "../auth/AuthContext";
+import { revokeCloudDevice, type CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
 import {
   createBillingPortalSession,
   createIndividualCheckout,
@@ -28,9 +29,13 @@ type UseCloudBillingControllerResult = {
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
   readonly billingPortalLoading: boolean;
+  readonly cloudDeviceActionError: string | null;
+  readonly cloudDeviceRevokingId: string | null;
+  readonly cloudDevices: readonly CloudDeviceRecord[];
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   readonly dismissCloudTrialStartedNotice: () => void;
   readonly handleManageCloudBilling: () => Promise<void>;
+  readonly handleRevokeCloudDevice: (deviceId: string) => Promise<void>;
   readonly handleStartDriftyCloudSetup: (billingInterval?: BillingInterval) => Promise<void>;
   readonly openCloudTrialStartedNoticeAiSetup: () => void;
   readonly refreshBillingEntitlement: () => Promise<BillingEntitlement | null>;
@@ -49,6 +54,8 @@ export function useCloudBillingController({
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [cloudDeviceActionError, setCloudDeviceActionError] = useState<string | null>(null);
+  const [cloudDeviceRevokingId, setCloudDeviceRevokingId] = useState<string | null>(null);
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const billingEntitlementRequestRef = useRef(0);
 
@@ -57,12 +64,14 @@ export function useCloudBillingController({
       setBillingEntitlement(null);
       setBillingEntitlementLoading(false);
       setBillingEntitlementError(null);
+      setCloudDeviceActionError(null);
       return null;
     }
 
     const requestId = ++billingEntitlementRequestRef.current;
     setBillingEntitlementLoading(true);
     setBillingEntitlementError(null);
+    setCloudDeviceActionError(null);
     const result = await fetchBillingEntitlement();
     if (requestId !== billingEntitlementRequestRef.current) return null;
     if (result.success) {
@@ -120,7 +129,9 @@ export function useCloudBillingController({
       return;
     }
 
-    if (billingEntitlement?.status !== "active") {
+    const canOpenBillingPortal = billingEntitlement?.status === "active"
+      || billingEntitlement?.lockedReason === "device_limit_reached";
+    if (!canOpenBillingPortal) {
       void refreshBillingEntitlement();
       return;
     }
@@ -140,11 +151,29 @@ export function useCloudBillingController({
     } finally {
       setBillingPortalLoading(false);
     }
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
+  }, [billingEntitlement?.lockedReason, billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
 
   const dismissCloudTrialStartedNotice = useCallback(() => {
     setCloudTrialStartedNotice(null);
   }, []);
+
+  const handleRevokeCloudDevice = useCallback(async (deviceId: string) => {
+    if (!deviceId) return;
+    setCloudDeviceActionError(null);
+    setCloudDeviceRevokingId(deviceId);
+    try {
+      const result = await revokeCloudDevice(deviceId);
+      if (!result.success) {
+        setCloudDeviceActionError(result.error);
+        return;
+      }
+      await refreshBillingEntitlement();
+    } catch (error) {
+      setCloudDeviceActionError(toErrorMessage(error));
+    } finally {
+      setCloudDeviceRevokingId(null);
+    }
+  }, [refreshBillingEntitlement]);
 
   const openCloudTrialStartedNoticeAiSetup = useCallback(() => {
     onOpenAiSetup();
@@ -158,12 +187,14 @@ export function useCloudBillingController({
       setBillingEntitlement(null);
       setBillingEntitlementLoading(false);
       setBillingEntitlementError(null);
+      setCloudDeviceActionError(null);
       return undefined;
     }
 
     const requestId = ++billingEntitlementRequestRef.current;
     setBillingEntitlementLoading(true);
     setBillingEntitlementError(null);
+    setCloudDeviceActionError(null);
     void fetchBillingEntitlement().then((result) => {
       if (cancelled) return;
       if (requestId !== billingEntitlementRequestRef.current) return;
@@ -208,9 +239,13 @@ export function useCloudBillingController({
     billingEntitlementError,
     billingEntitlementLoading,
     billingPortalLoading,
+    cloudDeviceActionError,
+    cloudDeviceRevokingId,
+    cloudDevices: billingEntitlement?.cloudDevices ?? [],
     cloudTrialStartedNotice,
     dismissCloudTrialStartedNotice,
     handleManageCloudBilling,
+    handleRevokeCloudDevice,
     handleStartDriftyCloudSetup,
     openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,

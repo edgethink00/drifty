@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { vi } from "vitest";
 
-import { AiSetupPanel } from "./AiSetupPanel";
+import { AiSetupPanel, type AiSetupPanelProps } from "./AiSetupPanel";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
@@ -126,6 +126,7 @@ export function renderPanel({
   connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null },
   currentBillingPlan = "individual",
   billingEntitlementStatus = "active",
+  billingEntitlementLockedReason = null,
   cloudTrialEndsAt = null,
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
   userEmail = null,
@@ -134,6 +135,7 @@ export function renderPanel({
   readonly connectionStatus?: AiConnectionStatus;
   readonly currentBillingPlan?: "free" | "individual";
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
+  readonly billingEntitlementLockedReason?: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached" | null;
   readonly cloudTrialEndsAt?: string | null;
   readonly initialSetup?: LocalAiSetupState;
   readonly userEmail?: string | null;
@@ -142,6 +144,7 @@ export function renderPanel({
   const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
   const onManageCloudBilling = vi.fn();
+  const onManageCloudDevices = vi.fn();
   const onLocalAiConnectionTestResult = vi.fn();
   let setConnectionStatus: Dispatch<SetStateAction<AiConnectionStatus>> | null = null;
 
@@ -159,6 +162,7 @@ export function renderPanel({
         aiServerStatusLabel="Available"
         billingCheckoutLoadingInterval={null}
         billingEntitlementError={null}
+        billingEntitlementLockedReason={billingEntitlementLockedReason}
         billingEntitlementStatus={billingEntitlementStatus}
         billingPlansDisabled={false}
         billingPortalLoading={false}
@@ -176,6 +180,7 @@ export function renderPanel({
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
+        onManageCloudDevices={onManageCloudDevices}
         onRefreshCloudStatus={onRefreshCloudStatus}
         onStartCloudSetup={onStartCloudSetup}
       />
@@ -186,6 +191,7 @@ export function renderPanel({
   return {
     onLocalAiConnectionTestResult,
     onManageCloudBilling,
+    onManageCloudDevices,
     onRefreshCloudStatus,
     onStartCloudSetup,
     setConnectionStatus: (nextConnectionStatus: AiConnectionStatus) => {

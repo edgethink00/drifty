@@ -159,6 +159,100 @@
   color: var(--canvas);
 }
 
+.ai-setup-cloud-devices {
+  background: color-mix(in srgb, var(--bg-2) 42%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: 10px;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.ai-setup-cloud-devices__header {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ai-setup-cloud-devices__header strong {
+  color: var(--text);
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.ai-setup-cloud-devices__header p,
+.ai-setup-cloud-devices__empty {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-setup-cloud-devices__list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ai-setup-cloud-device {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 3.25rem;
+  padding: 0.62rem var(--space-3);
+}
+
+.ai-setup-cloud-device__copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.ai-setup-cloud-device__name {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-setup-cloud-device__meta {
+  color: var(--text-soft);
+  font-size: var(--type-control-size);
+  overflow-wrap: anywhere;
+}
+
+.ai-setup-cloud-device__badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--cloud-action) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--cloud-action) 24%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 1.7rem;
+  padding: 0 0.65rem;
+}
+
+.ai-setup-cloud-device__remove {
+  justify-content: center;
+  min-width: 5.9rem;
+}
+
 .ai-setup-field {
   display: grid;
   gap: var(--space-2);

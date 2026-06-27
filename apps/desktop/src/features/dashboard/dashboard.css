@@ -455,6 +455,7 @@
   --dashboard-ai-notice-glow: color-mix(in srgb, var(--gold-soft) 42%, transparent);
 }
 
+.dashboard-ai-notice--device-limit,
 .dashboard-ai-notice--provider-disconnected,
 .dashboard-ai-notice--connect-ai {
   --dashboard-ai-notice-accent: var(--warn);

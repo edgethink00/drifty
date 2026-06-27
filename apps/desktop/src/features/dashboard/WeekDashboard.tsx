@@ -229,7 +229,7 @@ export function WeekDashboard({
                         : Math.max(28, rawEventHeight - 4);
                       const isCompactEvent = event.isShort || eventHeight < 36 || event.laneCount > 2;
                       const showsIdentityStrip = event.isGroupedCluster || hidesInlineText;
-                      const showsInlineDetail = !isCompactEvent && !event.isGroupedCluster;
+                      const showsInlineDetail = !isCompactEvent && event.sessionCount <= 1;
                       const eventStyle: WeekCalendarEventStyle = {
                         top: `${(event.topMinutes / 60) * calendarHourHeight}px`,
                         height: `${eventHeight}px`,

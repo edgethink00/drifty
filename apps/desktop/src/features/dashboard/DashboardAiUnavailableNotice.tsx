@@ -1,6 +1,6 @@
 import type { BillingEntitlement } from "../billing/billingService";
 
-export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-billing" | "provider-disconnected" | "connect-ai";
+export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-billing" | "device-limit" | "provider-disconnected" | "connect-ai";
 
 export type DashboardAiUnavailableState = {
   readonly variant: DashboardAiUnavailableVariant;
@@ -34,6 +34,13 @@ const CLOUD_BILLING_STATE = {
   ctaLabel: "Review plans",
 } satisfies DashboardAiUnavailableState;
 
+const DEVICE_LIMIT_STATE = {
+  variant: "device-limit",
+  title: "Drifty Cloud device limit reached",
+  body: "Your local timeline, predefined rules, and local rules are still shown. Individual includes 2 active Macs. Remove an old Mac to use Cloud AI here.",
+  ctaLabel: "Manage devices",
+} satisfies DashboardAiUnavailableState;
+
 const PROVIDER_DISCONNECTED_STATE = {
   variant: "provider-disconnected",
   title: "AI provider disconnected",
@@ -53,6 +60,7 @@ export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailable
   if (input.canUseCloudAiClassification) return null;
   if (input.localAiReady && input.observedAiClassificationFailure) return PROVIDER_DISCONNECTED_STATE;
   if (input.billingEntitlement?.status === "locked") {
+    if (input.billingEntitlement.lockedReason === "device_limit_reached") return DEVICE_LIMIT_STATE;
     return input.billingEntitlement.lockedReason === "trial_expired" ? TRIAL_ENDED_STATE : CLOUD_BILLING_STATE;
   }
   if (input.billingEntitlementLoading && input.isSupabaseConfigured && input.hasRequiredAccountAuth) return null;
