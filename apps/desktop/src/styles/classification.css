@@ -620,6 +620,12 @@
   font-size: var(--type-caption-size);
 }
 
+.classification-correction__summary .classification-correction__detail-value {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .classification-correction__fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

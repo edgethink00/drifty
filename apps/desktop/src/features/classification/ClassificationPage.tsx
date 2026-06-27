@@ -135,7 +135,7 @@ export function ClassificationPage({
           </span>
           <strong>{classificationCorrectionDraft.targetValue}</strong>
           {classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailValue ? (
-            <p>{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
+            <p className="classification-correction__detail-value">{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
           ) : null}
         </div>
         <div className="classification-correction__fields">

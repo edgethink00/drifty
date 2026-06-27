@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.storage.activity_segment_serialization import (
     json_list,
     serialize_activity_row,
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 
 VALID_RULE_TARGET_KINDS = {"app", "site"}
 VALID_RULE_MATCH_SCOPES = {"surface", "detail"}
-VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle"}
+VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", "siteUrl"}
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
@@ -664,10 +665,10 @@ class TrackerDatabase:
         if match_scope == "detail":
             detail_kind = str(rule_input.get("detailKind", rule_input.get("detail_kind", ""))).strip()
             raw_detail_value = str(rule_input.get("detailValue", rule_input.get("detail_value", ""))).strip()
-            normalized_detail_value = self._normalize_rule_detail(raw_detail_value)
+            normalized_detail_value = self._normalize_rule_detail_by_kind(detail_kind, raw_detail_value)
             if detail_kind not in VALID_RULE_DETAIL_KINDS or not normalized_detail_value:
                 raise ValueError("detailKind and detailValue are required for detail rules")
-            detail_value = raw_detail_value
+            detail_value = normalized_detail_value if detail_kind == "siteUrl" else raw_detail_value
 
         target_value = normalized_target_value if target_kind == "site" else raw_target_value
         category = str(rule_input["category"])
@@ -1536,6 +1537,12 @@ class TrackerDatabase:
         return " ".join((value or "").strip().lower().split())
 
     @staticmethod
+    def _normalize_rule_detail_by_kind(detail_kind: str, value: str | None) -> str:
+        if detail_kind == "siteUrl":
+            return canonicalize_classification_rule_site_url(value) or ""
+        return TrackerDatabase._normalize_rule_detail(value)
+
+    @staticmethod
     def _looks_like_bundle_id(value: str | None) -> bool:
         text = (value or "").strip()
         return "." in text and " " not in text
@@ -1568,6 +1575,9 @@ class TrackerDatabase:
         return normalized_detail_value in self._normalized_segment_rule_details(segment, rule["detail_kind"])
 
     def _normalized_segment_rule_details(self, segment: sqlite3.Row, detail_kind: str) -> set[str]:
+        if detail_kind == "siteUrl":
+            normalized_url = canonicalize_classification_rule_site_url(self._row_text(segment, "site_url"))
+            return {normalized_url} if normalized_url else set()
         detail_columns = {
             "title": ("youtube_title", "site_title", "window_title"),
             "windowTitle": ("window_title",),

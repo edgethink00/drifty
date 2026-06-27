@@ -45,7 +45,7 @@ export interface ClassificationRuleOption {
   targetKind: "app" | "site";
   targetValue: string;
   matchScope?: "surface" | "detail";
-  detailKind?: "title" | "windowTitle" | "siteTitle" | "youtubeTitle" | null;
+  detailKind?: "title" | "windowTitle" | "siteTitle" | "youtubeTitle" | "siteUrl" | null;
   detailValue?: string | null;
   category: ActivityCategory;
   productivity: ProductivityLabel;

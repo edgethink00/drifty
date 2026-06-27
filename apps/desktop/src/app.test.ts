@@ -112,6 +112,7 @@ function segment(input: {
   browserName?: string | null;
   siteDomain?: string | null;
   siteTitle?: string | null;
+  siteUrl?: string | null;
   classification?: ActivitySegment['classification'];
 }): ActivitySegment {
   return {
@@ -125,6 +126,7 @@ function segment(input: {
     browserName: input.browserName ?? null,
     siteDomain: input.siteDomain ?? null,
     siteTitle: input.siteTitle ?? null,
+    siteUrl: input.siteUrl ?? null,
     platform: 'macos',
     source: 'nsworkspace',
     classification: input.classification ?? null,
@@ -735,6 +737,39 @@ describe('domain helpers', () => {
 
     expect(classifyActivityDetailed(video, { rules })).toMatchObject({ category: 'learning', productivity: 'focus', source: 'rule' });
     expect(classifyActivityDetailed({ ...video, youtubeTitle: 'Highlights' }, { rules })).toMatchObject({ category: 'entertainment', productivity: 'drift', source: 'rule' });
+  });
+
+  it('applies site URL detail rules only to the same canonical URL on a matching site surface', () => {
+    const rules = [
+      {
+        targetKind: 'site' as const,
+        targetValue: 'lichess.org',
+        category: 'entertainment' as const,
+        productivity: 'drift' as const,
+        enabled: true,
+      },
+      {
+        targetKind: 'site' as const,
+        targetValue: 'lichess.org',
+        matchScope: 'detail' as const,
+        detailKind: 'siteUrl' as const,
+        detailValue: 'https://www.lichess.org/training/123?utm_source=share#comments',
+        category: 'learning' as const,
+        productivity: 'focus' as const,
+        enabled: true,
+      },
+    ];
+    const training = {
+      ...segments[0],
+      appName: 'Safari',
+      browserName: 'Safari',
+      siteDomain: 'lichess.org',
+      siteUrl: 'https://lichess.org/training/123',
+    };
+
+    expect(classifyActivityDetailed(training, { rules })).toMatchObject({ category: 'learning', productivity: 'focus', source: 'rule' });
+    expect(classifyActivityDetailed({ ...training, siteUrl: 'https://lichess.org/training/456' }, { rules })).toMatchObject({ category: 'entertainment', productivity: 'drift', source: 'rule' });
+    expect(classifyActivityDetailed({ ...training, siteDomain: 'chess.com', siteUrl: 'https://lichess.org/training/123' }, { rules })).not.toMatchObject({ category: 'learning', productivity: 'focus', source: 'rule' });
   });
 
   it('lets rules override stored llm classifications but not manual corrections', () => {

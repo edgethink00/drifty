@@ -1662,7 +1662,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   align-items: end;
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: minmax(15rem, 1.4fr) minmax(10rem, 0.8fr) minmax(10rem, 0.8fr) minmax(10rem, auto);
+  grid-template-columns: minmax(14rem, 1.35fr) minmax(8.5rem, 0.7fr) minmax(9rem, 0.75fr) minmax(9rem, 0.75fr) minmax(9rem, auto);
   width: 100%;
 }
 
@@ -1774,8 +1774,28 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   white-space: nowrap;
 }
 
+.classification-rule-mode-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: var(--classification-rule-control-height);
+  width: 100%;
+}
+
+.classification-rule-mode-control .settings-mode-option {
+  min-width: 0;
+}
+
+.classification-rule-mode-control .settings-mode-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .classification-rule-selected {
   margin: 0;
+}
+
+.classification-rule-selected--url {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .classification-rule-search {
@@ -1938,12 +1958,18 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   border-radius: var(--radius-sm);
 }
 
-.classification-rule-card__main > div {
+.classification-rule-card__main > div,
+.classification-rule-card__text {
   min-width: 0;
 }
 
 .classification-rule-card p {
   margin: var(--space-1) 0 0;
+}
+
+.classification-rule-card__detail {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .classification-rule-empty {

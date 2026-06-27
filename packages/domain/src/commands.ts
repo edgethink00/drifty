@@ -78,7 +78,7 @@ export interface AppIdentity {
 
 export type ClassificationRuleTargetKind = "app" | "site";
 export type ClassificationRuleMatchScope = "surface" | "detail";
-export type ClassificationRuleDetailKind = "title" | "windowTitle" | "siteTitle" | "youtubeTitle";
+export type ClassificationRuleDetailKind = "title" | "windowTitle" | "siteTitle" | "youtubeTitle" | "siteUrl";
 
 export interface ClassificationRule {
   id: string;
