@@ -23,6 +23,17 @@ describe("sidebar motion styles", () => {
     expect(hoverBlock).toContain("transform: translateX(var(--window-sidebar-toggle-shift));");
   });
 
+  it("keeps one-line dashboard period items on the primary nav vertical rhythm", () => {
+    const styles = readStyles();
+    const navItemBlock = cssBlock(styles, ".nav-item");
+    const periodBlock = cssBlock(styles, ".nav-item.nav-item--period");
+    const periodTextBlock = cssBlock(styles, ".nav-item--period > span:not(.nav-item__hover-label)");
+
+    expect(navItemBlock).toContain("padding: 8px 10px;");
+    expect(periodBlock).toContain("padding-block: 8px;");
+    expect(periodTextBlock).toContain("line-height: inherit;");
+  });
+
   it("collapses sidebar text and footer copy with max-size transitions", () => {
     const styles = readStyles();
     const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)");
