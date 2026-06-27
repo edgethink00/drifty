@@ -72,6 +72,11 @@ fn cloud_device_install_id() -> Result<String, String> {
     cloud_device_store::load_or_create_install_id()
 }
 
+#[tauri::command]
+fn cloud_device_identity() -> Result<cloud_device_store::CloudDeviceIdentity, String> {
+    cloud_device_store::load_or_create_identity()
+}
+
 fn remember_auth_deep_links<R: Runtime>(
     app: &AppHandle<R>,
     urls: impl IntoIterator<Item = String>,
@@ -235,6 +240,7 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            cloud_device_identity,
             cloud_device_install_id,
             app_reveal_main_window,
             focus_target_activate_browser_tab,

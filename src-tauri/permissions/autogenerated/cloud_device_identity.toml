@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cloud-device-identity"
+description = "Enables the cloud_device_identity command without any pre-configured scope."
+commands.allow = ["cloud_device_identity"]
+
+[[permission]]
+identifier = "deny-cloud-device-identity"
+description = "Denies the cloud_device_identity command without any pre-configured scope."
+commands.deny = ["cloud_device_identity"]
