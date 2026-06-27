@@ -13,11 +13,14 @@ export type AiConnectionStatusInput = {
   readonly canUseCloudAi: boolean;
   readonly localProviderStatus: LocalAiProviderStatus;
   readonly localProviderLabel: string | null;
-  readonly localMemoryLabel: string | null;
+  readonly localMemoryUsageBytes: number | null;
   readonly classificationRunning: boolean;
   readonly classificationIssueKind: AiConnectionIssueKind | null;
   readonly cloudIssueKind: AiConnectionIssueKind | null;
 };
+
+const BYTES_PER_MIB = 1024 * 1024;
+const BYTES_PER_GIB = 1024 * BYTES_PER_MIB;
 
 export type LocalAiProviderStatus =
   | { readonly kind: "unconfigured" }
@@ -109,32 +112,27 @@ export function AiConnectionStatusBar({
     <button
       type="button"
       className="ai-connection-status"
-      aria-label={`AI connection: ${status.label}, ${status.providerLabel}${status.memoryLabel ? `, memory ${status.memoryLabel}` : ""}. Open AI settings`}
+      aria-label={`AI connection: ${status.label}, ${status.providerLabel}${status.memoryLabel ? `, memory in use ${status.memoryLabel}` : ""}. Open AI settings`}
       data-tone={status.tone}
       onClick={onOpenSettings}
     >
       <span className="ai-connection-status__dot" aria-hidden="true" />
       <span className="ai-connection-status__label">{status.label}</span>
       <span className="ai-connection-status__provider">{status.providerLabel}</span>
-      {status.memoryLabel ? <span className="ai-connection-status__memory" title={`Memory ${status.memoryLabel}`}>{status.memoryLabel}</span> : null}
+      {status.memoryLabel ? <span className="ai-connection-status__memory" title={`Actual memory in use ${status.memoryLabel}`}>{status.memoryLabel}</span> : null}
     </button>
   );
 }
 
 function memoryLabelForLocalProvider(input: AiConnectionStatusInput): string | null {
   if (!input.localProviderLabel) return null;
-  const trimmedLabel = input.localMemoryLabel?.trim() ?? "";
-  return formatMemoryLabel(trimmedLabel);
+  return formatMemoryUsageLabel(input.localMemoryUsageBytes);
 }
 
-function formatMemoryLabel(label: string): string | null {
-  if (!label) return null;
-  const match = /^(\d+(?:\.\d+)?)\s*(.*)$/.exec(label);
-  if (!match) return label;
-  const numericValue = Number(match[1]);
-  if (!Number.isFinite(numericValue)) return label;
-  const unitLabel = match[2]?.trim() ?? "";
-  return unitLabel ? `${numericValue.toFixed(1)} ${unitLabel}` : numericValue.toFixed(1);
+function formatMemoryUsageLabel(memoryUsageBytes: number | null): string | null {
+  if (memoryUsageBytes === null || !Number.isFinite(memoryUsageBytes) || memoryUsageBytes <= 0) return null;
+  if (memoryUsageBytes >= BYTES_PER_GIB) return `${(memoryUsageBytes / BYTES_PER_GIB).toFixed(1)} GB RAM`;
+  return `${Math.max(1, Math.round(memoryUsageBytes / BYTES_PER_MIB))} MB RAM`;
 }
 
 function toneForIssueKind(issueKind: AiConnectionIssueKind): AiConnectionTone {

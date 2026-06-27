@@ -689,7 +689,7 @@ export default function App() {
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionProviderLabel,
-    localAiMemoryLabel,
+    localAiMemoryUsageBytes,
     localAiProviderStatus,
     localAiSetup,
     recordLocalAiClassificationError,
@@ -1024,7 +1024,7 @@ export default function App() {
     canUseCloudAi: canUseCloudAiClassification,
     localProviderStatus: localAiProviderStatus,
     localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
-    localMemoryLabel: localAiMemoryLabel,
+    localMemoryUsageBytes: localAiMemoryUsageBytes,
     classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
     classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
     cloudIssueKind: billingEntitlementError
