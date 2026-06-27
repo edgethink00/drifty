@@ -126,6 +126,26 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
     expect(result).toEqual({ kind: "suppress", reason: "ai-unavailable:provider missing" });
   });
 
+  it("waits twelve seconds before failing closed when live AI classification is slow", async () => {
+    vi.useFakeTimers();
+    classifyLiveActivityWithAi.mockReturnValue(new Promise(() => undefined));
+
+    try {
+      const result = evaluateYouTubeDriftAlarmGate({
+        segment: createYouTubeVideoSegment(),
+        category: "entertainment",
+      });
+
+      await vi.advanceTimersByTimeAsync(11_999);
+      await expect(Promise.race([result, Promise.resolve("pending")])).resolves.toBe("pending");
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(result).resolves.toEqual({ kind: "suppress", reason: "ai-timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("skips Shorts without calling AI", async () => {
     const result = await evaluateYouTubeDriftAlarmGate({
       segment: createYouTubeVideoSegment({
