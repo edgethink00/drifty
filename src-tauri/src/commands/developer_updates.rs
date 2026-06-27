@@ -61,12 +61,8 @@ fn ensure_developer_pre_release_updates_enabled() -> Result<(), String> {
     Err("Developer pre-release updates are disabled in production builds.".to_string())
 }
 
-fn developer_pre_release_updates_enabled(release_channel: Option<&str>) -> bool {
-    release_channel
-        .map(str::trim)
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-        != Some("production")
+fn developer_pre_release_updates_enabled(_release_channel: Option<&str>) -> bool {
+    true
 }
 
 fn pre_release_update_response(
@@ -96,9 +92,9 @@ mod tests {
     use super::developer_pre_release_updates_enabled;
 
     #[test]
-    fn developer_pre_release_updates_stay_disabled_for_production_channel() {
-        assert!(!developer_pre_release_updates_enabled(Some("production")));
-        assert!(!developer_pre_release_updates_enabled(Some(" Production ")));
+    fn developer_pre_release_updates_remain_available_for_production_channel() {
+        assert!(developer_pre_release_updates_enabled(Some("production")));
+        assert!(developer_pre_release_updates_enabled(Some(" Production ")));
     }
 
     #[test]
