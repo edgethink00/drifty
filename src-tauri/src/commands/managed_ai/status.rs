@@ -202,7 +202,7 @@ fn normalize_status_artifact_dir(
             status.state,
             ManagedAiInstallState::Starting | ManagedAiInstallState::Running
         ) {
-            status = runtime::normalize_runtime_status(spec, artifact_dir, status)?;
+            status = runtime::normalize_runtime_status(root, spec, artifact_dir, status)?;
         }
     } else {
         status.artifact_dir = None;

@@ -34,20 +34,13 @@ const RUNTIME_ARCHIVES: &[RuntimeArchive] = &[
 ];
 
 pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiError> {
+    if let Some(env_path) = debug_env_runtime_path() {
+        return Ok(env_path);
+    }
+
     let runtime_path = runtime_path(root);
     if runtime_path.is_file() {
         return Ok(runtime_path);
-    }
-
-    #[cfg(debug_assertions)]
-    if let Ok(path) = std::env::var("DRIFTY_LLAMA_SERVER_PATH") {
-        let trimmed = path.trim();
-        if !trimmed.is_empty() {
-            let env_path = PathBuf::from(trimmed);
-            if env_path.is_file() {
-                return Ok(env_path);
-            }
-        }
     }
 
     install_runtime(root)?;
@@ -60,6 +53,27 @@ pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiErro
         RUNTIME_FILE_NAME,
         runtime_path.display()
     )))
+}
+
+pub(super) fn expected_runtime_path(root: &Path) -> PathBuf {
+    debug_env_runtime_path().unwrap_or_else(|| runtime_path(root))
+}
+
+fn debug_env_runtime_path() -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        let Ok(path) = std::env::var("DRIFTY_LLAMA_SERVER_PATH") else {
+            return None;
+        };
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            let env_path = PathBuf::from(trimmed);
+            if env_path.is_file() {
+                return Some(env_path);
+            }
+        }
+    }
+    None
 }
 
 fn install_runtime(root: &Path) -> Result<(), ManagedAiError> {

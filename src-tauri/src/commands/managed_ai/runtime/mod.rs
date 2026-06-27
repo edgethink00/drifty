@@ -17,13 +17,12 @@ pub(super) fn start_runtime(
     spec: ManagedAiModelSpec,
     artifact_dir: &Path,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
-    if process::server_has_model(spec) {
-        process::stop_unrelated_child(spec.id)?;
+    process::stop_unrelated_child(spec.id)?;
+    let runtime_path = install::require_runtime_path(root)?;
+    if process::server_has_model(&runtime_path, spec) {
         return Ok(running_status(spec, artifact_dir));
     }
 
-    process::stop_unrelated_child(spec.id)?;
-    let runtime_path = install::require_runtime_path(root)?;
     process::stop_stale_runtime_server(&runtime_path)?;
     let model_path = artifact_dir.join(spec.file_name);
     if !model_path.is_file() {
@@ -36,7 +35,7 @@ pub(super) fn start_runtime(
     }
 
     process::start_child(root, &runtime_path, &model_path, spec)?;
-    if process::wait_for_ready(spec) {
+    if process::wait_for_ready(&runtime_path, spec) {
         Ok(running_status(spec, artifact_dir))
     } else {
         Ok(status_for_spec(
@@ -49,11 +48,13 @@ pub(super) fn start_runtime(
 }
 
 pub(super) fn normalize_runtime_status(
+    root: &Path,
     spec: ManagedAiModelSpec,
     artifact_dir: Option<PathBuf>,
     status: ManagedAiStatus,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
-    if process::server_has_model(spec) {
+    let runtime_path = install::expected_runtime_path(root);
+    if process::server_has_model(&runtime_path, spec) {
         return Ok(status_for_spec(
             ManagedAiInstallState::Running,
             spec,

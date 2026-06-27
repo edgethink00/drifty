@@ -39,10 +39,10 @@ pub(super) fn start_child(
     Ok(())
 }
 
-pub(super) fn wait_for_ready(spec: ManagedAiModelSpec) -> bool {
+pub(super) fn wait_for_ready(runtime_path: &Path, spec: ManagedAiModelSpec) -> bool {
     let deadline = Instant::now() + START_READY_GRACE;
     while Instant::now() < deadline {
-        if server_has_model(spec) {
+        if server_has_model(runtime_path, spec) {
             return true;
         }
         thread::sleep(Duration::from_millis(100));
@@ -50,7 +50,11 @@ pub(super) fn wait_for_ready(spec: ManagedAiModelSpec) -> bool {
     false
 }
 
-pub(super) fn server_has_model(spec: ManagedAiModelSpec) -> bool {
+pub(super) fn server_has_model(runtime_path: &Path, spec: ManagedAiModelSpec) -> bool {
+    if !runtime_listener_matches(runtime_path) {
+        return false;
+    }
+
     let Ok(client) = reqwest::blocking::Client::builder()
         .timeout(HEALTH_TIMEOUT)
         .build()
@@ -82,6 +86,22 @@ pub(super) fn server_has_model(spec: ManagedAiModelSpec) -> bool {
                     .is_some_and(|id| id == spec.runtime_model)
             })
         })
+}
+
+fn runtime_listener_matches(runtime_path: &Path) -> bool {
+    let Some(expected) = runtime_path.to_str() else {
+        return false;
+    };
+    let Ok(pids) = runtime_listener_pids() else {
+        return false;
+    };
+    for pid in pids {
+        match process_command_contains(pid, expected) {
+            Ok(true) => return true,
+            Ok(false) | Err(_) => {}
+        }
+    }
+    false
 }
 
 pub(super) fn child_alive_for_model(model_id: &str) -> Result<bool, ManagedAiError> {
