@@ -79,6 +79,7 @@ type ClassificationCorrectionDraft = {
   readonly targetValue: string;
   readonly detailKind: ClassificationRuleDetailKind | null;
   readonly detailValue: string | null;
+  readonly detailDisplayLabel: string | null;
   readonly category: ActivityCategory;
   readonly productivity: ProductivityLabel;
 };
@@ -126,6 +127,10 @@ export function ClassificationPage({
   const renderClassificationCorrection = (placement: "surface" | "detail") => {
     if (!classificationCorrectionDraft) return null;
 
+    const correctionSummaryLabel = classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailKind === "siteUrl"
+      ? classificationCorrectionDraft.detailDisplayLabel ?? classificationCorrectionDraft.targetValue
+      : classificationCorrectionDraft.targetValue;
+
     return (
       <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"} style={{ "--correction-tone": CATEGORY_COLORS[classificationCorrectionDraft.category] } as CSSProperties}>
         <div className="classification-correction__summary">
@@ -133,7 +138,7 @@ export function ClassificationPage({
             <span className="classification-correction__summary-dot" aria-hidden="true" />
             {classificationCorrectionDraft.scope === "detail" ? "Reclassify detail" : `Reclassify ${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind).toLowerCase()}`}
           </span>
-          <strong>{classificationCorrectionDraft.targetValue}</strong>
+          <strong title={correctionSummaryLabel}>{correctionSummaryLabel}</strong>
           {classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailValue ? (
             <p className="classification-correction__detail-value">{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
           ) : null}
