@@ -43,41 +43,45 @@ export function ClassificationSavedRulesList({
   onToggleClassificationRule,
 }: ClassificationSavedRulesListProps) {
   return (
-    <div className="settings-block">
-      <h3>Saved local rules</h3>
-      <div className="settings-row settings-row--group-end classification-rule-list-head">
-        <div>
-          <div className="lbl">Saved local rules</div>
-          <div className="desc">Use the switch to save a rule as off, delete it, or reapply enabled rules to existing activity.</div>
+    <div className="settings-block classification-rule-saved-block">
+      <h3 id="classification-saved-rules-heading">Saved local rules</h3>
+      <section className="settings-row settings-row--group-end classification-rule-list-section" aria-labelledby="classification-saved-rules-heading">
+        <div className="classification-rule-list-head">
+          <div>
+            <div className="lbl">Saved local rules</div>
+            <div className="desc">Use the switch to save a rule as off, delete it, or reapply enabled rules to existing activity.</div>
+          </div>
+          <div className="ctrl settings-row__actions">
+            <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>Refresh</button>
+            <button type="button" className="settings-btn settings-btn--primary" onClick={onApplyClassificationRules} disabled={classificationRuleApplying || classificationRules.length === 0}>{classificationRuleApplying ? "Applying..." : "Apply rules"}</button>
+          </div>
         </div>
-        <div className="ctrl settings-row__actions">
-          <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>Refresh</button>
-          <button type="button" className="settings-btn settings-btn--primary" onClick={onApplyClassificationRules} disabled={classificationRuleApplying || classificationRules.length === 0}>{classificationRuleApplying ? "Applying..." : "Apply rules"}</button>
+        <div className="classification-rule-list-shell">
+          {classificationRulesLoading ? <p className="classification-rule-hint">Loading local rules...</p> : null}
+          {!classificationRulesLoading && classificationRules.length === 0 ? (
+            <div className="empty-state classification-rule-empty">
+              <span className="eyebrow">No local rules</span>
+              <strong>No custom rules yet</strong>
+              <p>Add a Domain or App rule to override local classification for matching activity.</p>
+            </div>
+          ) : null}
+          {classificationRules.length > 0 ? (
+            <div className="classification-rule-list" aria-label="Saved local classification rules">
+              {classificationRules.map((rule) => (
+                <ClassificationSavedRuleCard
+                  key={rule.id}
+                  appIcons={appIcons}
+                  classificationRuleDeletingId={classificationRuleDeletingId}
+                  classificationRuleSegments={classificationRuleSegments}
+                  rule={rule}
+                  onDeleteClassificationRule={onDeleteClassificationRule}
+                  onToggleClassificationRule={onToggleClassificationRule}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
-      </div>
-      {classificationRulesLoading ? <p className="classification-rule-hint">Loading local rules...</p> : null}
-      {!classificationRulesLoading && classificationRules.length === 0 ? (
-        <div className="empty-state classification-rule-empty">
-          <span className="eyebrow">No local rules</span>
-          <strong>No custom rules yet</strong>
-          <p>Add a Domain or App rule to override local classification for matching activity.</p>
-        </div>
-      ) : null}
-      {classificationRules.length > 0 ? (
-        <div className="classification-rule-list" aria-label="Saved local classification rules">
-          {classificationRules.map((rule) => (
-            <ClassificationSavedRuleCard
-              key={rule.id}
-              appIcons={appIcons}
-              classificationRuleDeletingId={classificationRuleDeletingId}
-              classificationRuleSegments={classificationRuleSegments}
-              rule={rule}
-              onDeleteClassificationRule={onDeleteClassificationRule}
-              onToggleClassificationRule={onToggleClassificationRule}
-            />
-          ))}
-        </div>
-      ) : null}
+      </section>
     </div>
   );
 }
@@ -115,13 +119,15 @@ function ClassificationSavedRuleCard({
         <span className="chip gray">{classificationRuleScopeLabel(rule)}</span>
         <div className="classification-rule-card__text">
           <strong title={primaryLabel}>{primaryLabel}</strong>
-          <p>{metadataLabel}</p>
-          {detailLabel ? <p className="classification-rule-card__detail">{detailLabel}</p> : null}
+          <p className="classification-rule-card__meta">
+            {metadataLabel}
+            {detailLabel ? <> · <span className="classification-rule-card__detail" title={detailLabel}>{detailLabel}</span></> : null}
+          </p>
         </div>
       </div>
       <div className="classification-rule-card__actions">
         <Toggle checked={rule.enabled} onChange={(enabled) => onToggleClassificationRule(rule, enabled)} ariaLabel={`${rule.enabled ? "Disable" : "Enable"} ${rule.targetValue} rule`} />
-        <button type="button" className="settings-btn danger" onClick={() => onDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? "Deleting..." : "Delete"}</button>
+        <button type="button" className="settings-btn danger classification-rule-card__delete" onClick={() => onDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? "Deleting..." : "Delete"}</button>
       </div>
     </article>
   );
