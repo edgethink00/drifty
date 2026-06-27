@@ -1229,7 +1229,8 @@ export const CATEGORY_ORDER: ActivityCategory[] = [
 
 export const PRODUCTIVITY_ORDER: ProductivityLabel[] = ["focus", "neutral", "drift"];
 
-const PRODUCTIVITY_CONTEXT_WINDOW_SECONDS = 5 * 60;
+const PRODUCTIVITY_CONTEXT_ACTIVE_SECONDS = 5 * 60;
+const PRODUCTIVITY_CONTEXT_MAX_WINDOW_SECONDS = 10 * 60;
 const MINIMUM_CONTEXT_WINDOW_TRACKED_SECONDS = 2 * 60;
 const CONTEXT_WINDOW_STRONG_SHARE = 0.7;
 const CONTEXTUAL_PRODUCTIVITY_MAX_PASSES = 6;
@@ -1260,6 +1261,8 @@ type ContextWindowStats = {
   readonly strongFocus: boolean;
   readonly driftDominated: boolean;
 };
+
+type ContextWindowDirection = "before" | "after";
 
 const WORK_PRIMARY_COMMUNICATION_APP_NAMES: readonly string[] = [
   "slack",
@@ -1317,12 +1320,14 @@ function buildEffectiveProductivityBySegmentId(segments: ActivitySegment[], opti
     for (const episode of episodes) {
       const productivity = communicationEpisodeProductivity(episode, classifiedSegments, productivities);
       for (const item of episode) {
+        if (item.classification.productivity !== "neutral") continue;
         changed = setEffectiveProductivity(productivities, item, productivity) || changed;
       }
     }
 
     for (const item of classifiedSegments) {
       if (item.classification.category !== "utility") continue;
+      if (item.classification.productivity !== "neutral") continue;
       changed = setEffectiveProductivity(productivities, item, utilityProductivity(item, classifiedSegments, productivities)) || changed;
     }
 
@@ -1347,9 +1352,6 @@ function classifiedSegmentsInTimeOrder(segments: ActivitySegment[], options?: Cl
 }
 
 function defaultEffectiveProductivityForClassification(classification: ActivityClassificationDetail): EffectiveProductivityResolution {
-  if (classification.category === "communication" || classification.category === "utility") {
-    return resolveEffectiveProductivity("neutral", classification.productivity);
-  }
   return directProductivity(classification.productivity);
 }
 
@@ -1418,8 +1420,8 @@ function communicationEpisodeProductivity(
   if (!first || !last) return "neutral";
 
   const durationSeconds = Math.round((last.endMs - first.startMs) / 1000);
-  const before = contextWindowStats(classifiedSegments, productivities, first.startMs - PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000, first.startMs);
-  const after = contextWindowStats(classifiedSegments, productivities, last.endMs, last.endMs + PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000);
+  const before = contextWindowStats(classifiedSegments, productivities, first.startMs, "before");
+  const after = contextWindowStats(classifiedSegments, productivities, last.endMs, "after");
   const communicationClass = episodeCommunicationClass(episode);
 
   if (communicationClass === "mixed") {
@@ -1507,24 +1509,48 @@ function matchesKnownDomain(domain: string, domains: readonly string[]): boolean
 function contextWindowStats(
   classifiedSegments: readonly ClassifiedSegment[],
   productivities: ReadonlyMap<string, EffectiveProductivityResolution>,
-  windowStartMs: number,
-  windowEndMs: number,
+  anchorMs: number,
+  direction: ContextWindowDirection,
 ): ContextWindowStats {
   let trackedSeconds = 0;
   let strongFocusSeconds = 0;
   let driftSeconds = 0;
+  const maxWindowMs = PRODUCTIVITY_CONTEXT_MAX_WINDOW_SECONDS * 1000;
+  const activeTargetSeconds = PRODUCTIVITY_CONTEXT_ACTIVE_SECONDS;
 
-  for (const item of classifiedSegments) {
-    const overlapSeconds = clippedOverlapSeconds(item, windowStartMs, windowEndMs);
-    if (overlapSeconds <= 0) continue;
+  const addTrackedSeconds = (item: ClassifiedSegment, overlapSeconds: number): void => {
+    const countedSeconds = Math.min(overlapSeconds, activeTargetSeconds - trackedSeconds);
+    if (countedSeconds <= 0) return;
 
-    trackedSeconds += overlapSeconds;
+    trackedSeconds += countedSeconds;
     const productivity = contextualProductivity(item, productivities);
     if (productivity === "focus") {
-      strongFocusSeconds += overlapSeconds;
+      strongFocusSeconds += countedSeconds;
     }
     if (productivity === "drift") {
-      driftSeconds += overlapSeconds;
+      driftSeconds += countedSeconds;
+    }
+  };
+
+  if (direction === "before") {
+    const windowStartMs = anchorMs - maxWindowMs;
+    for (let index = classifiedSegments.length - 1; index >= 0; index -= 1) {
+      const item = classifiedSegments[index];
+      if (!item) continue;
+      if (item.endMs <= windowStartMs) break;
+      if (item.startMs >= anchorMs) continue;
+
+      addTrackedSeconds(item, clippedOverlapSeconds(item, windowStartMs, anchorMs));
+      if (trackedSeconds >= activeTargetSeconds) break;
+    }
+  } else {
+    const windowEndMs = anchorMs + maxWindowMs;
+    for (const item of classifiedSegments) {
+      if (item.startMs >= windowEndMs) break;
+      if (item.endMs <= anchorMs) continue;
+
+      addTrackedSeconds(item, clippedOverlapSeconds(item, anchorMs, windowEndMs));
+      if (trackedSeconds >= activeTargetSeconds) break;
     }
   }
 
@@ -1558,8 +1584,8 @@ function utilityProductivity(
   const durationSeconds = Math.round((item.endMs - item.startMs) / 1000);
   if (durationSeconds > UTILITY_CONTEXTUAL_SECONDS) return "neutral";
 
-  const before = contextWindowStats(classifiedSegments, productivities, item.startMs - PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000, item.startMs);
-  const after = contextWindowStats(classifiedSegments, productivities, item.endMs, item.endMs + PRODUCTIVITY_CONTEXT_WINDOW_SECONDS * 1000);
+  const before = contextWindowStats(classifiedSegments, productivities, item.startMs, "before");
+  const after = contextWindowStats(classifiedSegments, productivities, item.endMs, "after");
   if (before.strongFocus && after.strongFocus) return "focus";
   if (before.driftDominated && after.driftDominated) return "drift";
   return "neutral";
