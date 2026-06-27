@@ -141,6 +141,45 @@ describe("AccountSettingsSection", () => {
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 
+  it("surfaces Cloud device access failures instead of presenting an empty device list", () => {
+    render(
+      <AccountSettingsSection
+        billingCheckoutLoadingInterval={null}
+        billingEntitlementError={null}
+        billingEntitlementLockedReason={null}
+        billingEntitlementStatus="active"
+        billingPlansDisabled={false}
+        billingPortalLoading={false}
+        cloudDeviceAccess={{
+          allowed: false,
+          reason: "unavailable",
+          message: "Drifty Cloud device access is unavailable.",
+          activeDeviceCount: null,
+          maxActiveDevices: 2,
+          activeWindowDays: 30,
+          deviceId: null,
+        }}
+        cloudDeviceActionError={null}
+        cloudDeviceRevokingId={null}
+        cloudDevices={[]}
+        cloudStatusRefreshing={false}
+        currentBillingPlan="individual"
+        isSupabaseConfigured={true}
+        shouldShowCloudCheckoutPlans={false}
+        userEmail="alex@example.com"
+        onManageCloudBilling={vi.fn()}
+        onRefreshCloudStatus={vi.fn()}
+        onRevokeCloudDevice={vi.fn()}
+        onSignIn={vi.fn()}
+        onStartCloudSetup={vi.fn()}
+      />,
+    );
+
+    const cloudDevices = screen.getByRole("region", { name: /Cloud devices/i });
+    expect(within(cloudDevices).getByText("Drifty Cloud device access is unavailable.")).toBeTruthy();
+    expect(within(cloudDevices).queryByText(/Refresh devices to load active Macs/i)).toBeNull();
+  });
+
   it("keeps Cloud device status badges on the shared pill radius", () => {
     const styles = readFileSync(desktopSourcePath("src/features/cloud-devices/CloudDeviceManagementPanel.css"), "utf8");
     const badgeRule = cssRule(styles, ".cloud-device-row__badge");
