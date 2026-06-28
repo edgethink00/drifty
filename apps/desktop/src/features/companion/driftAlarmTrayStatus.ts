@@ -24,12 +24,16 @@ export type DriftAlarmTrayStatusInput = {
 };
 
 export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): DriftAlarmTrayStatus {
-  const checkedAt = checkedAtOrNull(input.checkedAt);
+  const checkedAt = input.result.kind === "tracker_paused" ? null : checkedAtOrNull(input.checkedAt);
   const baseStatus = {
     enabled: input.enabled,
     statusLabel: statusLabel(input.enabled, input.result),
     lastCheckedAt: checkedAt?.toISOString() ?? null,
-    lastCheckedLabel: checkedAt ? formatDriftAlarmTrayCheckTime(checkedAt) : input.enabled ? "Never" : "Off",
+    lastCheckedLabel: input.result.kind === "tracker_paused"
+      ? "Not checking"
+      : checkedAt
+        ? formatDriftAlarmTrayCheckTime(checkedAt)
+        : input.enabled ? "Never" : "Off",
     resultLabel: resultLabel(input.result),
     detailLabel: resultDetailLabel(input.result),
   };

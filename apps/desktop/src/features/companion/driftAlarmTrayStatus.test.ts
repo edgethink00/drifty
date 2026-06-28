@@ -44,6 +44,25 @@ describe("drift alarm tray status", () => {
     expect(status.trackerRunning).toBe(true);
   });
 
+  it("does not stamp a fresh check time while the tracker is paused", () => {
+    const status = buildDriftAlarmTrayStatus({
+      enabled: true,
+      checkedAt: new Date(2026, 5, 12, 9, 8, 7),
+      result: { kind: "tracker_paused" },
+      trackerRunning: false,
+    });
+
+    expect(status).toEqual({
+      enabled: true,
+      statusLabel: "Drift alerts: Paused",
+      lastCheckedAt: null,
+      lastCheckedLabel: "Not checking",
+      resultLabel: "Tracker paused",
+      detailLabel: null,
+      trackerRunning: false,
+    });
+  });
+
   it("keeps suppressed reasons and candidate details privacy safe", () => {
     const checkedAt = new Date(2026, 5, 12, 9, 8, 7);
     const status = buildDriftAlarmTrayStatus({
