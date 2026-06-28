@@ -334,6 +334,26 @@ def get_timeline_page(payload: dict):
     )
 
 
+def search_timeline(payload: dict):
+    safe_payload = payload if isinstance(payload, dict) else {}
+    query = safe_payload.get("query", "")
+    if not isinstance(query, str):
+        query = ""
+    db = database()
+    start, end = day_bounds(safe_payload)
+    return response(
+        True,
+        db.search_timeline_page(
+            query=query,
+            start=start,
+            end=end,
+            before_ended_at=safe_payload.get("beforeEndedAt"),
+            before_segment_id=safe_payload.get("beforeSegmentId"),
+            limit=safe_payload.get("limit"),
+        ),
+    )
+
+
 def get_dashboard_week_timeline(payload: dict):
     db = database()
     start, end = day_bounds(payload)
@@ -620,6 +640,7 @@ COMMANDS = {
     "stop_tracking": lambda payload: stop_tracking(),
     "get_timeline": get_timeline,
     "get_timeline_page": get_timeline_page,
+    "search_timeline": search_timeline,
     "get_dashboard_week_timeline": get_dashboard_week_timeline,
     "get_live_tail": get_live_tail,
     "get_current_snapshot": lambda payload: get_current_snapshot(),

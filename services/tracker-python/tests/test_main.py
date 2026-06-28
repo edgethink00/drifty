@@ -188,6 +188,56 @@ class TrackerMainTests(unittest.TestCase):
             limit=200,
         )
 
+    def test_search_timeline_forwards_query_range_cursor_and_limit(self) -> None:
+        mock_db = MagicMock()
+        mock_db.search_timeline_page.return_value = {
+            "items": [{"id": "42"}],
+            "hasMore": True,
+            "nextCursor": {
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "beforeSegmentId": "42",
+            },
+        }
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.search_timeline({
+                "query": "arc project",
+                "start": "2026-04-01T00:00:00",
+                "end": "2026-04-07T23:59:59",
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "beforeSegmentId": "42",
+                "limit": 200,
+            })
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["items"], [{"id": "42"}])
+        mock_db.search_timeline_page.assert_called_once_with(
+            query="arc project",
+            start="2026-04-01T00:00:00",
+            end="2026-04-07T23:59:59",
+            before_ended_at="2026-04-06T09:05:00+00:00",
+            before_segment_id="42",
+            limit=200,
+        )
+
+    def test_search_timeline_non_dict_payload_uses_blank_query(self) -> None:
+        mock_db = MagicMock()
+        mock_db.search_timeline_page.return_value = {"items": [], "hasMore": False, "nextCursor": None}
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.search_timeline("not a payload")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"], {"items": [], "hasMore": False, "nextCursor": None})
+        mock_db.search_timeline_page.assert_called_once_with(
+            query="",
+            start=None,
+            end=None,
+            before_ended_at=None,
+            before_segment_id=None,
+            limit=None,
+        )
+
     def test_get_dashboard_week_timeline_uses_compact_range_filter(self) -> None:
         mock_db = MagicMock()
         mock_db.dashboard_week_timeline.return_value = []

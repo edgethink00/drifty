@@ -107,6 +107,30 @@ impl TrackerController {
         )
     }
 
+    pub fn search_timeline(
+        &self,
+        app: &AppHandle,
+        query: String,
+        start: Option<String>,
+        end: Option<String>,
+        before_segment_id: Option<String>,
+        before_ended_at: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "search_timeline",
+            build_timeline_search_payload(
+                query,
+                start,
+                end,
+                before_segment_id,
+                before_ended_at,
+                limit,
+            ),
+        )
+    }
+
     pub fn get_dashboard_week_timeline(
         &self,
         app: &AppHandle,
@@ -679,6 +703,24 @@ fn build_timeline_page_payload(
     payload
 }
 
+fn build_timeline_search_payload(
+    query: String,
+    start: Option<String>,
+    end: Option<String>,
+    before_segment_id: Option<String>,
+    before_ended_at: Option<String>,
+    limit: Option<u32>,
+) -> Value {
+    let mut payload =
+        build_timeline_page_payload(start, end, before_segment_id, before_ended_at, limit);
+
+    if let Some(payload_object) = payload.as_object_mut() {
+        payload_object.insert("query".into(), json!(query));
+    }
+
+    payload
+}
+
 fn build_live_tail_payload(
     start: Option<String>,
     end: Option<String>,
@@ -905,6 +947,30 @@ mod tests {
         assert_eq!(
             payload,
             json!({
+                "start": "2026-04-06T00:00:00",
+                "end": "2026-04-06T23:59:59",
+                "beforeSegmentId": "42",
+                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
+                "limit": 200
+            })
+        );
+    }
+
+    #[test]
+    fn timeline_search_payload_preserves_query_range_cursor_and_default_limit() {
+        let payload = build_timeline_search_payload(
+            "github issue".into(),
+            Some("2026-04-06T00:00:00".into()),
+            Some("2026-04-06T23:59:59".into()),
+            Some("42".into()),
+            Some("2026-04-06T09:05:00+00:00".into()),
+            None,
+        );
+
+        assert_eq!(
+            payload,
+            json!({
+                "query": "github issue",
                 "start": "2026-04-06T00:00:00",
                 "end": "2026-04-06T23:59:59",
                 "beforeSegmentId": "42",

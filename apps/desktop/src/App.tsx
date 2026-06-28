@@ -608,6 +608,14 @@ export default function App() {
   const [historyHasMoreSegments, setHistoryHasMoreSegments] = useState(false);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyLoadMoreError, setHistoryLoadMoreError] = useState<string | null>(null);
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
+  const [historySearchSegments, setHistorySearchSegments] = useState<ActivitySegment[]>([]);
+  const [historySearchNextCursor, setHistorySearchNextCursor] = useState<TimelinePageCursor | null>(null);
+  const [historySearchHasMoreSegments, setHistorySearchHasMoreSegments] = useState(false);
+  const [historySearchLoading, setHistorySearchLoading] = useState(false);
+  const [historySearchError, setHistorySearchError] = useState<string | null>(null);
+  const normalizedHistorySearchQuery = historySearchQuery.trim();
+  const isHistorySearchActive = normalizedHistorySearchQuery.length > 0;
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
   const [dashboardWeekRefreshState, setDashboardWeekRefreshState] = useState<DashboardWeekRefreshState>({ key: null, status: "idle" });
   const [hourly, setHourly] = useState<HourBucket[]>([]);
@@ -1046,6 +1054,7 @@ export default function App() {
   const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
+  const historySearchRequestRef = useRef(0);
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
   const requiredCurrentSnapshotRefreshInFlightRef = useRef(false);
   const dashboardWeekPrefetchRequestRef = useRef(0);
@@ -1140,6 +1149,71 @@ export default function App() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    const query = normalizedHistorySearchQuery;
+    if (query.length === 0) {
+      historySearchRequestRef.current += 1;
+      setHistorySearchSegments([]);
+      setHistorySearchNextCursor(null);
+      setHistorySearchHasMoreSegments(false);
+      setHistorySearchLoading(false);
+      setHistorySearchError(null);
+      return;
+    }
+    if (activeTab !== "history" || shouldBlockLocalTrackerAccess) {
+      historySearchRequestRef.current += 1;
+      setHistorySearchLoading(false);
+      return;
+    }
+
+    const requestId = historySearchRequestRef.current + 1;
+    historySearchRequestRef.current = requestId;
+    setHistorySearchSegments([]);
+    setHistorySearchNextCursor(null);
+    setHistorySearchHasMoreSegments(false);
+    setHistorySearchLoading(true);
+    setHistorySearchError(null);
+
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const timelinePage = await trackerClient.searchTimeline({
+            query,
+            limit: HISTORY_TIMELINE_PAGE_SIZE,
+          });
+          const materializedPage = materializeBuiltInHeuristicTimeline(timelinePage.items);
+          if (historySearchRequestRef.current !== requestId) return;
+
+          setHistorySearchSegments(materializedPage.segments);
+          setHistorySearchNextCursor(timelinePage.nextCursor);
+          setHistorySearchHasMoreSegments(timelinePage.hasMore);
+          scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
+          loadMissingAppIcons({
+            segments: materializedPage.segments,
+            shouldReportFailure: () => historySearchRequestRef.current === requestId,
+            failureMessage: "Failed to load history search app icons",
+          });
+        } catch (nextError) {
+          if (historySearchRequestRef.current !== requestId) return;
+          setHistorySearchError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
+        } finally {
+          if (historySearchRequestRef.current === requestId) {
+            setHistorySearchLoading(false);
+          }
+        }
+      })();
+    }, 200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    activeTab,
+    loadMissingAppIcons,
+    materializeBuiltInHeuristicTimeline,
+    normalizedHistorySearchQuery,
+    shouldBlockLocalTrackerAccess,
+  ]);
+
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
     const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
@@ -2033,6 +2107,51 @@ export default function App() {
     historySegmentsLoadedRange,
     loadMissingAppIcons,
     materializeBuiltInHeuristicTimeline,
+  ]);
+
+  const loadMoreHistorySearchSegments = useCallback(async (): Promise<void> => {
+    if (historySearchLoading || !historySearchHasMoreSegments || historySearchNextCursor === null || normalizedHistorySearchQuery.length === 0) return;
+
+    const requestId = historySearchRequestRef.current;
+    setHistorySearchLoading(true);
+    setHistorySearchError(null);
+
+    try {
+      const timelinePage = await trackerClient.searchTimeline({
+        query: normalizedHistorySearchQuery,
+        beforeEndedAt: historySearchNextCursor.beforeEndedAt,
+        beforeSegmentId: historySearchNextCursor.beforeSegmentId,
+        limit: HISTORY_TIMELINE_PAGE_SIZE,
+      });
+      const materializedPage = materializeBuiltInHeuristicTimeline(timelinePage.items);
+
+      if (historySearchRequestRef.current !== requestId) return;
+
+      setHistorySearchSegments((currentSegments) => mergeHistoryTimelinePages(currentSegments, materializedPage.segments));
+      setHistorySearchNextCursor(timelinePage.nextCursor);
+      setHistorySearchHasMoreSegments(timelinePage.hasMore);
+      scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
+
+      loadMissingAppIcons({
+        segments: materializedPage.segments,
+        shouldReportFailure: () => historySearchRequestRef.current === requestId,
+        failureMessage: "Failed to load additional history search app icons",
+      });
+    } catch (nextError) {
+      if (historySearchRequestRef.current !== requestId) return;
+      setHistorySearchError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
+    } finally {
+      if (historySearchRequestRef.current === requestId) {
+        setHistorySearchLoading(false);
+      }
+    }
+  }, [
+    historySearchHasMoreSegments,
+    historySearchLoading,
+    historySearchNextCursor,
+    loadMissingAppIcons,
+    materializeBuiltInHeuristicTimeline,
+    normalizedHistorySearchQuery,
   ]);
 
   const prefetchCurrentWeekHistory = useCallback(async (day: string): Promise<boolean> => {
@@ -4419,6 +4538,12 @@ export default function App() {
       : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
         ? "free"
         : null;
+  const displayedHistorySegments = isHistorySearchActive ? historySearchSegments : historySegments;
+  const displayedHistoryHasMoreSegments = isHistorySearchActive ? historySearchHasMoreSegments : historyHasMoreSegments;
+  const displayedHistoryLoading = isHistorySearchActive ? historySearchLoading : historyLoadingMore;
+  const displayedHistoryLoadMoreError = isHistorySearchActive ? historySearchError : historyLoadMoreError;
+  const displayedHistoryLoadMore = isHistorySearchActive ? loadMoreHistorySearchSegments : loadMoreHistorySegments;
+  const historyInitialLoading = isHistorySearchActive && historySearchLoading && historySearchSegments.length === 0;
   const shellClassName = [
     "app-shell",
     isSettingsTab ? "app-shell--settings" : null,
@@ -4685,13 +4810,17 @@ export default function App() {
               <HistoryView
                 appIcons={appIcons}
                 deleting={historyDeleting}
-                hasMoreSegments={historyHasMoreSegments}
-                loadingMore={historyLoadingMore}
-                loadMoreError={historyLoadMoreError}
-                segments={historySegments}
+                hasMoreSegments={displayedHistoryHasMoreSegments}
+                initialLoading={historyInitialLoading}
+                loadingMore={displayedHistoryLoading}
+                loadMoreError={displayedHistoryLoadMoreError}
+                searchQuery={historySearchQuery}
+                searchUsesBackend={true}
+                segments={displayedHistorySegments}
                 startOfDayMinutes={startOfDayMinutes}
                 onDeleteSelected={handleDeleteHistorySegments}
-                onLoadMore={loadMoreHistorySegments}
+                onLoadMore={displayedHistoryLoadMore}
+                onSearchQueryChange={setHistorySearchQuery}
               />
             ) : (
               <DeferredTabBodyFallback label="history records" variant="history" />

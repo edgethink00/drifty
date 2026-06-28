@@ -1,5 +1,5 @@
 import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelinePage, TimelinePageQuery, TimelineQuery, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelinePage, TimelinePageQuery, TimelineQuery, TimelineSearchQuery, TrackerStatus } from "@drifty/domain";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
 type PreviewSegmentSpec = readonly [
@@ -265,20 +265,28 @@ export function previewTimeline(query: TimelineQuery): ActivitySegment[] {
 }
 
 export function previewTimelinePage(query: TimelinePageQuery): TimelinePage {
-  const limit = clampTimelinePageLimit(query.limit);
-  const beforeEndedAtMs = query.beforeEndedAt ? Date.parse(query.beforeEndedAt) : null;
-  const beforeSegmentId = query.beforeSegmentId ?? null;
   const rows = previewSegments()
     .filter((segment) => inTimelinePageRange(segment, query))
-    .filter((segment) => {
-      if (beforeEndedAtMs === null || !Number.isFinite(beforeEndedAtMs) || beforeSegmentId === null) return true;
-      const endedAtMs = Date.parse(segment.endedAt);
-      return endedAtMs < beforeEndedAtMs || (endedAtMs === beforeEndedAtMs && segment.id < beforeSegmentId);
-    })
-    .sort(compareTimelinePageSegmentsDescending);
-  const pageRows = rows.slice(0, limit);
+    .filter((segment) => isBeforeTimelinePageCursor(segment, query));
+  return previewTimelinePageFromRows(rows, query);
+}
+
+export function previewTimelineSearch(query: TimelineSearchQuery): TimelinePage {
+  const tokens = searchTokens(query.query);
+  if (tokens.length === 0) return { items: [], hasMore: false, nextCursor: null };
+  const rows = previewSegments()
+    .filter((segment) => inTimelinePageRange(segment, query))
+    .filter((segment) => isBeforeTimelinePageCursor(segment, query))
+    .filter((segment) => segmentMatchesSearchTokens(segment, tokens));
+  return previewTimelinePageFromRows(rows, query);
+}
+
+function previewTimelinePageFromRows(rows: readonly ActivitySegment[], query: TimelinePageQuery): TimelinePage {
+  const limit = clampTimelinePageLimit(query.limit);
+  const sortedRows = [...rows].sort(compareTimelinePageSegmentsDescending);
+  const pageRows = sortedRows.slice(0, limit);
   const items = [...pageRows].reverse();
-  const hasMore = rows.length > limit;
+  const hasMore = sortedRows.length > limit;
   const cursorRow = hasMore ? pageRows[pageRows.length - 1] : null;
   return {
     items,
@@ -290,6 +298,40 @@ export function previewTimelinePage(query: TimelinePageQuery): TimelinePage {
         }
       : null,
   };
+}
+
+function isBeforeTimelinePageCursor(segment: ActivitySegment, query: TimelinePageQuery): boolean {
+  const beforeEndedAtMs = query.beforeEndedAt ? Date.parse(query.beforeEndedAt) : null;
+  const beforeSegmentId = query.beforeSegmentId ?? null;
+  if (beforeEndedAtMs === null || !Number.isFinite(beforeEndedAtMs) || beforeSegmentId === null) return true;
+  const endedAtMs = Date.parse(segment.endedAt);
+  return endedAtMs < beforeEndedAtMs || (endedAtMs === beforeEndedAtMs && segment.id < beforeSegmentId);
+}
+
+function searchTokens(query: string): readonly string[] {
+  return query.trim().toLowerCase().split(/\s+/).filter((token) => token.length > 0);
+}
+
+function segmentMatchesSearchTokens(segment: PreviewActivitySegment, tokens: readonly string[]): boolean {
+  const fields = previewSearchFields(segment);
+  return tokens.every((token) => fields.some((field) => field.includes(token)));
+}
+
+function previewSearchFields(segment: PreviewActivitySegment): readonly string[] {
+  return [
+    segment.appName,
+    segment.browserName,
+    segment.siteDomain,
+    segment.siteTitle,
+    segment.siteUrl,
+    segment.windowTitle,
+    segment.classification?.category,
+    segment.classification?.productivity,
+    segment.category,
+    segment.productivity,
+  ]
+    .filter((field): field is string => typeof field === "string" && field.length > 0)
+    .map((field) => field.toLowerCase());
 }
 
 export function previewHourlySummary(query: TimelineQuery): HourBucket[] {

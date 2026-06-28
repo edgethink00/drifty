@@ -34,6 +34,17 @@ pub struct TimelinePageQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TimelineSearchQuery {
+    pub query: String,
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub before_segment_id: Option<String>,
+    pub before_ended_at: Option<String>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RawEventsQuery {
     pub day: Option<String>,
     pub start: Option<String>,
@@ -191,6 +202,30 @@ pub async fn tracker_get_timeline_page(
         controller
             .get_timeline_page(
                 &app,
+                query.start,
+                query.end,
+                query.before_segment_id,
+                query.before_ended_at,
+                query.limit,
+            )
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_search_timeline(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: TimelineSearchQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .search_timeline(
+                &app,
+                query.query,
                 query.start,
                 query.end,
                 query.before_segment_id,
