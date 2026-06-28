@@ -241,7 +241,10 @@ def start_tracking():
         start_new_session=True,
     )
     time.sleep(0.25)
-    return response(True, get_status()["data"])
+    status = get_status()["data"]
+    if not status.get("running"):
+        return response(False, status, "Tracker daemon did not start.")
+    return response(True, status)
 
 
 def stop_tracking():

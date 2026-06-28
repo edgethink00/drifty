@@ -38,6 +38,18 @@ class TrackerMainTests(unittest.TestCase):
                 self.assertIn("--db", args)
                 self.assertIn(str(tracker_main.DB_PATH), args)
 
+    def test_start_tracking_reports_failure_when_daemon_does_not_start(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            with patch.object(tracker_main, "is_running", return_value=False), patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": False}}
+            ), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen"):
+                result = tracker_main.start_tracking()
+
+        self.assertFalse(result["ok"])
+        self.assertIs(result["data"]["running"], False)
+        self.assertIn("did not start", result["error"])
+
     def test_start_tracking_replaces_stale_packaged_daemon(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
