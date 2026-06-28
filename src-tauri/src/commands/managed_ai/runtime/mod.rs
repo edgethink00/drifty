@@ -5,7 +5,9 @@ use super::{
     ManagedAiModelSpec, ManagedAiStatus, ManagedAiStatusErrorKind,
 };
 
+mod args;
 mod install;
+mod memory;
 mod process;
 
 const RUNTIME_FILE_NAME: &str = "llama-server";
