@@ -186,6 +186,7 @@ describe("Settings content styles", () => {
     const metaRule = cssRule(aiSetupStyles, ".ai-managed-model__meta");
     const actionsRule = cssRule(aiSetupStyles, ".ai-managed-model__actions");
     const primaryActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action");
+    const downloadActionRule = cssRule(aiSetupStyles, ".ai-managed-model__primary-action.ai-managed-model__download-action:not(.is-retry)");
     const deleteActionRule = cssRule(aiSetupStyles, ".ai-managed-model__actions .settings-btn.ai-managed-model__delete-action");
 
     expect(modelRule).toContain('"copy meta"');
@@ -199,6 +200,7 @@ describe("Settings content styles", () => {
     expect(actionsRule).not.toContain("border-top:");
     expect(actionsRule).not.toContain("min-width: 8.8rem;");
     expect(primaryActionRule).toContain("gap: 0.42rem;");
+    expect(downloadActionRule).toBe("");
     expect(deleteActionRule).toContain("background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));");
     expect(deleteActionRule).toContain("border-radius: var(--radius-pill);");
     expect(deleteActionRule).toContain("min-width: 2rem;");
