@@ -90,7 +90,7 @@
 }
 
 .ai-privacy-review__row--optional {
-  cursor: pointer;
+  cursor: default;
 }
 
 .ai-privacy-review__row-control {
@@ -118,6 +118,16 @@
   min-width: 0;
 }
 
+.ai-privacy-review__row-heading {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+  position: relative;
+  vertical-align: middle;
+}
+
 .ai-privacy-review__row-text strong,
 .ai-privacy-review__locked-row strong {
   color: var(--text);
@@ -128,6 +138,78 @@
   line-height: 1.25;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.ai-privacy-review__help-wrap {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.ai-privacy-review__help {
+  align-items: center;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 999px;
+  color: var(--text-soft);
+  cursor: help;
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 650;
+  height: 1rem;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+  width: 1rem;
+}
+
+.ai-privacy-review__help:hover,
+.ai-privacy-review__help:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+  color: var(--text);
+  outline: none;
+}
+
+.ai-privacy-review__tooltip {
+  background: var(--text);
+  border: 1px solid color-mix(in srgb, var(--surface) 24%, transparent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0.875rem 2rem rgb(0 0 0 / 38%);
+  color: var(--surface);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 450;
+  line-height: 1.35;
+  left: calc(100% + 0.5rem);
+  max-width: min(17rem, calc(100vw - 3rem));
+  opacity: 0;
+  padding: var(--space-2) var(--space-3);
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  top: 50%;
+  transform: translate(0.25rem, -50%) scale(0.98);
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast),
+    visibility var(--transition-fast);
+  visibility: hidden;
+  width: max-content;
+  z-index: 10;
+}
+
+.ai-privacy-review__help-wrap:hover .ai-privacy-review__tooltip,
+.ai-privacy-review__help-wrap:focus-within .ai-privacy-review__tooltip {
+  opacity: 1;
+  transform: translate(0, -50%) scale(1);
+  visibility: visible;
 }
 
 .ai-privacy-review__row em {

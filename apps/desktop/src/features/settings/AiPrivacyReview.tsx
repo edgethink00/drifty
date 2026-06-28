@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
   AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
@@ -12,7 +12,9 @@ import {
 type VisibleField = {
   readonly label: string;
   readonly detail: string;
-  readonly scope: "app" | "site" | "title" | "time" | "profile";
+  readonly scope: "app" | "site" | "windowTitle" | "content" | "time" | "profile";
+  readonly settingKey?: keyof AiPrivacyRequestOptionalSettings;
+  readonly helpText?: string;
 };
 
 type ExcludedField = {
@@ -30,14 +32,22 @@ const AI_VISIBLE_FIELDS: readonly VisibleField[] = [
   { label: "App context", detail: "App name and basic app context", scope: "app" },
   { label: "Duration", detail: "Activity duration", scope: "time" },
   { label: "Site domain", detail: "Browser or site domain", scope: "site" },
-  { label: "Site URL", detail: "Site URL", scope: "site" },
-  { label: "Window title", detail: "Page title or window title", scope: "title" },
-  { label: "Work profile", detail: "Your saved work profile", scope: "profile" },
+  { label: "Site URL", detail: "Site URL", scope: "site", settingKey: "siteUrl" },
+  { label: "Window title", detail: "Window title", scope: "windowTitle", settingKey: "windowTitle" },
+  {
+    label: "Content context",
+    detail: "Content context",
+    scope: "content",
+    settingKey: "contentContext",
+    helpText: "Includes page/video titles, YouTube channel name, and YouTube video category. Video descriptions and keywords stay local.",
+  },
+  { label: "Work profile", detail: "Your saved work profile", scope: "profile", settingKey: "workProfile" },
 ] as const;
 
 const AI_EXCLUDED_FIELDS: readonly ExcludedField[] = [
   { label: "Raw timeline rows", detail: "No full activity row upload" },
   { label: "Full session history", detail: "No replayable day history" },
+  { label: "YouTube descriptions", detail: "Video descriptions and keywords stay local" },
   { label: "Provider API keys", detail: "Stored locally, never sent as samples" },
 ] as const;
 
@@ -125,10 +135,7 @@ function optionalSettingEnabled(settings: AiPrivacyRequestSettings, field: Visib
 }
 
 function optionalSettingKey(field: VisibleField): keyof AiPrivacyRequestOptionalSettings | undefined {
-  if (field.label === "Site URL") return "siteUrl";
-  if (field.scope === "title") return "title";
-  if (field.scope === "profile") return "workProfile";
-  return undefined;
+  return field.settingKey;
 }
 
 function ControlRow({
@@ -150,12 +157,26 @@ function ControlRow({
   }
 
   return (
-    <label className="ai-privacy-review__row ai-privacy-review__row--optional" role="listitem">
+    <div className="ai-privacy-review__row ai-privacy-review__row--optional" role="listitem">
       <span className="ai-privacy-review__row-text">
-        <strong>{field.detail}</strong>
+        <span className="ai-privacy-review__row-heading">
+          <strong>{field.detail}</strong>
+          {field.helpText ? <InfoTooltip label={field.detail} text={field.helpText} /> : null}
+        </span>
       </span>
       <ControlSwitch field={field} onOptionalChange={onOptionalChange} />
-    </label>
+    </div>
+  );
+}
+
+function InfoTooltip({ label, text }: { readonly label: string; readonly text: string }) {
+  const reactId = useId();
+  const tooltipId = `ai-privacy-${reactId.replace(/:/g, "")}-tooltip`;
+  return (
+    <span className="ai-privacy-review__help-wrap">
+      <button aria-describedby={tooltipId} aria-label={`${label} details`} className="ai-privacy-review__help" type="button">i</button>
+      <span className="ai-privacy-review__tooltip" id={tooltipId} role="tooltip">{text}</span>
+    </span>
   );
 }
 
@@ -173,10 +194,10 @@ function ControlSwitch({
   };
 
   return (
-    <span className="ai-privacy-review__switch">
+    <label className="ai-privacy-review__switch" aria-label={field.detail}>
       <input checked={field.enabled} role="switch" type="checkbox" aria-label={field.detail} onChange={handleChange} />
       <span aria-hidden="true" />
-    </span>
+    </label>
   );
 }
 

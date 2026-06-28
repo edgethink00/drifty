@@ -28,7 +28,9 @@ export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
 const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v4-privacy-reddit-context";
+const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
+const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
+const AI_CLASSIFICATION_PROMPT_VERSION = "v5-privacy-youtube-category";
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
 const REDDIT_COMMUNITY_PATTERN = /\br\/([A-Za-z0-9_]{2,32})\b/i;
@@ -571,10 +573,16 @@ export async function getAiClassificationUsageSummary(day: string): Promise<AiCl
 async function toMinimizedPayload(segment: ActivitySegment, workProfile: string | null, privacySettings: AiPrivacyRequestSettings): Promise<MinimizedActivityPayload> {
   const siteUrl = privacySettings.optional.siteUrl ? sanitizeProviderSiteUrl(segment.siteUrl) : null;
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
-  const titleEnabled = privacySettings.optional.title;
-  const windowTitle = titleEnabled ? cleanText(segment.windowTitle) : null;
-  const title = titleEnabled ? cleanText(segment.siteTitle) ?? cleanText(segment.youtubeTitle) : null;
-  const redditCommunity = redditCommunityForSegment(segment, siteUrl, titleEnabled);
+  const contentContextEnabled = privacySettings.optional.contentContext;
+  const windowTitle = privacySettings.optional.windowTitle ? cleanText(segment.windowTitle) : null;
+  const title = contentContextEnabled ? cleanText(segment.siteTitle) ?? cleanText(segment.youtubeTitle) : null;
+  const youtubeChannelName = contentContextEnabled
+    ? cleanText(segment.youtubeChannelName)?.slice(0, MAX_YOUTUBE_CHANNEL_NAME_LENGTH) ?? null
+    : null;
+  const youtubeCategory = contentContextEnabled
+    ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
+    : null;
+  const redditCommunity = redditCommunityForSegment(segment, siteUrl, contentContextEnabled);
   const providerInput = {
     fingerprintVersion: AI_CLASSIFICATION_PROMPT_VERSION,
     appName: cleanText(segment.appName) ?? "Unknown",
@@ -583,6 +591,8 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     ...(siteUrl ? { siteUrl } : {}),
     ...(windowTitle ? { windowTitle } : {}),
     ...(title ? { title } : {}),
+    ...(youtubeChannelName ? { youtubeChannelName } : {}),
+    ...(youtubeCategory ? { youtubeCategory } : {}),
     ...(redditCommunity ? { redditCommunity } : {}),
     durationSeconds: segment.durationSeconds,
     ...(workProfile ? { workProfile } : {}),
@@ -599,11 +609,11 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     browserName: cleanText(segment.browserName),
     siteDomain,
     siteUrl,
-    siteTitle: titleEnabled ? cleanText(segment.siteTitle) : null,
+    siteTitle: contentContextEnabled ? cleanText(segment.siteTitle) : null,
     windowTitle,
-    youtubeTitle: titleEnabled ? cleanText(segment.youtubeTitle) : null,
-    youtubeChannelName: null,
-    youtubeCategory: null,
+    youtubeTitle: contentContextEnabled ? cleanText(segment.youtubeTitle) : null,
+    youtubeChannelName,
+    youtubeCategory,
     youtubeIsShorts: null,
     ...(redditCommunity ? { redditCommunity } : {}),
   };
@@ -619,6 +629,8 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
   windowTitle?: string;
   title?: string;
   redditCommunity?: string;
+  youtubeChannelName?: string;
+  youtubeCategory?: string;
   durationSeconds: number;
 }> {
   return payload.map((item) => {
@@ -633,6 +645,8 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
       ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
       ...(title ? { title } : {}),
       ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
+      ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
+      ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
       durationSeconds: item.durationSeconds,
     };
   });
