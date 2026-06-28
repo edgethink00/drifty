@@ -149,13 +149,21 @@ function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[],
           "Use the user's work profile as context when deciding whether an activity is work-related.",
         ]
       : []),
-    "Use the observed app, site, optional URL path, window title, page title, and duration as the primary evidence.",
+    primaryEvidenceGuidance(payload),
     ...redditPromptGuidance(payload),
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
     JSON.stringify(payload.map(promptItem)),
   ].join("\n");
+}
+
+function primaryEvidenceGuidance(payload: readonly MinimizedActivityPayload[]): string {
+  const hasYouTubeContext = payload.some((item) => item.youtubeChannelName || item.youtubeCategory);
+  const contentEvidence = hasYouTubeContext
+    ? "page/video title, YouTube channel name, YouTube video category"
+    : "page title";
+  return `Use the observed app, site, optional URL path, window title, ${contentEvidence}, and duration as the primary evidence.`;
 }
 
 function redditPromptGuidance(payload: readonly MinimizedActivityPayload[]): readonly string[] {
@@ -176,6 +184,8 @@ function promptItem(item: MinimizedActivityPayload): Record<string, unknown> {
     ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
     ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
     ...(title ? { title } : {}),
+    ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
+    ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
     ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
     durationSeconds: item.durationSeconds,
   };

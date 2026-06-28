@@ -307,9 +307,11 @@ describe("runAiClassification cloud contract", () => {
   }
 
   function writeAiPrivacyRequestSettings(optional: {
-    readonly siteUrl: boolean;
-    readonly title: boolean;
-    readonly workProfile: boolean;
+    readonly siteUrl?: boolean;
+    readonly title?: boolean;
+    readonly windowTitle?: boolean;
+    readonly contentContext?: boolean;
+    readonly workProfile?: boolean;
   }) {
     ensureTestWindow();
     window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, JSON.stringify({
@@ -631,6 +633,7 @@ describe("runAiClassification cloud contract", () => {
       siteUrl: "https://example.com/private/raw-url",
       youtubeTitle: "Allowed video title",
       youtubeChannelName: "Allowed channel",
+      youtubeCategory: "Education",
       youtubeDescription: "raw youtube description must stay local",
       youtubeKeywords: ["raw", "keywords"],
     });
@@ -651,6 +654,8 @@ describe("runAiClassification cloud contract", () => {
         "title",
         "urlHost",
         "windowTitle",
+        "youtubeCategory",
+        "youtubeChannelName",
       ].sort());
       expect(body.items[0]).toEqual(expect.objectContaining({
         id: "segment-1",
@@ -660,6 +665,8 @@ describe("runAiClassification cloud contract", () => {
         siteUrl: "https://example.com/private/raw-url",
         title: "Example private page",
         windowTitle: "Unmapped task 1",
+        youtubeCategory: "Education",
+        youtubeChannelName: "Allowed channel",
         durationSeconds: 300,
       }));
       expect(body.items[0]).not.toHaveProperty("startedAt");
@@ -668,6 +675,38 @@ describe("runAiClassification cloud contract", () => {
       expect(body.items[0]).not.toHaveProperty("browserName");
       expect(JSON.stringify(body)).not.toContain("raw youtube description must stay local");
       expect(JSON.stringify(body)).not.toContain("keywords");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("includes allowed YouTube channel names and categories in cloud requests and cache fingerprints", async () => {
+    const firstSegment = createUnknownSegment(1, {
+      siteDomain: "example.com",
+      siteTitle: "Same video title",
+      youtubeTitle: "Same video title",
+      youtubeChannelName: "Learning Channel",
+      youtubeCategory: "Education",
+    });
+    const secondSegment = createUnknownSegment(2, {
+      siteDomain: "example.com",
+      siteTitle: "Same video title",
+      youtubeTitle: "Same video title",
+      youtubeChannelName: "Entertainment Channel",
+      youtubeCategory: "Comedy",
+    });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications } = await importServiceWithSegments([firstSegment, secondSegment]);
+      await runAiClassification({ day: "2026-05-22" });
+
+      const reusableFingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(reusableFingerprints).toHaveLength(2);
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items).toEqual([
+        expect.objectContaining({ youtubeCategory: "Education", youtubeChannelName: "Learning Channel" }),
+        expect.objectContaining({ youtubeCategory: "Comedy", youtubeChannelName: "Entertainment Channel" }),
+      ]);
     } finally {
       cleanupServiceMocks();
     }
@@ -704,7 +743,7 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("removes disabled site URL, titles, work profile, and unsent values from cloud requests and cache fingerprints", async () => {
+  it("removes legacy-disabled site URL, titles, work profile, and unsent values from cloud requests and cache fingerprints", async () => {
     const firstSegment = createUnknownSegment(1, {
       appName: "Google Chrome",
       browserName: "Google Chrome",
@@ -760,6 +799,89 @@ describe("runAiClassification cloud contract", () => {
       expect(JSON.stringify(body)).not.toContain("Software Development in AI");
       expect(JSON.stringify(body)).not.toContain("Raw channel metadata");
       expect(JSON.stringify(body)).not.toContain("People & Blogs");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("sends window titles separately from disabled content context", async () => {
+    const firstSegment = createUnknownSegment(1, {
+      siteDomain: "example.com",
+      siteTitle: "Private page title",
+      windowTitle: "Useful window title",
+      youtubeTitle: "Private YouTube title",
+      youtubeChannelName: "Private channel",
+      youtubeCategory: "Education",
+    });
+    const secondSegment = createUnknownSegment(2, {
+      ...firstSegment,
+      id: "segment-2",
+      siteTitle: "Changed private page title",
+      windowTitle: "Useful window title",
+      youtubeTitle: "Changed private YouTube title",
+      youtubeChannelName: "Changed private channel",
+      youtubeCategory: "Music",
+    });
+
+    writeAiPrivacyRequestSettings({ siteUrl: false, windowTitle: true, contentContext: false, workProfile: false });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications } = await importServiceWithSegments([firstSegment, secondSegment]);
+      await runAiClassification({ day: "2026-05-22" });
+
+      const reusableFingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(reusableFingerprints).toHaveLength(1);
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items[0]).toEqual(expect.objectContaining({
+        domain: "example.com",
+        urlHost: "example.com",
+        windowTitle: "Useful window title",
+      }));
+      expect(body.items[0]).not.toHaveProperty("title");
+      expect(body.items[0]).not.toHaveProperty("youtubeChannelName");
+      expect(body.items[0]).not.toHaveProperty("youtubeCategory");
+      expect(JSON.stringify(body)).not.toContain("Private page title");
+      expect(JSON.stringify(body)).not.toContain("Private channel");
+      expect(JSON.stringify(body)).not.toContain("Education");
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("sends content context separately from disabled window titles", async () => {
+    const firstSegment = createUnknownSegment(1, {
+      siteDomain: "example.com",
+      siteTitle: "Useful page title",
+      windowTitle: "Private window title",
+      youtubeTitle: "Useful YouTube title",
+      youtubeChannelName: "Useful channel",
+      youtubeCategory: "Education",
+    });
+    const secondSegment = createUnknownSegment(2, {
+      ...firstSegment,
+      id: "segment-2",
+      siteTitle: "Useful page title",
+      windowTitle: "Changed private window title",
+      youtubeChannelName: "Changed useful channel",
+    });
+
+    writeAiPrivacyRequestSettings({ siteUrl: false, windowTitle: false, contentContext: true, workProfile: false });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications } = await importServiceWithSegments([firstSegment, secondSegment]);
+      await runAiClassification({ day: "2026-05-22" });
+
+      const reusableFingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(reusableFingerprints).toHaveLength(2);
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items[0]).toEqual(expect.objectContaining({
+        title: "Useful page title",
+        youtubeChannelName: "Useful channel",
+        youtubeCategory: "Education",
+      }));
+      expect(body.items[0]).not.toHaveProperty("windowTitle");
+      expect(JSON.stringify(body)).not.toContain("Private window title");
+      expect(JSON.stringify(body)).not.toContain("Changed private window title");
     } finally {
       cleanupServiceMocks();
     }
@@ -852,7 +974,7 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("removes disabled titles and work profile from local prompts and local reusable fingerprints", async () => {
+  it("removes legacy-disabled titles and work profile from local prompts and local reusable fingerprints", async () => {
     const firstSegment = createUnknownSegment(1, {
       appName: "Google Chrome",
       browserName: "Google Chrome",
@@ -1364,7 +1486,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v4-privacy-reddit-context" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v5-privacy-youtube-category" })]);
     } finally {
       cleanupServiceMocks();
     }

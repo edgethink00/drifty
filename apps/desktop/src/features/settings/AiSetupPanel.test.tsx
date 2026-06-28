@@ -256,10 +256,17 @@ describe("AiSetupPanel", () => {
     expect(within(requiredFields).queryByRole("switch", { name: /Browser or site domain/i })).toBeNull();
     expect(within(requiredFields).getAllByText(/Required/i)).toHaveLength(3);
     expect(within(optionalFields).getByRole("switch", { name: /Site URL/i })).toBeTruthy();
-    expect(within(optionalFields).getByRole("switch", { name: /Page title or window title/i })).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /Window title/i })).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /^Content context$/i })).toBeTruthy();
+    const contentContextHelp = within(optionalFields).getByRole("button", { name: /Content context details/i });
+    const contentContextTooltipId = contentContextHelp.getAttribute("aria-describedby");
+    expect(contentContextTooltipId).toBeTruthy();
+    const contentContextTooltip = document.getElementById(contentContextTooltipId ?? "");
+    expect(contentContextTooltip?.getAttribute("role")).toBe("tooltip");
+    expect(contentContextTooltip?.textContent).toContain("YouTube channel name");
     expect(within(optionalFields).getByRole("switch", { name: /Your saved work profile/i })).toBeTruthy();
     const optionalSwitches = within(optionalFields).getAllByRole("switch");
-    expect(optionalSwitches).toHaveLength(3);
+    expect(optionalSwitches).toHaveLength(4);
     for (const optionalSwitch of optionalSwitches) {
       if (!(optionalSwitch instanceof HTMLInputElement)) throw new Error("Optional privacy controls should render as switches.");
       expect(optionalSwitch.checked).toBe(true);
@@ -274,7 +281,8 @@ describe("AiSetupPanel", () => {
       version: 1,
       optional: {
         siteUrl: false,
-        title: true,
+        windowTitle: true,
+        contentContext: true,
         workProfile: true,
       },
     });
@@ -284,16 +292,19 @@ describe("AiSetupPanel", () => {
     const privacyOptionalFields = optionalFieldLists[optionalFieldLists.length - 1];
     if (!privacyOptionalFields) throw new Error("Privacy settings should render optional AI classification fields.");
     const sharedSiteUrlSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Site URL/i });
-    const sharedTitleSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Page title or window title/i });
-    if (!(sharedSiteUrlSwitch instanceof HTMLInputElement) || !(sharedTitleSwitch instanceof HTMLInputElement)) {
+    const sharedWindowTitleSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Window title/i });
+    const sharedContentContextSwitch = within(privacyOptionalFields).getByRole("switch", { name: /^Content context$/i });
+    if (!(sharedSiteUrlSwitch instanceof HTMLInputElement) || !(sharedWindowTitleSwitch instanceof HTMLInputElement) || !(sharedContentContextSwitch instanceof HTMLInputElement)) {
       throw new Error("Shared privacy controls should render as checkbox switches.");
     }
     expect(sharedSiteUrlSwitch.checked).toBe(false);
-    expect(sharedTitleSwitch.checked).toBe(true);
+    expect(sharedWindowTitleSwitch.checked).toBe(true);
+    expect(sharedContentContextSwitch.checked).toBe(true);
 
     expect(screen.queryByRole("button", { name: /Save selection/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Reset optional/i })).toBeNull();
     expect(screen.getAllByText(/Raw timeline rows/i)).toHaveLength(2);
+    expect(screen.getAllByText(/YouTube descriptions/i)).toHaveLength(2);
   });
 
   it("falls back to enabled optional AI privacy controls when persisted settings are malformed", () => {
@@ -308,6 +319,30 @@ describe("AiSetupPanel", () => {
       if (!(optionalSwitch instanceof HTMLInputElement)) throw new Error("Optional privacy controls should render as switches.");
       expect(optionalSwitch.checked).toBe(true);
     }
+  });
+
+  it("maps legacy disabled title privacy to disabled window title and content context controls", () => {
+    window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      optional: {
+        siteUrl: true,
+        title: false,
+        workProfile: true,
+      },
+    }));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
+
+    const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
+    const windowTitleSwitch = within(optionalFields).getByRole("switch", { name: /Window title/i });
+    const contentContextSwitch = within(optionalFields).getByRole("switch", { name: /^Content context$/i });
+    if (!(windowTitleSwitch instanceof HTMLInputElement) || !(contentContextSwitch instanceof HTMLInputElement)) {
+      throw new Error("Legacy privacy controls should render as switches.");
+    }
+    expect(windowTitleSwitch.checked).toBe(false);
+    expect(contentContextSwitch.checked).toBe(false);
   });
 });
 

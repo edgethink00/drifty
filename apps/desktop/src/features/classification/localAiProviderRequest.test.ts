@@ -52,6 +52,23 @@ describe("toLocalProviderRequest", () => {
 
     expect(prompt).not.toContain("Reddit-specific guidance");
     expect(prompt).not.toContain("redditCommunity");
+    expect(prompt).not.toContain("YouTube channel name");
+    expect(prompt).not.toContain("YouTube video category");
+  });
+
+  it("adds YouTube channel names and categories when present", () => {
+    const prompt = promptFor([{
+      ...basePayload,
+      siteDomain: "youtube.com",
+      youtubeTitle: "Machine learning lecture",
+      youtubeChannelName: "MIT OpenCourseWare",
+      youtubeCategory: "Education",
+    }]);
+
+    expect(prompt).toContain("YouTube channel name");
+    expect(prompt).toContain("YouTube video category");
+    expect(prompt).toContain("\"youtubeChannelName\":\"MIT OpenCourseWare\"");
+    expect(prompt).toContain("\"youtubeCategory\":\"Education\"");
   });
 
   it("adds Reddit-specific guidance and community context for Reddit payloads", () => {

@@ -4,7 +4,8 @@ export const AI_PRIVACY_REQUEST_SETTINGS_VERSION = 1;
 
 export type AiPrivacyRequestOptionalSettings = {
   readonly siteUrl: boolean;
-  readonly title: boolean;
+  readonly windowTitle: boolean;
+  readonly contentContext: boolean;
   readonly workProfile: boolean;
 };
 
@@ -17,7 +18,8 @@ export const DEFAULT_AI_PRIVACY_REQUEST_SETTINGS: AiPrivacyRequestSettings = {
   version: AI_PRIVACY_REQUEST_SETTINGS_VERSION,
   optional: {
     siteUrl: true,
-    title: true,
+    windowTitle: true,
+    contentContext: true,
     workProfile: true,
   },
 };
@@ -63,12 +65,14 @@ function parseAiPrivacyRequestSettings(value: unknown): AiPrivacyRequestSettings
   if (!isRecord(value)) return DEFAULT_AI_PRIVACY_REQUEST_SETTINGS;
   if (value.version !== AI_PRIVACY_REQUEST_SETTINGS_VERSION) return DEFAULT_AI_PRIVACY_REQUEST_SETTINGS;
   if (!isRecord(value.optional)) return DEFAULT_AI_PRIVACY_REQUEST_SETTINGS;
+  const legacyTitleEnabled = booleanOrDefault(value.optional.title, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional.contentContext);
 
   return {
     version: AI_PRIVACY_REQUEST_SETTINGS_VERSION,
     optional: {
       siteUrl: booleanOrDefault(value.optional.siteUrl, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional.siteUrl),
-      title: booleanOrDefault(value.optional.title, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional.title),
+      windowTitle: booleanOrDefault(value.optional.windowTitle, legacyTitleEnabled),
+      contentContext: booleanOrDefault(value.optional.contentContext, legacyTitleEnabled),
       workProfile: booleanOrDefault(value.optional.workProfile, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional.workProfile),
     },
   };
