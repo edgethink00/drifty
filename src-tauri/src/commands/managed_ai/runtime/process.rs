@@ -10,6 +10,8 @@ use std::{
 use serde_json::Value;
 
 use super::super::{ManagedAiError, ManagedAiModelSpec, MANAGED_BASE_URL};
+use super::args::runtime_args;
+use super::memory::process_memory_usage_bytes;
 use super::{RUNTIME_HOST, RUNTIME_PORT};
 
 const START_READY_GRACE: Duration = Duration::from_millis(1_500);
@@ -93,7 +95,7 @@ pub(super) fn server_memory_usage_bytes(runtime_path: &Path) -> Option<u64> {
     let pids = runtime_listener_pids().ok()?;
     pids.into_iter()
         .find_map(|pid| match process_command_contains(pid, expected) {
-            Ok(true) => process_resident_memory_bytes(pid),
+            Ok(true) => process_memory_usage_bytes(pid),
             Ok(false) | Err(_) => None,
         })
 }
@@ -216,22 +218,6 @@ fn process_command_contains(pid: u32, expected: &str) -> Result<bool, ManagedAiE
     Ok(command.contains(expected))
 }
 
-fn process_resident_memory_bytes(pid: u32) -> Option<u64> {
-    let output = Command::new("ps")
-        .arg("-p")
-        .arg(pid.to_string())
-        .arg("-o")
-        .arg("rss=")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let resident_kib = text.split_whitespace().next()?.parse::<u64>().ok()?;
-    resident_kib.checked_mul(1024)
-}
-
 fn kill_process(pid: u32) -> Result<(), ManagedAiError> {
     let status = Command::new("kill")
         .arg("-KILL")
@@ -262,20 +248,7 @@ fn spawn_runtime(
     let stderr = log_file.try_clone()?;
 
     Command::new(runtime_path)
-        .arg("-m")
-        .arg(model_path)
-        .arg("--host")
-        .arg(RUNTIME_HOST)
-        .arg("--port")
-        .arg(RUNTIME_PORT)
-        .arg("--alias")
-        .arg(spec.runtime_model)
-        .arg("--reasoning")
-        .arg("off")
-        .arg("--reasoning-format")
-        .arg("none")
-        .arg("--reasoning-budget")
-        .arg("0")
+        .args(runtime_args(model_path, spec))
         .stdin(Stdio::null())
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(stderr))
