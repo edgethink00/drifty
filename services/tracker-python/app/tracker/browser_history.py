@@ -28,7 +28,7 @@ _BROWSER_ROOTS: Final[dict[str, Path]] = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryCandidate:
     url: str
     title: str
@@ -37,13 +37,13 @@ class BrowserHistoryCandidate:
     profile_name: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryMatchResult:
     candidate: BrowserHistoryCandidate | None
     reason: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class _HistoryReadOutcome:
     candidates: tuple[BrowserHistoryCandidate, ...]
     errors: tuple[str, ...]

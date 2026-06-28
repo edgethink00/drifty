@@ -1,4 +1,5 @@
 import sqlite3
+import subprocess
 import sys
 import unittest
 from contextlib import closing
@@ -24,6 +25,25 @@ class BrowserHistoryTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
+
+    def test_browser_history_imports_with_system_python(self) -> None:
+        system_python = Path("/usr/bin/python3")
+        if not system_python.exists():
+            self.skipTest("/usr/bin/python3 is not available on this host")
+
+        script = (
+            "import sys; "
+            f"sys.path.insert(0, {str(SERVICE_ROOT)!r}); "
+            "import app.tracker.browser_history"
+        )
+        result = subprocess.run(
+            [str(system_python), "-c", script],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def _write_chromium_history(self, profile: str, rows: list[tuple[str, str, int]]) -> Path:
         history_path = self.root / profile / "History"
