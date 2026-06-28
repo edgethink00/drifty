@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-search-timeline"
+description = "Enables the tracker_search_timeline command without any pre-configured scope."
+commands.allow = ["tracker_search_timeline"]
+
+[[permission]]
+identifier = "deny-tracker-search-timeline"
+description = "Denies the tracker_search_timeline command without any pre-configured scope."
+commands.deny = ["tracker_search_timeline"]

@@ -42,23 +42,24 @@ class TrackerDatabaseTests(unittest.TestCase):
         *,
         started_at: str | None = None,
         ended_at: str | None = None,
+        **overrides,
     ) -> None:
         default_started_at = datetime(2026, 4, 6, 9, 0, 0) + timedelta(minutes=index)
         default_ended_at = default_started_at + timedelta(seconds=30)
-        self.database.insert_segment(
-            {
-                "started_at": started_at or f"{default_started_at.isoformat(timespec='seconds')}+00:00",
-                "ended_at": ended_at or f"{default_ended_at.isoformat(timespec='seconds')}+00:00",
-                "duration_seconds": 30,
-                "app_name": "Code",
-                "bundle_id": "com.microsoft.VSCode",
-                "window_title": f"Window {index}",
-                "platform": "macos",
-                "source": "accessibility",
-                "confidence": None,
-                "raw_context_json": "{}",
-            }
-        )
+        segment = {
+            "started_at": started_at or f"{default_started_at.isoformat(timespec='seconds')}+00:00",
+            "ended_at": ended_at or f"{default_ended_at.isoformat(timespec='seconds')}+00:00",
+            "duration_seconds": 30,
+            "app_name": "Code",
+            "bundle_id": "com.microsoft.VSCode",
+            "window_title": f"Window {index}",
+            "platform": "macos",
+            "source": "accessibility",
+            "confidence": None,
+            "raw_context_json": "{}",
+        }
+        segment.update(overrides)
+        self.database.insert_segment(segment)
 
     def test_timeline_page_defaults_to_200_rows_and_returns_cursor(self) -> None:
         for index in range(205):
@@ -128,6 +129,76 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(observed_ids, full_timeline_ids)
         self.assertFalse(second_page["hasMore"])
         self.assertIsNone(second_page["nextCursor"])
+
+    def test_search_timeline_page_returns_old_match_when_no_range_is_passed(self) -> None:
+        self._insert_activity_segment(
+            0,
+            started_at="2026-01-01T09:00:00+00:00",
+            ended_at="2026-01-01T09:05:00+00:00",
+            app_name="Arc",
+            window_title="Archive planning",
+            site_domain="old.example",
+        )
+        self._insert_activity_segment(
+            1,
+            started_at="2026-04-06T09:00:00+00:00",
+            ended_at="2026-04-06T09:05:00+00:00",
+            app_name="Code",
+            window_title="Current work",
+        )
+
+        page = self.database.search_timeline_page("archive")
+
+        self.assertEqual([item["windowTitle"] for item in page["items"]], ["Archive planning"])
+        self.assertFalse(page["hasMore"])
+        self.assertIsNone(page["nextCursor"])
+
+    def test_search_timeline_page_excludes_nonmatching_rows_and_uses_all_tokens(self) -> None:
+        self._insert_activity_segment(0, app_name="Arc", window_title="Project board", site_domain="example.com")
+        self._insert_activity_segment(1, app_name="Arc", window_title="Personal board", site_domain="example.com")
+        self._insert_activity_segment(2, app_name="Code", window_title="Project editor", site_domain="internal.test")
+
+        page = self.database.search_timeline_page("arc project")
+
+        self.assertEqual([item["windowTitle"] for item in page["items"]], ["Project board"])
+
+    def test_search_timeline_page_treats_like_wildcards_as_literals(self) -> None:
+        self._insert_activity_segment(0, window_title="Budget 100%_done")
+        self._insert_activity_segment(1, window_title="Budget 100xxdone")
+
+        page = self.database.search_timeline_page("100%_done")
+
+        self.assertEqual([item["windowTitle"] for item in page["items"]], ["Budget 100%_done"])
+
+    def test_search_timeline_page_cursor_handles_duplicate_ended_at_without_gaps(self) -> None:
+        duplicate_ended_at = "2026-04-06T10:00:00+00:00"
+        for index in range(4):
+            self._insert_activity_segment(
+                index,
+                started_at=f"2026-04-06T09:{index:02d}:00+00:00",
+                ended_at=duplicate_ended_at,
+                window_title=f"Search result {index}",
+            )
+
+        first_page = self.database.search_timeline_page("search", limit=2)
+        second_page = self.database.search_timeline_page(
+            "search",
+            before_ended_at=first_page["nextCursor"]["beforeEndedAt"],
+            before_segment_id=first_page["nextCursor"]["beforeSegmentId"],
+            limit=2,
+        )
+
+        observed_ids = [item["id"] for item in second_page["items"]] + [item["id"] for item in first_page["items"]]
+        full_search_ids = [item["id"] for item in self.database.search_timeline_page("search", limit=10)["items"]]
+        self.assertEqual(observed_ids, full_search_ids)
+        self.assertFalse(second_page["hasMore"])
+        self.assertIsNone(second_page["nextCursor"])
+
+    def test_search_timeline_page_blank_query_returns_empty_page_without_scanning(self) -> None:
+        with patch.object(self.database, "connect", side_effect=AssertionError("blank search should not scan")):
+            page = self.database.search_timeline_page(" \t\n ")
+
+        self.assertEqual(page, {"items": [], "hasMore": False, "nextCursor": None})
 
     def test_record_snapshot_does_not_merge_same_activity_after_long_gap(self) -> None:
         self.database.record_snapshot(

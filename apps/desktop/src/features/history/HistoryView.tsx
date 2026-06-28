@@ -10,10 +10,14 @@ type HistoryViewProps = {
   readonly appIcons: AppIconMap;
   readonly deleting: boolean;
   readonly hasMoreSegments?: boolean;
+  readonly initialLoading?: boolean;
   readonly loadMoreError?: string | null;
   readonly loadingMore?: boolean;
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
   readonly onLoadMore?: () => Promise<void> | void;
+  readonly onSearchQueryChange?: (query: string) => void;
+  readonly searchQuery?: string;
+  readonly searchUsesBackend?: boolean;
   readonly segments: readonly ActivitySegment[];
   readonly startOfDayMinutes?: number;
 };
@@ -25,19 +29,30 @@ export function HistoryView({
   appIcons,
   deleting,
   hasMoreSegments = false,
+  initialLoading = false,
   loadMoreError = null,
   loadingMore = false,
   onDeleteSelected,
   onLoadMore,
+  onSearchQueryChange,
+  searchQuery,
+  searchUsesBackend = false,
   segments,
   startOfDayMinutes = 0,
 }: HistoryViewProps) {
-  const [query, setQuery] = useState("");
+  const [uncontrolledQuery, setUncontrolledQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
+  const query = searchQuery ?? uncontrolledQuery;
   const normalizedQuery = query.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
+
+  const updateQuery = useCallback((nextQuery: string) => {
+    if (onSearchQueryChange) onSearchQueryChange(nextQuery);
+    else setUncontrolledQuery(nextQuery);
+    setRenderLimit(HISTORY_RENDER_STEP);
+  }, [onSearchQueryChange]);
 
   const recentHistoryWindow = useMemo(
     () => isSearching ? null : buildHistoryRowsWindow(segments, renderLimit),
@@ -50,14 +65,16 @@ export function HistoryView({
 
   const visibleRows = useMemo(() => (
     isSearching
-      ? searchableRows.filter((row) => row.searchText.includes(normalizedQuery))
+      ? searchUsesBackend
+        ? searchableRows
+        : searchableRows.filter((row) => row.searchText.includes(normalizedQuery))
       : recentHistoryWindow?.rows ?? EMPTY_HISTORY_ROWS
-  ), [isSearching, normalizedQuery, recentHistoryWindow, searchableRows]);
+  ), [isSearching, normalizedQuery, recentHistoryWindow, searchableRows, searchUsesBackend]);
 
   const renderedRows = isSearching && visibleRows.length > renderLimit ? visibleRows.slice(0, renderLimit) : visibleRows;
   const hiddenCount = isSearching ? visibleRows.length - renderedRows.length : 0;
   const hasLocalRowsToReveal = isSearching ? hiddenCount > 0 : recentHistoryWindow?.hasMore === true;
-  const canLoadBackendRows = !isSearching && !hasLocalRowsToReveal && hasMoreSegments && onLoadMore !== undefined;
+  const canLoadBackendRows = (!isSearching || searchUsesBackend) && !hasLocalRowsToReveal && hasMoreSegments && onLoadMore !== undefined;
   const hasMoreRows = hasLocalRowsToReveal || canLoadBackendRows;
 
   // Auto-load the next page once the user scrolls near the bottom, like a
@@ -126,8 +143,7 @@ export function HistoryView({
             aria-label="Search history"
             value={query}
             onChange={(event) => {
-              setQuery(event.target.value);
-              setRenderLimit(HISTORY_RENDER_STEP);
+              updateQuery(event.target.value);
             }}
             placeholder="Search history"
           />
@@ -144,8 +160,14 @@ export function HistoryView({
 
       {groups.length === 0 ? (
         <div className="history-empty" role="status">
-          <strong>No history records found.</strong>
-          <span>{query ? "Try another search." : "Activity appears here after the local tracker records segments."}</span>
+          <strong>{initialLoading ? "Loading history records..." : "No history records found."}</strong>
+          <span>
+            {initialLoading
+              ? "Searching local history."
+              : query
+                ? "Try another search."
+                : "Activity appears here after the local tracker records segments."}
+          </span>
         </div>
       ) : (
         <div className="history-groups" ref={scrollRootRef}>

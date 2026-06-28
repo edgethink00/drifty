@@ -19,6 +19,7 @@ fn main() {
             "tracker_start",
             "tracker_stop",
             "tracker_get_timeline",
+            "tracker_search_timeline",
             "tracker_get_current_snapshot",
             "tracker_get_hourly_summary",
             "tracker_get_raw_events",

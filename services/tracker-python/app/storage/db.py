@@ -30,6 +30,16 @@ VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", 
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
+TIMELINE_SEARCH_FIELDS = (
+    "activity_segments.app_name",
+    "activity_segments.browser_name",
+    "activity_segments.site_domain",
+    "activity_segments.site_title",
+    "activity_segments.site_url",
+    "activity_segments.window_title",
+    "activity_classifications.category",
+    "activity_classifications.productivity",
+)
 
 BrowserHistoryResolver = Callable[[str | None, str | None, str | None], Any]
 BrowserHistoryTitlePolicy = Callable[[str | None], bool]
@@ -1454,6 +1464,99 @@ class TrackerDatabase:
             } if cursor_row else None,
         }
 
+    def search_timeline_page(
+        self,
+        query: str,
+        start: str | None = None,
+        end: str | None = None,
+        before_ended_at: str | None = None,
+        before_segment_id: str | int | None = None,
+        limit: int | str | None = None,
+    ) -> dict[str, Any]:
+        tokens = self._timeline_search_tokens(query)
+        if not tokens:
+            return {"items": [], "hasMore": False, "nextCursor": None}
+
+        page_limit = self._clamp_timeline_page_limit(limit)
+        sql = """
+            SELECT
+                activity_segments.*,
+                youtube_video_metadata.category AS youtube_category,
+                youtube_video_metadata.channel_id AS youtube_channel_id,
+                youtube_video_metadata.channel_name AS youtube_channel_name,
+                youtube_video_metadata.title AS youtube_title,
+                youtube_video_metadata.description AS youtube_description,
+                youtube_video_metadata.keywords_json AS youtube_keywords_json,
+                youtube_video_metadata.duration_seconds AS youtube_duration_seconds,
+                youtube_video_metadata.view_count AS youtube_view_count,
+                youtube_video_metadata.is_live AS youtube_is_live,
+                youtube_video_metadata.is_unlisted AS youtube_is_unlisted,
+                youtube_video_metadata.publish_date AS youtube_publish_date,
+                youtube_video_metadata.upload_date AS youtube_upload_date,
+                activity_classifications.category AS classification_category,
+                activity_classifications.productivity AS classification_productivity,
+                activity_classifications.source AS classification_source,
+                activity_classifications.confidence AS classification_confidence,
+                activity_classifications.reason AS classification_reason,
+                activity_classifications.model AS classification_model,
+                activity_classifications.prompt_version AS classification_prompt_version,
+                activity_classifications.taxonomy_version AS classification_taxonomy_version,
+                activity_classifications.input_fingerprint AS classification_input_fingerprint,
+                activity_classifications.classified_at AS classification_classified_at,
+                activity_classifications.ai_result AS classification_ai_result,
+                activity_classifications.stale AS classification_stale,
+                activity_classifications.request_id AS classification_request_id,
+                activity_classifications.latency_ms AS classification_latency_ms,
+                activity_classifications.classification_rule_id AS classification_rule_id
+            FROM activity_segments
+            LEFT JOIN youtube_video_metadata
+              ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
+            LEFT JOIN activity_classifications
+              ON activity_classifications.segment_id = activity_segments.id
+            WHERE 1=1
+        """
+        params: list[Any] = []
+        sql = self._append_overlap_filters(sql, params, start, end, "activity_segments")
+        for token in tokens:
+            field_predicates = [
+                f"lower(coalesce({field}, '')) LIKE ? ESCAPE '\\'"
+                for field in TIMELINE_SEARCH_FIELDS
+            ]
+            sql += f" AND ({' OR '.join(field_predicates)})"
+            params.extend([f"%{token}%" for _ in TIMELINE_SEARCH_FIELDS])
+
+        cursor_segment_id = self._parse_timeline_page_cursor_segment_id(before_segment_id)
+        if before_ended_at and cursor_segment_id is not None:
+            normalized_before_ended_at = self._normalize_range_bound(before_ended_at)
+            sql += """
+                AND (
+                  datetime(activity_segments.ended_at) < datetime(?)
+                  OR (
+                    datetime(activity_segments.ended_at) = datetime(?)
+                    AND activity_segments.id < ?
+                  )
+                )
+            """
+            params.extend([normalized_before_ended_at, normalized_before_ended_at, cursor_segment_id])
+        sql += " ORDER BY datetime(activity_segments.ended_at) DESC, activity_segments.id DESC LIMIT ?"
+        params.append(page_limit + 1)
+
+        with self.connect() as conn:
+            rows = [dict(row) for row in conn.execute(sql, tuple(params)).fetchall()]
+
+        page_rows = rows[:page_limit]
+        has_more = len(rows) > page_limit
+        items = [self._serialize_row(row) for row in reversed(page_rows)]
+        cursor_row = page_rows[-1] if has_more and page_rows else None
+        return {
+            "items": items,
+            "hasMore": has_more,
+            "nextCursor": {
+                "beforeEndedAt": cursor_row["ended_at"],
+                "beforeSegmentId": str(cursor_row["id"]),
+            } if cursor_row else None,
+        }
+
     def dashboard_week_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
         query = """
             SELECT
@@ -1760,6 +1863,17 @@ class TrackerDatabase:
         except (TypeError, ValueError):
             return None
         return parsed if parsed >= 0 else None
+
+    @staticmethod
+    def _timeline_search_tokens(query: str) -> list[str]:
+        return [
+            TrackerDatabase._escape_timeline_search_token(token)
+            for token in query.strip().lower().split()
+        ]
+
+    @staticmethod
+    def _escape_timeline_search_token(token: str) -> str:
+        return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     @staticmethod
     def _local_day(value: str) -> str:

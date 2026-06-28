@@ -12,6 +12,8 @@ vi.mock("./previewData", () => ({
   previewStatus: vi.fn(),
   previewTimeline: vi.fn(),
   previewTopSites: vi.fn(),
+  previewTimelinePage: vi.fn(),
+  previewTimelineSearch: vi.fn(),
   shouldUsePreviewData: () => false,
 }));
 
@@ -86,6 +88,36 @@ describe("trackerClient", () => {
     });
   });
 
+  it("invokes tracker_search_timeline with the query and cursor fields", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const page = {
+      items: [{ id: "matching-history-segment" }],
+      hasMore: true,
+      nextCursor: {
+        beforeEndedAt: "2026-04-06T09:05:00+00:00",
+        beforeSegmentId: "42",
+      },
+    };
+    invoke.mockResolvedValueOnce(page);
+
+    const result = await trackerClient.searchTimeline({
+      query: "github review",
+      beforeEndedAt: "2026-04-06T09:05:00+00:00",
+      beforeSegmentId: "42",
+      limit: 50,
+    });
+
+    expect(result).toEqual(page);
+    expect(invoke).toHaveBeenCalledWith("tracker_search_timeline", {
+      query: {
+        query: "github review",
+        beforeEndedAt: "2026-04-06T09:05:00+00:00",
+        beforeSegmentId: "42",
+        limit: 50,
+      },
+    });
+  });
+
   it("persists developer diagnostics through the tracker command", async () => {
     const { trackerClient } = await import("./trackerClient");
     invoke.mockResolvedValueOnce({
@@ -119,6 +151,21 @@ describe("trackerClient", () => {
     });
 
     expect(result).toEqual([]);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty search page outside Tauri", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    const { trackerClient } = await import("./trackerClient");
+
+    const result = await trackerClient.searchTimeline({
+      query: "github",
+      beforeEndedAt: "2026-04-06T09:05:00+00:00",
+      beforeSegmentId: "42",
+      limit: 50,
+    });
+
+    expect(result).toEqual({ items: [], hasMore: false, nextCursor: null });
     expect(invoke).not.toHaveBeenCalled();
   });
 });

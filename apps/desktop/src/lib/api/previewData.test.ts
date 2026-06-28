@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { classifyActivity } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { previewAppIcons, previewTimeline, shouldUsePreviewData } from "./previewData";
+import { previewAppIcons, previewTimeline, previewTimelineSearch, shouldUsePreviewData } from "./previewData";
 
 describe("previewData", () => {
   afterEach(() => {
@@ -88,5 +88,73 @@ describe("previewData", () => {
     expect(icons["com.microsoft.VSCode"]).toContain("visual-studio-code");
     expect(icons.Figma).toContain("figma.com");
     expect(icons.Linear).toContain("linear");
+  });
+
+  it("returns an empty preview search page for blank queries", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+
+    expect(previewTimelineSearch({ query: "   ", limit: 25 })).toEqual({
+      items: [],
+      hasMore: false,
+      nextCursor: null,
+    });
+  });
+
+  it("searches all preview history by default with whitespace tokens across fields", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+
+    const page = previewTimelineSearch({ query: "arc react", limit: 20 });
+
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(page.items.every((segment) => segment.appName === "Arc" && segment.siteDomain === "react.dev")).toBe(true);
+    expect(page.items.some((segment) => segment.startedAt < "2026-04-01T00:00:00")).toBe(true);
+  });
+
+  it("applies optional preview search range filters", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+
+    const page = previewTimelineSearch({
+      query: "slack",
+      start: "2026-05-08T00:00:00",
+      end: "2026-05-08T23:59:59",
+      limit: 20,
+    });
+
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(page.items.every((segment) => segment.startedAt.slice(0, 10) === "2026-05-08")).toBe(true);
+    expect(page.items.every((segment) => segment.appName === "Slack")).toBe(true);
+  });
+
+  it("pages preview search results with the timeline cursor", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+
+    const firstPage = previewTimelineSearch({ query: "github", limit: 1 });
+    const secondPage = previewTimelineSearch({
+      query: "github",
+      beforeEndedAt: firstPage.nextCursor?.beforeEndedAt,
+      beforeSegmentId: firstPage.nextCursor?.beforeSegmentId,
+      limit: 1,
+    });
+
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.nextCursor).not.toBeNull();
+    expect(secondPage.items).toHaveLength(1);
+    expect(secondPage.items[0]?.id).not.toBe(firstPage.items[0]?.id);
+  });
+
+  it("matches preview search against classification category and productivity", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+
+    const page = previewTimelineSearch({ query: "social_media drift", limit: 50 });
+
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(page.items.every((segment) => segment.classification?.category === "social_media")).toBe(true);
+    expect(page.items.every((segment) => segment.classification?.productivity === "drift")).toBe(true);
   });
 });
