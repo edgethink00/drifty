@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from dataclasses import asdict
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,7 @@ from app.storage.activity_segment_serialization import (
 from app.storage.timestamps import parse_iso_datetime
 
 if TYPE_CHECKING:
+    from app.tracker.browser_automation import BrowserMetadata
     from app.tracker.macos_workspace import Snapshot
     from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
@@ -28,6 +30,22 @@ VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", 
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
+
+BrowserHistoryResolver = Callable[[str | None, str | None, str | None], Any]
+BrowserHistoryTitlePolicy = Callable[[str | None], bool]
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserHistoryBackfillConfig:
+    observed_at: str
+    max_age_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserHistoryBackfillResult:
+    segment_id: int
+    site_url: str | None
+    youtube_video_id: str | None
 
 
 class TrackerDatabase:
@@ -471,6 +489,90 @@ class TrackerDatabase:
                     json.dumps(asdict(snapshot)),
                 ),
             )
+
+    def backfill_recent_browser_history_context(
+        self,
+        resolve_browser_history: BrowserHistoryResolver,
+        is_retryable_window_title: BrowserHistoryTitlePolicy,
+        config: BrowserHistoryBackfillConfig,
+    ) -> list[BrowserHistoryBackfillResult]:
+        observed_at_seconds = self._timestamp_seconds(config.observed_at)
+        results: list[BrowserHistoryBackfillResult] = []
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM activity_segments
+                WHERE site_domain IS NULL
+                  AND site_title IS NULL
+                  AND site_url IS NULL
+                  AND youtube_video_id IS NULL
+                  AND youtube_playlist_id IS NULL
+                  AND youtube_is_shorts IS NULL
+                  AND window_title IS NOT NULL
+                ORDER BY datetime(ended_at) DESC, id DESC
+                LIMIT 100
+                """
+            ).fetchall()
+
+            for row in rows:
+                segment_age_seconds = observed_at_seconds - self._timestamp_seconds(row["ended_at"])
+                if segment_age_seconds < 0 or segment_age_seconds > config.max_age_seconds:
+                    continue
+                if not is_retryable_window_title(row["window_title"]):
+                    continue
+
+                raw_context = self._raw_context_dict(row["raw_context_json"])
+                if raw_context.get("browser_history_status") != "no_match":
+                    continue
+
+                metadata = resolve_browser_history(row["app_name"], row["window_title"], row["ended_at"])
+                if metadata.match_state != "browser-history-title" or metadata.site_url is None:
+                    continue
+
+                segment_id = int(row["id"])
+                confidence = 0.45
+                conn.execute(
+                    """
+                    UPDATE activity_segments
+                    SET browser_name = ?,
+                        site_domain = ?,
+                        site_title = ?,
+                        site_url = ?,
+                        youtube_video_id = ?,
+                        youtube_playlist_id = ?,
+                        youtube_is_shorts = ?,
+                        site_source = ?,
+                        confidence = ?,
+                        raw_context_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        metadata.browser_name,
+                        metadata.site_domain,
+                        metadata.site_title,
+                        metadata.site_url,
+                        metadata.youtube_video_id,
+                        metadata.youtube_playlist_id,
+                        self._optional_bool_int(metadata.youtube_is_shorts),
+                        metadata.match_state,
+                        confidence,
+                        self._backfilled_raw_context_json(raw_context, metadata, confidence, config.observed_at),
+                        segment_id,
+                    ),
+                )
+                conn.execute(
+                    "UPDATE activity_classifications SET stale = 1 WHERE segment_id = ?",
+                    (segment_id,),
+                )
+                results.append(
+                    BrowserHistoryBackfillResult(
+                        segment_id=segment_id,
+                        site_url=metadata.site_url,
+                        youtube_video_id=metadata.youtube_video_id,
+                    )
+                )
+        return results
 
     def trim_latest_segment(self, ended_at: str) -> None:
         with self.connect() as conn:
@@ -1680,6 +1782,55 @@ class TrackerDatabase:
         previous = TrackerDatabase._timestamp_seconds(previous_end)
         current = TrackerDatabase._timestamp_seconds(next_observed_at)
         return current - previous <= max_merge_gap_seconds
+
+    @staticmethod
+    def _backfilled_raw_context_json(
+        raw_context: dict[str, Any],
+        metadata: BrowserMetadata,
+        confidence: float,
+        backfilled_at: str,
+    ) -> str:
+        updated_context = {
+            **raw_context,
+            "browser_name": metadata.browser_name,
+            "site_domain": metadata.site_domain,
+            "site_title": metadata.site_title,
+            "site_url": metadata.site_url,
+            "youtube_video_id": metadata.youtube_video_id,
+            "youtube_playlist_id": metadata.youtube_playlist_id,
+            "youtube_is_shorts": metadata.youtube_is_shorts,
+            "site_source": metadata.match_state,
+            "capture_confidence": confidence,
+            "browser_automation_status": metadata.browser_automation_status,
+            "browser_automation_error": metadata.browser_automation_error,
+            "browser_history_status": metadata.browser_history_status,
+            "browser_history_reason": metadata.browser_history_reason,
+            "browser_history_database_found": metadata.browser_history_database_found,
+            "browser_history_profile_count": metadata.browser_history_profile_count,
+            "browser_history_candidate_count": metadata.browser_history_candidate_count,
+            "browser_history_error_count": metadata.browser_history_error_count,
+            "browser_history_backfilled": True,
+            "browser_history_backfilled_at": backfilled_at,
+        }
+        return json.dumps(updated_context)
+
+    @staticmethod
+    def _raw_context_dict(raw_context_json: str | None) -> dict[str, Any]:
+        if not raw_context_json:
+            return {}
+        try:
+            raw_context = json.loads(raw_context_json)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(raw_context, dict):
+            return raw_context
+        return {}
+
+    @staticmethod
+    def _optional_bool_int(value: bool | None) -> int | None:
+        if value is None:
+            return None
+        return int(value)
 
     @staticmethod
     def _timestamp_seconds(value: str) -> float:

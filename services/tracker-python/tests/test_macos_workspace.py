@@ -414,7 +414,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.browser_history_candidate_count, 1)
         self.assertEqual(snapshot.browser_history_error_count, 0)
         mock_browser_metadata.assert_not_called()
-        mock_history_metadata.assert_called_once_with('Google Chrome', 'Lecture - YouTube - Google Chrome')
+        mock_history_metadata.assert_called_once_with('Google Chrome', 'Lecture - YouTube - Google Chrome', snapshot.observed_at)
 
     def test_current_snapshot_forced_browser_history_unsupported_browser_keeps_no_site_data(self) -> None:
         with patch.dict(os.environ, {'DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK': '1'}), \
@@ -470,7 +470,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.browser_history_status, 'matched')
         self.assertEqual(snapshot.browser_history_candidate_count, 4)
         mock_browser_metadata.assert_called_once_with('Google Chrome')
-        mock_history_metadata.assert_called_once_with('Google Chrome', 'Fallback plan - Google Chrome')
+        mock_history_metadata.assert_called_once_with('Google Chrome', 'Fallback plan - Google Chrome', snapshot.observed_at)
 
     def test_current_snapshot_keeps_direct_browser_url_without_history_lookup(self) -> None:
         metadata = BrowserMetadata(
@@ -525,7 +525,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.browser_history_reason, 'no_match')
         self.assertTrue(snapshot.browser_history_database_found)
         self.assertEqual(snapshot.browser_history_candidate_count, 3)
-        mock_history_metadata.assert_called_once_with('Google Chrome', 'Missing page - Google Chrome')
+        mock_history_metadata.assert_called_once_with('Google Chrome', 'Missing page - Google Chrome', snapshot.observed_at)
 
     def test_current_snapshot_records_frontmost_diagnostics_when_all_app_capture_fails(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('osascript timed out')), \

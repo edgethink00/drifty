@@ -137,4 +137,56 @@ describe("YouTube classification", () => {
       source: "youtube",
     }));
   });
+
+  it("classifies title-only YouTube video windows only when YouTube is the browser site suffix", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "Lecture clip - YouTube - 오디오 재생 - Chrome - Alex",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+      confidence: 0.7,
+    }));
+  });
+
+  it("does not classify unrelated browser titles that merely mention YouTube", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "How YouTube affects attention - Medium - Chrome - Alex",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "unknown",
+    }));
+  });
+
+  it("does not classify YouTube search result titles as YouTube video windows", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "YouTube - Google 검색 - Chrome - Alex",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "unknown",
+    }));
+  });
 });

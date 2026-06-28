@@ -6,6 +6,7 @@ import sqlite3
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Final
@@ -15,6 +16,9 @@ from app.tracker.browser_automation import BrowserMetadata, normalize_domain, yo
 
 _CHROMIUM_HISTORY_LIMIT: Final = 200
 _FIREFOX_HISTORY_LIMIT: Final = 200
+_CHROMIUM_EPOCH_OFFSET_SECONDS: Final = 11_644_473_600
+_HISTORY_TIMESTAMP_MICROSECONDS: Final = 1_000_000
+BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS: Final = 3 * 60
 _VALID_URL_SCHEMES: Final = frozenset({"http", "https"})
 _GENERIC_TITLES: Final = frozenset({"", "new tab", "새 탭", "dashboard", "inbox", "home", "untitled"})
 _BROWSER_ROOTS: Final[dict[str, Path]] = {
@@ -81,6 +85,7 @@ def firefox_history_paths_for_root(root: Path) -> list[Path]:
 def match_browser_history_title(
     window_title: str | None,
     candidates: Iterable[BrowserHistoryCandidate],
+    observed_at: str | None = None,
 ) -> BrowserHistoryMatchResult:
     if not _normalize_title(window_title or ""):
         return BrowserHistoryMatchResult(candidate=None, reason="missing_window_title")
@@ -98,15 +103,16 @@ def match_browser_history_title(
 
     if not matches:
         return BrowserHistoryMatchResult(candidate=None, reason="generic_title" if saw_generic else "no_match")
-    unique_keys = {(candidate.url, _normalize_title(candidate.title)) for candidate in matches}
-    if len(unique_keys) != 1 or len(matches) != 1:
-        return BrowserHistoryMatchResult(candidate=None, reason="ambiguous_title")
-    return BrowserHistoryMatchResult(candidate=matches[0], reason="matched")
+    nearest_candidate = _nearest_history_candidate(matches, observed_at)
+    if nearest_candidate is None:
+        return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
+    return BrowserHistoryMatchResult(candidate=nearest_candidate, reason="matched")
 
 
 def browser_history_metadata(
     app_name: str | None,
     window_title: str | None,
+    observed_at: str | None = None,
     *,
     profile_roots: Mapping[str, Path] | None = None,
 ) -> BrowserMetadata:
@@ -147,7 +153,7 @@ def browser_history_metadata(
             browser_history_error_count=len(outcome.errors),
         )
 
-    match = match_browser_history_title(window_title, outcome.candidates)
+    match = match_browser_history_title(window_title, outcome.candidates, observed_at)
     if match.candidate is None:
         return BrowserMetadata(
             browser_name=app_name,
@@ -268,9 +274,50 @@ def _query_candidates(
     return candidates
 
 
+def _nearest_history_candidate(candidates: list[BrowserHistoryCandidate], observed_at: str | None) -> BrowserHistoryCandidate | None:
+    observed_at_seconds = _observed_at_unix_seconds(observed_at)
+    if observed_at_seconds is None:
+        return max(candidates, key=lambda candidate: candidate.visited_at)
+
+    nearest_candidate = min(
+        candidates,
+        key=lambda candidate: abs(_candidate_visited_at_unix_seconds(candidate) - observed_at_seconds),
+    )
+    nearest_delta_seconds = abs(_candidate_visited_at_unix_seconds(nearest_candidate) - observed_at_seconds)
+    if nearest_delta_seconds > BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS:
+        return None
+    return nearest_candidate
+
+
+def _observed_at_unix_seconds(observed_at: str | None) -> float | None:
+    if observed_at is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.timestamp()
+
+
+def _candidate_visited_at_unix_seconds(candidate: BrowserHistoryCandidate) -> float:
+    visited_at_seconds = candidate.visited_at / _HISTORY_TIMESTAMP_MICROSECONDS
+    if candidate.browser_name == "Firefox":
+        return visited_at_seconds
+    return visited_at_seconds - _CHROMIUM_EPOCH_OFFSET_SECONDS
+
+
 def _normalize_title(value: str) -> str:
     collapsed = re.sub(r"\s+", " ", value.strip().lower())
     return collapsed.strip(" -")
+
+
+def is_retryable_browser_history_window_title(window_title: str | None) -> bool:
+    normalized_window = _normalize_title(window_title or "")
+    if not normalized_window:
+        return False
+
+    first_part = _normalize_title(normalized_window.split(" - ", maxsplit=1)[0])
+    return not _is_generic_title(first_part)
 
 
 def _title_matches_window_title(window_title: str | None, title: str) -> bool:
