@@ -18,7 +18,7 @@ PACKAGE_ROOT = APP_DIR.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from app.storage.db import TrackerDatabase
+from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 
 if TYPE_CHECKING:
     from app.tracker.macos_workspace import Snapshot
@@ -101,6 +101,25 @@ def fetch_live_tail(
     from app.storage.live_tail import fetch_live_tail as read_fetch_live_tail
 
     return read_fetch_live_tail(db, start, end, after_segment_id, after_ended_at, limit)
+
+
+def backfill_browser_history_context(db: TrackerDatabase, observed_at: str) -> None:
+    from app.tracker.browser_history import (
+        BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS,
+        browser_history_metadata,
+        is_retryable_browser_history_window_title,
+    )
+
+    results = db.backfill_recent_browser_history_context(
+        browser_history_metadata,
+        is_retryable_browser_history_window_title,
+        BrowserHistoryBackfillConfig(
+            observed_at=observed_at,
+            max_age_seconds=BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS,
+        ),
+    )
+    for result in results:
+        enqueue_youtube_metadata_fetch(DB_PATH, result.youtube_video_id, result.site_url)
 
 
 def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
@@ -650,6 +669,7 @@ def daemon():
             last_capture_tick = capture_tick
             db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
             enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
+            backfill_browser_history_context(db, snapshot.observed_at)
             db.set_meta("last_event_at", snapshot.observed_at)
             db.set_meta("tracker_mode", "tracking")
             time.sleep(SAMPLE_SECONDS)

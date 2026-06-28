@@ -240,6 +240,94 @@ describe("buildDriftAlarmCandidates", () => {
     expect(candidates).toEqual([]);
   });
 
+  it("defers live browser drift while history title matching can still backfill", () => {
+    const pendingSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "history-pending-segment",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:00:20.000Z",
+      durationSeconds: 20,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Lecture - YouTube - Google Chrome",
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserHistoryStatus: "no_match",
+      browserHistoryReason: "outside_time_window",
+    };
+    const pendingSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      observedAt: "2026-06-11T09:01:00.000Z",
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Lecture - YouTube - Google Chrome",
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserHistoryStatus: "no_match",
+      browserHistoryReason: "outside_time_window",
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [pendingSegment],
+      currentSnapshot: pendingSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([]);
+  });
+
+  it("allows browser drift after the history title backfill window expires", () => {
+    const expiredSegment: ActivitySegment = {
+      ...driftSegment,
+      id: "history-expired-segment",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:00:20.000Z",
+      durationSeconds: 20,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Lecture - YouTube - Google Chrome",
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserHistoryStatus: "no_match",
+      browserHistoryReason: "no_match",
+    };
+    const expiredSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      observedAt: "2026-06-11T09:03:01.000Z",
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Lecture - YouTube - Google Chrome",
+      siteDomain: null,
+      siteTitle: null,
+      siteUrl: null,
+      browserHistoryStatus: "no_match",
+      browserHistoryReason: "no_match",
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [expiredSegment],
+      currentSnapshot: expiredSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        alertKey: "active:history-expired-segment",
+        category: "entertainment",
+        sourceSegmentId: "history-expired-segment",
+      }),
+    ]);
+  });
+
   it("flags a live YouTube feed drift candidate after thirty seconds", () => {
     const feedSegment: ActivitySegment = {
       ...driftSegment,

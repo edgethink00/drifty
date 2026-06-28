@@ -77,8 +77,8 @@ export function classifyYouTubeWindowTitle(segment: ActivitySegment): ActivityCl
   if (normalizeYouTubeSite(segment.siteDomain)) return null;
 
   const titleParts = normalizeText(segment.windowTitle).split(" - ").map((part) => part.trim());
-  if (titleParts.includes("youtube music")) return { category: "music", productivity: "neutral" };
-  if (titleParts.includes("youtube")) return { category: "entertainment", productivity: "drift" };
+  if (hasYouTubeWindowTitleSiteSuffix(titleParts, "youtube music")) return { category: "music", productivity: "neutral" };
+  if (hasYouTubeWindowTitleSiteSuffix(titleParts, "youtube")) return { category: "entertainment", productivity: "drift" };
   return null;
 }
 
@@ -166,6 +166,23 @@ function classifyYouTubeOfficialCategory(category: string): ActivityClassificati
   return YOUTUBE_OFFICIAL_CATEGORY_CLASSIFICATIONS[normalizeYouTubeOfficialCategory(category)] ?? null;
 }
 
+function hasYouTubeWindowTitleSiteSuffix(titleParts: readonly string[], sitePart: "youtube" | "youtube music"): boolean {
+  const sitePartIndex = titleParts.indexOf(sitePart);
+  if (sitePartIndex <= 0) return false;
+
+  const nextPart = titleParts[sitePartIndex + 1] ?? "";
+  if (isBrowserWindowTitleSuffix(nextPart)) return true;
+  return isYouTubePlaybackStatusPart(nextPart) && titleParts.slice(sitePartIndex + 2).some(isBrowserWindowTitleSuffix);
+}
+
+function isBrowserWindowTitleSuffix(value: string): boolean {
+  return BROWSER_WINDOW_TITLE_SUFFIXES.has(value);
+}
+
+function isYouTubePlaybackStatusPart(value: string): boolean {
+  return YOUTUBE_PLAYBACK_STATUS_PARTS.has(value);
+}
+
 function normalizeYouTubeOfficialCategory(category: string): string {
   return category.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -177,6 +194,25 @@ function normalizeDomain(value?: string | null): string {
 function normalizeText(value?: string | null): string {
   return (value ?? "").trim().toLowerCase();
 }
+
+const BROWSER_WINDOW_TITLE_SUFFIXES = new Set([
+  "arc",
+  "brave",
+  "brave browser",
+  "chrome",
+  "chromium",
+  "firefox",
+  "google chrome",
+  "google chrome canary",
+  "microsoft edge",
+  "mozilla firefox",
+  "safari",
+]);
+
+const YOUTUBE_PLAYBACK_STATUS_PARTS = new Set([
+  "audio playing",
+  "오디오 재생",
+]);
 
 function matchesAny(value: string, hints: readonly string[]): boolean {
   return hints.some((hint) => value.includes(hint));

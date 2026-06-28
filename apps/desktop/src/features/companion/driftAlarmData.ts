@@ -8,6 +8,7 @@ import { getActiveDriftAlarmSegment } from "./driftAlarmCurrentSegment";
 import { EXTREME_NUDGE_STORAGE_KEY } from "./extremeNudgeData";
 import { segmentForLiveDriftAlarmClassification } from "./liveDriftAlarmClassification";
 import { calibrateAppLlmClassificationWithHistory } from "./driftAlarmClassificationCalibration";
+import { isBrowserHistoryContextPendingForDriftAlarm } from "./driftAlarmHistoryPending";
 export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export type DriftAlarmBreakSnooze = {
@@ -115,6 +116,8 @@ export function buildDriftAlarmCandidates({
     if (!currentDriftAlarmSegment) return [];
 
     const { alertKey, segment: currentSegment, sourceSegmentId } = currentDriftAlarmSegment;
+    if (isBrowserHistoryContextPendingForDriftAlarm(currentSnapshot, currentSegment)) return [];
+
     const currentClassificationOptions = {
       ...classificationOptions,
       fallbackCandidates: [currentSegment, ...(classificationOptions.fallbackCandidates ?? segments)],

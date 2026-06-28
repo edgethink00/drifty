@@ -12,8 +12,9 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.storage.db import TrackerDatabase
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
+from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.tracker.browser_automation import BrowserMetadata
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
@@ -263,6 +264,88 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(events[0]["youtubeVideoId"], "lecture")
         self.assertEqual(events[0]["siteSource"], "browser-history-title")
         self.assertEqual(events[0]["confidence"], 0.45)
+
+    def test_backfill_recent_browser_history_context_updates_retryable_no_match_segment(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:00+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title="Lecture - YouTube - Google Chrome",
+                source="accessibility",
+                browser_name="Google Chrome",
+                browser_automation_status="unavailable",
+                browser_history_status="no_match",
+                browser_history_reason="outside_time_window",
+                browser_history_database_found=True,
+                browser_history_profile_count=1,
+                browser_history_candidate_count=0,
+                browser_history_error_count=0,
+            ),
+            5,
+            max_merge_gap_seconds=180,
+        )
+        segment_id = self.database.fetch_timeline("2026-04-06")[0]["id"]
+        with self.database.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO activity_classifications(
+                    segment_id,
+                    input_fingerprint,
+                    category,
+                    productivity,
+                    source,
+                    confidence,
+                    classified_at
+                ) VALUES (?, 'fp', 'entertainment', 'drift', 'youtube', 0.7, '2026-04-06T09:00:01+00:00')
+                """,
+                (segment_id,),
+            )
+
+        resolver_calls: list[tuple[str | None, str | None, str | None]] = []
+
+        def resolve_browser_history(app_name: str | None, window_title: str | None, observed_at: str | None) -> BrowserMetadata:
+            resolver_calls.append((app_name, window_title, observed_at))
+            return BrowserMetadata(
+                browser_name="Google Chrome",
+                site_domain="youtube.com",
+                site_title="Lecture - YouTube",
+                site_url="https://www.youtube.com/watch?v=lecture",
+                youtube_video_id="lecture",
+                match_state="browser-history-title",
+                browser_automation_status="granted",
+                browser_history_status="matched",
+                browser_history_reason="matched",
+                browser_history_database_found=True,
+                browser_history_profile_count=1,
+                browser_history_candidate_count=1,
+                browser_history_error_count=0,
+            )
+
+        results = self.database.backfill_recent_browser_history_context(
+            resolve_browser_history,
+            lambda title: True,
+            BrowserHistoryBackfillConfig(
+                observed_at="2026-04-06T09:00:30+00:00",
+                max_age_seconds=180,
+            ),
+        )
+
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].segment_id, int(segment_id))
+        self.assertEqual(results[0].youtube_video_id, "lecture")
+        self.assertEqual(events[0]["siteDomain"], "youtube.com")
+        self.assertEqual(events[0]["siteTitle"], "Lecture - YouTube")
+        self.assertEqual(events[0]["siteUrl"], "https://www.youtube.com/watch?v=lecture")
+        self.assertEqual(events[0]["youtubeVideoId"], "lecture")
+        self.assertEqual(events[0]["siteSource"], "browser-history-title")
+        self.assertEqual(events[0]["confidence"], 0.45)
+        self.assertTrue(events[0]["classification"]["stale"])
+        self.assertEqual(
+            resolver_calls,
+            [("Google Chrome", "Lecture - YouTube - Google Chrome", "2026-04-06T09:00:00+00:00")],
+        )
 
     def test_record_snapshot_does_not_overwrite_existing_site_context_with_browser_history(self) -> None:
         self.database.record_snapshot(

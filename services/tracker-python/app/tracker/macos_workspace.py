@@ -233,8 +233,8 @@ def _browser_metadata(app_name: str | None) -> BrowserMetadata:
     return browser_metadata(app_name, _run_osascript)
 
 
-def _browser_history_metadata(app_name: str | None, window_title: str | None) -> BrowserMetadata:
-    return browser_history_metadata(app_name, window_title)
+def _browser_history_metadata(app_name: str | None, window_title: str | None, observed_at: str | None) -> BrowserMetadata:
+    return browser_history_metadata(app_name, window_title, observed_at)
 
 
 def _force_browser_history_url_fallback() -> bool:
@@ -316,6 +316,7 @@ def _frontmost_via_fallback_capture() -> tuple[str | None, str | None, str | Non
 
 
 def current_snapshot(include_system_transient: bool = True) -> Snapshot:
+    observed_at = utc_now_iso()
     frontmost_capture_source: FrontmostCaptureSource = "system-events"
     frontmost_capture_error = None
     frontmost_fallback_error = None
@@ -342,7 +343,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     force_browser_history_url_fallback = _force_browser_history_url_fallback()
     if force_browser_history_url_fallback:
         if _is_browser_history_supported_app(app_name):
-            browser = _browser_history_metadata(app_name, window_title)
+            browser = _browser_history_metadata(app_name, window_title, observed_at)
         elif _browser_script(app_name):
             browser = BrowserMetadata(
                 browser_name=app_name,
@@ -363,7 +364,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     if browser.ax_window_title:
         window_title = browser.ax_window_title
     if not force_browser_history_url_fallback and _should_try_browser_history_url_fallback(app_name, browser):
-        history_browser = _browser_history_metadata(app_name, window_title)
+        history_browser = _browser_history_metadata(app_name, window_title, observed_at)
         browser_history = history_browser
         if history_browser.site_url:
             browser = history_browser
@@ -393,7 +394,7 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         browser_automation_status = "not_applicable"
 
     return Snapshot(
-        observed_at=utc_now_iso(),
+        observed_at=observed_at,
         app_name=app_name,
         bundle_id=bundle_id,
         window_title=window_title,
