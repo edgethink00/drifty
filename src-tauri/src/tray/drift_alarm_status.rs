@@ -39,6 +39,10 @@ impl TrayDriftAlarmStatus {
 }
 
 pub fn drift_alerts_status_label(status: &TrayDriftAlarmStatus) -> String {
+    if status.enabled && status.tracker_running == Some(false) {
+        return "Drift alerts: Paused".to_string();
+    }
+
     let label = status.status_label.trim();
     if !label.is_empty() {
         return label.to_string();
@@ -52,6 +56,10 @@ pub fn drift_alerts_status_label(status: &TrayDriftAlarmStatus) -> String {
 }
 
 pub fn drift_last_check_label(status: &TrayDriftAlarmStatus) -> String {
+    if status.enabled && status.tracker_running == Some(false) {
+        return "Last drift check: Not checking".to_string();
+    }
+
     let label = status.last_checked_label.trim();
     let display_label = if label.is_empty() && status.last_checked_at.is_some() {
         "Recorded"
@@ -64,6 +72,10 @@ pub fn drift_last_check_label(status: &TrayDriftAlarmStatus) -> String {
 }
 
 pub fn drift_result_label(status: &TrayDriftAlarmStatus) -> String {
+    if status.enabled && status.tracker_running == Some(false) {
+        return "Last result: Tracker paused".to_string();
+    }
+
     format!("Last result: {}", status.result_label)
 }
 
@@ -159,6 +171,24 @@ mod tests {
         .expect("tray status with cached tracker state should deserialize");
 
         assert_eq!(status.tracker_running(), Some(true));
+    }
+
+    #[test]
+    fn drift_last_check_label_reports_not_checking_when_tracker_is_paused() {
+        let status = TrayDriftAlarmStatus {
+            enabled: true,
+            status_label: "Drift alerts: Paused".to_string(),
+            last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
+            last_checked_label: "9:00:00 AM".to_string(),
+            result_label: "Tracker paused".to_string(),
+            detail_label: None,
+            tracker_running: Some(false),
+        };
+
+        assert_eq!(
+            drift_last_check_label(&status),
+            "Last drift check: Not checking"
+        );
     }
 
     #[test]

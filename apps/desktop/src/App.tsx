@@ -1203,6 +1203,13 @@ export default function App() {
     clearPendingTransientRefresh();
   }
 
+  function clearPausedDriftAlarmRuntime() {
+    pendingDriftAlarmGateRef.current = null;
+    lastEligibleDriftCandidateRef.current = null;
+    pendingDriftAlarmTransientRef.current = null;
+    clearPendingTransientRefresh();
+  }
+
   function currentDriftAlarmDay(): string {
     const nextAlarmDay = logicalTodayIsoDate(startOfDayMinutes);
     if (driftAlarmDayRef.current !== nextAlarmDay) resetDriftAlarmRuntimeForDay(nextAlarmDay);
@@ -1277,6 +1284,7 @@ export default function App() {
   }, [clearWatcherEvent, clearWatcherRecoveryTimer]);
 
   const showWatcherPeek = useCallback((force = false, reminderThresholdSeconds: number | null = null) => {
+    if (status?.running !== true) return;
     if (!force && watcherEventRef.current) return;
     if (watcherRequestInFlightRef.current) return;
 
@@ -1306,7 +1314,7 @@ export default function App() {
     })().finally(() => {
       watcherRequestInFlightRef.current = false;
     });
-  }, [armWatcherRecoveryTimer, clearWatcherEvent, showAiClassificationImpact]);
+  }, [armWatcherRecoveryTimer, clearWatcherEvent, showAiClassificationImpact, status?.running]);
 
   const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<boolean> => {
     if (!isTauriRuntime()) {
@@ -1695,9 +1703,13 @@ export default function App() {
         : Promise.resolve(status);
 
       const currentSnapshotRequest = isForegroundRefresh
-        ? isRequiredCurrentSnapshotRefresh
-          ? trackerClient.getCurrentSnapshot()
-          : trackerClient.getCurrentSnapshot().catch(() => null)
+        ? statusRequest.then((nextStatus) => {
+            if (refreshRequestRef.current !== requestId) return null;
+            if (!nextStatus?.running) return null;
+            return isRequiredCurrentSnapshotRefresh
+              ? trackerClient.getCurrentSnapshot()
+              : trackerClient.getCurrentSnapshot().catch(() => null);
+          })
         : Promise.resolve(currentSnapshot);
 
       const [timeline, archiveTimelineLoad, historyHourlySummary, historySiteSummary, nextCurrentSnapshot, nextClassificationMetrics, nextAiClassificationUsage] = await Promise.all([
@@ -2053,6 +2065,7 @@ export default function App() {
   const refreshLiveDriftAlarmActivity = useCallback(async (day: string): Promise<boolean> => {
     if (liveDriftAlarmRefreshInFlightRef.current) return false;
     if (shouldBlockLocalTrackerAccess) return false;
+    if (status?.running !== true) return false;
     if (day !== currentDriftAlarmDay()) return false;
 
     liveDriftAlarmRefreshInFlightRef.current = true;
@@ -2083,7 +2096,7 @@ export default function App() {
     } finally {
       liveDriftAlarmRefreshInFlightRef.current = false;
     }
-  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
 
   const refreshFocusedLiveTail = useCallback(async (day: string): Promise<boolean> => {
     if (focusedLiveTailRefreshInFlightRef.current) return false;
@@ -2225,6 +2238,7 @@ export default function App() {
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
     if (!driftAlertsEnabled) return undefined;
+    if (status?.running !== true) return undefined;
 
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
@@ -2233,7 +2247,7 @@ export default function App() {
       void refreshLiveDriftAlarmActivity(currentDriftAlarmDay());
     }, DRIFT_ALARM_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -2581,15 +2595,8 @@ export default function App() {
       return;
     }
     if (!status?.running) {
-      recordDriftAlarmDebugEvent({
-        kind: "evaluation_skipped",
-        reason: "tracker_paused",
-        evaluation,
-      });
-      publishEvaluationDriftAlarmTrayStatus({ kind: "tracker_paused" }, checkedAt);
-      pendingDriftAlarmGateRef.current = null;
-      lastEligibleDriftCandidateRef.current = null;
-      clearPendingTransientDriftAlarm();
+      publishEvaluationDriftAlarmTrayStatus({ kind: "tracker_paused" }, null);
+      clearPausedDriftAlarmRuntime();
       return;
     }
 
@@ -3288,11 +3295,20 @@ export default function App() {
   }, [evaluateDriftAlarm]);
 
   useEffect(() => {
+    if (!status) return;
+    if (status.running !== true) {
+      if (driftAlertsEnabled) {
+        clearPausedDriftAlarmRuntime();
+        publishDriftAlarmTrayStatus({ kind: "tracker_paused" }, null);
+      }
+      return;
+    }
+
     evaluateDriftAlarm({
       snapshot: currentSnapshot,
       liveSegments: liveDriftAlarmSegmentsRef.current,
     });
-  }, [currentSnapshot, evaluateDriftAlarm]);
+  }, [currentSnapshot, driftAlertsEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -4259,10 +4275,12 @@ export default function App() {
     });
   }, []);
   const handleOpenDebugLogs = useCallback(async () => {
-    const snapshotForDebug = await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
-      if (snapshotError instanceof Error) return null;
-      throw snapshotError;
-    });
+    const snapshotForDebug = status?.running === true
+      ? await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
+          if (snapshotError instanceof Error) return null;
+          throw snapshotError;
+        })
+      : null;
     const payload = buildDebugLogPayload({
       selectedDay,
       startOfDayMinutes,
