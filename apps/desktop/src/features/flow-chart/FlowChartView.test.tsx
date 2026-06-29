@@ -40,6 +40,10 @@ function expectedBreakdownCellMinHeight(intervalMinutes: FlowIntervalMinutes): s
   return `${(0.76 * intervalMinutes) / 3}rem`;
 }
 
+function expectedMinuteAxisFontSize(intervalMinutes: FlowIntervalMinutes): string {
+  return intervalMinutes === 3 ? "0.52rem" : "0.58rem";
+}
+
 function visibleHourLabels(): string[] {
   return Array.from(document.querySelectorAll(".flow-chart-hours > span"), (label) => label.textContent ?? "")
     .filter((label) => label.length > 0);
@@ -63,8 +67,8 @@ type BlockPlacementCase = {
 
 const blockPlacementCases: BlockPlacementCase[] = [
   { intervalMinutes: 3, minuteOffset: 6, rowLabel: ":06", endTime: "14:09" },
+  { intervalMinutes: 4, minuteOffset: 8, rowLabel: ":08", endTime: "14:12" },
   { intervalMinutes: 5, minuteOffset: 5, rowLabel: ":05", endTime: "14:10" },
-  { intervalMinutes: 10, minuteOffset: 10, rowLabel: ":10", endTime: "14:20" },
 ];
 
 describe("FlowChartView", () => {
@@ -105,6 +109,8 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-chart-card\s*{[\s\S]*gap:\s*8px;/);
     expect(styles).toMatch(/\.flow-chart-card\s*{[\s\S]*--flow-axis-gutter:\s*1\.55rem;/);
     expect(styles).toMatch(/\.flow-chart-hours,\s*\.flow-chart-row\s*\{[\s\S]*grid-template-columns:\s*var\(--flow-axis-gutter\) repeat\(24,\s*minmax\(1\.55rem,\s*1fr\)\);/);
+    expect(cssRule(".flow-chart-hours")).toContain("font-size: 0.58rem;");
+    expect(cssRule(".flow-chart-row-label")).toContain("font-size: var(--flow-minute-axis-font-size, 0.52rem);");
     expect(styles).toMatch(/\.flow-chart-row--now::before\s*\{[\s\S]*left:\s*calc\(var\(--flow-axis-gutter\) \+ 0\.15rem\);/);
     expect(styles).toMatch(/\.flow-chart-row--now::after\s*\{[\s\S]*left:\s*calc\(var\(--flow-axis-gutter\) \+ \(\(100% - var\(--flow-axis-gutter\)\) \/ 24\) \* \(var\(--flow-current-hour\) \+ 1\)\);/);
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*gap:\s*5px;/);
@@ -160,7 +166,7 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-breakdown-layout__chart \.flow-chart-row,\s*\.flow-breakdown-layout__chart \.flow-chart-hours\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
   });
 
-  it.each([3, 5, 10] as const)("renders %dm-specific minute rows", (intervalMinutes: FlowIntervalMinutes) => {
+  it.each([3, 4, 5] as const)("renders %dm-specific minute rows", (intervalMinutes: FlowIntervalMinutes) => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={intervalMinutes} />);
 
     const rowLabels = Array.from(document.querySelectorAll(".flow-chart-row-label"), (label) => label.textContent);
@@ -169,6 +175,7 @@ describe("FlowChartView", () => {
     expect(rowLabels).toEqual(expectedRowLabels(intervalMinutes));
     expect(chart.style.getPropertyValue("--flow-cell-min-height")).toBe(expectedCellMinHeight(intervalMinutes));
     expect(chart.style.getPropertyValue("--flow-breakdown-cell-min-height")).toBe(expectedBreakdownCellMinHeight(intervalMinutes));
+    expect(chart.style.getPropertyValue("--flow-minute-axis-font-size")).toBe(expectedMinuteAxisFontSize(intervalMinutes));
   });
 
   it.each(blockPlacementCases)("places a %dm block on the selected interval row", ({ intervalMinutes, minuteOffset, rowLabel, endTime }: BlockPlacementCase) => {
@@ -188,11 +195,11 @@ describe("FlowChartView", () => {
   });
 
   it("keeps the current-time marker inside the terminal interval row", () => {
-    render(<FlowChartView blocks={[makeFlowBlock({ minuteOfDay: 23 * 60 + 50 })]} appIcons={{}} intervalMinutes={10} currentMinuteOfDay={23 * 60 + 50} />);
+    render(<FlowChartView blocks={[makeFlowBlock({ minuteOfDay: 23 * 60 + 56 })]} appIcons={{}} intervalMinutes={4} currentMinuteOfDay={23 * 60 + 56} />);
 
     const currentRow = document.querySelector(".flow-chart-row--now") as HTMLElement;
 
-    expect(currentRow.querySelector(".flow-chart-row-label")?.textContent).toBe(":50");
+    expect(currentRow.querySelector(".flow-chart-row-label")?.textContent).toBe(":56");
     expect(currentRow.classList.contains("flow-chart-row--now-terminal")).toBe(true);
   });
 
@@ -250,27 +257,27 @@ describe("FlowChartView", () => {
     }
   });
 
-  it("places a 10-minute block on the selected 10-minute row", () => {
+  it("places a 4-minute block on the selected 4-minute row", () => {
     const block = makeFlowBlock({
-      id: "ten-minute-docs",
-      minuteOfDay: 14 * 60 + 10,
-      durationSeconds: 600,
+      id: "four-minute-docs",
+      minuteOfDay: 14 * 60 + 8,
+      durationSeconds: 240,
     });
 
-    render(<FlowChartView blocks={[block]} appIcons={{}} intervalMinutes={10} onIntervalChange={() => undefined} />);
+    render(<FlowChartView blocks={[block]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
 
-    const cell = screen.getByRole("button", { name: /time block: 14:10–14:20/i });
+    const cell = screen.getByRole("button", { name: /time block: 14:08–14:12/i });
     const row = cell.closest(".flow-chart-row") as HTMLElement;
 
-    expect(document.querySelector(".flow-chart-card")?.getAttribute("data-flow-interval")).toBe("10");
-    expect(screen.getByRole("button", { name: "10m" }).getAttribute("aria-pressed")).toBe("true");
-    expect(cell.getAttribute("aria-label")).toContain("Time block: 14:10–14:20");
-    expect(row.querySelector(".flow-chart-row-label")?.textContent).toBe(":10");
+    expect(document.querySelector(".flow-chart-card")?.getAttribute("data-flow-interval")).toBe("4");
+    expect(screen.getByRole("button", { name: "4m" }).getAttribute("aria-pressed")).toBe("true");
+    expect(cell.getAttribute("aria-label")).toContain("Time block: 14:08–14:12");
+    expect(row.querySelector(".flow-chart-row-label")?.textContent).toBe(":08");
     expect(Array.from(document.querySelectorAll(".flow-chart-row-label"), (label) => label.textContent)).not.toContain(":09");
 
     fireNativePointerMove(cell, 120, 80);
 
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("14:10–14:20");
+    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("14:08–14:12");
   });
 
   it("uses site identity instead of the browser app in hover labels", () => {
