@@ -1,0 +1,38 @@
+.onboarding-v2-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: #f2f1ed;
+}
+
+.onboarding-v2-preview__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #f2f1ed;
+}
+
+.onboarding-v2-preview__close {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(28, 28, 25, 0.14);
+  border-radius: 999px;
+  background: rgba(250, 250, 248, 0.92);
+  color: #1c1c19;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  box-shadow: 0 8px 24px rgba(28, 28, 25, 0.1);
+  cursor: pointer;
+  transition: opacity 140ms ease-out;
+}
+
+.onboarding-v2-preview__close:hover,
+.onboarding-v2-preview__close:focus-visible {
+  opacity: 1;
+}
