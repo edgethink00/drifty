@@ -3567,6 +3567,13 @@ export default function App() {
     () => trendsRange === "Week" ? { startDay: insightRange.startDay } : undefined,
     [insightRange.startDay, trendsRange],
   );
+  const insightRhythmVisibility = useMemo(
+    () => ({
+      ...(trendsRange === "Week" ? { startDay: insightRange.startDay } : {}),
+      averagingRange: { startDay: insightRange.startDay, endDay: insightRange.endDay },
+    }),
+    [insightRange.endDay, insightRange.startDay, trendsRange],
+  );
   const insightClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact }),
     [activeInsightSegments, showAiClassificationImpact],
@@ -3893,8 +3900,8 @@ export default function App() {
     [activeInsightSegments, insightClassificationOptions, insightWeekVisibility],
   );
   const attentionRhythm = useMemo(
-    () => buildAttentionRhythm(activeInsightSegments, insightClassificationOptions, insightWeekVisibility),
-    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility],
+    () => buildAttentionRhythm(activeInsightSegments, insightClassificationOptions, insightRhythmVisibility),
+    [activeInsightSegments, insightClassificationOptions, insightRhythmVisibility],
   );
   const driftSourceLists = useMemo(
     () => buildInsightSourceLists(activeInsightSegments, "drift", insightClassificationOptions),
