@@ -134,12 +134,49 @@
     color var(--transition-fast);
 }
 
+.brand,
+.nav-item,
+.tracker-control,
+.sidebar-tracker-toggle,
+.account-trigger {
+  transition:
+    opacity var(--sidebar-fade-duration) ease-out,
+    transform var(--sidebar-duration) var(--sidebar-ease),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.nav-item > span:not(.nav-item__hover-label),
+.settings-sidebar-back span,
+.settings-nav-item__label,
+.live-pill__summary-copy,
+.live-pill .app-name,
+.live-pill .app-class,
+.sidebar-tracker-toggle span,
+.account-trigger__copy,
+.account-trigger__chevrons {
+  transition:
+    opacity var(--sidebar-fade-duration) ease-out,
+    transform var(--sidebar-duration) var(--sidebar-ease);
+}
+
 .sidebar--collapsed {
-  align-items: center;
+  align-items: flex-start;
   gap: 0.24rem;
   overflow: visible;
   padding: var(--window-chrome-height) 7px var(--content-panel-gap);
   scrollbar-width: none;
+}
+
+.sidebar--collapsed .brand,
+.sidebar--collapsed .nav-label,
+.sidebar--collapsed .sidebar-nav,
+.sidebar--collapsed .settings-sidebar-back,
+.sidebar--collapsed .settings-nav,
+.sidebar--collapsed .sidebar-foot {
+  max-width: calc(var(--sidebar-collapsed-width) - 14px);
 }
 
 .sidebar--collapsed::-webkit-scrollbar {

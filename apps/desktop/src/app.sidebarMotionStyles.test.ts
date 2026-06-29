@@ -89,6 +89,23 @@ describe("sidebar motion styles", () => {
     expect(collapsedAccountTriggerBlock).toContain("justify-content: center;");
   });
 
+  it("pins collapsed rail controls to the final rail instead of centering inside the animating sidebar", () => {
+    const styles = readStyles();
+    const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
+    const navItemMotionBlock = cssBlock(styles, ".nav-item", "last");
+    const navLabelMotionBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)", "last");
+    const collapsedRailWidthBlock =
+      styles.match(/\.sidebar--collapsed \.brand,\s*\.sidebar--collapsed \.nav-label,\s*\.sidebar--collapsed \.sidebar-nav,\s*\.sidebar--collapsed \.settings-sidebar-back,\s*\.sidebar--collapsed \.settings-nav,\s*\.sidebar--collapsed \.sidebar-foot\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
+
+    expect(collapsedSidebarBlock).toContain("align-items: flex-start;");
+    expect(navItemMotionBlock).not.toMatch(/transition:[^;]*(?:width|padding)/);
+    expect(navLabelMotionBlock).not.toMatch(/transition:[^;]*(?:width|max-width|padding|margin)/);
+    expect(collapsedRailWidthBlock).toContain(".sidebar--collapsed .brand");
+    expect(collapsedRailWidthBlock).toContain(".sidebar--collapsed .sidebar-nav");
+    expect(collapsedRailWidthBlock).toContain(".sidebar--collapsed .sidebar-foot");
+    expect(collapsedRailWidthBlock).toContain("max-width: calc(var(--sidebar-collapsed-width) - 14px);");
+  });
+
   it("reveals collapsed sidebar hover labels with matching borderless typography", () => {
     const styles = readStyles();
     const hoverLabelBlock = cssBlock(styles, ".nav-item__hover-label");
