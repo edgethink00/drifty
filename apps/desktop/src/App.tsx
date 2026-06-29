@@ -70,6 +70,10 @@ import { consumePostUpdateRelaunchFocusPending } from "./features/updates/update
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
+import {
+  capturePostHogEvent,
+  toAnalyticsErrorKind,
+} from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
@@ -165,7 +169,7 @@ import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayRe
 import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
 import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
-import type { ClassificationRange, DashboardPeriod, InsightRange } from "./features/dashboard/dashboardPeriods";
+import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
 import { buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
@@ -192,6 +196,13 @@ import { DateNavigator } from "./components/DateNavigator";
 import { Toggle } from "./components/Toggle";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
 import { activityNav, commandBarTabs, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
+import {
+  captureAiClassificationRun,
+  toAiProviderAnalytics,
+  toAppSurfaceAnalytics,
+  toDashboardPeriodAnalytics,
+  toTrackerModeAnalytics,
+} from "./app/appAnalytics";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthRequiredGate } from "./features/auth/AuthGates";
@@ -585,6 +596,7 @@ export default function App() {
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
   const autoUpdateLaunchCheckScheduledRef = useRef(false);
+  const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const activeTab = activeSnapshot.tabId;
@@ -766,6 +778,27 @@ export default function App() {
   useEffect(() => {
     appIconsRef.current = appIcons;
   }, [appIcons]);
+
+  useEffect(() => {
+    const dashboardPeriod = activeTab === "dashboard" ? toDashboardPeriodAnalytics(dashPeriod) : null;
+    const surfaceKey = [activeTab, dashboardPeriod, activeTab === "settings" ? settingsSection : null].join(":");
+    if (previousSurfaceAnalyticsKeyRef.current === surfaceKey) return;
+    previousSurfaceAnalyticsKeyRef.current = surfaceKey;
+
+    capturePostHogEvent("app_surface_opened", {
+      surface: toAppSurfaceAnalytics(activeTab),
+      ...(dashboardPeriod ? { dashboard_period: dashboardPeriod } : {}),
+      ...(activeTab === "settings" ? { settings_section: settingsSection } : {}),
+    });
+  }, [activeTab, dashPeriod, settingsSection]);
+
+  useEffect(() => {
+    if (!error) return;
+    capturePostHogEvent("app_error", {
+      surface: toAppSurfaceAnalytics(activeTab),
+      error_kind: toAnalyticsErrorKind(error),
+    });
+  }, [activeTab, error]);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
     setNavigationHistory((current) => {
@@ -2829,6 +2862,7 @@ export default function App() {
           const liveAiOptions = localAiClassificationOptions
             ? { ...localAiClassificationOptions, persistLiveResult: true }
             : { persistLiveResult: true };
+          const liveAiProviderKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
           const refreshAfterLiveAiClassification = async () => {
             const alarmDay = currentDriftAlarmDay();
             if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
@@ -2850,6 +2884,14 @@ export default function App() {
 
             switch (result.kind) {
               case "classified":
+                capturePostHogEvent("ai_classification_run", {
+                  trigger: "live",
+                  provider_kind: liveAiProviderKind,
+                  result: "success",
+                  selected_count_bucket: "1",
+                  saved_count_bucket: result.classification.category === "unknown" ? "none" : "1",
+                  range: "current_day",
+                });
                 if (result.classification.category === "unknown") {
                   liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS);
                 } else {
@@ -2858,6 +2900,15 @@ export default function App() {
                 await refreshAfterLiveAiClassification();
                 return;
               case "unavailable":
+                capturePostHogEvent("ai_classification_run", {
+                  trigger: "live",
+                  provider_kind: liveAiProviderKind,
+                  result: "unavailable",
+                  selected_count_bucket: "1",
+                  saved_count_bucket: "none",
+                  range: "current_day",
+                  error_kind: toAnalyticsErrorKind(result.reason),
+                });
                 liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
                 publishEvaluationDriftAlarmTrayStatus({
                   kind: "suppressed",
@@ -2891,6 +2942,15 @@ export default function App() {
                 reason: toErrorMessage(error),
               },
               evaluation,
+            });
+            capturePostHogEvent("ai_classification_run", {
+              trigger: "live",
+              provider_kind: liveAiProviderKind,
+              result: "error",
+              selected_count_bucket: "1",
+              saved_count_bucket: "none",
+              range: "current_day",
+              error_kind: toAnalyticsErrorKind(error),
             });
             publishEvaluationDriftAlarmTrayStatus({
               kind: "error",
@@ -4079,6 +4139,8 @@ export default function App() {
     const isFocused = rendererFocusedRef.current;
     const threshold = isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return;
+    const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+    const trigger = isFocused ? "focused_idle" : "background_threshold";
 
     aiClassificationInFlightRef.current = true;
     try {
@@ -4101,10 +4163,17 @@ export default function App() {
         }
         if (summary.savedRecords > 0 && selectedDayRef.current === today) await refresh(today);
       }
+      captureAiClassificationRun(trigger, providerKind, "current_day", summary);
       if (summary.savedRecords > 0) await refreshLeaderboardData();
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
+      captureAiClassificationRun(trigger, providerKind, "current_day", {
+        status: "error",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message,
+      });
       if (selectedDayRef.current === today) {
         setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
         setObservedAiClassificationFailure(true);
@@ -4212,21 +4281,43 @@ export default function App() {
   async function handleStartTracking() {
     setError(null);
     try {
-      await trackerClient.start();
+      const nextStatus: TrackerStatus | undefined = await trackerClient.start();
       await refresh();
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: "success",
+        tracker_mode: toTrackerModeAnalytics(nextStatus?.trackerMode ?? status?.trackerMode),
+        running: nextStatus?.running ?? true,
+      });
     } catch (e) {
       setError(toErrorMessage(e));
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(e),
+      });
     }
   }
 
   async function handleStartTrackingFromOnboarding() {
     setError(null);
     try {
-      await trackerClient.start();
+      const nextStatus: TrackerStatus | undefined = await trackerClient.start();
       await refresh();
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: "success",
+        tracker_mode: toTrackerModeAnalytics(nextStatus?.trackerMode ?? status?.trackerMode),
+        running: nextStatus?.running ?? true,
+      });
     } catch (e) {
       const message = toErrorMessage(e);
       setError(message);
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(e),
+      });
       throw new Error(message);
     }
   }
@@ -4246,10 +4337,21 @@ export default function App() {
   async function handleStopTracking() {
     setError(null);
     try {
-      await trackerClient.stop();
+      const nextStatus: TrackerStatus | undefined = await trackerClient.stop();
       await refresh();
+      capturePostHogEvent("tracker_action", {
+        action: "stop",
+        result: "success",
+        tracker_mode: toTrackerModeAnalytics(nextStatus?.trackerMode ?? status?.trackerMode),
+        running: nextStatus?.running ?? false,
+      });
     } catch (e) {
       setError(toErrorMessage(e));
+      capturePostHogEvent("tracker_action", {
+        action: "stop",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(e),
+      });
     }
   }
 
@@ -4266,13 +4368,17 @@ export default function App() {
 
   async function handleRunAiClassificationNow() {
     if (!canUseCloudAiClassification && !localAiClassificationOptions) {
-      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
+      const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." } satisfies AiClassificationSummary;
+      setClassificationSummary(disabledSummary);
+      captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
     if (aiClassificationInFlightRef.current) return;
 
     const executionUsageDay = todayIsoDate();
+    const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+    const range = selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     aiClassificationInFlightRef.current = true;
     setClassificationActionLoading(true);
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: "Running AI classification..." });
@@ -4291,11 +4397,18 @@ export default function App() {
         await refreshLeaderboardData();
       }
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
+      captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
       setObservedAiClassificationFailure(true);
+      captureAiClassificationRun("manual", providerKind, range, {
+        status: "error",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message,
+      });
     } finally {
       aiClassificationInFlightRef.current = false;
       setClassificationActionLoading(false);
@@ -4304,7 +4417,9 @@ export default function App() {
 
   async function handleRunSelectedDayAiClassification() {
     if (!canUseCloudAiClassification && !localAiClassificationOptions) {
-      setClassificationSummary({ status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." });
+      const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." } satisfies AiClassificationSummary;
+      setClassificationSummary(disabledSummary);
+      captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
@@ -4312,6 +4427,8 @@ export default function App() {
     if (aiClassificationInFlightRef.current) return;
 
     const executionUsageDay = todayIsoDate();
+    const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+    const range = targetDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     aiClassificationInFlightRef.current = true;
     setClassificationActionLoading(true);
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: `Classifying all unclassified activity for ${formatDayLabel(targetDay)}...` });
@@ -4333,11 +4450,18 @@ export default function App() {
         await refreshLeaderboardData();
       }
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
+      captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
       setObservedAiClassificationFailure(true);
+      captureAiClassificationRun("manual", providerKind, range, {
+        status: "error",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message,
+      });
     } finally {
       aiClassificationInFlightRef.current = false;
       setClassificationActionLoading(false);

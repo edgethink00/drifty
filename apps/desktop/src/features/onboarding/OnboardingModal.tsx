@@ -1,5 +1,6 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useEffect, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
+import { capturePostHogEvent } from "../../lib/analytics/posthog";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import wordmarkUrl from "../../assets/drifty-wordmark.png";
@@ -56,6 +57,12 @@ export function OnboardingModal({
   /** Dev-only: start on a specific step for visual review / Playwright. */
   __devInitialStep?: OnboardingStep;
 }) {
+  useEffect(() => {
+    capturePostHogEvent("onboarding_opened", {
+      source: __devInitialStep ? "manual" : "first_run",
+    });
+  }, [__devInitialStep]);
+
   const flow = useOnboardingFlow({
     userId,
     userEmail,

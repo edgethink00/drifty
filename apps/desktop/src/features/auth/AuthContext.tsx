@@ -13,7 +13,7 @@ import {
   supabase,
   type DriftyAuthMode,
 } from "../../lib/supabase/client";
-import { recordPostHogAuthState } from "../../lib/analytics/posthog";
+import { capturePostHogEvent, recordPostHogAuthState, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
 import {
   getAuthDiagnosticError,
   getDesktopSessionDiagnosticSummary,
@@ -341,6 +341,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         setCallbackFailed(`OAuth authorization code exchange failed: ${error.message}`);
         applySession(previousSession);
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_completed",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(error),
+        });
         return true;
       }
 
@@ -349,6 +355,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         recordAuthDiagnostic("auth.callback.code.no_session", { callbackKind: "code" });
         setCallbackFailed("OAuth authorization code was accepted, but no Supabase session was available.");
         applySession(previousSession);
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_completed",
+          method: "oauth",
+          result: "error",
+          error_kind: "not_authenticated",
+        });
         return true;
       }
 
@@ -359,6 +371,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applySession(exchangedSession);
       await saveDesktopSession(exchangedSession);
       setCallbackCompleted();
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "oauth",
+        result: "success",
+      });
 
       return true;
     };
@@ -381,6 +398,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           source,
         });
         setCallbackFailed(callbackResult.message);
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_completed",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(callbackResult.message),
+        });
         return true;
       }
 
@@ -415,6 +438,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         setCallbackFailed(error ? getOAuthSessionCallbackErrorMessage(error.message) : "OAuth session callback did not return a session.");
         applySession(previousSession);
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_completed",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(error ?? new Error("OAuth session callback did not return a session")),
+        });
         return true;
       }
 
@@ -426,6 +455,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applySession(callbackSession);
       await saveDesktopSession(callbackSession);
       setCallbackCompleted();
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "oauth",
+        result: "success",
+      });
       return true;
     };
 
@@ -567,26 +601,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signInWithEmail(email: string, password: string) {
     if (!supabase) {
-      return { error: new Error("Supabase is not configured") };
+      const error = new Error("Supabase is not configured");
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "email",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return { error };
     }
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
+    });
+    capturePostHogEvent("cloud_auth_action", {
+      action: "sign_in_completed",
+      method: "email",
+      result: error ? "error" : "success",
+      ...(error ? { error_kind: toAnalyticsErrorKind(error) } : {}),
     });
     return { error };
   }
 
   async function signInAnonymously() {
     if (!authModePolicy.allowsAnonymousAuth) {
-      return { error: new Error("Sign in is required before joining the leaderboard."), user: null };
+      const error = new Error("Sign in is required before joining the leaderboard.");
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "anonymous",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return { error, user: null };
     }
 
     if (!supabase) {
-      return { error: new Error("Supabase is not configured"), user: null };
+      const error = new Error("Supabase is not configured");
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "anonymous",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return { error, user: null };
     }
 
     const { data, error } = await supabase.auth.signInAnonymously();
     if (error) {
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "anonymous",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
       return { error, user: null };
     }
 
@@ -597,15 +664,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await saveDesktopSession(nextSession);
     }
 
+    capturePostHogEvent("cloud_auth_action", {
+      action: "sign_in_completed",
+      method: "anonymous",
+      result: "success",
+    });
     return { error: null, user: nextSession?.user ?? data.user ?? null };
   }
 
   async function signUpWithEmail(email: string, password: string) {
     if (!supabase) {
-      return { error: new Error("Supabase is not configured"), needsEmailConfirmation: false };
+      const error = new Error("Supabase is not configured");
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_up_completed",
+        method: "email",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return { error, needsEmailConfirmation: false };
     }
     const validationError = validateAuthPasswordForSignUp(password);
     if (validationError) {
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_up_completed",
+        method: "email",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(validationError),
+      });
       return { error: validationError, needsEmailConfirmation: false };
     }
     const { data, error } = await supabase.auth.signUp({
@@ -614,6 +699,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const normalizedError = normalizeAuthPasswordError(error);
     const needsEmailConfirmation = !data.session && !normalizedError;
+    capturePostHogEvent("cloud_auth_action", {
+      action: "sign_up_completed",
+      method: "email",
+      result: normalizedError ? "error" : "success",
+      ...(normalizedError ? { error_kind: toAnalyticsErrorKind(normalizedError) } : {}),
+    });
     return { error: normalizedError, needsEmailConfirmation };
   }
 
@@ -623,7 +714,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signInWithWebsite() {
     if (!supabase) {
-      return { error: new Error("Supabase is not configured") };
+      const error = new Error("Supabase is not configured");
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_started",
+        method: "website",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return { error };
     }
     const isDesktop = isTauriRuntime();
 
@@ -642,6 +740,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phase: "waiting",
           message: "Browser opened.",
         });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "website",
+          result: "success",
+        });
       } catch (error) {
         const openError = error instanceof Error
           ? error
@@ -650,6 +753,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phase: "failed",
           message: openError.message,
         });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "website",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(openError),
+        });
         return { error: openError };
       }
 
@@ -657,12 +766,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     window.location.assign(DESKTOP_LOGIN_URL);
+    capturePostHogEvent("cloud_auth_action", {
+      action: "sign_in_started",
+      method: "website",
+      result: "success",
+    });
     return { error: null };
   }
 
   async function signInWithGoogle() {
     if (!supabase) {
-      return { error: new Error("Supabase is not configured") };
+      const error = new Error("Supabase is not configured");
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_started",
+        method: "oauth",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return { error };
     }
     const isDesktop = isTauriRuntime();
 
@@ -691,6 +812,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phase: "failed",
         message: error.message,
       });
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_started",
+        method: "oauth",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
       return { error };
     }
 
@@ -699,6 +826,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCallbackStatus({
         phase: "failed",
         message: missingUrlError.message,
+      });
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_started",
+        method: "oauth",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(missingUrlError),
       });
       return { error: missingUrlError };
     }
@@ -711,6 +844,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phase: "waiting",
           message: "Browser opened.",
         });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "success",
+        });
       } catch (error) {
         const openError = error instanceof Error
           ? error
@@ -719,6 +857,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phase: "failed",
           message: openError.message,
         });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(openError),
+        });
         return { error: openError };
       }
 
@@ -726,16 +870,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     window.location.assign(data.url);
+    capturePostHogEvent("cloud_auth_action", {
+      action: "sign_in_started",
+      method: "oauth",
+      result: "success",
+    });
     return { error: null };
   }
 
   async function signOut() {
     if (!supabase) return;
     recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
-    await supabase.auth.signOut();
-    applySessionState(null);
-    await saveDesktopSession(null);
-    recordAuthDiagnostic("auth.sign_out.complete", { hasSession: false });
+    try {
+      await supabase.auth.signOut();
+      applySessionState(null);
+      await saveDesktopSession(null);
+      recordAuthDiagnostic("auth.sign_out.complete", { hasSession: false });
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_out",
+        method: "unknown",
+        result: "success",
+      });
+    } catch (error) {
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_out",
+        method: "unknown",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      throw error;
+    }
   }
 
   return (

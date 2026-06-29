@@ -161,6 +161,7 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: true,
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
   IS_PRODUCTION_BUILD: false,
+  ONBOARDING_V2_PREVIEW_ENABLED: false,
   RELEASE_CHANNEL: "dev",
   get REPLAY_ONBOARDING_DEV_TOOL_ENABLED() {
     return appFeatureSwitches.replayOnboardingDevToolEnabled;

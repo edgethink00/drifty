@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
   type Dispatch,
@@ -6,6 +7,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
+import { capturePostHogEvent } from "../../lib/analytics/posthog";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
@@ -154,7 +156,12 @@ export function useOnboardingFlow({
     step,
   });
 
+  useEffect(() => {
+    capturePostHogEvent("onboarding_step_viewed", { step });
+  }, [step]);
+
   async function completeOnboarding() {
+    let didComplete = false;
     await completeOnboardingAction({
       cloudTrialStartedNoticePresent: Boolean(cloudTrialStartedNotice),
       displayName,
@@ -165,7 +172,10 @@ export function useOnboardingFlow({
       mainActivities,
       mainActivityOther,
       onAcknowledgeCloudTrialStartedNotice,
-      onComplete,
+      onComplete: (state) => {
+        didComplete = true;
+        onComplete(state);
+      },
       onStartTracking,
       openAtLoginEnabled,
       setSetupError,
@@ -177,6 +187,14 @@ export function useOnboardingFlow({
       workType,
       workTypeOther,
     });
+    if (didComplete) {
+      capturePostHogEvent("onboarding_completed", {
+        ...(connection.setupChoice ? { setup_choice: connection.setupChoice } : {}),
+        accessibility_granted: permissions.accessibilityGranted,
+        notifications_granted: permissions.notificationPermission === "granted",
+        account_connected: accountConnected,
+      });
+    }
   }
 
   function goToNextStep() {
