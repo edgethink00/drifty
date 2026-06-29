@@ -682,13 +682,13 @@
   letter-spacing: .08em;
   line-height: 1;
   text-transform: uppercase;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: none;
 }
 
 :root[data-theme="dark"] .sidebar-tracker-toggle {
   background: color-mix(in srgb, white 28.6%, color-mix(in srgb, var(--shell-floating-surface-strong) 44%, transparent));
   color: white;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: none;
 }
 
 .sidebar-tracker-toggle:hover:not(:disabled) {
