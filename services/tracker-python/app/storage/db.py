@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
@@ -41,17 +41,17 @@ TIMELINE_SEARCH_FIELDS = (
     "activity_classifications.productivity",
 )
 
-BrowserHistoryResolver = Callable[[str | None, str | None, str | None], Any]
-BrowserHistoryTitlePolicy = Callable[[str | None], bool]
+BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]], Any]
+BrowserHistoryTitlePolicy = Callable[[Optional[str]], bool]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryBackfillConfig:
     observed_at: str
     max_age_seconds: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryBackfillResult:
     segment_id: int
     site_url: str | None

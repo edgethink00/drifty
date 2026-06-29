@@ -114,6 +114,13 @@ export function LeaderboardView({
                 <div className="leaderboard-hero__main">
                   <div className="leaderboard-hero__name-row">
                     <h3>{previewName}</h3>
+                    <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`}>
+                      {isOptedIn
+                        ? currentUserRank !== null
+                          ? `On the board · ${formatRank(currentUserRank)}`
+                          : "On the board"
+                        : "Not on the board yet"}
+                    </span>
                     {(isSignedIn || onEditProfile) ? (
                       <button type="button" className="settings-btn" onClick={() => onEditProfile?.()} disabled={!onEditProfile}>Edit profile</button>
                     ) : null}
