@@ -189,7 +189,7 @@
   align-self: center;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.52rem;
+  font-size: var(--flow-minute-axis-font-size, 0.52rem);
   line-height: 1;
 }
 
