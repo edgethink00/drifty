@@ -34,8 +34,9 @@ type FocusDriftScaleTickStyle = CSSProperties & {
   readonly "--focus-drift-scale-y": string;
 };
 
-function liveStyleForChart(chart: FocusDriftChart): FocusDriftLiveStyle | undefined {
-  return chart.currentX !== null ? { "--focus-drift-now-x": `${chart.currentX}%` } : undefined;
+function markerStyleForChart(chart: FocusDriftChart): FocusDriftLiveStyle | undefined {
+  const markerX = chart.currentX ?? chart.revealX;
+  return markerX !== null ? { "--focus-drift-now-x": `${markerX}%` } : undefined;
 }
 
 function scaleTickStyle(y: number): FocusDriftScaleTickStyle {
@@ -50,6 +51,15 @@ function buildFocusDriftAreaPath(points: readonly FocusDriftPoint[], path: strin
   const first = points[0];
   const last = points[points.length - 1];
   return first && last && path ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${path.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z` : "";
+}
+
+function isPointRevealed(point: FocusDriftPoint, chart: FocusDriftChart): boolean {
+  return !point.isFuture && (chart.revealX === null || point.x <= chart.revealX);
+}
+
+function revealClipWidthForChart(chart: FocusDriftChart): number | null {
+  if (chart.revealX === null) return null;
+  return Math.max(0, Math.min(FOCUS_DRIFT_CLIP_BOUNDS.right, chart.revealX) - FOCUS_DRIFT_CLIP_BOUNDS.left);
 }
 
 export const FocusDriftSection = memo(function FocusDriftSection({
@@ -67,18 +77,32 @@ export const FocusDriftSection = memo(function FocusDriftSection({
   const [hover, setHover] = useState<FocusDriftHoverState | null>(null);
   const chartBoundsRef = useRef<DOMRect | null>(null);
   const hoverPoints = useMemo(
-    () => chart.points.filter((point) => point.totalSeconds > 0 && !point.isFuture),
-    [chart.points],
+    () => chart.points.filter((point) => point.totalSeconds > 0 && isPointRevealed(point, chart)),
+    [chart],
   );
   const measuredPoints = useMemo(
     () => chart.points.filter((point) => !point.isFuture),
     [chart.points],
   );
-  const liveStyle = liveStyleForChart(chart);
+  const markerStyle = markerStyleForChart(chart);
+  const shouldRenderMarker = chart.currentX !== null || chart.revealX !== null;
+  const revealClipWidth = revealClipWidthForChart(chart);
+  const chartClipPath = revealClipWidth === null ? "url(#focus-drift-chart-bounds)" : "url(#focus-drift-chart-reveal)";
   const driftMistAreaPath = useMemo(
     () => buildFocusDriftAreaPath(measuredPoints, chart.driftPath),
     [chart.driftPath, measuredPoints],
   );
+  const shouldRenderChart = chart.hasData || chart.isLive || chart.revealX !== null;
+  const sectionAriaLabel = chart.revealX !== null && chart.revealTimeLabel
+    ? `Focus versus drift by 30-minute windows, replaying through ${chart.revealTimeLabel}.`
+    : chart.isLive && chart.currentTimeLabel
+      ? `Focus versus drift by 30-minute windows, in progress through ${chart.currentTimeLabel}. Future windows are pending.`
+      : "Focus versus drift by 30-minute windows";
+  const svgAriaLabel = chart.revealX !== null && chart.revealTimeLabel
+    ? `Focus and drift curves replaying through ${chart.revealTimeLabel}`
+    : chart.isLive && chart.currentTimeLabel
+      ? `Focus and drift curves in progress through ${chart.currentTimeLabel}`
+      : "Focus and drift curves";
 
   function readChartBounds(event: MouseEvent<SVGRectElement>): DOMRect | null {
     const bounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
@@ -136,17 +160,22 @@ export const FocusDriftSection = memo(function FocusDriftSection({
             <span className="chip warn"><span className="sw" style={{ background: "var(--productivity-drift)" }} />Drift</span>
           </div>
         </div>
-        {chart.hasData ? (
+        {shouldRenderChart ? (
           <div
-            className={`focus-drift${chart.isLive ? " focus-drift--live" : ""}`}
-            aria-label={chart.isLive && chart.currentTimeLabel ? `Focus versus drift by 30-minute windows, in progress through ${chart.currentTimeLabel}. Future windows are pending.` : "Focus versus drift by 30-minute windows"}
+            className={`focus-drift${chart.isLive ? " focus-drift--live" : ""}${chart.revealX !== null ? " focus-drift--reveal" : ""}`}
+            aria-label={sectionAriaLabel}
           >
-            <div className="focus-drift__plot" style={liveStyle}>
-              <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="group" aria-label={chart.isLive && chart.currentTimeLabel ? `Focus and drift curves in progress through ${chart.currentTimeLabel}` : "Focus and drift curves"}>
+            <div className="focus-drift__plot" style={markerStyle}>
+              <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="group" aria-label={svgAriaLabel}>
                 <defs>
                   <clipPath id="focus-drift-chart-bounds" clipPathUnits="userSpaceOnUse">
                     <rect x={FOCUS_DRIFT_CLIP_BOUNDS.left} y={FOCUS_DRIFT_CLIP_BOUNDS.top} width={FOCUS_DRIFT_CLIP_BOUNDS.right - FOCUS_DRIFT_CLIP_BOUNDS.left} height={FOCUS_DRIFT_CLIP_BOUNDS.bottom - FOCUS_DRIFT_CLIP_BOUNDS.top} />
                   </clipPath>
+                  {revealClipWidth !== null ? (
+                    <clipPath id="focus-drift-chart-reveal" clipPathUnits="userSpaceOnUse">
+                      <rect x={FOCUS_DRIFT_CLIP_BOUNDS.left} y={FOCUS_DRIFT_CLIP_BOUNDS.top} width={revealClipWidth} height={FOCUS_DRIFT_CLIP_BOUNDS.bottom - FOCUS_DRIFT_CLIP_BOUNDS.top} />
+                    </clipPath>
+                  ) : null}
                   <linearGradient id="focus-drift-chart-drift-mist" x1="0" x2="0" y1="0" y2="1">
                     <stop className="focus-drift__drift-mist-stop--strong" offset="0%" />
                     <stop className="focus-drift__drift-mist-stop--soft" offset="78%" />
@@ -157,7 +186,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                 {chart.currentX !== null ? (
                   <rect className="focus-drift__future-region" x={chart.currentX} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - chart.currentX} height={FOCUS_DRIFT_CHART_BOUNDS.bottom - FOCUS_DRIFT_CHART_BOUNDS.top} aria-hidden="true" />
                 ) : null}
-                <g clipPath="url(#focus-drift-chart-bounds)">
+                <g clipPath={chartClipPath}>
                   <path className="focus-drift__area" d={chart.focusAreaPath} />
                   <path className="focus-drift__drift-mist" d={driftMistAreaPath} />
                   <path className="focus-drift__line focus-drift__line--focus" d={chart.focusPath} />
@@ -171,7 +200,12 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                   </g>
                 ))}
               </svg>
-              {chart.currentX !== null ? <div className="focus-drift__now-marker" aria-hidden="true" /> : null}
+              {shouldRenderMarker ? (
+                <div
+                  className={`focus-drift__now-marker${chart.revealX !== null ? " focus-drift__now-marker--replay" : ""}`}
+                  aria-hidden="true"
+                />
+              ) : null}
               <div className="focus-drift__scale" aria-hidden="true">
                 {FOCUS_DRIFT_Y_AXIS_TICKS.map((tick) => (
                   <span key={tick.label} style={scaleTickStyle(tick.y)}>{tick.label}</span>

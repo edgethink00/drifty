@@ -172,7 +172,7 @@ import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeri
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
-import { buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
+import { applyFocusDriftReplayReveal, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
 import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
 import type { MonthCellStyle } from "./features/dashboard/monthOverview";
 import {
@@ -184,12 +184,16 @@ import {
   type WeekDashboardDayModelCacheSettings,
   type WeekDashboardModel,
 } from "./features/dashboard/weekDashboardModel";
+import { useDashboardDemoReplayController } from "./features/dashboard/useDashboardDemoReplayController";
+import { buildSelectedDashboardReplayAnchor } from "./features/dashboard/dashboardDemoReplaySource";
+import type { DemoDashboardReplayKind } from "./features/dashboard/demoDashboardReplay";
+import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUpdateDialogBlocking, resolveDashboardDemoReplayEffectiveData } from "./features/dashboard/dashboardDemoReplayEffectiveData";
 import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
-import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
@@ -670,6 +674,7 @@ export default function App() {
   const [forceChromiumAxExtremeNudgeEnabled, setForceChromiumAxExtremeNudgeEnabled] = useState(resolveInitialForceChromiumAxExtremeNudgeEnabled);
   const [startOfDayMinutes, setStartOfDayMinutes] = useState(resolveInitialStartOfDayMinutes);
   const [startOfWeek, setStartOfWeek] = useState<StartOfWeek>(resolveInitialStartOfWeek);
+  const [demoDashboardReplaySettings, setDemoDashboardReplaySettings] = useState<DemoDashboardReplaySettings>(resolveInitialDemoDashboardReplaySettings);
   const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
   const {
@@ -809,6 +814,37 @@ export default function App() {
       return { entries: [...entries, { tabId, dashPeriod: nextDashPeriod }], index: entries.length };
     });
   }, [dashPeriod]);
+  const {
+    replayState: dashboardDemoReplayState,
+    restartReplay: restartDashboardDemoReplay,
+    startReplay: startDashboardDemoReplay,
+    stopReplay: stopDashboardDemoReplay,
+  } = useDashboardDemoReplayController({
+    settings: demoDashboardReplaySettings,
+    startOfDayMinutes,
+    startOfWeek,
+    onNavigateDashboard: (period) => navigateToTab("dashboard", period),
+    onSelectDay: selectDay,
+  });
+
+  useEffect(() => {
+    if (activeTab !== "dashboard") stopDashboardDemoReplay();
+  }, [activeTab, stopDashboardDemoReplay]);
+
+  function handleDemoDashboardReplayPreRollSecondsChange(value: number) {
+    stopDashboardDemoReplay();
+    setDemoDashboardReplaySettings((current) => persistDemoDashboardReplaySettings({ ...current, preRollSeconds: value }));
+  }
+
+  function handleDemoDashboardReplayDurationSecondsChange(value: number) {
+    stopDashboardDemoReplay();
+    setDemoDashboardReplaySettings((current) => persistDemoDashboardReplaySettings({ ...current, durationSeconds: value }));
+  }
+
+  function handleResetDemoDashboardReplaySettings() {
+    stopDashboardDemoReplay();
+    setDemoDashboardReplaySettings(resetDemoDashboardReplaySettings());
+  }
 
   const navigateBack = useCallback(() => {
     setNavigationHistory((current) => (current.index > 0 ? { ...current, index: current.index - 1 } : current));
@@ -3501,6 +3537,9 @@ export default function App() {
   }, []);
 
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
+  const isTodaySelected = selectedDay === todayDay;
+  const liveClock = isTodaySelected ? new Date() : null;
+  const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
 
   useEffect(() => {
     if (!WATCHER_PEEK_PROTOTYPE_ENABLED) return;
@@ -3581,6 +3620,109 @@ export default function App() {
       visibleRange: dashboardRange,
     });
   }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments]);
+  const {
+    effectiveSelectedDaySegments,
+    effectiveDashboardSegments,
+    effectiveCurrentMinuteOfDay,
+    effectiveDashboardRange,
+    effectiveTodayDayForWeekModel,
+    isDashboardDemoReplayActive,
+  } = useMemo(() => resolveDashboardDemoReplayEffectiveData({
+    currentMinuteOfDay,
+    dashboardRange,
+    dashboardSegments,
+    replayState: dashboardDemoReplayState,
+    selectedDaySegments: segments,
+    todayDayForWeekModel: todayDay,
+  }), [currentMinuteOfDay, dashboardDemoReplayState, dashboardRange, dashboardSegments, segments, todayDay]);
+  const handleStartDashboardDemoReplay = useCallback((replayKind: DemoDashboardReplayKind) => {
+    switch (replayKind) {
+      case "day": {
+        const anchor = buildSelectedDashboardReplayAnchor({
+          kind: replayKind,
+          anchorDay: selectedDay,
+          startDay: selectedDay,
+          endDay: selectedDay,
+          startOfDayMinutes,
+        });
+        startDashboardDemoReplay(replayKind, { anchor, segments });
+        if (!shouldBlockLocalTrackerAccess && segments.length > 0) {
+          loadMissingAppIcons({
+            segments,
+            failureMessage: "Failed to load selected day replay app icons",
+          });
+        }
+        return;
+      }
+      case "week": {
+        const anchor = buildSelectedDashboardReplayAnchor({
+          kind: replayKind,
+          anchorDay: selectedDay,
+          startDay: dashboardWeekRange.startDay,
+          endDay: dashboardWeekRange.endDay,
+          startOfDayMinutes,
+        });
+        const cachedWeek = findFreshCompactHistoryLoad(compactHistoryCacheRef.current, dashboardWeekHistoryRange);
+        if (cachedWeek) {
+          const weekSegments = cachedWeek.materialized.segments;
+          startDashboardDemoReplay(replayKind, { anchor, segments: weekSegments });
+          if (!shouldBlockLocalTrackerAccess && weekSegments.length > 0) {
+            loadMissingAppIcons({
+              segments: weekSegments,
+              failureMessage: "Failed to load selected week replay app icons",
+            });
+          }
+          return;
+        }
+        if (shouldBlockLocalTrackerAccess) {
+          startDashboardDemoReplay(replayKind, { anchor, segments: [] });
+          return;
+        }
+
+        void loadCompactHistoryRange(dashboardWeekHistoryRange).then((load) => {
+          const weekSegments = load.materialized.segments;
+          startDashboardDemoReplay(replayKind, { anchor, segments: weekSegments });
+          if (weekSegments.length > 0) {
+            loadMissingAppIcons({
+              segments: weekSegments,
+              failureMessage: "Failed to load selected week replay app icons",
+            });
+          }
+        }).catch((error) => {
+          let message = "unknown error";
+          if (error instanceof Error) {
+            message = error.message;
+          }
+          console.warn("Failed to load selected week replay data", message);
+          startDashboardDemoReplay(replayKind, { anchor, segments: [] });
+        });
+        return;
+      }
+      default:
+        assertNever(replayKind);
+    }
+  }, [
+    dashboardWeekHistoryRange,
+    dashboardWeekRange.endDay,
+    dashboardWeekRange.startDay,
+    loadCompactHistoryRange,
+    loadMissingAppIcons,
+    segments,
+    selectedDay,
+    shouldBlockLocalTrackerAccess,
+    startDashboardDemoReplay,
+    startOfDayMinutes,
+  ]);
+  const dashboardReplay = useMemo(() => (
+    dashboardDemoReplayState.kind === "active"
+      ? {
+          phase: dashboardDemoReplayState.phase,
+          progress: dashboardDemoReplayState.progress,
+          onRestart: restartDashboardDemoReplay,
+          onStop: stopDashboardDemoReplay,
+        }
+      : null
+  ), [dashboardDemoReplayState, restartDashboardDemoReplay, stopDashboardDemoReplay]);
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
     if (activeTab !== "dashboard" || dashPeriod !== "Week") return;
@@ -3598,12 +3740,20 @@ export default function App() {
       ? dashboardWeekRefreshState.status
       : "loading";
   const dashboardClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: dashboardSegments, includeAiClassifications: showAiClassificationImpact }),
-    [dashboardSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: effectiveDashboardSegments, includeAiClassifications: showAiClassificationImpact }),
+    [effectiveDashboardSegments, showAiClassificationImpact],
+  );
+  const effectiveSelectedDayClassificationOptions = useMemo<ClassificationOptions>(
+    () => buildSelectedDayDashboardClassificationOptions({
+      fallbackCandidates: effectiveSelectedDaySegments,
+      includeAiClassifications: showAiClassificationImpact,
+      rules: classificationRules,
+    }),
+    [classificationRules, effectiveSelectedDaySegments, showAiClassificationImpact],
   );
   const dashboardActiveDays = useMemo(
-    () => buildDailyTotals(dashboardSegments, dashboardRange.startDay, dashboardRange.endDay, startOfDayMinutes).filter((day) => day.totalSeconds > 0).length,
-    [dashboardRange.endDay, dashboardRange.startDay, dashboardSegments, startOfDayMinutes],
+    () => buildDailyTotals(effectiveDashboardSegments, effectiveDashboardRange.startDay, effectiveDashboardRange.endDay, startOfDayMinutes).filter((day) => day.totalSeconds > 0).length,
+    [effectiveDashboardRange.endDay, effectiveDashboardRange.startDay, effectiveDashboardSegments, startOfDayMinutes],
   );
   const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
   const shouldBuildInsightModels = activeTab === "trends";
@@ -3746,14 +3896,16 @@ export default function App() {
     weekDashboardDayModelCache,
     weekDashboardPrewarmSegments,
   ]);
-  const totalSeconds = useMemo(() => totalDurationSeconds(dashboardSegments), [dashboardSegments]);
+  const totalSeconds = useMemo(() => totalDurationSeconds(effectiveDashboardSegments), [effectiveDashboardSegments]);
   const activeDashboardAiUnavailablePreviewInput = useMemo(
-    () => dashboardAiUnavailablePreview?.appliedDay === selectedDay
+    () => !isDashboardDemoReplayActive && dashboardAiUnavailablePreview?.appliedDay === selectedDay
       ? buildDashboardAiUnavailablePreviewInput(dashboardAiUnavailablePreview.caseId)
       : null,
-    [dashboardAiUnavailablePreview, selectedDay],
+    [dashboardAiUnavailablePreview, isDashboardDemoReplayActive, selectedDay],
   );
-  const dashboardAiUnavailableState = activeDashboardAiUnavailablePreviewInput
+  const dashboardAiUnavailableState = isDashboardDemoReplayActive
+    ? null
+    : activeDashboardAiUnavailablePreviewInput
     ? resolveDashboardAiUnavailableState(activeDashboardAiUnavailablePreviewInput)
     : totalSeconds > 0 || (loading && !hasLoadedOnce)
       ? resolveDashboardAiUnavailableState({
@@ -3777,6 +3929,7 @@ export default function App() {
     : null;
   const updateDialogBlocked = Boolean(
     dashboardAiRecoveryState
+    || isDashboardDemoReplayUpdateDialogBlocking(dashboardDemoReplayState)
     || authModalOpen
     || feedbackModalOpen
     || aiSetupDialogOpen
@@ -3824,9 +3977,9 @@ export default function App() {
       trackerRunning: status?.running ?? null,
     }).catch(() => undefined);
   }, [driftAlarmTrayStatus, status?.running]);
-  const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 6 }), [dashboardSegments]);
-  const dashboardTopApps = useMemo(() => buildAppUsageSummaries(dashboardSegments, { limit: 1, groupBy: "app" }), [dashboardSegments]);
-  const dayField = useMemo(() => buildQuarterHourDayField(segments, selectedDay, startOfDayMinutes), [segments, selectedDay, startOfDayMinutes]);
+  const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 6 }), [effectiveDashboardSegments]);
+  const dashboardTopApps = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 1, groupBy: "app" }), [effectiveDashboardSegments]);
+  const dayField = useMemo(() => buildQuarterHourDayField(effectiveSelectedDaySegments, selectedDay, startOfDayMinutes), [effectiveSelectedDaySegments, selectedDay, startOfDayMinutes]);
   const selectedDayLabel = formatDayLabel(selectedDay);
   const aiClassificationUsageDayLabel = formatDayLabel(aiClassificationUsageDay ?? selectedDay);
   const aiClassificationCostProjection = useMemo(
@@ -3872,13 +4025,13 @@ export default function App() {
         : selectedDayLabel;
   const dashboardTitleDuration = dashboardTrackedTimeLabel;
   const lastCaptureDistanceLabel = status?.lastEventAt ? formatRelativeTime(status.lastEventAt) : "No captures yet";
-  const uniqueAppsCount = useMemo(() => new Set(dashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [dashboardSegments]);
-  const averageSessionMinutes = dashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / dashboardSegments.length) : 0;
+  const uniqueAppsCount = useMemo(() => new Set(effectiveDashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [effectiveDashboardSegments]);
+  const averageSessionMinutes = effectiveDashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / effectiveDashboardSegments.length) : 0;
   const topApp = dashboardTopApps[0];
   const topAppLabel = topApp?.appName ?? "No activity";
   const liveAppLabel = status?.running && currentSnapshot?.appName ? currentSnapshot.appName : topAppLabel;
   const liveSiteLabel = status?.running ? (currentSnapshot?.siteDomain || currentSnapshot?.siteTitle || null) : null;
-  const hasTimelineData = segments.length > 0;
+  const hasTimelineData = effectiveSelectedDaySegments.length > 0;
   const isBootstrappingTracker = loading && status === null;
   const trackerModeLabel = status?.trackerMode ?? "unknown";
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
@@ -3893,7 +4046,6 @@ export default function App() {
   const peakSlot = dayField.reduce((cur, slot) => (slot.totalSeconds > cur.totalSeconds ? slot : cur), dayField[0]);
   const peakTrackedSeconds = peakSlot?.totalSeconds ?? 0;
   const peakWindowLabel = peakTrackedSeconds > 0 ? formatQuarterHourLabel(peakSlot.minuteOfDay) : "\u2014";
-  const isTodaySelected = selectedDay === todayDay;
   const isCurrentClassificationRange = classificationRange === "Week"
     ? classificationWeekRange.startDay <= todayDay && todayDay <= classificationWeekRange.endDay
     : isTodaySelected;
@@ -3913,8 +4065,6 @@ export default function App() {
   const canShiftInsightForward = nextInsightDay <= todayDay;
   const dashboardDateLabel = dashPeriod === "Week" ? formatDateRangeLabel(dashboardRange.startDay, dashboardRange.endDay) : selectedDayLabel;
   const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
-  const liveClock = isTodaySelected ? new Date() : null;
-  const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
   const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && isDevModeActive && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
 
   useEffect(() => {
@@ -3984,8 +4134,8 @@ export default function App() {
   );
   const insightSiteSummary = insightTopSites.slice(0, 5);
   const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
-  const flowBlocks = useMemo(() => buildFlowBlocks(segments, selectedDay, flowIntervalMinutes, selectedDayClassificationOptions, startOfDayMinutes), [flowIntervalMinutes, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
-  const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
+  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, flowIntervalMinutes, selectedDay, startOfDayMinutes]);
+  const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   const classificationCategoryBreakdowns = useMemo(
     () => buildClassificationCategoryBreakdowns(classificationSegments, classificationOptions, classificationTotalSeconds),
     [classificationOptions, classificationSegments, classificationTotalSeconds],
@@ -4040,10 +4190,10 @@ export default function App() {
   }, [activeTab, classificationRange, selectedDay, effectiveClassifyCategoryId, effectiveClassifySourceId]);
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
-  const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(dashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, dashboardSegments]);
+  const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   const dashboardEffectiveProductivityTotals = useMemo(
-    () => buildEffectiveProductivityDurations(dashboardSegments, dashboardClassificationOptions),
-    [dashboardClassificationOptions, dashboardSegments],
+    () => buildEffectiveProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions),
+    [dashboardClassificationOptions, effectiveDashboardSegments],
   );
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const previousWeekFocusSeconds = dashPeriod === "Week" && dashboardPreviousWeekFocusLoad?.key === dashboardPreviousWeekFocusKey
@@ -4055,29 +4205,43 @@ export default function App() {
     return buildWeekDashboardModel({
       cache: weekDashboardDayModelCache,
       classificationOptions: dashboardClassificationOptions,
-      endDay: dashboardRange.endDay,
-      segments: dashboardSegments,
-      startDay: dashboardRange.startDay,
+      endDay: effectiveDashboardRange.endDay,
+      segments: effectiveDashboardSegments,
+      startDay: effectiveDashboardRange.startDay,
       startOfDayMinutes,
-      todayDay,
+      todayDay: effectiveTodayDayForWeekModel,
     });
   }, [
     dashPeriod,
     dashboardClassificationOptions,
-    dashboardRange.endDay,
-    dashboardRange.startDay,
-    dashboardSegments,
+    effectiveDashboardRange.endDay,
+    effectiveDashboardRange.startDay,
+    effectiveDashboardSegments,
+    effectiveTodayDayForWeekModel,
     startOfDayMinutes,
-    todayDay,
     weekDashboardCacheRevision,
     weekDashboardDayModelCache,
   ]);
   const weekRows = weekDashboardModel.rows;
   const weekCalendarEvents = weekDashboardModel.calendarEvents;
-  const focusDriftChart = useMemo(
-    () => buildFocusDriftChart(segments, selectedDay, selectedDayClassificationOptions, currentMinuteOfDay, startOfDayMinutes),
-    [currentMinuteOfDay, selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes],
-  );
+  const focusDriftChart = useMemo(() => {
+    if (dashboardDemoReplayState.kind !== "active") {
+      return buildFocusDriftChart(effectiveSelectedDaySegments, selectedDay, effectiveSelectedDayClassificationOptions, effectiveCurrentMinuteOfDay, startOfDayMinutes);
+    }
+
+    return applyFocusDriftReplayReveal({
+      chart: buildFocusDriftChart(dashboardDemoReplayState.fixture.segments, selectedDay, effectiveSelectedDayClassificationOptions, null, startOfDayMinutes),
+      revealMinuteOfDay: effectiveCurrentMinuteOfDay,
+      startOfDayMinutes,
+    });
+  }, [
+    dashboardDemoReplayState,
+    effectiveCurrentMinuteOfDay,
+    effectiveSelectedDayClassificationOptions,
+    effectiveSelectedDaySegments,
+    selectedDay,
+    startOfDayMinutes,
+  ]);
 
   const handleDeleteHistorySegments = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0 || historyDeleting) return;
@@ -4640,7 +4804,7 @@ export default function App() {
       chart={focusDriftChart}
       peakTrackedSeconds={peakTrackedSeconds}
       peakWindowLabel={peakWindowLabel}
-      sessionCount={dashboardSegments.length}
+      sessionCount={effectiveDashboardSegments.length}
       topAppLabel={topAppLabel}
       totalSeconds={totalSeconds}
       uniqueAppsCount={uniqueAppsCount}
@@ -4721,7 +4885,7 @@ export default function App() {
           ) : null}
         </div>
       </div>
-      {cloudTrialStartedNotice && !onboardingOpen && !onboardingV2PreviewOpen ? (
+      {cloudTrialStartedNotice && !onboardingOpen && !onboardingV2PreviewOpen && !isDashboardDemoReplayActive ? (
         <CloudTrialStartedNotice
           notice={cloudTrialStartedNotice}
           onDismiss={dismissCloudTrialStartedNotice}
@@ -4843,7 +5007,7 @@ export default function App() {
             appIcons={appIcons}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
             classificationActionLoading={classificationActionLoading}
-            currentMinuteOfDay={currentMinuteOfDay}
+            currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAiUnavailableState={dashboardAiUnavailableState}
             dashboardAppUsage={dashboardAppUsage}
@@ -4851,7 +5015,8 @@ export default function App() {
             dashboardDateNavigator={dashboardDateNavigator}
             dashboardEffectiveProductivityTotals={dashboardEffectiveProductivityTotals}
             dashboardProductivityTotals={dashboardProductivityTotals}
-            dashboardRange={dashboardRange}
+            dashboardReplay={dashboardReplay}
+            dashboardRange={effectiveDashboardRange}
             dashboardTitle={dashboardTitle}
             dashboardTitleDuration={dashboardTitleDuration}
             dashPeriod={dashPeriod}
@@ -4872,6 +5037,8 @@ export default function App() {
             weekFocusDeltaPercent={weekFocusDeltaPercent}
             weekRefreshStatus={weekRefreshStatus}
             weekRows={weekRows}
+            weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
+            weekCurrentMinuteOfDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveCurrentMinuteOfDay : null}
             onDashboardAiUnavailableAction={handleDashboardAiUnavailableAction}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
@@ -5191,6 +5358,7 @@ export default function App() {
                   <DevSettingsSection
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
                     dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
+                    demoDashboardReplaySettings={demoDashboardReplaySettings}
                     endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
                     forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
@@ -5202,6 +5370,8 @@ export default function App() {
                     watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
                     onClearDashboardAiUnavailablePreview={clearDashboardAiUnavailablePreview}
                     onDashboardAiUnavailablePreviewCaseChange={setDashboardAiUnavailablePreviewCase}
+                    onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
+                    onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
                     onEndOfDayReviewPreview={handleEndOfDayReviewPreview}
                     onForceBrowserHistoryUrlFallbackChange={setForceBrowserHistoryUrlFallbackEnabled}
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
@@ -5212,6 +5382,8 @@ export default function App() {
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
+                    onReplayDashboardDemo={handleStartDashboardDemoReplay}
+                    onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}
                     onShowWatcherPeek={showWatcherPeek}
                     onWatcherModeChange={setWatcherMode}
                     onWatcherPeekEnabledChange={setWatcherPeekEnabled}

@@ -26,6 +26,10 @@ export const FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY = "drifty.dev.forceB
 
 export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
 
+export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.preRollSeconds";
+
+export const DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.durationSeconds";
+
 export const START_OF_DAY_STORAGE_KEY = "drifty.general.startOfDayMinutes";
 
 export const START_OF_WEEK_STORAGE_KEY = "drifty.general.startOfWeek";
@@ -38,7 +42,29 @@ export const DEFAULT_START_OF_DAY_MINUTES = 4 * 60;
 
 export const DEFAULT_START_OF_WEEK: StartOfWeek = "monday";
 
+export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_DEFAULT_SECONDS = 5;
+
+export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS = 0;
+
+export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS = 15;
+
+export const DEMO_DASHBOARD_REPLAY_DURATION_DEFAULT_SECONDS = 45;
+
+export const DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS = 15;
+
+export const DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS = 180;
+
 export const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+
+export type DemoDashboardReplaySettings = {
+  readonly preRollSeconds: number;
+  readonly durationSeconds: number;
+};
+
+type DemoDashboardReplaySettingsInput = {
+  readonly preRollSeconds?: string | number | null;
+  readonly durationSeconds?: string | number | null;
+};
 
 export const START_OF_DAY_OPTIONS: Array<{ value: string; label: string; minutes: number }> = Array.from({ length: 24 }, (_, hour) => {
   const value = `${String(hour).padStart(2, "0")}:00`;
@@ -104,6 +130,72 @@ export function minutesToHourlyStartOfDayValue(minutes: number): string {
 
 export function hourlyStartOfDayValueToMinutes(value: string): number {
   return START_OF_DAY_OPTIONS.find((option) => option.value === value)?.minutes ?? DEFAULT_START_OF_DAY_MINUTES;
+}
+
+function parseDemoDashboardReplaySeconds(value: string | number | null | undefined, defaultValue: number): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : defaultValue;
+  if (typeof value !== "string") return defaultValue;
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return defaultValue;
+  const parsedValue = Number(trimmedValue);
+  return Number.isFinite(parsedValue) ? parsedValue : defaultValue;
+}
+
+function clampSeconds(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function clampDemoDashboardReplaySettings(settings: DemoDashboardReplaySettingsInput): DemoDashboardReplaySettings {
+  const preRollSeconds = parseDemoDashboardReplaySeconds(
+    settings.preRollSeconds,
+    DEMO_DASHBOARD_REPLAY_PRE_ROLL_DEFAULT_SECONDS,
+  );
+  const durationSeconds = parseDemoDashboardReplaySeconds(
+    settings.durationSeconds,
+    DEMO_DASHBOARD_REPLAY_DURATION_DEFAULT_SECONDS,
+  );
+  return {
+    preRollSeconds: clampSeconds(
+      preRollSeconds,
+      DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
+      DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
+    ),
+    durationSeconds: clampSeconds(
+      durationSeconds,
+      DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS,
+      DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS,
+    ),
+  };
+}
+
+export function resolveInitialDemoDashboardReplaySettings(): DemoDashboardReplaySettings {
+  if (typeof window === "undefined") return clampDemoDashboardReplaySettings({});
+  return clampDemoDashboardReplaySettings({
+    preRollSeconds: window.localStorage.getItem(DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY),
+    durationSeconds: window.localStorage.getItem(DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY),
+  });
+}
+
+export function persistDemoDashboardReplaySettings(settings: DemoDashboardReplaySettingsInput): DemoDashboardReplaySettings {
+  const clampedSettings = clampDemoDashboardReplaySettings(settings);
+  if (typeof window === "undefined") return clampedSettings;
+  window.localStorage.setItem(
+    DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY,
+    String(clampedSettings.preRollSeconds),
+  );
+  window.localStorage.setItem(
+    DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY,
+    String(clampedSettings.durationSeconds),
+  );
+  return clampedSettings;
+}
+
+export function resetDemoDashboardReplaySettings(): DemoDashboardReplaySettings {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY);
+    window.localStorage.removeItem(DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY);
+  }
+  return clampDemoDashboardReplaySettings({});
 }
 
 export function resolveInitialStartOfDayMinutes(): number {

@@ -79,6 +79,14 @@ describe("AppUsagePanel", () => {
     expect(screen.getByText("No tracked apps this week.")).toBeTruthy();
   });
 
+  it("renders a quiet blank frame when replay asks for empty data instead of empty-state copy", () => {
+    render(<AppUsagePanel periodLabel="today" totalSeconds={0} appIcons={{}} items={[]} emptyPresentation="blank" />);
+
+    expect(screen.getByLabelText("No app usage for today yet")).toBeTruthy();
+    expect(screen.queryByText("No usage ranking")).toBeNull();
+    expect(screen.queryByText("Usage is still quiet")).toBeNull();
+  });
+
   it("renders site usage with browser context", () => {
     render(
       <AppUsagePanel

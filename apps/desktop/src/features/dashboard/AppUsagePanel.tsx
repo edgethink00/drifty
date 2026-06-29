@@ -25,6 +25,7 @@ export type AppUsagePanelProps = {
   totalSeconds: number;
   appIcons: Record<string, string | null>;
   emptyDetail?: string;
+  emptyPresentation?: "message" | "blank";
 };
 
 type ShareStyle = CSSProperties & {
@@ -125,6 +126,7 @@ export function AppUsagePanel({
   periodLabel,
   appIcons,
   emptyDetail = "App rankings appear once tracked activity is available for this period.",
+  emptyPresentation = "message",
 }: AppUsagePanelProps) {
   const rankedItems = items.slice().sort((left, right) => left.rank - right.rank || right.totalSeconds - left.totalSeconds);
   const primaryItem = rankedItems[0] ?? null;
@@ -207,6 +209,8 @@ export function AppUsagePanel({
             </ol>
           ) : null}
         </div>
+      ) : emptyPresentation === "blank" ? (
+        <div className="app-usage-empty app-usage-empty--blank" aria-label={`No app usage for ${periodLabel} yet`} />
       ) : (
         <div className="app-usage-empty empty-state">
           <span className="eyebrow">No usage ranking</span>

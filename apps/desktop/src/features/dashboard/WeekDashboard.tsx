@@ -14,6 +14,24 @@ import type { MouseEvent, ReactNode } from "react";
 
 const ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX = 29;
 
+type WeekDashboardProps = {
+  readonly rows: WeekDayRow[];
+  readonly calendarEvents: Map<string, WeekCalendarEvent[]>;
+  readonly appIcons: AppIconMap;
+  readonly startDay: string;
+  readonly endDay: string;
+  readonly categoryEntries: CategoryDuration[];
+  readonly productivityEntries: ProductivityDuration[];
+  readonly totalSeconds: number;
+  readonly focusDeltaPercent: number | null;
+  readonly refreshStatus: "idle" | "loading" | "error";
+  readonly isPreviewSurface?: boolean;
+  readonly startOfDayMinutes: number;
+  readonly dateNavigator: ReactNode;
+  readonly currentCalendarDay?: string;
+  readonly currentMinuteOfDay?: number;
+};
+
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
   const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
   if (identity.siteDomain) {
@@ -37,21 +55,9 @@ export function WeekDashboard({
   isPreviewSurface = false,
   startOfDayMinutes,
   dateNavigator,
-}: {
-  rows: WeekDayRow[];
-  calendarEvents: Map<string, WeekCalendarEvent[]>;
-  appIcons: AppIconMap;
-  startDay: string;
-  endDay: string;
-  categoryEntries: CategoryDuration[];
-  productivityEntries: ProductivityDuration[];
-  totalSeconds: number;
-  focusDeltaPercent: number | null;
-  refreshStatus: "idle" | "loading" | "error";
-  isPreviewSurface?: boolean;
-  startOfDayMinutes: number;
-  dateNavigator: ReactNode;
-}) {
+  currentCalendarDay,
+  currentMinuteOfDay,
+}: WeekDashboardProps) {
   const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
   const [activeWeekEventId, setActiveWeekEventId] = useState<string | null>(null);
   const calendarScrollerRef = useRef<HTMLDivElement>(null);
@@ -79,23 +85,31 @@ export function WeekDashboard({
   const canMountIdentityIcons = useDeferredWeekIdentityIcons({ calendarEvents, endDay, startDay });
   const minCalendarMinute = calendarStartHour * 60;
   const maxCalendarMinute = calendarEndHour * 60;
-  const isCurrentCalendarWeek = startDay <= todayDay && todayDay <= endDay;
-  const currentCalendarMinute = isCurrentCalendarWeek
+  const isRealCurrentCalendarWeek = startDay <= todayDay && todayDay <= endDay;
+  const realCurrentCalendarMinute = isRealCurrentCalendarWeek
     ? Math.min(maxCalendarMinute, Math.max(minCalendarMinute, logicalMinuteOfDay(new Date().getHours() * 60 + new Date().getMinutes(), startOfDayMinutes)))
     : null;
+  const virtualCalendarDay = currentCalendarDay !== undefined && startDay <= currentCalendarDay && currentCalendarDay <= endDay
+    ? currentCalendarDay
+    : null;
+  const hasVirtualCurrentCalendarMarker = virtualCalendarDay !== null && currentMinuteOfDay !== undefined;
+  const markerCalendarDay = virtualCalendarDay ?? todayDay;
+  const currentCalendarMinute = hasVirtualCurrentCalendarMarker
+    ? Math.min(maxCalendarMinute, Math.max(minCalendarMinute, currentMinuteOfDay))
+    : realCurrentCalendarMinute;
   const currentCalendarOffset = currentCalendarMinute === null
     ? null
     : ((currentCalendarMinute - minCalendarMinute) / 60) * calendarHourHeight;
-  const currentCalendarLabel = currentCalendarMinute === null ? null : formatCalendarMinuteLabel(todayDay, currentCalendarMinute, startOfDayMinutes);
-  const currentCalendarLineEnd = String(calendarRows.findIndex((row) => row.day === todayDay) + 3);
-  const currentCalendarMarkerStyle = currentCalendarOffset === null
+  const currentCalendarLabel = currentCalendarMinute === null ? null : formatCalendarMinuteLabel(markerCalendarDay, currentCalendarMinute, startOfDayMinutes);
+  const currentCalendarLineEnd = String(calendarRows.findIndex((row) => row.day === markerCalendarDay) + 3);
+  const currentCalendarMarkerStyle: WeekCalendarNowMarkerStyle | null = currentCalendarOffset === null
     ? null
     : {
         "--week-calendar-now-offset": `${currentCalendarOffset}px`,
         "--week-calendar-now-line-end": currentCalendarLineEnd,
-      } as WeekCalendarNowMarkerStyle;
+      };
   const autoScrollTargetMinute = useMemo(() => {
-    if (currentCalendarMinute !== null) return currentCalendarMinute;
+    if (currentCalendarDay === undefined && realCurrentCalendarMinute !== null) return realCurrentCalendarMinute;
 
     const earliestEventOffset = calendarRows.reduce<number | null>((earliest, row) => {
       const firstEvent = calendarEvents.get(row.day)?.[0];
@@ -106,7 +120,7 @@ export function WeekDashboard({
     return earliestEventOffset === null
       ? minCalendarMinute
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
-  }, [calendarEvents, calendarRows, currentCalendarMinute, maxCalendarMinute, minCalendarMinute]);
+  }, [calendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute]);
 
   useLayoutEffect(() => {
     const scroller = calendarScrollerRef.current;
@@ -143,7 +157,7 @@ export function WeekDashboard({
                 const ratio = row.focusSeconds > 0 ? row.focusSeconds / summaryPeakSeconds : 0;
                 const barHeight = row.focusSeconds > 0 ? Math.max(4, Math.round(ratio * 30)) : 2;
                 const isPeak = bestDay?.day === row.day && row.focusSeconds > 0;
-                const isToday = todayDay === row.day;
+                const isToday = markerCalendarDay === row.day;
                 const dayLetter = row.dayName.charAt(0);
                 return (
                   <span
@@ -184,7 +198,7 @@ export function WeekDashboard({
                 const weekday = new Date(`${row.day}T12:00:00`).getDay();
                 const isWeekend = weekday === 0 || weekday === 6;
                 return (
-                  <span className={`${isWeekend ? "is-weekend" : ""}${row.day === todayDay ? " is-today" : ""}`.trim()} key={row.day}>
+                  <span className={`${isWeekend ? "is-weekend" : ""}${row.day === markerCalendarDay ? " is-today" : ""}`.trim()} key={row.day}>
                     <strong>{row.dayName}</strong>
                     <small>{row.dayNumber}</small>
                   </span>
@@ -216,7 +230,7 @@ export function WeekDashboard({
               {calendarRows.map((row) => {
                 const events = calendarEvents.get(row.day) ?? [];
                 return (
-                  <div className={`week-v2-calendar__day-column${row.day === todayDay ? " is-today" : ""}`} key={row.day}>
+                  <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} key={row.day}>
                     {calendarHours.map((hour) => (
                       <span className="week-v2-calendar__line" key={`${row.day}-${hour}`} style={{ top: `${(hour - calendarStartHour) * calendarHourHeight}px` }} />
                     ))}

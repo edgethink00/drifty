@@ -89,7 +89,15 @@ export type FocusDriftChart = {
   isLive: boolean;
   currentX: number | null;
   currentTimeLabel: string | null;
+  revealX: number | null;
+  revealTimeLabel: string | null;
   axisTicks: FocusDriftAxisTick[];
+};
+
+export type FocusDriftReplayRevealInput = {
+  readonly chart: FocusDriftChart;
+  readonly revealMinuteOfDay: number | null;
+  readonly startOfDayMinutes: number;
 };
 
 export function buildFocusDriftAxisTicks(startOfDayMinutes = 0): FocusDriftAxisTick[] {
@@ -122,6 +130,35 @@ export function buildProductivityQualityPercent(productivityTotals: Productivity
   const totalSeconds = productivityTotals.reduce((total, entry) => total + entry.totalSeconds, 0);
   const focusSeconds = productivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   return totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
+}
+
+export function applyFocusDriftReplayReveal(input: FocusDriftReplayRevealInput): FocusDriftChart {
+  if (input.revealMinuteOfDay === null) {
+    return {
+      ...input.chart,
+      isLive: false,
+      currentX: null,
+      currentTimeLabel: null,
+      revealX: null,
+      revealTimeLabel: null,
+    };
+  }
+
+  const logicalRevealMinute = Math.min(
+    Math.max(Math.floor(logicalMinuteOfDay(input.revealMinuteOfDay, input.startOfDayMinutes)), 0),
+    FOCUS_DRIFT_MINUTES_PER_DAY - 1,
+  );
+  const chartWidth = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
+  const revealX = FOCUS_DRIFT_CHART_BOUNDS.left + (logicalRevealMinute / FOCUS_DRIFT_MINUTES_PER_DAY) * chartWidth;
+
+  return {
+    ...input.chart,
+    isLive: false,
+    currentX: null,
+    currentTimeLabel: null,
+    revealX,
+    revealTimeLabel: formatQuarterHourLabel(clockMinuteForLogicalMinute(logicalRevealMinute, input.startOfDayMinutes)),
+  };
 }
 
 export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
@@ -227,6 +264,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     isLive,
     currentX,
     currentTimeLabel,
+    revealX: null,
+    revealTimeLabel: null,
     axisTicks: buildFocusDriftAxisTicks(startOfDayMinutes),
   };
 }

@@ -19,6 +19,7 @@ export function FlowChartView({
   currentMinuteOfDay,
   intervalMinutes = 3,
   onIntervalChange,
+  showEmptyGrid = false,
   startOfDayMinutes = 0,
 }: {
   blocks: FlowBlock[];
@@ -26,6 +27,7 @@ export function FlowChartView({
   currentMinuteOfDay?: number | null;
   intervalMinutes?: FlowIntervalMinutes;
   onIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
+  showEmptyGrid?: boolean;
   startOfDayMinutes?: number;
 }) {
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
@@ -61,7 +63,7 @@ export function FlowChartView({
     "--flow-minute-axis-font-size": minuteAxisFontSize,
     "--flow-row-count": `${60 / intervalMinutes}`,
   };
-  if (blocks.length === 0) return null;
+  if (blocks.length === 0 && !showEmptyGrid) return null;
 
   return (
     <section className="flow-chart-card" aria-label={`${intervalMinutes}-minute flow chart`} data-flow-interval={intervalMinutes} data-flow-color-mode={colorMode} style={chartStyle}>
