@@ -631,8 +631,8 @@ describe('domain helpers', () => {
     expect(blocks.map((block) => block.durationSeconds)).toEqual([120, 180, 60]);
   });
 
-  it('offers mock-aligned flow block intervals', () => {
-    expect(FLOW_INTERVAL_OPTIONS).toEqual([3, 5, 10]);
+  it('offers compact flow block intervals', () => {
+    expect(FLOW_INTERVAL_OPTIONS).toEqual([3, 4, 5]);
 
     const blocks = buildFlowBlocks([
       {
@@ -641,11 +641,11 @@ describe('domain helpers', () => {
         endedAt: localIso(9, 30),
         durationSeconds: 1800,
       },
-    ], '2026-04-06', 10);
+    ], '2026-04-06', 4);
 
-    expect(blocks).toHaveLength(3);
-    expect(blocks.map((block) => block.minuteOfDay)).toEqual([9 * 60, 9 * 60 + 10, 9 * 60 + 20]);
-    expect(blocks.map((block) => block.durationSeconds)).toEqual([600, 600, 600]);
+    expect(blocks).toHaveLength(8);
+    expect(blocks.map((block) => block.minuteOfDay)).toEqual([9 * 60, 9 * 60 + 4, 9 * 60 + 8, 9 * 60 + 12, 9 * 60 + 16, 9 * 60 + 20, 9 * 60 + 24, 9 * 60 + 28]);
+    expect(blocks.map((block) => block.durationSeconds)).toEqual([240, 240, 240, 240, 240, 240, 240, 120]);
   });
 
   it('classifies unmatched activity as unknown instead of focus workspace', () => {
