@@ -97,6 +97,29 @@ describe("insight weekly builders", () => {
     expect(cells.find((cell) => cell.weekdayIndex === 2 && cell.hour === 12)).toMatchObject({ state: "focus", intensity: 1 });
   });
 
+  it("colors longer attention rhythm windows from weekday-hour averages", () => {
+    const segments = [
+      segmentOnDay("monday-1", "2026-06-01", "workspace", "focus"),
+      segmentOnDay("monday-2", "2026-06-08", "workspace", "focus"),
+      segmentOnDay("monday-3", "2026-06-15", "workspace", "focus"),
+      segmentOnDay("monday-4", "2026-06-22", "workspace", "focus"),
+      segmentOnDay("monday-5", "2026-06-29", "workspace", "focus"),
+      segmentOnDay("tuesday-1", "2026-06-02", "workspace", "focus"),
+      segmentOnDay("wednesday-1", "2026-06-03", "workspace", "focus"),
+      segmentOnDay("wednesday-2", "2026-06-10", "workspace", "focus"),
+      segmentOnDay("wednesday-3", "2026-06-17", "workspace", "focus"),
+    ];
+    const visibility = {
+      averagingRange: { startDay: "2026-06-01", endDay: "2026-06-30" },
+    };
+
+    const cells = buildAttentionRhythm(segments, undefined, visibility);
+
+    expect(cells.find((cell) => cell.weekdayIndex === 0 && cell.hour === 10)).toMatchObject({ state: "focus", intensity: 3 });
+    expect(cells.find((cell) => cell.weekdayIndex === 1 && cell.hour === 10)).toMatchObject({ state: "focus", intensity: 1 });
+    expect(cells.find((cell) => cell.weekdayIndex === 2 && cell.hour === 10)).toMatchObject({ state: "focus", intensity: 3 });
+  });
+
   it("orders weekly chart segments by each day's largest share first", () => {
     const weekly = [
       {

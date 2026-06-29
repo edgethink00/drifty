@@ -17,6 +17,10 @@ export interface AttentionRhythmCell {
 type AttentionRhythmVisibility = {
   readonly startDay?: string;
   readonly visibleThroughDay?: string;
+  readonly averagingRange?: {
+    readonly startDay: string;
+    readonly endDay: string;
+  };
 };
 
 type HourOverlap = {
@@ -51,11 +55,51 @@ function orderedWeekdayIndexes(startDay?: string): readonly number[] {
   return Array.from({ length: WEEKDAY_COUNT }, (_, offset) => (startIndex + offset) % WEEKDAY_COUNT);
 }
 
+function validDayDate(day: string): Date | null {
+  const date = new Date(`${day}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function visibleThroughDay(visibility?: AttentionRhythmVisibility): string | null {
   if (weekdayIndexForDay(visibility?.startDay) !== null) return null;
   const day = visibility?.visibleThroughDay;
   if (!day) return null;
-  return Number.isNaN(new Date(`${day}T12:00:00`).getTime()) ? null : day;
+  return validDayDate(day) === null ? null : day;
+}
+
+function buildWeekdayOccurrenceCounts(visibility?: AttentionRhythmVisibility): number[] | null {
+  const range = visibility?.averagingRange;
+  if (!range) return null;
+
+  const startDate = validDayDate(range.startDay);
+  const endDate = validDayDate(range.endDay);
+  if (startDate === null || endDate === null || endDate < startDate) return null;
+
+  const counts = new Array<number>(WEEKDAY_COUNT).fill(0);
+  const cursor = new Date(startDate);
+  while (cursor <= endDate) {
+    counts[weekdayOrderIndex(cursor)] += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return counts;
+}
+
+function averageGridByWeekdayOccurrences(grid: number[][], weekdayOccurrences: readonly number[]): number[][] {
+  return grid.map((row, weekdayIndex) => {
+    const occurrences = weekdayOccurrences[weekdayIndex] ?? 0;
+    if (occurrences <= 1) return row.slice();
+    return row.map((value) => value / occurrences);
+  });
+}
+
+function averageRhythmTotals(totals: RhythmTotals, visibility?: AttentionRhythmVisibility): RhythmTotals {
+  const weekdayOccurrences = buildWeekdayOccurrenceCounts(visibility);
+  if (weekdayOccurrences === null) return totals;
+  return {
+    focus: averageGridByWeekdayOccurrences(totals.focus, weekdayOccurrences),
+    drift: averageGridByWeekdayOccurrences(totals.drift, weekdayOccurrences),
+    neutral: averageGridByWeekdayOccurrences(totals.neutral, weekdayOccurrences),
+  };
 }
 
 function nextHourBoundaryMs(valueMs: number): number {
@@ -146,12 +190,13 @@ export function buildAttentionRhythm(
     }
   }
 
-  const maxFocus = maxGridValue(totals.focus);
-  const maxDrift = maxGridValue(totals.drift);
+  const averagedTotals = averageRhythmTotals(totals, visibility);
+  const maxFocus = maxGridValue(averagedTotals.focus);
+  const maxDrift = maxGridValue(averagedTotals.drift);
   const cells: AttentionRhythmCell[] = [];
   for (const weekdayIndex of orderedWeekdayIndexes(visibility?.startDay)) {
     for (let hour = 0; hour < HOURS_PER_DAY; hour += 1) {
-      cells.push(buildCell(totals, weekdayIndex, hour, maxFocus, maxDrift));
+      cells.push(buildCell(averagedTotals, weekdayIndex, hour, maxFocus, maxDrift));
     }
   }
   return cells;
