@@ -16,6 +16,7 @@ import {
   type DashboardAiUnavailableVariant,
 } from "./DashboardAiUnavailableNotice";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
+import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
@@ -29,6 +30,7 @@ type DashboardPageProps = {
   readonly dashboardDateNavigator: ReactNode;
   readonly dashboardEffectiveProductivityTotals: ProductivityDuration[];
   readonly dashboardProductivityTotals: ProductivityDuration[];
+  readonly dashboardReplay: DashboardDemoReplayBannerState | null;
   readonly dashboardRange: {
     readonly startDay: string;
     readonly endDay: string;
@@ -53,9 +55,11 @@ type DashboardPageProps = {
   readonly weekFocusDeltaPercent: number | null;
   readonly weekRefreshStatus: "idle" | "loading" | "error";
   readonly weekRows: WeekDayRow[];
+  readonly weekCurrentCalendarDay: string | null;
+  readonly weekCurrentMinuteOfDay: number | null;
   readonly onDashboardAiUnavailableAction: (variant: DashboardAiUnavailableVariant) => void;
   readonly onDismissDashboardAiRecovery: () => void;
-  readonly onFlowIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
+  readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
   readonly onRetrySelectedDayAiClassification: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
@@ -74,6 +78,7 @@ export function DashboardPage({
   dashboardDateNavigator,
   dashboardEffectiveProductivityTotals,
   dashboardProductivityTotals,
+  dashboardReplay,
   dashboardRange,
   dashboardTitle,
   dashboardTitleDuration,
@@ -95,6 +100,8 @@ export function DashboardPage({
   weekFocusDeltaPercent,
   weekRefreshStatus,
   weekRows,
+  weekCurrentCalendarDay,
+  weekCurrentMinuteOfDay,
   onDashboardAiUnavailableAction,
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
@@ -108,6 +115,7 @@ export function DashboardPage({
     dashPeriod === "Week" ? "page--week-dashboard" : null,
     initialDataLoading ? "page--loading-skeleton" : null,
   ].filter(Boolean).join(" ");
+  const isDashboardReplayActive = dashboardReplay !== null;
 
   return (
     <div className={pageClassName}>
@@ -148,6 +156,8 @@ export function DashboardPage({
         </div>
       )}
 
+      <DashboardDemoReplayBanner replay={dashboardReplay} />
+
       {initialDataLoading ? (
         <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={dashboardDateNavigator} />
       ) : dashPeriod === "Week" ? (
@@ -165,6 +175,8 @@ export function DashboardPage({
           isPreviewSurface={isPreviewSurface}
           startOfDayMinutes={startOfDayMinutes}
           dateNavigator={dashboardDateNavigator}
+          currentCalendarDay={weekCurrentCalendarDay ?? undefined}
+          currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
         />
       ) : dashPeriod === "Month" ? (
         <HistoryCalendarPanel
@@ -176,7 +188,7 @@ export function DashboardPage({
         />
       ) : (
         <>
-          {hasTimelineData ? (
+          {hasTimelineData || isDashboardReplayActive ? (
             <div className="flow-breakdown-layout">
               <div className="flow-breakdown-layout__chart">
                 <FlowChartView
@@ -186,6 +198,7 @@ export function DashboardPage({
                   intervalMinutes={flowIntervalMinutes}
                   startOfDayMinutes={startOfDayMinutes}
                   onIntervalChange={onFlowIntervalChange}
+                  showEmptyGrid={isDashboardReplayActive}
                 />
               </div>
               <FlowCompactSplitChart
@@ -213,6 +226,7 @@ export function DashboardPage({
             periodLabel={dashPeriod.toLowerCase()}
             totalSeconds={totalSeconds}
             appIcons={appIcons}
+            emptyPresentation={isDashboardReplayActive ? "blank" : "message"}
           />
         </>
       ) : null}

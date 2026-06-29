@@ -3,13 +3,23 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { createRef, type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DevSettingsSection } from "./DevSettingsSection";
+import {
+  DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS,
+  DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS,
+  DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
+  DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
+} from "./settingsStorage";
 
 const featureSwitches = vi.hoisted(() => ({
+  demoDashboardReplayDevToolEnabled: false,
   onboardingV2PreviewEnabled: false,
 }));
 
 vi.mock("../../appFeatureSwitches", () => ({
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: false,
+  get DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED() {
+    return featureSwitches.demoDashboardReplayDevToolEnabled;
+  },
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: false,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
@@ -26,6 +36,10 @@ function renderProductionDevSettings() {
   const props = {
     dashboardAiUnavailablePreview: null,
     dashboardAiUnavailablePreviewCase: "connect-ai",
+    demoDashboardReplaySettings: {
+      preRollSeconds: 5,
+      durationSeconds: 45,
+    },
     endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
     forceBrowserHistoryUrlFallbackEnabled: false,
     forceChromiumAxCaptureEnabled: false,
@@ -37,6 +51,8 @@ function renderProductionDevSettings() {
     watcherPeriodicMinMinutes: 5,
     onClearDashboardAiUnavailablePreview: vi.fn(),
     onDashboardAiUnavailablePreviewCaseChange: vi.fn(),
+    onDemoDashboardReplayDurationSecondsChange: vi.fn(),
+    onDemoDashboardReplayPreRollSecondsChange: vi.fn(),
     onEndOfDayReviewPreview: vi.fn(),
     onForceBrowserHistoryUrlFallbackChange: vi.fn(),
     onForceChromiumAxCaptureChange: vi.fn(),
@@ -47,6 +63,8 @@ function renderProductionDevSettings() {
     onOpenReplayOnboarding: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onPreviewDriftAlarm: vi.fn(),
+    onReplayDashboardDemo: vi.fn(),
+    onResetDemoDashboardReplaySettings: vi.fn(),
     onShowWatcherPeek: vi.fn(),
     onWatcherModeChange: vi.fn(),
     onWatcherPeekEnabledChange: vi.fn(),
@@ -55,10 +73,13 @@ function renderProductionDevSettings() {
   } satisfies DevSettingsSectionProps;
 
   render(<DevSettingsSection {...props} />);
+
+  return props;
 }
 
 describe("DevSettingsSection", () => {
   beforeEach(() => {
+    featureSwitches.demoDashboardReplayDevToolEnabled = false;
     featureSwitches.onboardingV2PreviewEnabled = false;
   });
 
@@ -71,6 +92,7 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("heading", { name: /^Dev$/ })).toBeNull();
     expect(screen.queryByRole("group", { name: /^Pre-release update$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Preview v2$/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
   });
 
   it("calls the browser history fallback handler when toggled", () => {
@@ -148,5 +170,32 @@ describe("DevSettingsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Preview v2$/i }));
 
     expect(props.onOpenOnboardingV2Preview).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows dashboard demo replay controls and calls replay handlers when the feature switch is enabled", () => {
+    featureSwitches.demoDashboardReplayDevToolEnabled = true;
+
+    const props = renderProductionDevSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Replay Your Day" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replay Your Week" }));
+    const preRollInput = screen.getByLabelText("Demo replay pre-roll seconds");
+    const durationInput = screen.getByLabelText("Demo replay duration seconds");
+    fireEvent.change(preRollInput, { target: { value: "7" } });
+    fireEvent.change(durationInput, { target: { value: "60" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
+
+    expect(screen.getByRole("heading", { name: "Dashboard replay" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Dashboard demo replay" })).toBeTruthy();
+    expect(preRollInput.getAttribute("min")).toBe(String(DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS));
+    expect(preRollInput.getAttribute("max")).toBe(String(DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS));
+    expect(preRollInput.getAttribute("step")).toBe("1");
+    expect(durationInput.getAttribute("min")).toBe(String(DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS));
+    expect(durationInput.getAttribute("max")).toBe(String(DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS));
+    expect(durationInput.getAttribute("step")).toBe("1");
+    expect(props.onReplayDashboardDemo).toHaveBeenNthCalledWith(1, "day");
+    expect(props.onReplayDashboardDemo).toHaveBeenNthCalledWith(2, "week");
+    expect(props.onDemoDashboardReplayPreRollSecondsChange).toHaveBeenCalledWith(7);
+    expect(props.onDemoDashboardReplayDurationSecondsChange).toHaveBeenCalledWith(60);
+    expect(props.onResetDemoDashboardReplaySettings).toHaveBeenCalledTimes(1);
   });
 });

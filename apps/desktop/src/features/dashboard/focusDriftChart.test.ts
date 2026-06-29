@@ -4,6 +4,7 @@ import {
   FOCUS_DRIFT_CHART_BOUNDS,
   FOCUS_DRIFT_CLIP_BOUNDS,
   FOCUS_DRIFT_MINUTES_PER_DAY,
+  applyFocusDriftReplayReveal,
   buildFocusDriftChart,
   buildSmoothPath,
   scaleFocusDriftY,
@@ -194,6 +195,27 @@ describe("buildSmoothPath", () => {
 });
 
 describe("buildFocusDriftChart", () => {
+  it("keeps replay reveal position separate from completed chart geometry", () => {
+    const chart = buildFocusDriftChart([
+      makeTimedSegment("late-focus", 18 * 60, 60),
+    ], "2026-06-13");
+
+    const revealed = applyFocusDriftReplayReveal({
+      chart,
+      revealMinuteOfDay: 12 * 60,
+      startOfDayMinutes: 0,
+    });
+
+    expect(revealed.isLive).toBe(false);
+    expect(revealed.currentX).toBeNull();
+    expect(revealed.currentTimeLabel).toBeNull();
+    expect(revealed.revealX).toBe(50);
+    expect(revealed.revealTimeLabel).toBe("12:00 PM");
+    expect(revealed.focusPath).toBe(chart.focusPath);
+    expect(revealed.driftPath).toBe(chart.driftPath);
+    expect(revealed.points.find((point) => point.bucketStartMinute === 18 * 60)?.isFuture).toBe(false);
+  });
+
   it("keeps the live bucket anchored to the current minute", () => {
     const currentMinuteOfDay = 12 * 60 + 45;
     const expectedCurrentX = FOCUS_DRIFT_CHART_BOUNDS.left

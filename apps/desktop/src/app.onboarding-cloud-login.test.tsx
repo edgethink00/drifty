@@ -131,6 +131,7 @@ vi.mock("./features/billing/billingService", () => ({
 
 vi.mock("./appFeatureSwitches", () => ({
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: true,
+  DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED: false,
   DEV_ONBOARDING_BYPASS_ENABLED: false,
   DEV_SETTINGS_ENABLED: true,
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: true,

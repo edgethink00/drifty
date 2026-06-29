@@ -348,6 +348,11 @@
   background: color-mix(in srgb, var(--surface) 74%, transparent);
 }
 
+.app-usage-empty--blank {
+  min-height: 10rem;
+  border-radius: var(--radius-md);
+}
+
 @media (max-width: 860px) {
   .app-usage-content { grid-template-columns: 1fr; }
   .app-usage-feature { min-height: auto; }
