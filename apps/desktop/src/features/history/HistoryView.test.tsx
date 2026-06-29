@@ -138,6 +138,32 @@ describe("HistoryView", () => {
     expect(cssRule(".history-view .settings-btn--danger")).toMatch(/background:\s*var\(--warn\);[\s\S]*color:\s*var\(--canvas\);/);
   });
 
+  it("toggles history row selection when the row block is clicked", () => {
+    render(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+      />,
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: /select api reference/i });
+    if (!(checkbox instanceof HTMLInputElement)) throw new Error("History row selector was not a checkbox");
+    const firstRow = checkbox.closest(".history-row");
+    if (!firstRow) throw new Error("History row was not rendered");
+
+    fireEvent.click(firstRow);
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByRole("button", { name: /delete 1 selected/i })).toBeTruthy();
+
+    fireEvent.click(firstRow);
+    expect(checkbox.checked).toBe(false);
+    const deleteButton = screen.getByRole("button", { name: /^delete selected$/i });
+    if (!(deleteButton instanceof HTMLButtonElement)) throw new Error("Delete selected control was not a button");
+    expect(deleteButton.disabled).toBe(true);
+  });
+
   it("keeps History search controls fixed while records scroll independently", () => {
     expect(cssRule(".content--history")).toContain("overflow-y: hidden;");
     expect(cssRule(".content--history .page--history")).toMatch(/display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-height:\s*0;/);
