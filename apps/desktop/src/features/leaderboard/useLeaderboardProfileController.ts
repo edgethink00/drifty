@@ -4,6 +4,7 @@ import { buildRollingFocusSeconds } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { trackerClient } from "../../lib/api/trackerClient";
+import { capturePostHogEvent, toAnalyticsErrorKind, toCountBucket } from "../../lib/analytics/posthog";
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
 import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl, type ProfileDraft } from "../profile/ProfileModals";
@@ -219,6 +220,12 @@ export function useLeaderboardProfileController({
         leaderboardHasResolvedOnceRef.current = true;
         setLeaderboardHasResolvedOnce(true);
         setLeaderboardError(globalResult.error ?? "Unable to load leaderboard");
+        capturePostHogEvent("leaderboard_action", {
+          action: "load",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          error_kind: toAnalyticsErrorKind(globalResult.error),
+        });
         return;
       }
 
@@ -232,6 +239,14 @@ export function useLeaderboardProfileController({
         leaderboardHasResolvedOnceRef.current = true;
         setLeaderboardHasResolvedOnce(true);
         setLeaderboardError(ownResult.error ?? "Unable to load your leaderboard status");
+        capturePostHogEvent("leaderboard_action", {
+          action: "load",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          row_count_bucket: toCountBucket((globalResult.data ?? []).length),
+          segment_count_bucket: toCountBucket(leaderboardTimeline.length),
+          error_kind: toAnalyticsErrorKind(ownResult.error),
+        });
         return;
       }
 
@@ -244,6 +259,13 @@ export function useLeaderboardProfileController({
       setLeaderboardHasResolvedOnce(true);
       setLeaderboardHasLoadedOnce(true);
       setLeaderboardError(null);
+      capturePostHogEvent("leaderboard_action", {
+        action: "load",
+        result: "success",
+        period: activeLeaderboardPeriod,
+        row_count_bucket: toCountBucket((globalResult.data ?? []).length),
+        segment_count_bucket: toCountBucket(leaderboardTimeline.length),
+      });
     } catch (nextError) {
       if (leaderboardRefreshRequestRef.current !== requestId) return;
       if (!shouldPreserveLeaderboardState) {
@@ -255,6 +277,12 @@ export function useLeaderboardProfileController({
       leaderboardHasResolvedOnceRef.current = true;
       setLeaderboardHasResolvedOnce(true);
       setLeaderboardError(toErrorMessage(nextError));
+      capturePostHogEvent("leaderboard_action", {
+        action: "load",
+        result: "error",
+        period: activeLeaderboardPeriod,
+        error_kind: toAnalyticsErrorKind(nextError),
+      });
     } finally {
       if (leaderboardRefreshRequestRef.current === requestId) setLeaderboardRefreshing(false);
     }
@@ -342,6 +370,12 @@ export function useLeaderboardProfileController({
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
         onAuthRequired();
         setLeaderboardActionError("Sign in with a drifty.so account before joining the beta leaderboard.");
+        capturePostHogEvent("leaderboard_action", {
+          action: "publish",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          error_kind: "not_authenticated",
+        });
         return;
       }
 
@@ -350,12 +384,24 @@ export function useLeaderboardProfileController({
         if (!allowsEffectiveAnonymousAuth) {
           onAuthRequired();
           setLeaderboardActionError("Sign in before joining the beta leaderboard.");
+          capturePostHogEvent("leaderboard_action", {
+            action: "publish",
+            result: "error",
+            period: activeLeaderboardPeriod,
+            error_kind: "not_authenticated",
+          });
           return;
         }
 
         const anonymousResult = await signInAnonymously();
         if (anonymousResult.error || !anonymousResult.user) {
           setLeaderboardActionError(anonymousResult.error?.message ?? "Unable to join leaderboard without a beta session.");
+          capturePostHogEvent("leaderboard_action", {
+            action: "publish",
+            result: "error",
+            period: activeLeaderboardPeriod,
+            error_kind: toAnalyticsErrorKind(anonymousResult.error),
+          });
           return;
         }
         authenticatedUser = anonymousResult.user;
@@ -375,6 +421,12 @@ export function useLeaderboardProfileController({
       if (!profileResult.success || !profileResult.data) {
         setLeaderboardActionError(profileResult.error ?? "Unable to prepare public profile");
         if (profileResult.error === "Not authenticated") onAuthRequired();
+        capturePostHogEvent("leaderboard_action", {
+          action: "publish",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          error_kind: toAnalyticsErrorKind(profileResult.error),
+        });
         return;
       }
 
@@ -405,12 +457,31 @@ export function useLeaderboardProfileController({
       if (!result.success) {
         setLeaderboardActionError(result.error ?? "Unable to join leaderboard");
         if (result.error === "Not authenticated") onAuthRequired();
+        capturePostHogEvent("leaderboard_action", {
+          action: "publish",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          segment_count_bucket: toCountBucket(allPeriodSegments.length),
+          error_kind: toAnalyticsErrorKind(result.error),
+        });
         return;
       }
 
       await refreshLeaderboardData(authenticatedUser);
+      capturePostHogEvent("leaderboard_action", {
+        action: "publish",
+        result: "success",
+        period: activeLeaderboardPeriod,
+        segment_count_bucket: toCountBucket(allPeriodSegments.length),
+      });
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
+      capturePostHogEvent("leaderboard_action", {
+        action: "publish",
+        result: "error",
+        period: activeLeaderboardPeriod,
+        error_kind: toAnalyticsErrorKind(nextError),
+      });
     } finally {
       setLeaderboardActionLoading(false);
     }
@@ -425,14 +496,31 @@ export function useLeaderboardProfileController({
       const result = optOutResults.find((nextResult) => !nextResult.success) ?? optOutResults[0];
       if (!result.success) {
         setLeaderboardActionError(result.error ?? "Unable to leave leaderboard");
+        capturePostHogEvent("leaderboard_action", {
+          action: "opt_out",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          error_kind: toAnalyticsErrorKind(result.error),
+        });
         return;
       }
 
       leaderboardOwnEntryScopeRef.current = leaderboardOwnEntryScopeKey;
       setOwnLeaderboardEntry(null);
       await refreshLeaderboardData();
+      capturePostHogEvent("leaderboard_action", {
+        action: "opt_out",
+        result: "success",
+        period: activeLeaderboardPeriod,
+      });
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
+      capturePostHogEvent("leaderboard_action", {
+        action: "opt_out",
+        result: "error",
+        period: activeLeaderboardPeriod,
+        error_kind: toAnalyticsErrorKind(nextError),
+      });
     } finally {
       setLeaderboardActionLoading(false);
     }

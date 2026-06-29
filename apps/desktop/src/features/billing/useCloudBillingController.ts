@@ -13,6 +13,7 @@ import {
   type CloudTrialStartedNoticeModel,
 } from "./CloudTrialStartedNotice";
 import { toErrorMessage } from "../../lib/formatting";
+import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
 
 type UseCloudBillingControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
@@ -77,11 +78,22 @@ export function useCloudBillingController({
     if (result.success) {
       setBillingEntitlement(result.data);
       setBillingEntitlementLoading(false);
+      capturePostHogEvent("billing_action", {
+        action: "entitlement_check",
+        result: "success",
+        entitlement_status: result.data.status,
+        ...(result.data.lockedReason ? { locked_reason: result.data.lockedReason } : {}),
+      });
       return result.data;
     }
 
     setBillingEntitlementError(result.error);
     setBillingEntitlementLoading(false);
+    capturePostHogEvent("billing_action", {
+      action: "entitlement_check",
+      result: "error",
+      error_kind: toAnalyticsErrorKind(result.error),
+    });
     return null;
   }, [shouldCheckBillingEntitlement]);
 
@@ -107,12 +119,34 @@ export function useCloudBillingController({
       const checkoutResult = await createIndividualCheckout(billingInterval);
       if (!checkoutResult.success) {
         setBillingEntitlementError(checkoutResult.error);
+        capturePostHogEvent("billing_action", {
+          action: "checkout_created",
+          result: "error",
+          billing_interval: billingInterval,
+          error_kind: toAnalyticsErrorKind(checkoutResult.error),
+        });
         return;
       }
 
+      capturePostHogEvent("billing_action", {
+        action: "checkout_created",
+        result: "success",
+        billing_interval: billingInterval,
+      });
       await openExternalUrl(checkoutResult.data.url);
+      capturePostHogEvent("billing_action", {
+        action: "checkout_opened",
+        result: "success",
+        billing_interval: billingInterval,
+      });
     } catch (error) {
       setBillingEntitlementError(toErrorMessage(error));
+      capturePostHogEvent("billing_action", {
+        action: "checkout_opened",
+        result: "error",
+        billing_interval: billingInterval,
+        error_kind: toAnalyticsErrorKind(error),
+      });
     } finally {
       setBillingCheckoutLoadingInterval(null);
     }
@@ -142,12 +176,38 @@ export function useCloudBillingController({
       const portalResult = await createBillingPortalSession();
       if (!portalResult.success) {
         setBillingEntitlementError(portalResult.error);
+        capturePostHogEvent("billing_action", {
+          action: "portal_created",
+          result: "error",
+          entitlement_status: billingEntitlement?.status ?? "unknown",
+          ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
+          error_kind: toAnalyticsErrorKind(portalResult.error),
+        });
         return;
       }
 
+      capturePostHogEvent("billing_action", {
+        action: "portal_created",
+        result: "success",
+        entitlement_status: billingEntitlement?.status ?? "unknown",
+        ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
+      });
       await openExternalUrl(portalResult.data.url);
+      capturePostHogEvent("billing_action", {
+        action: "portal_opened",
+        result: "success",
+        entitlement_status: billingEntitlement?.status ?? "unknown",
+        ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
+      });
     } catch (error) {
       setBillingEntitlementError(toErrorMessage(error));
+      capturePostHogEvent("billing_action", {
+        action: "portal_opened",
+        result: "error",
+        entitlement_status: billingEntitlement?.status ?? "unknown",
+        ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
+        error_kind: toAnalyticsErrorKind(error),
+      });
     } finally {
       setBillingPortalLoading(false);
     }
@@ -200,9 +260,20 @@ export function useCloudBillingController({
       if (requestId !== billingEntitlementRequestRef.current) return;
       if (result.success) {
         setBillingEntitlement(result.data);
+        capturePostHogEvent("billing_action", {
+          action: "entitlement_check",
+          result: "success",
+          entitlement_status: result.data.status,
+          ...(result.data.lockedReason ? { locked_reason: result.data.lockedReason } : {}),
+        });
       } else {
         setBillingEntitlement(null);
         setBillingEntitlementError(result.error);
+        capturePostHogEvent("billing_action", {
+          action: "entitlement_check",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(result.error),
+        });
       }
     }).finally(() => {
       if (!cancelled && requestId === billingEntitlementRequestRef.current) setBillingEntitlementLoading(false);

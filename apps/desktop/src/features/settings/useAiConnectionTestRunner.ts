@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { localAiSetupFingerprint } from "../ai-connection/aiConnectionHealth";
+import { capturePostHogEvent, toAnalyticsErrorKind, type PostHogEventPropertiesByName } from "../../lib/analytics/posthog";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { testCloudAiConnection } from "./cloudAiConnectionTest";
 import { isActiveProviderTestable } from "./aiSetupProviderSelection";
@@ -9,6 +10,11 @@ import type { LocalAiSetupState } from "./localAiSetup";
 type UseAiConnectionTestRunnerOptions = {
   readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiConnectionTestResult: (setup: LocalAiSetupState, result: AiConnectionTestResult) => void;
+};
+
+type AiSetupProviderAnalyticsValue = NonNullable<PostHogEventPropertiesByName["ai_setup_action"]["provider_kind"]>;
+type RunAiConnectionTestOptions = {
+  readonly captureAnalytics: boolean;
 };
 
 export type UseAiConnectionTestRunnerResult = {
@@ -38,7 +44,10 @@ export function useAiConnectionTestRunner({
     setResult(null);
   }, []);
 
-  const runForSetup = useCallback(async (setupSnapshot: LocalAiSetupState): Promise<boolean> => {
+  const runForSetup = useCallback(async (
+    setupSnapshot: LocalAiSetupState,
+    options: RunAiConnectionTestOptions,
+  ): Promise<boolean> => {
     if (runningRef.current) return false;
     const fingerprint = localAiSetupFingerprint(setupSnapshot);
     runningRef.current = true;
@@ -51,6 +60,14 @@ export function useAiConnectionTestRunner({
       if (!isConnectionTestResultCurrent(setupSnapshot, latestSetupRef.current)) return false;
       setResult(nextResult);
       if (!isCloudRoute) onLocalAiConnectionTestResult(setupSnapshot, nextResult);
+      if (options.captureAnalytics) {
+        capturePostHogEvent("ai_setup_action", {
+          action: "test_connection",
+          provider_kind: toAiSetupProviderAnalytics(setupSnapshot),
+          result: nextResult.kind === "success" ? "success" : "error",
+          ...(nextResult.kind === "error" ? { error_kind: toAnalyticsErrorKind(nextResult.message) } : {}),
+        });
+      }
       return true;
     } finally {
       runningRef.current = false;
@@ -67,16 +84,22 @@ export function useAiConnectionTestRunner({
   useEffect(() => {
     if (!autoFingerprint || running) return;
     if (completedAutoFingerprintRef.current === autoFingerprint) return;
-    void runForSetup(localAiSetup).then((applied) => {
+    void runForSetup(localAiSetup, { captureAnalytics: false }).then((applied) => {
       if (applied) completedAutoFingerprintRef.current = autoFingerprint;
     });
   }, [autoFingerprint, localAiSetup, runForSetup, running]);
 
   const run = useCallback(async () => {
-    await runForSetup(localAiSetup);
+    await runForSetup(localAiSetup, { captureAnalytics: true });
   }, [localAiSetup, runForSetup]);
 
   return { result, running, runningFingerprint, clearResult, run };
+}
+
+function toAiSetupProviderAnalytics(setup: LocalAiSetupState): AiSetupProviderAnalyticsValue {
+  if (setup.provider === "managed_local" && setup.driftyRoute === "cloud") return "cloud";
+  if (setup.provider === "managed_local") return "local";
+  return "custom";
 }
 
 function isConnectionTestResultCurrent(

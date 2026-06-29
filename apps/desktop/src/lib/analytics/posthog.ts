@@ -1,10 +1,51 @@
+import {
+  sanitizePostHogEventProperties,
+  type PostHogEventName,
+  type PostHogEventPropertiesArgument,
+  type PostHogEventPropertiesByName,
+  type SanitizedPostHogProperties,
+} from "./events";
+
+export {
+  POSTHOG_EVENT_NAMES,
+  POSTHOG_EVENT_PROPERTY_ALLOWLIST,
+  sanitizePostHogEventProperties,
+  toAnalyticsErrorKind,
+  toCountBucket,
+  type PostHogEventName,
+  type PostHogEventPropertiesByName,
+} from "./events";
+
 type PostHogUser = {
-  readonly id: string;
-  readonly email?: string | null;
   readonly is_anonymous?: boolean | null;
 };
 
-type EventProperties = Record<string, unknown>;
+type PostHogDefaultProperties = {
+  readonly event_source: "mac_app";
+  readonly event_surface: "desktop_app";
+  readonly app_platform: "macos";
+  readonly runtime: "tauri" | "web";
+  readonly channel: string;
+};
+
+type PostHogPayloadProperties = PostHogDefaultProperties &
+  SanitizedPostHogProperties & {
+    readonly "$process_person_profile": false;
+  };
+
+export type PostHogEventPayload = {
+  readonly api_key: string;
+  readonly event: PostHogEventName;
+  readonly distinct_id: string;
+  readonly properties: PostHogPayloadProperties;
+};
+
+type PostHogEventPayloadInput<Event extends PostHogEventName> = {
+  readonly apiKey: string;
+  readonly distinctId: string;
+  readonly event: Event;
+  readonly properties?: PostHogEventPropertiesByName[Event] | SanitizedPostHogProperties | undefined;
+};
 
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY?.trim();
 const posthogHost = (import.meta.env.VITE_POSTHOG_HOST?.trim() || "https://us.i.posthog.com").replace(/\/$/, "");
@@ -29,7 +70,7 @@ function createDistinctId() {
 
 const anonymousSessionDistinctId = createDistinctId();
 
-function getDefaultProperties(): EventProperties {
+function getDefaultProperties(): PostHogDefaultProperties {
   return {
     event_source: "mac_app",
     event_surface: "desktop_app",
@@ -39,19 +80,38 @@ function getDefaultProperties(): EventProperties {
   };
 }
 
-function sendPostHogEvent(event: string, properties?: EventProperties) {
-  if (!posthogKey) return;
+export function createPostHogEventPayload<Event extends PostHogEventName>({
+  apiKey,
+  distinctId,
+  event,
+  properties,
+}: PostHogEventPayloadInput<Event>): PostHogEventPayload {
+  const sanitizedProperties = sanitizePostHogEventProperties(event, properties);
 
-  const payload = {
-    api_key: posthogKey,
+  return {
+    api_key: apiKey,
     event,
-    distinct_id: anonymousSessionDistinctId,
+    distinct_id: distinctId,
     properties: {
-      "$process_person_profile": false,
       ...getDefaultProperties(),
-      ...properties,
+      ...sanitizedProperties,
+      "$process_person_profile": false,
     },
   };
+}
+
+function sendPostHogEvent<Event extends PostHogEventName>(
+  event: Event,
+  properties?: PostHogEventPropertiesByName[Event],
+) {
+  if (!posthogKey) return;
+
+  const payload = createPostHogEventPayload({
+    apiKey: posthogKey,
+    distinctId: anonymousSessionDistinctId,
+    event,
+    properties,
+  });
 
   void fetch(`${posthogHost}/i/v0/e/`, {
     method: "POST",
@@ -84,7 +144,10 @@ export function recordPostHogAuthState(user: PostHogUser | null) {
   });
 }
 
-export function capturePostHogEvent(event: string, properties?: EventProperties) {
+export function capturePostHogEvent<Event extends PostHogEventName>(
+  event: Event,
+  ...[properties]: PostHogEventPropertiesArgument<Event>
+) {
   if (!isPostHogReady) return;
   sendPostHogEvent(event, properties);
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
+import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
 import type { NotificationPermissionState, OnboardingStep } from "./onboardingFlow";
 
 type UseOnboardingPermissionsOptions = {
@@ -109,8 +110,19 @@ export function useOnboardingPermissions({
     setSetupError(null);
     try {
       await onRefreshTrackerRef.current();
+      capturePostHogEvent("tracker_action", {
+        action: "refresh",
+        result: "success",
+        tracker_mode: trackerStatus?.trackerMode === "unavailable" ? "unavailable" : "tracking",
+        running: trackerStatus?.running === true,
+      });
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : "Unable to refresh tracker status.");
+      capturePostHogEvent("tracker_action", {
+        action: "refresh",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
     }
   }
 
@@ -118,9 +130,22 @@ export function useOnboardingPermissions({
     setSetupError(null);
     setOpeningSettingsPane("accessibility");
     try {
-      await onRequestAccessibilityRef.current();
+      const granted = await onRequestAccessibilityRef.current();
+      capturePostHogEvent("permission_action", {
+        permission: "accessibility",
+        action: "request",
+        result: granted ? "success" : "skipped",
+        accessibility_granted: granted,
+      });
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : "Unable to request Accessibility access.");
+      capturePostHogEvent("permission_action", {
+        permission: "accessibility",
+        action: "request",
+        result: "error",
+        accessibility_granted: false,
+        error_kind: toAnalyticsErrorKind(error),
+      });
     } finally {
       setOpeningSettingsPane(null);
     }
@@ -133,10 +158,32 @@ export function useOnboardingPermissions({
       const opened = await openSystemSettingsPane(pane);
       if (!opened) {
         setSetupError("System Settings can only be opened from the macOS desktop app.");
+        capturePostHogEvent("permission_action", {
+          permission: pane,
+          action: "open_settings",
+          result: "unavailable",
+          accessibility_granted: accessibilityGranted,
+          notifications_granted: notificationPermission === "granted",
+        });
         return;
       }
+      capturePostHogEvent("permission_action", {
+        permission: pane,
+        action: "open_settings",
+        result: "success",
+        accessibility_granted: accessibilityGranted,
+        notifications_granted: notificationPermission === "granted",
+      });
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : "Unable to open System Settings.");
+      capturePostHogEvent("permission_action", {
+        permission: pane,
+        action: "open_settings",
+        result: "error",
+        accessibility_granted: accessibilityGranted,
+        notifications_granted: notificationPermission === "granted",
+        error_kind: toAnalyticsErrorKind(error),
+      });
     } finally {
       setOpeningSettingsPane(null);
     }
@@ -146,6 +193,13 @@ export function useOnboardingPermissions({
     setSetupError(null);
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
       setNotificationPermission("unavailable");
+      capturePostHogEvent("permission_action", {
+        permission: "notifications",
+        action: "request",
+        result: "unavailable",
+        accessibility_granted: accessibilityGranted,
+        notifications_granted: false,
+      });
       return;
     }
     setNotificationPermission("checking");
@@ -155,18 +209,47 @@ export function useOnboardingPermissions({
       if (alreadyGranted) {
         onEnableDriftAlerts();
         setNotificationPermission("granted");
+        capturePostHogEvent("permission_action", {
+          permission: "notifications",
+          action: "request",
+          result: "success",
+          accessibility_granted: accessibilityGranted,
+          notifications_granted: true,
+        });
         return;
       }
       const permission = await requestPermission();
       if (permission === "granted") {
         onEnableDriftAlerts();
         setNotificationPermission("granted");
+        capturePostHogEvent("permission_action", {
+          permission: "notifications",
+          action: "request",
+          result: "success",
+          accessibility_granted: accessibilityGranted,
+          notifications_granted: true,
+        });
       } else {
         setNotificationPermission("denied");
+        capturePostHogEvent("permission_action", {
+          permission: "notifications",
+          action: "request",
+          result: "cancelled",
+          accessibility_granted: accessibilityGranted,
+          notifications_granted: false,
+        });
       }
     } catch (error) {
       setNotificationPermission("unavailable");
       setSetupError(error instanceof Error ? error.message : "Notification permission is unavailable here.");
+      capturePostHogEvent("permission_action", {
+        permission: "notifications",
+        action: "request",
+        result: "error",
+        accessibility_granted: accessibilityGranted,
+        notifications_granted: false,
+        error_kind: toAnalyticsErrorKind(error),
+      });
     }
   }
 

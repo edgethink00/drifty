@@ -1,0 +1,120 @@
+import type {
+  ACCOUNT_KINDS,
+  AI_PROVIDER_KINDS,
+  AI_SETUP_ACTIONS,
+  APP_ERROR_ACTIONS,
+  APP_SURFACES,
+  AUTH_STATES,
+  BILLING_ACTIONS,
+  BILLING_INTERVALS,
+  CLASSIFICATION_RANGES,
+  CLASSIFICATION_TRIGGERS,
+  CLOUD_AUTH_ACTIONS,
+  CLOUD_AUTH_METHODS,
+  COUNT_BUCKETS,
+  DASHBOARD_PERIODS,
+  ENTITLEMENT_STATUSES,
+  ERROR_KINDS,
+  LEADERBOARD_ACTIONS,
+  LEADERBOARD_PERIODS,
+  LOCKED_REASONS,
+  ONBOARDING_SOURCES,
+  ONBOARDING_STEPS,
+  PERMISSION_ACTIONS,
+  PERMISSIONS,
+  RESULT_VALUES,
+  SETTINGS_SECTIONS,
+  SETUP_CHOICES,
+  TRACKER_ACTIONS,
+  TRACKER_MODES,
+  PostHogEventName,
+} from "./eventTaxonomy";
+
+type EmptyPostHogProperties = Record<never, never>;
+
+export type PostHogEventPropertiesByName = {
+  readonly app_opened: EmptyPostHogProperties;
+  readonly app_surface_opened: {
+    readonly surface: (typeof APP_SURFACES)[number];
+    readonly dashboard_period?: (typeof DASHBOARD_PERIODS)[number];
+    readonly settings_section?: (typeof SETTINGS_SECTIONS)[number];
+  };
+  readonly onboarding_opened: {
+    readonly source?: (typeof ONBOARDING_SOURCES)[number];
+  };
+  readonly onboarding_step_viewed: {
+    readonly step: (typeof ONBOARDING_STEPS)[number];
+  };
+  readonly onboarding_completed: {
+    readonly setup_choice?: (typeof SETUP_CHOICES)[number];
+    readonly accessibility_granted?: boolean;
+    readonly notifications_granted?: boolean;
+    readonly account_connected?: boolean;
+  };
+  readonly permission_action: {
+    readonly permission: (typeof PERMISSIONS)[number];
+    readonly action: (typeof PERMISSION_ACTIONS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly accessibility_granted?: boolean;
+    readonly notifications_granted?: boolean;
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly tracker_action: {
+    readonly action: (typeof TRACKER_ACTIONS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly tracker_mode?: (typeof TRACKER_MODES)[number];
+    readonly running?: boolean;
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly auth_state_changed: {
+    readonly auth_state: (typeof AUTH_STATES)[number];
+    readonly account_kind: (typeof ACCOUNT_KINDS)[number];
+  };
+  readonly cloud_auth_action: {
+    readonly action: (typeof CLOUD_AUTH_ACTIONS)[number];
+    readonly method?: (typeof CLOUD_AUTH_METHODS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly billing_action: {
+    readonly action: (typeof BILLING_ACTIONS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly billing_interval?: (typeof BILLING_INTERVALS)[number];
+    readonly entitlement_status?: (typeof ENTITLEMENT_STATUSES)[number];
+    readonly locked_reason?: (typeof LOCKED_REASONS)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly leaderboard_action: {
+    readonly action: (typeof LEADERBOARD_ACTIONS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly period?: (typeof LEADERBOARD_PERIODS)[number];
+    readonly row_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly segment_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly ai_setup_action: {
+    readonly action: (typeof AI_SETUP_ACTIONS)[number];
+    readonly provider_kind?: (typeof AI_PROVIDER_KINDS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly ai_classification_run: {
+    readonly trigger: (typeof CLASSIFICATION_TRIGGERS)[number];
+    readonly provider_kind: (typeof AI_PROVIDER_KINDS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly selected_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly saved_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly range?: (typeof CLASSIFICATION_RANGES)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly app_error: {
+    readonly surface?: (typeof APP_SURFACES)[number];
+    readonly action?: (typeof APP_ERROR_ACTIONS)[number];
+    readonly error_kind: (typeof ERROR_KINDS)[number];
+  };
+};
+
+export type PostHogEventPropertiesArgument<Event extends PostHogEventName> =
+  keyof PostHogEventPropertiesByName[Event] extends never
+    ? readonly [properties?: undefined]
+    : readonly [properties: PostHogEventPropertiesByName[Event]];
