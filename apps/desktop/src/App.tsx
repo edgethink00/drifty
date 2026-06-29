@@ -92,6 +92,7 @@ import {
   hasCompletedUserOnboarding,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
+import { OnboardingV2Preview } from "./features/onboarding/OnboardingV2Preview";
 import {
   WatcherPeek,
   type WatcherPeekEvent,
@@ -849,6 +850,7 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [developerAuthRequiredPreview, setDeveloperAuthRequiredPreview] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingV2PreviewOpen, setOnboardingV2PreviewOpen] = useState(false);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
@@ -3719,6 +3721,7 @@ export default function App() {
     || feedbackModalOpen
     || aiSetupDialogOpen
     || onboardingOpen
+    || onboardingV2PreviewOpen
     || selectedLeaderboardRow
     || isProfileEditorOpen
     || cmdOpen,
@@ -4594,7 +4597,7 @@ export default function App() {
           ) : null}
         </div>
       </div>
-      {cloudTrialStartedNotice && !onboardingOpen ? (
+      {cloudTrialStartedNotice && !onboardingOpen && !onboardingV2PreviewOpen ? (
         <CloudTrialStartedNotice
           notice={cloudTrialStartedNotice}
           onDismiss={dismissCloudTrialStartedNotice}
@@ -5081,6 +5084,7 @@ export default function App() {
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
+                    onOpenOnboardingV2Preview={() => setOnboardingV2PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
@@ -5150,6 +5154,10 @@ export default function App() {
           onCopy={() => void handleCopyDebugLogs()}
           onDownload={handleDownloadDebugLogs}
         />
+      ) : null}
+
+      {onboardingV2PreviewOpen ? (
+        <OnboardingV2Preview onClose={() => setOnboardingV2PreviewOpen(false)} />
       ) : null}
 
       {onboardingOpen ? (
