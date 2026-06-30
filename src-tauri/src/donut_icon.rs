@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 #[derive(Clone, Copy)]
 struct ProductivityShares {
     focus: f64,
@@ -5,52 +7,77 @@ struct ProductivityShares {
     neutral: f64,
 }
 
-pub fn render(focus: f64, drift: f64, neutral: f64, is_dark: bool) -> (Vec<u8>, u32, u32) {
-    const W: usize = 40;
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TrayIconStyle {
+    #[default]
+    Compact,
+    Expanded,
+}
+
+#[derive(Clone, Copy)]
+pub struct DonutIconRenderInput {
+    pub focus: f64,
+    pub drift: f64,
+    pub neutral: f64,
+    pub is_dark: bool,
+    pub style: TrayIconStyle,
+}
+
+pub fn render(input: DonutIconRenderInput) -> (Vec<u8>, u32, u32) {
     const H: usize = 18;
 
+    let width = match input.style {
+        TrayIconStyle::Compact => 18,
+        TrayIconStyle::Expanded => 40,
+    };
     let logo_rgb: [u8; 3] = [0xf1, 0xef, 0xe7];
-    let focus_rgb: [u8; 3] = if is_dark {
+    let focus_rgb: [u8; 3] = if input.is_dark {
         [0xcf, 0xe8, 0x6a]
     } else {
         [0x53, 0x64, 0x14]
     };
-    let drift_rgb: [u8; 3] = if is_dark {
+    let drift_rgb: [u8; 3] = if input.is_dark {
         [0xf2, 0x8a, 0x78]
     } else {
         [0x8f, 0x35, 0x2d]
     };
-    let neutral_rgb: [u8; 3] = if is_dark {
+    let neutral_rgb: [u8; 3] = if input.is_dark {
         [0x6a, 0x67, 0x5e]
     } else {
         [0xb8, 0xb3, 0xa7]
     };
 
-    let mut pixels = vec![0u8; W * H * 4];
+    let mut pixels = vec![0u8; width * H * 4];
 
-    // Hourglass: two triangles in 18×18 left region
-    // Top triangle:    (1,1) (17,1) (9,9)
-    // Bottom triangle: (9,9) (17,17) (1,17)
-    for py in 0..H {
-        for px in 0..18usize {
-            let alpha = hourglass_alpha(px as f32 + 0.5, py as f32 + 0.5);
-            if alpha > 0.0 {
-                let i = (py * W + px) * 4;
-                pixels[i] = logo_rgb[0];
-                pixels[i + 1] = logo_rgb[1];
-                pixels[i + 2] = logo_rgb[2];
-                pixels[i + 3] = (alpha * 255.0) as u8;
+    if input.style == TrayIconStyle::Expanded {
+        for py in 0..H {
+            for px in 0..18usize {
+                let alpha = hourglass_alpha(px as f32 + 0.5, py as f32 + 0.5);
+                if alpha > 0.0 {
+                    let i = (py * width + px) * 4;
+                    pixels[i] = logo_rgb[0];
+                    pixels[i + 1] = logo_rgb[1];
+                    pixels[i + 2] = logo_rgb[2];
+                    pixels[i + 3] = (alpha * 255.0) as u8;
+                }
             }
         }
     }
 
-    // Donut ring: x=22..40, center=(31,9), r=6.5, stroke=2.5
-    let cx = 31.0f64;
+    let ring_start = match input.style {
+        TrayIconStyle::Compact => 0,
+        TrayIconStyle::Expanded => 22,
+    };
+    let cx = match input.style {
+        TrayIconStyle::Compact => 9.0,
+        TrayIconStyle::Expanded => 31.0,
+    };
     let cy = 9.0f64;
     let r = 6.5f64;
     let sw = 2.5f64;
 
-    let shares = normalize_shares(focus, drift, neutral);
+    let shares = normalize_shares(input.focus, input.drift, input.neutral);
     let tau = std::f64::consts::TAU;
     let half_pi = std::f64::consts::FRAC_PI_2;
 
@@ -63,7 +90,7 @@ pub fn render(focus: f64, drift: f64, neutral: f64, is_dark: bool) -> (Vec<u8>, 
         .unwrap_or(0.0);
 
     for py in 0..H {
-        for px in 22..W {
+        for px in ring_start..width {
             let dx = px as f64 + 0.5 - cx;
             let dy = py as f64 + 0.5 - cy;
             let dist = (dx * dx + dy * dy).sqrt();
@@ -89,7 +116,7 @@ pub fn render(focus: f64, drift: f64, neutral: f64, is_dark: bool) -> (Vec<u8>, 
                 (neutral_rgb, ring_alpha * 0.35)
             };
 
-            let i = (py * W + px) * 4;
+            let i = (py * width + px) * 4;
             pixels[i] = color[0];
             pixels[i + 1] = color[1];
             pixels[i + 2] = color[2];
@@ -97,7 +124,7 @@ pub fn render(focus: f64, drift: f64, neutral: f64, is_dark: bool) -> (Vec<u8>, 
         }
     }
 
-    (pixels, W as u32, H as u32)
+    (pixels, width as u32, H as u32)
 }
 
 fn normalize_shares(focus: f64, drift: f64, neutral: f64) -> Option<ProductivityShares> {
@@ -168,17 +195,43 @@ mod tests {
     }
 
     #[test]
-    fn render_colors_full_ring_with_productivity_shares() {
-        let (pixels, _, _) = render(0.4, 0.25, 0.35, true);
+    fn tray_icon_style_deserializes_from_frontend_values() {
+        assert_eq!(
+            serde_json::from_value::<TrayIconStyle>(serde_json::json!("compact")).expect("compact"),
+            TrayIconStyle::Compact,
+        );
+        assert_eq!(
+            serde_json::from_value::<TrayIconStyle>(serde_json::json!("expanded")).expect("expanded"),
+            TrayIconStyle::Expanded,
+        );
+    }
 
+    #[test]
+    fn render_colors_full_ring_with_productivity_shares() {
+        let (pixels, width, height) = render(DonutIconRenderInput {
+            focus: 0.4,
+            drift: 0.25,
+            neutral: 0.35,
+            is_dark: true,
+            style: TrayIconStyle::Compact,
+        });
+
+        assert_eq!((width, height), (18, 18));
         assert!(count_color(&pixels, [0xcf, 0xe8, 0x6a]) > 0);
         assert!(count_color(&pixels, [0xf2, 0x8a, 0x78]) > 0);
         assert!(count_color(&pixels, [0x6a, 0x67, 0x5e]) > 0);
+        assert_eq!(count_color(&pixels, [0xf1, 0xef, 0xe7]), 0);
     }
 
     #[test]
     fn render_without_measurements_uses_neutral_fallback() {
-        let (pixels, _, _) = render(0.0, 0.0, 0.0, true);
+        let (pixels, _, _) = render(DonutIconRenderInput {
+            focus: 0.0,
+            drift: 0.0,
+            neutral: 0.0,
+            is_dark: true,
+            style: TrayIconStyle::Compact,
+        });
 
         assert_eq!(count_color(&pixels, [0xcf, 0xe8, 0x6a]), 0);
         assert_eq!(count_color(&pixels, [0xf2, 0x8a, 0x78]), 0);
@@ -186,10 +239,24 @@ mod tests {
     }
 
     #[test]
-    fn render_uses_light_logo_in_both_appearances() {
-        let (dark_pixels, _, _) = render(0.0, 0.0, 0.0, true);
-        let (light_pixels, _, _) = render(0.0, 0.0, 0.0, false);
+    fn expanded_render_uses_light_logo_in_both_appearances() {
+        let (dark_pixels, dark_width, dark_height) = render(DonutIconRenderInput {
+            focus: 0.0,
+            drift: 0.0,
+            neutral: 0.0,
+            is_dark: true,
+            style: TrayIconStyle::Expanded,
+        });
+        let (light_pixels, light_width, light_height) = render(DonutIconRenderInput {
+            focus: 0.0,
+            drift: 0.0,
+            neutral: 0.0,
+            is_dark: false,
+            style: TrayIconStyle::Expanded,
+        });
 
+        assert_eq!((dark_width, dark_height), (40, 18));
+        assert_eq!((light_width, light_height), (40, 18));
         assert!(count_color(&dark_pixels, [0xf1, 0xef, 0xe7]) > 0);
         assert!(count_color(&light_pixels, [0xf1, 0xef, 0xe7]) > 0);
         assert_eq!(count_color(&light_pixels, [26, 26, 26]), 0);

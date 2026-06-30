@@ -27,6 +27,7 @@ export type TrackerCommand =
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
   | "tray_update_productivity_icon"
+  | "tray_update_icon_style"
   | "tray_update_drift_alarm_status";
 
 export interface DayQuery {
@@ -177,6 +178,8 @@ export interface ProductivityShareMix {
   drift: number;
 }
 
+export type TrayIconStyle = "compact" | "expanded";
+
 export interface DriftAlarmTrayStatus {
   readonly enabled: boolean;
   readonly statusLabel: string;
@@ -223,6 +226,7 @@ export interface TrackerApi {
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
+  updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;
 }
 

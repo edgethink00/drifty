@@ -25,6 +25,7 @@ import type {
   TrackerApi,
   TrackerLiveTail,
   TrackerStatus,
+  TrayIconStyle,
 } from "@drifty/domain";
 import { previewAppIcons, previewHourlySummary, previewStatus, previewTimeline, previewTimelinePage, previewTimelineSearch, previewTopSites, shouldUsePreviewData } from "./previewData";
 
@@ -282,6 +283,10 @@ export const trackerClient: TrackerApi = {
       drift: mix.drift,
       neutral: mix.neutral,
     });
+  },
+  async updateTrayIconStyle(style: TrayIconStyle) {
+    if (shouldUsePreviewData()) return;
+    await safeInvoke<void>("tray_update_icon_style", { style });
   },
   async updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus) {
     if (shouldUsePreviewData()) return;

@@ -34,8 +34,8 @@ use commands::{
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::TrackerController;
 use tray::{
-    setup_tray, tray_update_drift_alarm_status, tray_update_productivity_icon, TrayDriftAlarmState,
-    TrayProductivityState,
+    setup_tray, tray_update_drift_alarm_status, tray_update_icon_style,
+    tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState, TrayProductivityState,
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
@@ -45,10 +45,9 @@ struct PendingAuthDeepLinks(Mutex<Vec<String>>);
 
 #[tauri::command]
 fn auth_take_pending_deep_links(state: State<'_, PendingAuthDeepLinks>) -> Vec<String> {
-    let mut urls = state
-        .0
-        .lock()
-        .expect("pending auth deep links lock poisoned");
+    let Ok(mut urls) = state.0.lock() else {
+        return Vec::new();
+    };
     std::mem::take(&mut *urls)
 }
 
@@ -91,11 +90,9 @@ fn remember_auth_deep_links<R: Runtime>(
     }
 
     if let Some(pending) = app.try_state::<PendingAuthDeepLinks>() {
-        pending
-            .0
-            .lock()
-            .expect("pending auth deep links lock poisoned")
-            .extend(callback_urls.clone());
+        if let Ok(mut pending_urls) = pending.0.lock() {
+            pending_urls.extend(callback_urls.clone());
+        }
     }
 
     let _ = app.emit("deep-link://new-url", callback_urls);
@@ -143,6 +140,7 @@ pub fn run() {
         .manage(PendingAuthDeepLinks::default())
         .manage(TrayProductivityState::default())
         .manage(TrayDriftAlarmState::default())
+        .manage(TrayIconStyleState::default())
         .manage(DriftAlarmState::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
@@ -194,7 +192,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TrackerController::default());
 
-    builder
+    if let Err(error) = builder
         .setup(|app| {
             setup_watcher_window(app)?;
             setup_drift_alarm_window(app)?;
@@ -237,6 +235,7 @@ pub fn run() {
             tracker_get_classification_metrics,
             tray_update_productivity_icon,
             tray_update_drift_alarm_status,
+            tray_update_icon_style,
             auth_take_pending_deep_links,
             auth_load_saved_session,
             auth_save_session,
@@ -271,7 +270,10 @@ pub fn run() {
             extreme_nudge_apply,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Drifty");
+    {
+        eprintln!("error while running Drifty: {error}");
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]
