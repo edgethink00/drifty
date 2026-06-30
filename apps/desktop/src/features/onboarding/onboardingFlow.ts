@@ -26,6 +26,7 @@ export type NotificationPermissionState = "unknown" | "checking" | "granted" | "
 
 const BASE_STEPS: OnboardingStepDef[] = [
   { id: "welcome", label: "Welcome" },
+  { id: "account", label: "Account" },
   { id: "job", label: "Work" },
   { id: "permissions", label: "Permissions" },
   { id: "nudges", label: "Nudges" },
@@ -33,7 +34,6 @@ const BASE_STEPS: OnboardingStepDef[] = [
 ];
 
 const SIMPLE_SETUP_STEPS: OnboardingStepDef[] = [
-  { id: "account", label: "Account" },
   { id: "ready", label: "Ready" },
 ];
 

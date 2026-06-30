@@ -143,6 +143,11 @@ async function openAuthModalFromAccountMenu() {
   fireEvent.click(within(menu).getByRole("menuitem", { name: /sign in/i }));
 }
 
+async function advanceRequiredOnboardingToAccountStep() {
+  expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+  return screen.findByRole("dialog", { name: /connect your account/i });
+}
 
 describe("App auth modal", () => {
   beforeEach(() => {
@@ -184,7 +189,7 @@ describe("App auth modal", () => {
     expect(screen.getByRole("button", { name: /^unknown$/i })).toBeTruthy();
   });
 
-  it("keeps the local workspace available when required auth mode has no signed-in user", async () => {
+  it("requires account onboarding when required auth mode has no signed-in user", async () => {
     authState.authMode = "required";
     authState.isAuthRequired = true;
     authState.allowsAnonymousAuth = false;
@@ -192,15 +197,16 @@ describe("App auth modal", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(await advanceRequiredOnboardingToAccountStep()).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
-    await waitFor(() => expect(trackerClient.getStatus).toHaveBeenCalled());
-    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
+    expect(trackerClient.getStatus).not.toHaveBeenCalled();
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
     expect(trackerClient.start).not.toHaveBeenCalled();
   });
 
-  it("uses Drifty and drifty.so copy in the required auth gate", async () => {
+  it("uses Drifty account copy in required auth onboarding", async () => {
     authState.authMode = "required";
     authState.isAuthRequired = true;
     authState.allowsAnonymousAuth = false;
@@ -208,7 +214,9 @@ describe("App auth modal", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    const dialog = await advanceRequiredOnboardingToAccountStep();
+    expect(within(dialog).getByText(/your account keeps your focus/i)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /continue with google/i })).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
     expect(screen.queryByText(/beta deploys/i)).toBeNull();
@@ -216,7 +224,7 @@ describe("App auth modal", () => {
     expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 
-  it("uses a centered required auth layout without body copy", async () => {
+  it("keeps required auth inside account onboarding without exposing the app shell", async () => {
     authState.authMode = "required";
     authState.isAuthRequired = true;
     authState.allowsAnonymousAuth = false;
@@ -224,12 +232,15 @@ describe("App auth modal", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    const dialog = await advanceRequiredOnboardingToAccountStep();
+    expect(within(dialog).getByRole("button", { name: /continue with email/i })).toBeTruthy();
+    expect((within(dialog).getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
   });
 
-  it("keeps the local workspace available when required auth mode restores an anonymous Supabase user", async () => {
+  it("requires account onboarding when required auth mode restores an anonymous Supabase user", async () => {
     authState.user = { id: "anon-1", email: null, is_anonymous: true };
     authState.status = "authenticated";
     authState.authMode = "required";
@@ -244,7 +255,7 @@ describe("App auth modal", () => {
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
   });
 
-  it("keeps the local workspace available when required auth mode lacks Supabase config", async () => {
+  it("shows a blocking configuration gate when required auth mode lacks Supabase config", async () => {
     authState.isEnabled = false;
     authState.authMode = "required";
     authState.isAuthRequired = true;
@@ -254,9 +265,9 @@ describe("App auth modal", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
-    expect(screen.queryByRole("main", { name: /authentication configuration required/i })).toBeNull();
-    expect(screen.queryByRole("heading", { name: /authentication setup required/i })).toBeNull();
+    expect(await screen.findByRole("main", { name: /authentication configuration required/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /authentication setup required/i })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
   });
 
   it("opens sign-in directly from the local account menu", async () => {

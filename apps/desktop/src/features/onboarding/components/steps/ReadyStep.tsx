@@ -34,6 +34,10 @@ export function ReadyStep({
         <ul className="onb-summary" aria-label="Setup summary">
           <li className="onb-summary__item">
             <span className="onb-summary__check" aria-hidden="true" />
+            Account connected
+          </li>
+          <li className="onb-summary__item">
+            <span className="onb-summary__check" aria-hidden="true" />
             {setupChoice === "local_ai" ? "Local AI selected" : userManagedSetupLabel}
           </li>
           <li className="onb-summary__item">

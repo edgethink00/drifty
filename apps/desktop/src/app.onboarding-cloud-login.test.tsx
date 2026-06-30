@@ -195,15 +195,6 @@ async function clickButton(name: RegExp) {
 async function advanceToAccountStep() {
   await screen.findByRole("dialog", { name: /welcome to drifty/i });
   await clickEnabledAction(/^next$/i);
-  await screen.findByRole("dialog", { name: /what do you usually do/i });
-  await clickEnabledAction(/^continue$/i);
-  await screen.findByRole("dialog", { name: /set up permissions/i });
-  await clickEnabledAction(/^next$/i);
-  await screen.findByRole("dialog", { name: /set up drift alerts/i });
-  await clickEnabledAction(/^continue$/i);
-  await screen.findByRole("dialog", { name: /choose your setup/i });
-  await clickButton(/drifty cloud/i);
-  await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /connect your account/i });
 }
 

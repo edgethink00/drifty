@@ -515,7 +515,7 @@ describe("App leaderboard participation", () => {
     expect(screen.getByText(/sign in before joining the beta leaderboard/i)).toBeTruthy();
   });
 
-  it("blocks a restored anonymous user from required-mode leaderboard publishing without locking the local shell", async () => {
+  it("blocks a restored anonymous user from required-mode leaderboard publishing through account onboarding", async () => {
     authState.user = { id: "anon-1", email: null, is_anonymous: true };
     authState.status = "authenticated";
     authState.authMode = "required";
@@ -528,17 +528,17 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
 
     await waitFor(() => {
       expect(authState.signInAnonymously).not.toHaveBeenCalled();
       expect(saveOwnProfile).not.toHaveBeenCalled();
       expect(publishOwnFocusTotal).not.toHaveBeenCalled();
     });
-    expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByText(/sign in with a drifty\.so account before joining the beta leaderboard/i)).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
   });
 
   it("lets an optional-mode restored anonymous user publish the beta leaderboard aggregate", async () => {
