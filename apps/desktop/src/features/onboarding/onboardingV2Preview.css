@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: #f2f1ed;
+  background: transparent;
 }
 
 .onboarding-v2-preview__frame {
@@ -10,13 +10,27 @@
   width: 100%;
   height: 100%;
   border: 0;
-  background: #f2f1ed;
+  background: transparent;
+}
+
+/* Draggable titlebar strip: the card content covers the native macOS titlebar,
+   so this restores window dragging across the card's top padding area. */
+.onboarding-v2-preview__drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 34px;
+  z-index: 1101;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .onboarding-v2-preview__close {
   position: fixed;
   top: 12px;
   right: 12px;
+  z-index: 1102;
   min-height: 34px;
   padding: 0 14px;
   border: 1px solid rgba(28, 28, 25, 0.14);

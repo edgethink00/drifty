@@ -68,6 +68,7 @@
     "allow-managed-ai-delete",
     "allow-extreme-nudge-apply",
     "allow-system-open-settings-pane",
+    "allow-window-set-onboarding-presentation",
     "allow-watcher-peek-show",
     "allow-watcher-peek-hide",
     "allow-drift-alarm-show",

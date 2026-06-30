@@ -70,6 +70,7 @@ import { consumePostUpdateRelaunchFocusPending } from "./features/updates/update
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
+import { setOnboardingWindowPresentation } from "./lib/api/windowChromeClient";
 import {
   capturePostHogEvent,
   toAnalyticsErrorKind,
@@ -982,6 +983,17 @@ export default function App() {
       active = false;
     };
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
+  useEffect(() => {
+    const onboardingSurfaceOpen = onboardingOpen || onboardingV2PreviewOpen;
+    if (!onboardingSurfaceOpen) return;
+    // The v2.1 preview is a card-shaped surface, so shrink the window to it;
+    // the legacy onboarding modal only needs the traffic lights hidden.
+    const compact = onboardingV2PreviewOpen;
+    void setOnboardingWindowPresentation(true, compact);
+    return () => {
+      void setOnboardingWindowPresentation(false, compact);
+    };
+  }, [onboardingOpen, onboardingV2PreviewOpen]);
   const {
     user,
     status: authStatus,

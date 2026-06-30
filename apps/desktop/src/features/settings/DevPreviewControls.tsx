@@ -60,11 +60,11 @@ export function DevPreviewControls({
       {ONBOARDING_V2_PREVIEW_ENABLED ? (
         <div className="settings-row">
           <div>
-            <div className="lbl">Onboarding v2 preview</div>
-            <div className="desc">Open the isolated v2 setup concept from the onboarding analysis. It does not write onboarding state.</div>
+            <div className="lbl">Onboarding v2.1 preview</div>
+            <div className="desc">Open the isolated v2.1 setup concept from the onboarding analysis. It does not write onboarding state.</div>
           </div>
           <div className="ctrl">
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onOpenOnboardingV2Preview}>Preview v2</button>
+            <button type="button" className="settings-btn settings-btn--primary" onClick={onOpenOnboardingV2Preview}>Preview v2.1</button>
           </div>
         </div>
       ) : null}

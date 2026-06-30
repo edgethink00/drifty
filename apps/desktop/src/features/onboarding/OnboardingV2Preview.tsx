@@ -24,11 +24,12 @@ export function OnboardingV2Preview({ onClose }: OnboardingV2PreviewProps) {
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="onboarding-v2-preview" role="dialog" aria-modal="true" aria-label="Onboarding v2 original preview">
+    <div className="onboarding-v2-preview" role="dialog" aria-modal="true" aria-label="Onboarding v2.1 preview">
+      <div className="onboarding-v2-preview__drag" data-tauri-drag-region aria-hidden="true" />
       <iframe
         className="onboarding-v2-preview__frame"
         src={ORIGINAL_ONBOARDING_V2_PREVIEW_URL}
-        title="Onboarding v2 original preview"
+        title="Onboarding v2.1 preview"
       />
       <button type="button" className="onboarding-v2-preview__close" onClick={onClose}>
         Close preview

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-window-set-onboarding-presentation"
+description = "Enables the window_set_onboarding_presentation command without any pre-configured scope."
+commands.allow = ["window_set_onboarding_presentation"]
+
+[[permission]]
+identifier = "deny-window-set-onboarding-presentation"
+description = "Denies the window_set_onboarding_presentation command without any pre-configured scope."
+commands.deny = ["window_set_onboarding_presentation"]

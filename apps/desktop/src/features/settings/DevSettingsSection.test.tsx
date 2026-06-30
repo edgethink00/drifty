@@ -91,7 +91,7 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Force browser history URL fallback")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Dev$/ })).toBeNull();
     expect(screen.queryByRole("group", { name: /^Pre-release update$/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Preview v2$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
   });
 
@@ -133,7 +133,7 @@ describe("DevSettingsSection", () => {
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
   });
 
-  it("opens the isolated onboarding v2 preview when the dev flag is enabled", () => {
+  it("opens the isolated onboarding v2.1 preview when the dev flag is enabled", () => {
     featureSwitches.onboardingV2PreviewEnabled = true;
     const props = {
       dashboardAiUnavailablePreview: null,
@@ -167,7 +167,7 @@ describe("DevSettingsSection", () => {
     } satisfies DevSettingsSectionProps;
 
     render(<DevSettingsSection {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Preview v2$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Preview v2\.1$/i }));
 
     expect(props.onOpenOnboardingV2Preview).toHaveBeenCalledTimes(1);
   });
