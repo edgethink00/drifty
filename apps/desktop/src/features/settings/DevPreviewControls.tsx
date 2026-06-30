@@ -4,7 +4,6 @@ import {
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED,
-  ONBOARDING_V2_PREVIEW_ENABLED,
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED,
 } from "../../appFeatureSwitches";
 import { DRIFT_ALARM_PREVIEW_OPTIONS } from "../companion/driftAlarmData";
@@ -26,7 +25,6 @@ type DevPreviewControlsProps = {
   readonly watcherPeriodicMaxMinutes: number;
   readonly watcherPeriodicMinMinutes: number;
   readonly onEndOfDayReviewPreview: () => void;
-  readonly onOpenOnboardingV2Preview: () => void;
   readonly onOpenReplayOnboarding: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onShowWatcherPeek: (force?: boolean) => void;
@@ -44,7 +42,6 @@ export function DevPreviewControls({
   watcherPeriodicMaxMinutes,
   watcherPeriodicMinMinutes,
   onEndOfDayReviewPreview,
-  onOpenOnboardingV2Preview,
   onOpenReplayOnboarding,
   onPreviewDriftAlarm,
   onShowWatcherPeek,
@@ -57,17 +54,6 @@ export function DevPreviewControls({
     <div className="settings-block settings-block--dev-preview">
       <h3>Dev</h3>
       {DEVELOPER_PRE_RELEASE_UPDATES_ENABLED ? <DeveloperPreReleaseUpdateRow /> : null}
-      {ONBOARDING_V2_PREVIEW_ENABLED ? (
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Onboarding v2.1 preview</div>
-            <div className="desc">Open the isolated v2.1 setup concept from the onboarding analysis. It does not write onboarding state.</div>
-          </div>
-          <div className="ctrl">
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onOpenOnboardingV2Preview}>Preview v2.1</button>
-          </div>
-        </div>
-      ) : null}
       {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
         <div className="settings-row">
           <div>

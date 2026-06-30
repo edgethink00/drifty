@@ -21,7 +21,7 @@ export type { OnboardingStep as OnboardingStepId } from "./onboardingFlow";
 
 export function OnboardingModal({
   userId,
-  userEmail,
+  accountConnected,
   initialDisplayName,
   trackerStatus,
   accessibilityGranted,
@@ -39,7 +39,7 @@ export function OnboardingModal({
   __devInitialStep,
 }: {
   userId: string;
-  userEmail: string | null;
+  accountConnected: boolean;
   initialDisplayName: string;
   trackerStatus: TrackerStatus | null;
   accessibilityGranted: boolean;
@@ -65,7 +65,7 @@ export function OnboardingModal({
 
   const flow = useOnboardingFlow({
     userId,
-    userEmail,
+    accountConnected,
     initialDisplayName,
     trackerStatus,
     accessibilityGranted,

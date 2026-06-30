@@ -97,7 +97,6 @@ import {
   hasCompletedUserOnboarding,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
-import { OnboardingV2Preview } from "./features/onboarding/OnboardingV2Preview";
 import {
   WatcherPeek,
   type WatcherPeekEvent,
@@ -918,9 +917,8 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
-  const [developerAuthRequiredPreview, setDeveloperAuthRequiredPreview] = useState(false);
+  const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [onboardingV2PreviewOpen, setOnboardingV2PreviewOpen] = useState(false);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
@@ -984,16 +982,12 @@ export default function App() {
     };
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
   useEffect(() => {
-    const onboardingSurfaceOpen = onboardingOpen || onboardingV2PreviewOpen;
-    if (!onboardingSurfaceOpen) return;
-    // The v2.1 preview is a card-shaped surface, so shrink the window to it;
-    // the legacy onboarding modal only needs the traffic lights hidden.
-    const compact = onboardingV2PreviewOpen;
-    void setOnboardingWindowPresentation(true, compact);
+    if (!onboardingOpen) return;
+    void setOnboardingWindowPresentation(true, true);
     return () => {
-      void setOnboardingWindowPresentation(false, compact);
+      void setOnboardingWindowPresentation(false, true);
     };
-  }, [onboardingOpen, onboardingV2PreviewOpen]);
+  }, [onboardingOpen]);
   const {
     user,
     status: authStatus,
@@ -1008,14 +1002,14 @@ export default function App() {
     hasBlockingAuthConfigurationError,
   } = useAuth();
   const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
-  const isEffectiveAuthRequired = isAuthRequired || developerAuthRequiredPreview;
-  const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !developerAuthRequiredPreview;
-  const hasEffectiveBlockingAuthConfigurationError = hasBlockingAuthConfigurationError || (developerAuthRequiredPreview && !isSupabaseConfigured);
+  const isEffectiveAuthRequired = isAuthRequired;
+  const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !isEffectiveAuthRequired;
+  const hasEffectiveBlockingAuthConfigurationError = hasBlockingAuthConfigurationError;
   const cloudConnectionStatus: AuthConnectionStatus = reportedCloudConnectionStatus
     ?? (isSupabaseConfigured ? (authStatus === "loading" ? "checking" : "online") : "disabled");
   const isCloudOnline = cloudConnectionStatus === "online";
   const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
-  const shouldBlockLocalTrackerAccess = developerAuthRequiredPreview && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
+  const shouldBlockLocalTrackerAccess = isEffectiveAuthRequired && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const requestCloudBillingAuth = useCallback(() => setAuthModalOpen(true), []);
   const {
@@ -3946,7 +3940,6 @@ export default function App() {
     || feedbackModalOpen
     || aiSetupDialogOpen
     || onboardingOpen
-    || onboardingV2PreviewOpen
     || selectedLeaderboardRow
     || isProfileEditorOpen
     || cmdOpen,
@@ -4370,8 +4363,17 @@ export default function App() {
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
       setAuthModalOpen(false);
+      setResumeOnboardingAfterAuthModal(false);
     }
   }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired]);
+
+  const handleCloseAuthModal = useCallback(() => {
+    setAuthModalOpen(false);
+    if (resumeOnboardingAfterAuthModal && !hasRequiredAccountAuth) {
+      setOnboardingOpen(true);
+    }
+    setResumeOnboardingAfterAuthModal(false);
+  }, [hasRequiredAccountAuth, resumeOnboardingAfterAuthModal]);
 
   const openDashboardAiSetup = useCallback(() => {
     setSettingsSection("aiSetup");
@@ -4409,11 +4411,6 @@ export default function App() {
       return;
     }
 
-    if (developerAuthRequiredPreview && !hasRequiredAccountAuth) {
-      setOnboardingOpen(false);
-      return;
-    }
-
     if (authStatus === "authenticated") {
       if (!user?.id) {
         setOnboardingOpen(false);
@@ -4424,12 +4421,19 @@ export default function App() {
         return;
       }
 
-      setOnboardingOpen(!hasCompletedUserOnboarding(user.id, hasRequiredAccountAuth ? ["local"] : []));
+      const completedForAuthPolicy = hasCompletedUserOnboarding(user.id)
+        && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
+      setOnboardingOpen(!completedForAuthPolicy);
+      return;
+    }
+
+    if (isEffectiveAuthRequired) {
+      setOnboardingOpen(true);
       return;
     }
 
     setOnboardingOpen(!hasCompletedUserOnboarding("local"));
-  }, [authStatus, developerAuthRequiredPreview, hasRequiredAccountAuth, profileReadyUserId, user?.id]);
+  }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired, profileReadyUserId, user?.id]);
 
   function handleOnboardingComplete(state: UserOnboardingState) {
     const displayName = state.displayName.trim();
@@ -4444,14 +4448,6 @@ export default function App() {
   async function handleOpenDeveloperOnboarding() {
     await refresh();
     setOnboardingOpen(true);
-  }
-
-  function handleDeveloperAuthRequiredPreview() {
-    setDeveloperAuthRequiredPreview(true);
-    setAuthModalOpen(true);
-    if (user) {
-      void signOut();
-    }
   }
 
   async function handleStartTracking() {
@@ -4780,15 +4776,15 @@ export default function App() {
     }
   }, [debugLogPreview]);
 
-  if (developerAuthRequiredPreview && hasEffectiveBlockingAuthConfigurationError) {
+  if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
     return <AuthConfigurationGate />;
   }
 
-  if (developerAuthRequiredPreview && !hasRequiredAccountAuth) {
+  if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {
     return (
       <>
         <AuthRequiredGate onSignIn={() => setAuthModalOpen(true)} />
-        {authModalOpen ? <AuthModal onClose={() => setAuthModalOpen(false)} /> : null}
+        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
       </>
     );
   }
@@ -4897,7 +4893,7 @@ export default function App() {
           ) : null}
         </div>
       </div>
-      {cloudTrialStartedNotice && !onboardingOpen && !onboardingV2PreviewOpen && !isDashboardDemoReplayActive ? (
+      {cloudTrialStartedNotice && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <CloudTrialStartedNotice
           notice={cloudTrialStartedNotice}
           onDismiss={dismissCloudTrialStartedNotice}
@@ -5390,7 +5386,6 @@ export default function App() {
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
-                    onOpenOnboardingV2Preview={() => setOnboardingV2PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
@@ -5451,7 +5446,7 @@ export default function App() {
         </div>
       )}
 
-      {authModalOpen ? <AuthModal onClose={() => setAuthModalOpen(false)} /> : null}
+      {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
 
       {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
 
@@ -5464,14 +5459,10 @@ export default function App() {
         />
       ) : null}
 
-      {onboardingV2PreviewOpen ? (
-        <OnboardingV2Preview onClose={() => setOnboardingV2PreviewOpen(false)} />
-      ) : null}
-
       {onboardingOpen ? (
         <OnboardingModal
           userId={user?.id ?? "local"}
-          userEmail={user?.email ?? null}
+          accountConnected={hasRequiredAccountAuth}
           initialDisplayName={profileDraft.displayName}
           trackerStatus={status}
           accessibilityGranted={accessibilityGranted}
@@ -5484,6 +5475,7 @@ export default function App() {
           cloudTrialStartedNotice={cloudTrialStartedNotice}
           onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
           onStartCloudTrialWithEmail={() => {
+            setResumeOnboardingAfterAuthModal(true);
             setOnboardingOpen(false);
             setAuthModalOpen(true);
           }}

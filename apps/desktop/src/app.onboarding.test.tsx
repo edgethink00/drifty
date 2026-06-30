@@ -29,7 +29,7 @@ const {
   sendNotificationMock,
 } = vi.hoisted(() => ({
   authState: {
-    user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string } | null,
+    user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string | null } | null,
     session: null,
     status: "authenticated" as "loading" | "authenticated" | "unauthenticated",
     callbackStatus: null,
@@ -162,7 +162,6 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: true,
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
   IS_PRODUCTION_BUILD: false,
-  ONBOARDING_V2_PREVIEW_ENABLED: false,
   RELEASE_CHANNEL: "dev",
   get REPLAY_ONBOARDING_DEV_TOOL_ENABLED() {
     return appFeatureSwitches.replayOnboardingDevToolEnabled;
@@ -286,6 +285,8 @@ function selectMainActivity(option: string) {
 async function advanceThroughSharedBasics(options: { activity?: string } = {}) {
   await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 6_000 });
   await clickEnabledNext();
+  await screen.findByRole("dialog", { name: /connect your account/i }, { timeout: 6_000 });
+  await clickEnabledNext();
   await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 });
   if (options.activity) selectMainActivity(options.activity);
   await clickEnabledAction(/^continue$/i);
@@ -328,13 +329,14 @@ async function connectAccount() {
 async function advanceToPermissionsStep() {
   await screen.findByRole("dialog", { name: /welcome to drifty/i });
   await clickEnabledNext();
+  await screen.findByRole("dialog", { name: /connect your account/i });
+  await clickEnabledNext();
   await screen.findByRole("dialog", { name: /what do you usually do/i });
   await clickEnabledAction(/^continue$/i);
 }
 
 async function advanceToReadyStep(options: { activity?: string } = {}) {
   await chooseSimpleSetup(options);
-  await connectAccount();
 }
 
 describe("App onboarding", () => {
@@ -403,6 +405,9 @@ describe("App onboarding", () => {
     expect(await screen.findByText(/your ai time tracker/i, undefined, { timeout: 6_000 })).toBeTruthy();
 
     await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+    await clickEnabledNext();
 
     expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
     expect(screen.getByText(/choose up to 5 activities/i)).toBeTruthy();
@@ -453,21 +458,17 @@ describe("App onboarding", () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.isEnabled = true;
+    authState.hasRequiredAccountAuth = false;
 
     render(<App />);
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
-    await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /drifty cloud/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /local ai/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /byok \(bring your own key\)/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /drifty cloud/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /byok \(bring your own key\)/i })).toBeNull();
   });
 
   it("bypasses onboarding for an authenticated dev startup without storing completion", async () => {
@@ -487,6 +488,7 @@ describe("App onboarding", () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.isEnabled = true;
+    authState.hasRequiredAccountAuth = false;
 
     render(<App />);
 
@@ -508,24 +510,22 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
-    await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
-    await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /drifty cloud/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
   });
 
   it("opens the in-app auth modal from onboarding email continuation", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.isEnabled = true;
+    authState.hasRequiredAccountAuth = false;
 
     render(<App />);
 
-    await chooseSimpleSetup();
-
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
 
@@ -539,6 +539,30 @@ describe("App onboarding", () => {
     expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
   });
 
+  it("returns to required account onboarding when email sign-in is cancelled", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.hasRequiredAccountAuth = false;
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
+    expect(await screen.findByRole("dialog", { name: /sign in to drifty/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
+  });
+
   it("starts direct Google OAuth from the onboarding Google button", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
@@ -546,8 +570,8 @@ describe("App onboarding", () => {
 
     render(<App />);
 
-    await chooseSimpleSetup();
-
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
     const googleButton = await screen.findByRole("button", { name: /continue with google/i });
 
     expect(googleButton.querySelector(".onb-google-mark svg")).toBeTruthy();
@@ -562,15 +586,31 @@ describe("App onboarding", () => {
   it("lets an already authenticated account continue without starting sign-in again", async () => {
     render(<App />);
 
-    await chooseSimpleSetup();
-
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
     await clickEnabledNext();
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+  });
+
+  it("treats an email-less non-anonymous account as connected", async () => {
+    authState.user = { id: "user-1", email: null };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+    await clickEnabledNext();
+
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
   });
 
   it("waits for profile loading to settle before showing onboarding", async () => {
@@ -683,6 +723,8 @@ describe("App onboarding", () => {
 
     await screen.findByRole("dialog", { name: /welcome to drifty/i });
     await clickEnabledNext();
+    await screen.findByRole("dialog", { name: /connect your account/i });
+    await clickEnabledNext();
     await screen.findByRole("dialog", { name: /what do you usually do/i });
     await clickEnabledAction(/^continue$/i);
     await screen.findByRole("dialog", { name: /set up permissions/i });
@@ -710,7 +752,6 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
     await clickEnabledAction(/^continue$/i);
-    await connectAccount();
 
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
@@ -1085,8 +1126,6 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();
     expect(screen.getByText(/tracking readiness verified/i)).toBeTruthy();
@@ -1211,5 +1250,38 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
+  });
+
+  it("ignores legacy local completion when required auth needs an account", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.hasRequiredAccountAuth = false;
+    window.localStorage.setItem(
+      getUserOnboardingStorageKey("local"),
+      JSON.stringify({
+        version: 2,
+        completed: true,
+        displayName: "Local",
+        workType: "Design",
+        workTypeOther: "",
+        workDomain: "Tech",
+        workDomainOther: "",
+        focusGoalHours: null,
+        driftThresholdMinutes: null,
+        purpose: null,
+        completedAt: "2026-05-08T00:00:00.000Z",
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
   });
 });

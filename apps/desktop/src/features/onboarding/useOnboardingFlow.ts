@@ -26,7 +26,7 @@ import { useOnboardingPermissions } from "./useOnboardingPermissions";
 
 type UseOnboardingFlowOptions = {
   readonly userId: string;
-  readonly userEmail: string | null;
+  readonly accountConnected: boolean;
   readonly initialDisplayName: string;
   readonly trackerStatus: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
@@ -44,7 +44,7 @@ type UseOnboardingFlowOptions = {
 
 export function useOnboardingFlow({
   userId,
-  userEmail,
+  accountConnected,
   initialDisplayName,
   trackerStatus,
   accessibilityGranted: accessibilityGrantedFromApp,
@@ -89,7 +89,6 @@ export function useOnboardingFlow({
 
   const steps = useMemo(() => getOnboardingSteps(connection.setupChoice), [connection.setupChoice]);
   const stepIndex = steps.findIndex((item) => item.id === step);
-  const accountConnected = Boolean(userEmail);
   const permissionSummaryLabel = permissions.accessibilityGranted
     ? "Accessibility verified"
     : "Tracking readiness verified";

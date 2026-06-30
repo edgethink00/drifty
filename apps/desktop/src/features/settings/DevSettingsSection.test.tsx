@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createRef, type ComponentProps } from "react";
+import { createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DevSettingsSection } from "./DevSettingsSection";
 import {
@@ -12,7 +12,6 @@ import {
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
-  onboardingV2PreviewEnabled: false,
 }));
 
 vi.mock("../../appFeatureSwitches", () => ({
@@ -23,19 +22,14 @@ vi.mock("../../appFeatureSwitches", () => ({
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: false,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
-  get ONBOARDING_V2_PREVIEW_ENABLED() {
-    return featureSwitches.onboardingV2PreviewEnabled;
-  },
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
   WATCHER_PEEK_PROTOTYPE_ENABLED: false,
 }));
 
-type DevSettingsSectionProps = ComponentProps<typeof DevSettingsSection>;
-
 function renderProductionDevSettings() {
   const props = {
     dashboardAiUnavailablePreview: null,
-    dashboardAiUnavailablePreviewCase: "connect-ai",
+    dashboardAiUnavailablePreviewCase: "connect-ai" as const,
     demoDashboardReplaySettings: {
       preRollSeconds: 5,
       durationSeconds: 45,
@@ -45,7 +39,7 @@ function renderProductionDevSettings() {
     forceChromiumAxCaptureEnabled: false,
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
-    watcherMode: "periodic",
+    watcherMode: "periodic" as const,
     watcherPeekEnabled: false,
     watcherPeriodicMaxMinutes: 20,
     watcherPeriodicMinMinutes: 5,
@@ -59,7 +53,6 @@ function renderProductionDevSettings() {
     onForceChromiumAxExtremeNudgeChange: vi.fn(),
     onForceFrontmostFallbackCaptureChange: vi.fn(),
     onOpenDebugLogs: vi.fn(),
-    onOpenOnboardingV2Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onPreviewDriftAlarm: vi.fn(),
@@ -70,7 +63,7 @@ function renderProductionDevSettings() {
     onWatcherPeekEnabledChange: vi.fn(),
     onWatcherPeriodicMaxChange: vi.fn(),
     onWatcherPeriodicMinChange: vi.fn(),
-  } satisfies DevSettingsSectionProps;
+  };
 
   render(<DevSettingsSection {...props} />);
 
@@ -80,7 +73,6 @@ function renderProductionDevSettings() {
 describe("DevSettingsSection", () => {
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
-    featureSwitches.onboardingV2PreviewEnabled = false;
   });
 
   it("does not leave an empty Dev preview block in production diagnostics", () => {
@@ -98,13 +90,13 @@ describe("DevSettingsSection", () => {
   it("calls the browser history fallback handler when toggled", () => {
     const props = {
       dashboardAiUnavailablePreview: null,
-      dashboardAiUnavailablePreviewCase: "connect-ai",
+      dashboardAiUnavailablePreviewCase: "connect-ai" as const,
       endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
       forceBrowserHistoryUrlFallbackEnabled: false,
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
-      watcherMode: "periodic",
+      watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
       watcherPeriodicMaxMinutes: 20,
       watcherPeriodicMinMinutes: 5,
@@ -116,7 +108,6 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
-      onOpenOnboardingV2Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
@@ -125,7 +116,7 @@ describe("DevSettingsSection", () => {
       onWatcherPeekEnabledChange: vi.fn(),
       onWatcherPeriodicMaxChange: vi.fn(),
       onWatcherPeriodicMinChange: vi.fn(),
-    } satisfies DevSettingsSectionProps;
+    };
 
     render(<DevSettingsSection {...props} />);
     fireEvent.click(screen.getByRole("switch", { name: "Force browser history URL fallback" }));
@@ -133,17 +124,16 @@ describe("DevSettingsSection", () => {
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
   });
 
-  it("opens the isolated onboarding v2.1 preview when the dev flag is enabled", () => {
-    featureSwitches.onboardingV2PreviewEnabled = true;
+  it("does not expose the isolated onboarding v2.1 preview", () => {
     const props = {
       dashboardAiUnavailablePreview: null,
-      dashboardAiUnavailablePreviewCase: "connect-ai",
+      dashboardAiUnavailablePreviewCase: "connect-ai" as const,
       endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
       forceBrowserHistoryUrlFallbackEnabled: false,
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
-      watcherMode: "periodic",
+      watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
       watcherPeriodicMaxMinutes: 20,
       watcherPeriodicMinMinutes: 5,
@@ -155,7 +145,6 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
-      onOpenOnboardingV2Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
@@ -164,12 +153,12 @@ describe("DevSettingsSection", () => {
       onWatcherPeekEnabledChange: vi.fn(),
       onWatcherPeriodicMaxChange: vi.fn(),
       onWatcherPeriodicMinChange: vi.fn(),
-    } satisfies DevSettingsSectionProps;
+    };
 
     render(<DevSettingsSection {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Preview v2\.1$/i }));
 
-    expect(props.onOpenOnboardingV2Preview).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/^Onboarding v2\.1 preview$/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
   });
 
   it("shows dashboard demo replay controls and calls replay handlers when the feature switch is enabled", () => {
