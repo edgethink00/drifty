@@ -12,6 +12,7 @@
     "dev:web:skip-onboarding": "SKIP_ONBOARDING=1 npm run dev:web",
     "dev:web:auth-required": "VITE_DRIFTY_AUTH_MODE=required npm --prefix apps/desktop run dev",
     "build:web": "npm --prefix apps/desktop run build",
+    "build:tracker-sidecar": "node scripts/build-tracker-sidecar.mjs",
     "typecheck": "npm --prefix apps/desktop run typecheck",
     "test:python": "PYTHONPATH=services/tracker-python python3 -m unittest discover -s services/tracker-python/tests -v"
   },

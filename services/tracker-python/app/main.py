@@ -11,7 +11,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 APP_DIR = Path(__file__).resolve().parent
 PACKAGE_ROOT = APP_DIR.parent
@@ -38,6 +38,7 @@ FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLB
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
+RuntimeMode = Literal["source", "frozen"]
 
 
 def response(ok: bool, data=None, error: str | None = None):
@@ -131,6 +132,12 @@ def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
     os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "1" if force_browser_history_url_fallback else "0"
 
 
+def _apply_developer_diagnostics_defaults() -> None:
+    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "0"
+    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "0"
+    os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "0"
+
+
 def _bool_meta(value: str | None) -> bool | None:
     if value == "true":
         return True
@@ -198,6 +205,16 @@ def _current_script_path() -> str:
     return str(Path(__file__).resolve())
 
 
+def _current_runtime_mode() -> RuntimeMode:
+    return "frozen" if getattr(sys, "frozen", False) else "source"
+
+
+def _daemon_command(mode: str) -> list[str]:
+    if _current_runtime_mode() == "frozen":
+        return [sys.executable, mode, "--db", str(DB_PATH)]
+    return [sys.executable, _current_script_path(), mode, "--db", str(DB_PATH)]
+
+
 def _tracker_runtime_source_files() -> list[Path]:
     return [
         path
@@ -208,6 +225,24 @@ def _tracker_runtime_source_files() -> list[Path]:
 
 def _tracker_runtime_fingerprint() -> str:
     digest = hashlib.sha256()
+    if _current_runtime_mode() == "frozen":
+        executable = Path(sys.executable)
+        digest.update(b"frozen\0")
+        digest.update(str(executable).encode("utf-8"))
+        digest.update(b"\0")
+        try:
+            digest.update(executable.read_bytes())
+        except OSError as exc:
+            digest.update(f"read-error:{type(exc).__name__}".encode("utf-8"))
+            digest.update(b"\0")
+            try:
+                executable_stat = executable.stat()
+                digest.update(f"{executable_stat.st_size}:{executable_stat.st_mtime_ns}".encode("utf-8"))
+            except OSError as stat_exc:
+                digest.update(f"stat-error:{type(stat_exc).__name__}".encode("utf-8"))
+        return digest.hexdigest()
+
+    digest.update(b"source\0")
     for path in sorted(_tracker_runtime_source_files()):
         digest.update(str(path.relative_to(APP_DIR)).encode("utf-8"))
         digest.update(b"\0")
@@ -221,6 +256,12 @@ def _running_daemon_matches_current_script(pid: int) -> bool:
     if not command:
         return True
     current_script = _current_script_path()
+    if _current_runtime_mode() == "frozen":
+        if "tracker-python" in command and "main.py" in command:
+            return False
+        if sys.executable in command and "daemon" in command:
+            return True
+        return True
     if current_script in command:
         return True
     if "tracker-python" in command and "main.py" in command:
@@ -251,7 +292,7 @@ def start_tracking():
         _stop_stale_tracker_daemon(pid)
         time.sleep(0.25)
 
-    command = [sys.executable, str(Path(__file__).resolve()), "daemon", "--db", str(DB_PATH)]
+    command = _daemon_command("daemon")
     subprocess.Popen(
         command,
         stdout=subprocess.DEVNULL,
@@ -525,7 +566,10 @@ def set_developer_diagnostics(payload: dict):
 
 
 def get_current_snapshot():
-    _apply_developer_diagnostics_env(database())
+    if DB_PATH.exists():
+        _apply_developer_diagnostics_env(database())
+    else:
+        _apply_developer_diagnostics_defaults()
     snapshot = current_snapshot()
     return response(
         True,

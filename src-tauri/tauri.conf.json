@@ -53,8 +53,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../services/tracker-python/app"
+    "externalBin": [
+      "binaries/drifty-tracker"
     ],
     "macOS": {
       "minimumSystemVersion": "13.0",
