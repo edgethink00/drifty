@@ -5339,7 +5339,6 @@ export default function App() {
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}
-                    onManageCloudDevices={openAccountSettings}
                     onRefreshCloudStatus={refreshBillingEntitlement}
                     onStartCloudSetup={handleStartDriftyCloudSetup}
                   />
