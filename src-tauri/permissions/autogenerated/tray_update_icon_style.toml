@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-tray-update-icon-style"
+description = "Enables the tray_update_icon_style command without any pre-configured scope."
+commands.allow = ["tray_update_icon_style"]
+
+[[permission]]
+identifier = "deny-tray-update-icon-style"
+description = "Denies the tray_update_icon_style command without any pre-configured scope."
+commands.deny = ["tray_update_icon_style"]

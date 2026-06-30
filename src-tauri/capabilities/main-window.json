@@ -50,6 +50,7 @@
     "allow-tracker-get-classification-metrics",
     "allow-tray-update-productivity-icon",
     "allow-tray-update-drift-alarm-status",
+    "allow-tray-update-icon-style",
     "allow-auth-take-pending-deep-links",
     "allow-auth-load-saved-session",
     "allow-auth-save-session",

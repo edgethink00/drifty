@@ -141,6 +141,15 @@ describe("trackerClient", () => {
     });
   });
 
+  it("invokes tray_update_icon_style with the selected style", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce(null);
+
+    await trackerClient.updateTrayIconStyle("expanded");
+
+    expect(invoke).toHaveBeenCalledWith("tray_update_icon_style", { style: "expanded" });
+  });
+
   it("returns an empty dashboard week timeline outside Tauri", async () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     const { trackerClient } = await import("./trackerClient");

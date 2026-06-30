@@ -97,6 +97,7 @@ function BootstrapLoader() {
           import("./App"),
         ]);
         initializePostHog();
+        void syncInitialMenuBarIconStyle();
         window.__DRIFTY_SET_BOOT_STATUS__?.("App module imported");
         const App = mod.default;
         setLoadedApp(() => function AppWithAuthProvider() {
@@ -109,7 +110,8 @@ function BootstrapLoader() {
       } catch (error) {
         const root = document.getElementById("root");
         if (!root) return;
-        root.replaceChildren(createBootstrapErrorElement("Drifty startup error", toSafeErrorMessage(error)));
+        const message = error instanceof Error ? error.message : toSafeErrorMessage(error);
+        root.replaceChildren(createBootstrapErrorElement("Drifty startup error", message));
       }
     };
 
@@ -127,6 +129,22 @@ function BootstrapLoader() {
 
   if (!LoadedApp) return null;
   return <LoadedApp />;
+}
+
+async function syncInitialMenuBarIconStyle(): Promise<void> {
+  try {
+    const [{ trackerClient }, { resolveInitialMenuBarIconStyle }] = await Promise.all([
+      import("./lib/api/trackerClient"),
+      import("./features/settings/settingsStorage"),
+    ]);
+    await trackerClient.updateTrayIconStyle(resolveInitialMenuBarIconStyle());
+  } catch (error) {
+    if (error instanceof Error) {
+      window.__DRIFTY_SET_BOOT_STATUS__?.(`Menu bar icon sync skipped: ${error.message}`);
+      return;
+    }
+    throw error;
+  }
 }
 
 function resolveLocationSurface(location: Pick<Location, "pathname" | "search">): ResolvedBootstrapSurface {

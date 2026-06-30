@@ -19,7 +19,7 @@ use self::productivity_icon::{
 };
 
 pub use self::productivity_icon::TrayProductivityState;
-use crate::donut_icon;
+use crate::donut_icon::{self, DonutIconRenderInput, TrayIconStyle};
 use crate::tracker::TrackerController;
 use crate::{reveal_main_window, MAIN_WINDOW_LABEL};
 
@@ -39,6 +39,9 @@ const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 
 #[derive(Default)]
 pub struct TrayDriftAlarmState(Mutex<TrayDriftAlarmStatus>);
+
+#[derive(Default)]
+pub struct TrayIconStyleState(Mutex<TrayIconStyle>);
 
 #[tauri::command]
 pub fn tray_update_productivity_icon(
@@ -69,10 +72,33 @@ pub fn tray_update_drift_alarm_status(
     refresh_tray_menu(&app).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub fn tray_update_icon_style(
+    app: AppHandle,
+    state: State<'_, TrayIconStyleState>,
+    style: TrayIconStyle,
+) -> Result<(), String> {
+    let mut latest = state
+        .0
+        .lock()
+        .map_err(|_| "tray icon style state lock poisoned".to_string())?;
+    *latest = style;
+    drop(latest);
+
+    update_tray_icon(&app);
+    Ok(())
+}
+
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = build_tray_menu(app)?;
 
-    let (initial_rgba, iw, ih) = donut_icon::render(0.0, 0.0, 0.0, is_dark_mode());
+    let (initial_rgba, iw, ih) = donut_icon::render(DonutIconRenderInput {
+        focus: 0.0,
+        drift: 0.0,
+        neutral: 0.0,
+        is_dark: is_dark_mode(),
+        style: latest_tray_icon_style(app),
+    });
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(Image::new_owned(initial_rgba, iw, ih))
         .icon_as_template(false)
@@ -246,8 +272,20 @@ fn update_tray_icon(app: &AppHandle) {
         None => (0.0, 0.0, 0.0),
     };
     let dark = is_dark_mode();
-    let (rgba, w, h) = donut_icon::render(focus, drift, neutral, dark);
+    let (rgba, w, h) = donut_icon::render(DonutIconRenderInput {
+        focus,
+        drift,
+        neutral,
+        is_dark: dark,
+        style: latest_tray_icon_style(app),
+    });
     let _ = tray.set_icon(Some(Image::new_owned(rgba, w, h)));
+}
+
+fn latest_tray_icon_style(app: &AppHandle) -> TrayIconStyle {
+    app.try_state::<TrayIconStyleState>()
+        .and_then(|state| state.0.lock().ok().map(|latest| *latest))
+        .unwrap_or_default()
 }
 
 fn latest_tray_drift_alarm_status(app: &AppHandle) -> TrayDriftAlarmStatus {
