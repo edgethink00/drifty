@@ -184,7 +184,6 @@ export function renderPanel({
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
-        onManageCloudDevices={onManageCloudDevices}
         onRefreshCloudStatus={onRefreshCloudStatus}
         onStartCloudSetup={onStartCloudSetup}
       />

@@ -18,7 +18,6 @@ export type CloudSetupPanelProps = {
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly onManageCloudBilling: () => void | Promise<void>;
-  readonly onManageCloudDevices: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
 };
@@ -39,7 +38,6 @@ export function CloudSetupPanel({
   shouldShowCloudCheckoutPlans,
   userEmail,
   onManageCloudBilling,
-  onManageCloudDevices,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: CloudSetupPanelProps) {
@@ -57,12 +55,8 @@ export function CloudSetupPanel({
     isCurrentCloudPlan,
     isSupabaseConfigured,
   });
-  const primaryActionDisabled = isDeviceLimitLocked
-    ? cloudStatusRefreshing
-    : billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
-  const handlePrimaryAction = isDeviceLimitLocked
-    ? onManageCloudDevices
-    : isCurrentPaidPlan
+  const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
+  const handlePrimaryAction = isDeviceLimitLocked || isCurrentPaidPlan
     ? onManageCloudBilling
     : isCurrentTrial || !isCurrentCloudPlan
       ? () => onStartCloudSetup()
@@ -121,7 +115,7 @@ function cloudActionLabel({
   if (billingPortalLoading) return "Opening billing...";
   if (cloudStatusRefreshing) return "Checking...";
   if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Upgrade to Individual";
-  if (billingEntitlementLockedReason === "device_limit_reached") return "Manage devices";
+  if (billingEntitlementLockedReason === "device_limit_reached") return "Manage billing";
   if (billingEntitlementStatus === "trialing") return "Upgrade to Individual";
   if (billingEntitlementStatus === "active") return "Manage billing";
   return "Refresh Drifty Cloud";

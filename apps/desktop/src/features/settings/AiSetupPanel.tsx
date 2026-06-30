@@ -48,7 +48,6 @@ export type AiSetupPanelProps = {
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
-  readonly onManageCloudDevices: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
 };
@@ -75,7 +74,6 @@ export function AiSetupPanel({
   onDialogOpenChange,
   onLocalAiSetupChange,
   onManageCloudBilling,
-  onManageCloudDevices,
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
@@ -212,7 +210,6 @@ export function AiSetupPanel({
                 onDeleteModel={managedLocalAi.deleteModel}
                 onInstallModel={managedLocalAi.installModel}
                 onManageCloudBilling={onManageCloudBilling}
-                onManageCloudDevices={onManageCloudDevices}
                 onRefreshCloudStatus={onRefreshCloudStatus}
                 onStartCloudSetup={onStartCloudSetup}
               />
