@@ -1,3 +1,4 @@
+import hashlib
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,49 @@ class TrackerMainTests(unittest.TestCase):
                 self.assertIn("--db", args)
                 self.assertIn(str(tracker_main.DB_PATH), args)
 
+    def test_start_tracking_builds_source_daemon_command(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+
+            with patch.object(sys, "executable", "/usr/bin/python3"), patch.object(
+                sys, "frozen", False, create=True
+            ), patch.object(tracker_main, "is_running", return_value=False), patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": True}}
+            ), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen:
+                tracker_main.start_tracking()
+
+        self.assertEqual(
+            popen.call_args.args[0],
+            [
+                "/usr/bin/python3",
+                tracker_main._current_script_path(),
+                "daemon",
+                "--db",
+                str(tracker_main.DB_PATH),
+            ],
+        )
+
+    def test_start_tracking_builds_frozen_daemon_command(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+
+            with patch.object(sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"), patch.object(
+                sys, "frozen", True, create=True
+            ), patch.object(tracker_main, "is_running", return_value=False), patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": True}}
+            ), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen:
+                tracker_main.start_tracking()
+
+        self.assertEqual(
+            popen.call_args.args[0],
+            [
+                "/Applications/Drifty.app/Contents/MacOS/drifty-tracker",
+                "daemon",
+                "--db",
+                str(tracker_main.DB_PATH),
+            ],
+        )
+
     def test_start_tracking_reports_failure_when_daemon_does_not_start(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -49,6 +93,60 @@ class TrackerMainTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIs(result["data"]["running"], False)
         self.assertIn("did not start", result["error"])
+
+    def test_start_tracking_replaces_source_daemon_when_current_runtime_is_frozen(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main.pid_path().write_text("12345")
+            source_command = f"/usr/bin/python3 {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+
+            with patch.object(sys, "frozen", True, create=True), patch.object(
+                sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"
+            ), patch.object(tracker_main, "is_running", return_value=True), patch.object(
+                tracker_main, "_process_command", return_value=source_command
+            ), patch("app.main.os.kill") as kill, patch("app.main.time.sleep"), patch(
+                "app.main.subprocess.Popen"
+            ) as popen, patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": True}}
+            ):
+                tracker_main.start_tracking()
+
+        kill.assert_called_once_with(12345, tracker_main.signal.SIGTERM)
+        self.assertEqual(
+            popen.call_args.args[0],
+            [
+                "/Applications/Drifty.app/Contents/MacOS/drifty-tracker",
+                "daemon",
+                "--db",
+                str(tracker_main.DB_PATH),
+            ],
+        )
+
+    def test_start_tracking_recognizes_current_frozen_sidecar_daemon(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main.pid_path().write_text("12345")
+            mock_db = MagicMock()
+            mock_db.get_meta.return_value = "same-runtime"
+            sidecar_command = f"/Applications/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
+
+            with patch.object(sys, "frozen", True, create=True), patch.object(
+                sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"
+            ), patch.object(tracker_main, "is_running", return_value=True), patch.object(
+                tracker_main, "_process_command", return_value=sidecar_command
+            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "_tracker_runtime_fingerprint", return_value="same-runtime"
+            ), patch("app.main.os.kill") as kill, patch("app.main.subprocess.Popen") as popen, patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": True}}
+            ):
+                result = tracker_main.start_tracking()
+
+        self.assertTrue(result["ok"])
+        mock_db.get_meta.assert_called_once_with(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY)
+        kill.assert_not_called()
+        popen.assert_not_called()
 
     def test_start_tracking_replaces_stale_packaged_daemon(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -112,6 +210,75 @@ class TrackerMainTests(unittest.TestCase):
         kill.assert_not_called()
         popen.assert_not_called()
 
+    def test_frozen_runtime_fingerprint_changes_with_executable_bytes(self) -> None:
+        with TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "drifty-tracker"
+            executable.write_bytes(b"sidecar-v1")
+
+            with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", str(executable)):
+                first = tracker_main._tracker_runtime_fingerprint()
+                expected = hashlib.sha256(
+                    b"frozen\0" + str(executable).encode("utf-8") + b"\0" + b"sidecar-v1"
+                ).hexdigest()
+                executable.write_bytes(b"sidecar-v2")
+                second = tracker_main._tracker_runtime_fingerprint()
+
+        self.assertEqual(first, expected)
+        self.assertNotEqual(first, second)
+
+    def test_frozen_runtime_fingerprint_uses_stat_fallback_when_executable_read_fails(self) -> None:
+        with TemporaryDirectory() as tmp:
+            executable = Path(tmp) / "drifty-tracker"
+            executable.write_bytes(b"sidecar")
+
+            with patch.object(sys, "frozen", True, create=True), patch.object(
+                sys, "executable", str(executable)
+            ), patch("pathlib.Path.read_bytes", side_effect=OSError("denied")):
+                fingerprint = tracker_main._tracker_runtime_fingerprint()
+                executable_stat = executable.stat()
+                expected = hashlib.sha256(
+                    b"frozen\0"
+                    + str(executable).encode("utf-8")
+                    + b"\0"
+                    + b"read-error:OSError\0"
+                    + f"{executable_stat.st_size}:{executable_stat.st_mtime_ns}".encode("utf-8")
+                ).hexdigest()
+
+        self.assertEqual(fingerprint, expected)
+
+    def test_source_runtime_fingerprint_hashes_python_sources(self) -> None:
+        with TemporaryDirectory() as tmp:
+            app_dir = Path(tmp)
+            source_file = app_dir / "main.py"
+            nested_source = app_dir / "tracker" / "monitor.py"
+            ignored_source = app_dir / "__pycache__" / "main.py"
+            nested_source.parent.mkdir()
+            ignored_source.parent.mkdir()
+            source_file.write_bytes(b"print('main')\n")
+            nested_source.write_bytes(b"print('monitor')\n")
+            ignored_source.write_bytes(b"print('ignored')\n")
+            non_python = app_dir / "README.md"
+            non_python.write_text("ignored")
+
+            expected_digest = hashlib.sha256()
+            expected_digest.update(b"source\0")
+            for path in [source_file, nested_source]:
+                expected_digest.update(str(path.relative_to(app_dir)).encode("utf-8"))
+                expected_digest.update(b"\0")
+                expected_digest.update(path.read_bytes())
+                expected_digest.update(b"\0")
+
+            with patch.object(sys, "frozen", False, create=True), patch.object(tracker_main, "APP_DIR", app_dir):
+                first = tracker_main._tracker_runtime_fingerprint()
+                ignored_source.write_bytes(b"ignored change")
+                second = tracker_main._tracker_runtime_fingerprint()
+                nested_source.write_bytes(b"print('changed')\n")
+                third = tracker_main._tracker_runtime_fingerprint()
+
+        self.assertEqual(first, expected_digest.hexdigest())
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, third)
+
     def test_get_current_snapshot_returns_camel_case_payload_without_recording(self) -> None:
         snapshot = Snapshot(
             observed_at="2026-04-06T09:00:00+00:00",
@@ -143,6 +310,29 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["browserHistoryProfileCount"], 0)
         self.assertEqual(result["data"]["browserHistoryCandidateCount"], 0)
         self.assertEqual(result["data"]["browserHistoryErrorCount"], 0)
+
+    def test_get_current_snapshot_does_not_initialize_missing_database(self) -> None:
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:00:00+00:00",
+            app_name="cmux",
+            bundle_id="dev.cmux",
+            window_title="workspace",
+            source="accessibility",
+            browser_automation_status="not_applicable",
+        )
+
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tracker.sqlite3"
+            with patch.object(tracker_main, "DB_PATH", db_path), patch.object(
+                tracker_main, "current_snapshot", return_value=snapshot
+            ), patch.dict(tracker_main.os.environ, {}, clear=True):
+                result = tracker_main.get_current_snapshot()
+
+                self.assertTrue(result["ok"])
+                self.assertFalse(db_path.exists())
+                self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_CHROMIUM_AX_CAPTURE_ENV], "0")
+                self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV], "0")
+                self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV], "0")
 
     def test_get_timeline_uses_day_filter(self) -> None:
         mock_db = MagicMock()

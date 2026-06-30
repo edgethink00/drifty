@@ -1,5 +1,6 @@
 #[cfg(target_os = "macos")]
 use core_foundation::base::Boolean;
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -53,6 +54,8 @@ struct SidecarEnvelope<T> {
 pub enum TrackerError {
     #[error("tracker script missing at {0}")]
     MissingScript(String),
+    #[error("tracker runtime missing: {0}")]
+    MissingRuntime(String),
     #[error("tracker invocation failed: {0}")]
     CommandFailed(String),
     #[error("tracker returned invalid JSON: {0}")]
@@ -419,12 +422,7 @@ impl TrackerController {
         command: &str,
         payload: Value,
     ) -> Result<T, TrackerError> {
-        let script_path = resolve_tracker_script(app);
-        if !script_path.exists() {
-            return Err(TrackerError::MissingScript(
-                script_path.display().to_string(),
-            ));
-        }
+        let runtime = resolve_tracker_runtime(app)?;
         let db_path = resolve_db_path(app);
 
         let request = json!({
@@ -437,13 +435,13 @@ impl TrackerController {
         // several interpreters at once during a refresh burst). Fall back to a
         // one-shot invocation if the persistent process is unavailable.
         let serve_result = if should_use_one_shot_when_serve_busy(command) {
-            serve_request_if_idle(&script_path, &db_path, &request)
+            serve_request_if_idle(&runtime, &db_path, &request)
         } else {
-            serve_request(&script_path, &db_path, &request)
+            serve_request(&runtime, &db_path, &request)
         };
         let raw = match serve_result {
             Ok(line) => line.into_bytes(),
-            Err(_) => invoke_one_shot(&script_path, &db_path, &request)?,
+            Err(_) => invoke_one_shot(&runtime, &db_path, &request)?,
         };
 
         parse_envelope::<T>(&raw)
@@ -465,13 +463,88 @@ fn parse_envelope<T: for<'de> Deserialize<'de>>(raw: &[u8]) -> Result<T, Tracker
     envelope.data.ok_or(TrackerError::MissingData)
 }
 
-fn invoke_one_shot(script: &Path, db: &Path, request: &Value) -> Result<Vec<u8>, TrackerError> {
-    let output = Command::new(resolve_python_bin())
-        .arg(script)
-        .arg("--db")
-        .arg(db)
-        .arg("--request-json")
-        .arg(request.to_string())
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrackerRuntimeKind {
+    PackagedSidecar,
+    SourcePython,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TrackerRuntime {
+    executable_path: PathBuf,
+    base_args: Vec<OsString>,
+    display_identity: String,
+    kind: TrackerRuntimeKind,
+}
+
+impl TrackerRuntime {
+    fn packaged_sidecar(executable_path: PathBuf) -> Self {
+        Self {
+            display_identity: format!("packaged sidecar {}", executable_path.display()),
+            executable_path,
+            base_args: Vec::new(),
+            kind: TrackerRuntimeKind::PackagedSidecar,
+        }
+    }
+
+    fn source_python(python_path: PathBuf, script_path: PathBuf) -> Self {
+        Self {
+            display_identity: format!(
+                "source python {} {}",
+                python_path.display(),
+                script_path.display()
+            ),
+            executable_path: python_path,
+            base_args: vec![script_path.into_os_string()],
+            kind: TrackerRuntimeKind::SourcePython,
+        }
+    }
+
+    fn identity(&self) -> String {
+        let mut parts = vec![match self.kind {
+            TrackerRuntimeKind::PackagedSidecar => "packaged-sidecar".to_string(),
+            TrackerRuntimeKind::SourcePython => "source-python".to_string(),
+        }];
+        parts.push(self.executable_path.to_string_lossy().into_owned());
+        parts.extend(
+            self.base_args
+                .iter()
+                .map(|arg| arg.to_string_lossy().into_owned()),
+        );
+        parts.join("\0")
+    }
+
+    fn argv_for_one_shot(&self, db: &Path, request: &Value) -> Vec<OsString> {
+        let mut argv = self.argv_prefix();
+        argv.push("--db".into());
+        argv.push(db.as_os_str().to_os_string());
+        argv.push("--request-json".into());
+        argv.push(request.to_string().into());
+        argv
+    }
+
+    fn argv_for_serve(&self, db: &Path) -> Vec<OsString> {
+        let mut argv = self.argv_prefix();
+        argv.push("serve".into());
+        argv.push("--db".into());
+        argv.push(db.as_os_str().to_os_string());
+        argv
+    }
+
+    fn argv_prefix(&self) -> Vec<OsString> {
+        let mut argv = Vec::with_capacity(1 + self.base_args.len() + 4);
+        argv.push(self.executable_path.as_os_str().to_os_string());
+        argv.extend(self.base_args.iter().cloned());
+        argv
+    }
+}
+
+fn invoke_one_shot(
+    runtime: &TrackerRuntime,
+    db: &Path,
+    request: &Value,
+) -> Result<Vec<u8>, TrackerError> {
+    let output = command_from_argv(runtime.argv_for_one_shot(db, request))?
         .output()
         .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
 
@@ -484,14 +557,14 @@ fn invoke_one_shot(script: &Path, db: &Path, request: &Value) -> Result<Vec<u8>,
     Ok(output.stdout)
 }
 
-/// A long-lived `python main.py ... serve` process. Requests and responses are
+/// A long-lived tracker `serve` process. Requests and responses are
 /// newline-delimited JSON; access is serialized through a mutex so request and
 /// response order always match (the server processes one line at a time).
 struct ServeProcess {
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
-    script_path: PathBuf,
+    runtime_identity: String,
     db_path: PathBuf,
 }
 
@@ -511,12 +584,8 @@ fn serve_slot() -> &'static Mutex<Option<ServeProcess>> {
     SERVE_PROCESS.get_or_init(|| Mutex::new(None))
 }
 
-fn spawn_serve_process(script: &Path, db: &Path) -> Result<ServeProcess, TrackerError> {
-    let mut child = Command::new(resolve_python_bin())
-        .arg(script)
-        .arg("--db")
-        .arg(db)
-        .arg("serve")
+fn spawn_serve_process(runtime: &TrackerRuntime, db: &Path) -> Result<ServeProcess, TrackerError> {
+    let mut child = command_from_argv(runtime.argv_for_serve(db))?
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -536,7 +605,7 @@ fn spawn_serve_process(script: &Path, db: &Path) -> Result<ServeProcess, Tracker
         child,
         stdin,
         stdout: BufReader::new(stdout),
-        script_path: script.to_path_buf(),
+        runtime_identity: runtime.identity(),
         db_path: db.to_path_buf(),
     })
 }
@@ -567,20 +636,24 @@ fn serve_io_err(err: std::io::Error) -> TrackerError {
     TrackerError::CommandFailed(err.to_string())
 }
 
-fn serve_request(script: &Path, db: &Path, request: &Value) -> Result<String, TrackerError> {
-    serve_request_with_lock_mode(script, db, request, ServeLockMode::Wait)
-}
-
-fn serve_request_if_idle(
-    script: &Path,
+fn serve_request(
+    runtime: &TrackerRuntime,
     db: &Path,
     request: &Value,
 ) -> Result<String, TrackerError> {
-    serve_request_with_lock_mode(script, db, request, ServeLockMode::SkipIfBusy)
+    serve_request_with_lock_mode(runtime, db, request, ServeLockMode::Wait)
+}
+
+fn serve_request_if_idle(
+    runtime: &TrackerRuntime,
+    db: &Path,
+    request: &Value,
+) -> Result<String, TrackerError> {
+    serve_request_with_lock_mode(runtime, db, request, ServeLockMode::SkipIfBusy)
 }
 
 fn serve_request_with_lock_mode(
-    script: &Path,
+    runtime: &TrackerRuntime,
     db: &Path,
     request: &Value,
     lock_mode: ServeLockMode,
@@ -601,11 +674,11 @@ fn serve_request_with_lock_mode(
         },
     };
 
-    // Discard a process spawned for a different script/db (paths can change
+    // Discard a process spawned for a different runtime/db (paths can change
     // between dev runs); it will be respawned below.
     let stale = guard
         .as_ref()
-        .map(|proc| proc.script_path != script || proc.db_path != db)
+        .map(|proc| serve_process_is_stale(&proc.runtime_identity, &proc.db_path, runtime, db))
         .unwrap_or(false);
     if stale {
         if let Some(proc) = guard.take() {
@@ -618,7 +691,7 @@ fn serve_request_with_lock_mode(
     let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
     for _ in 0..2 {
         if guard.is_none() {
-            *guard = Some(spawn_serve_process(script, db)?);
+            *guard = Some(spawn_serve_process(runtime, db)?);
         }
 
         let id = SERVE_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
@@ -629,8 +702,12 @@ fn serve_request_with_lock_mode(
         let line = framed.to_string();
 
         let attempt = {
-            let proc = guard.as_mut().expect("serve process present");
-            serve_round_trip(proc, &line)
+            match guard.as_mut() {
+                Some(proc) => serve_round_trip(proc, &line),
+                None => Err(TrackerError::CommandFailed(
+                    "serve process unavailable".into(),
+                )),
+            }
         };
 
         match attempt {
@@ -770,6 +847,139 @@ fn core_foundation_boolean_to_bool(value: u8) -> bool {
     value != 0
 }
 
+fn command_from_argv(argv: Vec<OsString>) -> Result<Command, TrackerError> {
+    let mut args = argv.into_iter();
+    let Some(program) = args.next() else {
+        return Err(TrackerError::CommandFailed(
+            "tracker runtime argv was empty".into(),
+        ));
+    };
+    let mut command = Command::new(program);
+    command.args(args);
+    Ok(command)
+}
+
+fn resolve_tracker_runtime(app: &AppHandle) -> Result<TrackerRuntime, TrackerError> {
+    let resource_dir = app.path().resource_dir().ok();
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    resolve_tracker_runtime_from_paths(resource_dir.as_deref(), cwd.as_path())
+}
+
+fn resolve_tracker_runtime_from_paths(
+    resource_dir: Option<&Path>,
+    cwd: &Path,
+) -> Result<TrackerRuntime, TrackerError> {
+    resolve_tracker_runtime_from_paths_with_python_resolver(resource_dir, cwd, || {
+        PathBuf::from(resolve_python_bin())
+    })
+}
+
+fn resolve_tracker_runtime_from_paths_with_python_resolver(
+    resource_dir: Option<&Path>,
+    cwd: &Path,
+    python_resolver: impl FnOnce() -> PathBuf,
+) -> Result<TrackerRuntime, TrackerError> {
+    if let Some(resource_dir) = resource_dir {
+        if let Some(sidecar) = packaged_sidecar_candidates(resource_dir)
+            .into_iter()
+            .find(|candidate| candidate.is_file())
+        {
+            return Ok(TrackerRuntime::packaged_sidecar(sidecar));
+        }
+
+        if is_packaged_resource_dir(resource_dir) {
+            return Err(TrackerError::MissingRuntime(format!(
+                "bundled tracker sidecar not found under {}",
+                resource_dir.display()
+            )));
+        }
+    }
+
+    let script_path = resolve_source_tracker_script(cwd);
+    if !script_path.exists() {
+        return Err(TrackerError::MissingScript(
+            script_path.display().to_string(),
+        ));
+    }
+
+    Ok(TrackerRuntime::source_python(
+        python_resolver(),
+        script_path,
+    ))
+}
+
+fn packaged_sidecar_candidates(resource_dir: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if is_packaged_resource_dir(resource_dir) {
+        if let Some(contents_dir) = resource_dir.parent() {
+            let macos_dir = contents_dir.join("MacOS");
+            candidates.push(macos_dir.join("drifty-tracker"));
+            if let Some(target_triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
+                candidates.push(macos_dir.join(format!("drifty-tracker-{target_triple}")));
+            }
+        }
+    }
+
+    candidates.push(resource_dir.join("drifty-tracker"));
+    candidates.push(resource_dir.join("binaries").join("drifty-tracker"));
+
+    if let Some(target_triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
+        candidates.push(resource_dir.join(format!("drifty-tracker-{target_triple}")));
+        candidates.push(
+            resource_dir
+                .join("binaries")
+                .join(format!("drifty-tracker-{target_triple}")),
+        );
+    }
+
+    candidates
+}
+
+fn is_packaged_resource_dir(resource_dir: &Path) -> bool {
+    resource_dir.ends_with(Path::new("Contents").join("Resources"))
+}
+
+fn resolve_source_tracker_script(cwd: &Path) -> PathBuf {
+    if let Ok(path) = std::env::var("DRIFTY_TRACKER_SCRIPT") {
+        return PathBuf::from(path);
+    }
+
+    for base in cwd.ancestors().take(4) {
+        let candidate = base
+            .join("services")
+            .join("tracker-python")
+            .join("app")
+            .join("main.py");
+        if candidate.exists() {
+            return candidate;
+        }
+
+        let resource_candidate = base
+            .join("resources")
+            .join("tracker-python")
+            .join("app")
+            .join("main.py");
+        if resource_candidate.exists() {
+            return resource_candidate;
+        }
+    }
+
+    cwd.join("services")
+        .join("tracker-python")
+        .join("app")
+        .join("main.py")
+}
+
+fn serve_process_is_stale(
+    current_runtime_identity: &str,
+    current_db: &Path,
+    runtime: &TrackerRuntime,
+    db: &Path,
+) -> bool {
+    current_runtime_identity != runtime.identity() || current_db != db
+}
+
 #[cfg(target_os = "macos")]
 fn current_process_accessibility_trusted() -> Option<bool> {
     Some(core_foundation_boolean_to_bool(unsafe {
@@ -795,45 +1005,7 @@ fn resolve_python_bin() -> String {
     "python3".to_string()
 }
 
-fn resolve_tracker_script(app: &AppHandle) -> PathBuf {
-    if let Ok(path) = std::env::var("DRIFTY_TRACKER_SCRIPT") {
-        return PathBuf::from(path);
-    }
-
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let mut candidates = Vec::new();
-
-    for base in cwd.ancestors().take(4) {
-        candidates.push(
-            base.join("services")
-                .join("tracker-python")
-                .join("app")
-                .join("main.py"),
-        );
-        candidates.push(
-            base.join("resources")
-                .join("tracker-python")
-                .join("app")
-                .join("main.py"),
-        );
-    }
-
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.extend(tracker_script_resource_candidates(&resource_dir));
-    }
-
-    for candidate in candidates {
-        if candidate.exists() {
-            return candidate;
-        }
-    }
-
-    cwd.join("services")
-        .join("tracker-python")
-        .join("app")
-        .join("main.py")
-}
-
+#[cfg(test)]
 fn tracker_script_resource_candidates(resource_dir: &Path) -> Vec<PathBuf> {
     vec![
         resource_dir
@@ -1029,6 +1201,248 @@ mod tests {
                 .join("app")
                 .join("main.py")
         ));
+    }
+
+    #[test]
+    fn packaged_sidecar_runtime_selects_bundled_executable() {
+        let resource_dir = temp_dir_path("packaged-sidecar-runtime");
+        let sidecar = resource_dir.join("drifty-tracker");
+        std::fs::create_dir_all(&resource_dir).expect("create resource dir");
+        std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
+
+        let runtime =
+            resolve_tracker_runtime_from_paths(Some(&resource_dir), resource_dir.as_path())
+                .expect("packaged sidecar runtime");
+
+        assert_eq!(runtime.kind, TrackerRuntimeKind::PackagedSidecar);
+        assert_eq!(runtime.executable_path, sidecar);
+        assert!(runtime.base_args.is_empty());
+        assert_eq!(
+            runtime.display_identity,
+            format!("packaged sidecar {}", sidecar.display())
+        );
+
+        let _ = std::fs::remove_dir_all(resource_dir);
+    }
+
+    #[test]
+    fn development_runtime_falls_back_to_source_script() {
+        let repo = temp_dir_path("source-runtime");
+        let script = repo
+            .join("services")
+            .join("tracker-python")
+            .join("app")
+            .join("main.py");
+        std::fs::create_dir_all(script.parent().expect("script parent"))
+            .expect("create script dir");
+        std::fs::write(&script, b"print('ok')").expect("write source script");
+        let python = PathBuf::from("/dev/python3");
+
+        let runtime =
+            resolve_tracker_runtime_from_paths_with_python_resolver(None, repo.as_path(), || {
+                python.clone()
+            })
+            .expect("source python runtime");
+
+        assert_eq!(runtime.kind, TrackerRuntimeKind::SourcePython);
+        assert_eq!(runtime.executable_path, python);
+        assert_eq!(runtime.base_args, vec![script.into_os_string()]);
+
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn packaged_runtime_errors_when_sidecar_is_missing() {
+        let resource_dir = temp_dir_path("missing-packaged-sidecar")
+            .join("Drifty.app")
+            .join("Contents")
+            .join("Resources");
+        std::fs::create_dir_all(&resource_dir).expect("create resource dir");
+
+        let err = resolve_tracker_runtime_from_paths_with_python_resolver(
+            Some(&resource_dir),
+            resource_dir.as_path(),
+            || panic!("packaged runtime must not resolve Python"),
+        )
+        .expect_err("missing sidecar should fail in packaged mode");
+
+        assert!(matches!(err, TrackerError::MissingRuntime(_)));
+        assert!(err.to_string().contains("tracker runtime missing"));
+
+        let _ = std::fs::remove_dir_all(
+            resource_dir
+                .ancestors()
+                .nth(3)
+                .expect("temp root")
+                .to_path_buf(),
+        );
+    }
+
+    #[test]
+    fn packaged_sidecar_ignores_python_bin_override() {
+        let resource_dir = temp_dir_path("packaged-ignores-python");
+        let sidecar = resource_dir.join("drifty-tracker");
+        std::fs::create_dir_all(&resource_dir).expect("create resource dir");
+        std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
+
+        let runtime = resolve_tracker_runtime_from_paths_with_python_resolver(
+            Some(&resource_dir),
+            resource_dir.as_path(),
+            || PathBuf::from("/tmp/drifty-poison/python3"),
+        )
+        .expect("packaged runtime");
+
+        assert_eq!(runtime.kind, TrackerRuntimeKind::PackagedSidecar);
+        assert_eq!(runtime.executable_path, sidecar);
+        assert!(runtime
+            .argv_for_serve(Path::new("/tmp/tracker.sqlite3"))
+            .into_iter()
+            .all(|arg| arg != "/tmp/drifty-poison/python3"));
+
+        let _ = std::fs::remove_dir_all(resource_dir);
+    }
+
+    #[test]
+    fn packaged_app_resources_selects_macos_sidecar() {
+        let app_root = temp_dir_path("packaged-app-layout").join("Drifty.app");
+        let resource_dir = app_root.join("Contents").join("Resources");
+        let sidecar = app_root
+            .join("Contents")
+            .join("MacOS")
+            .join("drifty-tracker");
+        std::fs::create_dir_all(sidecar.parent().expect("sidecar parent"))
+            .expect("create macos dir");
+        std::fs::create_dir_all(&resource_dir).expect("create resource dir");
+        std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
+
+        let runtime = resolve_tracker_runtime_from_paths_with_python_resolver(
+            Some(&resource_dir),
+            resource_dir.as_path(),
+            || panic!("packaged runtime must not resolve Python"),
+        )
+        .expect("packaged app sidecar runtime");
+
+        assert_eq!(runtime.kind, TrackerRuntimeKind::PackagedSidecar);
+        assert_eq!(runtime.executable_path, sidecar);
+
+        let _ = std::fs::remove_dir_all(
+            app_root
+                .ancestors()
+                .nth(1)
+                .expect("temp root")
+                .to_path_buf(),
+        );
+    }
+
+    #[test]
+    fn packaged_sidecar_one_shot_argv_is_canonical() {
+        let runtime =
+            TrackerRuntime::packaged_sidecar(PathBuf::from("/App/Resources/drifty-tracker"));
+        let request = json!({ "command": "get_status", "payload": {} });
+        let argv =
+            os_args_to_strings(runtime.argv_for_one_shot(Path::new("/tmp/db.sqlite3"), &request));
+        println!("packaged one-shot argv: {argv:?}");
+
+        assert_eq!(
+            argv,
+            vec![
+                "/App/Resources/drifty-tracker",
+                "--db",
+                "/tmp/db.sqlite3",
+                "--request-json",
+                "{\"command\":\"get_status\",\"payload\":{}}",
+            ]
+        );
+    }
+
+    #[test]
+    fn source_runtime_one_shot_argv_is_canonical() {
+        let runtime = TrackerRuntime::source_python(
+            PathBuf::from("/usr/bin/python3"),
+            PathBuf::from("/repo/services/tracker-python/app/main.py"),
+        );
+        let request = json!({ "command": "get_status", "payload": {} });
+        let argv =
+            os_args_to_strings(runtime.argv_for_one_shot(Path::new("/tmp/db.sqlite3"), &request));
+        println!("source one-shot argv: {argv:?}");
+
+        assert_eq!(
+            argv,
+            vec![
+                "/usr/bin/python3",
+                "/repo/services/tracker-python/app/main.py",
+                "--db",
+                "/tmp/db.sqlite3",
+                "--request-json",
+                "{\"command\":\"get_status\",\"payload\":{}}",
+            ]
+        );
+    }
+
+    #[test]
+    fn packaged_sidecar_serve_argv_is_canonical() {
+        let runtime =
+            TrackerRuntime::packaged_sidecar(PathBuf::from("/App/Resources/drifty-tracker"));
+        let argv = os_args_to_strings(runtime.argv_for_serve(Path::new("/tmp/db.sqlite3")));
+        println!("packaged serve argv: {argv:?}");
+
+        assert_eq!(
+            argv,
+            vec![
+                "/App/Resources/drifty-tracker",
+                "serve",
+                "--db",
+                "/tmp/db.sqlite3"
+            ]
+        );
+    }
+
+    #[test]
+    fn source_runtime_serve_argv_is_canonical() {
+        let runtime = TrackerRuntime::source_python(
+            PathBuf::from("/usr/bin/python3"),
+            PathBuf::from("/repo/services/tracker-python/app/main.py"),
+        );
+        let argv = os_args_to_strings(runtime.argv_for_serve(Path::new("/tmp/db.sqlite3")));
+        println!("source serve argv: {argv:?}");
+
+        assert_eq!(
+            argv,
+            vec![
+                "/usr/bin/python3",
+                "/repo/services/tracker-python/app/main.py",
+                "serve",
+                "--db",
+                "/tmp/db.sqlite3",
+            ]
+        );
+    }
+
+    #[test]
+    fn serve_identity_is_stale_when_runtime_changes() {
+        let source = TrackerRuntime::source_python(
+            PathBuf::from("/usr/bin/python3"),
+            PathBuf::from("/repo/services/tracker-python/app/main.py"),
+        );
+        let sidecar =
+            TrackerRuntime::packaged_sidecar(PathBuf::from("/App/Resources/drifty-tracker"));
+
+        assert!(serve_process_is_stale(
+            &source.identity(),
+            Path::new("/tmp/db.sqlite3"),
+            &sidecar,
+            Path::new("/tmp/db.sqlite3")
+        ));
+    }
+
+    fn os_args_to_strings(args: Vec<std::ffi::OsString>) -> Vec<String> {
+        args.into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    fn temp_dir_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("drifty-tracker-test-{name}-{}", std::process::id()))
     }
 
     #[test]
