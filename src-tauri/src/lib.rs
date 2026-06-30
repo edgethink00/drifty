@@ -68,13 +68,15 @@ fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn cloud_device_install_id() -> Result<String, String> {
-    cloud_device_store::load_or_create_install_id()
+fn cloud_device_install_id(app: AppHandle) -> Result<String, String> {
+    cloud_device_store::load_or_create_install_id(&app)
 }
 
 #[tauri::command]
-fn cloud_device_identity() -> Result<cloud_device_store::CloudDeviceIdentity, String> {
-    cloud_device_store::load_or_create_identity()
+fn cloud_device_identity(
+    app: AppHandle,
+) -> Result<cloud_device_store::CloudDeviceIdentity, String> {
+    cloud_device_store::load_or_create_identity(&app)
 }
 
 fn remember_auth_deep_links<R: Runtime>(

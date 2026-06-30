@@ -1,10 +1,15 @@
 use keyring::{Entry, Error as KeyringError};
 use serde::Serialize;
+use std::fs;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 const CLOUD_DEVICE_KEYCHAIN_SERVICE: &str = "so.drifty.cloud-device";
 const CLOUD_DEVICE_KEYCHAIN_ACCOUNT: &str = "desktop-install";
+const CLOUD_DEVICE_INSTALL_ID_FILE: &str = "cloud-device-install-id";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,32 +23,100 @@ fn keychain_entry() -> Result<Entry, String> {
         .map_err(|error| format!("Unable to open Cloud device Keychain entry: {error}"))
 }
 
-pub fn load_or_create_install_id() -> Result<String, String> {
-    let entry = keychain_entry()?;
+pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
+    let backup_path = install_id_file_path(app)?;
+    let entry = match keychain_entry() {
+        Ok(entry) => entry,
+        Err(error) => return read_backup_install_id(&backup_path)?.ok_or(error),
+    };
+
     match entry.get_password() {
-        Ok(value) if is_valid_install_id(&value) => Ok(value),
+        Ok(value) if normalized_install_id(&value).is_some() => {
+            let install_id = normalized_install_id(&value)
+                .ok_or_else(|| "Unable to normalize Cloud device id from Keychain.".to_string())?;
+            let _ = save_backup_install_id(&backup_path, &install_id);
+            Ok(install_id)
+        }
         Ok(_) | Err(KeyringError::NoEntry) => {
+            if let Some(install_id) = read_backup_install_id(&backup_path)? {
+                let _ = entry.set_password(&install_id);
+                return Ok(install_id);
+            }
+
             let install_id = Uuid::new_v4().to_string();
             entry
                 .set_password(&install_id)
                 .map_err(|error| format!("Unable to save Cloud device id in Keychain: {error}"))?;
+            let _ = save_backup_install_id(&backup_path, &install_id);
             Ok(install_id)
         }
-        Err(error) => Err(format!(
-            "Unable to read Cloud device id from Keychain: {error}"
-        )),
+        Err(error) => read_backup_install_id(&backup_path)?
+            .ok_or_else(|| format!("Unable to read Cloud device id from Keychain: {error}")),
     }
 }
 
-pub fn load_or_create_identity() -> Result<CloudDeviceIdentity, String> {
+pub fn load_or_create_identity(app: &AppHandle) -> Result<CloudDeviceIdentity, String> {
     Ok(CloudDeviceIdentity {
-        install_id: load_or_create_install_id()?,
+        install_id: load_or_create_install_id(app)?,
         label: cloud_device_label(),
     })
 }
 
-fn is_valid_install_id(value: &str) -> bool {
-    Uuid::parse_str(value.trim()).is_ok()
+fn install_id_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join(CLOUD_DEVICE_INSTALL_ID_FILE))
+        .map_err(|error| format!("Unable to resolve Cloud device id backup path: {error}"))
+}
+
+fn read_backup_install_id(path: &Path) -> Result<Option<String>, String> {
+    match fs::read_to_string(path) {
+        Ok(value) => Ok(normalized_install_id(&value)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "Unable to read Cloud device id backup at {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn save_backup_install_id(path: &Path, install_id: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Unable to create Cloud device id backup directory at {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    fs::write(path, install_id).map_err(|error| {
+        format!(
+            "Unable to save Cloud device id backup at {}: {error}",
+            path.display()
+        )
+    })?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|error| {
+            format!(
+                "Unable to restrict Cloud device id backup permissions at {}: {error}",
+                path.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+fn normalized_install_id(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if Uuid::parse_str(trimmed).is_ok() {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
 }
 
 fn cloud_device_label() -> String {
@@ -185,5 +258,37 @@ mod tests {
         let label = cloud_device_label_from_parts(None, Some("Mac15,6"), Some("   "));
 
         assert_eq!(label, "Mac");
+    }
+
+    #[test]
+    fn backup_install_id_roundtrips_valid_uuid() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("nested").join(CLOUD_DEVICE_INSTALL_ID_FILE);
+        let install_id = "11111111-1111-4111-8111-111111111111";
+
+        save_backup_install_id(&path, install_id).expect("save backup id");
+
+        assert_eq!(
+            read_backup_install_id(&path).expect("read backup id"),
+            Some(install_id.to_string())
+        );
+    }
+
+    #[test]
+    fn backup_install_id_ignores_invalid_values() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join(CLOUD_DEVICE_INSTALL_ID_FILE);
+
+        fs::write(&path, "not-a-uuid").expect("write invalid backup id");
+
+        assert_eq!(read_backup_install_id(&path).expect("read backup id"), None);
+    }
+
+    #[test]
+    fn normalized_install_id_trims_keychain_values() {
+        assert_eq!(
+            normalized_install_id("  22222222-2222-4222-8222-222222222222\n"),
+            Some("22222222-2222-4222-8222-222222222222".to_string())
+        );
     }
 }
