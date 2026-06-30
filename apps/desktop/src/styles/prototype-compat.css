@@ -89,12 +89,12 @@
 
 .account-trigger {
   width: 100%;
-  min-height: 42px;
+  min-height: 46.2px;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  padding: 6px 8px;
+  padding: 7.5px 8px;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -233,8 +233,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 30px;
-  padding: 5px 8px;
+  min-height: 34.5px;
+  padding: 6.5px 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
