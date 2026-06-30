@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DEVELOPER_PRE_RELEASE_UPDATES_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DEVELOPER_PRE_RELEASE_UPDATES_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, ONBOARDING_V2_2_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
 import { formatDayLabel } from "../../lib/formatting";
@@ -26,6 +26,7 @@ type DevSettingsSectionProps = {
   readonly onDemoDashboardReplayDurationSecondsChange?: (value: number) => void;
   readonly onDemoDashboardReplayPreRollSecondsChange?: (value: number) => void;
   readonly onEndOfDayReviewPreview: () => void;
+  readonly onOpenOnboardingV22Preview: () => void;
   readonly onForceBrowserHistoryUrlFallbackChange: (enabled: boolean) => void;
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
@@ -61,6 +62,7 @@ export function DevSettingsSection({
   onDemoDashboardReplayDurationSecondsChange,
   onDemoDashboardReplayPreRollSecondsChange,
   onEndOfDayReviewPreview,
+  onOpenOnboardingV22Preview,
   onForceBrowserHistoryUrlFallbackChange,
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
@@ -81,6 +83,7 @@ export function DevSettingsSection({
   const showDevPreviewBlock =
     DEVELOPER_PRE_RELEASE_UPDATES_ENABLED ||
     REPLAY_ONBOARDING_DEV_TOOL_ENABLED ||
+    ONBOARDING_V2_2_PREVIEW_ENABLED ||
     END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ||
     DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ||
     showWatcherPeekSettings;
@@ -147,6 +150,7 @@ export function DevSettingsSection({
           watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
           watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
           onEndOfDayReviewPreview={onEndOfDayReviewPreview}
+          onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
           onOpenReplayOnboarding={onOpenReplayOnboarding}
           onPreviewDriftAlarm={onPreviewDriftAlarm}
           onShowWatcherPeek={onShowWatcherPeek}

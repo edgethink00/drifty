@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drifty Onboarding — v2.2 preview</title>
+<!--
+  Drifty Onboarding v2.2 — standalone preview.
+  Copied from the claude.ai/design project "Drifty Onboarding.dc.html" and
+  converted from the DC (DCLogic / support.js) runtime to self-contained
+  vanilla JS so it runs in any browser with no build step or dependencies.
+
+  Open this file directly in a browser to click through the full flow. The
+  controls strip (top-right) mirrors the design's editable props: start step,
+  brand name, trial days, and accent color.
+-->
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:#fafaf8;
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;
+    color:#1c1c19;
+    -webkit-font-smoothing:antialiased;
+  }
+  @keyframes onbRise{from{transform:translateY(9px)}to{transform:none}}
+  @keyframes onbPop{from{opacity:0;transform:translateY(-4px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes onbSpin{to{transform:rotate(360deg)}}
+  @keyframes onbBackdrop{from{opacity:0}to{opacity:1}}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:rgba(28,28,25,.18);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+
+  .onb-input:focus{border-color:#1c1c19 !important}
+  .onb-opt:hover{background:#f2f1ed}
+  .onb-ghost:hover{border-color:rgba(28,28,25,.34) !important}
+
+  /* preview controls */
+  .pv-ctrl{
+    position:fixed;top:16px;right:16px;z-index:200;
+    display:flex;flex-direction:column;gap:10px;
+    background:#fff;border:1px solid rgba(28,28,25,.12);border-radius:14px;
+    box-shadow:0 14px 34px rgba(28,28,25,.14);padding:14px 16px;
+    font-size:12px;color:#1c1c19;width:226px;
+  }
+  .pv-ctrl h3{margin:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9c9a92}
+  .pv-row{display:flex;flex-direction:column;gap:5px}
+  .pv-row > label{font-weight:600;color:#79776f}
+  .pv-ctrl select,.pv-ctrl input[type=text],.pv-ctrl input[type=number]{
+    width:100%;border:1px solid rgba(28,28,25,.16);border-radius:8px;padding:7px 9px;
+    font-size:12px;font-family:inherit;background:#fff;color:#1c1c19;outline:none;
+  }
+  .pv-swatches{display:flex;gap:8px}
+  .pv-swatch{width:24px;height:24px;border-radius:7px;cursor:pointer;border:2px solid transparent}
+  .pv-swatch[data-active="1"]{border-color:#1c1c19;box-shadow:0 0 0 2px #fff inset}
+</style>
+</head>
+<body>
+
+  <div class="pv-ctrl" id="pvCtrl">
+    <h3>Preview controls</h3>
+    <div class="pv-row">
+      <label for="pvStep">Start step</label>
+      <select id="pvStep"></select>
+    </div>
+    <div class="pv-row">
+      <label for="pvBrand">Brand name</label>
+      <input type="text" id="pvBrand" value="drifty">
+    </div>
+    <div class="pv-row">
+      <label for="pvTrial">Trial days</label>
+      <input type="number" id="pvTrial" min="1" max="30" value="7">
+    </div>
+    <div class="pv-row">
+      <label>Accent</label>
+      <div class="pv-swatches" id="pvAccent"></div>
+    </div>
+  </div>
+
+  <div id="onbRoot" style="min-height:100vh;background:#fafaf8;display:flex;align-items:center;justify-content:center;padding:40px;"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- static data (verbatim from the design) ----
+  var mainActivities = ["Coding","Designing","Writing","Researching","Studying","Data Analysis","Marketing","Sales","Trading","Content Creation","Meetings & Communication","Project Management","Operations","Other"];
+  var workDomains = ["Tech","SaaS","AI","Fashion","Beauty","Cosmetics","Education","Research","Media","Content","E-commerce","Retail","Finance","Business","Design","Creative","Health","Wellness","Gaming","Architecture","Music","Film","Food & Beverage","Real Estate","Non-profit","Government"];
+  var localModels = [
+    {id:"drifty-qwen3-5-2b-economy",label:"Qwen 3.5 2B",tier:"economy",detail:"Lightest and fastest, but least accurate — fine for rough sorting on older Macs.",downloadSize:"~1.4 GB",minimumMemory:"8 GB RAM",accuracy:1,speed:4,recommended:false},
+    {id:"drifty-qwen3-5-4b-default",label:"Qwen 3.5 4B",tier:"default",detail:"Best balance of speed and accuracy for most Macs — what we suggest.",downloadSize:"~2.8 GB",minimumMemory:"16 GB RAM",accuracy:2,speed:3,recommended:true},
+    {id:"drifty-gemma-4-12b-local",label:"Gemma 4 12B",tier:"gemma",detail:"More accurate on nuanced work, a bit slower and heavier to run.",downloadSize:"~7.2 GB",minimumMemory:"16 GB RAM",accuracy:3,speed:2,recommended:false},
+    {id:"drifty-qwen3-6-27b-smart",label:"Qwen 3.6 27B",tier:"smart",detail:"Most accurate classification — needs a powerful Mac and more memory.",downloadSize:"~15 GB",minimumMemory:"36 GB RAM",accuracy:4,speed:1,recommended:false}
+  ];
+  var connectionChecks = {
+    byok:[{id:"key",label:"OpenRouter key shape valid"},{id:"provider",label:"Provider reachable"},{id:"classifier",label:"Classification ready"}],
+    custom_endpoint:[{id:"url",label:"Endpoint URL valid"},{id:"model",label:"Model selected"},{id:"classifier",label:"OpenAI-compatible route ready"}]
+  };
+  var baseSteps = ["welcome","account","job","permissions","nudges","choose_setup"];
+  var allSteps = ["welcome","job","permissions","nudges","choose_setup","account","connect_server","test_connection","self_data_review","ready"];
+  var accentOptions = ["#1c1c19","#9e4238","#2a6fdb","#1f8a5b"];
+
+  // ---- props (editable in preview controls) ----
+  var props = { startStep:"welcome", brandName:"drifty", trialDays:7, accentColor:"#1c1c19" };
+
+  // ---- state ----
+  var state = {
+    step:"welcome",
+    setupChoice:"simple",
+    advancedOpen:false,
+    selectedActivities:[],
+    activityQuery:"",
+    activityOpen:false,
+    workDomain:"",
+    domainQuery:"",
+    domainOpen:false,
+    accessibilityGranted:false,
+    notificationsReady:false,
+    driftAlarmEnabled:false,
+    extremeNudgeEnabled:false,
+    confirmExtremeOpen:false,
+    accountConnected:false,
+    localAiStarted:false,
+    localAiModelId:"drifty-qwen3-5-4b-default",
+    apiKey:"",
+    customBaseUrl:"http://localhost:11434/v1",
+    customModel:"",
+    connectionPhase:"idle",
+    checkStatuses:[],
+    maskedApiKey:null,
+    openAtLoginEnabled:true
+  };
+
+  function setState(patch){ for(var k in patch) state[k]=patch[k]; render(); }
+
+  // ---- helpers ----
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  function isByok(){ return state.setupChoice==="byok"; }
+  function isCustom(){ return state.setupChoice==="custom_endpoint"; }
+  function isLocalAi(){ return state.setupChoice==="local_ai"; }
+  function isUserManaged(){ return isByok()||isCustom(); }
+
+  function stepsForState(){
+    var b=baseSteps;
+    if(state.setupChoice==="simple") return b.concat(["ready"]);
+    if(state.setupChoice==="local_ai") return b.concat(["connect_server","self_data_review","ready"]);
+    if(isUserManaged()) return b.concat(["connect_server","test_connection","self_data_review","ready"]);
+    return b.slice();
+  }
+
+  function apiKeyIsValid(){ return state.apiKey.trim().toLowerCase().indexOf("sk-or-")===0; }
+  function baseUrlError(){
+    var v=state.customBaseUrl.trim();
+    if(!v) return "Enter a base URL.";
+    if(!/^https?:\/\/\S+$/u.test(v)) return "Base URL should start with http:// or https://.";
+    return null;
+  }
+  function modelError(){ return state.customModel.trim() ? null : "Enter a model id."; }
+  function customValid(){ return baseUrlError()===null && modelError()===null; }
+
+  function canAdvance(){
+    switch(state.step){
+      case "choose_setup": return Boolean(state.setupChoice);
+      case "account": return state.accountConnected;
+      case "connect_server":
+        if(isLocalAi()) return state.localAiStarted;
+        if(isByok()) return apiKeyIsValid();
+        if(isCustom()) return customValid();
+        return false;
+      case "test_connection": return state.connectionPhase==="success";
+      default: return true;
+    }
+  }
+
+  function blockedHint(){
+    if(canAdvance()) return "";
+    switch(state.step){
+      case "connect_server":
+        if(isLocalAi()) return "";
+        if(isCustom()) return baseUrlError()||modelError()||"Enter your endpoint details.";
+        return "Enter an OpenRouter key that starts with sk-or-.";
+      case "test_connection": return state.connectionPhase==="failed" ? "Connection failed. Try again or edit your details." : "Checking your connection…";
+      default: return "";
+    }
+  }
+
+  function titleForStep(){
+    var s=state.step;
+    if(s==="job") return "What do you usually do?";
+    if(s==="permissions") return "Set up permissions";
+    if(s==="nudges") return "Set up drift alerts";
+    if(s==="choose_setup") return "Choose your setup";
+    if(s==="account") return "Connect your account";
+    if(s==="connect_server") return isByok() ? "Add your OpenRouter key" : isCustom() ? "Add your custom endpoint" : "Set up your local AI model";
+    if(s==="test_connection") return state.connectionPhase==="success" ? "Connection successful" : state.connectionPhase==="failed" ? "Connection failed" : "Testing connection";
+    if(s==="self_data_review") return "How your data is handled";
+    if(s==="ready") return (state.setupChoice==="simple" && state.accountConnected) ? "You're ready to go" : "You're ready to start";
+    return "Welcome";
+  }
+
+  function footerLabel(){
+    var s=state.step;
+    if(s==="ready") return "Start tracking";
+    if(s==="connect_server" && isUserManaged()) return "Test connection";
+    return "Continue";
+  }
+
+  function progressValue(){
+    var s=state.step;
+    var base={welcome:8,account:20,job:32,permissions:46,nudges:58,choose_setup:70};
+    if(base[s]!=null) return base[s];
+    if(s==="connect_server") return isLocalAi()?82:78;
+    if(s==="test_connection") return 88;
+    if(s==="self_data_review") return isLocalAi()?92:94;
+    if(s==="ready") return 100;
+    return 8;
+  }
+
+  // ---- navigation ----
+  function goToStep(step){
+    state.step=step; render();
+    if(step==="test_connection") runConnectionTest();
+  }
+  function goNext(){
+    if(!canAdvance()) return;
+    if(state.step==="ready") return;
+    if(state.step==="connect_server" && isUserManaged()){ goToStep("test_connection"); return; }
+    var steps=stepsForState();
+    var next=steps[steps.indexOf(state.step)+1];
+    if(next) goToStep(next);
+  }
+  function goBack(){
+    var steps=stepsForState();
+    var prev=steps[steps.indexOf(state.step)-1];
+    if(prev) goToStep(prev);
+  }
+
+  function runConnectionTest(){
+    var checks=isCustom() ? connectionChecks.custom_endpoint : connectionChecks.byok;
+    setState({connectionPhase:"testing", checkStatuses: checks.map(function(){return "pending";})});
+    checks.forEach(function(_, i){
+      setTimeout(function(){ var cs=state.checkStatuses.slice(); cs[i]="loading"; setState({checkStatuses:cs}); }, 160 + i*520);
+      setTimeout(function(){
+        var cs=state.checkStatuses.slice(); cs[i]="success";
+        var done = i===checks.length-1;
+        setState({
+          checkStatuses:cs,
+          connectionPhase: done?"success":state.connectionPhase,
+          maskedApiKey: done && isByok() ? "sk-or-......"+state.apiKey.slice(-4) : state.maskedApiKey
+        });
+      }, 420 + i*520);
+    });
+  }
+
+  // ---- activity / domain ----
+  function filterActivities(){
+    var q=state.activityQuery.trim().toLowerCase();
+    return mainActivities.filter(function(o){ return state.selectedActivities.indexOf(o)<0 && (!q || o.toLowerCase().indexOf(q)>=0); });
+  }
+  function filterDomains(){
+    var q=state.domainQuery.trim().toLowerCase();
+    return workDomains.filter(function(o){ return !q || o.toLowerCase().indexOf(q)>=0; });
+  }
+  function addActivity(v){
+    v=String(v).trim(); if(!v) return;
+    var sel=state.selectedActivities;
+    if(sel.indexOf(v)>=0 || sel.length>=5) return;
+    setState({selectedActivities:sel.concat([v]), activityQuery:"", activityOpen:false});
+  }
+  function removeActivity(v){ setState({selectedActivities:state.selectedActivities.filter(function(x){return x!==v;})}); }
+  function selectDomain(v){ v=String(v).trim(); if(!v) return; setState({workDomain:v, domainQuery:v, domainOpen:false}); }
+
+  // ---- toggles / actions ----
+  function toggleDrift(){ var on=!state.driftAlarmEnabled; setState({driftAlarmEnabled:on, extremeNudgeEnabled: on?state.extremeNudgeEnabled:false}); }
+  function toggleExtreme(){ if(state.extremeNudgeEnabled) setState({extremeNudgeEnabled:false}); else setState({confirmExtremeOpen:true}); }
+  function confirmExtreme(){ setState({driftAlarmEnabled:true, extremeNudgeEnabled:true, confirmExtremeOpen:false}); }
+  function cancelExtreme(){ setState({confirmExtremeOpen:false}); }
+  function toggleAdvanced(){ setState({advancedOpen:!state.advancedOpen}); }
+  function chooseSetup(c){ setState({setupChoice:c, connectionPhase:"idle", checkStatuses:[]}); }
+  function connectAccount(){
+    setState({accountConnected:true});
+    setTimeout(function(){ if(state.step==="account") goNext(); }, 850);
+  }
+  function downloadLocal(id){ setState({localAiStarted:true, localAiModelId:id}); }
+  function toggleLogin(){ setState({openAtLoginEnabled:!state.openAtLoginEnabled}); }
+
+  function toggleVisual(on, tone){
+    var accent = tone==="extreme" ? "#9e4238" : (props.accentColor || "#1c1c19");
+    return {trackBg: on?accent:"#d7d5cd", thumbX: on?"17px":"0px", label: on?"On":"Off"};
+  }
+  function cardVisual(selected){
+    var accent = props.accentColor || "#1c1c19";
+    return selected
+      ? {border:accent, bg:"#ffffff", shadow:"0 0 0 1px "+accent}
+      : {border:"rgba(28,28,25,.12)", bg:"#fff", shadow:"none"};
+  }
+
+  // ---- compute view values (mirrors design renderVals) ----
+  function renderVals(){
+    var s=state;
+    var accent = props.accentColor || "#1c1c19";
+    var brandName = props.brandName || "drifty";
+    var trialDays = props.trialDays!=null ? props.trialDays : 7;
+    var steps = stepsForState();
+    var idx = Math.max(steps.indexOf(s.step), 0);
+    var step = s.step;
+
+    var aOpts = filterActivities();
+    var aq = s.activityQuery.trim();
+    var showACustom = aq.length>0 && !mainActivities.some(function(o){return o.toLowerCase()===aq.toLowerCase();}) && !s.selectedActivities.some(function(o){return o.toLowerCase()===aq.toLowerCase();}) && s.selectedActivities.length<5;
+    var dOpts = filterDomains();
+    var dq = s.domainQuery.trim();
+    var showDCustom = dq.length>0 && !workDomains.some(function(o){return o.toLowerCase()===dq.toLowerCase();});
+
+    var baseIssue = s.customBaseUrl.trim() ? baseUrlError() : null;
+    var modelIssue = s.customModel.trim() ? modelError() : null;
+    var apiInvalid = s.apiKey.trim() && !apiKeyIsValid();
+
+    var reviewIntro = isByok()
+      ? "With BYOK, Drifty sends minimized activity context to your chosen provider through OpenRouter using your masked key."
+      : isCustom()
+        ? "With a custom endpoint, Drifty sends minimized activity context to the endpoint and model you entered."
+        : "With Local AI, minimized activity context stays on this Mac and is classified by the model you picked.";
+    var whereDesc = isByok() ? "Minimized classification context goes to OpenRouter for the model call."
+      : isCustom() ? "Minimized classification context goes to your custom endpoint for the model call."
+      : "Activity goes to the selected local model on this Mac, not to Drifty Cloud.";
+    var whoDesc = isByok() ? "You manage the provider key, model access, and provider billing."
+      : isCustom() ? "You manage the endpoint, model access, uptime, and billing if it is hosted."
+      : "Drifty manages the local runtime files; you control whether the model is installed.";
+    var whatDesc = isByok() ? "A masked OpenRouter key"+(s.maskedApiKey?" ("+s.maskedApiKey+")":"")+" plus local permissions for activity context."
+      : isCustom() ? "Local permissions plus "+(s.customModel.trim()||"your model")+" at "+s.customBaseUrl.trim()+"."
+      : "Local permissions to read activity context and a downloaded managed local model.";
+
+    var summaryItems;
+    if(isLocalAi() || isUserManaged()){
+      summaryItems = [
+        {label: isLocalAi() ? "Local AI selected" : (isByok() ? "BYOK selected" : "Custom endpoint selected"), plain:true},
+        {label:"Account connected", plain:true},
+        {label: isLocalAi() ? (s.localAiStarted ? "Local model downloading" : "Local model ready") : (isByok() ? "OpenRouter key connected" : "Custom endpoint connected"), plain:true},
+        {label:"Tracking ready", plain:true}
+      ];
+    } else {
+      summaryItems = [
+        {label:"Drifty Cloud selected", plain:true},
+        {label:"Account connected", plain:true},
+        {label:trialDays+"-day free trial started", strong:true, sub:"Your Drifty Cloud trial is ready."},
+        {label:"Tracking ready", plain:true}
+      ];
+    }
+    summaryItems = summaryItems.map(function(it,i){ it.dividerColor = i===0 ? "transparent" : "rgba(28,28,25,.08)"; return it; });
+
+    var checks = isCustom() ? connectionChecks.custom_endpoint : connectionChecks.byok;
+    var checkRows = checks.map(function(c,i){
+      var st = s.checkStatuses[i] || "pending";
+      return {label:c.label, isPending:st==="pending", isLoading:st==="loading", isSuccess:st==="success", labelColor: st==="success" ? "#1c1c19" : "#79776f"};
+    });
+
+    var localModelCards = localModels.map(function(m){
+      var sel = s.localAiModelId===m.id;
+      var started = s.localAiStarted && sel;
+      var cv = cardVisual(sel);
+      return {
+        id:m.id, label:m.label, downloadSize:m.downloadSize, minimumMemory:m.minimumMemory,
+        desc: started ? "Ready for private local classification." : m.detail,
+        tierLabel: m.recommended ? "Recommended" : (m.tier.charAt(0).toUpperCase()+m.tier.slice(1)),
+        tierColor: m.recommended ? "#1f8a5b" : "#9c9a92",
+        border: cv.border,
+        actionLabel: started ? "Downloading 42%" : "Download",
+        disabled: s.localAiStarted, btnOpacity: s.localAiStarted ? "0.5" : "1"
+      };
+    });
+
+    var drift = toggleVisual(s.driftAlarmEnabled, "default");
+    var extreme = toggleVisual(s.extremeNudgeEnabled, "extreme");
+    var login = toggleVisual(s.openAtLoginEnabled, "default");
+
+    return {
+      accent:accent, brandName:brandName, trialDays:trialDays,
+      stepDots: steps.map(function(st,i){ return { bg: i===idx ? "#1c1c19" : "rgba(28,28,25,.18)", w: i===idx ? "20px" : "6px" }; }),
+      title: titleForStep(),
+      showTitle: step!=="welcome" && step!=="account",
+      subtitle: step==="choose_setup" ? "Pick how Drifty runs its AI. You can change this any time." : "",
+      hasSubtitle: step==="choose_setup",
+      showBack: idx>0,
+      showDots: step!=="welcome" && step!=="account",
+      showFooter: step!=="account",
+      contentAlign: step==="account" ? "auto" : "0",
+      primaryLabel: footerLabel(),
+      primaryDisabled: !canAdvance(),
+      primaryOpacity: canAdvance() ? "1" : "0.4",
+      hint: blockedHint(),
+      hintVisible: blockedHint().length>0,
+
+      isWelcome: step==="welcome", isJob: step==="job", isPermissions: step==="permissions",
+      isNudges: step==="nudges", isChooseSetup: step==="choose_setup", isAccount: step==="account",
+      isConnectServer: step==="connect_server", isTestConnection: step==="test_connection",
+      isSelfDataReview: step==="self_data_review", isReady: step==="ready",
+      isLocalAi: isLocalAi(), isByok: isByok(), isCustom: isCustom(),
+
+      activityCount: s.selectedActivities.length,
+      atMax: s.selectedActivities.length>=5,
+      hasActivities: s.selectedActivities.length>0,
+      activityTags: s.selectedActivities.map(function(v){return {label:v};}),
+      activityQuery: s.activityQuery, activityOpen: s.activityOpen,
+      activityPlaceholder: s.selectedActivities.length>=5 ? "Maximum 5 selected" : (s.selectedActivities.length>0 ? "Add another…" : "Type to search or add your own…"),
+      activityOptions: aOpts.map(function(v){return {label:v};}),
+      showActivityCustom: showACustom, activityCustomLabel: 'Add "'+aq+'"', activityCustomArg: aq,
+      activityEmpty: aOpts.length===0 && !showACustom,
+      domainQuery: s.domainQuery, domainOpen: s.domainOpen,
+      domainOptions: dOpts.map(function(v){return {label:v};}),
+      showDomainCustom: showDCustom, domainCustomLabel: 'Add "'+dq+'"', domainCustomArg: dq,
+
+      accessGranted: s.accessibilityGranted,
+      accessPill: s.accessibilityGranted ? {label:"Enabled", border:"rgba(31,138,91,.3)", color:"#1f8a5b", bg:"rgba(31,138,91,.08)"} : {label:"Required", border:"rgba(158,66,56,.3)", color:"#9e4238", bg:"#f0deda"},
+      accessBtnLabel: s.accessibilityGranted ? "Enabled" : "Enable", accessBtnOpacity: s.accessibilityGranted ? "0.5" : "1",
+      notifReady: s.notificationsReady,
+      notifPill: s.notificationsReady ? {label:"Enabled", border:"rgba(31,138,91,.3)", color:"#1f8a5b", bg:"rgba(31,138,91,.08)"} : {label:"Recommended", border:"rgba(28,28,25,.16)", color:"#79776f", bg:"#f4f3ef"},
+      notifBtnLabel: s.notificationsReady ? "Enabled" : "Enable", notifBtnOpacity: s.notificationsReady ? "0.5" : "1",
+
+      driftToggle: drift, extremeToggle: extreme,
+      extremeRow: s.extremeNudgeEnabled ? {bg:"#fbf3f1", border:"rgba(158,66,56,.3)"} : {bg:"#fff", border:"rgba(28,28,25,.1)"},
+
+      simpleCard: cardVisual(s.setupChoice==="simple"), simpleSelected: s.setupChoice==="simple",
+      localCard: cardVisual(s.setupChoice==="local_ai"), localSelected: s.setupChoice==="local_ai",
+      byokCard: cardVisual(s.setupChoice==="byok"), byokSelected: s.setupChoice==="byok",
+      customCard: cardVisual(s.setupChoice==="custom_endpoint"), customSelected: s.setupChoice==="custom_endpoint",
+      advancedOpen: s.advancedOpen || isUserManaged(),
+      advancedChevron: (s.advancedOpen || isUserManaged()) ? "90deg" : "0deg",
+
+      accountConnected: s.accountConnected, accountPending: !s.accountConnected,
+      accountBtnOpacity: s.accountConnected ? "0.5" : "1",
+      emailBtnLabel: s.accountConnected ? "Signed in" : "Continue with email",
+
+      serverDescription: isByok() ? "Enter the OpenRouter key Drifty uses for focus insights. The key stays masked during setup."
+        : isCustom() ? "Enter the OpenAI-compatible endpoint and model Drifty should use for minimized classification requests."
+        : "Choose a managed local model. Drifty downloads it inside the app and keeps classification on this Mac.",
+      localStatusText: s.localAiStarted ? "Downloading managed local model…" : "Checking managed local AI…",
+      localModelCards: localModelCards,
+      customBaseUrl: s.customBaseUrl, customModel: s.customModel,
+      baseBorder: baseIssue ? "#9e4238" : "rgba(28,28,25,.16)", baseHintColor: baseIssue ? "#9e4238" : "#9c9a92",
+      baseHintText: baseIssue || "Use an OpenAI-compatible /v1 endpoint. Localhost works.",
+      modelBorder: modelIssue ? "#9e4238" : "rgba(28,28,25,.16)", modelHintColor: modelIssue ? "#9e4238" : "#9c9a92",
+      modelHintText: modelIssue || "Enter the model id your endpoint exposes.",
+      apiKey: s.apiKey, apiBorder: apiInvalid ? "#9e4238" : "rgba(28,28,25,.16)", apiHintColor: apiInvalid ? "#9e4238" : "#9c9a92",
+      apiHintText: apiInvalid ? "OpenRouter key should start with sk-or-." : "Drifty never displays the raw key after you leave this field.",
+
+      checkRows: checkRows,
+      testCopy: s.connectionPhase==="success"
+        ? (isByok() ? "Your OpenRouter key is connected and ready for AI classification." : "Your custom endpoint is connected and ready for AI classification.")
+        : (isByok() ? "Checking that Drifty can use your masked OpenRouter key." : "Checking that Drifty can use your custom endpoint."),
+
+      reviewIntro:reviewIntro, whereDesc:whereDesc, whoDesc:whoDesc, whatDesc:whatDesc,
+
+      summaryItems: summaryItems,
+      loginToggle: {trackBg:login.trackBg, label:login.label, thumbX: s.openAtLoginEnabled ? "16px" : "0px"},
+
+      confirmOpen: s.confirmExtremeOpen
+    };
+  }
+
+  // ---- HTML builders ----
+  var checkSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="currentColor"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function radioCheck(selected, accent){
+    return selected ? '<span aria-hidden="true" style="flex:none;color:'+accent+';margin-top:2px;">'+checkSvg+'</span>' : '';
+  }
+
+  function setupCard(act, sel, card, accent, icon, title, badge, desc){
+    return '<button type="button" data-act="'+act+'" style="display:flex;align-items:flex-start;gap:15px;text-align:left;background:'+card.bg+';border:1.5px solid '+card.border+';box-shadow:'+card.shadow+';border-radius:14px;padding:17px 18px;cursor:pointer;font-family:inherit;transition:border-color .15s,box-shadow .15s,background .15s;">'
+      + '<span aria-hidden="true" style="flex:none;width:38px;height:38px;border-radius:10px;background:#eceae3;display:flex;align-items:center;justify-content:center;color:#1c1c19;">'+icon+'</span>'
+      + '<span style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;">'
+        + '<span style="display:flex;align-items:center;gap:9px;"><span style="font-size:15px;font-weight:600;">'+title+'</span>'+badge+'</span>'
+        + '<span style="font-size:13px;line-height:1.45;color:#79776f;">'+desc+'</span>'
+      + '</span>'
+      + radioCheck(sel, accent)
+      + '</button>';
+  }
+
+  function stepBody(v){
+    var step=state.step;
+    if(step==="welcome"){
+      return '<div style="display:flex;flex-direction:column;gap:16px;padding-top:18px;">'
+        + '<span style="font-family:-apple-system,BlinkMacSystemFont,\'SF Pro Display\',sans-serif;font-size:32px;font-weight:600;letter-spacing:-.025em;line-height:1.1;animation:onbRise .55s both;">Hey, I\'m '+esc(v.brandName)+'.</span>'
+        + '<span style="font-family:-apple-system,BlinkMacSystemFont,\'SF Pro Display\',sans-serif;font-size:32px;font-weight:600;letter-spacing:-.025em;line-height:1.1;color:#9c9a92;animation:onbRise .55s .12s both;">Your AI time tracker.</span>'
+        + '<span style="font-size:17px;line-height:1.55;color:#383834;max-width:46ch;margin-top:4px;animation:onbRise .55s .3s both;">I show where your time actually goes, and gently help you stay with the work that matters.</span>'
+        + '<span style="font-size:14px;color:#79776f;animation:onbRise .55s .48s both;">Let\'s set up a few things — about a minute.</span>'
+        + '</div>';
+    }
+    if(step==="job"){
+      var tags = v.hasActivities ? '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+v.activityTags.map(function(t){
+        return '<button type="button" data-act="removeActivity" data-arg="'+esc(t.label)+'" style="display:inline-flex;align-items:center;gap:7px;background:#1c1c19;border:none;border-radius:999px;padding:6px 9px 6px 13px;font-size:13px;font-weight:500;color:#fafaf8;cursor:pointer;font-family:inherit;"><span>'+esc(t.label)+'</span><span aria-hidden="true" style="font-size:11px;opacity:.7;line-height:1;">✕</span></button>';
+      }).join('')+'</div>' : '';
+      var actDrop = '';
+      if(v.activityOpen){
+        actDrop = v.activityOptions.map(function(o){ return '<button type="button" class="onb-opt" data-act="addActivity" data-arg="'+esc(o.label)+'" style="display:block;width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:8px;font-size:14px;color:#1c1c19;cursor:pointer;font-family:inherit;">'+esc(o.label)+'</button>'; }).join('');
+        if(v.showActivityCustom) actDrop += '<button type="button" class="onb-opt" data-act="addCustomActivity" data-arg="'+esc(v.activityCustomArg)+'" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:8px;font-size:14px;color:#1c1c19;cursor:pointer;font-family:inherit;"><span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:5px;background:#1c1c19;color:#fff;font-size:13px;line-height:1;">+</span>'+esc(v.activityCustomLabel)+'</button>';
+        if(v.activityEmpty) actDrop += '<div style="padding:10px 12px;font-size:13px;color:#9c9a92;">No matches — keep typing to add your own.</div>';
+        actDrop = '<div style="position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid rgba(28,28,25,.12);border-radius:12px;box-shadow:0 14px 34px rgba(28,28,25,.14);max-height:236px;overflow:auto;padding:6px;animation:onbPop .13s ease;">'+actDrop+'</div>';
+      }
+      var domDrop = '';
+      if(v.domainOpen){
+        domDrop = v.domainOptions.map(function(o){ return '<button type="button" class="onb-opt" data-act="selectDomain" data-arg="'+esc(o.label)+'" style="display:block;width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:8px;font-size:14px;color:#1c1c19;cursor:pointer;font-family:inherit;">'+esc(o.label)+'</button>'; }).join('');
+        if(v.showDomainCustom) domDrop += '<button type="button" class="onb-opt" data-act="addCustomDomain" data-arg="'+esc(v.domainCustomArg)+'" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:8px;font-size:14px;color:#1c1c19;cursor:pointer;font-family:inherit;"><span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:5px;background:#1c1c19;color:#fff;font-size:13px;line-height:1;">+</span>'+esc(v.domainCustomLabel)+'</button>';
+        domDrop = '<div style="position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;background:#fff;border:1px solid rgba(28,28,25,.12);border-radius:12px;box-shadow:0 14px 34px rgba(28,28,25,.14);max-height:236px;overflow:auto;padding:6px;animation:onbPop .13s ease;">'+domDrop+'</div>';
+      }
+      return '<div style="display:flex;flex-direction:column;gap:24px;margin-top:20px;">'
+        + '<div style="display:flex;flex-direction:column;gap:10px;">'
+          + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;"><span style="font-size:14px;font-weight:600;color:#1c1c19;">What do you usually work on?</span><span style="font-size:12px;color:#9c9a92;font-variant-numeric:tabular-nums;">'+v.activityCount+' / 5</span></div>'
+          + '<div data-combobox style="display:flex;flex-direction:column;gap:8px;">'+tags
+            + '<div style="position:relative;"><input class="onb-input" data-fkey="activity" data-input="activity" data-keydown="activity" data-focus="activity" value="'+esc(v.activityQuery)+'" placeholder="'+esc(v.activityPlaceholder)+'"'+(v.atMax?' disabled':'')+' style="width:100%;border:1px solid rgba(28,28,25,.16);border-radius:11px;padding:12px 14px;font-size:14px;background:#fff;color:#1c1c19;outline:none;font-family:inherit;" />'+actDrop+'</div>'
+          + '</div>'
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:10px;">'
+          + '<span style="font-size:14px;font-weight:600;color:#1c1c19;">What field are you in?</span>'
+          + '<div data-combobox style="position:relative;"><input class="onb-input" data-fkey="domain" data-input="domain" data-keydown="domain" data-focus="domain" value="'+esc(v.domainQuery)+'" placeholder="Type to search or add your own…" style="width:100%;border:1px solid rgba(28,28,25,.16);border-radius:11px;padding:12px 14px;font-size:14px;background:#fff;color:#1c1c19;outline:none;font-family:inherit;" />'+domDrop+'</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:11px;align-items:flex-start;background:#f4f3ef;border:1px solid rgba(28,28,25,.07);border-radius:12px;padding:13px 15px;"><span aria-hidden="true" style="flex:none;margin-top:1px;color:#79776f;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5M12 8.2v.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><p style="margin:0;font-size:13px;line-height:1.5;color:#383834;">Drifty\'s AI uses these as hints to <strong style="font-weight:600;">auto-sort your time</strong> into the right categories — so your timeline reads like your real work, not a list of raw app names. You can edit or add more later.</p></div>'
+        + '</div>';
+    }
+    if(step==="permissions"){
+      function permRow(title, desc, pill, btnAct, btnLabel, btnOpacity, disabled){
+        return '<li style="display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;border:1px solid rgba(28,28,25,.1);border-radius:13px;padding:16px 18px;">'
+          + '<div style="display:flex;flex-direction:column;gap:3px;min-width:0;"><span style="font-size:14px;font-weight:600;">'+title+'</span><span style="font-size:13px;color:#79776f;">'+desc+'</span></div>'
+          + '<div style="display:flex;align-items:center;gap:12px;flex:none;"><span style="font-size:11px;font-weight:600;letter-spacing:.02em;padding:4px 9px;border-radius:999px;border:1px solid '+pill.border+';color:'+pill.color+';background:'+pill.bg+';">'+pill.label+'</span>'
+          + '<button type="button" data-act="'+btnAct+'"'+(disabled?' disabled':'')+' style="appearance:none;background:#fff;border:1px solid rgba(28,28,25,.18);color:#1c1c19;border-radius:9px;padding:8px 15px;font-size:13px;font-weight:560;cursor:pointer;font-family:inherit;opacity:'+btnOpacity+';">'+btnLabel+'</button></div></li>';
+      }
+      return '<p style="font-size:15px;line-height:1.5;color:#383834;margin:0 0 20px;">Drifty needs a couple of Mac permissions to see your focus and drift patterns. Everything is processed for your own timeline.</p>'
+        + '<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;">'
+        + permRow("Accessibility","Lets Drifty see your active app and window — required to track at all.", v.accessPill, "enableAccessibility", v.accessBtnLabel, v.accessBtnOpacity, v.accessGranted)
+        + permRow("Notifications","Lets Drifty send gentle focus nudges and setup alerts.", v.notifPill, "enableNotifications", v.notifBtnLabel, v.notifBtnOpacity, v.notifReady)
+        + '</ul>';
+    }
+    if(step==="nudges"){
+      var driftBtn = '<button type="button" data-act="toggleDrift" style="display:inline-flex;align-items:center;gap:9px;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;flex:none;"><span style="position:relative;width:42px;height:25px;border-radius:999px;background:'+v.driftToggle.trackBg+';transition:background .2s;display:inline-block;"><span style="position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transform:translateX('+v.driftToggle.thumbX+');transition:transform .2s;"></span></span><span style="font-size:13px;color:#79776f;width:20px;text-align:left;">'+v.driftToggle.label+'</span></button>';
+      var extremeBtn = '<button type="button" data-act="toggleExtreme" style="display:inline-flex;align-items:center;gap:9px;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;flex:none;"><span style="position:relative;width:42px;height:25px;border-radius:999px;background:'+v.extremeToggle.trackBg+';transition:background .2s;display:inline-block;"><span style="position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transform:translateX('+v.extremeToggle.thumbX+');transition:transform .2s;"></span></span><span style="font-size:13px;color:#79776f;width:20px;text-align:left;">'+v.extremeToggle.label+'</span></button>';
+      return '<p style="font-size:15px;line-height:1.5;color:#383834;margin:0 0 20px;">Choose how firmly Drifty pulls you back when you drift. You can change this any time.</p>'
+        + '<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;">'
+        + '<li style="display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;border:1px solid rgba(28,28,25,.1);border-radius:13px;padding:16px 18px;"><div style="display:flex;flex-direction:column;gap:3px;min-width:0;"><span style="font-size:14px;font-weight:600;">Drift alarm</span><span style="font-size:13px;color:#79776f;">A gentle alert after you\'ve drifted for a while.</span></div>'+driftBtn+'</li>'
+        + '<li style="display:flex;align-items:center;justify-content:space-between;gap:16px;background:'+v.extremeRow.bg+';border:1px solid '+v.extremeRow.border+';border-radius:13px;padding:16px 18px;transition:background .2s,border-color .2s;"><div style="display:flex;flex-direction:column;gap:3px;min-width:0;"><span style="font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;">Extreme nudge <span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:#f0deda;color:#9e4238;">Beta</span></span><span style="font-size:13px;color:#79776f;">Closes the distracting tab or app when repeated drift is detected.</span></div>'+extremeBtn+'</li>'
+        + '</ul>';
+    }
+    if(step==="choose_setup"){
+      var accent=v.accent;
+      var simpleIcon = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 17.2h9.2a4 4 0 0 0 .4-8 5.8 5.8 0 0 0-11 1.8 3.2 3.2 0 0 0 1.4 6.2Z"/></svg>';
+      var localIcon = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6.8" width="12" height="8.4" rx="1.4"/><path d="M8.4 18h7.2M9.2 9.8h5.6M9.2 12.2h5.6"/></svg>';
+      var byokIcon = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.1" cy="15.9" r="2.45"/><path d="M9.85 14.15 16.9 7.1M15.35 8.65l1.8 1.8M13.95 10.05l1.25 1.25"/></svg>';
+      var customIcon = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 8.2h7.9a3.8 3.8 0 1 1 0 7.6H9.6M9.6 12h9M9.6 15.8a3.8 3.8 0 1 1 0-7.6h3.7"/></svg>';
+      var recBadge = '<span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:'+accent+';color:#fafaf8;">Recommended</span>';
+      var advanced = '';
+      if(v.advancedOpen){
+        advanced = '<div style="display:flex;flex-direction:column;gap:11px;animation:onbPop .15s ease;">'
+          + setupCard("chooseByok", v.byokSelected, v.byokCard, accent, byokIcon, "Bring your own key", "", "Use your own OpenRouter API key. Roughly $2–4/month, depending on usage.")
+          + setupCard("chooseCustom", v.customSelected, v.customCard, accent, customIcon, "Custom endpoint", "", "Point Drifty at any OpenAI-compatible endpoint and model you run.")
+          + '</div>';
+      }
+      return '<div style="display:flex;flex-direction:column;gap:11px;">'
+        + setupCard("chooseSimple", v.simpleSelected, v.simpleCard, accent, simpleIcon, "Drifty Cloud", recBadge, "We host the AI for you — nothing to install. Includes a "+v.trialDays+"-day free trial.")
+        + setupCard("chooseLocal", v.localSelected, v.localCard, accent, localIcon, "Local AI", "", "Runs on this Mac — your activity never leaves your device. One-time model download.")
+        + '<button type="button" data-act="toggleAdvanced" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;font-family:inherit;color:#79776f;font-size:13px;font-weight:560;padding:6px 2px;margin-top:2px;align-self:flex-start;"><span aria-hidden="true" style="display:inline-flex;transition:transform .18s;transform:rotate('+v.advancedChevron+');"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M5.25 3.5L8.75 7l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Connect your own AI provider</button>'
+        + advanced
+        + '</div>';
+    }
+    if(step==="account"){
+      var googleSvg = '<span aria-hidden="true" style="display:inline-flex;background:#fff;border-radius:4px;padding:2px;"><svg viewBox="0 0 18 18" width="16" height="16"><path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.23-.16-1.8H9v3.4h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.56 2.7-3.86 2.7-6.58Z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.82.86-3.06.86-2.35 0-4.34-1.58-5.05-3.72H.96v2.33A9 9 0 0 0 9 18Z"/><path fill="#FBBC05" d="M3.95 10.7a5.4 5.4 0 0 1 0-3.4V4.97H.96a9 9 0 0 0 0 8.06l2.99-2.33Z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.43 1.35l2.58-2.58A8.96 8.96 0 0 0 9 0 9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.16 6.65 3.58 9 3.58Z"/></svg></span>';
+      var primaryInner = v.accountConnected ? '<span>Account connected</span>' : (googleSvg+'<span>Continue with Google</span>');
+      return '<div style="max-width:360px;margin:6px auto 0;display:flex;flex-direction:column;text-align:center;">'
+        + '<h1 style="font-family:-apple-system,BlinkMacSystemFont,\'SF Pro Display\',sans-serif;font-size:27px;font-weight:600;letter-spacing:-.02em;margin:0 0 8px;line-height:1.2;">Connect your account</h1>'
+        + '<p style="font-size:15px;line-height:1.55;color:#383834;margin:0 0 24px;">Your account keeps focus and drift insights synced across your devices.</p>'
+        + '<div style="display:flex;flex-direction:column;gap:12px;">'
+          + '<button type="button" data-act="connectAccount"'+(v.accountConnected?' disabled':'')+' style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;appearance:none;background:#1c1c19;color:#fafaf8;border:none;border-radius:11px;padding:13px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:'+v.accountBtnOpacity+';">'+primaryInner+'</button>'
+          + '<div style="display:flex;align-items:center;gap:12px;color:#b3b1a8;font-size:12px;"><span style="flex:1;height:1px;background:rgba(28,28,25,.1);"></span>or<span style="flex:1;height:1px;background:rgba(28,28,25,.1);"></span></div>'
+          + '<button type="button" class="onb-ghost" data-act="connectAccount"'+(v.accountConnected?' disabled':'')+' style="width:100%;appearance:none;background:#fff;border:1px solid rgba(28,28,25,.18);color:#1c1c19;border-radius:11px;padding:13px 18px;font-size:14px;font-weight:560;cursor:pointer;font-family:inherit;opacity:'+v.accountBtnOpacity+';">'+v.emailBtnLabel+'</button>'
+        + '</div>'
+        + '<p style="font-size:12.5px;line-height:1.5;color:#79776f;margin:24px 0 0;">Drifty never shares your activity data with teammates unless you choose to join a team or share a report.</p>'
+        + '<p style="font-size:12px;color:#9c9a92;margin:12px 0 0;">By continuing, you accept <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer" style="color:#79776f;">Terms</a> &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer" style="color:#79776f;">Privacy</a>.</p>'
+        + '</div>';
+    }
+    if(step==="connect_server"){
+      var inner='';
+      if(v.isLocalAi){
+        var cards = v.localModelCards.map(function(m){
+          return '<article style="display:flex;align-items:center;gap:16px;background:#fff;border:1.5px solid '+m.border+';border-radius:12px;padding:9px 16px;">'
+            + '<div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;"><div style="display:flex;align-items:center;gap:9px;"><strong style="font-size:14px;font-weight:600;">'+m.label+'</strong><span style="font-size:11px;font-weight:600;color:'+m.tierColor+';">'+m.tierLabel+'</span></div><p style="margin:0;font-size:12.5px;line-height:1.45;color:#79776f;">'+m.desc+'</p></div>'
+            + '<dl style="display:flex;gap:18px;margin:0;flex:none;"><div style="display:flex;flex-direction:column;gap:1px;"><dt style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#9c9a92;">Download</dt><dd style="margin:0;font-size:12.5px;font-weight:560;">'+m.downloadSize+'</dd></div><div style="display:flex;flex-direction:column;gap:1px;"><dt style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#9c9a92;">Memory</dt><dd style="margin:0;font-size:12.5px;font-weight:560;">'+m.minimumMemory+'</dd></div></dl>'
+            + '<button type="button" data-act="downloadLocal" data-arg="'+esc(m.id)+'"'+(m.disabled?' disabled':'')+' style="appearance:none;background:#fff;border:1px solid rgba(28,28,25,.18);color:#1c1c19;border-radius:9px;padding:8px 15px;font-size:13px;font-weight:560;cursor:pointer;font-family:inherit;flex:none;opacity:'+m.btnOpacity+';">'+m.actionLabel+'</button>'
+            + '</article>';
+        }).join('');
+        inner = '<div style="display:flex;flex-direction:column;gap:12px;"><div role="status" style="font-size:13px;color:#79776f;display:flex;align-items:center;gap:8px;"><span aria-hidden="true" style="display:inline-block;width:13px;height:13px;border-radius:50%;border:2px solid rgba(28,28,25,.2);border-top-color:#1c1c19;animation:onbSpin .8s linear infinite;"></span>'+v.localStatusText+'</div><div style="display:flex;flex-direction:column;gap:8px;">'+cards+'</div></div>';
+      } else if(v.isCustom){
+        inner = '<div style="display:flex;flex-direction:column;gap:16px;max-width:480px;">'
+          + '<label style="display:flex;flex-direction:column;gap:6px;"><span style="font-size:13px;font-weight:600;">Base URL</span><input class="onb-input" data-fkey="customBase" data-input="customBase" value="'+esc(v.customBaseUrl)+'" placeholder="http://localhost:11434/v1" style="width:100%;border:1px solid '+v.baseBorder+';border-radius:10px;padding:11px 13px;font-size:14px;background:#fff;color:#1c1c19;outline:none;font-family:\'SF Mono\',ui-monospace,Menlo,monospace;" /><span style="font-size:12px;color:'+v.baseHintColor+';">'+esc(v.baseHintText)+'</span></label>'
+          + '<label style="display:flex;flex-direction:column;gap:6px;"><span style="font-size:13px;font-weight:600;">Model</span><input class="onb-input" data-fkey="customModel" data-input="customModel" value="'+esc(v.customModel)+'" placeholder="llama3.2:latest" style="width:100%;border:1px solid '+v.modelBorder+';border-radius:10px;padding:11px 13px;font-size:14px;background:#fff;color:#1c1c19;outline:none;font-family:\'SF Mono\',ui-monospace,Menlo,monospace;" /><span style="font-size:12px;color:'+v.modelHintColor+';">'+esc(v.modelHintText)+'</span></label>'
+          + '</div>';
+      } else if(v.isByok){
+        inner = '<div style="display:flex;flex-direction:column;gap:6px;max-width:480px;"><label style="display:flex;flex-direction:column;gap:6px;"><span style="font-size:13px;font-weight:600;">OpenRouter API key</span><input class="onb-input" data-fkey="apiKey" data-input="apiKey" type="password" value="'+esc(v.apiKey)+'" placeholder="sk-or-..." style="width:100%;border:1px solid '+v.apiBorder+';border-radius:10px;padding:11px 13px;font-size:14px;background:#fff;color:#1c1c19;outline:none;font-family:\'SF Mono\',ui-monospace,Menlo,monospace;" /><span style="font-size:12px;color:'+v.apiHintColor+';">'+esc(v.apiHintText)+'</span></label></div>';
+      }
+      return '<p style="font-size:15px;line-height:1.5;color:#383834;margin:0 0 20px;">'+esc(v.serverDescription)+'</p>'+inner;
+    }
+    if(step==="test_connection"){
+      var rows = v.checkRows.map(function(row){
+        var mark = row.isPending ? '<span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(28,28,25,.18);"></span>'
+          : row.isLoading ? '<span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(28,28,25,.18);border-top-color:#1c1c19;animation:onbSpin .8s linear infinite;"></span>'
+          : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#1f8a5b"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        return '<li style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid rgba(28,28,25,.1);border-radius:11px;padding:13px 15px;"><span aria-hidden="true" style="flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;">'+mark+'</span><span style="font-size:14px;color:'+row.labelColor+';">'+row.label+'</span></li>';
+      }).join('');
+      return '<p style="font-size:15px;line-height:1.5;color:#383834;margin:0 0 20px;">'+esc(v.testCopy)+'</p><ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;max-width:460px;">'+rows+'</ul>';
+    }
+    if(step==="self_data_review"){
+      function card(h, d){ return '<div style="background:#fff;border:1px solid rgba(28,28,25,.1);border-radius:13px;padding:16px;display:flex;flex-direction:column;gap:7px;"><h2 style="margin:0;font-size:13px;font-weight:600;">'+h+'</h2><p style="margin:0;font-size:12.5px;line-height:1.5;color:#79776f;">'+esc(d)+'</p></div>'; }
+      return '<p style="font-size:15px;line-height:1.5;color:#383834;margin:0 0 20px;max-width:56ch;">'+esc(v.reviewIntro)+'</p>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px;">'+card("Where data goes",v.whereDesc)+card("Who manages it",v.whoDesc)+card("What Drifty needs",v.whatDesc)+'</div>'
+        + '<p style="font-size:13px;color:#79776f;margin:16px 0 0;">You can change these settings later.</p>';
+    }
+    if(step==="ready"){
+      var items = v.summaryItems.map(function(item){
+        var content = item.strong
+          ? '<span style="display:flex;flex-direction:column;gap:1px;"><strong style="font-weight:600;color:#1c1c19;">'+item.label+'</strong><span style="font-size:12.5px;color:#9c9a92;">'+item.sub+'</span></span>'
+          : '<span style="font-weight:600;color:#1c1c19;">'+item.label+'</span>';
+        return '<li style="display:flex;align-items:center;gap:15px;font-size:14px;padding:11px 20px;border-top:1px solid '+item.dividerColor+';"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex:none;"><path d="M4 12.5l4.5 4.5L20 6" stroke="#1c1c19" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'+content+'</li>';
+      }).join('');
+      return '<p style="font-size:15px;line-height:1.5;color:#383834;margin:0 0 18px;">Drifty will now track your focus and drift in the background while you work.</p>'
+        + '<ul style="list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;background:#fff;border:1px solid rgba(28,28,25,.09);border-radius:14px;overflow:hidden;">'+items+'</ul>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;background:#f4f3ef;border:1px solid rgba(28,28,25,.07);border-radius:12px;padding:11px 18px;"><h2 style="margin:0;font-size:14px;font-weight:600;color:#1c1c19;">Start Drifty at login</h2>'
+          + '<button type="button" data-act="toggleLogin" style="display:inline-flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;"><span style="position:relative;width:38px;height:22px;border-radius:999px;background:'+v.loginToggle.trackBg+';transition:background .2s;display:inline-block;"><span style="position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transform:translateX('+v.loginToggle.thumbX+');transition:transform .2s;"></span></span><span style="font-size:13px;font-weight:500;color:#79776f;width:24px;text-align:left;">'+v.loginToggle.label+'</span></button>'
+        + '</div>'
+        + '<p style="font-size:13px;color:#79776f;margin:14px 2px 0;">You can pause Drifty any time from the menu bar.</p>';
+    }
+    return '';
+  }
+
+  function render(){
+    var v = renderVals();
+
+    // remember focus + caret to survive full re-render of inputs
+    var ae = document.activeElement;
+    var focusKey = ae && ae.getAttribute ? ae.getAttribute("data-fkey") : null;
+    var caret = (focusKey && typeof ae.selectionStart==="number") ? ae.selectionStart : null;
+
+    var head = '';
+    if(v.showTitle) head += '<h1 style="font-family:-apple-system,BlinkMacSystemFont,\'SF Pro Display\',sans-serif;font-size:27px;font-weight:600;letter-spacing:-.02em;margin:0 0 6px;line-height:1.2;">'+esc(v.title)+'</h1>';
+    if(v.hasSubtitle) head += '<p style="font-size:15px;line-height:1.5;color:#79776f;margin:0 0 22px;max-width:54ch;">'+esc(v.subtitle)+'</p>';
+
+    var footer = '';
+    if(v.showFooter){
+      var back = v.showBack ? '<button type="button" data-act="goBack" style="appearance:none;background:none;border:none;color:#79776f;font-size:14px;font-weight:560;cursor:pointer;font-family:inherit;padding:6px 4px;">Back</button>' : '';
+      var dots = '';
+      if(v.showDots){
+        dots = '<div style="position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:7px;pointer-events:none;">'
+          + v.stepDots.map(function(d){ return '<span style="display:inline-block;height:6px;width:'+d.w+';border-radius:999px;background:'+d.bg+';transition:width .3s cubic-bezier(.4,0,.2,1),background .3s;"></span>'; }).join('')
+          + '</div>';
+      }
+      var hint = v.hintVisible ? '<span role="status" style="font-size:13px;color:#9e4238;text-align:right;">'+esc(v.hint)+'</span>' : '';
+      footer = '<div style="position:relative;display:flex;align-items:center;gap:14px;margin-top:32px;padding-top:22px;">'
+        + back + dots + '<span style="flex:1;"></span>' + hint
+        + '<button type="button" data-act="goNext"'+(v.primaryDisabled?' disabled':'')+' style="appearance:none;border:none;background:'+v.accent+';color:#fafaf8;border-radius:11px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:'+v.primaryOpacity+';transition:opacity .15s;">'+esc(v.primaryLabel)+'</button>'
+        + '</div>';
+    }
+
+    var card = '<div style="width:100%;max-width:720px;background:#fafaf8;border:1px solid rgba(28,28,25,.07);border-radius:16px;box-shadow:0 0 0 1px rgba(0,0,0,.04),0 30px 70px rgba(0,0,0,.22);padding:34px 40px;height:524px;display:flex;flex-direction:column;">'
+      + '<div style="flex:1;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;">'
+        + '<div style="margin:'+v.contentAlign+' 0;width:100%;">'+head+stepBody(v)+'</div>'
+      + '</div>'
+      + footer
+      + '</div>';
+
+    var confirm = '';
+    if(v.confirmOpen){
+      confirm = '<div style="position:fixed;inset:0;z-index:100;background:rgba(28,28,25,.42);display:flex;align-items:center;justify-content:center;padding:24px;animation:onbBackdrop .15s ease;">'
+        + '<section role="alertdialog" aria-modal="true" style="width:100%;max-width:400px;background:#fafaf8;border-radius:18px;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,.3);animation:onbPop .18s ease;text-align:center;">'
+          + '<div aria-hidden="true" style="width:48px;height:48px;border-radius:13px;background:#f0deda;color:#9e4238;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.25" cy="6.25" r="2.65"/><circle cx="6.25" cy="17.75" r="2.65"/><path d="M8.2 8.2 19 19M8.2 15.8 19 5M12.2 12h4.2"/></svg></div>'
+          + '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9e4238;margin-bottom:6px;">Extreme nudge</div>'
+          + '<h2 style="margin:0 0 8px;font-size:19px;font-weight:600;">Let Drifty close drift?</h2>'
+          + '<p style="margin:0 0 22px;font-size:14px;line-height:1.5;color:#79776f;">When repeated drift is detected, Drifty can close the distracting browser tab or quit the distracting app. This is more direct than a warning.</p>'
+          + '<div style="display:flex;gap:10px;"><button type="button" data-act="cancelExtreme" style="flex:1;appearance:none;background:#fff;border:1px solid rgba(28,28,25,.18);color:#1c1c19;border-radius:11px;padding:12px;font-size:14px;font-weight:560;cursor:pointer;font-family:inherit;">Keep off</button><button type="button" data-act="confirmExtreme" style="flex:1;appearance:none;background:#9e4238;border:none;color:#fafaf8;border-radius:11px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Allow closing</button></div>'
+        + '</section>'
+        + '</div>';
+    }
+
+    root.innerHTML = card + confirm;
+
+    // restore focus + caret
+    if(focusKey){
+      var el = root.querySelector('[data-fkey="'+focusKey+'"]');
+      if(el){
+        el.focus();
+        if(caret!=null && typeof el.setSelectionRange==="function"){
+          try{ el.setSelectionRange(caret, caret); }catch(e){}
+        }
+      }
+    }
+  }
+
+  // ---- event dispatch ----
+  var actions = {
+    goNext:goNext, goBack:goBack,
+    enableAccessibility:function(){ setState({accessibilityGranted:true}); },
+    enableNotifications:function(){ setState({notificationsReady:true}); },
+    toggleDrift:toggleDrift, toggleExtreme:toggleExtreme, confirmExtreme:confirmExtreme, cancelExtreme:cancelExtreme,
+    toggleAdvanced:toggleAdvanced,
+    chooseSimple:function(){ chooseSetup("simple"); }, chooseLocal:function(){ chooseSetup("local_ai"); },
+    chooseByok:function(){ chooseSetup("byok"); }, chooseCustom:function(){ chooseSetup("custom_endpoint"); },
+    connectAccount:connectAccount,
+    addActivity:function(arg){ addActivity(arg); }, removeActivity:function(arg){ removeActivity(arg); },
+    addCustomActivity:function(arg){ addActivity(arg); },
+    selectDomain:function(arg){ selectDomain(arg); }, addCustomDomain:function(arg){ selectDomain(arg); },
+    downloadLocal:function(arg){ downloadLocal(arg); },
+    toggleLogin:toggleLogin
+  };
+
+  var root = document.getElementById("onbRoot");
+
+  root.addEventListener("click", function(e){
+    var el = e.target.closest("[data-act]");
+    if(!el || el.disabled) return;
+    var fn = actions[el.getAttribute("data-act")];
+    if(fn) fn(el.getAttribute("data-arg"));
+  });
+
+  root.addEventListener("input", function(e){
+    var key = e.target.getAttribute && e.target.getAttribute("data-input");
+    if(!key) return;
+    var val = e.target.value;
+    if(key==="activity") setState({activityQuery:val, activityOpen:true});
+    else if(key==="domain") setState({domainQuery:val, domainOpen:true, workDomain:""});
+    else if(key==="apiKey") setState({apiKey:val, connectionPhase:"idle", checkStatuses:[]});
+    else if(key==="customBase") setState({customBaseUrl:val, connectionPhase:"idle", checkStatuses:[]});
+    else if(key==="customModel") setState({customModel:val, connectionPhase:"idle", checkStatuses:[]});
+  });
+
+  root.addEventListener("focusin", function(e){
+    var key = e.target.getAttribute && e.target.getAttribute("data-focus");
+    // Guard against the focus restored inside render() re-triggering a render,
+    // which would otherwise recurse infinitely (focus -> focusin -> render -> focus).
+    if(key==="activity" && !state.activityOpen) setState({activityOpen:true});
+    else if(key==="domain" && !state.domainOpen) setState({domainOpen:true});
+  });
+
+  root.addEventListener("keydown", function(e){
+    var key = e.target.getAttribute && e.target.getAttribute("data-keydown");
+    if(!key) return;
+    if(key==="activity"){
+      if(e.key==="Enter"){ e.preventDefault(); var opts=filterActivities(); var q=state.activityQuery.trim(); if(opts.length) addActivity(opts[0]); else if(q) addActivity(q); }
+      else if(e.key==="Escape"){ setState({activityOpen:false}); }
+    } else if(key==="domain"){
+      if(e.key==="Enter"){ e.preventDefault(); var dopts=filterDomains(); var dq=state.domainQuery.trim(); if(dopts.length) selectDomain(dopts[0]); else if(dq) selectDomain(dq); }
+      else if(e.key==="Escape"){ setState({domainOpen:false}); }
+    }
+  });
+
+  document.addEventListener("mousedown", function(e){
+    if(!e.target.closest("[data-combobox]") && (state.activityOpen || state.domainOpen)){
+      setState({activityOpen:false, domainOpen:false});
+    }
+  });
+
+  // ---- preview controls ----
+  var stepLabels = {welcome:"Welcome",job:"Job",permissions:"Permissions",nudges:"Nudges",choose_setup:"Choose setup",account:"Account",connect_server:"Connect server",test_connection:"Test connection",self_data_review:"Self data review",ready:"Ready"};
+  var pvStep = document.getElementById("pvStep");
+  allSteps.forEach(function(st){ var o=document.createElement("option"); o.value=st; o.textContent=stepLabels[st]||st; pvStep.appendChild(o); });
+  pvStep.value = props.startStep;
+  pvStep.addEventListener("change", function(){ props.startStep=pvStep.value; goToStep(pvStep.value); });
+
+  document.getElementById("pvBrand").addEventListener("input", function(e){ props.brandName=e.target.value; render(); });
+  document.getElementById("pvTrial").addEventListener("input", function(e){
+    var n=parseInt(e.target.value,10); props.trialDays=isNaN(n)?7:Math.min(30,Math.max(1,n)); render();
+  });
+
+  var pvAccent = document.getElementById("pvAccent");
+  function paintSwatches(){ Array.prototype.forEach.call(pvAccent.children, function(sw){ sw.setAttribute("data-active", sw.getAttribute("data-color")===props.accentColor ? "1":"0"); }); }
+  accentOptions.forEach(function(c){
+    var sw=document.createElement("span"); sw.className="pv-swatch"; sw.setAttribute("data-color",c); sw.style.background=c;
+    sw.addEventListener("click", function(){ props.accentColor=c; paintSwatches(); render(); });
+    pvAccent.appendChild(sw);
+  });
+  paintSwatches();
+
+  // ---- boot ----
+  state.step = props.startStep || "welcome";
+  render();
+})();
+</script>
+</body>
+</html>

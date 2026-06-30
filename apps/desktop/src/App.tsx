@@ -97,6 +97,7 @@ import {
   hasCompletedUserOnboarding,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
+import { OnboardingV22Preview } from "./features/onboarding/previews/OnboardingV22Preview";
 import {
   WatcherPeek,
   type WatcherPeekEvent,
@@ -667,6 +668,7 @@ export default function App() {
     updaterMessage,
   } = useUpdateController();
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
+  const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
@@ -5385,6 +5387,7 @@ export default function App() {
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
+                    onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
@@ -5482,6 +5485,8 @@ export default function App() {
           onComplete={handleOnboardingComplete}
         />
       ) : null}
+
+      <OnboardingV22Preview open={onboardingV22PreviewOpen} onClose={() => setOnboardingV22PreviewOpen(false)} />
 
       <ProfileDialogs
         avatarUrl={profileDraft.avatarUrl}

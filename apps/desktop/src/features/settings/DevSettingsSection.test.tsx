@@ -12,6 +12,7 @@ import {
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
+  onboardingV22PreviewEnabled: false,
 }));
 
 vi.mock("../../appFeatureSwitches", () => ({
@@ -22,6 +23,9 @@ vi.mock("../../appFeatureSwitches", () => ({
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: false,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
+  get ONBOARDING_V2_2_PREVIEW_ENABLED() {
+    return featureSwitches.onboardingV22PreviewEnabled;
+  },
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
   WATCHER_PEEK_PROTOTYPE_ENABLED: false,
 }));
@@ -53,6 +57,7 @@ function renderProductionDevSettings() {
     onForceChromiumAxExtremeNudgeChange: vi.fn(),
     onForceFrontmostFallbackCaptureChange: vi.fn(),
     onOpenDebugLogs: vi.fn(),
+    onOpenOnboardingV22Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onPreviewDriftAlarm: vi.fn(),
@@ -73,6 +78,17 @@ function renderProductionDevSettings() {
 describe("DevSettingsSection", () => {
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
+    featureSwitches.onboardingV22PreviewEnabled = false;
+  });
+
+  it("opens the onboarding v2.2 preview when the dev tool is enabled", () => {
+    featureSwitches.onboardingV22PreviewEnabled = true;
+
+    const props = renderProductionDevSettings();
+
+    expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Open preview$/ }));
+    expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
   });
 
   it("does not leave an empty Dev preview block in production diagnostics", () => {
@@ -108,7 +124,8 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
-      onOpenReplayOnboarding: vi.fn(),
+      onOpenOnboardingV22Preview: vi.fn(),
+    onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onShowWatcherPeek: vi.fn(),
@@ -145,7 +162,8 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
-      onOpenReplayOnboarding: vi.fn(),
+      onOpenOnboardingV22Preview: vi.fn(),
+    onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onShowWatcherPeek: vi.fn(),
