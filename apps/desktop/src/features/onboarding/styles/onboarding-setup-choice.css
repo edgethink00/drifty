@@ -167,3 +167,80 @@
   line-height: 1.45;
   color: var(--onb-text-soft);
 }
+
+/* ── v2.2: heading row, recommended badge, selected check ── */
+.onboarding-card .onb-setup-choice__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.onboarding-card .onb-setup-choice__badge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--onb-accent-strong);
+  color: var(--onb-surface);
+  font-family: var(--onb-font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.onboarding-card .onb-setup-choice__check {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: 4px;
+  color: var(--onb-accent-strong);
+}
+
+/* ── v2.2: "Connect your own AI provider" disclosure ── */
+.onboarding-card .onb-setup-choice__advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--onb-text-soft);
+  font-family: var(--onb-font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.onboarding-card .onb-setup-choice__advanced-toggle:hover {
+  color: var(--onb-text);
+}
+
+.onboarding-card .onb-setup-choice__chevron {
+  display: inline-flex;
+  transition: transform var(--onb-transition-fast);
+}
+
+.onboarding-card .onb-setup-choice__chevron--open {
+  transform: rotate(90deg);
+}
+
+.onboarding-card .onb-setup-choice__advanced {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+  animation: onbSetupAdvancedReveal var(--onb-transition-fast);
+}
+
+@keyframes onbSetupAdvancedReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

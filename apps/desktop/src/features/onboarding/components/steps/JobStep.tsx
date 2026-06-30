@@ -26,10 +26,16 @@ export function JobStep({
 }: JobStepProps) {
   return (
     <>
-      <p className="onb-step-desc">Choose up to 5 activities.</p>
       <div className="onb-job__compact">
-        <div className="onb-activity-picker">
-          {mainActivities.length > 0 ? (
+        <div className="onb-job__question">
+          <div className="onb-job__field-head">
+            <h2 className="onb-job__field-label">What do you usually work on?</h2>
+            <span className="onb-job__count" aria-label={`${mainActivities.length} of ${MAX_MAIN_ACTIVITY_SELECTIONS} selected`}>
+              {mainActivities.length} / {MAX_MAIN_ACTIVITY_SELECTIONS}
+            </span>
+          </div>
+          <div className="onb-activity-picker">
+            {mainActivities.length > 0 ? (
             <div className="onb-activity-tags" role="group" aria-label="Selected activities">
               {mainActivities.map((option) => (
                 <button
@@ -80,12 +86,10 @@ export function JobStep({
               aria-label="Enter your activity"
             />
           ) : null}
+          </div>
         </div>
         <div className="onb-job__question">
-          <div className="onb-inline-question">
-            <h2 className="onb-inline-question-title">What field are you in?</h2>
-            <p className="onb-step-desc">This helps Drifty understand the context of your work.</p>
-          </div>
+          <h2 className="onb-job__field-label">What field are you in?</h2>
           <Dropdown
             options={WORK_DOMAIN_OPTIONS}
             value={workDomain}
@@ -96,6 +100,18 @@ export function JobStep({
             searchable
             ariaLabel="Your field"
           />
+        </div>
+        <div className="onb-job__hint">
+          <span className="onb-job__hint-icon" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+          </span>
+          <p className="onb-job__hint-text">
+            Drifty's AI uses these as hints to <strong>auto-sort your time</strong> into the right categories — so your
+            timeline reads like your real work, not a list of raw app names. You can edit or add more later.
+          </p>
         </div>
       </div>
     </>

@@ -367,7 +367,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* Above the onboarding screen (z-index 1000) so email sign-in can stack
+     over an in-progress onboarding in auth-optional mode. */
+  z-index: 1100;
   padding: var(--space-4);
 }
 

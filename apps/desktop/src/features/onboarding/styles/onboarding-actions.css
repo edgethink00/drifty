@@ -1,5 +1,6 @@
 /* ── Footer actions ── */
 .onboarding-card .onb-actions {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10,6 +11,31 @@
   margin-top: var(--onb-action-gap);
   border-top: 0;
   flex-shrink: 0;
+}
+
+/* ── v2.2 progress dots (centered, non-interactive) ── */
+.onboarding-card .onb-actions__dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.onboarding-card .onb-actions__dot {
+  height: 6px;
+  width: 6px;
+  border-radius: 999px;
+  background: var(--onb-line-strong);
+  transition: width var(--onb-transition-base), background var(--onb-transition-base);
+}
+
+.onboarding-card .onb-actions__dot--active {
+  width: 20px;
+  background: var(--onb-accent-strong);
 }
 
 .onboarding-card .onb-actions--setup {
@@ -99,9 +125,9 @@
 .onboarding-card .onb-hint {
   font-size: 12px;
   color: color-mix(in oklch, var(--onb-text-soft) 82%, var(--onb-warn));
-  text-align: center;
+  text-align: right;
   line-height: 1.4;
-  margin: 0;
-  flex: 1 1 auto;
+  margin: 0 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
 }

@@ -5477,8 +5477,13 @@ export default function App() {
           cloudTrialStartedNotice={cloudTrialStartedNotice}
           onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
           onStartCloudTrialWithEmail={() => {
-            setResumeOnboardingAfterAuthModal(true);
-            setOnboardingOpen(false);
+            // When auth is optional, keep onboarding mounted and stack the auth
+            // modal above it so cancelling sign-in preserves onboarding progress.
+            // When auth is required, the onboarding is dismissed and resumed after.
+            if (isEffectiveAuthRequired) {
+              setResumeOnboardingAfterAuthModal(true);
+              setOnboardingOpen(false);
+            }
             setAuthModalOpen(true);
           }}
           onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}

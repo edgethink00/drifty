@@ -22,13 +22,14 @@ export function PermissionsStep({
   return (
     <>
       <p className="onb-step-desc">
-        Drifty needs a few Mac permissions to understand your focus and drift patterns.
+        Drifty needs a couple of Mac permissions to see your focus and drift patterns. Everything is processed for your
+        own timeline.
       </p>
       <ul className="onb-perms" aria-label="Required permissions">
         <li className="onb-perms__row">
           <div className="onb-perms__info">
             <span className="onb-perms__name">Accessibility</span>
-            <span className="onb-perms__desc">Lets Drifty understand active apps and windows.</span>
+            <span className="onb-perms__desc">Lets Drifty see your active app and window — required to track at all.</span>
           </div>
           <div className="onb-perms__control">
             <span className={`onb-status-pill${accessibilityReady ? " onb-status-pill--ready" : ""}`}>
@@ -53,9 +54,12 @@ export function PermissionsStep({
         <li className="onb-perms__row">
           <div className="onb-perms__info">
             <span className="onb-perms__name">Notifications</span>
-            <span className="onb-perms__desc">Lets Drifty send gentle focus nudges and useful setup alerts.</span>
+            <span className="onb-perms__desc">Lets Drifty send gentle focus nudges and setup alerts.</span>
           </div>
           <div className="onb-perms__control">
+            <span className={`onb-status-pill${notificationsReady ? " onb-status-pill--ready" : ""}`}>
+              {notificationsReady ? "Enabled" : "Recommended"}
+            </span>
             <button
               type="button"
               className="onb-button onb-button--ghost onb-perms__action"

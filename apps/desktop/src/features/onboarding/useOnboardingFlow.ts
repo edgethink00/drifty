@@ -250,6 +250,7 @@ export function useOnboardingFlow({
     step,
     stepBodyRef,
     stepIndex,
+    steps,
     storageError,
     subtitle,
     title,
