@@ -133,6 +133,27 @@ describe("LeaderboardView", () => {
     expect(screen.getByText(/checking the latest opt-in rankings/i)).toBeTruthy();
   });
 
+  it("renders background refresh status as a non-error toolbar status", () => {
+    renderView({
+      actionError: null,
+      leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
+      statusMessage: "Refreshing leaderboard",
+      statusTone: "neutral",
+    });
+
+    const toolbar = screen.getByLabelText(/global leaderboard/i).querySelector(".leaderboard-toolbar");
+    const statusSlot = toolbar?.querySelector(".leaderboard-toolbar__status-slot");
+    if (!(statusSlot instanceof HTMLElement)) throw new Error("Expected leaderboard toolbar status slot");
+    const refreshStatus = within(statusSlot).getByRole("status");
+
+    expect(refreshStatus.textContent).toBe("Refreshing leaderboard");
+    expect(refreshStatus.classList.contains("leaderboard-refresh-status")).toBe(true);
+    expect(refreshStatus.classList.contains("capture-recency--error")).toBe(false);
+    expect(refreshStatus.getAttribute("data-tone")).toBe("neutral");
+    expect(refreshStatus.closest(".capture-recency")).toBeNull();
+    expect(refreshStatus.closest(".leaderboard-toolbar__status-slot")).toBe(statusSlot);
+  });
+
   it("renders an error state when the fetch fails", () => {
     renderView({ error: "RPC exploded" });
 
