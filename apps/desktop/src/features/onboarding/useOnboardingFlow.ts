@@ -151,7 +151,6 @@ export function useOnboardingFlow({
   const footerLabel = footerLabelForStep({
     isFinalStep,
     isUserManagedProviderSetup: connection.isUserManagedProviderSetup,
-    setupChoice: connection.setupChoice,
     step,
   });
 

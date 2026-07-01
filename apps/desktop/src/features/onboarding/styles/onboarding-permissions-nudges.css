@@ -5,20 +5,20 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--onb-space-2);
-  margin-top: var(--onb-content-gap);
+  gap: 12px;
+  margin-top: 0;
 }
 
 .onboarding-card .onb-perms__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--onb-space-4);
+  gap: 16px;
   min-height: 64px;
-  padding: 12px 14px;
-  border: 1px solid var(--onb-line-strong);
-  border-radius: var(--onb-radius-sm);
-  background: var(--onb-surface);
+  padding: 16px 18px;
+  border: 1px solid rgba(28, 28, 25, 0.1);
+  border-radius: 13px;
+  background: #fff;
   box-shadow: none;
   transition: border-color var(--onb-transition-fast), background var(--onb-transition-fast);
 }
@@ -47,7 +47,7 @@
 .onboarding-card .onb-perms__desc {
   font-size: 13px;
   line-height: 1.42;
-  color: var(--onb-text-muted);
+  color: var(--onb-text-soft);
 }
 
 .onboarding-card .onb-perms__control {
@@ -66,7 +66,7 @@
 }
 
 .onboarding-card .onb-nudges {
-  margin-top: var(--onb-content-gap);
+  margin-top: 0;
 }
 
 .onboarding-card .onb-nudges-copy {
@@ -82,8 +82,8 @@
 }
 
 .onboarding-card .onb-nudge-row--extreme {
-  border-color: var(--onb-line-strong);
-  background: var(--onb-surface);
+  border-color: rgba(28, 28, 25, 0.1);
+  background: #fff;
 }
 
 .onboarding-card .onb-nudge-row--extreme:hover {
@@ -125,8 +125,8 @@
 
 .onboarding-card .onb-toggle__track {
   width: 42px;
-  height: 24px;
-  padding: 3px;
+  height: 25px;
+  padding: 2px;
   border: 1px solid var(--onb-line-strong);
   border-radius: 999px;
   background: var(--onb-bg-2);
@@ -135,8 +135,8 @@
 
 .onboarding-card .onb-toggle__thumb {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 21px;
+  height: 21px;
   border-radius: 50%;
   background: var(--onb-surface);
   box-shadow: 0 1px 2px rgba(39, 37, 31, 0.14);
@@ -161,7 +161,7 @@
 }
 
 .onboarding-card .onb-toggle--on .onb-toggle__thumb {
-  transform: translateX(18px);
+  transform: translateX(17px);
 }
 
 .onboarding-card .onb-toggle--on .onb-toggle__label {

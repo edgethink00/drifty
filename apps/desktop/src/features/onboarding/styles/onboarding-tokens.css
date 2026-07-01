@@ -32,7 +32,10 @@
   --onb-action-gap: 20px;
   --onb-step-content-baseline: 300px;
   --onb-step-frame-baseline: calc(var(--onb-step-content-baseline) + 44px);
-  --onb-content-width: 464px;
+  --onb-content-width: 720px;
+  --onb-card-height: 524px;
+  --onb-card-padding-x: 40px;
+  --onb-card-padding-y: 34px;
 
   --onb-canvas: var(--canvas, #f2f1ed);
   --onb-bg-2: var(--bg-2, #e7e5df);
@@ -61,7 +64,7 @@
   --onb-blue: #416d98;
   --onb-blue-soft: #eaf4fb;
   --onb-shadow-soft: 0 1px 2px rgba(38, 38, 32, 0.035);
-  --onb-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --onb-shadow-card: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 30px 70px rgba(0, 0, 0, 0.22);
 
   position: fixed;
   inset: 0;
@@ -69,8 +72,9 @@
   display: flex;
   flex-direction: column;
   align-items: safe center;
-  background: linear-gradient(180deg, #fff 0%, var(--onb-surface) 54%, var(--onb-canvas) 100%);
-  overflow-y: auto;
+  justify-content: center;
+  background: var(--onb-surface);
+  overflow: hidden;
   font-family: var(--onb-font-sans);
   color: var(--onb-text);
   font-size: 14px;

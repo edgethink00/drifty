@@ -3,12 +3,11 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--onb-space-3);
+  gap: 14px;
   width: 100%;
-  min-height: 36px;
-  padding: 0;
-  margin-top: var(--onb-action-gap);
+  min-height: 41px;
+  padding-top: 22px;
+  margin-top: 32px;
   border-top: 0;
   flex-shrink: 0;
 }
@@ -44,30 +43,30 @@
 }
 
 .onboarding-card .onb-actions .onb-button--primary {
-  min-height: 36px;
+  min-height: 41px;
   min-width: 104px;
   flex: 0 0 auto;
-  padding: 0 var(--onb-space-4);
-  border-radius: var(--onb-radius-sm);
+  padding: 0 24px;
+  border-radius: 11px;
   border-color: var(--onb-continue-bg);
   background: var(--onb-continue-bg);
-  color: #fff;
+  color: var(--onb-surface);
   box-shadow: none;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .onboarding-card .onb-actions .onb-button--primary:hover:not(:disabled) {
   border-color: var(--onb-continue-bg-hover);
   background: var(--onb-continue-bg-hover);
-  color: #fff;
+  color: var(--onb-surface);
   box-shadow: none;
 }
 
 .onboarding-card .onb-actions .onb-button--primary:active:not(:disabled) {
   border-color: var(--onb-continue-bg-hover);
   background: var(--onb-continue-bg-hover);
-  color: #fff;
+  color: var(--onb-surface);
   box-shadow: none;
 }
 
@@ -94,27 +93,26 @@
 
 .onboarding-card .onb-actions__back {
   font-family: var(--onb-font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--onb-text-muted);
-  background: var(--onb-surface);
-  border: 1px solid var(--onb-line-strong);
-  border-radius: var(--onb-radius-sm);
+  font-size: 14px;
+  font-weight: 560;
+  color: var(--onb-text-soft);
+  background: none;
+  border: 0;
+  border-radius: 8px;
   cursor: pointer;
-  min-height: 36px;
-  min-width: 78px;
+  min-height: 32px;
+  min-width: 0;
   flex: 0 0 auto;
-  padding: 0 var(--onb-space-4);
+  padding: 6px 4px;
   transition: background var(--onb-transition-fast), border-color var(--onb-transition-fast), color var(--onb-transition-fast), box-shadow var(--onb-transition-fast);
 }
 .onboarding-card .onb-actions__back:hover {
   color: var(--onb-text);
-  border-color: rgba(55, 53, 47, 0.2);
-  background: color-mix(in oklch, var(--onb-surface) 82%, var(--onb-bg-2));
+  background: transparent;
 }
 
 .onboarding-card .onb-actions__back:active {
-  background: var(--onb-bg-2);
+  background: transparent;
 }
 
 .onboarding-card .onb-actions__spacer {

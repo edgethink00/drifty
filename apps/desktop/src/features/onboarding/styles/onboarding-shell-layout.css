@@ -3,26 +3,27 @@
   position: relative;
   z-index: 1;
   width: min(100%, var(--onb-content-width));
-  height: auto;
-  min-height: 0;
+  height: var(--onb-card-height);
+  max-height: calc(100vh - 80px);
+  min-height: min(var(--onb-card-height), calc(100vh - 80px));
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
+  padding: var(--onb-card-padding-y) var(--onb-card-padding-x);
+  background: var(--onb-surface);
+  border: 1px solid rgba(28, 28, 25, 0.07);
+  border-radius: 16px;
+  box-shadow: var(--onb-shadow-card);
+  overflow: hidden;
 }
 
 .onboarding-copy-column {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: var(--onb-content-width);
-  height: auto;
+  max-width: none;
+  height: 100%;
   min-height: 0;
   justify-content: flex-start;
 }
@@ -40,68 +41,45 @@
 /* ── Title / body ── */
 .onboarding-card .onboarding-middle {
   display: flex;
-  flex: 0 0 var(--onb-step-frame-baseline);
+  flex: 1 1 auto;
   flex-direction: column;
-  justify-content: safe center;
+  justify-content: flex-start;
   width: 100%;
-  height: var(--onb-step-frame-baseline);
-  min-height: var(--onb-step-frame-baseline);
-  max-height: var(--onb-step-frame-baseline);
-  overflow: visible;
-}
-
-.onboarding-card .onboarding-middle--account,
-.onboarding-card .onboarding-middle--connect_server,
-.onboarding-card .onboarding-middle--choose_setup,
-.onboarding-card .onboarding-middle--job,
-.onboarding-card .onboarding-middle--ready,
-.onboarding-card .onboarding-middle--self_data_review,
-.onboarding-card .onboarding-middle--work_profile {
-  flex: 0 1 auto;
   height: auto;
   min-height: 0;
   max-height: none;
-  justify-content: flex-start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
-.onboarding-card .onboarding-middle--account .onboarding-body,
-.onboarding-card .onboarding-middle--account .onboarding-viewport,
-.onboarding-card .onboarding-middle--connect_server .onboarding-body,
-.onboarding-card .onboarding-middle--connect_server .onboarding-viewport,
-.onboarding-card .onboarding-middle--choose_setup .onboarding-body,
-.onboarding-card .onboarding-middle--choose_setup .onboarding-viewport,
-.onboarding-card .onboarding-middle--job .onboarding-body,
-.onboarding-card .onboarding-middle--job .onboarding-viewport,
-.onboarding-card .onboarding-middle--ready .onboarding-body,
-.onboarding-card .onboarding-middle--ready .onboarding-viewport,
-.onboarding-card .onboarding-middle--self_data_review .onboarding-body,
-.onboarding-card .onboarding-middle--self_data_review .onboarding-viewport,
-.onboarding-card .onboarding-middle--work_profile .onboarding-body,
-.onboarding-card .onboarding-middle--work_profile .onboarding-viewport {
-  max-height: none;
-  overflow: visible;
-  contain: none;
+.onboarding-card .onboarding-middle--account {
+  justify-content: center;
 }
 
 .onboarding-card .onboarding-title {
   font-family: var(--onb-font-display);
-  font-size: clamp(24px, 2.7vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.12;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--onb-text);
   text-align: left;
-  margin: 0 0 var(--onb-header-gap);
+  margin: 0 0 6px;
   outline: none;
   text-wrap: balance;
 }
 
 .onboarding-card .onboarding-subtitle {
-  margin: 0 0 var(--onb-content-gap);
+  margin: 0 0 22px;
+  max-width: 54ch;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--onb-text-soft);
 }
 
 .onboarding-card .onboarding-body--choose_setup {
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 /* biome-ignore lint/style/noDescendingSpecificity: base body styles sit after step modifiers in the imported onboarding prototype cascade. */
@@ -112,8 +90,9 @@
   flex: 0 1 auto;
   height: auto;
   min-height: 0;
-  max-height: var(--onb-step-content-baseline);
-  contain: layout;
+  max-height: none;
+  contain: none;
+  overflow: visible;
 }
 
 .onboarding-card .onboarding-body--choose_setup .onboarding-viewport {

@@ -162,12 +162,10 @@ export function titleForStep({
 export function footerLabelForStep({
   isFinalStep,
   isUserManagedProviderSetup,
-  setupChoice,
   step,
 }: {
   readonly isFinalStep: boolean;
   readonly isUserManagedProviderSetup: boolean;
-  readonly setupChoice: SetupChoice | null;
   readonly step: OnboardingStep;
 }): string {
   switch (step) {
@@ -180,10 +178,10 @@ export function footerLabelForStep({
     case "connect_server":
       return isUserManagedProviderSetup ? "Test connection" : "Continue";
     case "permissions":
-      return setupChoice === "local_ai" || isUserManagedProviderSetup ? "Continue" : "Next";
+      return "Continue";
     case "ready":
       return "Start tracking";
     default:
-      return isFinalStep ? "Finish setup" : "Next";
+      return isFinalStep ? "Finish setup" : "Continue";
   }
 }

@@ -1,11 +1,17 @@
 /* ── Setup cards (tracker / accessibility / notifications) ── */
 .onboarding-card .onb-step-desc {
-  font-size: 14px;
-  color: color-mix(in oklch, var(--onb-text-muted) 78%, var(--onb-text-soft));
-  line-height: 1.52;
-  margin: 0;
-  max-width: 48ch;
+  font-size: 15px;
+  color: var(--onb-text-muted);
+  line-height: 1.5;
+  margin: 0 0 20px;
+  max-width: 56ch;
   text-wrap: pretty;
+}
+
+.onboarding-card .onboarding-subtitle.onb-step-desc {
+  color: var(--onb-text-soft);
+  margin: 0 0 22px;
+  max-width: 54ch;
 }
 
 .onboarding-card .onb-step-desc + :where(
@@ -24,7 +30,7 @@
   .onb-data-cards,
   .onb-checklist
 ) {
-  margin-top: var(--onb-content-gap);
+  margin-top: 0;
 }
 
 .onboarding-card .onb-instructions {

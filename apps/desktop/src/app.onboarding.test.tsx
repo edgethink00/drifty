@@ -256,7 +256,7 @@ function modelIdFromArgs(args: unknown): string {
   return args.modelId;
 }
 
-async function clickEnabledAction(name: RegExp = /^next$/i) {
+async function clickEnabledAction(name: RegExp = /^continue$/i) {
   const button = (await screen.findByRole("button", { name })) as HTMLButtonElement;
   await waitFor(() => {
     expect(button.disabled).toBe(false);
@@ -265,7 +265,7 @@ async function clickEnabledAction(name: RegExp = /^next$/i) {
 }
 
 async function clickEnabledNext() {
-  await clickEnabledAction(/^next$/i);
+  await clickEnabledAction(/^continue$/i);
 }
 
 async function settleAppStartupEffects() {
@@ -276,19 +276,26 @@ async function settleAppStartupEffects() {
 }
 
 function selectMainActivity(option: string) {
-  const activitySelect = document.querySelector('select[aria-label="Search activities"]');
-  if (!(activitySelect instanceof HTMLSelectElement)) {
-    throw new Error("Activity select was not rendered");
+  const activityInput = screen.getByLabelText(/search activities/i);
+  if (!(activityInput instanceof HTMLInputElement)) {
+    throw new Error("Activity combobox input was not rendered");
   }
-  fireEvent.change(activitySelect, { target: { value: option } });
+  fireEvent.focus(activityInput);
+  fireEvent.change(activityInput, { target: { value: option } });
+  fireEvent.keyDown(activityInput, { key: "Enter", code: "Enter" });
+}
+
+async function waitForConnectedAccountAutoAdvance() {
+  await screen.findByRole("dialog", { name: /connect your account/i }, { timeout: 6_000 });
+  expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
+  await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 });
 }
 
 async function advanceThroughSharedBasics(options: { activity?: string } = {}) {
   await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 6_000 });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /connect your account/i }, { timeout: 6_000 });
-  await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 });
+  await waitForConnectedAccountAutoAdvance();
   if (options.activity) selectMainActivity(options.activity);
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
@@ -331,17 +338,10 @@ async function chooseCustomEndpointSetup(options: { activity?: string } = {}) {
   await clickEnabledAction(/^continue$/i);
 }
 
-async function connectAccount() {
-  await screen.findByRole("dialog", { name: /connect your account/i });
-  await clickEnabledNext();
-}
-
 async function advanceToPermissionsStep() {
   await screen.findByRole("dialog", { name: /welcome to drifty/i });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /connect your account/i });
-  await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /what do you usually do/i });
+  await waitForConnectedAccountAutoAdvance();
   await clickEnabledAction(/^continue$/i);
 }
 
@@ -403,7 +403,8 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /^next$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^continue$/i })).toBeTruthy();
+    expect(document.querySelector(".onb-actions__dots")).toBeNull();
     expect(screen.queryByPlaceholderText("Alex Chen")).toBeNull();
   });
 
@@ -417,29 +418,26 @@ describe("App onboarding", () => {
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
-    await clickEnabledNext();
+    expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
 
     expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /what do you usually work on\?/i })).toBeTruthy();
-    expect(screen.getByLabelText(/search activities/i, { selector: "select" })).toBeTruthy();
+    expect(screen.getByLabelText(/search activities/i, { selector: "input" })).toBeTruthy();
     const onboardingDragStrip = document.querySelector(".onboarding-window-drag-strip");
-    const onboardingTopbar = document.querySelector(".onboarding-topbar");
     for (const selector of [
       ".onboarding-window-drag-strip",
-      ".onboarding-copy-column",
-      ".onboarding-topbar",
+      ".dc-onb-card",
+      ".dc-onb-scroll",
       ".onb-actions__dots",
-      ".onboarding-middle",
-      ".onboarding-viewport",
       ".onboarding-step",
       ".onb-actions",
-      ".onb-title--job",
-      ".onb-activity-picker",
+      ".dc-onb-title",
+      ".dc-onb-job",
     ]) {
       expect(document.querySelector(selector)).toBeTruthy();
     }
     expect(onboardingDragStrip?.hasAttribute("data-tauri-drag-region")).toBe(true);
-    expect(onboardingTopbar?.hasAttribute("data-tauri-drag-region")).toBe(true);
+    expect(document.querySelector(".onboarding-topbar")).toBeNull();
     expect(document.querySelector(".onboarding-flow-mark")).toBeNull();
 
     await clickEnabledAction(/^continue$/i);
@@ -454,7 +452,7 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
     const continueButton = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
-    expect(continueButton.disabled).toBe(true);
+    expect(continueButton.disabled).toBe(false);
     expect(screen.getByRole("button", { name: /drifty cloud/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /local ai/i })).toBeTruthy();
     // Advanced providers (BYOK / custom endpoint) live behind a disclosure.
@@ -478,7 +476,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /drifty cloud/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /byok \(bring your own key\)/i })).toBeNull();
@@ -524,12 +522,12 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /drifty cloud/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
   });
 
-  it("opens the in-app auth modal from onboarding email continuation", async () => {
+  it("opens website sign-in from onboarding email continuation", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.isEnabled = true;
@@ -540,25 +538,21 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
 
     fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
 
-    expect(await screen.findByRole("dialog", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+    });
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
     expect(authState.signInWithEmail).not.toHaveBeenCalled();
     expect(authState.signUpWithEmail).not.toHaveBeenCalled();
-    // Auth-optional: onboarding stays mounted beneath the auth modal so progress survives.
+    expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-
-    // Cancelling sign-in returns to the same account step — not the start of onboarding.
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
-    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect(screen.queryByRole("dialog", { name: /welcome to drifty/i })).toBeNull();
   });
 
-  it("returns to required account onboarding when email sign-in is cancelled", async () => {
+  it("opens website sign-in from required account onboarding without exposing the app shell", async () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.authMode = "required";
@@ -573,12 +567,12 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
 
     fireEvent.click(await screen.findByRole("button", { name: /continue with email/i }));
-    expect(await screen.findByRole("dialog", { name: /sign in to drifty/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
-    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
-    await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    await waitFor(() => {
+      expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
+    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
   });
 
@@ -609,7 +603,6 @@ describe("App onboarding", () => {
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
-    await clickEnabledNext();
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
@@ -627,7 +620,6 @@ describe("App onboarding", () => {
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
-    await clickEnabledNext();
 
     expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
   });
@@ -726,8 +718,8 @@ describe("App onboarding", () => {
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
 
     expect(within(readyDialog).getByText(/drifty cloud selected/i)).toBeTruthy();
-    expect(within(readyDialog).getByText(/1-week free trial started/i)).toBeTruthy();
-    expect(within(readyDialog).getByText(/available until jun 20/i)).toBeTruthy();
+    expect(within(readyDialog).getByText(/7-day free trial started/i)).toBeTruthy();
+    expect(within(readyDialog).getByText(/your drifty cloud trial is ready/i)).toBeTruthy();
 
     fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
 
@@ -742,9 +734,7 @@ describe("App onboarding", () => {
 
     await screen.findByRole("dialog", { name: /welcome to drifty/i });
     await clickEnabledNext();
-    await screen.findByRole("dialog", { name: /connect your account/i });
-    await clickEnabledNext();
-    await screen.findByRole("dialog", { name: /what do you usually do/i });
+    await waitForConnectedAccountAutoAdvance();
     await clickEnabledAction(/^continue$/i);
     await screen.findByRole("dialog", { name: /set up permissions/i });
     await clickEnabledNext();
@@ -1037,8 +1027,8 @@ describe("App onboarding", () => {
     expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
 
-    expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
-    expect(screen.getByText(/activity goes to the selected local model managed by drifty, not to drifty cloud/i)).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
+    expect(screen.getByText(/activity goes to the selected local model on this mac, not to drifty cloud/i)).toBeTruthy();
 
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
@@ -1094,7 +1084,7 @@ describe("App onboarding", () => {
     }, { timeout: 6000 });
     await clickEnabledAction(/^continue$/i);
 
-    expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/masked openrouter key/i).textContent).toContain("1234");
     expect(screen.queryByText(/validkey1234/i)).toBeNull();
   }, 15_000);
@@ -1116,7 +1106,7 @@ describe("App onboarding", () => {
     }, { timeout: 6000 });
     await clickEnabledAction(/^continue$/i);
 
-    expect(await screen.findByRole("dialog", { name: /review how your data is handled/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/minimized classification context goes to your custom endpoint/i)).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
@@ -1147,7 +1137,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();
-    expect(screen.getByText(/tracking readiness verified/i)).toBeTruthy();
+    expect(screen.getByText(/tracking ready/i)).toBeTruthy();
   });
 
   it("does not show onboarding when local completion state already exists", async () => {
@@ -1206,6 +1196,9 @@ describe("App onboarding", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^Open onboarding$/i }));
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    expect(document.querySelector(".app-shell")).toBeNull();
+    expect(document.querySelector(".onboarding-topbar")).toBeNull();
+    expect(screen.queryByText("Force browser history URL fallback")).toBeNull();
     expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
   });
 
@@ -1300,7 +1293,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
   });
 });

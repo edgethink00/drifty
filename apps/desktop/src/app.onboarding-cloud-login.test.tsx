@@ -175,7 +175,7 @@ function makeTrackerStatus(overrides: Partial<TrackerStatus> = {}): TrackerStatu
   };
 }
 
-async function clickEnabledAction(name: RegExp = /^next$/i) {
+async function clickEnabledAction(name: RegExp = /^continue$/i) {
   const button = (await screen.findByRole("button", { name })) as HTMLButtonElement;
   await waitFor(() => {
     expect(button.disabled).toBe(false);
@@ -194,7 +194,7 @@ async function clickButton(name: RegExp) {
 
 async function advanceToAccountStep() {
   await screen.findByRole("dialog", { name: /welcome to drifty/i });
-  await clickEnabledAction(/^next$/i);
+  await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /connect your account/i });
 }
 

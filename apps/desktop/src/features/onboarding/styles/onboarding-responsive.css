@@ -7,26 +7,30 @@
   .onboarding-screen .onboarding-card .onb-perms__row { flex-direction: column; align-items: flex-start; }
   .onboarding-screen .onboarding-card .onb-perms__control { width: 100%; justify-content: space-between; }
   .onboarding-screen .onboarding-flow-mark { gap: var(--onb-space-5); }
-  .onboarding-screen .onboarding-logo { font-size: 13px; }
-  .onboarding-screen .onboarding-logo--image { width: 68px; }
   .onboarding-screen .onboarding-content-area { padding: 18px var(--onb-space-3) var(--onb-space-4); }
-  .onboarding-screen .onboarding-card { width: min(100%, var(--onb-content-width)); }
+  .onboarding-screen .onboarding-card {
+    width: min(100%, var(--onb-content-width));
+    min-height: 0;
+    max-height: calc(100vh - 34px);
+    padding: 24px 22px;
+  }
   .onboarding-screen .onboarding-card .onboarding-title { font-size: 24px; }
-  .onboarding-screen .onboarding-card .onb-typewriter .tw-title { font-size: 36px; }
+  .onboarding-screen .onboarding-card .onb-welcome .tw-title { font-size: 30px; }
+  .onboarding-screen .onboarding-card .onb-welcome .tw-message { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding-screen .onboarding-progress-bar__fill,
   .onboarding-screen .onboarding-step,
   .onboarding-screen .onb-focus-bar__fill,
-  .onboarding-screen .onb-typewriter .tw-line,
+  .onboarding-screen .onb-welcome .tw-line,
   .onboarding-screen .onb-button--loading::before,
   .onboarding-screen .onb-checklist__row--loading .onb-checklist__icon {
     transition: none;
     animation: none;
   }
 
-  .onboarding-screen .onb-typewriter .tw-line {
+  .onboarding-screen .onb-welcome .tw-line {
     opacity: 1;
     transform: none;
   }

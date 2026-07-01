@@ -3,8 +3,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthog";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
-import wordmarkUrl from "../../assets/drifty-wordmark.png";
-import { OnboardingStepContent } from "./OnboardingStepContent";
+import { OnboardingDesignCodeContent } from "./OnboardingDesignCodeContent";
 import { useOnboardingFlow } from "./useOnboardingFlow";
 import type { OnboardingStep } from "./onboardingFlow";
 import "./onboarding.css";
@@ -81,86 +80,31 @@ export function OnboardingModal({
     devInitialStep: __devInitialStep,
   });
 
+  useEffect(() => {
+    if (flow.step !== "account" || !flow.accountConnected) return;
+    const timeoutId = window.setTimeout(() => {
+      const nextStep = flow.steps[flow.stepIndex + 1]?.id;
+      if (nextStep) flow.setStep(nextStep);
+    }, 850);
+    return () => window.clearTimeout(timeoutId);
+  }, [flow.accountConnected, flow.step, flow.stepIndex, flow.steps, flow.setStep]);
+
   return (
     <section
       ref={flow.screenRef}
-      className="onboarding-screen"
+      className="onboarding-screen dc-onboarding-screen"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
       <div className="onboarding-window-drag-strip" data-tauri-drag-region aria-hidden="true" />
-      <div className="onboarding-topbar" data-tauri-drag-region>
-        <img className="onboarding-logo onboarding-logo--image" src={wordmarkUrl} alt="drifty" data-tauri-drag-region />
-      </div>
 
       <div className="onboarding-content-area">
-        <form className="onboarding-card" onSubmit={flow.handleSubmit}>
-          <div className="onboarding-copy-column">
-            <div className={`onboarding-middle onboarding-middle--${flow.step}`}>
-              <h1
-                className={`onboarding-title${flow.titleIsVisible ? "" : " onb-visually-hidden"}${flow.step === "job" ? " onb-title--job" : ""}`}
-                id="onboarding-title"
-                ref={flow.titleRef}
-                tabIndex={-1}
-              >
-                {flow.title}
-              </h1>
-              {flow.subtitle ? <p className="onb-step-desc onboarding-subtitle">{flow.subtitle}</p> : null}
-
-              <div className={`onboarding-body onboarding-body--${flow.step}`}>
-                <div className="onboarding-viewport">
-                  <div className="onboarding-step" key={flow.step} ref={flow.stepBodyRef}>
-                    <OnboardingStepContent
-                      flow={flow}
-                      onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
-                      onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
-                    />
-
-                    {flow.storageError ? (
-                      <p className="onb-error" role="alert">
-                        {flow.storageError}
-                      </p>
-                    ) : null}
-                    {flow.setupError ? (
-                      <p className="onb-error" role="alert">
-                        {flow.setupError}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="onb-actions">
-              {flow.stepIndex > 0 ? (
-                <button type="button" className="onb-actions__back" onClick={flow.goToPreviousStep}>
-                  Back
-                </button>
-              ) : (
-                <span className="onb-actions__spacer" />
-              )}
-              {flow.step !== "account" ? (
-                <div className="onb-actions__dots" aria-hidden="true">
-                  {flow.steps.map((stepDef, index) => (
-                    <span
-                      key={stepDef.id}
-                      className={`onb-actions__dot${index === flow.stepIndex ? " onb-actions__dot--active" : ""}`}
-                    />
-                  ))}
-                </div>
-              ) : null}
-              {flow.blockedHint ? (
-                <p className="onb-hint" role="status">
-                  {flow.blockedHint}
-                </p>
-              ) : null}
-              <button type="submit" className="onb-button onb-button--primary" disabled={!flow.canAdvance}>
-                {flow.footerLabel}
-              </button>
-            </div>
-          </div>
-        </form>
+        <OnboardingDesignCodeContent
+          flow={flow}
+          onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
+          onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+        />
       </div>
     </section>
   );

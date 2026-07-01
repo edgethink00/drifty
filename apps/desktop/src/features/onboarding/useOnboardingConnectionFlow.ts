@@ -24,7 +24,7 @@ export function useOnboardingConnectionFlow({
   onLocalAiSetupChange,
   step,
 }: UseOnboardingConnectionFlowOptions) {
-  const [setupChoice, setSetupChoice] = useState<SetupChoice | null>(null);
+  const [setupChoice, setSetupChoice] = useState<SetupChoice | null>("simple");
   const [apiKey, setApiKey] = useState("");
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
   const [customEndpointDraft, setCustomEndpointDraft] = useState<CustomEndpointDraft>(CUSTOM_ENDPOINT_DEFAULT_DRAFT);

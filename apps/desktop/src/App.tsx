@@ -994,6 +994,7 @@ export default function App() {
     user,
     status: authStatus,
     cloudConnectionStatus: reportedCloudConnectionStatus,
+    signInWithWebsite,
     signInWithGoogle,
     signInAnonymously,
     signOut,
@@ -4852,11 +4853,41 @@ export default function App() {
   const displayedHistoryLoadMoreError = isHistorySearchActive ? historySearchError : historyLoadMoreError;
   const displayedHistoryLoadMore = isHistorySearchActive ? loadMoreHistorySearchSegments : loadMoreHistorySegments;
   const historyInitialLoading = isHistorySearchActive && historySearchLoading && historySearchSegments.length === 0;
+  const onboardingModal = onboardingOpen ? (
+    <OnboardingModal
+      userId={user?.id ?? "local"}
+      accountConnected={hasRequiredAccountAuth}
+      initialDisplayName={profileDraft.displayName}
+      trackerStatus={status}
+      accessibilityGranted={accessibilityGranted}
+      onRefreshTracker={() => refresh().then(() => undefined)}
+      onStartTracking={handleStartTrackingFromOnboarding}
+      onCheckAccessibility={handleCheckAccessibility}
+      onRequestAccessibility={handleRequestAccessibility}
+      onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
+      onLocalAiSetupChange={setLocalAiSetup}
+      cloudTrialStartedNotice={cloudTrialStartedNotice}
+      onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
+      onStartCloudTrialWithEmail={() => void signInWithWebsite()}
+      onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
+      onComplete={handleOnboardingComplete}
+    />
+  ) : null;
   const shellClassName = [
     "app-shell",
     isSettingsTab ? "app-shell--settings" : null,
     isSidebarVisuallyCollapsed ? "app-shell--sidebar-collapsed" : null,
   ].filter(Boolean).join(" ");
+
+  if (onboardingOpen) {
+    return (
+      <>
+        {onboardingModal}
+        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
+      </>
+    );
+  }
+
   return (
     <div className={shellClassName}>
       <div className="window-chrome">
@@ -5458,36 +5489,6 @@ export default function App() {
           onClose={() => setDebugLogPreview(null)}
           onCopy={() => void handleCopyDebugLogs()}
           onDownload={handleDownloadDebugLogs}
-        />
-      ) : null}
-
-      {onboardingOpen ? (
-        <OnboardingModal
-          userId={user?.id ?? "local"}
-          accountConnected={hasRequiredAccountAuth}
-          initialDisplayName={profileDraft.displayName}
-          trackerStatus={status}
-          accessibilityGranted={accessibilityGranted}
-          onRefreshTracker={() => refresh().then(() => undefined)}
-          onStartTracking={handleStartTrackingFromOnboarding}
-          onCheckAccessibility={handleCheckAccessibility}
-          onRequestAccessibility={handleRequestAccessibility}
-          onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
-          onLocalAiSetupChange={setLocalAiSetup}
-          cloudTrialStartedNotice={cloudTrialStartedNotice}
-          onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
-          onStartCloudTrialWithEmail={() => {
-            // When auth is optional, keep onboarding mounted and stack the auth
-            // modal above it so cancelling sign-in preserves onboarding progress.
-            // When auth is required, the onboarding is dismissed and resumed after.
-            if (isEffectiveAuthRequired) {
-              setResumeOnboardingAfterAuthModal(true);
-              setOnboardingOpen(false);
-            }
-            setAuthModalOpen(true);
-          }}
-          onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
-          onComplete={handleOnboardingComplete}
         />
       ) : null}
 

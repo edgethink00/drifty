@@ -145,7 +145,7 @@ async function openAuthModalFromAccountMenu() {
 
 async function advanceRequiredOnboardingToAccountStep() {
   expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
   return screen.findByRole("dialog", { name: /connect your account/i });
 }
 
@@ -215,7 +215,7 @@ describe("App auth modal", () => {
     render(<App />);
 
     const dialog = await advanceRequiredOnboardingToAccountStep();
-    expect(within(dialog).getByText(/your account keeps your focus/i)).toBeTruthy();
+    expect(within(dialog).getByText(/your account keeps focus and drift insights synced/i)).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: /continue with google/i })).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
@@ -233,8 +233,8 @@ describe("App auth modal", () => {
     render(<App />);
 
     const dialog = await advanceRequiredOnboardingToAccountStep();
-    expect(within(dialog).getByRole("button", { name: /continue with email/i })).toBeTruthy();
-    expect((within(dialog).getByRole("button", { name: /^next$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByRole("button", { name: /continue with email/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect(within(dialog).queryByRole("button", { name: /^continue$/i })).toBeNull();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
     expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
