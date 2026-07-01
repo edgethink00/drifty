@@ -62,9 +62,12 @@ pub fn managed_ai_catalog() -> Vec<ManagedAiCatalogModel> {
 }
 
 #[tauri::command]
-pub fn managed_ai_status(app: AppHandle) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_status(app: AppHandle) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
-    read_status(&root).map_err(error_message)
+    async_runtime::spawn_blocking(move || read_status(&root))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(error_message)
 }
 
 #[tauri::command]
@@ -81,19 +84,27 @@ pub async fn managed_ai_install(
 }
 
 #[tauri::command]
-pub fn managed_ai_start(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_start(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
-    start_model_at_root(&root, model_id.trim()).map_err(error_message)
+    let model_id = model_id.trim().to_string();
+    async_runtime::spawn_blocking(move || start_model_at_root(&root, &model_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(error_message)
 }
 
 #[tauri::command]
-pub fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
-    delete_model_at_root(&root, model_id.trim()).map_err(error_message)
+    let model_id = model_id.trim().to_string();
+    async_runtime::spawn_blocking(move || delete_model_at_root(&root, &model_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(error_message)
 }
 
-pub(crate) fn managed_ai_stop_runtime_for_app_exit() {
-    let _ = runtime::stop_runtime();
+pub(crate) fn managed_ai_stop_runtime_for_app_exit(app: &AppHandle) {
+    let _ = runtime::stop_runtime(managed_ai_root(app).ok().as_deref());
 }
 
 fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
@@ -121,7 +132,11 @@ fn install_model_at_root_with_downloader(
     )?;
     write_status(root, &installing)?;
 
+    let mut progress_gate = DownloadProgressWriteGate::default();
     let mut report_progress = |progress: ManagedAiDownloadProgress| {
+        if !progress_gate.should_write(progress.percent) {
+            return Ok(());
+        }
         let status =
             status_with_installed_models(root, status_for_download_progress(spec, progress))?;
         write_status(root, &status)
@@ -152,6 +167,25 @@ fn install_model_at_root_with_downloader(
     )?;
     write_status(root, &status)?;
     Ok(status)
+}
+
+/// Decides which download progress reports get persisted to status.json.
+/// The downloader reports every 64KB chunk (~49k times for a 3GB model), so
+/// only integer-percent changes are written; the final 100% always differs
+/// from the previous percent and is therefore always written.
+#[derive(Default)]
+struct DownloadProgressWriteGate {
+    last_written_percent: Option<u8>,
+}
+
+impl DownloadProgressWriteGate {
+    fn should_write(&mut self, percent: u8) -> bool {
+        if self.last_written_percent == Some(percent) {
+            return false;
+        }
+        self.last_written_percent = Some(percent);
+        true
+    }
 }
 
 fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
@@ -187,7 +221,7 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
 
 fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    runtime::stop_runtime_for_model(spec.id)?;
+    runtime::stop_runtime_for_model(root, spec.id)?;
     let model_path = model_dir(root, spec.id);
     if model_path.exists() {
         fs::remove_dir_all(model_path)?;

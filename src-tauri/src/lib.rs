@@ -68,15 +68,21 @@ fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn cloud_device_install_id(app: AppHandle) -> Result<String, String> {
-    cloud_device_store::load_or_create_install_id(&app)
+async fn cloud_device_install_id(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cloud_device_store::load_or_create_install_id(&app)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn cloud_device_identity(
+async fn cloud_device_identity(
     app: AppHandle,
 ) -> Result<cloud_device_store::CloudDeviceIdentity, String> {
-    cloud_device_store::load_or_create_identity(&app)
+    tauri::async_runtime::spawn_blocking(move || cloud_device_store::load_or_create_identity(&app))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 fn remember_auth_deep_links<R: Runtime>(
@@ -152,7 +158,7 @@ pub fn run() {
                         let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
                     }
                     tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
-                        managed_ai_stop_runtime_for_app_exit();
+                        managed_ai_stop_runtime_for_app_exit(app);
                         tracker::shutdown_serve_process();
                     }
                     tauri::RunEvent::WindowEvent {
