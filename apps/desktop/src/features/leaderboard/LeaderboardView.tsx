@@ -29,6 +29,8 @@ export type LeaderboardViewProps = {
   email?: string | null;
   isActionLoading?: boolean;
   actionError?: string | null;
+  statusMessage?: string | null;
+  statusTone?: "error" | "neutral";
   onOptIn?: () => void;
   onSignIn?: () => void;
   onEditProfile?: () => void;
@@ -61,6 +63,8 @@ export function LeaderboardView({
   email = null,
   isActionLoading = false,
   actionError = null,
+  statusMessage = null,
+  statusTone = "neutral",
   onOptIn,
   onSignIn,
   onEditProfile,
@@ -231,6 +235,17 @@ export function LeaderboardView({
                     <span>{item.label}</span>
                   </button>
                 ))}
+              </div>
+              <div className="leaderboard-toolbar__status-slot">
+                {statusMessage ? (
+                  <span className="leaderboard-refresh-status" data-tone={statusTone} role="status" aria-live="polite">
+                    {statusMessage}
+                  </span>
+                ) : (
+                  <span className="leaderboard-refresh-status leaderboard-refresh-status--placeholder" aria-hidden="true">
+                    Refreshing leaderboard
+                  </span>
+                )}
               </div>
               <div className="leaderboard-toolbar__stats" aria-label="Leaderboard totals">
                 <div>

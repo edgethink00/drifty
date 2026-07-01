@@ -1054,6 +1054,8 @@ export default function App() {
     leaderboardProfileGithubUrl,
     leaderboardProfileLinkedinUrl,
     leaderboardProfileWebsiteUrl,
+    leaderboardStatusMessage,
+    leaderboardStatusTone,
     leaderboardSegments,
     leaderboardUsesPreviewProfile,
     leaderboardWindowEndDay,
@@ -5222,6 +5224,8 @@ export default function App() {
             profileLinkedinUrl={leaderboardProfileLinkedinUrl}
             profileMessage={profileMessage}
             profileShareMessage={profileShareMessage}
+            statusMessage={leaderboardStatusMessage}
+            statusTone={leaderboardStatusTone}
             profileWebsiteUrl={leaderboardProfileWebsiteUrl}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
             windowEndDay={leaderboardWindowEndDay}

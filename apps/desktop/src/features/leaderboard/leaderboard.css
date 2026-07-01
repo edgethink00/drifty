@@ -349,7 +349,7 @@
 .leaderboard-toolbar {
   display: grid;
   align-items: center;
-  grid-template-columns: auto minmax(16rem, 0.95fr) minmax(15rem, 0.58fr);
+  grid-template-columns: auto minmax(11rem, 0.34fr) minmax(16rem, 0.95fr) minmax(15rem, 0.58fr);
   gap: var(--space-2);
   padding: 0.42rem;
   border-radius: 18px;
@@ -361,6 +361,57 @@
   justify-self: start;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-2) 76%, transparent);
+}
+
+.leaderboard-toolbar__status-slot {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.leaderboard-refresh-status {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  gap: 0.34rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-height: 1.42rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 0.54rem;
+  pointer-events: none;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-refresh-status::before {
+  background: var(--accent);
+  border-radius: 999px;
+  content: "";
+  display: block;
+  height: 0.38rem;
+  width: 0.38rem;
+}
+
+.leaderboard-refresh-status[data-tone="error"] {
+  background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));
+  border-color: var(--danger-line);
+  color: var(--warn);
+}
+
+.leaderboard-refresh-status[data-tone="error"]::before {
+  background: var(--warn);
+}
+
+.leaderboard-refresh-status--placeholder {
+  visibility: hidden;
 }
 
 .leaderboard-period-control button {
@@ -710,7 +761,7 @@
 }
 
 .leaderboard-toolbar {
-  grid-template-columns: 220px 1fr 226px;
+  grid-template-columns: 220px minmax(11rem, 0.35fr) 1fr 226px;
   gap: var(--space-2);
   padding: var(--space-2) 0;
 }
@@ -1014,7 +1065,7 @@
 }
 
 .leaderboard-toolbar {
-  grid-template-columns: minmax(13rem, auto) minmax(0, 1fr) minmax(14rem, 0.45fr);
+  grid-template-columns: minmax(13rem, auto) minmax(11rem, 12.5rem) minmax(0, 1fr) minmax(14rem, 18rem);
   gap: var(--space-2);
   padding: var(--space-2) 0 0;
   border: 0;

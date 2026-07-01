@@ -769,6 +769,8 @@ describe("App leaderboard participation", () => {
     expect(profileButtonDuringRefresh).toBeTruthy();
     expect(profileNameDuringRefresh).toBeTruthy();
     expect(compactRefreshStatus).toBeTruthy();
+    expect(compactRefreshStatus?.classList.contains("leaderboard-refresh-status")).toBe(true);
+    expect(compactRefreshStatus?.closest(".capture-recency--error")).toBeNull();
   });
 
   it("clears joined controls after opt-out even when the follow-up refresh fails", async () => {

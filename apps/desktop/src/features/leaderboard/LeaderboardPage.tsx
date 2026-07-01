@@ -23,6 +23,8 @@ export type LeaderboardPageProps = {
   profileMessage?: string | null;
   profileShareMessage?: string | null;
   profileWebsiteUrl?: string | null;
+  statusMessage?: string | null;
+  statusTone?: "error" | "neutral";
   totalFocusSeconds7d: number;
   windowEndDay: string;
   windowStartDay: string;
@@ -58,6 +60,8 @@ export function LeaderboardPage({
   profileMessage,
   profileShareMessage,
   profileWebsiteUrl,
+  statusMessage,
+  statusTone,
   totalFocusSeconds7d,
   windowEndDay,
   windowStartDay,
@@ -101,6 +105,8 @@ export function LeaderboardPage({
           email={email}
           isActionLoading={isActionLoading}
           actionError={actionError}
+          statusMessage={statusMessage}
+          statusTone={statusTone}
           onOptIn={onOptIn}
           onSignIn={onSignIn}
           onEditProfile={onEditProfile}
