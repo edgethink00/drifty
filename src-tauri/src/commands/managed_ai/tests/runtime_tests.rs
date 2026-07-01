@@ -129,7 +129,10 @@ fn wait_for_exit(child: &mut Child) -> bool {
 #[test]
 fn read_status_downgrades_stale_running_without_runtime_process() {
     let root = tempfile::tempdir().expect("create temp root");
-    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    // Distinct model id: with the same id as start_spawns_runtime_for_downloaded_model
+    // this test can observe that test's live child in the process-global
+    // RUNTIME_CHILD and read Starting instead of Error.
+    let spec = require_model("drifty-qwen3-5-2b-economy").expect("model spec");
     let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
     let stale_status = status_for_spec(
         ManagedAiInstallState::Running,
