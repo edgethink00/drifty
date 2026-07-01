@@ -6,6 +6,9 @@ import type { SetupChoice } from "./onboardingFlow";
 import type { OnboardingFlow } from "./useOnboardingFlow";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
+const ACTIVITY_DROPDOWN_LIMIT = 6;
+const DOMAIN_DROPDOWN_LIMIT = 3;
+const DOMAIN_DROPDOWN_LIMIT_WITH_CUSTOM = 2;
 const TRIAL_DAYS = 7;
 
 type OnboardingDesignCodeContentProps = {
@@ -62,6 +65,7 @@ export function OnboardingDesignCodeContent({
   const showDots = flow.step !== "welcome" && flow.step !== "account";
   const showBack = flow.stepIndex > 0;
   const footerLabel = footerLabelForDesignCodeStep(flow);
+  const framedStepClass = flow.step === "permissions" || flow.step === "nudges" ? " dc-onb-card--framed-step" : "";
   const selectedActivities = flow.mainActivities;
   const activityOptions = useMemo(() => {
     const query = activityQuery.trim().toLowerCase();
@@ -161,7 +165,7 @@ export function OnboardingDesignCodeContent({
 
   return (
     <>
-      <form className="onboarding-card dc-onb-card" onSubmit={flow.handleSubmit}>
+      <form className={`onboarding-card dc-onb-card${framedStepClass}`} onSubmit={flow.handleSubmit}>
         <div className="dc-onb-scroll">
           <div className={`dc-onb-content${flow.step === "account" ? " dc-onb-content--account" : ""}`}>
             {showTitle ? (
@@ -401,6 +405,14 @@ function JobStep({
 }) {
   const activityQueryTrimmed = activityQuery.trim();
   const domainQueryTrimmed = domainQuery.trim();
+  const visibleActivityOptions = activityOptions.slice(
+    0,
+    showActivityCustom ? ACTIVITY_DROPDOWN_LIMIT - 1 : ACTIVITY_DROPDOWN_LIMIT,
+  );
+  const visibleDomainOptions = domainOptions.slice(
+    0,
+    showDomainCustom ? DOMAIN_DROPDOWN_LIMIT_WITH_CUSTOM : DOMAIN_DROPDOWN_LIMIT,
+  );
   const activityPlaceholder = selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS
     ? "Maximum 5 selected"
     : selectedActivities.length > 0
@@ -444,7 +456,7 @@ function JobStep({
             />
             {activityOpen ? (
               <DropdownList>
-                {activityOptions.map((option) => (
+                {visibleActivityOptions.map((option) => (
                   <DropdownOption key={option} onClick={() => onAddActivity(option)}>
                     {option}
                   </DropdownOption>
@@ -478,7 +490,7 @@ function JobStep({
           />
           {domainOpen ? (
             <DropdownList>
-              {domainOptions.map((option) => (
+              {visibleDomainOptions.map((option) => (
                 <DropdownOption key={option} onClick={() => onSelectDomain(option)}>
                   {option}
                 </DropdownOption>
