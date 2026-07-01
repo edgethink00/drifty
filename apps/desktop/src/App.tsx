@@ -4326,11 +4326,14 @@ export default function App() {
     if (ids.length === 0 || historyDeleting) return;
 
     setHistoryDeleting(true);
+    setError(null);
     try {
       await trackerClient.deleteActivitySegments(ids);
       const deletedIds = new Set(ids);
       setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
       await refresh(selectedDayRef.current);
+    } catch (e) {
+      setError(toErrorMessage(e));
     } finally {
       setHistoryDeleting(false);
     }
