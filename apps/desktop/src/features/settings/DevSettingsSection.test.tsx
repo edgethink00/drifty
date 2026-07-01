@@ -43,6 +43,7 @@ function renderProductionDevSettings() {
     forceChromiumAxCaptureEnabled: false,
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
+    logoAnimationPreviewEnabled: false,
     watcherMode: "periodic" as const,
     watcherPeekEnabled: false,
     watcherPeriodicMaxMinutes: 20,
@@ -56,6 +57,7 @@ function renderProductionDevSettings() {
     onForceChromiumAxCaptureChange: vi.fn(),
     onForceChromiumAxExtremeNudgeChange: vi.fn(),
     onForceFrontmostFallbackCaptureChange: vi.fn(),
+    onLogoAnimationPreviewChange: vi.fn(),
     onOpenDebugLogs: vi.fn(),
     onOpenOnboardingV22Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
@@ -112,6 +114,7 @@ describe("DevSettingsSection", () => {
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
+      logoAnimationPreviewEnabled: false,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
       watcherPeriodicMaxMinutes: 20,
@@ -123,9 +126,10 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxCaptureChange: vi.fn(),
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
+      onLogoAnimationPreviewChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
-    onOpenReplayOnboarding: vi.fn(),
+      onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onShowWatcherPeek: vi.fn(),
@@ -141,6 +145,14 @@ describe("DevSettingsSection", () => {
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
   });
 
+  it("calls the logo animation preview handler when toggled", () => {
+    const props = renderProductionDevSettings();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle logo animation preview" }));
+
+    expect(props.onLogoAnimationPreviewChange).toHaveBeenCalledWith(true);
+  });
+
   it("does not expose the isolated onboarding v2.1 preview", () => {
     const props = {
       dashboardAiUnavailablePreview: null,
@@ -150,6 +162,7 @@ describe("DevSettingsSection", () => {
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
+      logoAnimationPreviewEnabled: false,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
       watcherPeriodicMaxMinutes: 20,
@@ -161,9 +174,10 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxCaptureChange: vi.fn(),
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
+      onLogoAnimationPreviewChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
-    onOpenReplayOnboarding: vi.fn(),
+      onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onShowWatcherPeek: vi.fn(),

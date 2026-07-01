@@ -287,6 +287,8 @@ const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
+const LAST_CAPTURE_JUST_NOW_MS = 10_000;
+const DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS = 1400;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT = 20;
@@ -320,6 +322,12 @@ function compactHistoryRangeKey(range: CompactHistoryRange): string {
 
 function isFreshCompactHistoryLoad(load: CompactHistoryLoad): boolean {
   return Date.now() - load.loadedAtMs <= COMPACT_HISTORY_CACHE_TTL_MS;
+}
+
+function isLastCaptureJustNow(value: string, nowMs = Date.now()): boolean {
+  const capturedAtMs = new Date(value).getTime();
+  if (Number.isNaN(capturedAtMs)) return false;
+  return Math.max(0, nowMs - capturedAtMs) < LAST_CAPTURE_JUST_NOW_MS;
 }
 
 function compactHistoryRangeContains(outer: CompactHistoryRange, inner: CompactHistoryRange): boolean {
@@ -617,6 +625,10 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(resolveInitialSidebarCollapsed);
   const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
+  const hasTrackerStatus = status !== null;
+  const [brandCaptureMotionKey, setBrandCaptureMotionKey] = useState(0);
+  const brandCaptureEventAtRef = useRef<string | null>(null);
+  const hasObservedBrandCaptureRef = useRef(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
@@ -671,6 +683,7 @@ export default function App() {
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const [devLogoAnimationPreviewEnabled, setDevLogoAnimationPreviewEnabled] = useState(false);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
   const [forceBrowserHistoryUrlFallbackEnabled, setForceBrowserHistoryUrlFallbackEnabled] = useState(resolveInitialForceBrowserHistoryUrlFallbackEnabled);
@@ -2481,6 +2494,27 @@ export default function App() {
   }, [hasLoadedOnce, segments.length, selectedDay, status?.lastEventAt]);
 
   useEffect(() => {
+    if (status === null) return;
+
+    const lastEventAt = status?.lastEventAt ?? null;
+    const previousLastEventAt = brandCaptureEventAtRef.current;
+
+    if (!hasObservedBrandCaptureRef.current) {
+      hasObservedBrandCaptureRef.current = true;
+      brandCaptureEventAtRef.current = lastEventAt;
+      return;
+    }
+
+    brandCaptureEventAtRef.current = lastEventAt;
+
+    if (status?.running !== true) return;
+    if (lastEventAt === null || lastEventAt === previousLastEventAt) return;
+    if (!isLastCaptureJustNow(lastEventAt)) return;
+
+    setBrandCaptureMotionKey((currentKey) => currentKey + 1);
+  }, [hasTrackerStatus, status?.lastEventAt, status?.running]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -2521,11 +2555,23 @@ export default function App() {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
     if (settingsSection === "dev") setSettingsSection("general");
+    if (devLogoAnimationPreviewEnabled) setDevLogoAnimationPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection]);
+  }, [devLogoAnimationPreviewEnabled, devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection]);
+
+  useEffect(() => {
+    if (!isDevModeActive || !devLogoAnimationPreviewEnabled) return undefined;
+
+    setBrandCaptureMotionKey((currentKey) => currentKey + 1);
+    const intervalId = window.setInterval(() => {
+      setBrandCaptureMotionKey((currentKey) => currentKey + 1);
+    }, DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [devLogoAnimationPreviewEnabled, isDevModeActive]);
 
   useEffect(() => {
     const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
@@ -4969,8 +5015,13 @@ export default function App() {
         />
       ) : (
         <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
-        <div className="brand" aria-label="Drifty">
-          <img className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
+        <div
+          className="brand"
+          aria-label="Drifty"
+          data-capture-motion-key={brandCaptureMotionKey}
+          data-capture-motion={brandCaptureMotionKey > 0 ? "capture-flip" : undefined}
+        >
+          <img key={brandCaptureMotionKey} className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
         </div>
 
         <div className="nav-label">Dashboard</div>
@@ -5437,6 +5488,7 @@ export default function App() {
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
+                    logoAnimationPreviewEnabled={devLogoAnimationPreviewEnabled}
                     watcherMode={watcherMode}
                     watcherPeekEnabled={watcherPeekEnabled}
                     watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
@@ -5450,6 +5502,7 @@ export default function App() {
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
+                    onLogoAnimationPreviewChange={setDevLogoAnimationPreviewEnabled}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
                     onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
