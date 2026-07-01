@@ -17,6 +17,11 @@ type CompactProductivityCircleChartProps = {
   readonly appIcons: AppIconMap;
 };
 
+function formatProductivityLegendHours(totalSeconds: number): string {
+  const hours = Math.max(0, Math.floor((totalSeconds / 3600) * 10) / 10);
+  return `${hours.toFixed(1)}h`;
+}
+
 export function CompactProductivityCircleChart({
   entries,
   totalSeconds,
@@ -77,7 +82,7 @@ export function CompactProductivityCircleChart({
             <span className="flow-compact-split-chart__legend-item" key={entry.productivity}>
               <span className="flow-compact-split-chart__swatch" style={{ background: PRODUCTIVITY_COLORS[entry.productivity] }} />
               <span className="flow-compact-split-chart__legend-label">{productivityLabel(entry.productivity)}</span>
-              <span className="flow-compact-split-chart__legend-value">{formatCompactDurationFromSeconds(entry.totalSeconds)}</span>
+              <span className="flow-compact-split-chart__legend-value">{formatProductivityLegendHours(entry.totalSeconds)}</span>
             </span>
           ))}
         </div>
