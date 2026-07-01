@@ -104,7 +104,7 @@ def match_browser_history_title(
 
     if not matches:
         return BrowserHistoryMatchResult(candidate=None, reason="generic_title" if saw_generic else "no_match")
-    nearest_candidate = _nearest_history_candidate(matches, observed_at)
+    nearest_candidate = _nearest_history_candidate(_most_specific_title_matches(matches), observed_at)
     if nearest_candidate is None:
         return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
     return BrowserHistoryMatchResult(candidate=nearest_candidate, reason="matched")
@@ -273,6 +273,11 @@ def _query_candidates(
                     )
                 )
     return candidates
+
+
+def _most_specific_title_matches(matches: list[BrowserHistoryCandidate]) -> list[BrowserHistoryCandidate]:
+    best_length = max(len(_normalize_title(candidate.title)) for candidate in matches)
+    return [candidate for candidate in matches if len(_normalize_title(candidate.title)) == best_length]
 
 
 def _nearest_history_candidate(candidates: list[BrowserHistoryCandidate], observed_at: str | None) -> BrowserHistoryCandidate | None:

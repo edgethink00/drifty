@@ -93,6 +93,30 @@ class BrowserHistoryTitleMatchingTests(unittest.TestCase):
         self.assertEqual(result.candidate, candidates[1])
         self.assertEqual(result.reason, "matched")
 
+    def test_prefers_most_specific_title_over_recency(self) -> None:
+        observed_at = "2026-06-28T17:06:30+00:00"
+        candidates = [
+            BrowserHistoryCandidate(
+                url="https://project.example.test/",
+                title="Project",
+                visited_at=chromium_timestamp("2026-06-28T17:06:20+00:00"),
+                browser_name="Google Chrome",
+                profile_name="Default",
+            ),
+            BrowserHistoryCandidate(
+                url="https://overview.example.test/project",
+                title="Project - Overview",
+                visited_at=chromium_timestamp("2026-06-28T17:04:30+00:00"),
+                browser_name="Google Chrome",
+                profile_name="Default",
+            ),
+        ]
+
+        result = match_browser_history_title("Project - Overview - Google Chrome", candidates, observed_at)
+
+        self.assertEqual(result.candidate, candidates[1])
+        self.assertEqual(result.reason, "matched")
+
     def test_matcher_rejects_nearest_specific_title_outside_time_window(self) -> None:
         observed_at = "2026-06-28T17:06:30+00:00"
         candidates = [
