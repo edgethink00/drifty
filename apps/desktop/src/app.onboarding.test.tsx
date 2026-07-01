@@ -285,6 +285,16 @@ function selectMainActivity(option: string) {
   fireEvent.keyDown(activityInput, { key: "Enter", code: "Enter" });
 }
 
+function selectWorkDomain(option: string) {
+  const domainInput = screen.getByLabelText(/your field/i);
+  if (!(domainInput instanceof HTMLInputElement)) {
+    throw new Error("Domain combobox input was not rendered");
+  }
+  fireEvent.focus(domainInput);
+  fireEvent.change(domainInput, { target: { value: option } });
+  fireEvent.keyDown(domainInput, { key: "Enter", code: "Enter" });
+}
+
 async function waitForConnectedAccountAutoAdvance() {
   await screen.findByRole("dialog", { name: /connect your account/i }, { timeout: 6_000 });
   expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
@@ -412,8 +422,10 @@ describe("App onboarding", () => {
     render(<App />);
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
-    expect(await screen.findByText(/hey, i'm drifty\./i, undefined, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByText(/welcome to drifty\./i, undefined, { timeout: 6_000 })).toBeTruthy();
     expect(await screen.findByText(/your ai time tracker/i, undefined, { timeout: 6_000 })).toBeTruthy();
+    expect(document.querySelector(".dc-onb-welcome__icon")).toBeTruthy();
+    expect(screen.queryByText(/about a minute/i)).toBeNull();
 
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
@@ -440,6 +452,8 @@ describe("App onboarding", () => {
     expect(document.querySelector(".onboarding-topbar")).toBeNull();
     expect(document.querySelector(".onboarding-flow-mark")).toBeNull();
 
+    selectMainActivity("Writing");
+    selectWorkDomain("Tech");
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     expect(screen.queryByText("Screen Recording")).toBeNull();

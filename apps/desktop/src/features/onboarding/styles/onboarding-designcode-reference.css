@@ -116,6 +116,10 @@
   margin: auto;
 }
 
+.dc-onb-content--welcome {
+  margin: auto;
+}
+
 .dc-onb-title {
   margin: 0 0 6px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
@@ -142,8 +146,18 @@
 .dc-onb-welcome {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 16px;
-  padding-top: 18px;
+  padding-top: 6px;
+  text-align: center;
+}
+
+.dc-onb-welcome__icon {
+  width: 30px;
+  height: 30px;
+  display: block;
+  margin-bottom: 6px;
+  animation: dcOnbRise 0.55s both;
 }
 
 .dc-onb-welcome__headline {
@@ -758,6 +772,8 @@
   color: var(--dc-onb-soft);
   font-size: 13px;
   line-height: 1.45;
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .dc-onb-setup-card__check {

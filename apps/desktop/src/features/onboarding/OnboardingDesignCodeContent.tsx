@@ -1,14 +1,23 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type { ManagedLocalAiModel } from "../settings/managedLocalAiClient";
+import driftyIconUrl from "../../assets/drifty-icon.png";
 import { GoogleMark } from "./components/GoogleMark";
 import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
 import type { SetupChoice } from "./onboardingFlow";
 import type { OnboardingFlow } from "./useOnboardingFlow";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
-const ACTIVITY_DROPDOWN_LIMIT = 6;
-const DOMAIN_DROPDOWN_LIMIT = 3;
-const DOMAIN_DROPDOWN_LIMIT_WITH_CUSTOM = 2;
 const TRIAL_DAYS = 7;
 
 type OnboardingDesignCodeContentProps = {
@@ -45,6 +54,10 @@ export function OnboardingDesignCodeContent({
   const [domainOpen, setDomainOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmExtremeOpen, setConfirmExtremeOpen] = useState(false);
+  const activityInputRef = useRef<HTMLInputElement | null>(null);
+  const domainInputRef = useRef<HTMLInputElement | null>(null);
+  const [activityDropdownStyle, setActivityDropdownStyle] = useState<CSSProperties | undefined>();
+  const [domainDropdownStyle, setDomainDropdownStyle] = useState<CSSProperties | undefined>();
 
   useEffect(() => {
     function handleDocumentMouseDown(event: MouseEvent) {
@@ -85,7 +98,30 @@ export function OnboardingDesignCodeContent({
   const domainQueryTrimmed = domainQuery.trim();
   const showDomainCustom = domainQueryTrimmed.length > 0
     && !WORK_DOMAIN_OPTIONS.some((option) => option.toLowerCase() === domainQueryTrimmed.toLowerCase());
+
+  useLayoutEffect(() => {
+    if (!activityOpen && !domainOpen) return;
+
+    function updateDropdownLayout() {
+      setActivityDropdownStyle(activityOpen ? computeDropdownStyle(activityInputRef.current) : undefined);
+      setDomainDropdownStyle(domainOpen ? computeDropdownStyle(domainInputRef.current) : undefined);
+    }
+
+    updateDropdownLayout();
+    window.addEventListener("resize", updateDropdownLayout);
+    window.addEventListener("scroll", updateDropdownLayout, true);
+    return () => {
+      window.removeEventListener("resize", updateDropdownLayout);
+      window.removeEventListener("scroll", updateDropdownLayout, true);
+    };
+  }, [activityOpen, domainOpen, activityOptions.length, domainOptions.length, showActivityCustom, showDomainCustom]);
+
   const advancedVisible = advancedOpen || flow.isUserManagedProviderSetup;
+  const contentClassName = [
+    "dc-onb-content",
+    flow.step === "account" ? "dc-onb-content--account" : "",
+    flow.step === "welcome" ? "dc-onb-content--welcome" : "",
+  ].filter(Boolean).join(" ");
 
   function addActivity(option: string) {
     flow.addMainActivity(option);
@@ -167,7 +203,7 @@ export function OnboardingDesignCodeContent({
     <>
       <form className={`onboarding-card dc-onb-card${framedStepClass}`} onSubmit={flow.handleSubmit}>
         <div className="dc-onb-scroll">
-          <div className={`dc-onb-content${flow.step === "account" ? " dc-onb-content--account" : ""}`}>
+          <div className={contentClassName}>
             {showTitle ? (
               <h1 className="dc-onb-title" id="onboarding-title" ref={flow.titleRef} tabIndex={-1}>
                 {title}
@@ -202,22 +238,34 @@ export function OnboardingDesignCodeContent({
                   selectedActivities={selectedActivities}
                   showActivityCustom={showActivityCustom}
                   showDomainCustom={showDomainCustom}
-                  onActivityFocus={() => setActivityOpen(true)}
+                  onActivityFocus={() => {
+                    setActivityOpen(true);
+                    setDomainOpen(false);
+                  }}
                   onActivityInput={(event) => {
                     setActivityQuery(event.target.value);
                     setActivityOpen(true);
+                    setDomainOpen(false);
                   }}
                   onActivityKeyDown={handleActivityKeyDown}
                   onAddActivity={addActivity}
-                  onDomainFocus={() => setDomainOpen(true)}
+                  onDomainFocus={() => {
+                    setDomainOpen(true);
+                    setActivityOpen(false);
+                  }}
                   onDomainInput={(event) => {
                     setDomainQuery(event.target.value);
                     flow.setWorkDomain(null);
                     setDomainOpen(true);
+                    setActivityOpen(false);
                   }}
                   onDomainKeyDown={handleDomainKeyDown}
                   onRemoveActivity={removeActivity}
                   onSelectDomain={selectDomain}
+                  activityDropdownStyle={activityDropdownStyle}
+                  activityInputRef={activityInputRef}
+                  domainDropdownStyle={domainDropdownStyle}
+                  domainInputRef={domainInputRef}
                 />
               ) : null}
               {flow.step === "permissions" ? <PermissionsStep flow={flow} /> : null}
@@ -292,15 +340,38 @@ export function OnboardingDesignCodeContent({
   );
 }
 
+function computeDropdownStyle(input: HTMLInputElement | null): CSSProperties | undefined {
+  if (!input) return undefined;
+  const rect = input.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  const gap = 6;
+  const desiredMaxHeight = 236;
+  const spaceBelow = viewportHeight - rect.bottom - 12;
+  const spaceAbove = rect.top - 12;
+  const openUp = spaceBelow < 140 && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(96, Math.min(desiredMaxHeight, openUp ? spaceAbove : spaceBelow));
+
+  return {
+    position: "fixed",
+    left: rect.left,
+    right: "auto",
+    width: rect.width,
+    top: openUp ? "auto" : rect.bottom + gap,
+    bottom: openUp ? viewportHeight - rect.top + gap : "auto",
+    maxHeight,
+    zIndex: 9999,
+  };
+}
+
 function WelcomeStep() {
   return (
     <div className="dc-onb-welcome">
-      <span className="dc-onb-welcome__headline">Hey, I'm drifty.</span>
+      <img className="dc-onb-welcome__icon" src={driftyIconUrl} alt="" aria-hidden="true" />
+      <span className="dc-onb-welcome__headline">Welcome to drifty.</span>
       <span className="dc-onb-welcome__headline dc-onb-welcome__headline--muted">Your AI time tracker.</span>
       <span className="dc-onb-welcome__body">
         I show where your time actually goes, and gently help you stay with the work that matters.
       </span>
-      <span className="dc-onb-welcome__note">Let's set up a few things — about a minute.</span>
     </div>
   );
 }
@@ -382,10 +453,18 @@ function JobStep({
   onDomainKeyDown,
   onRemoveActivity,
   onSelectDomain,
+  activityDropdownStyle,
+  activityInputRef,
+  domainDropdownStyle,
+  domainInputRef,
 }: {
+  readonly activityDropdownStyle?: CSSProperties;
+  readonly activityInputRef: RefObject<HTMLInputElement>;
   readonly activityOpen: boolean;
   readonly activityOptions: readonly string[];
   readonly activityQuery: string;
+  readonly domainDropdownStyle?: CSSProperties;
+  readonly domainInputRef: RefObject<HTMLInputElement>;
   readonly domainOpen: boolean;
   readonly domainOptions: readonly string[];
   readonly domainQuery: string;
@@ -405,14 +484,6 @@ function JobStep({
 }) {
   const activityQueryTrimmed = activityQuery.trim();
   const domainQueryTrimmed = domainQuery.trim();
-  const visibleActivityOptions = activityOptions.slice(
-    0,
-    showActivityCustom ? ACTIVITY_DROPDOWN_LIMIT - 1 : ACTIVITY_DROPDOWN_LIMIT,
-  );
-  const visibleDomainOptions = domainOptions.slice(
-    0,
-    showDomainCustom ? DOMAIN_DROPDOWN_LIMIT_WITH_CUSTOM : DOMAIN_DROPDOWN_LIMIT,
-  );
   const activityPlaceholder = selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS
     ? "Maximum 5 selected"
     : selectedActivities.length > 0
@@ -453,10 +524,11 @@ function JobStep({
               placeholder={activityPlaceholder}
               disabled={selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS}
               aria-label="Search activities"
+              ref={activityInputRef}
             />
             {activityOpen ? (
-              <DropdownList>
-                {visibleActivityOptions.map((option) => (
+              <DropdownList style={activityDropdownStyle}>
+                {activityOptions.map((option) => (
                   <DropdownOption key={option} onClick={() => onAddActivity(option)}>
                     {option}
                   </DropdownOption>
@@ -487,10 +559,11 @@ function JobStep({
             onKeyDown={onDomainKeyDown}
             placeholder="Type to search or add your own…"
             aria-label="Your field"
+            ref={domainInputRef}
           />
           {domainOpen ? (
-            <DropdownList>
-              {visibleDomainOptions.map((option) => (
+            <DropdownList style={domainDropdownStyle}>
+              {domainOptions.map((option) => (
                 <DropdownOption key={option} onClick={() => onSelectDomain(option)}>
                   {option}
                 </DropdownOption>
@@ -517,8 +590,14 @@ function JobStep({
   );
 }
 
-function DropdownList({ children }: { readonly children: ReactNode }) {
-  return <div className="dc-onb-dropdown">{children}</div>;
+function DropdownList({
+  children,
+  style,
+}: {
+  readonly children: ReactNode;
+  readonly style?: CSSProperties;
+}) {
+  return <div className="dc-onb-dropdown" style={style}>{children}</div>;
 }
 
 function DropdownOption({
