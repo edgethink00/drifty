@@ -132,7 +132,11 @@ fn install_model_at_root_with_downloader(
     )?;
     write_status(root, &installing)?;
 
+    let mut progress_gate = DownloadProgressWriteGate::default();
     let mut report_progress = |progress: ManagedAiDownloadProgress| {
+        if !progress_gate.should_write(progress.percent) {
+            return Ok(());
+        }
         let status =
             status_with_installed_models(root, status_for_download_progress(spec, progress))?;
         write_status(root, &status)
@@ -163,6 +167,25 @@ fn install_model_at_root_with_downloader(
     )?;
     write_status(root, &status)?;
     Ok(status)
+}
+
+/// Decides which download progress reports get persisted to status.json.
+/// The downloader reports every 64KB chunk (~49k times for a 3GB model), so
+/// only integer-percent changes are written; the final 100% always differs
+/// from the previous percent and is therefore always written.
+#[derive(Default)]
+struct DownloadProgressWriteGate {
+    last_written_percent: Option<u8>,
+}
+
+impl DownloadProgressWriteGate {
+    fn should_write(&mut self, percent: u8) -> bool {
+        if self.last_written_percent == Some(percent) {
+            return false;
+        }
+        self.last_written_percent = Some(percent);
+        true
+    }
 }
 
 fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {

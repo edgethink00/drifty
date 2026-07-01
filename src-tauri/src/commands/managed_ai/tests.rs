@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use super::{
     install_model_at_root_with_downloader, managed_ai_catalog, model_dir, read_status,
     require_model, runtime, start_model_at_root, status_for_spec, write_status,
-    ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
-    ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
+    DownloadProgressWriteGate, ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState,
+    ManagedAiModelSpec, ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 mod runtime_tests;
@@ -180,6 +180,41 @@ fn read_status_downgrades_stale_installed_empty_model_dir() {
         Some(ManagedAiStatusErrorKind::ModelArtifactMissing)
     ));
     assert_eq!(status.message, MANAGED_ASSETS_MISSING_MESSAGE);
+}
+
+#[test]
+fn progress_gate_writes_once_per_integer_percent_change() {
+    let mut gate = DownloadProgressWriteGate::default();
+    let percents = [0_u8, 0, 0, 1, 1, 2, 2, 2, 3, 50, 50, 99, 100, 100, 100];
+
+    let written = percents
+        .into_iter()
+        .filter(|percent| gate.should_write(*percent))
+        .collect::<Vec<_>>();
+
+    assert_eq!(written, vec![0, 1, 2, 3, 50, 99, 100]);
+}
+
+#[test]
+fn progress_gate_bounds_status_writes_for_chunked_download() {
+    let total: u64 = 3 * 1024 * 1024 * 1024;
+    let chunk: u64 = 64 * 1024;
+    let mut gate = DownloadProgressWriteGate::default();
+    let mut writes = 0_u32;
+    let mut last_written_percent = None;
+    let mut downloaded = 0_u64;
+    while downloaded < total {
+        downloaded = (downloaded + chunk).min(total);
+        let progress = ManagedAiDownloadProgress::from_counts(downloaded, total);
+        if gate.should_write(progress.percent) {
+            writes += 1;
+            last_written_percent = Some(progress.percent);
+        }
+    }
+
+    // One write per integer percent instead of one per 64KB chunk.
+    assert_eq!(writes, 101);
+    assert_eq!(last_written_percent, Some(100));
 }
 
 fn fake_download(
