@@ -62,7 +62,7 @@ def browser_script(app_name: str) -> str | None:
             fallback_title="name of front document",
         )
 
-    if app_name in {"Google Chrome", "Google Chrome Canary", "Microsoft Edge", "Arc", "Brave Browser", "Chromium"}:
+    if app_name in {"Google Chrome", "Google Chrome Canary", "Microsoft Edge", "Arc", "Aside", "Brave Browser", "Chromium"}:
         return _tab_matching_script(
             app_name=app_name,
             exists_check="(count of windows) > 0",

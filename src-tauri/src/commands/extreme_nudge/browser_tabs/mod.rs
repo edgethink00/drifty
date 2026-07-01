@@ -141,6 +141,7 @@ fn browser_tab_script_kind(app_name: &str) -> Option<BrowserTabScriptKind> {
         | "Google Chrome Canary"
         | "Microsoft Edge"
         | "Arc"
+        | "Aside"
         | "Brave Browser"
         | "Chromium" => Some(BrowserTabScriptKind::Chromium),
         "Firefox" => Some(BrowserTabScriptKind::Firefox),
@@ -218,6 +219,21 @@ mod tests {
         .unwrap();
 
         assert!(script.contains("normalizedUrlHost(currentUrl) is targetDomain"));
+    }
+
+    #[test]
+    fn chrome_like_tab_close_script_supports_aside() {
+        let script = tab_close_script(
+            "Aside",
+            "https://docs.example.test/aside",
+            Some("docs.example.test"),
+            false,
+        )
+        .unwrap();
+
+        assert!(script.contains("tell application \"Aside\""));
+        assert!(script.contains("URL of active tab of front window"));
+        assert!(script.contains("tell process \"Aside\""));
     }
 
     #[test]

@@ -138,6 +138,7 @@ export type AiDebugLogInput = {
 
 const SUPPORTED_BROWSER_NAMES = [
   "Arc",
+  "Aside",
   "Brave Browser",
   "Chromium",
   "Firefox",

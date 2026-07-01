@@ -206,6 +206,7 @@ mod tests {
             "Microsoft Edge"
         ));
         assert!(browser_tabs::is_supported_browser_tab_target("Arc"));
+        assert!(browser_tabs::is_supported_browser_tab_target("Aside"));
         assert!(browser_tabs::is_supported_browser_tab_target("Safari"));
         assert!(browser_tabs::is_supported_browser_tab_target("Firefox"));
     }

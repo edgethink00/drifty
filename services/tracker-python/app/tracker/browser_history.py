@@ -28,6 +28,7 @@ _BROWSER_ROOTS: Final[dict[str, Path]] = {
     "Brave Browser": Path.home() / "Library/Application Support/BraveSoftware/Brave-Browser",
     "Chromium": Path.home() / "Library/Application Support/Chromium",
     "Arc": Path.home() / "Library/Application Support/Arc/User Data",
+    "Aside": Path.home() / "Library/Application Support/Aside",
     "Firefox": Path.home() / "Library/Application Support/Firefox/Profiles",
 }
 

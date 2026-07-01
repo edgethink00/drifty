@@ -31,7 +31,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIn('name of front document', safari_script)
         self.assertIn('"STALE"', safari_script)
 
-        for app_name in ["Google Chrome", "Arc", "Brave Browser", "Chromium", "Microsoft Edge"]:
+        for app_name in ["Google Chrome", "Arc", "Aside", "Brave Browser", "Chromium", "Microsoft Edge"]:
             with self.subTest(app_name=app_name):
                 script = _browser_script(app_name)
                 self.assertIsNotNone(script)
@@ -52,7 +52,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIsNone(_browser_script("Preview"))
 
     def test_browser_scripts_read_ax_title_in_same_pass(self) -> None:
-        for app_name in ["Safari", "Google Chrome", "Arc", "Brave Browser", "Chromium", "Microsoft Edge"]:
+        for app_name in ["Safari", "Google Chrome", "Arc", "Aside", "Brave Browser", "Chromium", "Microsoft Edge"]:
             with self.subTest(app_name=app_name):
                 script = _browser_script(app_name)
                 self.assertIn('first application process whose frontmost is true', script)
@@ -65,6 +65,7 @@ class MacosWorkspaceTests(unittest.TestCase):
             "Safari",
             "Google Chrome",
             "Arc",
+            "Aside",
             "Brave Browser",
             "Chromium",
             "Microsoft Edge",
