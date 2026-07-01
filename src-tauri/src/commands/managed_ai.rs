@@ -62,9 +62,12 @@ pub fn managed_ai_catalog() -> Vec<ManagedAiCatalogModel> {
 }
 
 #[tauri::command]
-pub fn managed_ai_status(app: AppHandle) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_status(app: AppHandle) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
-    read_status(&root).map_err(error_message)
+    async_runtime::spawn_blocking(move || read_status(&root))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(error_message)
 }
 
 #[tauri::command]
@@ -81,15 +84,23 @@ pub async fn managed_ai_install(
 }
 
 #[tauri::command]
-pub fn managed_ai_start(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_start(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
-    start_model_at_root(&root, model_id.trim()).map_err(error_message)
+    let model_id = model_id.trim().to_string();
+    async_runtime::spawn_blocking(move || start_model_at_root(&root, &model_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(error_message)
 }
 
 #[tauri::command]
-pub fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
-    delete_model_at_root(&root, model_id.trim()).map_err(error_message)
+    let model_id = model_id.trim().to_string();
+    async_runtime::spawn_blocking(move || delete_model_at_root(&root, &model_id))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(error_message)
 }
 
 pub(crate) fn managed_ai_stop_runtime_for_app_exit() {
