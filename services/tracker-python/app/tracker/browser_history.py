@@ -104,7 +104,7 @@ def match_browser_history_title(
 
     if not matches:
         return BrowserHistoryMatchResult(candidate=None, reason="generic_title" if saw_generic else "no_match")
-    nearest_candidate = _nearest_history_candidate(matches, observed_at)
+    nearest_candidate = _nearest_history_candidate(_most_specific_title_matches(matches), observed_at)
     if nearest_candidate is None:
         return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
     return BrowserHistoryMatchResult(candidate=nearest_candidate, reason="matched")
@@ -219,7 +219,8 @@ def _read_history_files(
 def _copy_history_database(source: Path, temp_path: Path) -> Path:
     target = temp_path / source.name
     shutil.copy2(source, target)
-    for sidecar in (source.with_name(f"{source.name}-wal"), source.with_name(f"{source.name}-shm")):
+    for sidecar_suffix in ("-journal", "-wal", "-shm"):
+        sidecar = source.with_name(f"{source.name}{sidecar_suffix}")
         if sidecar.exists():
             shutil.copy2(sidecar, temp_path / sidecar.name)
     return target
@@ -273,6 +274,11 @@ def _query_candidates(
                     )
                 )
     return candidates
+
+
+def _most_specific_title_matches(matches: list[BrowserHistoryCandidate]) -> list[BrowserHistoryCandidate]:
+    best_length = max(len(_normalize_title(candidate.title)) for candidate in matches)
+    return [candidate for candidate in matches if len(_normalize_title(candidate.title)) == best_length]
 
 
 def _nearest_history_candidate(candidates: list[BrowserHistoryCandidate], observed_at: str | None) -> BrowserHistoryCandidate | None:

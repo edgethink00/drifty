@@ -16,6 +16,7 @@ from app.tracker.macos_workspace import (
     _browser_script,
     _browser_automation_status_from_error,
     _frontmost_via_lsappinfo,
+    _run_command,
     _youtube_ids,
     current_snapshot,
 )
@@ -200,6 +201,12 @@ class MacosWorkspaceTests(unittest.TestCase):
         for url, expected in cases:
             with self.subTest(url=url):
                 self.assertEqual(_youtube_ids(url), expected)
+
+    def test_run_command_raises_runtime_error_on_timeout(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            _run_command(['/bin/sleep', '5'], timeout=0.1)
+
+        self.assertEqual(str(caught.exception), 'command timed out')
 
     def test_frontmost_lsappinfo_parses_real_quoted_header_name(self) -> None:
         info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'

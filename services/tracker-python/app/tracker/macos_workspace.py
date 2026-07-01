@@ -26,6 +26,8 @@ from app.tracker.browser_history import (
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
 FrontmostCaptureSource = Literal["system-events", "lsappinfo", "unavailable"]
 OSASCRIPT_TIMEOUT_SECONDS: Final = 3.0
+# Generous enough for the first `swift -e` invocation, which pays JIT warmup cost.
+COMMAND_TIMEOUT_SECONDS: Final = 5.0
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
 FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: Final = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 _BROWSER_HISTORY_FALLBACK_STATUSES: Final = frozenset({"denied", "empty_result", "stale", "unavailable"})
@@ -105,8 +107,11 @@ def _run_osascript(script: str) -> str:
     return result.stdout.strip()
 
 
-def _run_command(command: list[str]) -> str:
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+def _run_command(command: list[str], timeout: float = COMMAND_TIMEOUT_SECONDS) -> str:
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("command timed out") from error
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "command failed")
     return result.stdout.strip()
