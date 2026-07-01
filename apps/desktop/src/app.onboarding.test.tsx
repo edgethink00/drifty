@@ -1016,9 +1016,13 @@ describe("App onboarding", () => {
             installedModels: [],
             baseUrl: null,
             model: null,
-            message: "Downloading managed local model...",
+            message: "Downloading managed local model... (44%)",
             artifactDir: null,
-            progress: null,
+            progress: {
+              percent: 44,
+              downloadedBytes: 1_200_000_000,
+              totalBytes: 2_740_937_888,
+            },
             errorKind: null,
             memoryUsageBytes: null,
           };
@@ -1036,9 +1040,17 @@ describe("App onboarding", () => {
     expect(within(localDialog).queryByRole("textbox", { name: /server url/i })).toBeNull();
     expect(screen.queryByLabelText(/openrouter api key/i)).toBeNull();
     const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
+    const statusPollCountBeforeDownload = invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length;
     fireEvent.click(within(defaultModel).getByRole("button", { name: /^download$/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
-    expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
+    expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
+    await waitFor(() => expect(within(defaultModel).getByRole("button", { name: /^downloading 44%$/i })).toBeTruthy(), { timeout: 2_000 });
+    await waitFor(() => {
+      const statusPollCount = invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length;
+      expect(statusPollCount).toBeGreaterThan(statusPollCountBeforeDownload);
+    }, { timeout: 2_000 });
+    expect(within(localDialog).getAllByText(/1\.2\/2\.7 GB/i).length).toBeGreaterThan(0);
+    expect(within(localDialog).queryByRole("button", { name: /^downloading 42%$/i })).toBeNull();
     await clickEnabledAction(/^continue$/i);
 
     expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
@@ -1079,6 +1091,23 @@ describe("App onboarding", () => {
         managedLocalModel: "drifty-qwen3.5-4b-local",
       });
     });
+  });
+
+  it("keeps connect-step blocked hints hidden until the user enters invalid provider details", async () => {
+    render(<App />);
+
+    await chooseByokSetup();
+
+    expect(await screen.findByRole("dialog", { name: /add your openrouter key/i })).toBeTruthy();
+    const testConnection = screen.getByRole("button", { name: /^test connection$/i });
+    if (!(testConnection instanceof HTMLButtonElement)) throw new Error("Test connection action should be a button.");
+    expect(testConnection.disabled).toBe(true);
+    expect(screen.queryByText(/enter an openrouter key that starts with sk-or-/i)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/openrouter api key/i), { target: { value: "not-a-real-key" } });
+
+    expect(screen.getByText(/openrouter key should start with sk-or-/i)).toBeTruthy();
+    expect(screen.queryByText(/enter an openrouter key that starts with sk-or-/i)).toBeNull();
   });
 
   it("routes BYOK through OpenRouter key data handling review without exposing the raw key", async () => {

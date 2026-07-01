@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ManagedModelActionIcon } from "./ManagedModelActionIcon";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
+import { managedLocalAiProgressText } from "./managedLocalAiProgressText";
 
 export type ManagedLocalAiPanelProps = {
   readonly actionModelId: string | null;
@@ -70,6 +71,7 @@ function ManagedLocalAiModelRow({
   const busyThisModel = actionModelId === model.id || installingThisModel || startingThisModel;
   const anyManagedActionRunning = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
   const downloadProgress = installingThisModel ? status.progress : null;
+  const downloadProgressText = managedLocalAiProgressText(downloadProgress);
   const artifactDir = installedModel?.artifactDir ?? null;
   const showInFinderDisabled = busyThisModel || finderOpening || !artifactDir;
 
@@ -81,7 +83,11 @@ function ManagedLocalAiModelRow({
       const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
       await revealItemInDir(artifactDir);
     } catch (error) {
-      setFinderError(messageFromFinderError(error));
+      if (error instanceof Error) {
+        setFinderError(`Finder unavailable: ${error.message}`);
+        return;
+      }
+      setFinderError("Finder unavailable.");
     } finally {
       setFinderOpening(false);
     }
@@ -137,6 +143,7 @@ function ManagedLocalAiModelRow({
             <span>{managedDownloadButtonLabel(busyThisModel, errorThisModel, downloadProgress?.percent ?? null)}</span>
           </button>
         )}
+        {downloadProgressText ? <span className="ai-managed-model__action-note" role="status">{downloadProgressText}</span> : null}
         {finderError ? <span className="ai-managed-model__action-note" role="status">{finderError}</span> : null}
       </div>
     </article>
@@ -154,10 +161,6 @@ function installedManagedModel(modelId: string, status: ManagedLocalAiStatus | n
 
 function isRetryableManagedModelError(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
   return errorKind === "download_failed" || errorKind === "model_artifact_missing";
-}
-
-function messageFromFinderError(error: unknown): string {
-  return error instanceof Error && error.message ? `Finder unavailable: ${error.message}` : "Finder unavailable.";
 }
 
 function managedDownloadButtonLabel(isBusy: boolean, isError: boolean, percent: number | null): string {

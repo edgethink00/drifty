@@ -10,7 +10,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { ManagedLocalAiModel } from "../settings/managedLocalAiClient";
+import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
+import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressText";
 import driftyIconUrl from "../../assets/drifty-icon.png";
 import { GoogleMark } from "./components/GoogleMark";
 import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
@@ -320,11 +321,6 @@ export function OnboardingDesignCodeContent({
               </div>
             ) : null}
             <span className="dc-onb-actions-spacer" />
-            {flow.blockedHint ? (
-              <span className="dc-onb-hint" role="status">
-                {flow.blockedHint}
-              </span>
-            ) : null}
             <button type="submit" className="onb-button onb-button--primary dc-onb-primary" disabled={!flow.canAdvance}>
               {footerLabel}
             </button>
@@ -803,15 +799,21 @@ function ConnectServerStep({ flow }: { readonly flow: OnboardingFlow }) {
 }
 
 function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
+  const status = flow.managedLocalAi.status;
   const selectedModelId = flow.managedLocalAi.status?.selectedModelId
     ?? flow.managedLocalAi.actionModelId
     ?? DEFAULT_LOCAL_MODEL_ID;
+  const statusBusy = flow.managedLocalAi.loading
+    || Boolean(flow.managedLocalAi.actionModelId)
+    || status?.state === "installing"
+    || status?.state === "starting";
+  const statusMessage = localModelStatusMessage(flow.managedLocalAi.loading, status);
 
   return (
     <div className="dc-onb-local">
       <div className="dc-onb-status" role="status">
-        <SpinnerIcon />
-        {flow.managedLocalStarted ? "Downloading managed local model…" : "Checking managed local AI…"}
+        {statusBusy ? <SpinnerIcon /> : null}
+        {statusMessage}
       </div>
       <div className="dc-onb-local__cards">
         {flow.managedLocalAi.catalog.map((model) => (
@@ -836,11 +838,28 @@ function LocalModelCard({
   readonly model: ManagedLocalAiModel;
   readonly selected: boolean;
 }) {
+  const status = flow.managedLocalAi.status;
   const installingThisModel = flow.managedLocalAi.actionModelId === model.id
-    || (flow.managedLocalAi.status?.state === "installing" && flow.managedLocalAi.status.selectedModelId === model.id);
-  const startedThisModel = flow.managedLocalStarted && selected;
-  const disabled = flow.managedLocalStarted || Boolean(flow.managedLocalAi.actionModelId);
-  const actionLabel = installingThisModel || startedThisModel ? "Downloading 42%" : "Download";
+    || (status?.state === "installing" && status.selectedModelId === model.id);
+  const failedThisModel = status?.state === "error" && status.selectedModelId === model.id;
+  const ready = localModelIsReady(model.id, status);
+  const disabled = ready
+    || Boolean(flow.managedLocalAi.actionModelId)
+    || status?.state === "installing"
+    || status?.state === "starting";
+  const actionLabel = localModelActionLabel({
+    failed: failedThisModel,
+    installing: installingThisModel,
+    progress: installingThisModel ? status?.progress ?? null : null,
+    ready,
+  });
+  const description = localModelDescription({
+    defaultDescription: model.detail,
+    failed: failedThisModel,
+    installing: installingThisModel,
+    ready,
+    status,
+  });
 
   return (
     <article
@@ -854,7 +873,7 @@ function LocalModelCard({
             {model.recommended ? "Recommended" : titleCase(model.tier)}
           </span>
         </div>
-        <p>{startedThisModel ? "Ready for private local classification." : model.detail}</p>
+        <p>{description}</p>
       </div>
       <dl className="dc-onb-local-card__meta">
         <div>
@@ -876,6 +895,53 @@ function LocalModelCard({
       </button>
     </article>
   );
+}
+
+function localModelStatusMessage(loading: boolean, status: ManagedLocalAiStatus | null): string {
+  if (loading) return "Checking managed local AI...";
+  const progressText = managedLocalAiProgressText(status?.progress ?? null);
+  if (status?.progress && progressText) return `Downloading ${status.progress.percent.toFixed(0)}% · ${progressText}`;
+  return status?.message ?? "Choose a local model and Drifty will download it inside the app.";
+}
+
+function localModelIsReady(modelId: string, status: ManagedLocalAiStatus | null): boolean {
+  if (status?.selectedModelId !== modelId) return false;
+  return status.state === "installed" || status.state === "starting" || status.state === "running";
+}
+
+function localModelActionLabel({
+  failed,
+  installing,
+  progress,
+  ready,
+}: {
+  readonly failed: boolean;
+  readonly installing: boolean;
+  readonly progress: ManagedLocalAiStatus["progress"];
+  readonly ready: boolean;
+}): string {
+  if (ready) return "Ready";
+  if (installing) return progress === null ? "Downloading..." : `Downloading ${progress.percent.toFixed(0)}%`;
+  if (failed) return "Retry";
+  return "Download";
+}
+
+function localModelDescription({
+  defaultDescription,
+  failed,
+  installing,
+  ready,
+  status,
+}: {
+  readonly defaultDescription: string;
+  readonly failed: boolean;
+  readonly installing: boolean;
+  readonly ready: boolean;
+  readonly status: ManagedLocalAiStatus | null;
+}): string {
+  if (ready) return "Ready for private local classification.";
+  if ((installing || failed) && status?.message) return status.message;
+  return defaultDescription;
 }
 
 function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {

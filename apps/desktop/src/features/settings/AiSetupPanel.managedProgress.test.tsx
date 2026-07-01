@@ -34,8 +34,8 @@ describe("AiSetupPanel managed local progress", () => {
     const downloadButton = within(qwenDefault).getByRole("button", { name: /^Downloading 44%$/i });
     if (!(downloadButton instanceof HTMLButtonElement)) throw new Error("Download progress action should be a button.");
     expect(downloadButton.disabled).toBe(true);
+    expect(within(qwenDefault).getByText("1.2/2.7 GB")).toBeTruthy();
     expect(within(qwenDefault).queryByRole("progressbar")).toBeNull();
-    expect(within(qwenDefault).queryByText("1.2 GB / 2.7 GB")).toBeNull();
   });
 
   it("shows a retry action when a managed local model download fails", async () => {
