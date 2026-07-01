@@ -3,9 +3,12 @@ use core_foundation::base::Boolean;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Mutex, OnceLock, TryLockError};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -58,6 +61,8 @@ pub enum TrackerError {
     MissingRuntime(String),
     #[error("tracker invocation failed: {0}")]
     CommandFailed(String),
+    #[error("tracker serve request timed out after {0:?}")]
+    ServeTimedOut(Duration),
     #[error("tracker returned invalid JSON: {0}")]
     ParseFailed(String),
     #[error("tracker returned an error: {0}")]
@@ -560,16 +565,34 @@ fn invoke_one_shot(
 /// A long-lived tracker `serve` process. Requests and responses are
 /// newline-delimited JSON; access is serialized through a mutex so request and
 /// response order always match (the server processes one line at a time).
+/// Responses arrive through a dedicated reader thread so a wedged sidecar can
+/// be bounded by a timeout instead of pinning the mutex forever.
 struct ServeProcess {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    responses: mpsc::Receiver<std::io::Result<String>>,
     runtime_identity: String,
     db_path: PathBuf,
 }
 
 static SERVE_PROCESS: OnceLock<Mutex<Option<ServeProcess>>> = OnceLock::new();
 static SERVE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+// PID of the live serve child so shutdown can force-kill it when the serve
+// mutex is stuck behind a hung round trip. 0 means no live child.
+static SERVE_CHILD_PID: AtomicU32 = AtomicU32::new(0);
+
+const SERVE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(30);
+const SHUTDOWN_LOCK_WAIT: Duration = Duration::from_secs(2);
+const SHUTDOWN_LOCK_POLL: Duration = Duration::from_millis(50);
+
+fn serve_round_trip_timeout() -> Duration {
+    std::env::var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(SERVE_ROUND_TRIP_TIMEOUT)
+}
 
 enum ServeLockMode {
     Wait,
@@ -600,19 +623,46 @@ fn spawn_serve_process(runtime: &TrackerRuntime, db: &Path) -> Result<ServeProce
         .stdout
         .take()
         .ok_or_else(|| TrackerError::CommandFailed("serve stdout unavailable".into()))?;
+    SERVE_CHILD_PID.store(child.id(), Ordering::SeqCst);
+
+    let (response_sender, responses) = mpsc::channel();
+    thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                // An empty line marks EOF; the thread exits with the process.
+                Ok(0) => {
+                    let _ = response_sender.send(Ok(String::new()));
+                    break;
+                }
+                Ok(_) => {
+                    if response_sender.send(Ok(line)).is_err() {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    let _ = response_sender.send(Err(err));
+                    break;
+                }
+            }
+        }
+    });
 
     Ok(ServeProcess {
         child,
         stdin,
-        stdout: BufReader::new(stdout),
+        responses,
         runtime_identity: runtime.identity(),
         db_path: db.to_path_buf(),
     })
 }
 
 fn kill_serve_process(mut proc: ServeProcess) {
+    let pid = proc.child.id();
     let _ = proc.child.kill();
     let _ = proc.child.wait();
+    let _ = SERVE_CHILD_PID.compare_exchange(pid, 0, Ordering::SeqCst, Ordering::SeqCst);
 }
 
 fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, TrackerError> {
@@ -622,14 +672,23 @@ fn serve_round_trip(proc: &mut ServeProcess, line: &str) -> Result<String, Track
     proc.stdin.write_all(b"\n").map_err(serve_io_err)?;
     proc.stdin.flush().map_err(serve_io_err)?;
 
-    let mut response = String::new();
-    let read = proc.stdout.read_line(&mut response).map_err(serve_io_err)?;
-    if read == 0 {
-        return Err(TrackerError::CommandFailed(
+    let timeout = serve_round_trip_timeout();
+    match proc.responses.recv_timeout(timeout) {
+        Ok(Ok(response)) if response.is_empty() => Err(TrackerError::CommandFailed(
             "serve process closed its output".into(),
-        ));
+        )),
+        Ok(Ok(response)) => Ok(response),
+        Ok(Err(err)) => Err(serve_io_err(err)),
+        Err(RecvTimeoutError::Timeout) => {
+            // A wedged sidecar would otherwise hold the serve mutex forever;
+            // kill it so the slot resets and a later call respawns.
+            let _ = proc.child.kill();
+            Err(TrackerError::ServeTimedOut(timeout))
+        }
+        Err(RecvTimeoutError::Disconnected) => Err(TrackerError::CommandFailed(
+            "serve reader thread terminated".into(),
+        )),
     }
-    Ok(response)
 }
 
 fn serve_io_err(err: std::io::Error) -> TrackerError {
@@ -713,10 +772,16 @@ fn serve_request_with_lock_mode(
         match attempt {
             Ok(response) => return Ok(response),
             Err(err) => {
-                last_err = err;
                 if let Some(proc) = guard.take() {
                     kill_serve_process(proc);
                 }
+                // A timeout means the sidecar wedged mid-request, not that a
+                // dead process was discovered; don't spend a second timeout in
+                // the same call — the next call respawns against a fresh slot.
+                if matches!(err, TrackerError::ServeTimedOut(_)) {
+                    return Err(err);
+                }
+                last_err = err;
             }
         }
     }
@@ -726,13 +791,38 @@ fn serve_request_with_lock_mode(
 
 /// Terminate the long-lived serve process (called on app exit). The process also
 /// exits on its own when its stdin reaches EOF, so this is a best-effort cleanup.
+/// The wait for the serve mutex is bounded so a hung round trip can never block
+/// app quit; in that case the child is force-killed through its recorded PID.
 pub fn shutdown_serve_process() {
-    if let Some(slot) = SERVE_PROCESS.get() {
-        if let Ok(mut guard) = slot.lock() {
-            if let Some(proc) = guard.take() {
-                kill_serve_process(proc);
+    let Some(slot) = SERVE_PROCESS.get() else {
+        return;
+    };
+    let deadline = Instant::now() + SHUTDOWN_LOCK_WAIT;
+    loop {
+        match slot.try_lock() {
+            Ok(mut guard) => {
+                if let Some(proc) = guard.take() {
+                    kill_serve_process(proc);
+                }
+                return;
+            }
+            Err(TryLockError::Poisoned(poisoned)) => {
+                if let Some(proc) = poisoned.into_inner().take() {
+                    kill_serve_process(proc);
+                }
+                return;
+            }
+            Err(TryLockError::WouldBlock) => {
+                if Instant::now() >= deadline {
+                    break;
+                }
+                thread::sleep(SHUTDOWN_LOCK_POLL);
             }
         }
+    }
+    let pid = SERVE_CHILD_PID.swap(0, Ordering::SeqCst);
+    if pid != 0 {
+        let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
     }
 }
 
@@ -1443,6 +1533,60 @@ mod tests {
 
     fn temp_dir_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("drifty-tracker-test-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn serve_round_trip_times_out_on_hung_sidecar_and_respawns() {
+        let dir = temp_dir_path("serve-timeout");
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let script = dir.join("fake-serve");
+        let marker = dir.join("hung-once");
+        // First serve spawn hangs without replying; every later spawn answers
+        // each request line with a valid envelope.
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = \"warmup\" ]; then\n  exit 0\nfi\nif [ ! -f \"{marker}\" ]; then\n  : > \"{marker}\"\n  exec sleep 600\nfi\nwhile read line; do\n  printf '%s\\n' '{{\"ok\": true, \"data\": {{\"pong\": true}}}}'\ndone\n",
+                marker = marker.display()
+            ),
+        )
+        .expect("write fake serve script");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+                .expect("mark script executable");
+        }
+        // The first exec of a freshly written script can stall behind the
+        // macOS malware scan; run it once so the timed calls below only
+        // measure the sidecar behavior.
+        assert!(Command::new(&script)
+            .arg("warmup")
+            .status()
+            .expect("warm up fake serve script")
+            .success());
+
+        std::env::set_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS", "500");
+        let runtime = TrackerRuntime::packaged_sidecar(script);
+        let db = dir.join("db.sqlite3");
+        let request = json!({ "command": "ping", "payload": {} });
+
+        let started = std::time::Instant::now();
+        let hung = serve_request(&runtime, &db, &request);
+        let elapsed = started.elapsed();
+        let respawned = serve_request(&runtime, &db, &request);
+        std::env::remove_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS");
+        shutdown_serve_process();
+
+        assert!(hung.is_err(), "hung sidecar must not produce a response");
+        assert!(
+            elapsed < std::time::Duration::from_secs(10),
+            "round trip must be bounded by the timeout, took {elapsed:?}"
+        );
+        let response = respawned.expect("next call respawns the serve process");
+        assert!(response.contains("pong"), "unexpected response {response}");
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
