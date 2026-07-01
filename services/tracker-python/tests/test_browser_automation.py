@@ -9,7 +9,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.tracker.accessibility_address_bar import accessibility_address_bar_script
+from app.tracker.accessibility_address_bar import accessibility_address_bar_script, is_chromium_browser_app
 from app.tracker.macos_workspace import (
     BrowserMetadata,
     _browser_metadata,
@@ -96,6 +96,19 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
 
         self.assertIsNotNone(script)
         self.assertIn('tell application "Google Chrome Canary"', script)
+
+    def test_browser_script_supports_aside_as_chromium_browser(self) -> None:
+        script = _browser_script("Aside")
+
+        self.assertIsNotNone(script)
+        self.assertIn('tell application "Aside"', script)
+        self.assertIn('URL of active tab of window 1', script)
+
+    def test_chromium_accessibility_fallback_supports_aside(self) -> None:
+        script = accessibility_address_bar_script("Aside")
+
+        self.assertTrue(is_chromium_browser_app("Aside"))
+        self.assertIn('process "Aside"', script)
 
     def test_browser_metadata_marks_missing_scriptable_window_unavailable(self) -> None:
         with patch(

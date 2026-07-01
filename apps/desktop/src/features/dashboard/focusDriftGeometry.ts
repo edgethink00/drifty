@@ -18,7 +18,7 @@ type FocusDriftBasisWindow = {
   readonly p3: FocusDriftPathPoint;
 };
 
-export const FOCUS_DRIFT_CHART_BOUNDS = { left: 5, right: 95, top: 8, bottom: 92 } as const;
+export const FOCUS_DRIFT_CHART_BOUNDS = { left: 4.5, right: 95.5, top: 8, bottom: 92 } as const;
 
 export const FOCUS_DRIFT_MINUTES_PER_DAY = 24 * 60;
 

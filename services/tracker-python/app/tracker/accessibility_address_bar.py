@@ -11,6 +11,7 @@ CHROMIUM_BROWSER_APPS: Final = {
     "Google Chrome Canary",
     "Microsoft Edge",
     "Arc",
+    "Aside",
     "Brave Browser",
     "Chromium",
 }
@@ -26,6 +27,7 @@ _SCHEMED_PREFIXES: Final = (
     "edge://",
     "brave://",
     "arc://",
+    "aside://",
     "file://",
     "about:",
 )

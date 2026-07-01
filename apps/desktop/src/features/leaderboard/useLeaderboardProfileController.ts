@@ -45,6 +45,8 @@ type UseLeaderboardProfileControllerResult = {
   readonly leaderboardActionLoading: boolean;
   readonly leaderboardError: string | null;
   readonly leaderboardLoading: boolean;
+  readonly leaderboardStatusMessage: string | null;
+  readonly leaderboardStatusTone: "error" | "neutral";
   readonly leaderboardProfileBio: string;
   readonly leaderboardProfileDisplayName: string;
   readonly leaderboardProfileGithubUrl: string;
@@ -657,16 +659,19 @@ export function useLeaderboardProfileController({
   const leaderboardBlockingError = leaderboardHasLoadedOnce ? null : leaderboardError;
   const leaderboardRefreshStatus = leaderboardRefreshing && leaderboardHasResolvedOnce ? "Refreshing leaderboard" : null;
   const leaderboardBackgroundError = leaderboardHasLoadedOnce ? leaderboardError : null;
-  const leaderboardInlineStatus = leaderboardActionError ?? leaderboardBackgroundError ?? leaderboardRefreshStatus;
+  const leaderboardStatusMessage = leaderboardBackgroundError ?? leaderboardRefreshStatus;
+  const leaderboardStatusTone = leaderboardBackgroundError ? "error" : "neutral";
 
   return {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
     isProfileEditorOpen,
-    leaderboardActionError: leaderboardInlineStatus,
+    leaderboardActionError,
     leaderboardActionLoading,
     leaderboardError: leaderboardBlockingError,
     leaderboardLoading: leaderboardBlockingLoading,
+    leaderboardStatusMessage,
+    leaderboardStatusTone,
     leaderboardProfileBio,
     leaderboardProfileDisplayName,
     leaderboardProfileGithubUrl,

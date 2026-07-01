@@ -240,7 +240,9 @@ describe("buildFocusDriftChart", () => {
 
     expect(chart.currentTimeLabel).toBe("12:45 PM");
     expect(livePoint.label).toBe("12:30");
-    expect(chart.axisTicks.map((tick) => tick.label)).toEqual(["04:00", "07:00", "10:00", "13:00", "16:00", "19:00", "22:00", "01:00", "04:00"]);
+    expect(chart.axisTicks.map((tick) => tick.label)).toEqual(["4am", "7am", "10am", "1pm", "4pm", "7pm", "10pm", "1am", "4am"]);
+    expect(chart.axisTicks[0]?.x).toBe(4.5);
+    expect(chart.axisTicks[chart.axisTicks.length - 1]?.x).toBe(95.5);
   });
 
   it.each([

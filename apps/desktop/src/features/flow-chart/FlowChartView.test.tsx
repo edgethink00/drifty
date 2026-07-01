@@ -117,6 +117,8 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*padding:\s*0\.44rem 0\.64rem;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.68rem;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.62rem;/);
+    expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.79rem;/);
+    expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.71rem;/);
   });
 
   it("keeps light empty flow cells softly visible while preserving the dark plot bed", () => {

@@ -704,7 +704,7 @@
 .focus-drift__scale span {
   position: absolute;
   top: var(--focus-drift-scale-y);
-  right: calc(95% + var(--space-1));
+  right: calc(100% - var(--focus-drift-chart-left, 5%) + var(--space-1));
   transform: translateY(-50%);
   color: var(--text-soft);
   font-family: var(--font-mono);

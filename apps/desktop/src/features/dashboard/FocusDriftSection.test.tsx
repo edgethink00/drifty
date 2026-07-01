@@ -46,11 +46,16 @@ describe("FocusDriftSection", () => {
   it("renders a live empty chart frame instead of empty-state copy", () => {
     const chart = buildFocusDriftChart([], "2026-06-29", undefined, 4 * 60, 4 * 60);
 
-    renderFocusDriftSection(chart);
+    const { container } = renderFocusDriftSection(chart);
 
     expect(screen.getByRole("group", { name: /focus and drift curves in progress/i })).toBeTruthy();
     expect(screen.queryByText("No focus pattern yet")).toBeNull();
     expect(screen.queryByText("Not enough data yet")).toBeNull();
+    expect(container.querySelector(".focus-drift__future-region")).toBeNull();
+    expect(container.querySelector(".focus-drift__now-marker")).toBeNull();
+    expect(container.querySelector(".focus-drift__line")).toBeNull();
+    expect(container.querySelector(".focus-drift__area")).toBeNull();
+    expect(container.querySelector(".focus-drift__plot")?.getAttribute("style")).not.toContain("--focus-drift-now-x");
   });
 
   it("renders replay reveal with completed line geometry and a reveal marker", () => {
@@ -66,8 +71,10 @@ describe("FocusDriftSection", () => {
     expect(container.querySelector(".focus-drift--reveal")).toBeTruthy();
     expect(container.querySelector(".focus-drift__future-region")).toBeNull();
     expect(container.querySelector(".focus-drift__plot")?.getAttribute("style")).toContain("--focus-drift-now-x: 50%");
+    expect(container.querySelector(".focus-drift__plot")?.getAttribute("style")).toContain("--focus-drift-chart-left: 4.5%");
     expect(container.querySelector(".focus-drift__now-marker--replay")).toBeTruthy();
-    expect(container.querySelector("#focus-drift-chart-reveal rect")?.getAttribute("width")).toBe("47.5");
+    expect(container.querySelector("#focus-drift-chart-reveal rect")?.getAttribute("x")).toBe("2");
+    expect(container.querySelector("#focus-drift-chart-reveal rect")?.getAttribute("width")).toBe("48");
     expect(container.querySelector("g")?.getAttribute("clip-path") ?? container.querySelector("g")?.getAttribute("clipPath")).toBe("url(#focus-drift-chart-reveal)");
   });
 });

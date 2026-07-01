@@ -1,13 +1,12 @@
 import { secondsToLabel, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { formatCompactHourLabel } from "../../lib/formatting";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 
 const MINUTES_PER_DAY = 24 * 60;
 
 export function formatHourLabel(hour: number): string {
-  const period = hour < 12 ? "am" : "pm";
-  const displayHour = hour % 12 || 12;
-  return `${displayHour}${period}`;
+  return formatCompactHourLabel(hour);
 }
 
 export function normalizeStartOfDayMinutes(minutes?: number): number {

@@ -2,7 +2,7 @@ import { categorizeActivity, logicalDayStartMs, logicalMinuteOfDay, normalizeSta
 import type { ActivitySegment, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
-import { formatQuarterHourLabel } from "../../lib/formatting";
+import { formatCompactHourLabel, formatQuarterHourLabel } from "../../lib/formatting";
 import type { CSSProperties } from "react";
 import { scoreFocusDriftWindowShare } from "./focusDriftScoring";
 import {
@@ -106,7 +106,7 @@ export function buildFocusDriftAxisTicks(startOfDayMinutes = 0): FocusDriftAxisT
     const logicalMinute = index * 3 * 60;
     return {
       id: `focus-drift-axis-${logicalMinute}`,
-      label: formatFocusDriftBucketLabel(logicalMinute, startOfDayMinutes),
+      label: formatCompactHourLabel(Math.floor(clockMinuteForLogicalMinute(logicalMinute, startOfDayMinutes) / 60)),
       x: FOCUS_DRIFT_CHART_BOUNDS.left + (logicalMinute / FOCUS_DRIFT_MINUTES_PER_DAY) * chartWidth,
     };
   });

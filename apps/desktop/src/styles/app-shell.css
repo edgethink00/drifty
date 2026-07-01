@@ -605,6 +605,11 @@
   animation: pulse 1.8s infinite;
 }
 
+.tracker-control[data-state="replay"] .live-pill__status-dot {
+  background: var(--accent);
+  animation: pulse 1.8s infinite;
+}
+
 .tracker-control[data-state="resume"] .live-pill__status-dot {
   background: var(--warn);
   animation: none;

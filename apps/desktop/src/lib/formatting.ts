@@ -98,6 +98,13 @@ export function formatCalendarMinuteLabel(day: string, minuteOfDay: number, star
   return formatTimeLabel(new Date(logicalDayStartMs(day, startOfDayMinutes) + minuteOfDay * 60 * 1000));
 }
 
+export function formatCompactHourLabel(hour: number): string {
+  const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
+  const period = normalizedHour < 12 ? "am" : "pm";
+  const displayHour = normalizedHour % 12 || 12;
+  return `${displayHour}${period}`;
+}
+
 export function formatHourLabel(hour: number): string {
   if (hour === 0) return "12 AM";
   if (hour === 12) return "12 PM";

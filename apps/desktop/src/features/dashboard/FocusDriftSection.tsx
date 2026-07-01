@@ -12,7 +12,6 @@ import {
   FOCUS_DRIFT_Y_AXIS_TICKS,
   type FocusDriftAxisTickStyle,
   type FocusDriftChart,
-  type FocusDriftLiveStyle,
   type FocusDriftPoint,
 } from "./focusDriftChart";
 import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
@@ -34,9 +33,23 @@ type FocusDriftScaleTickStyle = CSSProperties & {
   readonly "--focus-drift-scale-y": string;
 };
 
-function markerStyleForChart(chart: FocusDriftChart): FocusDriftLiveStyle | undefined {
-  const markerX = chart.currentX ?? chart.revealX;
-  return markerX !== null ? { "--focus-drift-now-x": `${markerX}%` } : undefined;
+type FocusDriftPlotStyle = CSSProperties & {
+  readonly "--focus-drift-chart-left": string;
+  readonly "--focus-drift-chart-right": string;
+  readonly "--focus-drift-now-x"?: string;
+};
+
+function visibleMarkerXForChart(chart: FocusDriftChart): number | null {
+  if (chart.revealX !== null) return chart.revealX;
+  return chart.hasData ? chart.currentX : null;
+}
+
+function plotStyleForChart(markerX: number | null): FocusDriftPlotStyle {
+  const baseStyle = {
+    "--focus-drift-chart-left": `${FOCUS_DRIFT_CHART_BOUNDS.left}%`,
+    "--focus-drift-chart-right": `${FOCUS_DRIFT_CHART_BOUNDS.right}%`,
+  };
+  return markerX !== null ? { ...baseStyle, "--focus-drift-now-x": `${markerX}%` } : baseStyle;
 }
 
 function scaleTickStyle(y: number): FocusDriftScaleTickStyle {
@@ -84,8 +97,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     () => chart.points.filter((point) => !point.isFuture),
     [chart.points],
   );
-  const markerStyle = markerStyleForChart(chart);
-  const shouldRenderMarker = chart.currentX !== null || chart.revealX !== null;
+  const markerX = visibleMarkerXForChart(chart);
+  const plotStyle = plotStyleForChart(markerX);
+  const shouldRenderMarker = markerX !== null;
+  const shouldRenderSeries = chart.hasData;
   const revealClipWidth = revealClipWidthForChart(chart);
   const chartClipPath = revealClipWidth === null ? "url(#focus-drift-chart-bounds)" : "url(#focus-drift-chart-reveal)";
   const driftMistAreaPath = useMemo(
@@ -165,7 +180,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
             className={`focus-drift${chart.isLive ? " focus-drift--live" : ""}${chart.revealX !== null ? " focus-drift--reveal" : ""}`}
             aria-label={sectionAriaLabel}
           >
-            <div className="focus-drift__plot" style={markerStyle}>
+            <div className="focus-drift__plot" style={plotStyle}>
               <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="group" aria-label={svgAriaLabel}>
                 <defs>
                   <clipPath id="focus-drift-chart-bounds" clipPathUnits="userSpaceOnUse">
@@ -183,15 +198,17 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                   </linearGradient>
                 </defs>
                 <path className="focus-drift__grid" d={FOCUS_DRIFT_GRID_PATH} />
-                {chart.currentX !== null ? (
+                {chart.hasData && chart.currentX !== null ? (
                   <rect className="focus-drift__future-region" x={chart.currentX} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - chart.currentX} height={FOCUS_DRIFT_CHART_BOUNDS.bottom - FOCUS_DRIFT_CHART_BOUNDS.top} aria-hidden="true" />
                 ) : null}
-                <g clipPath={chartClipPath}>
-                  <path className="focus-drift__area" d={chart.focusAreaPath} />
-                  <path className="focus-drift__drift-mist" d={driftMistAreaPath} />
-                  <path className="focus-drift__line focus-drift__line--focus" d={chart.focusPath} />
-                  <path className="focus-drift__line focus-drift__line--drift" d={chart.driftPath} />
-                </g>
+                {shouldRenderSeries ? (
+                  <g clipPath={chartClipPath}>
+                    <path className="focus-drift__area" d={chart.focusAreaPath} />
+                    <path className="focus-drift__drift-mist" d={driftMistAreaPath} />
+                    <path className="focus-drift__line focus-drift__line--focus" d={chart.focusPath} />
+                    <path className="focus-drift__line focus-drift__line--drift" d={chart.driftPath} />
+                  </g>
+                ) : null}
                 <rect className="focus-drift__line-target" x={FOCUS_DRIFT_CHART_BOUNDS.left} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left} height={100 - FOCUS_DRIFT_CHART_BOUNDS.top} aria-label="Focus and drift curve hover target" onMouseEnter={updateLineHover} onMouseMove={updateLineHover} onMouseLeave={clearHover} />
                 {hoverPoints.map((point) => (
                   <g key={point.id}>
