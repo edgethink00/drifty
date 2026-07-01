@@ -219,7 +219,8 @@ def _read_history_files(
 def _copy_history_database(source: Path, temp_path: Path) -> Path:
     target = temp_path / source.name
     shutil.copy2(source, target)
-    for sidecar in (source.with_name(f"{source.name}-wal"), source.with_name(f"{source.name}-shm")):
+    for sidecar_suffix in ("-journal", "-wal", "-shm"):
+        sidecar = source.with_name(f"{source.name}{sidecar_suffix}")
         if sidecar.exists():
             shutil.copy2(sidecar, temp_path / sidecar.name)
     return target

@@ -252,6 +252,17 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertIn("History", copied_names)
         self.assertIn("History-wal", copied_names)
 
+    def test_browser_history_metadata_copies_journal_sidecar_when_present(self) -> None:
+        history_path = self._write_chromium_history("Default", [("https://docs.example.test/", "Docs", 10)])
+        history_path.with_name("History-journal").write_bytes(b"")
+
+        with patch("app.tracker.browser_history.shutil.copy2", wraps=__import__("shutil").copy2) as copy_file:
+            browser_history_metadata("Google Chrome", "Docs - Google Chrome", profile_roots={"Google Chrome": self.root})
+
+        copied_names = [Path(call.args[0]).name for call in copy_file.call_args_list]
+        self.assertIn("History", copied_names)
+        self.assertIn("History-journal", copied_names)
+
     def test_browser_history_metadata_reports_unsupported_safari(self) -> None:
         metadata = browser_history_metadata("Safari", "Docs - Safari", profile_roots={"Safari": self.root})
 
