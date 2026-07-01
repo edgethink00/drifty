@@ -855,6 +855,21 @@
   margin-left: calc(0px - var(--focus-drift-left-bleed));
 }
 
+.focus-drift--live .focus-drift__plot::after,
+.focus-drift--reveal .focus-drift__plot::after {
+  content: "";
+  position: absolute;
+  top: 8%;
+  right: calc(var(--focus-drift-right-bleed) - var(--space-2));
+  bottom: 8%;
+  left: var(--focus-drift-chart-right, 95.5%);
+  z-index: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in srgb, var(--surface-strong) 72%, var(--bg-2));
+  opacity: 0.58;
+  pointer-events: none;
+}
+
 .focus-drift__svg {
   width: 100%;
   height: clamp(4.19rem, 8vw, 5.9rem);
