@@ -189,6 +189,7 @@ import { useDashboardDemoReplayController } from "./features/dashboard/useDashbo
 import { buildSelectedDashboardReplayAnchor } from "./features/dashboard/dashboardDemoReplaySource";
 import type { DemoDashboardReplayKind } from "./features/dashboard/demoDashboardReplay";
 import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUpdateDialogBlocking, resolveDashboardDemoReplayEffectiveData } from "./features/dashboard/dashboardDemoReplayEffectiveData";
+import { buildDashboardDemoReplaySidebarCard } from "./features/dashboard/dashboardDemoReplaySidebarCard";
 import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
 import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
@@ -4048,7 +4049,29 @@ export default function App() {
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
-  const trackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Start tracking";
+  const liveTrackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Start tracking";
+  const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
+    currentDay: effectiveTodayDayForWeekModel,
+    currentMinuteOfDay: effectiveCurrentMinuteOfDay,
+    replayState: dashboardDemoReplayState,
+    segments: effectiveSelectedDaySegments,
+    startOfDayMinutes,
+  }), [
+    dashboardDemoReplayState,
+    effectiveCurrentMinuteOfDay,
+    effectiveSelectedDaySegments,
+    effectiveTodayDayForWeekModel,
+    startOfDayMinutes,
+  ]);
+  const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
+  const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable ? "unavailable" : "idle");
+  const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused");
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? `${trackerStateLabel} · ${formatDuration(dayTotalSeconds)}`;
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? liveAppLabel;
+  const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
+  const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? `Last capture: ${lastCaptureDistanceLabel}`;
+  const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
+  const isSidebarTrackerActionDisabled = replaySidebarTrackerCard === null && isTrackerUnavailable;
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
@@ -4977,25 +5000,25 @@ export default function App() {
         </nav>
 
         <div className="sidebar-foot">
-          <div className="tracker-control" data-state={isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume"}>
+          <div className="tracker-control" data-state={sidebarTrackerControlState}>
             <div className="live-pill">
               <div className="live-pill__summary">
-                <div className={`k ${status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable ? "unavailable" : "idle"}`}>
-                  {status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused"}
+                <div className={`k ${sidebarTrackerIndicatorClassName}`}>
+                  {sidebarTrackerCollapsedLabel}
                 </div>
                 <div className="live-pill__summary-copy">
                   <span className="live-pill__status-row">
                     <span className="live-pill__status-dot" aria-hidden="true" />
                     <span className="live-pill__status-label">
-                      {trackerStateLabel} &middot; {formatDuration(dayTotalSeconds)}
+                      {sidebarTrackerStatusLabel}
                     </span>
                   </span>
                   <span className="live-pill__summary-name">
-                    <span className="live-pill__summary-app">{liveAppLabel}</span>
-                    {liveSiteLabel ? <span className="live-pill__summary-site">{liveSiteLabel}</span> : null}
+                    <span className="live-pill__summary-app">{sidebarTrackerAppLabel}</span>
+                    {sidebarTrackerSiteLabel ? <span className="live-pill__summary-site">{sidebarTrackerSiteLabel}</span> : null}
                   </span>
                   <span className="live-pill__summary-meta">
-                    <span className="live-pill__summary-meta-line">Last capture: {lastCaptureDistanceLabel}</span>
+                    <span className="live-pill__summary-meta-line">{sidebarTrackerMetaLabel}</span>
                   </span>
                 </div>
               </div>
@@ -5003,13 +5026,19 @@ export default function App() {
             <button
               type="button"
               className="sidebar-tracker-toggle"
-              data-state={isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume"}
-              onClick={() => void (status?.running ? handleStopTracking() : handleStartTracking())}
-              disabled={isTrackerUnavailable}
-              aria-label={trackerActionLabel}
-              title={trackerActionLabel}
+              data-state={sidebarTrackerControlState}
+              onClick={() => {
+                if (replaySidebarTrackerCard) {
+                  stopDashboardDemoReplay();
+                  return;
+                }
+                void (status?.running ? handleStopTracking() : handleStartTracking());
+              }}
+              disabled={isSidebarTrackerActionDisabled}
+              aria-label={sidebarTrackerActionLabel}
+              title={sidebarTrackerActionLabel}
             >
-              <span>{trackerActionLabel}</span>
+              <span>{sidebarTrackerActionLabel}</span>
             </button>
           </div>
           <AccountMenu
