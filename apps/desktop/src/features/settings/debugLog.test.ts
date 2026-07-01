@@ -337,6 +337,62 @@ describe("buildDebugLogPayload", () => {
     });
   });
 
+  it("recognizes Aside app-only segments as supported browser diagnostics", () => {
+    const asideSegment = segment({
+      id: "aside-segment",
+      appName: "Aside",
+      browserName: null,
+      siteDomain: "docs.example.test",
+      siteUrl: "https://docs.example.test/aside",
+      siteSource: "applescript",
+      browserAutomationStatus: "granted",
+    });
+
+    const payload = buildDebugLogPayload({
+      selectedDay: "2026-06-13",
+      startOfDayMinutes: 240,
+      startOfWeek: "monday",
+      theme: "light",
+      categoryColorOverrides: {},
+      appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: true,
+        forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: false,
+        forceBrowserHistoryUrlFallback: false,
+        forceChromiumAxExtremeNudge: false,
+      },
+      status: null,
+      accessibilityGranted: true,
+      currentSnapshot: null,
+      driftAlarm,
+      driftAlarmDebugEvents: [],
+      segments: [asideSegment],
+      historySegments: [],
+      leaderboardSegments: [],
+      ai: baseAiDebug,
+      error: null,
+    });
+
+    expect(payload.tracker.browserCaptureDiagnostics.today).toMatchObject({
+      browserSegments: 1,
+      siteContextSegments: 1,
+      missingSiteContextSegments: 0,
+      browserAutomationStatusCounts: {
+        granted: 1,
+      },
+    });
+    expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser).toHaveLength(1);
+    expect(payload.tracker.browserCaptureDiagnostics.today.byBrowser[0]).toMatchObject({
+      browserName: "Aside",
+      totalSegments: 1,
+      siteContextSegments: 1,
+      siteSourceCounts: {
+        applescript: 1,
+      },
+    });
+  });
+
   it("records cloud AI issue diagnostics without raw provider payloads", () => {
     const payload = buildDebugLogPayload({
       selectedDay: "2026-06-13",

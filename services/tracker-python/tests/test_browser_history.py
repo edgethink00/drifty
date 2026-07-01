@@ -15,6 +15,7 @@ from app.tracker.browser_history import (
     browser_history_metadata,
     chromium_history_paths_for_root,
     firefox_history_paths_for_root,
+    is_browser_history_supported_app,
 )
 
 
@@ -120,6 +121,26 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertEqual(metadata.browser_history_profile_count, 1)
         self.assertEqual(metadata.browser_history_candidate_count, 1)
         self.assertEqual(metadata.browser_history_error_count, 0)
+
+    def test_browser_history_metadata_reads_aside_chromium_profile(self) -> None:
+        self._write_chromium_history(
+            "Default",
+            [("https://docs.example.test/aside", "Aside Docs", 50)],
+        )
+
+        metadata = browser_history_metadata(
+            "Aside",
+            "Aside Docs - Aside",
+            profile_roots={"Aside": self.root},
+        )
+
+        self.assertTrue(is_browser_history_supported_app("Aside"))
+        self.assertEqual(metadata.site_url, "https://docs.example.test/aside")
+        self.assertEqual(metadata.site_domain, "docs.example.test")
+        self.assertEqual(metadata.site_title, "Aside Docs")
+        self.assertEqual(metadata.match_state, "browser-history-title")
+        self.assertEqual(metadata.browser_automation_status, "granted")
+        self.assertEqual(metadata.browser_history_status, "matched")
 
     def test_browser_history_metadata_reads_firefox_unique_match(self) -> None:
         self._write_firefox_places(
