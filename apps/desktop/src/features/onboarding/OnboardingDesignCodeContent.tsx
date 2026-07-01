@@ -78,7 +78,6 @@ export function OnboardingDesignCodeContent({
   const showDots = flow.step !== "welcome" && flow.step !== "account";
   const showBack = flow.stepIndex > 0;
   const footerLabel = footerLabelForDesignCodeStep(flow);
-  const framedStepClass = flow.step === "permissions" || flow.step === "nudges" ? " dc-onb-card--framed-step" : "";
   const selectedActivities = flow.mainActivities;
   const activityOptions = useMemo(() => {
     const query = activityQuery.trim().toLowerCase();
@@ -201,7 +200,7 @@ export function OnboardingDesignCodeContent({
 
   return (
     <>
-      <form className={`onboarding-card dc-onb-card${framedStepClass}`} onSubmit={flow.handleSubmit}>
+      <form className="onboarding-card dc-onb-card" onSubmit={flow.handleSubmit}>
         <div className="dc-onb-scroll">
           <div className={contentClassName}>
             {showTitle ? (
@@ -795,7 +794,7 @@ function SetupCard({ badge, description, icon, label, selected, onClick }: Setup
 function ConnectServerStep({ flow }: { readonly flow: OnboardingFlow }) {
   return (
     <>
-      <p className="dc-onb-copy">{serverDescriptionForSetup(flow.setupChoice)}</p>
+      <p className="dc-onb-copy dc-onb-server-copy">{serverDescriptionForSetup(flow.setupChoice)}</p>
       {flow.setupChoice === "local_ai" ? <LocalAiSetup flow={flow} /> : null}
       {flow.isCustomEndpointSetup ? <CustomEndpointSetup flow={flow} /> : null}
       {flow.isByokSetup ? <ByokSetup flow={flow} /> : null}

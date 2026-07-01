@@ -45,3 +45,31 @@ describe("onboarding setup choice styles", () => {
     expect(viewportRule).toContain("overflow: visible;");
   });
 });
+
+describe("onboarding design-code reference styles", () => {
+  it("does not add an inner framed window to individual design-code steps", () => {
+    expect(styles).not.toContain("dc-onb-card--framed-step");
+  });
+
+  it("keeps the design-code continue button static on hover", () => {
+    const primaryButtonRule = styles.match(
+      /\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary,\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:hover:not\(:disabled\),\s*\.onboarding-card\.dc-onb-card \.dc-onb-actions \.dc-onb-primary:active:not\(:disabled\)\s*\{(?<body>[^}]*)\}/,
+    )?.groups?.body ?? "";
+
+    expect(primaryButtonRule).toContain("height: 41px;");
+    expect(primaryButtonRule).toContain("background: var(--dc-onb-accent);");
+    expect(primaryButtonRule).toContain("transform: none;");
+    expect(primaryButtonRule).toContain("transition: opacity 0.15s;");
+  });
+
+  it("keeps local model cards in the reference row layout at the 720px card width", () => {
+    const mediumQueryStart = styles.indexOf("@media (max-width: 760px)");
+    const compactQueryStart = styles.indexOf("@media (max-width: 560px)");
+    const mediumQuery = styles.slice(mediumQueryStart, compactQueryStart);
+    const compactQuery = styles.slice(compactQueryStart);
+
+    expect(mediumQuery).not.toContain(".dc-onb-local-card");
+    expect(compactQuery).toContain(".dc-onb-local-card");
+    expect(compactQuery).toContain("flex-direction: column;");
+  });
+});
