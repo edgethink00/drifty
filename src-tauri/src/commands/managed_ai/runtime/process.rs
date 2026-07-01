@@ -148,12 +148,26 @@ pub(super) fn stop_stale_runtime_server(runtime_path: &Path) -> Result<(), Manag
     let Some(runtime_path) = runtime_path.to_str() else {
         return Ok(());
     };
+    // The tracked child is stopped through its handle; only untracked servers
+    // (for example one adopted from a previous app run) are reaped here.
+    let tracked_pid = tracked_child_pid();
     for pid in runtime_listener_pids()? {
+        if tracked_pid == Some(pid) {
+            continue;
+        }
         if process_command_contains(pid, runtime_path)? {
             kill_process(pid)?;
         }
     }
     Ok(())
+}
+
+fn tracked_child_pid() -> Option<u32> {
+    RUNTIME_CHILD
+        .lock()
+        .ok()?
+        .as_ref()
+        .map(|runtime| runtime.child.id())
 }
 
 pub(super) fn stop_runtime_for_model(model_id: &str) -> Result<(), ManagedAiError> {
@@ -182,7 +196,27 @@ pub(super) fn stop_runtime_for_tests() {
     }
 }
 
+#[cfg(test)]
+static TEST_RUNTIME_LISTENER_PIDS: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+
+#[cfg(test)]
+pub(super) fn set_runtime_listener_pids_for_tests(pids: Option<Vec<u32>>) {
+    if let Ok(mut guard) = TEST_RUNTIME_LISTENER_PIDS.lock() {
+        *guard = pids;
+    }
+}
+
 fn runtime_listener_pids() -> Result<Vec<u32>, ManagedAiError> {
+    #[cfg(test)]
+    if let Ok(guard) = TEST_RUNTIME_LISTENER_PIDS.lock() {
+        if let Some(pids) = guard.as_ref() {
+            return Ok(pids.clone());
+        }
+    }
+    real_runtime_listener_pids()
+}
+
+fn real_runtime_listener_pids() -> Result<Vec<u32>, ManagedAiError> {
     let output = match Command::new("lsof")
         .arg("-nP")
         .arg(format!("-iTCP:{RUNTIME_PORT}"))

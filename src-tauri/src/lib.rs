@@ -158,7 +158,7 @@ pub fn run() {
                         let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
                     }
                     tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
-                        managed_ai_stop_runtime_for_app_exit();
+                        managed_ai_stop_runtime_for_app_exit(app);
                         tracker::shutdown_serve_process();
                     }
                     tauri::RunEvent::WindowEvent {

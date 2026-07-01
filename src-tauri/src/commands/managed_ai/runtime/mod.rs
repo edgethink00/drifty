@@ -91,12 +91,19 @@ pub(super) fn normalize_runtime_status(
     Ok(status)
 }
 
-pub(super) fn stop_runtime_for_model(model_id: &str) -> Result<(), ManagedAiError> {
-    process::stop_runtime_for_model(model_id)
+pub(super) fn stop_runtime_for_model(root: &Path, model_id: &str) -> Result<(), ManagedAiError> {
+    process::stop_runtime_for_model(model_id)?;
+    // An adopted server (already listening when the app launched) is never in
+    // RUNTIME_CHILD, so it must be reaped by port + command-line match.
+    process::stop_stale_runtime_server(&install::expected_runtime_path(root))
 }
 
-pub(super) fn stop_runtime() -> Result<(), ManagedAiError> {
-    process::stop_runtime()
+pub(super) fn stop_runtime(root: Option<&Path>) -> Result<(), ManagedAiError> {
+    process::stop_runtime()?;
+    if let Some(root) = root {
+        process::stop_stale_runtime_server(&install::expected_runtime_path(root))?;
+    }
+    Ok(())
 }
 
 fn running_status(
@@ -117,4 +124,9 @@ fn running_status(
 #[cfg(test)]
 pub(super) fn stop_runtime_for_tests() {
     process::stop_runtime_for_tests();
+}
+
+#[cfg(test)]
+pub(super) fn set_runtime_listener_pids_for_tests(pids: Option<Vec<u32>>) {
+    process::set_runtime_listener_pids_for_tests(pids);
 }

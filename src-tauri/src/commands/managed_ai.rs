@@ -103,8 +103,8 @@ pub async fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<Manag
         .map_err(error_message)
 }
 
-pub(crate) fn managed_ai_stop_runtime_for_app_exit() {
-    let _ = runtime::stop_runtime();
+pub(crate) fn managed_ai_stop_runtime_for_app_exit(app: &AppHandle) {
+    let _ = runtime::stop_runtime(managed_ai_root(app).ok().as_deref());
 }
 
 fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
@@ -198,7 +198,7 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
 
 fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    runtime::stop_runtime_for_model(spec.id)?;
+    runtime::stop_runtime_for_model(root, spec.id)?;
     let model_path = model_dir(root, spec.id);
     if model_path.exists() {
         fs::remove_dir_all(model_path)?;

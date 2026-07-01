@@ -1,6 +1,19 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 
 use super::*;
+
+// Serializes tests that touch the process-global RUNTIME_CHILD slot or the
+// runtime-listener pid override.
+static RUNTIME_GLOBALS_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_runtime_globals() -> MutexGuard<'static, ()> {
+    RUNTIME_GLOBALS_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
 
 #[test]
 fn start_requires_runtime_assets() {
@@ -17,6 +30,7 @@ fn start_requires_runtime_assets() {
 
 #[test]
 fn start_spawns_runtime_for_downloaded_model() {
+    let _globals = lock_runtime_globals();
     let root = tempfile::tempdir().expect("create temp root");
     let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
     fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
@@ -46,6 +60,70 @@ fn start_spawns_runtime_for_downloaded_model() {
     ] {
         assert!(args.contains(expected), "missing runtime arg {expected}");
     }
+}
+
+#[test]
+fn delete_model_reaps_adopted_runtime_server() {
+    let _globals = lock_runtime_globals();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-gemma-4-12b-local").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+    write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
+        .expect("write fake runtime");
+    // Adopted server: already listening when the app launched, never tracked
+    // in RUNTIME_CHILD.
+    let mut adopted = spawn_adopted_runtime(root.path());
+
+    runtime::set_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
+    let result = super::super::delete_model_at_root(root.path(), "drifty-gemma-4-12b-local");
+    runtime::set_runtime_listener_pids_for_tests(None);
+
+    let status = result.expect("delete status");
+    assert!(matches!(status.state, ManagedAiInstallState::NotInstalled));
+    assert!(
+        wait_for_exit(&mut adopted),
+        "adopted llama-server must be terminated by model delete"
+    );
+}
+
+#[test]
+fn app_exit_reaps_adopted_runtime_server() {
+    let _globals = lock_runtime_globals();
+    let root = tempfile::tempdir().expect("create temp root");
+    write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
+        .expect("write fake runtime");
+    let mut adopted = spawn_adopted_runtime(root.path());
+
+    runtime::set_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
+    let result = runtime::stop_runtime(Some(root.path()));
+    runtime::set_runtime_listener_pids_for_tests(None);
+
+    result.expect("stop runtime");
+    assert!(
+        wait_for_exit(&mut adopted),
+        "adopted llama-server must be terminated on app exit"
+    );
+}
+
+fn spawn_adopted_runtime(root: &Path) -> Child {
+    Command::new("/bin/sh")
+        .arg(root.join("runtime").join("llama-server"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn adopted runtime process")
+}
+
+fn wait_for_exit(child: &mut Child) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    false
 }
 
 #[test]
