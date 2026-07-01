@@ -378,7 +378,7 @@ class TrackerDatabase:
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
-                ORDER BY ended_at DESC, id DESC
+                ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
                 """
             ).fetchone()
@@ -589,7 +589,7 @@ class TrackerDatabase:
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
-                ORDER BY ended_at DESC, id DESC
+                ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
                 """
             ).fetchone()
@@ -732,7 +732,7 @@ class TrackerDatabase:
     def fetch_last_event_at(self) -> str | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT ended_at FROM activity_segments ORDER BY ended_at DESC, id DESC LIMIT 1"
+                "SELECT ended_at FROM activity_segments ORDER BY datetime(ended_at) DESC, id DESC LIMIT 1"
             ).fetchone()
         return row["ended_at"] if row else None
 

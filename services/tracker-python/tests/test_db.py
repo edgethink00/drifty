@@ -640,6 +640,24 @@ class TrackerDatabaseTests(unittest.TestCase):
         )
         self.assertEqual(self.database.fetch_last_event_at(), "2026-04-06T09:05:00+00:00")
 
+    def test_last_event_at_orders_by_datetime_not_text(self) -> None:
+        self._insert_activity_segment(0, started_at="2026-04-06T09:00:00+00:00", ended_at="2026-04-06T09:05:00+00:00")
+        self._insert_activity_segment(1, started_at="2026-04-06T10:55:00+02:00", ended_at="2026-04-06T11:00:00+02:00")
+
+        self.assertEqual(self.database.fetch_last_event_at(), "2026-04-06T09:05:00+00:00")
+
+    def test_latest_segment_query_avoids_temp_btree_sort(self) -> None:
+        with self.database.connect() as conn:
+            plan = " ".join(
+                row["detail"]
+                for row in conn.execute(
+                    "EXPLAIN QUERY PLAN "
+                    "SELECT ended_at FROM activity_segments ORDER BY datetime(ended_at) DESC, id DESC LIMIT 1"
+                )
+            )
+
+        self.assertNotIn("TEMP B-TREE", plan)
+
     def test_fetch_top_sites_aggregates_browser_rows(self) -> None:
         started_at = "2026-04-06T09:00:00+00:00"
         self.database.insert_segment(
