@@ -1,0 +1,91 @@
+.settings-collapsible-card {
+  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.settings-collapsible-card.is-expanded {
+  border-color: var(--line-strong, color-mix(in srgb, var(--text) 14%, var(--line)));
+}
+
+.settings-collapsible-card__toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr) auto 1rem;
+  min-height: 3.55rem;
+  padding: 0.72rem var(--space-3);
+  text-align: left;
+  width: 100%;
+}
+
+.settings-collapsible-card__toggle:hover {
+  background: color-mix(in srgb, var(--bg-2) 38%, transparent);
+}
+
+.settings-collapsible-card__toggle:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: -3px;
+}
+
+.settings-collapsible-card__copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.settings-collapsible-card__copy strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.settings-collapsible-card__copy span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.settings-collapsible-card__summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-self: end;
+  transition: opacity var(--transition-fast);
+}
+
+.settings-collapsible-card.is-expanded .settings-collapsible-card__summary {
+  opacity: 0;
+}
+
+.settings-collapsible-card__chevron {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  display: inline-block;
+  height: 0.48rem;
+  justify-self: end;
+  opacity: 0.82;
+  transform: rotate(45deg);
+  transition: transform var(--transition-fast);
+  width: 0.48rem;
+}
+
+.settings-collapsible-card.is-expanded .settings-collapsible-card__chevron {
+  transform: rotate(225deg);
+}
+
+.settings-collapsible-card__panel {
+  border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  padding: var(--space-3);
+}

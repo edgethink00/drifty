@@ -153,6 +153,8 @@ describe("AiSetupPanel", () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: /^Work profile$/i }));
     expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
     expect(screen.queryByRole("region", { name: /^Model being used$/i })).toBeNull();
     expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();

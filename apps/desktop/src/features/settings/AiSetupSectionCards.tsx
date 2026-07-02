@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import driftyLogoUrl from "../../assets/drifty-icon.png";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 
 export const AI_SETUP_SECTIONS = [
   { id: "drifty", title: "Drifty" },
@@ -44,11 +45,9 @@ export function AiSetupSectionCard({
         </span>
         <span className="ai-setup-choice__chevron" aria-hidden="true" />
       </button>
-      {expanded ? (
-        <div id={panelId} className="ai-setup-choice__panel" role="region" aria-labelledby={buttonId}>
-          {children}
-        </div>
-      ) : null}
+      <CollapsiblePanel contentClassName="ai-setup-choice__panel" expanded={expanded} id={panelId} labelledBy={buttonId}>
+        {children}
+      </CollapsiblePanel>
     </article>
   );
 }
