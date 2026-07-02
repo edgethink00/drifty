@@ -1,7 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
 import {
-  DEVELOPER_PRE_RELEASE_UPDATES_ENABLED,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED,
   ONBOARDING_V2_2_PREVIEW_ENABLED,
@@ -14,7 +13,6 @@ import {
   WATCHER_PERIODIC_MIN_LIMIT_MINUTES,
   type WatcherMode,
 } from "../companion/watcherData";
-import { DeveloperPreReleaseUpdateRow } from "../updates/DeveloperPreReleaseUpdateRow";
 
 export type DriftAlarmPreviewOption = typeof DRIFT_ALARM_PREVIEW_OPTIONS[number];
 
@@ -56,7 +54,6 @@ export function DevPreviewControls({
   return (
     <div className="settings-block settings-block--dev-preview">
       <h3>Dev</h3>
-      {DEVELOPER_PRE_RELEASE_UPDATES_ENABLED ? <DeveloperPreReleaseUpdateRow /> : null}
       {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
         <div className="settings-row">
           <div>

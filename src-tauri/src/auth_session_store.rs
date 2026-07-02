@@ -49,7 +49,9 @@ pub fn load_saved_session(app: &AppHandle) -> Result<Option<String>, String> {
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(KeyringError::NoEntry) => load_legacy_session(app, &entry),
-        Err(error) => Err(format!("Unable to read auth session from Keychain: {error}")),
+        Err(error) => Err(format!(
+            "Unable to read auth session from Keychain: {error}"
+        )),
     }
 }
 
@@ -62,7 +64,9 @@ pub fn save_session(value: &str) -> Result<(), String> {
 pub fn clear_saved_session(app: &AppHandle) -> Result<(), String> {
     let keychain_result = match keychain_entry()?.delete_credential() {
         Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
-        Err(error) => Err(format!("Unable to clear auth session from Keychain: {error}")),
+        Err(error) => Err(format!(
+            "Unable to clear auth session from Keychain: {error}"
+        )),
     };
 
     let legacy_result = remove_legacy_session_file(app);

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
@@ -19,9 +19,9 @@ export type WatcherWindowEvent = WatcherPeekEvent | EndOfDayReviewEvent | Extrem
 export type EndOfDayReviewAction = "openDashboard" | "viewDetails" | "openNotificationSettings";
 
 export function isTauriRuntime() {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return false;
-  const internals = window.__TAURI_INTERNALS__ as Record<string, unknown>;
-  return typeof internals.invoke === "function" && typeof internals.transformCallback === "function";
+  if (typeof window === "undefined") return false;
+  if (isTauri()) return true;
+  return "__TAURI_INTERNALS__" in window;
 }
 
 export async function showNativeWatcherPeek(event: WatcherPeekEvent): Promise<boolean> {

@@ -1,6 +1,5 @@
 import { Toggle } from "../../components/Toggle";
 import { SettingsSelect } from "./SettingsSelect";
-import { SettingsBuildInfoRow } from "./SettingsBuildInfoRow";
 import { StartupSettingsRow } from "./StartupSettingsRow";
 import type { StartOfWeek } from "./settingsStorage";
 import {
@@ -10,8 +9,6 @@ import {
 
 type GeneralSettingsSectionProps = {
   readonly autoInstallFutureUpdates: boolean;
-  readonly devModeEnabled: boolean;
-  readonly isDevSettingsEnabled: boolean;
   readonly startOfDayValue: string;
   readonly startOfWeek: StartOfWeek;
   readonly updaterChecking: boolean;
@@ -23,13 +20,10 @@ type GeneralSettingsSectionProps = {
   readonly onRequestAccessibility: () => void;
   readonly onStartOfDayChange: (value: string) => void;
   readonly onStartOfWeekChange: (value: StartOfWeek) => void;
-  readonly onDevModeChange: (enabled: boolean) => void;
 };
 
 export function GeneralSettingsSection({
   autoInstallFutureUpdates,
-  devModeEnabled,
-  isDevSettingsEnabled,
   startOfDayValue,
   startOfWeek,
   updaterChecking,
@@ -41,7 +35,6 @@ export function GeneralSettingsSection({
   onRequestAccessibility,
   onStartOfDayChange,
   onStartOfWeekChange,
-  onDevModeChange,
 }: GeneralSettingsSectionProps) {
   return (
     <div className="settings-section settings-section--general">
@@ -59,12 +52,6 @@ export function GeneralSettingsSection({
       <div className="settings-block"><h3>Permissions</h3>
         <div className="settings-row"><div><div className="lbl">Accessibility</div><div className="desc">Grant Accessibility permission so Drifty can read window titles for better activity context.</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={onRequestAccessibility}>Grant Accessibility access</button></div></div>
       </div>
-      {isDevSettingsEnabled ? (
-        <div className="settings-block"><h3>Debugging</h3>
-          <div className="settings-row"><div><div className="lbl">Dev mode</div><div className="desc">Show local diagnostics controls for this build.</div></div><div className="ctrl"><Toggle checked={devModeEnabled} onChange={onDevModeChange} ariaLabel="Toggle Dev mode" /></div></div>
-          <SettingsBuildInfoRow />
-        </div>
-      ) : null}
     </div>
   );
 }

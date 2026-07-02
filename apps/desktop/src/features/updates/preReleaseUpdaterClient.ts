@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { clearPostUpdateRelaunchFocusPending, markPostUpdateRelaunchFocusPending } from "./updatePolicy";
 
@@ -11,7 +11,7 @@ export type DeveloperPreReleaseUpdate = {
 };
 
 export function isDeveloperPreReleaseUpdaterAvailable(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && (isTauri() || "__TAURI_INTERNALS__" in window);
 }
 
 export async function checkDeveloperPreReleaseUpdate(): Promise<DeveloperPreReleaseUpdate | null> {

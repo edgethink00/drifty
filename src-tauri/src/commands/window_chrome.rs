@@ -59,13 +59,19 @@ pub fn window_set_onboarding_presentation(
             )))
             .map_err(|error| error.to_string())?;
         window
-            .set_size(LogicalSize::new(ONBOARDING_CARD_WIDTH, ONBOARDING_CARD_HEIGHT))
+            .set_size(LogicalSize::new(
+                ONBOARDING_CARD_WIDTH,
+                ONBOARDING_CARD_HEIGHT,
+            ))
             .map_err(|error| error.to_string())?;
         window.center().map_err(|error| error.to_string())?;
     } else if !active {
         let restore = saved_window_size().lock().ok().and_then(|mut s| s.take());
         window
-            .set_min_size(Some(LogicalSize::new(DEFAULT_MIN_WIDTH, DEFAULT_MIN_HEIGHT)))
+            .set_min_size(Some(LogicalSize::new(
+                DEFAULT_MIN_WIDTH,
+                DEFAULT_MIN_HEIGHT,
+            )))
             .map_err(|error| error.to_string())?;
         if let Some(size) = restore {
             window.set_size(size).map_err(|error| error.to_string())?;

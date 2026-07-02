@@ -1,4 +1,5 @@
 mod app_icons;
+mod app_menu;
 mod auth_session_store;
 mod cloud_device_store;
 mod commands;
@@ -8,6 +9,7 @@ mod tray;
 
 use std::sync::Mutex;
 
+use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_menu};
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_openai_chat,
     developer_check_pre_release_update, developer_install_pre_release_update, drift_alarm_action,
@@ -199,10 +201,12 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(TrackerController::default());
+        .manage(TrackerController::default())
+        .on_menu_event(|app, event| handle_app_menu_event(app, event.id().as_ref()));
 
     if let Err(error) = builder
         .setup(|app| {
+            setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
             setup_drift_alarm_window(app)?;
             setup_tray(app.handle())?;
@@ -214,6 +218,7 @@ pub fn run() {
             accessibility_get_status,
             accessibility_request_access,
             ai_classification_openai_chat,
+            app_menu_set_dev_mode_checked,
             developer_check_pre_release_update,
             developer_install_pre_release_update,
             update_prompt_show_native,

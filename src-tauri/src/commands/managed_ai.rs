@@ -94,7 +94,10 @@ pub async fn managed_ai_start(app: AppHandle, model_id: String) -> Result<Manage
 }
 
 #[tauri::command]
-pub async fn managed_ai_delete(app: AppHandle, model_id: String) -> Result<ManagedAiStatus, String> {
+pub async fn managed_ai_delete(
+    app: AppHandle,
+    model_id: String,
+) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
     let model_id = model_id.trim().to_string();
     async_runtime::spawn_blocking(move || delete_model_at_root(&root, &model_id))

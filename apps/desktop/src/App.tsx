@@ -66,7 +66,8 @@ import { useClassificationRulesController } from "./features/classification/useC
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import { useUpdateController } from "./features/updates/useUpdateController";
-import { consumePostUpdateRelaunchFocusPending } from "./features/updates/updatePolicy";
+import { consumePostUpdateRelaunchFocusPending, fallbackUpdatePolicy } from "./features/updates/updatePolicy";
+import { useDeveloperPreReleaseUpdateController } from "./features/updates/useDeveloperPreReleaseUpdateController";
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
@@ -680,6 +681,7 @@ export default function App() {
     updaterInstalling,
     updaterMessage,
   } = useUpdateController();
+  const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
@@ -904,6 +906,14 @@ export default function App() {
     setAccountMenuOpen(false);
     void handleCheckForUpdates();
   }, [handleCheckForUpdates, navigateToTab]);
+
+  const handleAppMenuCheckLatestBuild = useCallback(() => {
+    void developerPreReleaseUpdateController.checkLatestBuild();
+  }, [developerPreReleaseUpdateController.checkLatestBuild]);
+
+  const handleAppMenuToggleDevMode = useCallback(() => {
+    setDevModeEnabled((enabled) => !enabled);
+  }, []);
 
   const openEndOfDayReviewSettings = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -2563,6 +2573,16 @@ export default function App() {
   }, [devLogoAnimationPreviewEnabled, devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void invoke("app_menu_set_dev_mode_checked", {
+      checked: DEV_SETTINGS_ENABLED && devModeEnabled,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : toErrorMessage(error);
+      console.warn("Failed to sync Dev Mode menu state", message);
+    });
+  }, [devModeEnabled]);
+
+  useEffect(() => {
     if (!isDevModeActive || !devLogoAnimationPreviewEnabled) return undefined;
 
     setBrandCaptureMotionKey((currentKey) => currentKey + 1);
@@ -2720,6 +2740,46 @@ export default function App() {
       cleanupTauriEventListener(unlisten);
     };
   }, [handleTrayCheckForUpdates]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen("app-menu-toggle-dev-mode", handleAppMenuToggleDevMode).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, [handleAppMenuToggleDevMode]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen("app-menu-check-latest-build", handleAppMenuCheckLatestBuild).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, [handleAppMenuCheckLatestBuild]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -3998,6 +4058,7 @@ export default function App() {
   );
   const visibleUpdate = updateDialogBlocked || !shouldShowAvailableUpdateDialog ? null : availableUpdate;
   const titlebarUpdate = updateDialogBlocked || visibleUpdate ? null : availableUpdate;
+  const latestBuildPromptUpdate = developerPreReleaseUpdateController.promptUpdate;
 
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
   const selectedDayProductivityTotals = useMemo(
@@ -5358,8 +5419,6 @@ export default function App() {
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
                     autoInstallFutureUpdates={autoInstallFutureUpdates}
-                    devModeEnabled={devModeEnabled}
-                    isDevSettingsEnabled={DEV_SETTINGS_ENABLED}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
                     updaterChecking={updaterChecking}
@@ -5371,7 +5430,6 @@ export default function App() {
                     onRequestAccessibility={() => void handleRequestAccessibility()}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
-                    onDevModeChange={setDevModeEnabled}
                   />
                 )}
                 {settingsSection === "appearance" && (
@@ -5617,6 +5675,24 @@ export default function App() {
           onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
           onDismiss={dismissAvailableUpdate}
           onInstall={() => void handleInstallUpdate()}
+        />
+      ) : null}
+
+      {latestBuildPromptUpdate?.version ? (
+        <AvailableUpdateDialog
+          autoInstallFutureUpdates={developerPreReleaseUpdateController.autoInstallFutureUpdates}
+          policy={fallbackUpdatePolicy(latestBuildPromptUpdate.version)}
+          update={{
+            body: latestBuildPromptUpdate.body,
+            date: latestBuildPromptUpdate.date,
+            version: latestBuildPromptUpdate.version,
+          }}
+          updaterChecking={developerPreReleaseUpdateController.status === "checking"}
+          updaterError={developerPreReleaseUpdateController.error}
+          updaterInstalling={developerPreReleaseUpdateController.status === "installing"}
+          onAutoInstallFutureUpdatesChange={developerPreReleaseUpdateController.setAutoInstallFutureUpdates}
+          onDismiss={developerPreReleaseUpdateController.dismissPrompt}
+          onInstall={() => void developerPreReleaseUpdateController.installLatestBuild()}
         />
       ) : null}
 

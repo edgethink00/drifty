@@ -83,7 +83,10 @@ vi.mock("./features/billing/billingService", () => ({
   createBillingPortalSession: billingMocks.createBillingPortalSession,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
 }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: tauriInvoke }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: tauriInvoke,
+  isTauri: () => false,
+}));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn((eventName: string, handler: (event: { payload: unknown }) => void) => {
     const handlers = tauriEventHandlers.get(eventName) ?? [];

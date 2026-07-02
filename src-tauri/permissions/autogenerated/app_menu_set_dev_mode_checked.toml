@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-menu-set-dev-mode-checked"
+description = "Enables the app_menu_set_dev_mode_checked command without any pre-configured scope."
+commands.allow = ["app_menu_set_dev_mode_checked"]
+
+[[permission]]
+identifier = "deny-app-menu-set-dev-mode-checked"
+description = "Denies the app_menu_set_dev_mode_checked command without any pre-configured scope."
+commands.deny = ["app_menu_set_dev_mode_checked"]
