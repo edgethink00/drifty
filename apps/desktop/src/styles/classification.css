@@ -131,11 +131,12 @@
 
 .classification-panel-view__category-row {
   --classification-category-tone: var(--classification-selected-tone);
-  border: 2px solid color-mix(in srgb, color-mix(in srgb, var(--classification-category-tone) 2.5%, var(--line)) 50%, transparent);
+  border-color: color-mix(in srgb, var(--classification-category-tone) 12%, var(--line));
   background:
     linear-gradient(135deg,
       color-mix(in srgb, var(--classification-category-tone) 2%, var(--surface)),
       color-mix(in srgb, var(--classification-category-tone) 1%, var(--surface)));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--classification-category-tone) 4%, transparent);
 }
 
 .classification-panel-view__category-row:has(.category-dot--workspace) {
@@ -186,30 +187,31 @@
 }
 
 .classification-panel-view__category-row:hover {
-  border-color: color-mix(in srgb, color-mix(in srgb, var(--classification-category-tone) 5%, var(--line-strong)) 50%, transparent);
+  border-color: color-mix(in srgb, var(--classification-category-tone) 20%, var(--line-strong));
   background:
     linear-gradient(135deg,
       color-mix(in srgb, var(--classification-category-tone) 4%, var(--surface-strong)),
       color-mix(in srgb, var(--classification-category-tone) 2%, var(--surface)));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--classification-category-tone) 10%, transparent);
 }
 
 .classification-panel-view__category-row[data-selected="true"] {
-  border-color: color-mix(in srgb, var(--classification-category-tone) 52%, var(--line));
+  border-color: transparent;
   background:
     linear-gradient(135deg,
       color-mix(in srgb, var(--classification-category-tone) 34%, var(--surface-strong)),
       color-mix(in srgb, var(--classification-category-tone) 15%, var(--surface)));
   box-shadow:
-    0 8px 18px color-mix(in srgb, var(--classification-category-tone) 13%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--classification-category-tone) 10%, transparent);
+    0 10px 22px color-mix(in srgb, var(--classification-category-tone) 20%, transparent),
+    0 2px 8px color-mix(in srgb, var(--classification-category-tone) 14%, transparent);
 }
 
 .classification-panel-view__source-row[data-selected="true"] {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 20%, var(--line));
+  border-color: transparent;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--classification-selected-tone) 18%, transparent), transparent 0.24rem),
     linear-gradient(135deg, color-mix(in srgb, var(--classification-selected-tone) 5%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
-  box-shadow: none;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--classification-selected-tone) 12%, transparent);
 }
 
 .classification-panel-view__category-row:focus-visible,
@@ -446,6 +448,7 @@
 
 .classification-panel-view__activity-copy strong {
   display: -webkit-box;
+  font-size: 0.64rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
   white-space: normal;

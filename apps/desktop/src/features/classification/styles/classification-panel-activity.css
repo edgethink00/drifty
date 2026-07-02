@@ -81,6 +81,7 @@
 
 .classification-panel-view__activity-copy strong {
   display: -webkit-box;
+  font-size: 0.64rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
   white-space: normal;
