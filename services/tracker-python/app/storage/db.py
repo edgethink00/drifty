@@ -933,6 +933,120 @@ class TrackerDatabase:
             )
             return cursor.rowcount
 
+    @staticmethod
+    def _expand_history_range_bound(value: str | None, *, end_of_day: bool) -> str | None:
+        if not value:
+            return None
+        text = value.strip()
+        if len(text) == 10 and "T" not in text and " " not in text:
+            return f"{text}T23:59:59" if end_of_day else f"{text}T00:00:00"
+        return text
+
+    def delete_history_range(
+        self,
+        start: str | None = None,
+        end: str | None = None,
+        scopes: dict[str, Any] | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        scopes = scopes or {}
+        delete_activity = bool(scopes.get("activity"))
+        delete_ai_classifications = bool(scopes.get("aiClassifications"))
+        delete_youtube_metadata = bool(scopes.get("youtubeMetadata"))
+
+        start_bound = self._expand_history_range_bound(start, end_of_day=False)
+        end_bound = self._expand_history_range_bound(end, end_of_day=True)
+        has_range = bool(start_bound or end_bound)
+
+        segment_params: list[Any] = []
+        segment_subquery = self._append_overlap_filters(
+            "SELECT id FROM activity_segments WHERE 1=1",
+            segment_params,
+            start_bound,
+            end_bound,
+        )
+        segment_video_params: list[Any] = []
+        segment_video_subquery = self._append_overlap_filters(
+            "SELECT youtube_video_id FROM activity_segments WHERE youtube_video_id IS NOT NULL",
+            segment_video_params,
+            start_bound,
+            end_bound,
+        )
+
+        activity_segments = 0
+        classifications = 0
+        youtube_metadata = 0
+
+        with self.connect() as conn:
+            if delete_activity:
+                activity_segments = int(
+                    conn.execute(
+                        f"SELECT COUNT(*) AS count FROM activity_segments WHERE id IN ({segment_subquery})",
+                        tuple(segment_params),
+                    ).fetchone()["count"]
+                )
+                classifications = int(
+                    conn.execute(
+                        f"SELECT COUNT(*) AS count FROM activity_classifications WHERE segment_id IN ({segment_subquery})",
+                        tuple(segment_params),
+                    ).fetchone()["count"]
+                )
+            elif delete_ai_classifications:
+                classifications = int(
+                    conn.execute(
+                        "SELECT COUNT(*) AS count FROM activity_classifications "
+                        f"WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
+                        tuple(segment_params),
+                    ).fetchone()["count"]
+                )
+
+            if delete_youtube_metadata:
+                if has_range:
+                    youtube_metadata = int(
+                        conn.execute(
+                            f"SELECT COUNT(*) AS count FROM youtube_video_metadata WHERE video_id IN ({segment_video_subquery})",
+                            tuple(segment_video_params),
+                        ).fetchone()["count"]
+                    )
+                else:
+                    youtube_metadata = int(
+                        conn.execute("SELECT COUNT(*) AS count FROM youtube_video_metadata").fetchone()["count"]
+                    )
+
+            if not dry_run:
+                if delete_ai_classifications:
+                    conn.execute(
+                        f"DELETE FROM activity_classifications WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
+                        tuple(segment_params),
+                    )
+                if delete_youtube_metadata:
+                    if has_range:
+                        conn.execute(
+                            f"DELETE FROM youtube_video_metadata WHERE video_id IN ({segment_video_subquery})",
+                            tuple(segment_video_params),
+                        )
+                    else:
+                        conn.execute("DELETE FROM youtube_video_metadata")
+                if delete_activity:
+                    conn.execute(
+                        f"DELETE FROM activity_segments WHERE id IN ({segment_subquery})",
+                        tuple(segment_params),
+                    )
+
+        if not dry_run and activity_segments >= 1000:
+            vacuum_connection = self.connect()
+            try:
+                vacuum_connection.execute("VACUUM")
+            finally:
+                vacuum_connection.close()
+
+        return {
+            "activitySegments": activity_segments,
+            "classifications": classifications,
+            "youtubeMetadata": youtube_metadata,
+            "dryRun": bool(dry_run),
+        }
+
     def search_classification_rule_candidates(self, query: str, target_kind: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         needle = query.strip().lower()
         include_sites = target_kind is None or target_kind == "site"

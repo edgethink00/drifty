@@ -105,6 +105,23 @@ pub struct DeleteActivitySegmentsQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeleteHistoryRangeScopes {
+    pub activity: bool,
+    pub ai_classifications: bool,
+    pub youtube_metadata: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteHistoryRangeQuery {
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub scopes: DeleteHistoryRangeScopes,
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClassificationRuleCandidateQuery {
     pub query: String,
     pub target_kind: Option<ClassificationRuleTargetKind>,
@@ -472,6 +489,30 @@ pub async fn tracker_delete_activity_segments(
     async_runtime::spawn_blocking(move || {
         controller
             .delete_activity_segments(&app, query.ids)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_history_range(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DeleteHistoryRangeQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_history_range(
+                &app,
+                query.start,
+                query.end,
+                query.scopes.activity,
+                query.scopes.ai_classifications,
+                query.scopes.youtube_metadata,
+                query.dry_run.unwrap_or(false),
+            )
             .map_err(|error| error.to_string())
     })
     .await

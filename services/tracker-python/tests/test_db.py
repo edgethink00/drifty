@@ -1726,6 +1726,240 @@ class TrackerDatabaseTests(unittest.TestCase):
             ).fetchall()
         self.assertEqual([row["segment_id"] for row in classifications], [kept_segment_id])
 
+    @staticmethod
+    def _local_history_iso(year: int, month: int, day: int, hour: int = 0, minute: int = 0, second: int = 0) -> str:
+        return datetime(year, month, day, hour, minute, second).astimezone().isoformat()
+
+    def _insert_history_segment(
+        self,
+        started_at: str,
+        ended_at: str,
+        *,
+        app_name: str = "Code",
+        youtube_video_id: str | None = None,
+    ) -> int:
+        self.database.insert_segment(
+            {
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "duration_seconds": 60,
+                "app_name": app_name,
+                "youtube_video_id": youtube_video_id,
+            }
+        )
+        with self.database.connect() as conn:
+            return int(conn.execute("SELECT MAX(id) AS id FROM activity_segments").fetchone()["id"])
+
+    def _count_rows(self, table: str) -> int:
+        with self.database.connect() as conn:
+            return int(conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
+
+    def _save_history_classification(self, segment_id: int, *, source: str = "llm", ai_result: bool = True) -> None:
+        self.database.save_classifications([
+            {
+                "segmentId": segment_id,
+                "category": "workspace",
+                "productivity": "focus",
+                "source": source,
+                "confidence": 0.9,
+                "inputFingerprint": f"fp-{segment_id}",
+                "aiResult": ai_result,
+            }
+        ])
+
+    def test_delete_history_range_includes_segments_overlapping_day_bounds(self) -> None:
+        kept_before = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 5, 22, 0, 0),
+            self._local_history_iso(2026, 4, 5, 22, 1, 0),
+        )
+        start_edge = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 5, 23, 59, 30),
+            self._local_history_iso(2026, 4, 6, 0, 0, 30),
+        )
+        middle = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 12, 0, 0),
+            self._local_history_iso(2026, 4, 6, 12, 1, 0),
+        )
+        end_edge = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 7, 23, 59, 50),
+            self._local_history_iso(2026, 4, 8, 0, 10, 0),
+        )
+        kept_after = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 8, 0, 30, 0),
+            self._local_history_iso(2026, 4, 8, 0, 31, 0),
+        )
+
+        result = self.database.delete_history_range(
+            start="2026-04-06",
+            end="2026-04-07",
+            scopes={"activity": True, "aiClassifications": False, "youtubeMetadata": False},
+        )
+
+        self.assertEqual(
+            result,
+            {"activitySegments": 3, "classifications": 0, "youtubeMetadata": 0, "dryRun": False},
+        )
+        with self.database.connect() as conn:
+            remaining = [row["id"] for row in conn.execute("SELECT id FROM activity_segments ORDER BY id")]
+        self.assertEqual(remaining, [kept_before, kept_after])
+        self.assertNotIn(start_edge, remaining)
+        self.assertNotIn(middle, remaining)
+        self.assertNotIn(end_edge, remaining)
+
+    def test_delete_history_range_dry_run_counts_match_real_delete(self) -> None:
+        ai_segment = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 9, 0, 0),
+            self._local_history_iso(2026, 4, 6, 9, 1, 0),
+            youtube_video_id="vid-in-range",
+        )
+        rule_segment = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 10, 0, 0),
+            self._local_history_iso(2026, 4, 6, 10, 1, 0),
+        )
+        self._save_history_classification(ai_segment, source="llm", ai_result=True)
+        self._save_history_classification(rule_segment, source="rule", ai_result=False)
+        self.database.save_youtube_metadata(YouTubeVideoMetadata(video_id="vid-in-range"))
+
+        scopes = {"activity": True, "aiClassifications": True, "youtubeMetadata": True}
+        dry = self.database.delete_history_range(start="2026-04-06", end="2026-04-06", scopes=scopes, dry_run=True)
+
+        self.assertEqual(
+            dry,
+            {"activitySegments": 2, "classifications": 2, "youtubeMetadata": 1, "dryRun": True},
+        )
+        self.assertEqual(self._count_rows("activity_segments"), 2)
+        self.assertEqual(self._count_rows("activity_classifications"), 2)
+        self.assertEqual(self._count_rows("youtube_video_metadata"), 1)
+
+        real = self.database.delete_history_range(start="2026-04-06", end="2026-04-06", scopes=scopes)
+
+        self.assertEqual(real, {**dry, "dryRun": False})
+        self.assertEqual(self._count_rows("activity_segments"), 0)
+        self.assertEqual(self._count_rows("activity_classifications"), 0)
+        self.assertEqual(self._count_rows("youtube_video_metadata"), 0)
+
+    def test_delete_history_range_activity_scope_cascades_classifications(self) -> None:
+        in_range = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 9, 0, 0),
+            self._local_history_iso(2026, 4, 6, 9, 1, 0),
+        )
+        also_in_range = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 10, 0, 0),
+            self._local_history_iso(2026, 4, 6, 10, 1, 0),
+        )
+        out_of_range = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 8, 9, 0, 0),
+            self._local_history_iso(2026, 4, 8, 9, 1, 0),
+        )
+        self._save_history_classification(in_range, source="llm", ai_result=True)
+        self._save_history_classification(also_in_range, source="rule", ai_result=False)
+        self._save_history_classification(out_of_range, source="llm", ai_result=True)
+
+        result = self.database.delete_history_range(
+            start="2026-04-06",
+            end="2026-04-06",
+            scopes={"activity": True, "aiClassifications": False, "youtubeMetadata": False},
+        )
+
+        self.assertEqual(
+            result,
+            {"activitySegments": 2, "classifications": 2, "youtubeMetadata": 0, "dryRun": False},
+        )
+        with self.database.connect() as conn:
+            remaining_classifications = [
+                row["segment_id"]
+                for row in conn.execute("SELECT segment_id FROM activity_classifications ORDER BY segment_id")
+            ]
+        self.assertEqual(remaining_classifications, [out_of_range])
+
+    def test_delete_history_range_ai_scope_keeps_segments_and_rule_classifications(self) -> None:
+        ai_segment = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 9, 0, 0),
+            self._local_history_iso(2026, 4, 6, 9, 1, 0),
+        )
+        rule_segment = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 10, 0, 0),
+            self._local_history_iso(2026, 4, 6, 10, 1, 0),
+        )
+        self._save_history_classification(ai_segment, source="llm", ai_result=True)
+        self._save_history_classification(rule_segment, source="rule", ai_result=False)
+
+        result = self.database.delete_history_range(
+            start="2026-04-06",
+            end="2026-04-06",
+            scopes={"activity": False, "aiClassifications": True, "youtubeMetadata": False},
+        )
+
+        self.assertEqual(
+            result,
+            {"activitySegments": 0, "classifications": 1, "youtubeMetadata": 0, "dryRun": False},
+        )
+        self.assertEqual(self._count_rows("activity_segments"), 2)
+        with self.database.connect() as conn:
+            remaining_classifications = [
+                row["segment_id"]
+                for row in conn.execute("SELECT segment_id FROM activity_classifications ORDER BY segment_id")
+            ]
+        self.assertEqual(remaining_classifications, [rule_segment])
+
+    def test_delete_history_range_youtube_scope_removes_only_metadata_referenced_in_range(self) -> None:
+        self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 9, 0, 0),
+            self._local_history_iso(2026, 4, 6, 9, 1, 0),
+            youtube_video_id="vid-in-range",
+        )
+        self._insert_history_segment(
+            self._local_history_iso(2026, 4, 8, 9, 0, 0),
+            self._local_history_iso(2026, 4, 8, 9, 1, 0),
+            youtube_video_id="vid-out-of-range",
+        )
+        self.database.save_youtube_metadata(YouTubeVideoMetadata(video_id="vid-in-range"))
+        self.database.save_youtube_metadata(YouTubeVideoMetadata(video_id="vid-out-of-range"))
+        self.database.save_youtube_metadata(YouTubeVideoMetadata(video_id="vid-orphan"))
+
+        result = self.database.delete_history_range(
+            start="2026-04-06",
+            end="2026-04-06",
+            scopes={"activity": False, "aiClassifications": False, "youtubeMetadata": True},
+        )
+
+        self.assertEqual(
+            result,
+            {"activitySegments": 0, "classifications": 0, "youtubeMetadata": 1, "dryRun": False},
+        )
+        self.assertEqual(self._count_rows("activity_segments"), 2)
+        with self.database.connect() as conn:
+            remaining_videos = sorted(
+                row["video_id"] for row in conn.execute("SELECT video_id FROM youtube_video_metadata")
+            )
+        self.assertEqual(remaining_videos, ["vid-orphan", "vid-out-of-range"])
+
+    def test_delete_history_range_all_time_removes_everything_in_scope(self) -> None:
+        first = self._insert_history_segment(
+            self._local_history_iso(2026, 4, 6, 9, 0, 0),
+            self._local_history_iso(2026, 4, 6, 9, 1, 0),
+            youtube_video_id="vid-referenced",
+        )
+        self._insert_history_segment(
+            self._local_history_iso(2026, 5, 1, 9, 0, 0),
+            self._local_history_iso(2026, 5, 1, 9, 1, 0),
+        )
+        self._save_history_classification(first, source="llm", ai_result=True)
+        self.database.save_youtube_metadata(YouTubeVideoMetadata(video_id="vid-referenced"))
+        self.database.save_youtube_metadata(YouTubeVideoMetadata(video_id="vid-orphan"))
+
+        result = self.database.delete_history_range(
+            scopes={"activity": True, "aiClassifications": True, "youtubeMetadata": True},
+        )
+
+        self.assertEqual(
+            result,
+            {"activitySegments": 2, "classifications": 1, "youtubeMetadata": 2, "dryRun": False},
+        )
+        self.assertEqual(self._count_rows("activity_segments"), 0)
+        self.assertEqual(self._count_rows("activity_classifications"), 0)
+        self.assertEqual(self._count_rows("youtube_video_metadata"), 0)
+
     def test_disabling_classification_rule_removes_materialized_rule_classifications(self) -> None:
         self.database.insert_segment(
             {

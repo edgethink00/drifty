@@ -21,6 +21,7 @@ export type TrackerCommand =
   | "tracker_save_classification_rule"
   | "tracker_delete_classification_rule"
   | "tracker_delete_activity_segments"
+  | "tracker_delete_history_range"
   | "tracker_search_classification_rule_candidates"
   | "tracker_apply_classification_rules"
   | "tracker_save_classifications"
@@ -136,6 +137,26 @@ export interface ClassificationRuleCandidateQuery {
   readonly targetKind?: ClassificationRuleTargetKind;
 }
 
+export type DeleteHistoryRangeScopes = {
+  readonly activity: boolean;
+  readonly aiClassifications: boolean;
+  readonly youtubeMetadata: boolean;
+};
+
+export type DeleteHistoryRangeQuery = {
+  readonly start?: string;
+  readonly end?: string;
+  readonly scopes: DeleteHistoryRangeScopes;
+  readonly dryRun?: boolean;
+};
+
+export type DeleteHistoryRangeResult = {
+  readonly activitySegments: number;
+  readonly classifications: number;
+  readonly youtubeMetadata: number;
+  readonly dryRun: boolean;
+};
+
 export interface ClassificationRuleApplyResult {
   matchedCount: number;
   appliedCount: number;
@@ -220,6 +241,7 @@ export interface TrackerApi {
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
   deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
+  deleteHistoryRange(query: DeleteHistoryRangeQuery): Promise<DeleteHistoryRangeResult>;
   searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery): Promise<ClassificationRuleCandidate[]>;
   applyClassificationRules(query?: ClassificationQuery): Promise<ClassificationRuleApplyResult>;
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
