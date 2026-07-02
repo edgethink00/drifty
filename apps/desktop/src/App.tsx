@@ -193,6 +193,7 @@ import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUp
 import { buildDashboardDemoReplaySidebarCard } from "./features/dashboard/dashboardDemoReplaySidebarCard";
 import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
+import { selectInsightSegments } from "./features/insights/insightSegments";
 import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
@@ -1833,6 +1834,9 @@ export default function App() {
       trendsRange,
     });
     const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (shouldLoadHistory && activeTab === "trends" && trendsRange === "Week");
+    const trendsRecentWeekRange = shouldLoadHistory && activeTab === "trends" && trendsRange !== "Week"
+      ? getInsightPeriodRange(day, "Week", startOfDayMinutes)
+      : null;
     const dashboardWeekRefreshKey = shouldLoadDashboardWeekHistory ? compactHistoryRangeKey(historyTimelineRange) : null;
     if (dashboardWeekRefreshKey && !findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange)) {
       setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "loading" });
@@ -1865,6 +1869,9 @@ export default function App() {
                 materialized: materializeBuiltInHeuristicTimeline(timeline),
                 nextCursor: null,
               }))
+        : Promise.resolve(null);
+      const trendsRecentWeekRequest = trendsRecentWeekRange
+        ? loadCompactHistoryRange({ start: trendsRecentWeekRange.start, end: trendsRecentWeekRange.end }).catch(() => null)
         : Promise.resolve(null);
       const historyHourlySummaryRequest = shouldLoadHistorySummaries
         ? trackerClient.getHourlySummary(historySummaryRange)
@@ -1900,6 +1907,7 @@ export default function App() {
         currentSnapshotRequest,
         loadClassificationMetrics(day),
         loadAiClassificationUsage(day),
+        trendsRecentWeekRequest,
         statusRequest,
       ]);
 
@@ -3874,22 +3882,31 @@ export default function App() {
     [effectiveDashboardRange.endDay, effectiveDashboardRange.startDay, effectiveDashboardSegments, startOfDayMinutes],
   );
   const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
+  const insightRecentWeekRange = useMemo(() => getInsightPeriodRange(selectedDay, "Week", startOfDayMinutes), [selectedDay, startOfDayMinutes]);
   const shouldBuildInsightModels = activeTab === "trends";
   const cachedInsightWeekHistory = useMemo(
-    () => trendsRange === "Week" ? findFreshCompactHistoryLoad(compactHistoryCacheRef.current, insightRange) : null,
-    [compactHistoryCacheRevision, insightRange, trendsRange],
+    () => findFreshCompactHistoryLoad(compactHistoryCacheRef.current, insightRecentWeekRange),
+    [compactHistoryCacheRevision, insightRecentWeekRange],
   );
   const isInsightHistoryRangeReady = historySegmentsLoadedRange !== null && compactHistoryRangeContains(historySegmentsLoadedRange, insightRange);
   const isTrendsDataReady = trendsRange === "Week" ? cachedInsightWeekHistory !== null || isInsightHistoryRangeReady : isInsightHistoryRangeReady;
   const insightSegments = useMemo(
     () => {
       if (!shouldBuildInsightModels || !isTrendsDataReady) return EMPTY_ACTIVITY_SEGMENTS;
-      if (cachedInsightWeekHistory) {
-        return filterSegmentsForRange(cachedInsightWeekHistory.materialized.segments, insightRange.start, insightRange.end);
-      }
-      return filterSegmentsForRange(historySegments, insightRange.start, insightRange.end);
+      const historySourceSegments = trendsRange === "Week" && cachedInsightWeekHistory
+        ? cachedInsightWeekHistory.materialized.segments
+        : historySegments;
+      const supplementalSegments = trendsRange === "Week"
+        ? EMPTY_ACTIVITY_SEGMENTS
+        : cachedInsightWeekHistory?.materialized.segments ?? EMPTY_ACTIVITY_SEGMENTS;
+      return selectInsightSegments({
+        historySegments: historySourceSegments,
+        supplementalSegments,
+        selectedDaySegments: segments,
+        range: { start: insightRange.start, end: insightRange.end },
+      });
     },
-    [cachedInsightWeekHistory, historySegments, insightRange, isTrendsDataReady, shouldBuildInsightModels],
+    [cachedInsightWeekHistory, historySegments, insightRange, isTrendsDataReady, segments, shouldBuildInsightModels, trendsRange],
   );
   const isTrendsBodyReady = activeTab === "trends" && isDeferredTabBodyReady && isTrendsDataReady;
   const activeInsightSegments = isTrendsBodyReady ? insightSegments : EMPTY_ACTIVITY_SEGMENTS;
