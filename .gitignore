@@ -20,7 +20,16 @@ src-tauri/binaries/drifty-tracker-*
 .omo/
 .sisyphus/
 .playwright-mcp/
-.onboarding-visual/
+onboarding-visual/
+.qa-captures/
+.codex/
+.codegraph
+.debug-journal.md
+.debug-artifacts/
+.perf-measurements/
+drifty_mac_legacy/
+.od-skills/
+/evidence/
 apps/desktop/.omc/
 apps/desktop/.env
 supabase/.temp/
