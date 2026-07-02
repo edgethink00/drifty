@@ -6,6 +6,7 @@ import {
   OPENROUTER_RECOMMENDED_MODELS,
   isForbiddenOpenRouterModel,
   isRecommendedOpenRouterModel,
+  openRouterModelMetadata,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   uniqueOpenRouterModels,
@@ -31,7 +32,11 @@ export function useAiSetupModelPickers(
   const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !isRecommendedOpenRouterModel(model));
   const openRouterModelOptions = useMemo((): readonly AiModelOption[] => [
     ...OPENROUTER_RECOMMENDED_MODELS,
-    ...openRouterCustomSelectedModels.map((model) => ({ id: model, label: model, detail: "Other model" })),
+    ...openRouterCustomSelectedModels.map((model) => {
+      const metadata = openRouterModelMetadata(model);
+      if (metadata) return metadata;
+      return { id: model, label: model, detail: "Other model" };
+    }),
   ], [openRouterCustomSelectedModels]);
   const openRouterSelectionSummary = openRouterFallbackModels.length > 0
     ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`

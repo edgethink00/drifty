@@ -4,7 +4,7 @@ export type AiModelOption = {
   readonly id: string;
   readonly label: string;
   readonly detail: string;
-  readonly badge?: string;
+  readonly badges?: readonly string[];
 };
 
 type OpenRouterModelDialogProps = {
@@ -45,9 +45,19 @@ export function OpenRouterModelDialog({
               <div key={option.id} className="model-picker-choice" data-selected={isSelected ? "true" : "false"}>
                 <label className="model-picker-choice__select">
                   <input type="checkbox" aria-label={`Select ${option.id}`} checked={isSelected} onChange={(event) => onToggleModel(option.id, event.target.checked)} />
-                  <span><strong>{option.label}</strong><small>{option.id}</small><small>{option.detail}</small></span>
+                  <span className="model-picker-choice__body">
+                    <span className="model-picker-choice__title">
+                      <strong>{option.label}</strong>
+                      {option.badges && option.badges.length > 0 ? (
+                        <span className="model-picker-choice__badges">
+                          {option.badges.map((badge) => <span key={badge} className={badge === "No ZDR" ? "chip warn" : "chip green"}>{badge}</span>)}
+                        </span>
+                      ) : null}
+                    </span>
+                    <small>{option.id}</small>
+                    <small>{option.detail}</small>
+                  </span>
                 </label>
-                {option.badge ? <span className="chip green">{option.badge}</span> : null}
                 <label className="model-picker-choice__primary">
                   <input type="radio" name="openrouter-primary-model" aria-label={`Use ${option.id} as primary`} checked={isPrimary} disabled={!isSelected} onChange={() => onPrimaryModelChange(option.id)} />
                   <span>Primary</span>

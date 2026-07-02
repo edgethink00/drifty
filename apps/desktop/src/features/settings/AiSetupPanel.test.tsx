@@ -90,12 +90,12 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
 
-    chooseOption(modelBeingUsed, /^AI model$/i, /^Qwen 3\.6 Plus$/i);
-    expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
+    chooseOption(modelBeingUsed, /^AI model$/i, /^MiMo V2\.5$/i);
+    expect(modelSelect.textContent).toContain("MiMo V2.5");
 
     fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Custom endpoint setup row$/i }));
     expect(providerSelect.textContent).toContain("OpenRouter");
-    expect(modelSelect.textContent).toContain("Qwen 3.6 Plus");
+    expect(modelSelect.textContent).toContain("MiMo V2.5");
     expect(screen.getByRole("group", { name: /Custom endpoint settings/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
 
@@ -213,6 +213,46 @@ describe("AiSetupPanel", () => {
       message: "Connected in 42 ms.",
     });
     expect(window.localStorage.getItem("drifty.aiSetup.v1") ?? "").not.toContain("sk-or-v1-test-secret");
+  });
+
+  it("keeps stale OpenRouter selections visible but demotes them from strict privacy", () => {
+    renderPanel({
+      initialSetup: {
+        provider: "openrouter_byok",
+        driftyRoute: "cloud",
+        managedLocalModelId: "drifty-qwen3-5-4b-default",
+        managedLocalBaseUrl: "",
+        managedLocalModel: "",
+        openRouterApiKey: "",
+        openRouterModel: "qwen/qwen3.6-flash",
+        openRouterFallbackModels: ["deepseek/deepseek-v4-flash:free", "custom/provider-model"],
+        selfHostedBaseUrl: "http://localhost:11434/v1",
+        selfHostedModel: "",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Choose OpenRouter models/i }));
+    const dialog = screen.getByRole("dialog", { name: /OpenRouter models/i });
+
+    const qwenChoice = within(dialog).getByLabelText("Select qwen/qwen3.6-flash").closest(".model-picker-choice");
+    const freeChoice = within(dialog).getByLabelText("Select deepseek/deepseek-v4-flash:free").closest(".model-picker-choice");
+    const customChoice = within(dialog).getByLabelText("Select custom/provider-model").closest(".model-picker-choice");
+    if (!(qwenChoice instanceof HTMLElement) || !(freeChoice instanceof HTMLElement) || !(customChoice instanceof HTMLElement)) {
+      throw new Error("Expected selected OpenRouter model choices.");
+    }
+
+    expect(qwenChoice.textContent).toContain("Unavailable with strict privacy");
+    expect(qwenChoice.textContent).toContain("No ZDR");
+    const qwenSelect = within(qwenChoice).getByLabelText("Select qwen/qwen3.6-flash").closest(".model-picker-choice__select");
+    const qwenBadges = qwenChoice.querySelector(".model-picker-choice__badges");
+    const qwenPrimary = qwenChoice.querySelector(".model-picker-choice__primary");
+    if (!qwenSelect || !qwenBadges || !qwenPrimary) throw new Error("Expected model choice controls to be grouped.");
+    expect(qwenSelect.contains(qwenBadges)).toBe(true);
+    expect(qwenPrimary.textContent).toBe("Primary");
+    expect(freeChoice.textContent).toContain("Unavailable with strict privacy");
+    expect(freeChoice.textContent).toContain("No ZDR");
+    expect(customChoice.textContent).toContain("Other model");
+    expect(customChoice.textContent).not.toContain("ZDR");
   });
 
   it("tests Drifty Cloud instead of stale managed local settings when Cloud is selected", async () => {

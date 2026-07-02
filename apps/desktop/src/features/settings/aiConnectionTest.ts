@@ -9,6 +9,7 @@ import {
 } from "../classification/managedLocalAiChat";
 import {
   isManagedLocalAiRoute,
+  OPENROUTER_PRIVACY_PROVIDER,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   type LocalAiSetupState,
@@ -75,6 +76,7 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
         baseUrl: "https://openrouter.ai/api/v1",
         apiKey,
         ...(models.length === 1 ? { model } : { models }),
+        provider: OPENROUTER_PRIVACY_PROVIDER,
         messages: testMessages(),
         headers: {
           "HTTP-Referer": "https://drifty.so",

@@ -19,6 +19,20 @@ export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiK
 export const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
 export const DEFAULT_MANAGED_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 export const DEFAULT_DRIFTY_ROUTE: DriftyAiRoute = "cloud";
+export const OPENROUTER_MAX_MODEL_IDS = 3;
+export const OPENROUTER_PRIVACY_PROVIDER = {
+  data_collection: "deny",
+  zdr: true,
+} as const;
+
+export type OpenRouterModelBadge = "Default" | "ZDR" | "No ZDR";
+export type OpenRouterModelMetadata = {
+  readonly id: string;
+  readonly label: string;
+  readonly detail: string;
+  readonly supportsZdr: boolean;
+  readonly badges?: readonly OpenRouterModelBadge[];
+};
 
 export const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   provider: "managed_local",
@@ -36,20 +50,32 @@ export const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
 export const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
 
 export const OPENROUTER_RECOMMENDED_MODELS = [
-  { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", detail: "Default, fast paid route", badge: "Default" },
-  { id: "qwen/qwen3.6-flash", label: "Qwen 3.6 Flash", detail: "Fast Qwen 3.6 route" },
-  { id: "qwen/qwen3.6-plus", label: "Qwen 3.6 Plus", detail: "Balanced Qwen 3.6 route" },
-  { id: "qwen/qwen3.6-max-preview", label: "Qwen 3.6 Max Preview", detail: "Highest-capacity Qwen 3.6 preview" },
-  { id: "qwen/qwen3.6-35b-a3b", label: "Qwen 3.6 35B A3B", detail: "Efficient Qwen 3.6 MoE route" },
-  { id: "qwen/qwen3.6-27b", label: "Qwen 3.6 27B", detail: "Compact Qwen 3.6 route" },
-  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash Free", detail: "Free route when available" },
-] as const;
+  { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", detail: "Default, fast paid route", supportsZdr: true, badges: ["Default", "ZDR"] },
+  { id: "xiaomi/mimo-v2.5", label: "MiMo V2.5", detail: "Strict-ZDR MiMo route", supportsZdr: true, badges: ["ZDR"] },
+  { id: "xiaomi/mimo-v2.5-pro", label: "MiMo V2.5 Pro", detail: "Strict-ZDR MiMo Pro route", supportsZdr: true, badges: ["ZDR"] },
+  { id: "qwen/qwen3.6-35b-a3b", label: "Qwen 3.6 35B A3B", detail: "Efficient Qwen 3.6 MoE route", supportsZdr: true, badges: ["ZDR"] },
+  { id: "qwen/qwen3.6-27b", label: "Qwen 3.6 27B", detail: "Compact Qwen 3.6 route", supportsZdr: true, badges: ["ZDR"] },
+  { id: "z-ai/glm-4.7-flash", label: "GLM 4.7 Flash", detail: "Strict-ZDR GLM route", supportsZdr: true, badges: ["ZDR"] },
+  { id: "mistralai/mistral-small-2603", label: "Mistral Small 2603", detail: "Strict-ZDR Mistral route", supportsZdr: true, badges: ["ZDR"] },
+] as const satisfies readonly OpenRouterModelMetadata[];
+
+const OPENROUTER_KNOWN_NON_ZDR_MODELS = [
+  { id: "qwen/qwen3.6-flash", label: "Qwen 3.6 Flash", detail: "Unavailable with strict privacy", supportsZdr: false, badges: ["No ZDR"] },
+  { id: "qwen/qwen3.6-plus", label: "Qwen 3.6 Plus", detail: "Unavailable with strict privacy", supportsZdr: false, badges: ["No ZDR"] },
+  { id: "qwen/qwen3.6-max-preview", label: "Qwen 3.6 Max Preview", detail: "Unavailable with strict privacy", supportsZdr: false, badges: ["No ZDR"] },
+  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash Free", detail: "Unavailable with strict privacy", supportsZdr: false, badges: ["No ZDR"] },
+] as const satisfies readonly OpenRouterModelMetadata[];
+
+const OPENROUTER_KNOWN_MODEL_METADATA = [
+  ...OPENROUTER_RECOMMENDED_MODELS,
+  ...OPENROUTER_KNOWN_NON_ZDR_MODELS,
+] as const satisfies readonly OpenRouterModelMetadata[];
 
 export function isForbiddenOpenRouterModel(model: string): boolean {
   return FORBIDDEN_OPENROUTER_MODEL_IDS.has(model.trim());
 }
 
-export function uniqueOpenRouterModels(models: string[]): string[] {
+export function uniqueOpenRouterModels(models: readonly string[]): string[] {
   const seen = new Set<string>();
   return models.flatMap((model) => {
     const trimmedModel = model.trim();
@@ -65,13 +91,20 @@ export function normalizeOpenRouterPrimaryModel(model: string): string {
   return trimmedModel;
 }
 
-export function normalizeOpenRouterFallbackModels(primaryModel: string, fallbackModels: string[]): string[] {
+export function normalizeOpenRouterFallbackModels(primaryModel: string, fallbackModels: readonly string[]): string[] {
   const trimmedPrimaryModel = normalizeOpenRouterPrimaryModel(primaryModel);
-  return uniqueOpenRouterModels(fallbackModels).filter((model) => model !== trimmedPrimaryModel);
+  return uniqueOpenRouterModels(fallbackModels)
+    .filter((model) => model !== trimmedPrimaryModel)
+    .slice(0, OPENROUTER_MAX_MODEL_IDS - 1);
 }
 
 export function isRecommendedOpenRouterModel(model: string): boolean {
   return OPENROUTER_RECOMMENDED_MODELS.some((option) => option.id === model);
+}
+
+export function openRouterModelMetadata(model: string): OpenRouterModelMetadata | null {
+  const trimmedModel = model.trim();
+  return OPENROUTER_KNOWN_MODEL_METADATA.find((option) => option.id === trimmedModel) ?? null;
 }
 
 export function toPersistedLocalAiSetup(setup: LocalAiSetupState): PersistedLocalAiSetupState {

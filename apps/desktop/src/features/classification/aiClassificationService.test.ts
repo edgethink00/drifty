@@ -1187,6 +1187,44 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("limits OpenRouter BYOK classification fallback requests to three total model IDs", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, nativeInvoke } = await importServiceWithSegments([segment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "openrouter_byok",
+          apiKey: "sk-or-v1-test",
+          model: "deepseek/deepseek-v4-flash",
+          fallbackModels: [
+            "qwen/qwen3.6-35b-a3b",
+            "qwen/qwen3.6-27b",
+            "z-ai/glm-4.7-flash",
+            "mistralai/mistral-small-2603",
+          ],
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledWith("ai_classification_openai_chat", {
+        request: expect.objectContaining({
+          models: [
+            "deepseek/deepseek-v4-flash",
+            "qwen/qwen3.6-35b-a3b",
+            "qwen/qwen3.6-27b",
+          ],
+          provider: {
+            data_collection: "deny",
+            zdr: true,
+          },
+        }),
+      });
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("preserves self-hosted requests as single model", async () => {
     const segment = createUnknownSegment(1);
 

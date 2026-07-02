@@ -1,10 +1,10 @@
+import {
+  OPENROUTER_PRIVACY_PROVIDER,
+  normalizeOpenRouterFallbackModels,
+  normalizeOpenRouterPrimaryModel,
+} from "../settings/localAiSetup";
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
-const FORBIDDEN_OPENROUTER_MODEL_IDS = new Set(["openrouter/auto"]);
-const OPENROUTER_PRIVACY_PROVIDER = {
-  data_collection: "deny",
-  zdr: true,
-} as const;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 4096;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS = 180_000;
 export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
@@ -124,20 +124,8 @@ function openAiCompatibleProviderRequest(
 }
 
 function normalizeOpenRouterModels(primaryModel: string, fallbackModels: readonly string[] | undefined): string[] {
-  const models = [normalizeOpenRouterPrimaryModel(primaryModel), ...(fallbackModels ?? [])];
-  const seen = new Set<string>();
-  return models.flatMap((model) => {
-    const trimmed = model.trim();
-    if (!trimmed || FORBIDDEN_OPENROUTER_MODEL_IDS.has(trimmed) || seen.has(trimmed)) return [];
-    seen.add(trimmed);
-    return [trimmed];
-  });
-}
-
-function normalizeOpenRouterPrimaryModel(model: string): string {
-  const trimmed = model.trim();
-  if (!trimmed || FORBIDDEN_OPENROUTER_MODEL_IDS.has(trimmed)) return DEFAULT_OPENROUTER_MODEL;
-  return trimmed;
+  const model = normalizeOpenRouterPrimaryModel(primaryModel);
+  return [model, ...normalizeOpenRouterFallbackModels(model, fallbackModels ?? [])];
 }
 
 function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[], workProfile: string | null): string {

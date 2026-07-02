@@ -130,4 +130,46 @@ describe("testLocalAiConnection", () => {
       }),
     });
   });
+
+  it("tests OpenRouter BYOK with strict privacy routing and at most three model IDs", async () => {
+    invokeMock.mockResolvedValue({
+      status: 200,
+      body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}",
+      latencyMs: 31,
+    });
+
+    const result = await testLocalAiConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "openrouter_byok",
+      openRouterApiKey: "sk-or-v1-test",
+      openRouterModel: "deepseek/deepseek-v4-flash",
+      openRouterFallbackModels: [
+        "qwen/qwen3.6-35b-a3b",
+        "qwen/qwen3.6-27b",
+        "z-ai/glm-4.7-flash",
+      ],
+    });
+
+    expect(result).toEqual({ kind: "success", message: "Connected in 31 ms." });
+    expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", {
+      request: expect.objectContaining({
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKey: "sk-or-v1-test",
+        models: [
+          "deepseek/deepseek-v4-flash",
+          "qwen/qwen3.6-35b-a3b",
+          "qwen/qwen3.6-27b",
+        ],
+        provider: {
+          data_collection: "deny",
+          zdr: true,
+        },
+      }),
+    });
+    const requestArgs = invokeMock.mock.calls[0]?.[1];
+    if (!requestArgs || typeof requestArgs !== "object" || !("request" in requestArgs) || !requestArgs.request || typeof requestArgs.request !== "object") {
+      throw new Error("OpenRouter connection test should invoke a request object.");
+    }
+    expect("maxTokens" in requestArgs.request).toBe(false);
+  });
 });
