@@ -8,11 +8,18 @@ fn main() {
     println!("cargo:rerun-if-changed=icons/128x128@2x.png");
     println!("cargo:rerun-if-changed=binaries");
     println!("cargo:rerun-if-env-changed=VITE_DRIFTY_CHANNEL");
+    println!("cargo:rerun-if-env-changed=VITE_DRIFTY_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
+    println!(
+        "cargo:rustc-env=DRIFTY_BUILD_COMMIT={}",
+        resolve_build_commit()
+    );
 
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "accessibility_get_status",
             "accessibility_request_access",
+            "app_menu_set_dev_mode_checked",
             "developer_check_pre_release_update",
             "developer_install_pre_release_update",
             "update_prompt_show_native",
@@ -68,4 +75,30 @@ fn main() {
         ]),
     ))
     .expect("failed to build tauri app manifest");
+}
+
+fn resolve_build_commit() -> String {
+    let resolved_commit = std::env::var("VITE_DRIFTY_BUILD_COMMIT")
+        .or_else(|_| std::env::var("GITHUB_SHA"))
+        .ok()
+        .map(|commit| commit.trim().to_string())
+        .filter(|commit| !commit.is_empty())
+        .or_else(git_head_commit);
+
+    match resolved_commit {
+        Some(commit) => commit,
+        None => "unknown".to_string(),
+    }
+}
+
+fn git_head_commit() -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let commit = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    (!commit.is_empty()).then_some(commit)
 }

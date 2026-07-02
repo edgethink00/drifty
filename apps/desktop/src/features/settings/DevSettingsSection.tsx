@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DEVELOPER_PRE_RELEASE_UPDATES_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, ONBOARDING_V2_2_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, ONBOARDING_V2_2_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
 import { formatDayLabel } from "../../lib/formatting";
@@ -85,7 +85,6 @@ export function DevSettingsSection({
 }: DevSettingsSectionProps) {
   const showWatcherPeekSettings = WATCHER_PEEK_SETTINGS_VISIBLE && WATCHER_PEEK_PROTOTYPE_ENABLED;
   const showDevPreviewBlock =
-    DEVELOPER_PRE_RELEASE_UPDATES_ENABLED ||
     REPLAY_ONBOARDING_DEV_TOOL_ENABLED ||
     ONBOARDING_V2_2_PREVIEW_ENABLED ||
     END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ||

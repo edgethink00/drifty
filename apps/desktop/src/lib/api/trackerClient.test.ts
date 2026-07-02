@@ -5,7 +5,10 @@ const { invoke } = vi.hoisted(() => ({
   invoke: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke,
+  isTauri: () => false,
+}));
 vi.mock("./previewData", () => ({
   previewAppIcons: vi.fn(),
   previewHourlySummary: vi.fn(),

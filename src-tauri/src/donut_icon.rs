@@ -201,7 +201,8 @@ mod tests {
             TrayIconStyle::Compact,
         );
         assert_eq!(
-            serde_json::from_value::<TrayIconStyle>(serde_json::json!("expanded")).expect("expanded"),
+            serde_json::from_value::<TrayIconStyle>(serde_json::json!("expanded"))
+                .expect("expanded"),
             TrayIconStyle::Expanded,
         );
     }

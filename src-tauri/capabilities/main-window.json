@@ -57,6 +57,7 @@
     "allow-auth-clear-saved-session",
     "allow-cloud-device-identity",
     "allow-cloud-device-install-id",
+    "allow-app-menu-set-dev-mode-checked",
     "allow-app-reveal-main-window",
     "allow-focus-target-activate-browser-tab",
     "allow-focus-target-browser-tab-exists",
