@@ -290,6 +290,7 @@ describe("AiSetupPanel", () => {
     });
 
     render(<PrivacySettingsSection />);
+    fireEvent.click(screen.getByRole("button", { name: /AI data sending/i }));
     const optionalFieldLists = screen.getAllByRole("list", { name: /Optional AI classification fields/i });
     const privacyOptionalFields = optionalFieldLists[optionalFieldLists.length - 1];
     if (!privacyOptionalFields) throw new Error("Privacy settings should render optional AI classification fields.");

@@ -279,7 +279,7 @@ describe("Settings content styles", () => {
     expect(appSource).toContain("<NotificationsSettingsSection");
     expect(notificationsSource).toContain("<h3>Notifications</h3>");
     expect(appSource).toContain('settingsSection === "privacy"');
-    expect(appSource).toContain("<PrivacySettingsSection />");
+    expect(appSource).toContain("<PrivacySettingsSection");
     expect(appSource).toContain('settingsSection === "data"');
     expect(appSource).toContain("<DataExportSettingsSection");
     expect(dataExportSource).toContain("<h3>Data &amp; Export</h3>");

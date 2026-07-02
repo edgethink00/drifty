@@ -4417,6 +4417,17 @@ export default function App() {
     }
   }, [historyDeleting, refresh]);
 
+  const handleHistoryRangeDeleted = useCallback(async () => {
+    setHistorySearchSegments([]);
+    try {
+      setClassificationMetrics(await trackerClient.getClassificationMetrics({ day: selectedDayRef.current }));
+    } catch {
+      // Metrics refresh is best-effort after a bulk delete; the views below still reload.
+    }
+    await refresh(selectedDayRef.current);
+    await refreshLeaderboardData();
+  }, [refresh, refreshLeaderboardData]);
+
   useEffect(() => {
     selectedDayRef.current = selectedDay;
   }, [selectedDay]);
@@ -5553,7 +5564,7 @@ export default function App() {
                   />
                 )}
                 {settingsSection === "privacy" && (
-                  <PrivacySettingsSection />
+                  <PrivacySettingsSection onHistoryDeleted={handleHistoryRangeDeleted} />
                 )}
                 {settingsSection === "data" && (
                   <DataExportSettingsSection databasePath={status?.databasePath} todaySessionCount={segments.length} />
