@@ -92,9 +92,16 @@ function basisWindowAt(points: readonly FocusDriftPathPoint[], index: number): F
 
 function basisBezierSegment({ p1, p2, p3 }: FocusDriftBasisWindow): FocusDriftBezierSegment {
   return {
-    controlStart: basisPoint({ p0: p1, p1: p1, p2 }),
-    controlEnd: basisPoint({ p0: p1, p1: p2, p2 }),
+    controlStart: basisControlPoint(p1, p2),
+    controlEnd: basisControlPoint(p2, p1),
     end: basisPoint({ p0: p1, p1: p2, p2: p3 }),
+  };
+}
+
+function basisControlPoint(near: FocusDriftPathPoint, far: FocusDriftPathPoint): FocusDriftPathPoint {
+  return {
+    x: (2 * near.x + far.x) / 3,
+    y: (2 * near.y + far.y) / 3,
   };
 }
 

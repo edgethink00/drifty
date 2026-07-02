@@ -136,6 +136,14 @@ function parsePathNumbers(pathData: string): readonly number[] {
   return Array.from(pathData.matchAll(/-?\d+(?:\.\d+)?/g), (match) => Number(match[0]));
 }
 
+function cubicBezierAt(start: { readonly x: number; readonly y: number }, segment: CubicSegment, t: number): { x: number; y: number } {
+  const u = 1 - t;
+  return {
+    x: u * u * u * start.x + 3 * u * u * t * segment.c1.x + 3 * u * t * t * segment.c2.x + t * t * t * segment.end.x,
+    y: u * u * u * start.y + 3 * u * u * t * segment.c1.y + 3 * u * t * t * segment.c2.y + t * t * t * segment.end.y,
+  };
+}
+
 describe("buildSmoothPath", () => {
   it("keeps generated control points inside the focus drift chart bounds", () => {
     const bottomY = scaleFocusDriftY(0);
@@ -175,6 +183,40 @@ describe("buildSmoothPath", () => {
     expect(readNumberAt(numbers, 0)).toBe(10);
     expect(readNumberAt(numbers, 1)).toBe(bottomY);
     expect(lastSegment?.end).toEqual({ x: 30, y: bottomY });
+  });
+
+  it("keeps tangents continuous across interior knots", () => {
+    const bottomY = scaleFocusDriftY(0);
+    const topY = scaleFocusDriftY(100);
+    const pathData = buildSmoothPath([
+      makePoint(0, 10, bottomY),
+      makePoint(1, 20, topY),
+      makePoint(2, 30, bottomY),
+      makePoint(3, 40, topY),
+      makePoint(4, 50, bottomY),
+    ], "focusY");
+    const numbers = parsePathNumbers(pathData);
+    const segments = parseCubicSegments(pathData);
+    const moveToPoint = { x: readNumberAt(numbers, 0), y: readNumberAt(numbers, 1) };
+    const epsilon = 1e-5;
+
+    expect(segments.length).toBeGreaterThan(1);
+
+    for (let index = 1; index < segments.length; index += 1) {
+      const previousSegment = segments[index - 1];
+      const segment = segments[index];
+      const previousStart = index === 1 ? moveToPoint : segments[index - 2]?.end;
+      if (!previousSegment || !segment || !previousStart) throw new Error(`Expected cubic segments around knot ${index}`);
+
+      const knot = previousSegment.end;
+      const beforeKnot = cubicBezierAt(previousStart, previousSegment, 1 - epsilon);
+      const afterKnot = cubicBezierAt(knot, segment, epsilon);
+      const incoming = { x: (knot.x - beforeKnot.x) / epsilon, y: (knot.y - beforeKnot.y) / epsilon };
+      const outgoing = { x: (afterKnot.x - knot.x) / epsilon, y: (afterKnot.y - knot.y) / epsilon };
+
+      expect(Math.abs(outgoing.x - incoming.x)).toBeLessThan(0.01);
+      expect(Math.abs(outgoing.y - incoming.y)).toBeLessThan(0.01);
+    }
   });
 
   it("softens sharp interior peaks instead of using them as segment endpoints", () => {
