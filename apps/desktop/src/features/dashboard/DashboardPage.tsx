@@ -57,6 +57,7 @@ type DashboardPageProps = {
   readonly weekRows: WeekDayRow[];
   readonly weekCurrentCalendarDay: string | null;
   readonly weekCurrentMinuteOfDay: number | null;
+  readonly weekDashboardAxisScalePercent?: number;
   readonly onDashboardAiUnavailableAction: (variant: DashboardAiUnavailableVariant) => void;
   readonly onDismissDashboardAiRecovery: () => void;
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
@@ -102,6 +103,7 @@ export function DashboardPage({
   weekRows,
   weekCurrentCalendarDay,
   weekCurrentMinuteOfDay,
+  weekDashboardAxisScalePercent = 100,
   onDashboardAiUnavailableAction,
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
@@ -177,6 +179,7 @@ export function DashboardPage({
           dateNavigator={dashboardDateNavigator}
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
+          axisScalePercent={weekDashboardAxisScalePercent}
         />
       ) : dashPeriod === "Month" ? (
         <HistoryCalendarPanel

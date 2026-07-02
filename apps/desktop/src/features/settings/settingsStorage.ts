@@ -2,6 +2,8 @@ import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, ProductivityLabel, TrayIconStyle } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
+export * from "./weekDashboardAxisScaleSettings";
+
 export type ThemeMode = "light" | "dark";
 
 export type StartOfWeek = "sunday" | "monday" | "saturday";

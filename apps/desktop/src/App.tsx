@@ -196,7 +196,7 @@ import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceL
 import { selectInsightSegments } from "./features/insights/insightSegments";
 import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "./lib/activityLabels";
 import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
@@ -686,6 +686,8 @@ export default function App() {
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
+  const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
   const [devLogoAnimationPreviewEnabled, setDevLogoAnimationPreviewEnabled] = useState(false);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
@@ -863,6 +865,14 @@ export default function App() {
   function handleResetDemoDashboardReplaySettings() {
     stopDashboardDemoReplay();
     setDemoDashboardReplaySettings(resetDemoDashboardReplaySettings());
+  }
+
+  function handleWeekDashboardAxisScalePercentChange(scalePercent: number) {
+    setWeekDashboardAxisScalePercent(persistWeekDashboardAxisScalePercent(scalePercent));
+  }
+
+  function handleResetWeekDashboardAxisScalePercent() {
+    setWeekDashboardAxisScalePercent(resetWeekDashboardAxisScalePercent());
   }
 
   const navigateBack = useCallback(() => {
@@ -5245,6 +5255,7 @@ export default function App() {
             weekRows={weekRows}
             weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
             weekCurrentMinuteOfDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveCurrentMinuteOfDay : null}
+            weekDashboardAxisScalePercent={effectiveWeekDashboardAxisScalePercent}
             onDashboardAiUnavailableAction={handleDashboardAiUnavailableAction}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
@@ -5569,6 +5580,7 @@ export default function App() {
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
                     logoAnimationPreviewEnabled={devLogoAnimationPreviewEnabled}
+                    weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
                     watcherMode={watcherMode}
                     watcherPeekEnabled={watcherPeekEnabled}
                     watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
@@ -5590,7 +5602,9 @@ export default function App() {
                     onPreviewDriftAlarm={previewDriftAlarm}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
                     onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}
+                    onResetWeekDashboardAxisScalePercent={handleResetWeekDashboardAxisScalePercent}
                     onShowWatcherPeek={showWatcherPeek}
+                    onWeekDashboardAxisScalePercentChange={handleWeekDashboardAxisScalePercentChange}
                     onWatcherModeChange={setWatcherMode}
                     onWatcherPeekEnabledChange={setWatcherPeekEnabled}
                     onWatcherPeriodicMaxChange={handleWatcherPeriodicMaxChange}

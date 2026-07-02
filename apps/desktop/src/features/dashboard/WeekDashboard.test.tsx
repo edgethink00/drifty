@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
-import type { WeekDayRow } from "./weekCalendar";
+import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 
 const weekRows: WeekDayRow[] = [
   "2024-01-01",
@@ -32,14 +32,47 @@ const categoryEntries: CategoryDuration[] = [
   { category: "workspace", ratio: 1, segments: 1, totalSeconds: 4500 },
 ];
 
-function renderWeekDashboard(overrides: {
+function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): WeekCalendarEvent {
+  return {
+    activeDurationMinutes: 60,
+    aiClassification: false,
+    appName: "Design review",
+    category: "workspace",
+    classificationSource: "rule",
+    detailSummary: "1 captured segment",
+    detailTitle: "9:00 AM-10:00 AM\nDesign review",
+    durationMinutes: 60,
+    endLabel: "10:00 AM",
+    hiddenIdentityCount: 0,
+    id: "event-1",
+    identities: [],
+    isGroupedCluster: false,
+    isShort: false,
+    lane: 0,
+    laneCount: 1,
+    productivity: "focus",
+    sessionCount: 1,
+    startLabel: "9:00 AM",
+    topMinutes: 9 * 60,
+    ...overrides,
+  };
+}
+
+type WeekDashboardRenderOverrides = {
+  readonly axisScalePercent?: number;
+  readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
-} = {}) {
+};
+
+function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
+  const { axisScalePercent, calendarEvents = new Map(), ...dashboardOverrides } = overrides;
+
   return render(
     <WeekDashboard
       appIcons={{}}
-      calendarEvents={new Map()}
+      axisScalePercent={axisScalePercent}
+      calendarEvents={calendarEvents}
       categoryEntries={categoryEntries}
       dateNavigator={<button type="button">Pick week</button>}
       endDay="2024-01-07"
@@ -50,7 +83,7 @@ function renderWeekDashboard(overrides: {
       startDay="2024-01-01"
       startOfDayMinutes={0}
       totalSeconds={4500}
-      {...overrides}
+      {...dashboardOverrides}
     />,
   );
 }
@@ -72,5 +105,29 @@ describe("WeekDashboard virtual current marker", () => {
 
     expect(screen.queryByLabelText(/Current time/)).toBeNull();
     expect(container.querySelector(".week-v2-calendar__now-marker--line")).toBeNull();
+  });
+});
+
+describe("WeekDashboard axis scale", () => {
+  it("scales the calendar y-axis while keeping event and current-time geometry aligned", () => {
+    const calendarEvents = new Map<string, WeekCalendarEvent[]>([
+      ["2024-01-03", [makeWeekCalendarEvent()]],
+    ]);
+
+    const { container } = renderWeekDashboard({
+      axisScalePercent: 80,
+      calendarEvents,
+      currentCalendarDay: "2024-01-03",
+      currentMinuteOfDay: 9 * 60,
+    });
+
+    const calendarBody = container.querySelector<HTMLElement>(".week-v2-calendar__body");
+    const currentMarker = container.querySelector<HTMLElement>(".week-v2-calendar__now-marker--line");
+    const event = screen.getByLabelText("9:00 AM-10:00 AM, Design review");
+
+    expect(calendarBody?.style.height).toBe("1075.2px");
+    expect(currentMarker?.style.getPropertyValue("--week-calendar-now-offset")).toBe("403.2px");
+    expect(event.style.top).toBe("403.2px");
+    expect(event.style.height).toBe("40.8px");
   });
 });

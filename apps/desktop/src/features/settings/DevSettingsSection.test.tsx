@@ -8,6 +8,8 @@ import {
   DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
+  WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT,
+  WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT,
 } from "./settingsStorage";
 
 const featureSwitches = vi.hoisted(() => ({
@@ -44,6 +46,7 @@ function renderProductionDevSettings() {
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
     logoAnimationPreviewEnabled: false,
+    weekDashboardAxisScalePercent: 80,
     watcherMode: "periodic" as const,
     watcherPeekEnabled: false,
     watcherPeriodicMaxMinutes: 20,
@@ -65,7 +68,9 @@ function renderProductionDevSettings() {
     onPreviewDriftAlarm: vi.fn(),
     onReplayDashboardDemo: vi.fn(),
     onResetDemoDashboardReplaySettings: vi.fn(),
+    onResetWeekDashboardAxisScalePercent: vi.fn(),
     onShowWatcherPeek: vi.fn(),
+    onWeekDashboardAxisScalePercentChange: vi.fn(),
     onWatcherModeChange: vi.fn(),
     onWatcherPeekEnabledChange: vi.fn(),
     onWatcherPeriodicMaxChange: vi.fn(),
@@ -115,6 +120,7 @@ describe("DevSettingsSection", () => {
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
       logoAnimationPreviewEnabled: false,
+      weekDashboardAxisScalePercent: 80,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
       watcherPeriodicMaxMinutes: 20,
@@ -132,7 +138,9 @@ describe("DevSettingsSection", () => {
       onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
+      onResetWeekDashboardAxisScalePercent: vi.fn(),
       onShowWatcherPeek: vi.fn(),
+      onWeekDashboardAxisScalePercentChange: vi.fn(),
       onWatcherModeChange: vi.fn(),
       onWatcherPeekEnabledChange: vi.fn(),
       onWatcherPeriodicMaxChange: vi.fn(),
@@ -163,6 +171,7 @@ describe("DevSettingsSection", () => {
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
       logoAnimationPreviewEnabled: false,
+      weekDashboardAxisScalePercent: 80,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
       watcherPeriodicMaxMinutes: 20,
@@ -180,7 +189,9 @@ describe("DevSettingsSection", () => {
       onOpenReplayOnboarding: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
+      onResetWeekDashboardAxisScalePercent: vi.fn(),
       onShowWatcherPeek: vi.fn(),
+      onWeekDashboardAxisScalePercentChange: vi.fn(),
       onWatcherModeChange: vi.fn(),
       onWatcherPeekEnabledChange: vi.fn(),
       onWatcherPeriodicMaxChange: vi.fn(),
@@ -218,5 +229,23 @@ describe("DevSettingsSection", () => {
     expect(props.onDemoDashboardReplayPreRollSecondsChange).toHaveBeenCalledWith(7);
     expect(props.onDemoDashboardReplayDurationSecondsChange).toHaveBeenCalledWith(60);
     expect(props.onResetDemoDashboardReplaySettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the Your Week y-axis scale slider and calls live scale handlers", () => {
+    const props = renderProductionDevSettings();
+    const scaleInput = screen.getByLabelText("Your Week y-axis scale percent");
+
+    fireEvent.change(scaleInput, { target: { value: "82" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(screen.getByRole("heading", { name: "Dashboard layout" })).toBeTruthy();
+    expect(screen.getByText("Your Week y-axis scale")).toBeTruthy();
+    expect(screen.getByLabelText("Current Your Week y-axis scale").textContent).toBe("80%");
+    expect(scaleInput.getAttribute("min")).toBe(String(WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT));
+    expect(scaleInput.getAttribute("max")).toBe(String(WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT));
+    expect(scaleInput.getAttribute("step")).toBe("1");
+    expect(scaleInput.getAttribute("value")).toBe("80");
+    expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(82);
+    expect(props.onResetWeekDashboardAxisScalePercent).toHaveBeenCalledTimes(1);
   });
 });
