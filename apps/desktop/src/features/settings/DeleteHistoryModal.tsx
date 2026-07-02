@@ -5,39 +5,28 @@ import type { DeleteHistoryRangeResult, DeleteHistoryRangeScopes } from "@drifty
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { localDateKey } from "../../lib/formatting";
+import { SettingsSelect } from "./SettingsSelect";
+import type { SettingsSelectOption } from "./SettingsSelect";
 import "./DeleteHistoryModal.css";
 
 type RangePreset = "today" | "last7" | "last30" | "all" | "custom";
 
-const RANGE_PRESETS: readonly { readonly id: RangePreset; readonly label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "last7", label: "Last 7 days" },
-  { id: "last30", label: "Last 30 days" },
-  { id: "all", label: "All time" },
-  { id: "custom", label: "Custom" },
+const RANGE_OPTIONS: readonly SettingsSelectOption<RangePreset>[] = [
+  { value: "today", label: "Today" },
+  { value: "last7", label: "Last 7 days" },
+  { value: "last30", label: "Last 30 days" },
+  { value: "all", label: "All time" },
+  { value: "custom", label: "Custom range" },
 ] as const;
 
-const SCOPE_ITEMS: readonly {
-  readonly key: keyof DeleteHistoryRangeScopes;
-  readonly label: string;
-  readonly detail: string;
-}[] = [
-  {
-    key: "activity",
-    label: "Activity history",
-    detail: "Raw tracked segments for this range. Their classifications are removed together.",
-  },
-  {
-    key: "aiClassifications",
-    label: "AI classification results",
-    detail: "Clear AI labels only. Raw activity rows and your rules are kept.",
-  },
-  {
-    key: "youtubeMetadata",
-    label: "YouTube metadata",
-    detail: "Cached video titles, channels, and descriptions for this range.",
-  },
-] as const;
+// The deletion scope is fixed: tracked activity for the range, its
+// classifications (via cascade), and cached YouTube metadata. Classification
+// rules and settings are never touched.
+const DELETE_SCOPES: DeleteHistoryRangeScopes = {
+  activity: true,
+  aiClassifications: false,
+  youtubeMetadata: true,
+};
 
 type DeleteHistoryModalProps = {
   readonly onClose: () => void;
@@ -48,11 +37,6 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
   const [preset, setPreset] = useState<RangePreset>("today");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
-  const [scopes, setScopes] = useState<DeleteHistoryRangeScopes>({
-    activity: true,
-    aiClassifications: false,
-    youtubeMetadata: false,
-  });
   const [preview, setPreview] = useState<DeleteHistoryRangeResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +47,6 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
   const armTimer = useRef<number | null>(null);
 
   const bounds = rangeBounds(preset, customStart, customEnd);
-  const anyScope = scopes.activity || scopes.aiClassifications || scopes.youtubeMetadata;
 
   useEffect(() => {
     return () => {
@@ -82,8 +65,7 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
   useEffect(() => {
     setArmed(false);
     const nextBounds = rangeBounds(preset, customStart, customEnd);
-    const hasScope = scopes.activity || scopes.aiClassifications || scopes.youtubeMetadata;
-    if (!nextBounds || !hasScope || done) {
+    if (!nextBounds || done) {
       setPreview(null);
       setPreviewLoading(false);
       return;
@@ -93,7 +75,7 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
     const seq = ++previewSeq.current;
     const handle = window.setTimeout(async () => {
       try {
-        const result = await trackerClient.deleteHistoryRange({ ...nextBounds, scopes, dryRun: true });
+        const result = await trackerClient.deleteHistoryRange({ ...nextBounds, scopes: DELETE_SCOPES, dryRun: true });
         if (seq !== previewSeq.current) return;
         setPreview(result);
         setError(null);
@@ -106,18 +88,14 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
       }
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [preset, customStart, customEnd, scopes, done]);
+  }, [preset, customStart, customEnd, done]);
 
   const previewTotal = preview ? preview.activitySegments + preview.classifications + preview.youtubeMetadata : 0;
-  const canDelete = Boolean(bounds) && anyScope && !deleting && !done && previewTotal > 0 && !previewLoading;
-  const needsArm = preset === "all" && scopes.activity;
+  const canDelete = Boolean(bounds) && !deleting && !done && previewTotal > 0 && !previewLoading;
+  const needsArm = preset === "all";
 
   const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget && !deleting) onClose();
-  };
-
-  const handleScopeToggle = (key: keyof DeleteHistoryRangeScopes) => {
-    setScopes((current) => ({ ...current, [key]: !current[key] }));
   };
 
   const handleDelete = async () => {
@@ -132,7 +110,7 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
     setDeleting(true);
     setError(null);
     try {
-      const result = await trackerClient.deleteHistoryRange({ ...bounds, scopes, dryRun: false });
+      const result = await trackerClient.deleteHistoryRange({ ...bounds, scopes: DELETE_SCOPES, dryRun: false });
       setDone(result);
       await onDeleted();
       window.setTimeout(onClose, 1600);
@@ -153,7 +131,7 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
       >
         <div className="auth-modal__header">
           <h2 id="delete-history-modal-title">Delete history</h2>
-          <p>Choose a time range and what to remove. This cannot be undone.</p>
+          <p>Removes tracked activity for the selected range, including its AI labels and cached YouTube metadata. Classification rules and settings are kept. This cannot be undone.</p>
         </div>
 
         {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
@@ -164,65 +142,31 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
           </p>
         ) : (
           <>
-            <fieldset className="delete-history-modal__group">
-              <legend>Range</legend>
-              <div aria-label="Delete range" className="delete-history-modal__presets" role="radiogroup">
-                {RANGE_PRESETS.map((item) => (
-                  <button
-                    aria-checked={preset === item.id}
-                    className={`delete-history-modal__preset${preset === item.id ? " is-active" : ""}`}
-                    key={item.id}
-                    role="radio"
-                    type="button"
-                    onClick={() => setPreset(item.id)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+            <div className="delete-history-modal__range-row">
+              <span className="delete-history-modal__range-label">Range</span>
+              <SettingsSelect
+                ariaLabel="Delete range"
+                className="delete-history-modal__range-select"
+                options={RANGE_OPTIONS}
+                value={preset}
+                onChange={setPreset}
+              />
+            </div>
+            {preset === "custom" ? (
+              <div className="delete-history-modal__custom-range">
+                <label>
+                  <span>From</span>
+                  <input max={localDateKey(new Date())} type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
+                </label>
+                <label>
+                  <span>To</span>
+                  <input max={localDateKey(new Date())} type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
+                </label>
               </div>
-              {preset === "custom" ? (
-                <div className="delete-history-modal__custom-range">
-                  <label>
-                    <span>From</span>
-                    <input max={localDateKey(new Date())} type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>To</span>
-                    <input max={localDateKey(new Date())} type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
-                  </label>
-                </div>
-              ) : null}
-            </fieldset>
-
-            <fieldset className="delete-history-modal__group">
-              <legend>What to delete</legend>
-              <div className="delete-history-modal__scopes">
-                {SCOPE_ITEMS.map((item) => {
-                  const includedByActivity = item.key === "aiClassifications" && scopes.activity;
-                  return (
-                    <label
-                      className={`delete-history-modal__scope${scopes[item.key] || includedByActivity ? " is-selected" : ""}`}
-                      key={item.key}
-                    >
-                      <input
-                        checked={includedByActivity ? true : scopes[item.key]}
-                        disabled={includedByActivity || deleting}
-                        type="checkbox"
-                        onChange={() => handleScopeToggle(item.key)}
-                      />
-                      <span className="delete-history-modal__scope-copy">
-                        <strong>{item.label}</strong>
-                        <small>{item.detail}</small>
-                      </span>
-                      {includedByActivity ? <span className="chip gray">Included</span> : null}
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
+            ) : null}
 
             <p aria-live="polite" className={`delete-history-modal__preview${previewTotal > 0 ? " has-items" : ""}`}>
-              {previewMessage(bounds, anyScope, previewLoading, preview, previewTotal)}
+              {previewMessage(bounds, previewLoading, preview, previewTotal)}
             </p>
 
             <div className="delete-history-modal__actions">
@@ -270,12 +214,10 @@ function rangeBounds(
 
 function previewMessage(
   bounds: { readonly start?: string; readonly end?: string } | null,
-  anyScope: boolean,
   loading: boolean,
   preview: DeleteHistoryRangeResult | null,
   total: number,
 ): string {
-  if (!anyScope) return "Select at least one data type to delete.";
   if (!bounds) return "Pick a valid start and end date.";
   if (loading) return "Checking what this range contains…";
   if (!preview) return "Nothing to preview yet.";
