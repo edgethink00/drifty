@@ -8,6 +8,7 @@ import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty
 import { WeekCalendarHoverCard } from "./HoverCards";
 import type { WeekCalendarHoverState } from "./HoverCards";
 import { buildWeekCalendarEventLayout } from "./weekCalendarEventLayout";
+import { clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
@@ -30,6 +31,7 @@ type WeekDashboardProps = {
   readonly dateNavigator: ReactNode;
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
+  readonly axisScalePercent?: number;
 };
 
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
@@ -57,6 +59,7 @@ export function WeekDashboard({
   dateNavigator,
   currentCalendarDay,
   currentMinuteOfDay,
+  axisScalePercent = 100,
 }: WeekDashboardProps) {
   const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
   const [activeWeekEventId, setActiveWeekEventId] = useState<string | null>(null);
@@ -79,7 +82,8 @@ export function WeekDashboard({
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
-  const calendarHourHeight = 56;
+  const effectiveAxisScalePercent = clampWeekDashboardAxisScalePercent(axisScalePercent);
+  const calendarHourHeight = weekDashboardAxisScalePercentToHourHeight(effectiveAxisScalePercent);
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
   const canMountIdentityIcons = useDeferredWeekIdentityIcons({ calendarEvents, endDay, startDay });
@@ -105,7 +109,7 @@ export function WeekDashboard({
   const currentCalendarMarkerStyle: WeekCalendarNowMarkerStyle | null = currentCalendarOffset === null
     ? null
     : {
-        "--week-calendar-now-offset": `${currentCalendarOffset}px`,
+        "--week-calendar-now-offset": formatWeekDashboardAxisPixelValue(currentCalendarOffset),
         "--week-calendar-now-line-end": currentCalendarLineEnd,
       };
   const autoScrollTargetMinute = useMemo(() => {
@@ -144,7 +148,7 @@ export function WeekDashboard({
   }, [autoScrollTargetMinute, calendarHourHeight, endDay, minCalendarMinute, startDay]);
 
   return (
-    <section className="week-v2" aria-label="Your week overview">
+    <section className="week-v2" aria-label="Your week overview" data-week-axis-scale-percent={effectiveAxisScalePercent}>
       <div className="week-v2-grid week-v2-grid--calendar">
         <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label="Week calendar schedule">
           <div className="week-v2-summary week-v2-summary--compact week-v2-summary--integrated" aria-label="Week summary">
@@ -205,14 +209,14 @@ export function WeekDashboard({
                 );
               })}
             </div>
-            <div ref={calendarBodyRef} className="week-v2-calendar__body" style={{ height: `${(calendarEndHour - calendarStartHour) * calendarHourHeight}px` }}>
+            <div ref={calendarBodyRef} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
-                  <span key={hour} style={{ top: `${(hour - calendarStartHour) * calendarHourHeight}px` }}>{formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes))}</span>
+                  <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes))}</span>
                 ))}
                 <span
                   className="week-v2-calendar__time-rail-endpoint"
-                  style={{ top: `${(calendarEndHour - calendarStartHour) * calendarHourHeight}px` }}
+                  style={{ top: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}
                 >
                   {formatHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes))}
                 </span>
@@ -232,13 +236,13 @@ export function WeekDashboard({
                 return (
                   <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} key={row.day}>
                     {calendarHours.map((hour) => (
-                      <span className="week-v2-calendar__line" key={`${row.day}-${hour}`} style={{ top: `${(hour - calendarStartHour) * calendarHourHeight}px` }} />
+                      <span className="week-v2-calendar__line" key={`${row.day}-${hour}`} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }} />
                     ))}
                     {events.map((event) => {
                       const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight);
                       const eventStyle: WeekCalendarEventStyle = {
-                        top: `${(event.topMinutes / 60) * calendarHourHeight}px`,
-                        height: `${eventLayout.eventHeight}px`,
+                        top: formatWeekDashboardAxisPixelValue((event.topMinutes / 60) * calendarHourHeight),
+                        height: formatWeekDashboardAxisPixelValue(eventLayout.eventHeight),
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 4px)` : "4px",
                         width: event.laneCount > 1 ? "calc(100% - 32px)" : "calc(100% - 8px)",
                         zIndex: activeWeekEventId === event.id ? ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX : event.laneCount > 1 ? 10 + event.lane : 3,

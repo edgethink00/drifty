@@ -6,6 +6,7 @@ import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/wa
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
 import { DevPreviewControls, type DriftAlarmPreviewOption } from "./DevPreviewControls";
+import { WeekDashboardAxisScaleControl } from "./WeekDashboardAxisScaleControl";
 import type { DemoDashboardReplaySettings } from "./settingsStorage";
 
 type DevSettingsSectionProps = {
@@ -18,6 +19,7 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
   readonly logoAnimationPreviewEnabled: boolean;
+  readonly weekDashboardAxisScalePercent: number;
   readonly watcherMode: WatcherMode;
   readonly watcherPeekEnabled: boolean;
   readonly watcherPeriodicMaxMinutes: number;
@@ -39,7 +41,9 @@ type DevSettingsSectionProps = {
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
+  readonly onResetWeekDashboardAxisScalePercent: () => void;
   readonly onShowWatcherPeek: (force?: boolean) => void;
+  readonly onWeekDashboardAxisScalePercentChange: (scalePercent: number) => void;
   readonly onWatcherModeChange: (mode: WatcherMode) => void;
   readonly onWatcherPeekEnabledChange: (enabled: boolean) => void;
   readonly onWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -56,6 +60,7 @@ export function DevSettingsSection({
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
   logoAnimationPreviewEnabled,
+  weekDashboardAxisScalePercent,
   watcherMode,
   watcherPeekEnabled,
   watcherPeriodicMaxMinutes,
@@ -77,7 +82,9 @@ export function DevSettingsSection({
   onPreviewDriftAlarm,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
+  onResetWeekDashboardAxisScalePercent,
   onShowWatcherPeek,
+  onWeekDashboardAxisScalePercentChange,
   onWatcherModeChange,
   onWatcherPeekEnabledChange,
   onWatcherPeriodicMaxChange,
@@ -114,6 +121,22 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={logoAnimationPreviewEnabled} onChange={onLogoAnimationPreviewChange} ariaLabel="Toggle logo animation preview" />
+          </div>
+        </div>
+      </div>
+      <div className="settings-block settings-block--dev-preview">
+        <h3>Dashboard layout</h3>
+        <div className="settings-row settings-row--fallback settings-row--week-axis-scale">
+          <div>
+            <div className="lbl">Your Week y-axis scale</div>
+            <div className="desc">Adjust the Week calendar vertical hour scale for layout review.</div>
+          </div>
+          <div className="ctrl settings-row__actions">
+            <WeekDashboardAxisScaleControl
+              scalePercent={weekDashboardAxisScalePercent}
+              onResetScalePercent={onResetWeekDashboardAxisScalePercent}
+              onScalePercentChange={onWeekDashboardAxisScalePercentChange}
+            />
           </div>
         </div>
       </div>

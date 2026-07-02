@@ -543,6 +543,40 @@
   flex: 0 0 auto;
 }
 
+.settings-row--week-axis-scale .settings-row__actions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  min-width: min(100%, 24rem);
+}
+
+.settings-axis-scale-control {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 3rem minmax(10rem, 1fr) auto;
+  gap: var(--space-2);
+  width: min(100%, 24rem);
+}
+
+.settings-axis-scale-control__value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  font-weight: 650;
+  line-height: 1;
+  text-align: right;
+}
+
+.content--settings .settings-range {
+  accent-color: var(--accent);
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-row--week-axis-scale .settings-btn {
+  min-width: 4.4rem;
+}
+
 .content--settings .settings-section--appearance .settings-color-grid {
   align-items: start;
   display: grid;
