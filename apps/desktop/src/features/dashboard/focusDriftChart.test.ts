@@ -245,6 +245,60 @@ describe("buildFocusDriftChart", () => {
     expect(chart.axisTicks[chart.axisTicks.length - 1]?.x).toBe(95.5);
   });
 
+  it("scores the live bucket by its elapsed window instead of the full bucket", () => {
+    const currentMinuteOfDay = 12 * 60 + 31;
+    const chart = buildFocusDriftChart([
+      makeTimedSegmentInSeconds({
+        id: "live-focus",
+        startSecond: (12 * 60 + 30) * 60,
+        durationSeconds: 60,
+        productivity: "focus",
+      }),
+    ], "2026-06-13", undefined, currentMinuteOfDay, 0);
+    const livePoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60 + 30);
+
+    if (!livePoint) throw new Error("Expected live bucket point to exist");
+
+    expect(livePoint.windowSeconds).toBe(60);
+    expect(livePoint.focusScore).toBe(100);
+  });
+
+  it("keeps completed buckets scored on the full window while live", () => {
+    const currentMinuteOfDay = 12 * 60 + 31;
+    const chart = buildFocusDriftChart([
+      makeTimedSegmentInSeconds({
+        id: "completed-focus",
+        startSecond: 12 * 60 * 60,
+        durationSeconds: 3 * 60,
+        productivity: "focus",
+      }),
+    ], "2026-06-13", undefined, currentMinuteOfDay, 0);
+    const completedPoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
+
+    if (!completedPoint) throw new Error("Expected completed bucket point to exist");
+
+    expect(completedPoint.windowSeconds).toBe(30 * 60);
+    expect(completedPoint.focusScore).toBeCloseTo(74, 2);
+  });
+
+  it("still penalizes a sparsely tracked live bucket relative to its elapsed window", () => {
+    const currentMinuteOfDay = 12 * 60 + 20;
+    const chart = buildFocusDriftChart([
+      makeTimedSegmentInSeconds({
+        id: "sparse-live-focus",
+        startSecond: 12 * 60 * 60,
+        durationSeconds: 60,
+        productivity: "focus",
+      }),
+    ], "2026-06-13", undefined, currentMinuteOfDay, 0);
+    const livePoint = chart.points.find((point) => point.bucketStartMinute === 12 * 60);
+
+    if (!livePoint) throw new Error("Expected live bucket point to exist");
+
+    expect(livePoint.windowSeconds).toBe(20 * 60);
+    expect(livePoint.focusScore).toBeCloseTo(62, 2);
+  });
+
   it.each([
     { durationSeconds: 90, expectedConsistency: 62, expectedScore: 62, label: "5%" },
     { durationSeconds: 3 * 60, expectedConsistency: 74, expectedScore: 74, label: "10%" },

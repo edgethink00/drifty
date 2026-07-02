@@ -211,7 +211,9 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
 
   const points = buckets.map((entry) => {
     const totalSeconds = entry.focusSeconds + entry.driftSeconds;
-    const windowSeconds = FOCUS_DRIFT_BUCKET_MINUTES * 60;
+    const windowSeconds = boundedCurrentMinute !== null && entry.bucketStartMinute === currentBucketStartMinute
+      ? Math.min(Math.max((boundedCurrentMinute - entry.bucketStartMinute) * 60, 60), FOCUS_DRIFT_BUCKET_MINUTES * 60)
+      : FOCUS_DRIFT_BUCKET_MINUTES * 60;
     const focusScore = scoreFocusDriftWindowShare(entry.focusSeconds, totalSeconds, windowSeconds);
     const driftScore = scoreFocusDriftWindowShare(entry.driftSeconds, totalSeconds, windowSeconds);
     const isFuture = currentBucketStartMinute !== null ? entry.bucketStartMinute > currentBucketStartMinute : false;
