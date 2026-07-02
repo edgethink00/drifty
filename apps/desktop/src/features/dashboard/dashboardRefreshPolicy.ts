@@ -1,7 +1,7 @@
 import type { ClassificationRange, DashboardPeriod } from "./dashboardPeriods";
 import type { StartOfWeek } from "../settings/settingsStorage";
 
-export type DashboardRefreshTabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "settings";
+export type DashboardRefreshTabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "team" | "settings";
 
 export type DashboardRefreshInputs = {
   readonly selectedDay: string;

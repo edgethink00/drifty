@@ -15,6 +15,7 @@ import {
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
   onboardingV22PreviewEnabled: false,
+  teamsBetaEnabled: false,
 }));
 
 vi.mock("../../appFeatureSwitches", () => ({
@@ -29,6 +30,9 @@ vi.mock("../../appFeatureSwitches", () => ({
     return featureSwitches.onboardingV22PreviewEnabled;
   },
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
+  get TEAMS_BETA_ENABLED() {
+    return featureSwitches.teamsBetaEnabled;
+  },
   WATCHER_PEEK_PROTOTYPE_ENABLED: false,
 }));
 
@@ -64,6 +68,7 @@ function renderProductionDevSettings() {
     onOpenDebugLogs: vi.fn(),
     onOpenOnboardingV22Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
+    onOpenTeamsBeta: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onPreviewDriftAlarm: vi.fn(),
     onReplayDashboardDemo: vi.fn(),
@@ -86,6 +91,7 @@ describe("DevSettingsSection", () => {
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
     featureSwitches.onboardingV22PreviewEnabled = false;
+    featureSwitches.teamsBetaEnabled = false;
   });
 
   it("opens the onboarding v2.2 preview when the dev tool is enabled", () => {
@@ -96,6 +102,16 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Open preview$/ }));
     expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Teams beta from the Dev preview block when the internal flag is enabled", () => {
+    featureSwitches.teamsBetaEnabled = true;
+
+    const props = renderProductionDevSettings();
+
+    expect(screen.getByText("Teams beta")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Open Teams beta$/ }));
+    expect(props.onOpenTeamsBeta).toHaveBeenCalledTimes(1);
   });
 
   it("does not leave an empty Dev preview block in production diagnostics", () => {
@@ -136,6 +152,7 @@ describe("DevSettingsSection", () => {
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
+      onOpenTeamsBeta: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onResetWeekDashboardAxisScalePercent: vi.fn(),
@@ -187,6 +204,7 @@ describe("DevSettingsSection", () => {
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
+      onOpenTeamsBeta: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onResetWeekDashboardAxisScalePercent: vi.fn(),

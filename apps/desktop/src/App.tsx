@@ -52,6 +52,8 @@ import {
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
+import { TeamPage } from "./features/team/TeamPage";
+import { useTeamController } from "./features/team/useTeamController";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
@@ -77,8 +79,8 @@ import {
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
-import { useAuth } from "./features/auth/AuthContext";
+import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { useAuth, type AuthState } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -608,6 +610,90 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
 }
 
+type TeamsBetaSurfaceProps = {
+  readonly hasRequiredAccountAuth: boolean;
+  readonly isEffectiveAuthRequired: boolean;
+  readonly isPolicySignedIn: boolean;
+  readonly isSupabaseConfigured: boolean;
+  readonly showAiClassificationImpact: boolean;
+  readonly startOfDayMinutes: number;
+  readonly user: AuthState["user"];
+  readonly onAuthRequired: () => void;
+};
+
+function TeamsBetaSurface({
+  hasRequiredAccountAuth,
+  isEffectiveAuthRequired,
+  isPolicySignedIn,
+  isSupabaseConfigured,
+  showAiClassificationImpact,
+  startOfDayMinutes,
+  user,
+  onAuthRequired,
+}: TeamsBetaSurfaceProps) {
+  const {
+    activeTeamPeriod,
+    invites: teamInvites,
+    rows: teamRows,
+    selectedTeam,
+    teamActionError,
+    teamActionLoading,
+    teamError,
+    teamLoading,
+    teamStatusMessage,
+    teamStatusTone,
+    teams,
+    handleAcceptInvite,
+    handleCreateInvite,
+    handleCreateTeam,
+    handlePublishTeamFocus,
+    handleRevokeInvite,
+    handleStopTeamFocusSharing,
+    refreshTeamData,
+    selectTeam,
+    setActiveTeamPeriod,
+  } = useTeamController({
+    activeTab: "team",
+    hasRequiredAccountAuth,
+    isEffectiveAuthRequired,
+    isSupabaseConfigured,
+    showAiClassificationImpact,
+    startOfDayMinutes,
+    user,
+    onAuthRequired,
+  });
+
+  return (
+    <TeamPage
+      actionError={teamActionError}
+      activePeriod={activeTeamPeriod}
+      error={teamError}
+      hasRequiredAccountAuth={hasRequiredAccountAuth}
+      isActionLoading={teamActionLoading}
+      isLoading={teamLoading}
+      isSignedIn={isPolicySignedIn}
+      isSupabaseEnabled={isSupabaseConfigured}
+      invites={teamInvites}
+      rows={teamRows}
+      selectedTeam={selectedTeam}
+      statusMessage={teamStatusMessage}
+      statusTone={teamStatusTone}
+      teams={teams}
+      onAcceptInvite={handleAcceptInvite}
+      onCopyInvite={copyTextToClipboard}
+      onCreateInvite={handleCreateInvite}
+      onCreateTeam={handleCreateTeam}
+      onPeriodChange={setActiveTeamPeriod}
+      onPublishTeamFocus={handlePublishTeamFocus}
+      onRefresh={refreshTeamData}
+      onRevokeInvite={handleRevokeInvite}
+      onSelectTeam={selectTeam}
+      onSignIn={onAuthRequired}
+      onStopTeamFocusSharing={handleStopTeamFocusSharing}
+    />
+  );
+}
+
 export default function App() {
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
@@ -686,6 +772,7 @@ export default function App() {
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
   const [devLogoAnimationPreviewEnabled, setDevLogoAnimationPreviewEnabled] = useState(false);
@@ -835,6 +922,18 @@ export default function App() {
       return { entries: [...entries, { tabId, dashPeriod: nextDashPeriod }], index: entries.length };
     });
   }, [dashPeriod]);
+
+  useEffect(() => {
+    if (activeTab !== "team" || canOpenTeamsBeta) return;
+
+    setNavigationHistory((current) => {
+      const safeEntry: NavigationHistoryState["entries"][number] = { tabId: "dashboard", dashPeriod: "Today" };
+      if (current.entries.length === 0) return { entries: [safeEntry], index: 0 };
+      const entries = current.entries.slice();
+      entries[current.index] = safeEntry;
+      return { ...current, entries };
+    });
+  }, [activeTab, canOpenTeamsBeta]);
   const {
     replayState: dashboardDemoReplayState,
     restartReplay: restartDashboardDemoReplay,
@@ -901,6 +1000,11 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+  const openTeamsBeta = useCallback(() => {
+    if (!canOpenTeamsBeta) return;
+    navigateToTab("team");
+    setAccountMenuOpen(false);
+  }, [canOpenTeamsBeta, navigateToTab]);
   const handleSettingsBack = useCallback(() => {
     setAccountMenuOpen(false);
     if (canNavigateBack) {
@@ -1076,6 +1180,7 @@ export default function App() {
   });
   const canUseCloudAiClassification = isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
   const requestLeaderboardAuth = useCallback(() => setAuthModalOpen(true), []);
+  const requestTeamAuth = useCallback(() => setAuthModalOpen(true), []);
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
@@ -5415,6 +5520,19 @@ export default function App() {
           />
         ) : null}
 
+        {activeTab === "team" && canOpenTeamsBeta ? (
+          <TeamsBetaSurface
+            hasRequiredAccountAuth={hasRequiredAccountAuth}
+            isEffectiveAuthRequired={isEffectiveAuthRequired}
+            isPolicySignedIn={isPolicySignedIn}
+            isSupabaseConfigured={isSupabaseConfigured}
+            showAiClassificationImpact={showAiClassificationImpact}
+            startOfDayMinutes={startOfDayMinutes}
+            user={user}
+            onAuthRequired={requestTeamAuth}
+          />
+        ) : null}
+
         {/* Settings */}
         {activeTab === "settings" ? (
           <div className="page">
@@ -5598,6 +5716,7 @@ export default function App() {
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
                     onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
+                    onOpenTeamsBeta={openTeamsBeta}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}

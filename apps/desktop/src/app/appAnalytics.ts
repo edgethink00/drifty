@@ -36,6 +36,7 @@ export function toAppSurfaceAnalytics(tabId: TabId): AppSurfaceAnalyticsValue {
     case "history":
     case "trends":
     case "leaderboard":
+    case "team":
     case "settings":
       return tabId;
     default:

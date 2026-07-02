@@ -1,6 +1,6 @@
 import type { DashboardPeriod, DashboardPeriodOption } from "../features/dashboard/dashboardPeriods";
 
-export type TabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "settings";
+export type TabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "team" | "settings";
 
 export type NavigationSnapshot = {
   tabId: TabId;

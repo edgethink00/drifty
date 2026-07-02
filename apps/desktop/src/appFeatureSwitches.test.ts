@@ -13,6 +13,7 @@ describe("app feature switches", () => {
 
     expect(switches.RELEASE_CHANNEL).toBe("production");
     expect(switches.IS_PRODUCTION_BUILD).toBe(true);
+    expect(switches.TEAMS_BETA_ENABLED).toBe(false);
     expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(false);
     expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
     expect(switches.AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED).toBe(true);
@@ -31,6 +32,7 @@ describe("app feature switches", () => {
 
     expect(switches.RELEASE_CHANNEL).toBe("dev");
     expect(switches.IS_PRODUCTION_BUILD).toBe(false);
+    expect(switches.TEAMS_BETA_ENABLED).toBe(true);
     expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(true);
     expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
     expect(switches.AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED).toBe(true);

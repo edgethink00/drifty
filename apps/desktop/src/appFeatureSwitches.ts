@@ -11,6 +11,7 @@ function resolveReleaseChannel(): ReleaseChannel {
 export const RELEASE_CHANNEL: ReleaseChannel = resolveReleaseChannel();
 export const IS_PRODUCTION_BUILD = RELEASE_CHANNEL === "production";
 
+export const TEAMS_BETA_ENABLED = !IS_PRODUCTION_BUILD;
 export const WATCHER_PEEK_PROTOTYPE_ENABLED = !IS_PRODUCTION_BUILD;
 export const DRIFT_ALARM_PANEL_PREVIEWS_ENABLED = true;
 export const AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED = true;

@@ -14,6 +14,7 @@ describe("app analytics mapping", () => {
     expect(toAppSurfaceAnalytics("history")).toBe("history");
     expect(toAppSurfaceAnalytics("trends")).toBe("trends");
     expect(toAppSurfaceAnalytics("leaderboard")).toBe("leaderboard");
+    expect(toAppSurfaceAnalytics("team")).toBe("team");
     expect(toAppSurfaceAnalytics("settings")).toBe("settings");
   });
 

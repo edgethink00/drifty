@@ -5,6 +5,7 @@ import {
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED,
   ONBOARDING_V2_2_PREVIEW_ENABLED,
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED,
+  TEAMS_BETA_ENABLED,
 } from "../../appFeatureSwitches";
 import { DRIFT_ALARM_PREVIEW_OPTIONS } from "../companion/driftAlarmData";
 import {
@@ -26,6 +27,7 @@ type DevPreviewControlsProps = {
   readonly onEndOfDayReviewPreview: () => void;
   readonly onOpenOnboardingV22Preview: () => void;
   readonly onOpenReplayOnboarding: () => void;
+  readonly onOpenTeamsBeta: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onShowWatcherPeek: (force?: boolean) => void;
   readonly onWatcherModeChange: (mode: WatcherMode) => void;
@@ -44,6 +46,7 @@ export function DevPreviewControls({
   onEndOfDayReviewPreview,
   onOpenOnboardingV22Preview,
   onOpenReplayOnboarding,
+  onOpenTeamsBeta,
   onPreviewDriftAlarm,
   onShowWatcherPeek,
   onWatcherModeChange,
@@ -73,6 +76,17 @@ export function DevPreviewControls({
           </div>
           <div className="ctrl">
             <button type="button" className="settings-btn" onClick={onOpenOnboardingV22Preview}>Open preview</button>
+          </div>
+        </div>
+      ) : null}
+      {TEAMS_BETA_ENABLED ? (
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Teams beta</div>
+            <div className="desc">Open the internal aggregate team focus surface. Dev builds only.</div>
+          </div>
+          <div className="ctrl">
+            <button type="button" className="settings-btn" onClick={onOpenTeamsBeta}>Open Teams beta</button>
           </div>
         </div>
       ) : null}

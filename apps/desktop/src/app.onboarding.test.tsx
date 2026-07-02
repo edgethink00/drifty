@@ -177,6 +177,7 @@ vi.mock("./appFeatureSwitches", () => ({
   IS_PRODUCTION_BUILD: false,
   ONBOARDING_V2_2_PREVIEW_ENABLED: false,
   RELEASE_CHANNEL: "dev",
+  TEAMS_BETA_ENABLED: true,
   get REPLAY_ONBOARDING_DEV_TOOL_ENABLED() {
     return appFeatureSwitches.replayOnboardingDevToolEnabled;
   },

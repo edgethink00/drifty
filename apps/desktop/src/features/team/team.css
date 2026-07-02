@@ -1,0 +1,286 @@
+.page.content--team,
+.team-page-layout {
+  max-width: none;
+}
+
+.team-panel {
+  --team-surface: color-mix(in srgb, var(--surface) 90%, transparent);
+  --team-surface-soft: color-mix(in srgb, var(--surface-strong) 52%, transparent);
+  --team-ring: color-mix(in srgb, var(--accent) 20%, var(--line));
+  display: grid;
+  gap: var(--space-3);
+}
+
+.team-head,
+.team-requirement,
+.team-selected,
+.team-sharing,
+.team-list-section,
+.team-form,
+.team-state {
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  background: var(--team-surface);
+}
+
+.team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+}
+
+.team-head h2,
+.team-selected strong,
+.team-sharing strong,
+.team-section-head h3,
+.team-state strong {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-section-title-size);
+  font-weight: 640;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.team-requirement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-soft) 34%, var(--surface));
+}
+
+.team-requirement__copy { display: grid; gap: var(--space-1); min-width: 0; }
+
+.team-requirement p,
+.team-selected p,
+.team-sharing p,
+.team-state p,
+.team-message {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.team-requirement__status,
+.team-message {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  padding: 0.34rem 0.58rem;
+  white-space: nowrap;
+}
+
+.team-workspace,
+.team-command-grid,
+.team-list-section,
+.team-selected,
+.team-sharing {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.team-command-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.team-form,
+.team-list-section,
+.team-selected,
+.team-sharing,
+.team-state {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+}
+
+.team-form label,
+.team-invite-form label,
+.team-select {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+}
+
+.team-form input,
+.team-invite-form input,
+.team-select select {
+  min-height: 2.18rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--team-surface-soft);
+  color: var(--text);
+  font: inherit;
+  padding: 0.44rem 0.62rem;
+}
+
+.team-form input:focus-visible,
+.team-invite-form input:focus-visible,
+.team-select select:focus-visible {
+  outline: 2px solid var(--team-ring);
+  outline-offset: 2px;
+}
+
+.team-message {
+  width: fit-content;
+}
+
+.team-message--error,
+.team-message[data-tone="error"] {
+  border-color: var(--danger-line);
+  background: color-mix(in srgb, var(--warn-soft) 78%, var(--surface));
+  color: var(--warn);
+}
+
+.team-selected {
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 16rem) auto;
+  align-items: end;
+}
+
+.team-period {
+  display: inline-grid;
+  grid-auto-flow: column;
+  justify-content: end;
+  gap: var(--space-1);
+}
+
+.team-period button {
+  min-width: 4.8rem;
+}
+
+.team-sharing {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  background: var(--team-surface-soft);
+}
+
+.team-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.team-row-list,
+.team-invite-list {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  list-style: none;
+}
+
+.team-row,
+.team-invite-row {
+  display: grid;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 2.7rem;
+  padding: 0.52rem var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.team-row:last-child,
+.team-invite-row:last-child {
+  border-bottom: 0;
+}
+
+.team-row {
+  grid-template-columns: 2rem minmax(8rem, 1fr) minmax(5rem, 0.42fr) minmax(5rem, 0.32fr) minmax(11rem, 0.7fr);
+}
+
+.team-row span,
+.team-row em,
+.team-row small,
+.team-invite-row span {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-row b {
+  color: var(--text-muted);
+  font-weight: 620;
+}
+
+.team-invite-form,
+.team-invite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.team-invite-form {
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.team-invite-row div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.team-small-empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  padding: var(--space-3);
+}
+
+.team-panel .settings-btn,
+.team-panel .ghost-button {
+  min-height: 1.9rem;
+  padding: 0.36rem 0.72rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px) {
+  .team-command-grid,
+  .team-selected,
+  .team-sharing,
+  .team-invite-form,
+  .team-invite-row {
+    grid-template-columns: 1fr;
+  }
+
+  .team-row {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .team-row em,
+  .team-row b,
+  .team-row small {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .team-head,
+  .team-requirement,
+  .team-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .team-period {
+    grid-auto-flow: row;
+    justify-content: stretch;
+  }
+}

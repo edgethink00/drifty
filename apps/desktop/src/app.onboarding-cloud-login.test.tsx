@@ -141,6 +141,7 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
   IS_PRODUCTION_BUILD: false,
   RELEASE_CHANNEL: "dev",
+  TEAMS_BETA_ENABLED: true,
   WATCHER_PEEK_PROTOTYPE_ENABLED: true,
   isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
 }));
