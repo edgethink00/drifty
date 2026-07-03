@@ -1228,6 +1228,7 @@ export default function App() {
     handleViewOwnLeaderboardProfile,
     openProfileEditor,
     refreshLeaderboardData,
+    syncLeaderboardPublication,
     removeProfilePhoto,
     setActiveLeaderboardPeriod,
     updateProfileDraft,
@@ -4543,8 +4544,9 @@ export default function App() {
       // Metrics refresh is best-effort after a bulk delete; the views below still reload.
     }
     await refresh(selectedDayRef.current);
+    await syncLeaderboardPublication("history_deleted", { bypassMinInterval: true });
     await refreshLeaderboardData();
-  }, [refresh, refreshLeaderboardData]);
+  }, [refresh, refreshLeaderboardData, syncLeaderboardPublication]);
 
   useEffect(() => {
     selectedDayRef.current = selectedDay;
@@ -4619,7 +4621,10 @@ export default function App() {
         if (summary.savedRecords > 0 && selectedDayRef.current === today) await refresh(today);
       }
       captureAiClassificationRun(trigger, providerKind, "current_day", summary);
-      if (summary.savedRecords > 0) await refreshLeaderboardData();
+      if (summary.savedRecords > 0) {
+        await syncLeaderboardPublication("classification_updated");
+        await refreshLeaderboardData();
+      }
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
@@ -4636,7 +4641,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -4852,6 +4857,7 @@ export default function App() {
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
         await refresh(selectedDay);
+        await syncLeaderboardPublication("classification_updated");
         await refreshLeaderboardData();
       }
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
@@ -4905,6 +4911,7 @@ export default function App() {
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
         await refresh(targetDay);
+        await syncLeaderboardPublication("classification_updated");
         await refreshLeaderboardData();
       }
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
@@ -4942,6 +4949,7 @@ export default function App() {
         metrics,
       });
       await refresh(selectedDay);
+      await syncLeaderboardPublication("classification_updated");
       await refreshLeaderboardData();
     } catch (nextError) {
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message: toErrorMessage(nextError) });

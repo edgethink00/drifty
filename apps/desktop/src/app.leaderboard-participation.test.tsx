@@ -4,6 +4,7 @@ import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardPeriod, LeaderboardResult, LeaderboardRow, OwnLeaderboardEntry } from "./features/leaderboard/leaderboardService";
+import { LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY } from "./features/leaderboard/leaderboardAutoPublishState";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
 const {
@@ -369,6 +370,241 @@ describe("App leaderboard participation", () => {
       });
     });
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
+  });
+
+  it("automatically republishes opted-in signed-in users after the daily publish cadence passes", async () => {
+    const today = todayIsoDate();
+    const windowStartDay = shiftIsoDate(today, -6);
+    const monthStartDay = shiftIsoDate(today, -29);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const staleRemoteUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    fetchOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex Remote",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    getTimeline.mockResolvedValue([
+      {
+        id: "today-window",
+        startedAt: `${today}T09:00:00.000Z`,
+        endedAt: `${today}T10:00:00.000Z`,
+        durationSeconds: 3600,
+        appName: "Safari",
+        siteDomain: "stackoverflow.com",
+        siteTitle: "Developer docs",
+        platform: "macos",
+        source: "nsworkspace",
+      },
+    ]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockImplementation(async (period: LeaderboardPeriod = "weekly") => ({
+      success: true,
+      error: null,
+      data: {
+        ...makeOwnLeaderboardEntry(period),
+        display_name: "Alex Remote",
+        timezone,
+        updated_at: staleRemoteUpdatedAt,
+      },
+    }));
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
+    });
+    expect(authState.signInAnonymously).not.toHaveBeenCalled();
+    expect(saveOwnProfile).not.toHaveBeenCalled();
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith({
+      profileDisplayName: "Alex Remote",
+      period: "daily",
+      focus_seconds: 3600,
+      focus_seconds_7d: 3600,
+      window_start_date: today,
+      window_end_date: today,
+      timezone,
+    }, undefined, { updateProfile: false });
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith({
+      profileDisplayName: "Alex Remote",
+      period: "weekly",
+      focus_seconds: 3600,
+      focus_seconds_7d: 3600,
+      window_start_date: windowStartDay,
+      window_end_date: today,
+      timezone,
+    }, undefined, { updateProfile: false });
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith({
+      profileDisplayName: "Alex Remote",
+      period: "monthly",
+      focus_seconds: 3600,
+      focus_seconds_7d: 3600,
+      window_start_date: monthStartDay,
+      window_end_date: today,
+      timezone,
+    }, undefined, { updateProfile: false });
+  });
+
+  it("does not automatically republish opted-in users when the remote row is under 24 hours old", async () => {
+    const today = todayIsoDate();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    fetchOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex Remote",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    getTimeline.mockResolvedValue([
+      {
+        id: "today-window",
+        startedAt: `${today}T09:00:00.000Z`,
+        endedAt: `${today}T10:00:00.000Z`,
+        durationSeconds: 3600,
+        appName: "Safari",
+        siteDomain: "stackoverflow.com",
+        siteTitle: "Developer docs",
+        platform: "macos",
+        source: "nsworkspace",
+      },
+    ]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockImplementation(async (period: LeaderboardPeriod = "weekly") => ({
+      success: true,
+      error: null,
+      data: {
+        ...makeOwnLeaderboardEntry(period),
+        display_name: "Alex Remote",
+        timezone,
+        updated_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      },
+    }));
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("daily");
+      expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
+      expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("monthly");
+    });
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+  });
+
+  it("automatically republishes only periods whose 24-hour throttle has passed", async () => {
+    const today = todayIsoDate();
+    const windowStartDay = shiftIsoDate(today, -6);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const recentAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const staleAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+
+    window.localStorage.setItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY, JSON.stringify([
+      {
+        userScopeKey: "user-1",
+        period: "daily",
+        payloadKey: "previous-daily",
+        lastAttemptAt: recentAt,
+        lastSuccessAt: recentAt,
+        lastErrorAt: null,
+      },
+      {
+        userScopeKey: "user-1",
+        period: "weekly",
+        payloadKey: "previous-weekly",
+        lastAttemptAt: staleAt,
+        lastSuccessAt: staleAt,
+        lastErrorAt: null,
+      },
+      {
+        userScopeKey: "user-1",
+        period: "monthly",
+        payloadKey: "previous-monthly",
+        lastAttemptAt: recentAt,
+        lastSuccessAt: recentAt,
+        lastErrorAt: null,
+      },
+    ]));
+
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    fetchOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex Remote",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    getTimeline.mockResolvedValue([
+      {
+        id: "today-window",
+        startedAt: `${today}T09:00:00.000Z`,
+        endedAt: `${today}T10:00:00.000Z`,
+        durationSeconds: 3600,
+        appName: "Safari",
+        siteDomain: "stackoverflow.com",
+        siteTitle: "Developer docs",
+        platform: "macos",
+        source: "nsworkspace",
+      },
+    ]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockImplementation(async (period: LeaderboardPeriod = "weekly") => ({
+      success: true,
+      error: null,
+      data: {
+        ...makeOwnLeaderboardEntry(period),
+        display_name: "Alex Remote",
+        timezone,
+      },
+    }));
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(publishOwnFocusTotal).toHaveBeenCalledTimes(1);
+    });
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith({
+      profileDisplayName: "Alex Remote",
+      period: "weekly",
+      focus_seconds: 3600,
+      focus_seconds_7d: 3600,
+      window_start_date: windowStartDay,
+      window_end_date: today,
+      timezone,
+    }, undefined, { updateProfile: false });
   });
 
   it("shows joined controls after a signed-out anonymous join refresh", async () => {
@@ -774,6 +1010,16 @@ describe("App leaderboard participation", () => {
   });
 
   it("clears joined controls after opt-out even when the follow-up refresh fails", async () => {
+    window.localStorage.setItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY, JSON.stringify([
+      {
+        userScopeKey: "alex@example.com",
+        period: "weekly",
+        payloadKey: "stale-payload",
+        lastAttemptAt: new Date().toISOString(),
+        lastSuccessAt: new Date().toISOString(),
+        lastErrorAt: null,
+      },
+    ]));
     getTimeline.mockResolvedValue([]);
     fetchGlobalLeaderboard
       .mockResolvedValueOnce({ success: true, error: null, data: [makeLeaderboardRow("weekly")] })
@@ -795,6 +1041,7 @@ describe("App leaderboard participation", () => {
     expect(screen.queryByRole("button", { name: /leave leaderboard/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /view profile/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY) ?? "[]")).toEqual([]);
     expect((await screen.findByRole("status")).textContent).toMatch(/network unavailable/i);
   });
 

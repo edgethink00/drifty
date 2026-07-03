@@ -214,6 +214,38 @@ describe("leaderboardService", () => {
     expect(payload.display_name).toBe("no-name");
   });
 
+  it("can publish an aggregate without touching the public profile", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-2",
+          email: "alex@example.com",
+        } satisfies AuthUser,
+      },
+      error: null,
+    });
+    client.__mocks.upsert.mockResolvedValue({ error: null });
+
+    const result = await publishOwnFocusTotal(
+      {
+        profileDisplayName: "Alex",
+        period: "daily",
+        focus_seconds_7d: 1200,
+        window_start_date: "2026-04-07",
+        window_end_date: "2026-04-07",
+        timezone: "Asia/Seoul",
+      },
+      client,
+      { updateProfile: false },
+    );
+
+    expect(result).toEqual({ success: true, error: null });
+    expect(client.from).toHaveBeenCalledTimes(1);
+    expect(client.from).toHaveBeenCalledWith("leaderboard_focus_totals");
+    expect(client.__mocks.upsert).toHaveBeenCalledTimes(1);
+  });
+
   it("reads the current user's own leaderboard row truthfully", async () => {
     const client = createClient();
     client.auth.getUser.mockResolvedValue({
