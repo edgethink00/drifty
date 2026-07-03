@@ -803,8 +803,8 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
   const selectedModelId = flow.managedLocalAi.status?.selectedModelId
     ?? flow.managedLocalAi.actionModelId
     ?? DEFAULT_LOCAL_MODEL_ID;
-  const statusBusy = flow.managedLocalAi.loading
-    || Boolean(flow.managedLocalAi.actionModelId)
+  const statusBusy = (flow.managedLocalAi.loading && status === null)
+    || (Boolean(flow.managedLocalAi.actionModelId) && status?.state !== "error")
     || status?.state === "installing"
     || status?.state === "starting";
   const statusMessage = localModelStatusMessage(flow.managedLocalAi.loading, status);
@@ -844,6 +844,7 @@ function LocalModelCard({
   const failedThisModel = status?.state === "error" && status.selectedModelId === model.id;
   const ready = localModelIsReady(model.id, status);
   const disabled = ready
+    || (flow.managedLocalAi.loading && status === null)
     || Boolean(flow.managedLocalAi.actionModelId)
     || status?.state === "installing"
     || status?.state === "starting";
@@ -898,10 +899,10 @@ function LocalModelCard({
 }
 
 function localModelStatusMessage(loading: boolean, status: ManagedLocalAiStatus | null): string {
-  if (loading) return "Checking managed local AI...";
   const progressText = managedLocalAiProgressText(status?.progress ?? null);
   if (status?.progress && progressText) return `Downloading ${status.progress.percent.toFixed(0)}% · ${progressText}`;
-  return status?.message ?? "Choose a local model and Drifty will download it inside the app.";
+  if (status) return status.message;
+  return loading ? "Looking for downloaded local models..." : "Choose a local model and Drifty will download it inside the app.";
 }
 
 function localModelIsReady(modelId: string, status: ManagedLocalAiStatus | null): boolean {
@@ -921,8 +922,8 @@ function localModelActionLabel({
   readonly ready: boolean;
 }): string {
   if (ready) return "Ready";
-  if (installing) return progress === null ? "Downloading..." : `Downloading ${progress.percent.toFixed(0)}%`;
   if (failed) return "Retry";
+  if (installing) return progress === null ? "Downloading..." : `Downloading ${progress.percent.toFixed(0)}%`;
   return "Download";
 }
 

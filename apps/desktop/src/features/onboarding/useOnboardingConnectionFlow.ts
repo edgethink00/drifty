@@ -53,14 +53,25 @@ export function useOnboardingConnectionFlow({
     if (setupChoice !== "local_ai") return;
     const status = managedLocalAi.status;
     if (!isManagedLocalReady(status)) return;
-    onLocalAiSetupChange((current) => ({
-      ...current,
-      provider: "managed_local",
-      driftyRoute: "local",
-      managedLocalModelId: status.selectedModelId,
-      managedLocalBaseUrl: status.baseUrl,
-      managedLocalModel: status.model,
-    }));
+    onLocalAiSetupChange((current) => {
+      if (
+        current.provider === "managed_local"
+        && current.driftyRoute === "local"
+        && current.managedLocalModelId === status.selectedModelId
+        && current.managedLocalBaseUrl === status.baseUrl
+        && current.managedLocalModel === status.model
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        provider: "managed_local",
+        driftyRoute: "local",
+        managedLocalModelId: status.selectedModelId,
+        managedLocalBaseUrl: status.baseUrl,
+        managedLocalModel: status.model,
+      };
+    });
   }, [managedLocalAi.status, onLocalAiSetupChange, setupChoice]);
 
   useEffect(() => runConnectionTest(step), [

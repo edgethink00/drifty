@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthog";
+import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED } from "../../appFeatureSwitches";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
@@ -87,7 +88,9 @@ export function useOnboardingFlow({
     trackerStatus,
   });
 
-  const steps = useMemo(() => getOnboardingSteps(connection.setupChoice), [connection.setupChoice]);
+  const steps = useMemo(() => getOnboardingSteps(connection.setupChoice, {
+    skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
+  }), [connection.setupChoice]);
   const stepIndex = steps.findIndex((item) => item.id === step);
   const permissionSummaryLabel = permissions.accessibilityGranted
     ? "Accessibility verified"
