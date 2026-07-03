@@ -10,6 +10,7 @@ import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
+import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
 import {
   DashboardAiUnavailableNotice,
   type DashboardAiUnavailableState,
@@ -103,7 +104,7 @@ export function DashboardPage({
   weekRows,
   weekCurrentCalendarDay,
   weekCurrentMinuteOfDay,
-  weekDashboardAxisScalePercent = 100,
+  weekDashboardAxisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
   onDashboardAiUnavailableAction,
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,

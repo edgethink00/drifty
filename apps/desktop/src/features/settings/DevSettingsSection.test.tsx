@@ -8,8 +8,6 @@ import {
   DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
-  WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT,
-  WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT,
 } from "./settingsStorage";
 
 const featureSwitches = vi.hoisted(() => ({
@@ -36,7 +34,7 @@ vi.mock("../../appFeatureSwitches", () => ({
   WATCHER_PEEK_PROTOTYPE_ENABLED: false,
 }));
 
-function renderProductionDevSettings() {
+function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
   const props = {
     dashboardAiUnavailablePreview: null,
     dashboardAiUnavailablePreviewCase: "connect-ai" as const,
@@ -50,7 +48,7 @@ function renderProductionDevSettings() {
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
     logoAnimationPreviewEnabled: false,
-    weekDashboardAxisScalePercent: 80,
+    weekDashboardAxisScalePercent,
     watcherMode: "periodic" as const,
     watcherPeekEnabled: false,
     watcherPeriodicMaxMinutes: 20,
@@ -249,21 +247,20 @@ describe("DevSettingsSection", () => {
     expect(props.onResetDemoDashboardReplaySettings).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Your Week y-axis scale slider and calls live scale handlers", () => {
+  it("shows the Your Week y-axis scale slider relative to the compressed default", () => {
     const props = renderProductionDevSettings();
     const scaleInput = screen.getByLabelText("Your Week y-axis scale percent");
 
-    fireEvent.change(scaleInput, { target: { value: "82" } });
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    fireEvent.change(scaleInput, { target: { value: "120" } });
 
     expect(screen.getByRole("heading", { name: "Dashboard layout" })).toBeTruthy();
     expect(screen.getByText("Your Week y-axis scale")).toBeTruthy();
-    expect(screen.getByLabelText("Current Your Week y-axis scale").textContent).toBe("80%");
-    expect(scaleInput.getAttribute("min")).toBe(String(WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT));
-    expect(scaleInput.getAttribute("max")).toBe(String(WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT));
+    expect(screen.getByLabelText("Current Your Week y-axis scale").textContent).toBe("100%");
+    expect(scaleInput.getAttribute("min")).toBe("60");
+    expect(scaleInput.getAttribute("max")).toBe("140");
     expect(scaleInput.getAttribute("step")).toBe("1");
-    expect(scaleInput.getAttribute("value")).toBe("80");
-    expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(82);
-    expect(props.onResetWeekDashboardAxisScalePercent).toHaveBeenCalledTimes(1);
+    expect(scaleInput.getAttribute("value")).toBe("100");
+    expect(screen.getByRole("button", { name: "Reset" }).getAttribute("disabled")).toBe("");
+    expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(90);
   });
 });

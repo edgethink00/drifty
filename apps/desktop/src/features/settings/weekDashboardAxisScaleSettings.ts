@@ -5,11 +5,16 @@ import {
 } from "../dashboard/weekDashboardAxisScale";
 
 export {
+  WEEK_DASHBOARD_AXIS_SCALE_CONTROL_DEFAULT_PERCENT,
+  WEEK_DASHBOARD_AXIS_SCALE_CONTROL_MAX_PERCENT,
+  WEEK_DASHBOARD_AXIS_SCALE_CONTROL_MIN_PERCENT,
   WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
   WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT,
   WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT,
   clampWeekDashboardAxisScalePercent,
   resolveEffectiveWeekDashboardAxisScalePercent,
+  weekDashboardAxisScaleControlPercentToAxisScalePercent,
+  weekDashboardAxisScalePercentToControlPercent,
 } from "../dashboard/weekDashboardAxisScale";
 
 export const WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY = "drifty.dev.weekDashboardAxisScalePercent";
