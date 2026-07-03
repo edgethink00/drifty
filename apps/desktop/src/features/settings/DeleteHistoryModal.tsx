@@ -9,9 +9,10 @@ import { SettingsSelect } from "./SettingsSelect";
 import type { SettingsSelectOption } from "./SettingsSelect";
 import "./DeleteHistoryModal.css";
 
-type RangePreset = "today" | "last7" | "last30" | "all" | "custom";
+type RangePreset = "lastHour" | "today" | "last7" | "last30" | "all" | "custom";
 
 const RANGE_OPTIONS: readonly SettingsSelectOption<RangePreset>[] = [
+  { value: "lastHour", label: "Last hour" },
   { value: "today", label: "Today" },
   { value: "last7", label: "Last 7 days" },
   { value: "last30", label: "Last 30 days" },
@@ -164,6 +165,10 @@ function rangeBounds(
 ): { readonly start?: string; readonly end?: string } | null {
   const today = localDateKey(new Date());
   switch (preset) {
+    case "lastHour":
+      // Full datetime bounds pass through to the tracker untouched (naive =
+      // local time); the open end keeps the currently tracked segment included.
+      return { start: localDateTimeKey(new Date(Date.now() - 60 * 60 * 1000)) };
     case "today":
       return { start: today, end: today };
     case "last7":
@@ -178,6 +183,11 @@ function rangeBounds(
     default:
       return null;
   }
+}
+
+function localDateTimeKey(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function summarizeCounts(result: DeleteHistoryRangeResult): string {
