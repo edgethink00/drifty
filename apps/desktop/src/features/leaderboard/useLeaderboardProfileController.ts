@@ -10,6 +10,18 @@ import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl, type ProfileDraft } from "../profile/ProfileModals";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
+import {
+  LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS,
+  buildLeaderboardAutoPublishPayloadKey,
+  clearLeaderboardAutoPublishRecordsForUser,
+  findLeaderboardAutoPublishRecord,
+  readLeaderboardAutoPublishRecords,
+  shouldPublishLeaderboardPeriod,
+  upsertLeaderboardAutoPublishRecords,
+  writeLeaderboardAutoPublishRecords,
+  type LeaderboardAutoPublishDecision,
+  type LeaderboardAutoPublishRecord,
+} from "./leaderboardAutoPublishState";
 import { getLeaderboardWindowStartDay } from "./leaderboardWindow";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
@@ -17,11 +29,16 @@ import {
   fetchGlobalLeaderboard,
   fetchOwnLeaderboardEntry,
   optOutLeaderboard,
-  publishOwnFocusTotal,
   type LeaderboardPeriod,
   type LeaderboardRow,
   type OwnLeaderboardEntry,
 } from "./leaderboardService";
+import {
+  buildLeaderboardPublishPayloads,
+  publishLeaderboardPayloads,
+  publishLeaderboardPeriods,
+  type LeaderboardPublishPayload,
+} from "./leaderboardPublisher";
 
 type UseLeaderboardProfileControllerInput = {
   readonly activeTab: string;
@@ -83,9 +100,42 @@ type UseLeaderboardProfileControllerResult = {
   readonly handleViewOwnLeaderboardProfile: () => Promise<void>;
   readonly openProfileEditor: () => void;
   readonly refreshLeaderboardData: () => Promise<void>;
+  readonly syncLeaderboardPublication: (reason: LeaderboardAutoPublishReason, options?: LeaderboardAutoPublishOptions) => Promise<void>;
   readonly removeProfilePhoto: () => void;
   readonly setActiveLeaderboardPeriod: Dispatch<SetStateAction<LeaderboardPeriod>>;
   readonly updateProfileDraft: (updater: Partial<ProfileDraft>) => void;
+};
+
+export type LeaderboardAutoPublishReason =
+  | "startup"
+  | "interval"
+  | "focus"
+  | "visibility"
+  | "day_changed"
+  | "classification_updated"
+  | "history_deleted";
+
+export type LeaderboardAutoPublishOptions = {
+  readonly bypassMinInterval?: boolean;
+  readonly refreshAfter?: boolean;
+};
+
+type LeaderboardOptInCache = {
+  readonly userScopeKey: string;
+  readonly optedIn: boolean;
+};
+
+type LeaderboardAutoPublishPrepared = {
+  readonly allPayloads: readonly LeaderboardPublishPayload[];
+  readonly payloads: readonly LeaderboardPublishPayload[];
+  readonly segmentCount: number;
+  readonly decisions: readonly LeaderboardAutoPublishDecision[];
+};
+
+type LeaderboardOptInConfirmation = {
+  readonly optedIn: boolean;
+  readonly failed: boolean;
+  readonly entries: readonly OwnLeaderboardEntry[];
 };
 
 function profileDraftFromProfile(profile: UserProfile | null, email: string | null | undefined, authMetadataAvatarUrl: string): ProfileDraft {
@@ -114,6 +164,110 @@ function emptyProfileDraft(email: string | null | undefined, authMetadataAvatarU
 
 function getLeaderboardUserScopeKey(authenticatedUser: AuthState["user"] | null | undefined) {
   return authenticatedUser ? authenticatedUser.id ?? authenticatedUser.email ?? "authenticated" : "signed-out";
+}
+
+function buildAutoPublishRecords({
+  currentRecords,
+  userScopeKey,
+  payloads,
+  publishedAt,
+  success,
+}: {
+  readonly currentRecords: readonly LeaderboardAutoPublishRecord[];
+  readonly userScopeKey: string;
+  readonly payloads: readonly LeaderboardPublishPayload[];
+  readonly publishedAt: string;
+  readonly success: boolean;
+}) {
+  const nextRecords = payloads.map((payload) => {
+    const currentRecord = findLeaderboardAutoPublishRecord(currentRecords, userScopeKey, payload.period);
+    return {
+      userScopeKey,
+      period: payload.period,
+      payloadKey: success ? payload.payloadKey : currentRecord?.payloadKey ?? payload.payloadKey,
+      lastAttemptAt: publishedAt,
+      lastSuccessAt: success ? publishedAt : currentRecord?.lastSuccessAt ?? null,
+      lastErrorAt: success ? null : publishedAt,
+    } satisfies LeaderboardAutoPublishRecord;
+  });
+  return upsertLeaderboardAutoPublishRecords(currentRecords, nextRecords);
+}
+
+function buildRemoteAutoPublishRecord(
+  userScopeKey: string,
+  entry: OwnLeaderboardEntry,
+): LeaderboardAutoPublishRecord | null {
+  const updatedAt = Date.parse(entry.updated_at);
+  if (!Number.isFinite(updatedAt) || entry.opted_in !== true) return null;
+
+  return {
+    userScopeKey,
+    period: entry.period,
+    payloadKey: buildLeaderboardAutoPublishPayloadKey({
+      profileDisplayName: entry.display_name,
+      period: entry.period,
+      focusSeconds: entry.focus_seconds,
+      windowStartDay: entry.window_start_date,
+      windowEndDay: entry.window_end_date,
+      timezone: entry.timezone,
+    }),
+    lastAttemptAt: entry.updated_at,
+    lastSuccessAt: entry.updated_at,
+    lastErrorAt: null,
+  };
+}
+
+function seedMissingAutoPublishRecordsFromRemoteEntries({
+  currentRecords,
+  userScopeKey,
+  entries,
+}: {
+  readonly currentRecords: readonly LeaderboardAutoPublishRecord[];
+  readonly userScopeKey: string;
+  readonly entries: readonly OwnLeaderboardEntry[];
+}) {
+  const nextRecords = entries.flatMap((entry) => {
+    if (findLeaderboardAutoPublishRecord(currentRecords, userScopeKey, entry.period)) return [];
+    const record = buildRemoteAutoPublishRecord(userScopeKey, entry);
+    return record ? [record] : [];
+  });
+
+  return nextRecords.length === 0 ? currentRecords : upsertLeaderboardAutoPublishRecords(currentRecords, nextRecords);
+}
+
+function selectAutoPublishPayloads({
+  payloads,
+  records,
+  userScopeKey,
+  now,
+  bypassMinInterval,
+}: {
+  readonly payloads: readonly LeaderboardPublishPayload[];
+  readonly records: readonly LeaderboardAutoPublishRecord[];
+  readonly userScopeKey: string;
+  readonly now: Date;
+  readonly bypassMinInterval: boolean;
+}): Pick<LeaderboardAutoPublishPrepared, "payloads" | "decisions"> | null {
+  const decisions = payloads.map((payload) => ({
+    payload,
+    decision: shouldPublishLeaderboardPeriod({
+      record: findLeaderboardAutoPublishRecord(records, userScopeKey, payload.period),
+      payloadKey: payload.payloadKey,
+      now,
+      bypassMinInterval,
+    }),
+  }));
+
+  if (decisions.some((item) => item.decision.reason === "failure_backoff")) return null;
+
+  const selected = decisions.filter((item) => item.decision.shouldPublish);
+
+  if (selected.length === 0) return null;
+
+  return {
+    payloads: selected.map((item) => item.payload),
+    decisions: selected.map((item) => item.decision),
+  };
 }
 
 export function useLeaderboardProfileController({
@@ -156,6 +310,12 @@ export function useLeaderboardProfileController({
   const leaderboardHasResolvedOnceRef = useRef(false);
   const leaderboardHasLoadedOnceRef = useRef(false);
   const leaderboardOwnEntryScopeRef = useRef<string | null>(null);
+  const leaderboardAutoPublishInFlightRef = useRef(false);
+  const leaderboardManualActionInFlightRef = useRef(false);
+  const leaderboardOptInCacheRef = useRef<LeaderboardOptInCache | null>(null);
+  const leaderboardAutoPublishDayRef = useRef<string | null>(null);
+  const [leaderboardAutoPublishRefreshing, setLeaderboardAutoPublishRefreshing] = useState(false);
+  const [leaderboardAutoPublishError, setLeaderboardAutoPublishError] = useState<string | null>(null);
 
   const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
   const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
@@ -178,6 +338,10 @@ export function useLeaderboardProfileController({
   const leaderboardOwnEntryScopeKey = isPolicySignedIn ? getLeaderboardUserScopeKey(user) : "signed-out";
   const scopedOwnLeaderboardEntry = leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey ? ownLeaderboardEntry : null;
   const isLeaderboardOptedIn = scopedOwnLeaderboardEntry?.opted_in === true;
+
+  useEffect(() => {
+    leaderboardOptInCacheRef.current = null;
+  }, [leaderboardOwnEntryScopeKey]);
 
   const refreshLeaderboardData = useCallback(async (authenticatedUser = user) => {
     const requestId = ++leaderboardRefreshRequestRef.current;
@@ -346,6 +510,234 @@ export function useLeaderboardProfileController({
     return () => { cancelled = true; };
   }, [authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
 
+  const prepareLeaderboardAutoPublish = useCallback(async (options: LeaderboardAutoPublishOptions): Promise<LeaderboardAutoPublishPrepared | null> => {
+    if (profileReadyUserId !== (user?.id ?? null)) return null;
+
+    const profileDisplayName = profile?.display_name.trim();
+    if (!profileDisplayName || profileLoading || profileError) return null;
+
+    const payloads = await buildLeaderboardPublishPayloads({
+      profileDisplayName,
+      leaderboardWindowEndDay,
+      timezone: leaderboardTimezone,
+      startOfDayMinutes,
+      showAiClassificationImpact,
+    });
+    const selection = selectAutoPublishPayloads({
+      payloads: payloads.payloads,
+      records: readLeaderboardAutoPublishRecords(),
+      userScopeKey: leaderboardOwnEntryScopeKey,
+      now: new Date(),
+      bypassMinInterval: options.bypassMinInterval === true,
+    });
+
+    if (!selection) return null;
+    return {
+      allPayloads: payloads.payloads,
+      payloads: selection.payloads,
+      segmentCount: payloads.segmentCount,
+      decisions: selection.decisions,
+    };
+  }, [leaderboardOwnEntryScopeKey, leaderboardTimezone, leaderboardWindowEndDay, profile?.display_name, profileError, profileLoading, profileReadyUserId, showAiClassificationImpact, startOfDayMinutes, user?.id]);
+
+  const confirmLeaderboardOptInForAutoPublish = useCallback(async (requiresRemoteCheck: boolean) => {
+    if (!requiresRemoteCheck && scopedOwnLeaderboardEntry?.opted_in === true) {
+      leaderboardOptInCacheRef.current = { userScopeKey: leaderboardOwnEntryScopeKey, optedIn: true };
+      return { optedIn: true, failed: false, entries: [] } satisfies LeaderboardOptInConfirmation;
+    }
+
+    const cached = leaderboardOptInCacheRef.current;
+    if (!requiresRemoteCheck && cached?.userScopeKey === leaderboardOwnEntryScopeKey) {
+      return { optedIn: cached.optedIn, failed: false, entries: [] } satisfies LeaderboardOptInConfirmation;
+    }
+
+    const results = await Promise.all(LEADERBOARD_PERIODS.map((period) => fetchOwnLeaderboardEntry(period)));
+    const failedResult = results.find((result) => !result.success);
+    if (failedResult) {
+      if (activeTab === "leaderboard") {
+        setLeaderboardAutoPublishError(failedResult.error ?? "Unable to confirm leaderboard participation");
+      }
+      return { optedIn: false, failed: true, entries: [] } satisfies LeaderboardOptInConfirmation;
+    }
+
+    const entries = results.flatMap((result) => result.data ? [result.data] : []);
+    const optedIn = results.some((result) => result.data?.opted_in === true);
+    leaderboardOptInCacheRef.current = { userScopeKey: leaderboardOwnEntryScopeKey, optedIn };
+    if (!optedIn) clearLeaderboardAutoPublishRecordsForUser(leaderboardOwnEntryScopeKey);
+    return { optedIn, failed: false, entries } satisfies LeaderboardOptInConfirmation;
+  }, [activeTab, leaderboardOwnEntryScopeKey, scopedOwnLeaderboardEntry?.opted_in]);
+
+  const syncLeaderboardPublication = useCallback(async (
+    reason: LeaderboardAutoPublishReason,
+    options: LeaderboardAutoPublishOptions = {},
+  ) => {
+    if (!isSupabaseConfigured || shouldUsePreviewData()) return;
+    if (!isPolicySignedIn || !user) return;
+    if (leaderboardOwnEntryScopeKey === "signed-out") return;
+    if (leaderboardManualActionInFlightRef.current) return;
+    if (leaderboardAutoPublishInFlightRef.current) return;
+
+    leaderboardAutoPublishInFlightRef.current = true;
+    if (activeTab === "leaderboard") {
+      setLeaderboardAutoPublishRefreshing(true);
+      setLeaderboardAutoPublishError(null);
+    }
+
+    let preparedForFailure: LeaderboardAutoPublishPrepared | null = null;
+
+    try {
+      const prepared = await prepareLeaderboardAutoPublish(options);
+      if (!prepared) return;
+      let publishablePrepared = prepared;
+      preparedForFailure = publishablePrepared;
+
+      const requiresRemoteCheck = prepared.decisions.some((decision) => decision.requiresRemoteOptInCheck);
+      const optInConfirmation = await confirmLeaderboardOptInForAutoPublish(requiresRemoteCheck);
+      if (!optInConfirmation.optedIn) {
+        if (optInConfirmation.failed) {
+          writeLeaderboardAutoPublishRecords(buildAutoPublishRecords({
+            currentRecords: readLeaderboardAutoPublishRecords(),
+            userScopeKey: leaderboardOwnEntryScopeKey,
+            payloads: publishablePrepared.payloads,
+            publishedAt: new Date().toISOString(),
+            success: false,
+          }));
+        }
+        return;
+      }
+
+      if (optInConfirmation.entries.length > 0) {
+        const currentRecords = readLeaderboardAutoPublishRecords();
+        const seededRecords = seedMissingAutoPublishRecordsFromRemoteEntries({
+          currentRecords,
+          userScopeKey: leaderboardOwnEntryScopeKey,
+          entries: optInConfirmation.entries,
+        });
+        if (seededRecords !== currentRecords) {
+          writeLeaderboardAutoPublishRecords(seededRecords);
+        }
+
+        const selection = selectAutoPublishPayloads({
+          payloads: prepared.allPayloads,
+          records: seededRecords,
+          userScopeKey: leaderboardOwnEntryScopeKey,
+          now: new Date(),
+          bypassMinInterval: options.bypassMinInterval === true,
+        });
+        if (!selection) return;
+
+        publishablePrepared = {
+          ...prepared,
+          payloads: selection.payloads,
+          decisions: selection.decisions,
+        };
+        preparedForFailure = publishablePrepared;
+      }
+
+      const result = await publishLeaderboardPayloads("auto", publishablePrepared.payloads);
+      const publishedAt = new Date().toISOString();
+      writeLeaderboardAutoPublishRecords(buildAutoPublishRecords({
+        currentRecords: readLeaderboardAutoPublishRecords(),
+        userScopeKey: leaderboardOwnEntryScopeKey,
+        payloads: publishablePrepared.payloads,
+        publishedAt,
+        success: result.success,
+      }));
+
+      if (!result.success) {
+        if (activeTab === "leaderboard") {
+          setLeaderboardAutoPublishError(result.error ?? "Unable to update your leaderboard score");
+        }
+        capturePostHogEvent("leaderboard_action", {
+          action: "publish",
+          result: "error",
+          period: activeLeaderboardPeriod,
+          segment_count_bucket: toCountBucket(publishablePrepared.segmentCount),
+          error_kind: toAnalyticsErrorKind(result.error),
+        });
+        return;
+      }
+
+      setLeaderboardAutoPublishError(null);
+      capturePostHogEvent("leaderboard_action", {
+        action: "publish",
+        result: "success",
+        period: activeLeaderboardPeriod,
+        segment_count_bucket: toCountBucket(publishablePrepared.segmentCount),
+      });
+
+      if (options.refreshAfter === true || activeTab === "leaderboard") {
+        await refreshLeaderboardData();
+      }
+    } catch (nextError) {
+      const message = toErrorMessage(nextError);
+      if (preparedForFailure) {
+        writeLeaderboardAutoPublishRecords(buildAutoPublishRecords({
+          currentRecords: readLeaderboardAutoPublishRecords(),
+          userScopeKey: leaderboardOwnEntryScopeKey,
+          payloads: preparedForFailure.payloads,
+          publishedAt: new Date().toISOString(),
+          success: false,
+        }));
+      }
+      if (activeTab === "leaderboard") setLeaderboardAutoPublishError(message);
+      capturePostHogEvent("leaderboard_action", {
+        action: "publish",
+        result: "error",
+        period: activeLeaderboardPeriod,
+        error_kind: toAnalyticsErrorKind(nextError),
+      });
+    } finally {
+      leaderboardAutoPublishInFlightRef.current = false;
+      if (activeTab === "leaderboard") setLeaderboardAutoPublishRefreshing(false);
+      void reason;
+    }
+  }, [
+    activeLeaderboardPeriod,
+    activeTab,
+    confirmLeaderboardOptInForAutoPublish,
+    isPolicySignedIn,
+    isSupabaseConfigured,
+    leaderboardOwnEntryScopeKey,
+    prepareLeaderboardAutoPublish,
+    refreshLeaderboardData,
+    user,
+  ]);
+
+  useEffect(() => {
+    void syncLeaderboardPublication("startup");
+    const intervalId = window.setInterval(() => {
+      void syncLeaderboardPublication("interval");
+    }, LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS);
+
+    function handleFocus() {
+      void syncLeaderboardPublication("focus");
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") void syncLeaderboardPublication("visibility");
+    }
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [syncLeaderboardPublication]);
+
+  useEffect(() => {
+    if (leaderboardAutoPublishDayRef.current === null) {
+      leaderboardAutoPublishDayRef.current = leaderboardWindowEndDay;
+      return;
+    }
+    if (leaderboardAutoPublishDayRef.current === leaderboardWindowEndDay) return;
+    leaderboardAutoPublishDayRef.current = leaderboardWindowEndDay;
+    void syncLeaderboardPublication("day_changed");
+  }, [leaderboardWindowEndDay, syncLeaderboardPublication]);
+
   const updateProfileDraft = useCallback((updater: Partial<ProfileDraft>) => {
     setProfileDraft((draft) => ({ ...draft, ...updater, isPublic: true }));
   }, []);
@@ -365,6 +757,7 @@ export function useLeaderboardProfileController({
 
   const handleLeaderboardOptIn = useCallback(async () => {
     setLeaderboardActionLoading(true);
+    leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
     setProfileError(null);
 
@@ -436,25 +829,14 @@ export function useLeaderboardProfileController({
       setProfile(nextProfile);
       setProfileDraft(profileDraftFromProfile(nextProfile, authenticatedUser?.email, authMetadataAvatarUrl));
 
-      const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
-      const allPeriodSegments = await trackerClient.getTimeline(getLogicalDayRange(allPeriodWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes));
-      const publishResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => {
-        const windowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, period);
-        const focusSeconds = buildRollingFocusSeconds(allPeriodSegments, windowStartDay, leaderboardWindowEndDay, {
-          fallbackCandidates: allPeriodSegments,
-          includeAiClassifications: showAiClassificationImpact,
-        }, startOfDayMinutes);
-        return publishOwnFocusTotal({
-          profileDisplayName: nextProfile.display_name,
-          period,
-          focus_seconds: focusSeconds,
-          focus_seconds_7d: focusSeconds,
-          window_start_date: windowStartDay,
-          window_end_date: leaderboardWindowEndDay,
-          timezone: leaderboardTimezone,
-        });
-      }));
-      const result = publishResults.find((nextResult) => !nextResult.success) ?? publishResults[0];
+      const result = await publishLeaderboardPeriods({
+        mode: "join",
+        profileDisplayName: nextProfile.display_name,
+        leaderboardWindowEndDay,
+        timezone: leaderboardTimezone,
+        startOfDayMinutes,
+        showAiClassificationImpact,
+      });
 
       if (!result.success) {
         setLeaderboardActionError(result.error ?? "Unable to join leaderboard");
@@ -463,18 +845,27 @@ export function useLeaderboardProfileController({
           action: "publish",
           result: "error",
           period: activeLeaderboardPeriod,
-          segment_count_bucket: toCountBucket(allPeriodSegments.length),
+          segment_count_bucket: toCountBucket(result.data?.segmentCount ?? 0),
           error_kind: toAnalyticsErrorKind(result.error),
         });
         return;
       }
 
+      const publishedAt = new Date().toISOString();
+      writeLeaderboardAutoPublishRecords(buildAutoPublishRecords({
+        currentRecords: readLeaderboardAutoPublishRecords(),
+        userScopeKey: getLeaderboardUserScopeKey(authenticatedUser),
+        payloads: result.data?.payloads ?? [],
+        publishedAt,
+        success: true,
+      }));
+      leaderboardOptInCacheRef.current = { userScopeKey: getLeaderboardUserScopeKey(authenticatedUser), optedIn: true };
       await refreshLeaderboardData(authenticatedUser);
       capturePostHogEvent("leaderboard_action", {
         action: "publish",
         result: "success",
         period: activeLeaderboardPeriod,
-        segment_count_bucket: toCountBucket(allPeriodSegments.length),
+        segment_count_bucket: toCountBucket(result.data?.segmentCount ?? 0),
       });
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
@@ -485,12 +876,14 @@ export function useLeaderboardProfileController({
         error_kind: toAnalyticsErrorKind(nextError),
       });
     } finally {
+      leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
   }, [allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profileDraft, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
   const handleLeaderboardOptOut = useCallback(async () => {
     setLeaderboardActionLoading(true);
+    leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
 
     try {
@@ -508,6 +901,8 @@ export function useLeaderboardProfileController({
       }
 
       leaderboardOwnEntryScopeRef.current = leaderboardOwnEntryScopeKey;
+      leaderboardOptInCacheRef.current = { userScopeKey: leaderboardOwnEntryScopeKey, optedIn: false };
+      clearLeaderboardAutoPublishRecordsForUser(leaderboardOwnEntryScopeKey);
       setOwnLeaderboardEntry(null);
       await refreshLeaderboardData();
       capturePostHogEvent("leaderboard_action", {
@@ -524,6 +919,7 @@ export function useLeaderboardProfileController({
         error_kind: toAnalyticsErrorKind(nextError),
       });
     } finally {
+      leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
   }, [leaderboardOwnEntryScopeKey, refreshLeaderboardData]);
@@ -658,8 +1054,11 @@ export function useLeaderboardProfileController({
   const leaderboardBlockingLoading = leaderboardRefreshing && !leaderboardHasResolvedOnce;
   const leaderboardBlockingError = leaderboardHasLoadedOnce ? null : leaderboardError;
   const leaderboardRefreshStatus = leaderboardRefreshing && leaderboardHasResolvedOnce ? "Refreshing leaderboard" : null;
-  const leaderboardBackgroundError = leaderboardHasLoadedOnce ? leaderboardError : null;
-  const leaderboardStatusMessage = leaderboardBackgroundError ?? leaderboardRefreshStatus;
+  const leaderboardAutoPublishStatus = leaderboardAutoPublishRefreshing && activeTab === "leaderboard" ? "Updating your leaderboard score" : null;
+  const leaderboardBackgroundError = leaderboardHasLoadedOnce
+    ? leaderboardError ?? (activeTab === "leaderboard" ? leaderboardAutoPublishError : null)
+    : null;
+  const leaderboardStatusMessage = leaderboardBackgroundError ?? leaderboardAutoPublishStatus ?? leaderboardRefreshStatus;
   const leaderboardStatusTone = leaderboardBackgroundError ? "error" : "neutral";
 
   return {
@@ -708,6 +1107,7 @@ export function useLeaderboardProfileController({
     handleViewOwnLeaderboardProfile,
     openProfileEditor,
     refreshLeaderboardData,
+    syncLeaderboardPublication,
     removeProfilePhoto,
     setActiveLeaderboardPeriod,
     updateProfileDraft,

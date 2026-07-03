@@ -48,6 +48,10 @@ export interface LeaderboardResult<T = undefined> {
   data?: T;
 }
 
+export type PublishOwnFocusTotalOptions = {
+  readonly updateProfile?: boolean;
+};
+
 type LeaderboardTable = "leaderboard_focus_totals" | "profiles";
 
 function isoDay(date: Date) {
@@ -300,6 +304,7 @@ export async function fetchOwnLeaderboardEntry(
 export async function publishOwnFocusTotal(
   input: LeaderboardPayload,
   client?: LeaderboardClient | null,
+  options: PublishOwnFocusTotalOptions = {},
 ): Promise<LeaderboardResult> {
   const resolvedClient = resolveClient(client);
   if (!resolvedClient) {
@@ -313,16 +318,18 @@ export async function publishOwnFocusTotal(
 
   try {
     const payload = buildAggregatePayload(user, input, true);
-    const { error: profileError } = await resolvedClient.from("profiles").upsert({
-      user_id: user.id,
-      display_name: payload.display_name,
-      timezone: input.timezone,
-      is_public: true,
-      updated_at: payload.updated_at,
-    }, { onConflict: "user_id" });
+    if (options.updateProfile !== false) {
+      const { error: profileError } = await resolvedClient.from("profiles").upsert({
+        user_id: user.id,
+        display_name: payload.display_name,
+        timezone: input.timezone,
+        is_public: true,
+        updated_at: payload.updated_at,
+      }, { onConflict: "user_id" });
 
-    if (profileError) {
-      return { success: false, error: profileError.message };
+      if (profileError) {
+        return { success: false, error: profileError.message };
+      }
     }
 
     const { error } = await resolvedClient.from("leaderboard_focus_totals").upsert(payload, {
