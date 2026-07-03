@@ -4,6 +4,7 @@ mod auth_session_store;
 mod cloud_device_store;
 mod commands;
 mod donut_icon;
+mod openrouter_key_store;
 mod tracker;
 mod tray;
 
@@ -21,11 +22,10 @@ use commands::{
     startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_get_app_icons,
-    tracker_get_classification_metrics,
-    tracker_get_classification_rules, tracker_get_current_snapshot,
-    tracker_get_dashboard_week_timeline, tracker_get_hourly_summary, tracker_get_live_tail,
-    tracker_get_raw_events, tracker_get_reusable_ai_classifications, tracker_get_status,
-    tracker_get_timeline, tracker_get_timeline_page, tracker_get_top_sites,
+    tracker_get_classification_metrics, tracker_get_classification_rules,
+    tracker_get_current_snapshot, tracker_get_dashboard_week_timeline, tracker_get_hourly_summary,
+    tracker_get_live_tail, tracker_get_raw_events, tracker_get_reusable_ai_classifications,
+    tracker_get_status, tracker_get_timeline, tracker_get_timeline_page, tracker_get_top_sites,
     tracker_get_unclassified_segments, tracker_refresh_non_ai_classifications,
     tracker_save_classification_rule, tracker_save_classifications,
     tracker_search_classification_rule_candidates, tracker_search_timeline,
@@ -68,6 +68,21 @@ fn auth_save_session(_app: AppHandle, value: String) -> Result<(), String> {
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
     auth_session_store::clear_saved_session(&app)
+}
+
+#[tauri::command]
+fn openrouter_load_api_key() -> Result<Option<String>, String> {
+    openrouter_key_store::load_api_key()
+}
+
+#[tauri::command]
+fn openrouter_save_api_key(value: String) -> Result<(), String> {
+    openrouter_key_store::save_api_key(&value)
+}
+
+#[tauri::command]
+fn openrouter_clear_api_key() -> Result<(), String> {
+    openrouter_key_store::clear_api_key()
 }
 
 #[tauri::command]
@@ -256,6 +271,9 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            openrouter_load_api_key,
+            openrouter_save_api_key,
+            openrouter_clear_api_key,
             cloud_device_identity,
             cloud_device_install_id,
             app_reveal_main_window,

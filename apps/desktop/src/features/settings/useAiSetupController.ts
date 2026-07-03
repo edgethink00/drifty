@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
 import {
@@ -20,9 +20,11 @@ import {
 } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 import { getManagedLocalAiStatus, type ManagedLocalAiStatus } from "./managedLocalAiClient";
+import { loadOpenRouterApiKey, saveOpenRouterApiKey } from "./openRouterApiKeyStore";
 import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 
 const MANAGED_LOCAL_MEMORY_POLL_MS = 5_000;
+const OPENROUTER_KEY_SAVE_DELAY_MS = 400;
 
 type UseAiSetupControllerResult = {
   readonly aiConnectionTest: UseAiConnectionTestRunnerResult;
@@ -44,6 +46,8 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
   const [localAiMemoryUsageBytes, setLocalAiMemoryUsageBytes] = useState<number | null>(null);
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
+  const [openRouterKeyLoaded, setOpenRouterKeyLoaded] = useState(false);
+  const lastSavedOpenRouterKeyRef = useRef<string | null>(null);
 
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
@@ -130,6 +134,36 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   useEffect(() => {
     window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedLocalAiSetup(localAiSetup)));
   }, [localAiSetup]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadOpenRouterApiKey().then((savedApiKey) => {
+      if (cancelled) return;
+      const normalizedApiKey = savedApiKey?.trim() ?? "";
+      lastSavedOpenRouterKeyRef.current = normalizedApiKey;
+      if (normalizedApiKey) {
+        setLocalAiSetup((current) => current.openRouterApiKey.trim() === normalizedApiKey
+          ? current
+          : { ...current, openRouterApiKey: normalizedApiKey });
+      }
+      setOpenRouterKeyLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!openRouterKeyLoaded) return;
+    const normalizedApiKey = localAiSetup.openRouterApiKey.trim();
+    if (lastSavedOpenRouterKeyRef.current === normalizedApiKey) return;
+    const timeoutId = window.setTimeout(() => {
+      void saveOpenRouterApiKey(normalizedApiKey).then(() => {
+        lastSavedOpenRouterKeyRef.current = normalizedApiKey;
+      });
+    }, OPENROUTER_KEY_SAVE_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [localAiSetup.openRouterApiKey, openRouterKeyLoaded]);
 
   useEffect(() => {
     if (!localAiConnectionFingerprint || !isManagedLocalAiRoute(localAiSetup)) {

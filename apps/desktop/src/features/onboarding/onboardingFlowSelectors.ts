@@ -41,11 +41,12 @@ export function canAdvanceOnboarding({
     case "job":
     case "data_review":
     case "self_data_review":
-    case "permissions":
     case "nudges":
     case "ready":
     case "privacy":
       return true;
+    case "permissions":
+      return accessibilityReady && !accessibilityRecheckPending;
     case "connect_server":
       if (isManagedProviderSetup) return managedLocalStarted;
       if (setupChoice === "byok") return apiKeyIsValid;
@@ -93,6 +94,7 @@ export function blockedHintForStep({
       if (connectionPhase === "failed") return "Connection failed. Try again or edit your details.";
       return "Checking your connection.";
     case "accessibility":
+    case "permissions":
       if (accessibilityRecheckPending) return "Checking Accessibility access.";
       return "Enable Accessibility to continue.";
     case "notifications":

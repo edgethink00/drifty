@@ -321,6 +321,7 @@ export function OnboardingDesignCodeContent({
               </div>
             ) : null}
             <span className="dc-onb-actions-spacer" />
+            {flow.step === "permissions" && flow.blockedHint ? <p className="dc-onb-hint">{flow.blockedHint}</p> : null}
             <button type="submit" className="onb-button onb-button--primary dc-onb-primary" disabled={!flow.canAdvance}>
               {footerLabel}
             </button>
@@ -1025,6 +1026,8 @@ function TestConnectionStep({ flow }: { readonly flow: OnboardingFlow }) {
           ? flow.isByokSetup
             ? "Your OpenRouter key is connected and ready for AI classification."
             : "Your custom endpoint is connected and ready for AI classification."
+          : flow.connectionPhase === "failed"
+            ? `Drifty could not connect: ${flow.connectionFailureLabel ?? "Connection test failed."}`
           : flow.isByokSetup
             ? "Checking that Drifty can use your masked OpenRouter key."
             : "Checking that Drifty can use your custom endpoint."}
@@ -1236,7 +1239,7 @@ function summaryItemsForFlow(flow: OnboardingFlow): ReadonlyArray<{ readonly lab
       { label: "Account connected" },
       {
         label: flow.setupChoice === "local_ai"
-          ? flow.managedLocalStarted ? "Local model downloading" : "Local model ready"
+          ? flow.managedLocalReady ? "Local model ready" : "Local model downloading"
           : flow.isByokSetup ? "OpenRouter key connected" : "Custom endpoint connected",
       },
       { label: "Tracking ready" },
