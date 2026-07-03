@@ -188,3 +188,15 @@
   line-height: 1.5;
   color: var(--onb-text-muted);
 }
+
+.onboarding-card .onb-managed-model.is-unsupported {
+  opacity: 0.62;
+}
+
+.onboarding-card .onb-managed-model__fit-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--onb-text-soft);
+  font-size: 11px;
+  line-height: 1.35;
+}

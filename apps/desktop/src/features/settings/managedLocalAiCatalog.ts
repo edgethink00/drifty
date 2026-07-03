@@ -1,3 +1,5 @@
+export type ManagedLocalAiModelFit = "good" | "tight" | "insufficient";
+
 export type ManagedLocalAiModel = {
   readonly id: string;
   readonly tier: "economy" | "default" | "gemma" | "smart";
@@ -8,6 +10,8 @@ export type ManagedLocalAiModel = {
   readonly minimumMemory: string;
   readonly estimatedRuntimeMemoryBytes: number | null;
   readonly recommended: boolean;
+  readonly fit: ManagedLocalAiModelFit | null;
+  readonly fitDetail: string | null;
 };
 
 export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
@@ -21,6 +25,8 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     minimumMemory: "8 GB RAM",
     estimatedRuntimeMemoryBytes: 2_147_483_648,
     recommended: false,
+    fit: null,
+    fitDetail: null,
   },
   {
     id: "drifty-qwen3-5-4b-default",
@@ -32,6 +38,8 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     minimumMemory: "16 GB RAM",
     estimatedRuntimeMemoryBytes: 3_758_096_384,
     recommended: true,
+    fit: null,
+    fitDetail: null,
   },
   {
     id: "drifty-gemma-4-12b-local",
@@ -43,6 +51,8 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     minimumMemory: "16 GB RAM",
     estimatedRuntimeMemoryBytes: 9_288_286_208,
     recommended: false,
+    fit: null,
+    fitDetail: null,
   },
   {
     id: "drifty-qwen3-6-27b-smart",
@@ -54,5 +64,7 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     minimumMemory: "36 GB RAM",
     estimatedRuntimeMemoryBytes: 19_864_223_744,
     recommended: false,
+    fit: null,
+    fitDetail: null,
   },
 ] satisfies readonly ManagedLocalAiModel[];

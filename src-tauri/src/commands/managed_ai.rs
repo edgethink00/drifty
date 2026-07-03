@@ -7,12 +7,16 @@ use thiserror::Error;
 
 mod catalog;
 mod download;
+mod hardware;
 mod runtime;
 mod status;
 #[cfg(test)]
 mod tests;
 
-use catalog::{catalog_model, ManagedAiCatalogModel, ManagedAiModelSpec, MANAGED_MODELS};
+use catalog::{
+    catalog_model_for_machine, recommended_model_id, ManagedAiCatalogModel, ManagedAiModelSpec,
+    MANAGED_MODELS,
+};
 use download::download_model_artifact;
 use status::{
     default_status, read_status, status_for_download_progress, status_for_global_error,
@@ -59,7 +63,16 @@ enum ManagedAiError {
 
 #[tauri::command]
 pub fn managed_ai_catalog() -> Vec<ManagedAiCatalogModel> {
-    MANAGED_MODELS.iter().copied().map(catalog_model).collect()
+    catalog_for_machine(hardware::machine_memory_bytes())
+}
+
+fn catalog_for_machine(machine_memory_bytes: Option<u64>) -> Vec<ManagedAiCatalogModel> {
+    let recommended_id = machine_memory_bytes.and_then(recommended_model_id);
+    MANAGED_MODELS
+        .iter()
+        .copied()
+        .map(|spec| catalog_model_for_machine(spec, machine_memory_bytes, recommended_id))
+        .collect()
 }
 
 #[tauri::command]

@@ -58,14 +58,16 @@ function OnboardingManagedLocalAiModel({
   const failed = status?.selectedModelId === model.id && status.state === "error";
   const busy = actionModelId === model.id || installing;
   const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
-  const actionDisabled = ready || (loading && status === null) || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
+  const unsupported = model.fit === "insufficient";
+  const actionDisabled = unsupported || ready || (loading && status === null) || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
 
   return (
-    <article className={`onb-managed-model${ready ? " is-ready" : ""}`} aria-label={`${model.label} local AI model`}>
+    <article className={`onb-managed-model${ready ? " is-ready" : ""}${unsupported ? " is-unsupported" : ""}`} aria-label={`${model.label} local AI model`}>
       <div className="onb-managed-model__copy">
         <strong>{model.label}</strong>
-        <span>{model.recommended ? "Recommended" : model.tier}</span>
+        <span>{model.recommended ? (model.fit ? "Recommended for your Mac" : "Recommended") : model.tier}</span>
         <p>{ready ? "Ready for private local classification." : model.detail}</p>
+        {!ready && model.fitDetail ? <p className="onb-managed-model__fit-note">{model.fitDetail}</p> : null}
       </div>
       <dl className="onb-managed-model__facts">
         <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
