@@ -171,6 +171,10 @@ describe("week dashboard axis scale settings", () => {
   });
 
   it("resolves the default scale when storage is missing or malformed", () => {
+    expect(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT).toBe(75);
+    expect(WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT).toBe(45);
+    expect(WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT).toBe(105);
+
     window.localStorage.removeItem(WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY);
 
     expect(resolveInitialWeekDashboardAxisScalePercent()).toBe(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);

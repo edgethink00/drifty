@@ -109,6 +109,16 @@ describe("WeekDashboard virtual current marker", () => {
 });
 
 describe("WeekDashboard axis scale", () => {
+  it("uses the compressed 75 percent calendar y-axis by default", () => {
+    const { container } = renderWeekDashboard();
+
+    const dashboard = container.querySelector<HTMLElement>(".week-v2");
+    const calendarBody = container.querySelector<HTMLElement>(".week-v2-calendar__body");
+
+    expect(dashboard?.dataset.weekAxisScalePercent).toBe("75");
+    expect(calendarBody?.style.height).toBe("1008px");
+  });
+
   it("scales the calendar y-axis while keeping event and current-time geometry aligned", () => {
     const calendarEvents = new Map<string, WeekCalendarEvent[]>([
       ["2024-01-03", [makeWeekCalendarEvent()]],

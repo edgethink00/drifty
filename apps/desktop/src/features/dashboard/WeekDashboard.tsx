@@ -8,7 +8,7 @@ import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty
 import { WeekCalendarHoverCard } from "./HoverCards";
 import type { WeekCalendarHoverState } from "./HoverCards";
 import { buildWeekCalendarEventLayout } from "./weekCalendarEventLayout";
-import { clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
+import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
@@ -59,7 +59,7 @@ export function WeekDashboard({
   dateNavigator,
   currentCalendarDay,
   currentMinuteOfDay,
-  axisScalePercent = 100,
+  axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
 }: WeekDashboardProps) {
   const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
   const [activeWeekEventId, setActiveWeekEventId] = useState<string | null>(null);

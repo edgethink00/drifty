@@ -1,7 +1,9 @@
 import {
+  WEEK_DASHBOARD_AXIS_SCALE_CONTROL_MAX_PERCENT,
+  WEEK_DASHBOARD_AXIS_SCALE_CONTROL_MIN_PERCENT,
   WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
-  WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT,
-  WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT,
+  weekDashboardAxisScaleControlPercentToAxisScalePercent,
+  weekDashboardAxisScalePercentToControlPercent,
 } from "./settingsStorage";
 
 type WeekDashboardAxisScaleControlProps = {
@@ -15,20 +17,24 @@ export function WeekDashboardAxisScaleControl({
   onScalePercentChange,
   onResetScalePercent,
 }: WeekDashboardAxisScaleControlProps) {
+  const controlScalePercent = weekDashboardAxisScalePercentToControlPercent(scalePercent);
+
   return (
     <div className="settings-axis-scale-control">
       <span className="settings-axis-scale-control__value" aria-label="Current Your Week y-axis scale">
-        {scalePercent}%
+        {controlScalePercent}%
       </span>
       <input
         aria-label="Your Week y-axis scale percent"
         className="settings-range"
-        max={WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT}
-        min={WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT}
+        max={WEEK_DASHBOARD_AXIS_SCALE_CONTROL_MAX_PERCENT}
+        min={WEEK_DASHBOARD_AXIS_SCALE_CONTROL_MIN_PERCENT}
         step={1}
         type="range"
-        value={scalePercent}
-        onChange={(event) => onScalePercentChange(Number(event.target.value))}
+        value={controlScalePercent}
+        onChange={(event) => onScalePercentChange(
+          weekDashboardAxisScaleControlPercentToAxisScalePercent(Number(event.target.value)),
+        )}
       />
       <button
         className="settings-btn"
