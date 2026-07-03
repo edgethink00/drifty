@@ -134,6 +134,40 @@ describe("teamAggregate", () => {
     });
   });
 
+  it("Given browser history import estimates When aggregate is built Then shared focus excludes them", () => {
+    const localActivity = [
+      makeActivity({
+        id: "manual-focus",
+        startedAt: "2026-07-02T10:00:00",
+        endedAt: "2026-07-02T11:00:00",
+        durationSeconds: 60 * 60,
+      }),
+      makeActivity({
+        id: "estimated-focus",
+        startedAt: "2026-07-02T12:00:00",
+        endedAt: "2026-07-02T13:00:00",
+        durationSeconds: 60 * 60,
+        source: "browser-history-import",
+        siteSource: "browser-history-import",
+      }),
+    ];
+
+    const result = buildTeamFocusAggregate({
+      localActivity,
+      period: "daily",
+      windowEndDay: "2026-07-02",
+      displayName: "Alex",
+      roleLabel: "Builder",
+      timezone: "UTC",
+      startOfDayMinutes: 0,
+      includeAiClassifications: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.success ? result.data.focus_seconds : 0).toBe(60 * 60);
+    expect(result.success ? result.data.active_seconds : 0).toBe(60 * 60);
+  });
+
   it("Given every team period When focus windows are requested Then daily weekly and monthly ranges are supported", () => {
     // Given
     const windowEndDay = "2026-07-02";

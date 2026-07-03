@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
-import { buildRollingFocusSeconds } from "@drifty/domain";
+import { buildRollingFocusSeconds, isBrowserHistoryImportSegment } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -319,13 +319,17 @@ export function useLeaderboardProfileController({
 
   const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
   const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
+  const publishableLeaderboardSegments = useMemo<ActivitySegment[]>(
+    () => leaderboardSegments.filter((segment: ActivitySegment) => !isBrowserHistoryImportSegment(segment)),
+    [leaderboardSegments],
+  );
   const leaderboardClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: leaderboardSegments, includeAiClassifications: showAiClassificationImpact }),
-    [leaderboardSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: publishableLeaderboardSegments, includeAiClassifications: showAiClassificationImpact }),
+    [publishableLeaderboardSegments, showAiClassificationImpact],
   );
   const localRollingFocusSeconds = useMemo(
-    () => buildRollingFocusSeconds(leaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions, startOfDayMinutes),
-    [leaderboardClassificationOptions, leaderboardSegments, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes],
+    () => buildRollingFocusSeconds(publishableLeaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions, startOfDayMinutes),
+    [leaderboardClassificationOptions, leaderboardWindowEndDay, leaderboardWindowStartDay, publishableLeaderboardSegments, startOfDayMinutes],
   );
   const leaderboardProfileDisplayName = useMemo(() => profile?.display_name || fallbackDisplayName(user?.email), [profile?.display_name, user?.email]);
   const leaderboardUsesPreviewProfile = shouldUsePreviewData();

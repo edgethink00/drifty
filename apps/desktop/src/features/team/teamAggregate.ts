@@ -1,6 +1,7 @@
 import {
   buildEffectiveProductivityDurations,
   buildRollingFocusSeconds,
+  isBrowserHistoryImportSegment,
   shiftIsoDate,
 } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
@@ -60,19 +61,20 @@ export function buildTeamFocusAggregate(input: TeamFocusAggregateInput): TeamFoc
     return { success: false, error: "Unsupported team focus period.", reason: "invalid_period" };
   }
 
+  const publishableActivity = input.localActivity.filter((activity) => !isBrowserHistoryImportSegment(activity));
   const classificationOptions: ClassificationOptions = {
-    fallbackCandidates: input.localActivity,
+    fallbackCandidates: publishableActivity,
     includeAiClassifications: input.includeAiClassifications,
   };
   const focusSeconds = buildRollingFocusSeconds(
-    input.localActivity,
+    publishableActivity,
     window.window_start_date,
     window.window_end_date,
     classificationOptions,
     input.startOfDayMinutes,
   );
   const windowedActivity = clipLocalActivityToWindow(
-    input.localActivity,
+    publishableActivity,
     window.window_start_date,
     window.window_end_date,
     input.startOfDayMinutes,
