@@ -50,4 +50,12 @@ describe("app feature switches", () => {
     expect(switches.resolveDevOnboardingBypass("dev", false)).toBe(false);
     expect(switches.resolveDevOnboardingBypass("production", true)).toBe(false);
   });
+
+  it("keeps the onboarding auth-step bypass dev-only even when the raw skip flag is present", async () => {
+    const switches = await import("./appFeatureSwitches");
+
+    expect(switches.resolveDevOnboardingAuthBypass("dev", true)).toBe(true);
+    expect(switches.resolveDevOnboardingAuthBypass("dev", false)).toBe(false);
+    expect(switches.resolveDevOnboardingAuthBypass("production", true)).toBe(false);
+  });
 });

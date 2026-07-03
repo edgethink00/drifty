@@ -17,12 +17,14 @@ function resolveBuildCommit(): string {
 
 export default defineConfig(({ command, mode }) => {
   const devSkipOnboarding = command === "serve" && mode !== "production" && process.env.SKIP_ONBOARDING === "1";
+  const devSkipOnboardingAuth = command === "serve" && mode !== "production" && process.env.SKIP_ONBOARDING_AUTH === "1";
   const buildCommit = resolveBuildCommit();
 
   return {
     define: {
       __DRIFTY_BUILD_COMMIT__: JSON.stringify(buildCommit),
       __DRIFTY_DEV_SKIP_ONBOARDING__: JSON.stringify(devSkipOnboarding),
+      __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__: JSON.stringify(devSkipOnboardingAuth),
     },
     plugins: [react()],
     resolve: {

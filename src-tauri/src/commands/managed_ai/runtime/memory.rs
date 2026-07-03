@@ -1,7 +1,7 @@
 use std::process::Command;
 
 pub(super) fn process_memory_usage_bytes(pid: u32) -> Option<u64> {
-    process_footprint_bytes(pid).or_else(|| process_resident_memory_bytes(pid))
+    process_resident_memory_bytes(pid).or_else(|| process_footprint_bytes(pid))
 }
 
 fn process_footprint_bytes(pid: u32) -> Option<u64> {

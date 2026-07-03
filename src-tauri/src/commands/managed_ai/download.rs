@@ -58,7 +58,7 @@ fn download_to_path(
     let mut bytes_written = 0_u64;
     let mut buffer = [0_u8; DOWNLOAD_BUFFER_SIZE];
     loop {
-        let bytes_read = response.read(&mut buffer)?;
+        let bytes_read = read_download_chunk(&mut response, &mut buffer)?;
         if bytes_read == 0 {
             break;
         }
@@ -74,6 +74,15 @@ fn download_to_path(
     }
     file.sync_all()?;
     Ok(bytes_written)
+}
+
+fn read_download_chunk(
+    reader: &mut dyn Read,
+    buffer: &mut [u8],
+) -> Result<usize, ManagedAiError> {
+    reader
+        .read(buffer)
+        .map_err(|error| ManagedAiError::DownloadFailed(error.to_string()))
 }
 
 fn verify_download_size(
@@ -95,4 +104,32 @@ fn verify_download_size(
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Error, ErrorKind, Read};
+
+    use super::{read_download_chunk, ManagedAiError};
+
+    #[test]
+    fn response_read_errors_are_download_failures() {
+        let mut reader = FailingReader;
+        let mut buffer = [0_u8; 8];
+        let error = read_download_chunk(&mut reader, &mut buffer).expect_err("download read fails");
+
+        assert!(matches!(
+            error,
+            ManagedAiError::DownloadFailed(message)
+                if message.contains("error decoding response body")
+        ));
+    }
+
+    struct FailingReader;
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+            Err(Error::new(ErrorKind::InvalidData, "error decoding response body"))
+        }
+    }
 }

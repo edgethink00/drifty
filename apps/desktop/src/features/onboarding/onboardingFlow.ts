@@ -18,6 +18,7 @@ export type OnboardingStep =
   | "notifications";
 
 export type OnboardingStepDef = { id: OnboardingStep; label: string };
+export type OnboardingStepsOptions = { readonly skipAccountStep?: boolean };
 export type SetupChoice = "simple" | "local_ai" | "byok" | "custom_endpoint";
 export type ConnectionCheckStatus = "pending" | "loading" | "success" | "error";
 export type ConnectionPhase = "idle" | "testing" | "success" | "failed";
@@ -57,12 +58,13 @@ const CUSTOM_ENDPOINT_STEPS: OnboardingStepDef[] = [
   { id: "ready", label: "Ready" },
 ];
 
-export function getOnboardingSteps(setupChoice: SetupChoice | null): OnboardingStepDef[] {
-  if (setupChoice === "simple") return [...BASE_STEPS, ...SIMPLE_SETUP_STEPS];
-  if (setupChoice === "local_ai") return [...BASE_STEPS, ...LOCAL_AI_STEPS];
-  if (setupChoice === "byok") return [...BASE_STEPS, ...BYOK_STEPS];
-  if (setupChoice === "custom_endpoint") return [...BASE_STEPS, ...CUSTOM_ENDPOINT_STEPS];
-  return BASE_STEPS;
+export function getOnboardingSteps(setupChoice: SetupChoice | null, options: OnboardingStepsOptions = {}): OnboardingStepDef[] {
+  const baseSteps = options.skipAccountStep ? BASE_STEPS.filter((step) => step.id !== "account") : BASE_STEPS;
+  if (setupChoice === "simple") return [...baseSteps, ...SIMPLE_SETUP_STEPS];
+  if (setupChoice === "local_ai") return [...baseSteps, ...LOCAL_AI_STEPS];
+  if (setupChoice === "byok") return [...baseSteps, ...BYOK_STEPS];
+  if (setupChoice === "custom_endpoint") return [...baseSteps, ...CUSTOM_ENDPOINT_STEPS];
+  return baseSteps;
 }
 
 export const PRIVACY_RECORDED = [

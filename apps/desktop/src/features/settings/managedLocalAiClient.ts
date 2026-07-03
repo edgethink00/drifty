@@ -39,19 +39,19 @@ export async function listManagedLocalAiModels(): Promise<readonly ManagedLocalA
 }
 
 export async function getManagedLocalAiStatus(): Promise<ManagedLocalAiStatus> {
-  return parseManagedStatus(await invoke<unknown>("managed_ai_status"));
+  return parseManagedLocalAiStatus(await invoke<unknown>("managed_ai_status"));
 }
 
 export async function installManagedLocalAiModel(modelId: string): Promise<ManagedLocalAiStatus> {
-  return parseManagedStatus(await invoke<unknown>("managed_ai_install", { modelId }));
+  return parseManagedLocalAiStatus(await invoke<unknown>("managed_ai_install", { modelId }));
 }
 
 export async function startManagedLocalAi(modelId: string): Promise<ManagedLocalAiStatus> {
-  return parseManagedStatus(await invoke<unknown>("managed_ai_start", { modelId }));
+  return parseManagedLocalAiStatus(await invoke<unknown>("managed_ai_start", { modelId }));
 }
 
 export async function deleteManagedLocalAiModel(modelId: string): Promise<ManagedLocalAiStatus> {
-  return parseManagedStatus(await invoke<unknown>("managed_ai_delete", { modelId }));
+  return parseManagedLocalAiStatus(await invoke<unknown>("managed_ai_delete", { modelId }));
 }
 
 export function fallbackManagedLocalAiStatus(message: string): ManagedLocalAiStatus {
@@ -89,7 +89,7 @@ function parseManagedModel(value: unknown): ManagedLocalAiModel[] {
   }];
 }
 
-function parseManagedStatus(value: unknown): ManagedLocalAiStatus {
+export function parseManagedLocalAiStatus(value: unknown): ManagedLocalAiStatus {
   if (!isRecord(value)) return fallbackManagedLocalAiStatus("Managed local AI status was not readable.");
   return {
     state: parseState(value.state),

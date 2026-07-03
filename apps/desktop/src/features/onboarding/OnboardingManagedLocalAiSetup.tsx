@@ -15,11 +15,8 @@ export function OnboardingManagedLocalAiSetup({
   status,
   onInstallModel,
 }: OnboardingManagedLocalAiSetupProps) {
-  const statusMessage = status?.state === "installing"
-    ? status.message
-    : loading
-      ? "Checking managed local AI..."
-      : status?.message ?? "Choose a local model and Drifty will download it inside the app.";
+  const statusMessage = status?.message
+    ?? (loading ? "Looking for downloaded local models..." : "Choose a local model and Drifty will download it inside the app.");
 
   return (
     <div className="onb-managed-local-ai">
@@ -31,6 +28,7 @@ export function OnboardingManagedLocalAiSetup({
           <OnboardingManagedLocalAiModel
             key={model.id}
             actionModelId={actionModelId}
+            loading={loading}
             model={model}
             status={status}
             onInstallModel={onInstallModel}
@@ -43,11 +41,13 @@ export function OnboardingManagedLocalAiSetup({
 
 function OnboardingManagedLocalAiModel({
   actionModelId,
+  loading,
   model,
   status,
   onInstallModel,
 }: {
   readonly actionModelId: string | null;
+  readonly loading: boolean;
   readonly model: ManagedLocalAiModel;
   readonly status: ManagedLocalAiStatus | null;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
@@ -56,7 +56,7 @@ function OnboardingManagedLocalAiModel({
   const installing = status?.selectedModelId === model.id && status.state === "installing";
   const failed = status?.selectedModelId === model.id && status.state === "error";
   const busy = actionModelId === model.id || installing;
-  const actionDisabled = ready || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
+  const actionDisabled = ready || (loading && status === null) || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
 
   return (
     <article className={`onb-managed-model${ready ? " is-ready" : ""}`} aria-label={`${model.label} local AI model`}>

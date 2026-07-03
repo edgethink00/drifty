@@ -1,6 +1,7 @@
 export type ReleaseChannel = "dev" | "production";
 
 declare const __DRIFTY_DEV_SKIP_ONBOARDING__: boolean;
+declare const __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__: boolean;
 
 function resolveReleaseChannel(): ReleaseChannel {
   const raw = String(import.meta.env.VITE_DRIFTY_CHANNEL ?? "").trim().toLowerCase();
@@ -25,12 +26,18 @@ export const END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED = true;
 export const END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED = END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED;
 
 const RAW_DEV_SKIP_ONBOARDING = typeof __DRIFTY_DEV_SKIP_ONBOARDING__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING__ : false;
+const RAW_DEV_SKIP_ONBOARDING_AUTH = typeof __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__ : false;
 
 export function resolveDevOnboardingBypass(releaseChannel: ReleaseChannel, rawSkipOnboarding: boolean): boolean {
   return releaseChannel !== "production" && rawSkipOnboarding;
 }
 
+export function resolveDevOnboardingAuthBypass(releaseChannel: ReleaseChannel, rawSkipOnboardingAuth: boolean): boolean {
+  return releaseChannel !== "production" && rawSkipOnboardingAuth;
+}
+
 export const DEV_ONBOARDING_BYPASS_ENABLED = resolveDevOnboardingBypass(RELEASE_CHANNEL, RAW_DEV_SKIP_ONBOARDING);
+export const DEV_ONBOARDING_AUTH_BYPASS_ENABLED = resolveDevOnboardingAuthBypass(RELEASE_CHANNEL, RAW_DEV_SKIP_ONBOARDING_AUTH);
 
 export function isDevOnboardingBypassEnabled(): boolean {
   return DEV_ONBOARDING_BYPASS_ENABLED;

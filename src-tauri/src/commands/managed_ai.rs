@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri::{async_runtime, AppHandle, Manager};
+use tauri::{async_runtime, AppHandle, Emitter, Manager};
 use thiserror::Error;
 
 mod catalog;
@@ -24,6 +24,7 @@ pub use status::{ManagedAiDownloadProgress, ManagedAiStatus};
 const MANAGED_BASE_URL: &str = "http://127.0.0.1:39217/v1";
 const MANAGED_ASSETS_MISSING_MESSAGE: &str =
     "Managed local model files are missing. Download again when model assets are available.";
+const MANAGED_AI_STATUS_EVENT: &str = "managed-ai-status";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -77,7 +78,7 @@ pub async fn managed_ai_install(
 ) -> Result<ManagedAiStatus, String> {
     let root = managed_ai_root(&app).map_err(error_message)?;
     let model_id = model_id.trim().to_string();
-    async_runtime::spawn_blocking(move || install_model_at_root(&root, &model_id))
+    async_runtime::spawn_blocking(move || install_model_at_root(&root, &model_id, Some(&app)))
         .await
         .map_err(|error| error.to_string())?
         .map_err(error_message)
@@ -110,8 +111,12 @@ pub(crate) fn managed_ai_stop_runtime_for_app_exit(app: &AppHandle) {
     let _ = runtime::stop_runtime(managed_ai_root(app).ok().as_deref());
 }
 
-fn install_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
-    install_model_at_root_with_downloader(root, model_id, download_model_artifact)
+fn install_model_at_root(
+    root: &Path,
+    model_id: &str,
+    app: Option<&AppHandle>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    install_model_at_root_with_downloader(root, model_id, download_model_artifact, app)
 }
 
 fn install_model_at_root_with_downloader(
@@ -122,6 +127,7 @@ fn install_model_at_root_with_downloader(
         ManagedAiModelSpec,
         &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
     ) -> Result<PathBuf, ManagedAiError>,
+    app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
     let installing = status_with_installed_models(
@@ -133,7 +139,7 @@ fn install_model_at_root_with_downloader(
             "Downloading managed local model...",
         ),
     )?;
-    write_status(root, &installing)?;
+    write_and_emit_status(root, &installing, app)?;
 
     let mut progress_gate = DownloadProgressWriteGate::default();
     let mut report_progress = |progress: ManagedAiDownloadProgress| {
@@ -142,7 +148,7 @@ fn install_model_at_root_with_downloader(
         }
         let status =
             status_with_installed_models(root, status_for_download_progress(spec, progress))?;
-        write_status(root, &status)
+        write_and_emit_status(root, &status, app)
     };
 
     let artifact_dir = match downloader(root, spec, &mut report_progress) {
@@ -155,7 +161,7 @@ fn install_model_at_root_with_downloader(
                 None => status_for_global_error(&error.to_string()),
             };
             let status = status_with_installed_models(root, status)?;
-            write_status(root, &status)?;
+            write_and_emit_status(root, &status, app)?;
             return Ok(status);
         }
     };
@@ -168,8 +174,20 @@ fn install_model_at_root_with_downloader(
             "Managed local model downloaded.",
         ),
     )?;
-    write_status(root, &status)?;
+    write_and_emit_status(root, &status, app)?;
     Ok(status)
+}
+
+fn write_and_emit_status(
+    root: &Path,
+    status: &ManagedAiStatus,
+    app: Option<&AppHandle>,
+) -> Result<(), ManagedAiError> {
+    write_status(root, status)?;
+    if let Some(app) = app {
+        let _ = app.emit(MANAGED_AI_STATUS_EVENT, status.clone());
+    }
+    Ok(())
 }
 
 /// Decides which download progress reports get persisted to status.json.

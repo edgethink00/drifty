@@ -34,6 +34,7 @@ export function ManagedLocalAiPanel({
           <ManagedLocalAiModelRow
             key={model.id}
             actionModelId={actionModelId}
+            loading={loading}
             localAiSetup={localAiSetup}
             model={model}
             status={status}
@@ -48,6 +49,7 @@ export function ManagedLocalAiPanel({
 
 function ManagedLocalAiModelRow({
   actionModelId,
+  loading,
   localAiSetup,
   model,
   status,
@@ -55,6 +57,7 @@ function ManagedLocalAiModelRow({
   onInstallModel,
 }: {
   readonly actionModelId: string | null;
+  readonly loading: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly model: ManagedLocalAiModel;
   readonly status: ManagedLocalAiStatus | null;
@@ -69,7 +72,7 @@ function ManagedLocalAiModelRow({
   const startingThisModel = status?.selectedModelId === model.id && status.state === "starting";
   const errorThisModel = status?.selectedModelId === model.id && status.state === "error" && isRetryableManagedModelError(status.errorKind);
   const busyThisModel = actionModelId === model.id || installingThisModel || startingThisModel;
-  const anyManagedActionRunning = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
+  const anyManagedActionRunning = loading || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
   const downloadProgress = installingThisModel ? status.progress : null;
   const downloadProgressText = managedLocalAiProgressText(downloadProgress);
   const artifactDir = installedModel?.artifactDir ?? null;

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { listen } from "@tauri-apps/api/event";
 
+import { cleanupTauriEventListener, type TauriEventUnlisten } from "../../lib/tauriEventCleanup";
 import {
   deleteManagedLocalAiModel,
   fallbackManagedLocalAiStatus,
@@ -9,6 +11,7 @@ import {
   installManagedLocalAiModel,
   listManagedLocalAiModels,
   MANAGED_LOCAL_AI_FALLBACK_CATALOG,
+  parseManagedLocalAiStatus,
   type ManagedLocalAiModel,
   type ManagedLocalAiStatus,
 } from "./managedLocalAiClient";
@@ -22,6 +25,8 @@ type RunActionOptions = {
   readonly activateProvider: boolean;
   readonly optimisticInstalling: boolean;
 };
+
+const MANAGED_LOCAL_AI_STATUS_EVENT = "managed-ai-status";
 
 export type UseManagedLocalAiSetupResult = {
   readonly actionModelId: string | null;
@@ -46,14 +51,30 @@ export function useManagedLocalAiSetup(
   const pendingReadyNotificationModelIdsRef = useRef(new Set<string>());
 
   const syncManagedSetup = useCallback((nextStatus: ManagedLocalAiStatus, options: SyncManagedSetupOptions) => {
-    onLocalAiSetupChange((current) => ({
-      ...current,
-      provider: options.activateProvider ? "managed_local" : current.provider,
-      driftyRoute: options.activateProvider ? "local" : current.driftyRoute,
-      managedLocalModelId: normalizeManagedLocalModelId(nextStatus.selectedModelId ?? current.managedLocalModelId),
-      managedLocalBaseUrl: nextStatus.baseUrl ?? current.managedLocalBaseUrl,
-      managedLocalModel: nextStatus.model ?? current.managedLocalModel,
-    }));
+    onLocalAiSetupChange((current) => {
+      const provider = options.activateProvider ? "managed_local" : current.provider;
+      const driftyRoute = options.activateProvider ? "local" : current.driftyRoute;
+      const managedLocalModelId = normalizeManagedLocalModelId(nextStatus.selectedModelId ?? current.managedLocalModelId);
+      const managedLocalBaseUrl = nextStatus.baseUrl ?? current.managedLocalBaseUrl;
+      const managedLocalModel = nextStatus.model ?? current.managedLocalModel;
+      if (
+        current.provider === provider
+        && current.driftyRoute === driftyRoute
+        && current.managedLocalModelId === managedLocalModelId
+        && current.managedLocalBaseUrl === managedLocalBaseUrl
+        && current.managedLocalModel === managedLocalModel
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        provider,
+        driftyRoute,
+        managedLocalModelId,
+        managedLocalBaseUrl,
+        managedLocalModel,
+      };
+    });
   }, [onLocalAiSetupChange]);
 
   const notifyReadyOnce = useCallback((nextStatus: ManagedLocalAiStatus) => {
@@ -65,6 +86,7 @@ export function useManagedLocalAiSetup(
   }, [catalog]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -72,13 +94,19 @@ export function useManagedLocalAiSetup(
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    void listManagedLocalAiModels()
+      .then((nextCatalog) => {
+        if (!mountedRef.current) return;
+        setCatalog(nextCatalog.length > 0 ? nextCatalog : MANAGED_LOCAL_AI_FALLBACK_CATALOG);
+      })
+      .catch((error: unknown) => {
+        if (!mountedRef.current) return;
+        setCatalog(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
+        if (!(error instanceof Error)) throw error;
+      });
     try {
-      const [nextCatalog, nextStatus] = await Promise.all([
-        listManagedLocalAiModels(),
-        getManagedLocalAiStatus(),
-      ]);
+      const nextStatus = await getManagedLocalAiStatus();
       if (!mountedRef.current) return;
-      setCatalog(nextCatalog.length > 0 ? nextCatalog : MANAGED_LOCAL_AI_FALLBACK_CATALOG);
       setStatus(nextStatus);
       syncManagedSetup(nextStatus, { activateProvider: false });
     } catch (error) {
@@ -107,6 +135,28 @@ export function useManagedLocalAiSetup(
     if (!enabled) return;
     void refresh();
   }, [enabled, refresh]);
+
+  useEffect(() => {
+    if (!enabled || !isTauriRuntime()) return;
+    let unlisten: TauriEventUnlisten | null = null;
+    let cancelled = false;
+    void listen<unknown>(MANAGED_LOCAL_AI_STATUS_EVENT, ({ payload }) => {
+      const nextStatus = parseManagedLocalAiStatus(payload);
+      setStatus(nextStatus);
+      syncManagedSetup(nextStatus, { activateProvider: false });
+      notifyReadyOnce(nextStatus);
+    }).then((nextUnlisten) => {
+      if (cancelled) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, [enabled, notifyReadyOnce, syncManagedSetup]);
 
   useEffect(() => {
     if (!enabled || (status?.state !== "installing" && status?.state !== "starting")) return;
@@ -151,6 +201,10 @@ export function useManagedLocalAiSetup(
 
 function messageFromError(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "Managed local AI is not available in this build.";
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 function isReadyManagedLocalAiStatus(status: ManagedLocalAiStatus): status is ManagedLocalAiStatus & {

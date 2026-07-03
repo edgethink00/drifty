@@ -61,6 +61,7 @@ const {
   },
   appFeatureSwitches: {
     devOnboardingBypassEnabled: false,
+    devOnboardingAuthBypassEnabled: false,
   },
 }));
 
@@ -133,6 +134,9 @@ vi.mock("./appFeatureSwitches", () => ({
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: true,
   DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED: false,
   DEV_ONBOARDING_BYPASS_ENABLED: false,
+  get DEV_ONBOARDING_AUTH_BYPASS_ENABLED() {
+    return appFeatureSwitches.devOnboardingAuthBypassEnabled;
+  },
   DEV_SETTINGS_ENABLED: true,
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: true,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: true,
@@ -227,6 +231,7 @@ describe("App onboarding cloud login", () => {
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
     billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
     appFeatureSwitches.devOnboardingBypassEnabled = false;
+    appFeatureSwitches.devOnboardingAuthBypassEnabled = false;
   });
 
   it("keeps the account onboarding step mounted while cloud login profile readiness settles", async () => {

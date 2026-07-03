@@ -29,6 +29,7 @@ fn install_downloads_model_artifact_before_marking_installed() {
         root.path(),
         "drifty-qwen3-5-4b-default",
         fake_download,
+        None,
     )
     .expect("install model");
     let artifact_dir = model_dir(root.path(), "drifty-qwen3-5-4b-default");
@@ -57,6 +58,7 @@ fn install_returns_error_status_when_download_fails() {
         root.path(),
         "drifty-qwen3-5-4b-default",
         failing_download,
+        None,
     )
     .expect("install model");
 
@@ -81,6 +83,7 @@ fn install_reports_global_error_for_non_download_failures() {
         root.path(),
         "drifty-qwen3-5-4b-default",
         storage_failing_download,
+        None,
     )
     .expect("install model");
 
@@ -97,6 +100,7 @@ fn install_records_downloader_reported_progress_before_marking_installed() {
         root.path(),
         "drifty-qwen3-5-4b-default",
         progress_reporting_download,
+        None,
     )
     .expect("install model");
 
@@ -121,13 +125,14 @@ fn install_records_downloader_reported_progress_before_marking_installed() {
 #[test]
 fn install_tracks_multiple_downloaded_models() {
     let root = tempfile::tempdir().expect("create temp root");
-    install_model_at_root_with_downloader(root.path(), "drifty-qwen3-5-4b-default", fake_download)
+    install_model_at_root_with_downloader(root.path(), "drifty-qwen3-5-4b-default", fake_download, None)
         .expect("install default model");
 
     let status = install_model_at_root_with_downloader(
         root.path(),
         "drifty-qwen3-5-2b-economy",
         fake_download,
+        None,
     )
     .expect("install economy model");
 
