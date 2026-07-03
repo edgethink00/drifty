@@ -37,13 +37,10 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
   const [preset, setPreset] = useState<RangePreset>("today");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
-  const [preview, setPreview] = useState<DeleteHistoryRangeResult | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [done, setDone] = useState<DeleteHistoryRangeResult | null>(null);
-  const previewSeq = useRef(0);
   const armTimer = useRef<number | null>(null);
 
   const bounds = rangeBounds(preset, customStart, customEnd);
@@ -64,34 +61,9 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
 
   useEffect(() => {
     setArmed(false);
-    const nextBounds = rangeBounds(preset, customStart, customEnd);
-    if (!nextBounds || done) {
-      setPreview(null);
-      setPreviewLoading(false);
-      return;
-    }
+  }, [preset, customStart, customEnd]);
 
-    setPreviewLoading(true);
-    const seq = ++previewSeq.current;
-    const handle = window.setTimeout(async () => {
-      try {
-        const result = await trackerClient.deleteHistoryRange({ ...nextBounds, scopes: DELETE_SCOPES, dryRun: true });
-        if (seq !== previewSeq.current) return;
-        setPreview(result);
-        setError(null);
-      } catch (previewError) {
-        if (seq !== previewSeq.current) return;
-        setPreview(null);
-        setError(previewError instanceof Error ? previewError.message : String(previewError));
-      } finally {
-        if (seq === previewSeq.current) setPreviewLoading(false);
-      }
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [preset, customStart, customEnd, done]);
-
-  const previewTotal = preview ? preview.activitySegments + preview.classifications + preview.youtubeMetadata : 0;
-  const canDelete = Boolean(bounds) && !deleting && !done && previewTotal > 0 && !previewLoading;
+  const canDelete = Boolean(bounds) && !deleting && !done;
   const needsArm = preset === "all";
 
   const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -165,10 +137,6 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
               </div>
             ) : null}
 
-            <p aria-live="polite" className={`delete-history-modal__preview${previewTotal > 0 ? " has-items" : ""}`}>
-              {previewMessage(bounds, previewLoading, preview, previewTotal)}
-            </p>
-
             <div className="delete-history-modal__actions">
               <button className="settings-btn" disabled={deleting} type="button" onClick={onClose}>
                 Cancel
@@ -210,19 +178,6 @@ function rangeBounds(
     default:
       return null;
   }
-}
-
-function previewMessage(
-  bounds: { readonly start?: string; readonly end?: string } | null,
-  loading: boolean,
-  preview: DeleteHistoryRangeResult | null,
-  total: number,
-): string {
-  if (!bounds) return "Pick a valid start and end date.";
-  if (loading) return "Checking what this range contains…";
-  if (!preview) return "Nothing to preview yet.";
-  if (total === 0) return "Nothing matches this range.";
-  return `Will delete ${summarizeCounts(preview)}.`;
 }
 
 function summarizeCounts(result: DeleteHistoryRangeResult): string {
