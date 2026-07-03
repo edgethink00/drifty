@@ -70,6 +70,7 @@ export function useOnboardingFlow({
   const [jobTypeOther] = useState("");
   const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(false);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(false);
+  const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(true);
   const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -105,7 +106,7 @@ export function useOnboardingFlow({
     customEndpointIsValid: connection.customEndpointIsValid,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
-    managedLocalStarted: connection.managedLocalStarted,
+    managedLocalReady: connection.managedLocalReady,
     notificationsReady: permissions.notificationsReady,
     setupChoice: connection.setupChoice,
     step,
@@ -120,6 +121,7 @@ export function useOnboardingFlow({
     customEndpointModelIssue: connection.customEndpointModelIssue,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
+    managedLocalStarted: connection.managedLocalStarted,
     step,
   }), [
     canAdvance,
@@ -128,6 +130,7 @@ export function useOnboardingFlow({
     connection.customEndpointModelIssue,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
+    connection.managedLocalStarted,
     permissions.accessibilityRecheckPending,
     step,
   ]);
@@ -168,6 +171,7 @@ export function useOnboardingFlow({
       displayName,
       driftAlarmEnabled,
       extremeNudgeEnabled,
+      browserHistoryBootstrapEnabled,
       jobType,
       jobTypeOther,
       mainActivities,
@@ -229,6 +233,7 @@ export function useOnboardingFlow({
     ...permissions,
     accountConnected,
     addMainActivity,
+    browserHistoryBootstrapEnabled,
     blockedHint,
     canAdvance,
     cloudTrialStartedNotice,
@@ -244,6 +249,7 @@ export function useOnboardingFlow({
     progressPct,
     screenRef,
     setDriftAlarmEnabled,
+    setBrowserHistoryBootstrapEnabled,
     setExtremeNudgeEnabled,
     setMainActivityOther,
     setOpenAtLoginEnabled,

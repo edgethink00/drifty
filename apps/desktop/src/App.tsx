@@ -50,6 +50,7 @@ import {
   type DashboardAiUnavailablePreviewCase,
   type DashboardAiUnavailablePreviewState,
 } from "./features/dashboard/dashboardAiUnavailablePreview";
+import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { TeamPage } from "./features/team/TeamPage";
@@ -98,8 +99,10 @@ import { buildDebugLogPayload } from "./features/settings/debugLog";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
+  readUserOnboardingState,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
+import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
 import { OnboardingV22Preview } from "./features/onboarding/previews/OnboardingV22Preview";
 import {
   WatcherPeek,
@@ -298,6 +301,26 @@ const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT = 20;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = 2;
+// The intent is to reveal a *classified* dashboard, so we wait while today's AI
+// classification keeps making progress. We only cut it short when a batch stalls
+// (a genuine hang, e.g. an unauthenticated cloud call) or when the overall phase
+// exceeds its cap — after which the remainder finishes in the background.
+const FIRST_DAY_PREPARATION_MAX_MS = 300 * 1000; // ultimate "never trap the user" backstop
+const FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES = 80;
+const FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE = 10; // small batches so each call finishes fast on slow local models
+const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 45 * 1000; // per-batch: treat as hung if a single batch takes this long
+const FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT = 4; // give up only after this many consecutive no-save batches
+const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [-1, -2] as const;
+
+// Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
+// hung AI classification request can never trap the user on the loading screen.
+function firstDayPreparationRaceTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 // Compact history is mostly closed-day data that rarely changes, so it does not need
@@ -1061,6 +1084,13 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(
+    () => readUserOnboardingState("local")?.browserHistoryBootstrapEnabled === true,
+  );
+  const [preparingFirstDay, setPreparingFirstDay] = useState(false);
+  const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
+  const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
+  const firstDayPreparationRunRef = useRef(false);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
@@ -1123,13 +1153,17 @@ export default function App() {
       active = false;
     };
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
+  // Keep the compact onboarding window chrome through the first-day preparation gate,
+  // so the loading screen runs in the small onboarding window rather than the full app
+  // window. Only apply when the desired state actually flips to avoid a resize flicker
+  // across the onboarding -> gate handoff.
+  const onboardingChromeAppliedRef = useRef(false);
   useEffect(() => {
-    if (!onboardingOpen) return;
-    void setOnboardingWindowPresentation(true, true);
-    return () => {
-      void setOnboardingWindowPresentation(false, true);
-    };
-  }, [onboardingOpen]);
+    const wantsOnboardingChrome = onboardingOpen || preparingFirstDay;
+    if (wantsOnboardingChrome === onboardingChromeAppliedRef.current) return;
+    onboardingChromeAppliedRef.current = wantsOnboardingChrome;
+    void setOnboardingWindowPresentation(wantsOnboardingChrome, true);
+  }, [onboardingOpen, preparingFirstDay]);
   const {
     user,
     status: authStatus,
@@ -2294,6 +2328,36 @@ export default function App() {
     }
   }
 
+  const clearLocalActivityCaches = useCallback(() => {
+    compactHistoryCacheGenerationRef.current += 1;
+    compactHistoryCacheRef.current.clear();
+    compactHistoryInFlightRef.current.clear();
+    setCompactHistoryCacheRevision((revision) => revision + 1);
+    setHistorySegmentsLoadedRange(null);
+    setDashboardWeekRefreshState({ key: null, status: "idle" });
+  }, []);
+
+  const isPreviewSurface = shouldUsePreviewData();
+  const shouldStartBrowserHistoryBootstrap =
+    activeTab === "dashboard"
+    && dashPeriod === "Today"
+    && hasLoadedOnce
+    && !loading
+    && selectedDay === logicalTodayIsoDate(startOfDayMinutes)
+    && segmentsLoadedDay === selectedDay
+    && segments.length === 0;
+  const { notice: browserHistoryBootstrapNotice, reset: resetBrowserHistoryBootstrap } = useBrowserHistoryBootstrap({
+    blocked: shouldBlockLocalTrackerAccess,
+    clearLocalActivityCaches,
+    enabled: browserHistoryBootstrapEnabled && !preparingFirstDay,
+    isPreviewSurface,
+    refresh,
+    refreshHistoryData,
+    selectedDayRef,
+    setError,
+    shouldStart: shouldStartBrowserHistoryBootstrap,
+  });
+
   const loadMoreHistorySegments = useCallback(async (): Promise<void> => {
     if (historyLoadingMore || !historyHasMoreSegments || historyNextCursor === null || historySegmentsLoadedRange === null) return;
 
@@ -2536,13 +2600,8 @@ export default function App() {
   }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek, trendsRange]);
 
   useEffect(() => {
-    compactHistoryCacheGenerationRef.current += 1;
-    compactHistoryCacheRef.current.clear();
-    compactHistoryInFlightRef.current.clear();
-    setCompactHistoryCacheRevision((revision) => revision + 1);
-    setHistorySegmentsLoadedRange(null);
-    setDashboardWeekRefreshState({ key: null, status: "idle" });
-  }, [classificationRules, startOfDayMinutes, startOfWeek]);
+    clearLocalActivityCaches();
+  }, [classificationRules, clearLocalActivityCaches, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -4651,6 +4710,132 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [runAutoAiClassificationBatch]);
 
+  // First-day preparation gate: after opted-in onboarding, import the last 48h of
+  // browser history and finish classifying *today* before revealing the dashboard.
+  // Older days within the window are left to a background pass so the reveal is fast.
+  useEffect(() => {
+    if (!preparingFirstDay) return;
+    if (firstDayPreparationRunRef.current) return;
+    firstDayPreparationRunRef.current = true;
+
+    let settled = false;
+    const reveal = () => {
+      if (settled) return;
+      settled = true;
+      setPreparingFirstDay(false);
+    };
+    const safetyTimeout = setTimeout(reveal, FIRST_DAY_PREPARATION_MAX_MS);
+
+    const runClassificationForDay = (day: string) => {
+      const query = toClassificationQueryForDay(day);
+      return localAiClassificationOptions
+        ? runAiClassificationUntilEmpty(query, undefined, localAiClassificationOptions)
+        : runAiClassificationUntilEmpty(query);
+    };
+
+    // Classify a single day one batch at a time so the loading screen can report
+    // real progress (classified / total) as the AI works through today's segments.
+    const classifyTodayWithProgress = async (day: string) => {
+      const query = toClassificationQueryForDay(day);
+      const reportProgress = async () => {
+        try {
+          const metrics = await trackerClient.getClassificationMetrics(query);
+          if (metrics.totalSegments > 0) {
+            setFirstDayPreparationProgress(Math.min(1, metrics.classifiedSegments / metrics.totalSegments));
+          }
+        } catch {
+          // progress is best-effort; never let it interrupt classification
+        }
+      };
+      await reportProgress();
+      const batchTimeoutSummary: AiClassificationSummary = {
+        status: "error",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message: "Classification timed out.",
+      };
+      let consecutiveNoProgress = 0;
+      for (let batch = 0; batch < FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES; batch += 1) {
+        // Small batches so each call finishes fast; a single stalled/failed batch is
+        // treated as a hang after the timeout but does NOT abandon the rest — we keep
+        // going until nothing is left or several no-progress batches in a row.
+        const summary = await firstDayPreparationRaceTimeout(
+          localAiClassificationOptions
+            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, localAiClassificationOptions)
+            : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE),
+          FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS,
+          batchTimeoutSummary,
+        );
+        await reportProgress();
+        if (summary.selectedSegments === 0 || summary.status === "disabled") break; // nothing left / AI off
+        if (summary.savedRecords > 0) {
+          consecutiveNoProgress = 0;
+          continue;
+        }
+        consecutiveNoProgress += 1;
+        if (consecutiveNoProgress >= FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT) break;
+      }
+      // No forced 100%: the progress bar reflects real classified/total coverage.
+      await reportProgress();
+    };
+
+    void (async () => {
+      const today = logicalTodayIsoDate(startOfDayMinutes);
+      const aiAvailable = Boolean(localAiClassificationOptions) || canUseCloudAiClassification;
+      try {
+        if (!shouldBlockLocalTrackerAccess) {
+          setFirstDayPreparationPhase("importing");
+          setFirstDayPreparationProgress(null);
+          const preview = await trackerClient.previewBrowserHistoryImport({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
+          if (preview.segmentCount > 0) {
+            await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
+            clearLocalActivityCaches();
+          }
+          // refresh() materializes and persists today's built-in heuristic classifications,
+          // so nothing renders as bare "unclassified" even before AI runs.
+          await refresh(today, { foreground: true });
+
+          if (aiAvailable && !settled) {
+            setFirstDayPreparationPhase("classifying");
+            // Intent: reveal a fully-classified *today*. Wait until today's segments are
+            // all classified (the loop exits when nothing is left). The only escape hatches
+            // are a genuinely stalled/hung provider and the overall safety backstop below.
+            await classifyTodayWithProgress(today);
+            await refresh(today);
+          }
+        }
+      } catch {
+        // Never trap the user on the loading screen; reveal with whatever we have.
+      } finally {
+        clearTimeout(safetyTimeout);
+        reveal();
+      }
+
+      // Background: classify the rest of the 48h window without blocking the reveal.
+      if (aiAvailable && !shouldBlockLocalTrackerAccess) {
+        void (async () => {
+          for (const offset of FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS) {
+            const day = shiftIsoDate(today, offset);
+            try {
+              const summary = await runClassificationForDay(day);
+              if (summary.savedRecords > 0 && selectedDayRef.current === day) await refresh(day);
+            } catch {
+              // best-effort background classification
+            }
+          }
+        })();
+      }
+    })();
+
+    return () => {
+      clearTimeout(safetyTimeout);
+    };
+    // Intentionally keyed only on `preparingFirstDay`: this is a one-shot run guarded
+    // by firstDayPreparationRunRef, and re-running on other dep changes would clear the
+    // safety-reveal timeout mid-flight and could trap the user on the loading screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparingFirstDay]);
+
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
       setAuthModalOpen(false);
@@ -4693,6 +4878,11 @@ export default function App() {
   }, [dashboardAiRecoveryKey]);
 
   useEffect(() => {
+    const onboardingUserId = user?.id ?? "local";
+    setBrowserHistoryBootstrapEnabled(readUserOnboardingState(onboardingUserId)?.browserHistoryBootstrapEnabled === true);
+  }, [onboardingOpen, user?.id]);
+
+  useEffect(() => {
     if (isDevOnboardingBypassEnabled()) {
       setOnboardingOpen(false);
       return;
@@ -4733,7 +4923,16 @@ export default function App() {
     }
     setDriftAlertsEnabled(state.driftAlarmEnabled);
     setExtremeNudgeEnabled(state.extremeNudgeEnabled);
+    setBrowserHistoryBootstrapEnabled(state.browserHistoryBootstrapEnabled);
+    resetBrowserHistoryBootstrap();
+    selectDay(logicalTodayIsoDate(startOfDayMinutes));
+    navigateToTab("dashboard", "Today");
     setOnboardingOpen(false);
+    if (state.browserHistoryBootstrapEnabled && !shouldBlockLocalTrackerAccess) {
+      firstDayPreparationRunRef.current = false;
+      setFirstDayPreparationPhase("importing");
+      setPreparingFirstDay(true);
+    }
   }
 
   async function handleOpenDeveloperOnboarding() {
@@ -5179,6 +5378,10 @@ export default function App() {
     );
   }
 
+  if (preparingFirstDay) {
+    return <FirstDayPreparationScreen phase={firstDayPreparationPhase} progress={firstDayPreparationProgress} />;
+  }
+
   return (
     <div className={shellClassName}>
       <div className="window-chrome">
@@ -5354,6 +5557,7 @@ export default function App() {
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAiUnavailableState={dashboardAiUnavailableState}
             dashboardAppUsage={dashboardAppUsage}
+            browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
             dashboardCategoryTotals={dashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
             dashboardEffectiveProductivityTotals={dashboardEffectiveProductivityTotals}
@@ -5370,7 +5574,7 @@ export default function App() {
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
             initialDataLoading={loading && !hasLoadedOnce}
-            isPreviewSurface={shouldUsePreviewData()}
+            isPreviewSurface={isPreviewSurface}
             selectedDay={selectedDay}
             selectedDayLabel={selectedDayLabel}
             startOfDayMinutes={startOfDayMinutes}

@@ -121,6 +121,7 @@ export function OnboardingStepContent({
     case "ready":
       return (
         <ReadyStep
+          browserHistoryBootstrapEnabled={flow.browserHistoryBootstrapEnabled}
           cloudTrialStartedNotice={flow.cloudTrialStartedNotice}
           isUserManagedProviderSetup={flow.isUserManagedProviderSetup}
           localAiSummaryLabel={flow.localAiSummaryLabel}
@@ -129,6 +130,7 @@ export function OnboardingStepContent({
           setupChoice={flow.setupChoice}
           userManagedConnectionLabel={flow.userManagedConnectionLabel}
           userManagedSetupLabel={flow.userManagedSetupLabel}
+          onBrowserHistoryBootstrapChange={flow.setBrowserHistoryBootstrapEnabled}
           onOpenAtLoginChange={flow.setOpenAtLoginEnabled}
         />
       );

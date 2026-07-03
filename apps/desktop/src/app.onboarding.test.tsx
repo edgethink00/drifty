@@ -21,6 +21,8 @@ const {
   accessibilityRequestAccess,
   trackerGetStatus,
   trackerGetHourlySummary,
+  trackerPreviewBrowserHistoryImport,
+  trackerImportBrowserHistory,
   openSystemSettingsPane,
   billingMocks,
   appFeatureSwitches,
@@ -61,6 +63,8 @@ const {
   accessibilityRequestAccess: vi.fn(),
   trackerGetStatus: vi.fn(),
   trackerGetHourlySummary: vi.fn(),
+  trackerPreviewBrowserHistoryImport: vi.fn(),
+  trackerImportBrowserHistory: vi.fn(),
   openSystemSettingsPane: vi.fn(),
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
@@ -166,6 +170,8 @@ vi.mock("./lib/api/trackerClient", () => ({
     start: vi.fn(),
     stop: vi.fn(),
     updateTrayProductivityIcon: vi.fn().mockResolvedValue(undefined),
+    previewBrowserHistoryImport: trackerPreviewBrowserHistoryImport,
+    importBrowserHistory: trackerImportBrowserHistory,
   },
 }));
 
@@ -442,6 +448,32 @@ describe("App onboarding", () => {
     });
     configureManagedAiMocks();
     trackerGetHourlySummary.mockResolvedValue([]);
+    trackerPreviewBrowserHistoryImport.mockResolvedValue({
+      lookbackDays: 2,
+      candidateCount: 0,
+      segmentCount: 0,
+      estimatedSeconds: 0,
+      browserCount: 0,
+      profileCount: 0,
+      databaseCount: 0,
+      errorCount: 0,
+      windowStart: "2026-07-01T13:15:00.000Z",
+      windowEnd: "2026-07-03T13:15:00.000Z",
+    });
+    trackerImportBrowserHistory.mockResolvedValue({
+      lookbackDays: 2,
+      candidateCount: 0,
+      segmentCount: 0,
+      estimatedSeconds: 0,
+      browserCount: 0,
+      profileCount: 0,
+      databaseCount: 0,
+      errorCount: 0,
+      windowStart: "2026-07-01T13:15:00.000Z",
+      windowEnd: "2026-07-03T13:15:00.000Z",
+      insertedCount: 0,
+      skippedDuplicateCount: 0,
+    });
     openSystemSettingsPane.mockResolvedValue(true);
     tauriEventHandlers.clear();
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
@@ -773,6 +805,7 @@ describe("App onboarding", () => {
     expect(storedRecord.workDomain).toBeNull();
     expect(storedRecord.driftAlarmEnabled).toBe(false);
     expect(storedRecord.extremeNudgeEnabled).toBe(false);
+    expect(storedRecord.browserHistoryBootstrapEnabled).toBe(true);
     expect(storedRecord.focusGoalHours).toBeNull();
     expect(storedRecord.driftThresholdMinutes).toBeNull();
     expect(typeof storedRecord.completedAt).toBe("string");
@@ -918,6 +951,82 @@ describe("App onboarding", () => {
       debugSpy.mockRestore();
     }
   });
+
+  it("lets users opt out of the recent history first-dashboard bootstrap", async () => {
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const browserHistoryCheckbox = within(readyDialog).getByRole("checkbox", {
+      name: /import from browser history \(last 48 hours\)/i,
+    });
+
+    expect((browserHistoryCheckbox as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(browserHistoryCheckbox);
+    expect((browserHistoryCheckbox as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    });
+
+    const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
+    const storedRecord = JSON.parse(storedValue ?? "{}") as Record<string, unknown>;
+    expect(storedRecord.browserHistoryBootstrapEnabled).toBe(false);
+  }, 15_000);
+
+  it("prepares the first day before revealing the dashboard when browser history import stays enabled", async () => {
+    trackerPreviewBrowserHistoryImport.mockResolvedValue({
+      lookbackDays: 2,
+      candidateCount: 3,
+      segmentCount: 2,
+      estimatedSeconds: 600,
+      browserCount: 1,
+      profileCount: 1,
+      databaseCount: 1,
+      errorCount: 0,
+      windowStart: "2026-07-01T13:15:00.000Z",
+      windowEnd: "2026-07-03T13:15:00.000Z",
+    });
+    let resolveImport: () => void = () => undefined;
+    trackerImportBrowserHistory.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveImport = () =>
+            resolve({
+              lookbackDays: 2,
+              candidateCount: 3,
+              segmentCount: 2,
+              estimatedSeconds: 600,
+              browserCount: 1,
+              profileCount: 1,
+              databaseCount: 1,
+              errorCount: 0,
+              windowStart: "2026-07-01T13:15:00.000Z",
+              windowEnd: "2026-07-03T13:15:00.000Z",
+              insertedCount: 2,
+              skippedDuplicateCount: 0,
+            });
+        }),
+    );
+
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+    // The dashboard is gated behind the preparation screen while the 48h import runs.
+    expect(await screen.findByText(/getting your day ready/i)).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    await waitFor(() => expect(trackerPreviewBrowserHistoryImport).toHaveBeenCalledWith({ lookbackDays: 2 }));
+    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 2 }));
+
+    // Only once preparation settles does the dashboard appear.
+    resolveImport();
+    await waitFor(() => expect(screen.queryByText(/getting your day ready/i)).toBeNull());
+  }, 15_000);
 
   it("completes onboarding when login startup cannot be enabled", async () => {
     const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
@@ -1090,7 +1199,7 @@ describe("App onboarding", () => {
     });
   });
 
-  it("lets Local AI onboarding continue during managed model download and applies the completed model", async () => {
+  it("blocks Local AI onboarding until the managed model download completes, then applies the model", async () => {
     setTauriRuntime();
     const installDeferred = createDeferred<ManagedLocalAiStatus>();
     let managedStatus: ManagedLocalAiStatus = {
@@ -1154,30 +1263,28 @@ describe("App onboarding", () => {
     }, { timeout: 2_000 });
     expect(within(localDialog).getAllByText(/1\.2\/2\.7 GB/i).length).toBeGreaterThan(0);
     expect(within(localDialog).queryByRole("button", { name: /^downloading 42%$/i })).toBeNull();
-    await clickEnabledAction(/^continue$/i);
 
+    // The user must not advance while the managed model is still downloading — the
+    // first-day preparation gate that follows depends on the model being ready.
+    const continueDuringDownload = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
+    expect(continueDuringDownload.disabled).toBe(true);
+
+    // Complete the download; only then can onboarding continue.
+    const completedStatus = installManagedModel("drifty-qwen3-5-4b-default");
+    managedStatus = completedStatus;
+    installDeferred.resolve(completedStatus);
+
+    await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/activity goes to the selected local model on this mac, not to drifty cloud/i)).toBeTruthy();
 
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
-    expect(screen.getByText(/local model downloading/i)).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
     });
-    expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({
-      provider: "managed_local",
-      driftyRoute: "local",
-      managedLocalModelId: "drifty-qwen3-5-4b-default",
-      managedLocalBaseUrl: "",
-      managedLocalModel: "",
-    });
-
-    const completedStatus = installManagedModel("drifty-qwen3-5-4b-default");
-    managedStatus = completedStatus;
-    installDeferred.resolve(completedStatus);
 
     await waitFor(() => {
       expect(sendNotificationMock).toHaveBeenCalledWith({

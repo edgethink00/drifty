@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
 
 const noop = vi.fn();
 
-function renderReplayDashboardWithNoData() {
+type DashboardPageFixtureOptions = {
+  readonly browserHistoryBootstrapNotice?: ComponentProps<typeof DashboardPage>["browserHistoryBootstrapNotice"];
+  readonly dashboardReplay?: ComponentProps<typeof DashboardPage>["dashboardReplay"];
+};
+
+function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
   render(
     <DashboardPage
       appIcons={{}}
@@ -15,11 +21,12 @@ function renderReplayDashboardWithNoData() {
       dashboardAiRecoveryState={null}
       dashboardAiUnavailableState={null}
       dashboardAppUsage={[]}
+      browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={[]}
       dashboardDateNavigator={<div aria-label="date navigator" />}
       dashboardEffectiveProductivityTotals={[]}
       dashboardProductivityTotals={[]}
-      dashboardReplay={{ phase: "playing", progress: 0, onRestart: noop, onStop: noop }}
+      dashboardReplay={options.dashboardReplay === undefined ? { phase: "playing", progress: 0, onRestart: noop, onStop: noop } : options.dashboardReplay}
       dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
       dashboardTitle="Today"
       dashboardTitleDuration="0m"
@@ -56,12 +63,28 @@ function renderReplayDashboardWithNoData() {
 
 describe("DashboardPage demo replay empty data", () => {
   it("keeps blank chart frames visible instead of empty-state copy while replay is active", () => {
-    renderReplayDashboardWithNoData();
+    renderDashboardWithNoData();
 
     expect(screen.getByLabelText("3-minute flow chart")).toBeTruthy();
     expect(screen.getByLabelText("No app usage for today yet")).toBeTruthy();
     expect(screen.queryByText("No timeline yet")).toBeNull();
     expect(screen.queryByText("No usage ranking")).toBeNull();
     expect(screen.queryByText("Not enough data yet")).toBeNull();
+  });
+
+  it("shows the browser history bootstrap status on an empty Today dashboard", () => {
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      browserHistoryBootstrapNotice: {
+        detail: "Importing from browser history (last 48 hours).",
+        statusLabel: "3 visits summarized locally.",
+        tone: "working",
+      },
+    });
+
+    expect(screen.getByText("Not enough data yet")).toBeTruthy();
+    expect(screen.getByText("Importing from browser history (last 48 hours).")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("3 visits summarized locally.");
+    expect(screen.queryByRole("button", { name: /last 48 hours|add estimates/i })).toBeNull();
   });
 });

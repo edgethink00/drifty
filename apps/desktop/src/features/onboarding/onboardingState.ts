@@ -19,6 +19,7 @@ export type UserOnboardingState = {
   jobTypeOther: string;
   driftAlarmEnabled: boolean;
   extremeNudgeEnabled: boolean;
+  browserHistoryBootstrapEnabled: boolean;
   focusGoalHours: number | null;
   driftThresholdMinutes: number | null;
   purpose: OnboardingPurpose | null;
@@ -83,6 +84,8 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
     const jobTypeOther = typeof record.jobTypeOther === "string" ? record.jobTypeOther : "";
     const driftAlarmEnabled = typeof record.driftAlarmEnabled === "boolean" ? record.driftAlarmEnabled : false;
     const extremeNudgeEnabled = typeof record.extremeNudgeEnabled === "boolean" ? record.extremeNudgeEnabled : false;
+    const browserHistoryBootstrapEnabled =
+      typeof record.browserHistoryBootstrapEnabled === "boolean" ? record.browserHistoryBootstrapEnabled : false;
     const focusGoalHours = typeof record.focusGoalHours === "number" ? record.focusGoalHours : null;
     const driftThresholdMinutes =
       typeof record.driftThresholdMinutes === "number" ? record.driftThresholdMinutes : null;
@@ -99,6 +102,7 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
       jobTypeOther,
       driftAlarmEnabled,
       extremeNudgeEnabled,
+      browserHistoryBootstrapEnabled,
       focusGoalHours,
       driftThresholdMinutes,
       purpose,
@@ -176,6 +180,7 @@ export function saveUserWorkProfileSettings(
     jobTypeOther: nextWorkProfile.workActivities.includes("Other") ? nextWorkProfile.workActivityOther : "",
     driftAlarmEnabled: currentState?.driftAlarmEnabled ?? false,
     extremeNudgeEnabled: currentState?.extremeNudgeEnabled ?? false,
+    browserHistoryBootstrapEnabled: currentState?.browserHistoryBootstrapEnabled ?? false,
     focusGoalHours: currentState?.focusGoalHours ?? null,
     driftThresholdMinutes: currentState?.driftThresholdMinutes ?? null,
     purpose: currentState?.purpose ?? null,

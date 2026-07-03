@@ -14,6 +14,7 @@ import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../settings/mana
 import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressText";
 import driftyIconUrl from "../../assets/drifty-icon.png";
 import { GoogleMark } from "./components/GoogleMark";
+import { BrowserHistoryBootstrapPreference } from "./components/BrowserHistoryBootstrapPreference";
 import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
 import type { SetupChoice } from "./onboardingFlow";
 import type { OnboardingFlow } from "./useOnboardingFlow";
@@ -1128,6 +1129,10 @@ function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
           onClick={() => flow.setOpenAtLoginEnabled((current) => !current)}
         />
       </div>
+      <BrowserHistoryBootstrapPreference
+        enabled={flow.browserHistoryBootstrapEnabled}
+        onChange={flow.setBrowserHistoryBootstrapEnabled}
+      />
       <p className="dc-onb-muted-note dc-onb-muted-note--ready">You can pause Drifty any time from the menu bar.</p>
     </>
   );
