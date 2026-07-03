@@ -148,6 +148,7 @@ import {
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
+import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey, normalizeClassificationRuleDetail } from "./features/classification/classificationViewData";
@@ -4532,6 +4533,19 @@ export default function App() {
     }
   }, [historyDeleting, refresh]);
 
+  const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
+
+  const handleHistoryRangeDeleted = useCallback(async () => {
+    setHistorySearchSegments([]);
+    try {
+      setClassificationMetrics(await trackerClient.getClassificationMetrics({ day: selectedDayRef.current }));
+    } catch {
+      // Metrics refresh is best-effort after a bulk delete; the views below still reload.
+    }
+    await refresh(selectedDayRef.current);
+    await refreshLeaderboardData();
+  }, [refresh, refreshLeaderboardData]);
+
   useEffect(() => {
     selectedDayRef.current = selectedDay;
   }, [selectedDay]);
@@ -5442,6 +5456,7 @@ export default function App() {
                 segments={displayedHistorySegments}
                 startOfDayMinutes={startOfDayMinutes}
                 onDeleteSelected={handleDeleteHistorySegments}
+                onOpenDeleteHistory={() => setDeleteHistoryModalOpen(true)}
                 onLoadMore={displayedHistoryLoadMore}
                 onSearchQueryChange={setHistorySearchQuery}
               />
@@ -5682,7 +5697,7 @@ export default function App() {
                   />
                 )}
                 {settingsSection === "privacy" && (
-                  <PrivacySettingsSection />
+                  <PrivacySettingsSection onHistoryDeleted={handleHistoryRangeDeleted} />
                 )}
                 {settingsSection === "data" && (
                   <DataExportSettingsSection databasePath={status?.databasePath} todaySessionCount={segments.length} />
@@ -5781,6 +5796,7 @@ export default function App() {
       {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
 
       {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
+      {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} /> : null}
 
       {debugLogPreview ? (
         <DebugLogModal

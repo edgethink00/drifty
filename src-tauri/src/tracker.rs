@@ -295,6 +295,31 @@ impl TrackerController {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn delete_history_range(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+        activity: bool,
+        ai_classifications: bool,
+        youtube_metadata: bool,
+        dry_run: bool,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "delete_history_range",
+            build_delete_history_range_payload(
+                start,
+                end,
+                activity,
+                ai_classifications,
+                youtube_metadata,
+                dry_run,
+            ),
+        )
+    }
+
     pub fn search_classification_rule_candidates(
         &self,
         app: &AppHandle,
@@ -914,6 +939,31 @@ fn build_delete_activity_segments_payload(ids: &[String]) -> Value {
     json!({ "ids": ids })
 }
 
+fn build_delete_history_range_payload(
+    start: Option<String>,
+    end: Option<String>,
+    activity: bool,
+    ai_classifications: bool,
+    youtube_metadata: bool,
+    dry_run: bool,
+) -> Value {
+    let mut payload = build_period_payload(None, start, end);
+
+    if let Some(payload_object) = payload.as_object_mut() {
+        payload_object.insert(
+            "scopes".into(),
+            json!({
+                "activity": activity,
+                "aiClassifications": ai_classifications,
+                "youtubeMetadata": youtube_metadata,
+            }),
+        );
+        payload_object.insert("dryRun".into(), json!(dry_run));
+    }
+
+    payload
+}
+
 fn build_developer_diagnostics_payload(
     force_chromium_ax_capture: bool,
     force_frontmost_fallback_capture: bool,
@@ -1158,6 +1208,49 @@ mod tests {
         let payload = build_delete_activity_segments_payload(&["42".into(), "43".into()]);
 
         assert_eq!(payload, json!({ "ids": ["42", "43"] }));
+    }
+
+    #[test]
+    fn delete_history_range_payload_preserves_range_scopes_and_dry_run() {
+        let payload = build_delete_history_range_payload(
+            Some("2026-04-01".into()),
+            Some("2026-04-06".into()),
+            true,
+            false,
+            true,
+            true,
+        );
+
+        assert_eq!(
+            payload,
+            json!({
+                "start": "2026-04-01",
+                "end": "2026-04-06",
+                "scopes": {
+                    "activity": true,
+                    "aiClassifications": false,
+                    "youtubeMetadata": true,
+                },
+                "dryRun": true,
+            })
+        );
+    }
+
+    #[test]
+    fn delete_history_range_payload_omits_missing_bounds_for_all_time() {
+        let payload = build_delete_history_range_payload(None, None, true, true, true, false);
+
+        assert_eq!(
+            payload,
+            json!({
+                "scopes": {
+                    "activity": true,
+                    "aiClassifications": true,
+                    "youtubeMetadata": true,
+                },
+                "dryRun": false,
+            })
+        );
     }
 
     #[test]

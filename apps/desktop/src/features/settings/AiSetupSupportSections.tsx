@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { AiPrivacyReview } from "./AiPrivacyReview";
 import { AiSetupWorkProfileSection } from "./AiSetupWorkProfileSection";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import type { WorkProfileSettings } from "../onboarding/onboardingState";
 
 type AiSetupSupportSectionId = "workProfile" | "privacyReview";
@@ -20,7 +21,7 @@ export function AiSetupSupportSections({
   onSaveWorkProfile,
   onWorkProfileDraftChange,
 }: AiSetupSupportSectionsProps) {
-  const [expandedSection, setExpandedSection] = useState<AiSetupSupportSectionId | null>("workProfile");
+  const [expandedSection, setExpandedSection] = useState<AiSetupSupportSectionId | null>(null);
 
   return (
     <div className="ai-setup-support-list" aria-label="Additional AI setup sections">
@@ -90,11 +91,9 @@ function AiSetupSupportSection({
         {badge ? <span className="chip gray">{badge}</span> : null}
         <span className="ai-setup-support-section__chevron" aria-hidden="true" />
       </button>
-      {expanded ? (
-        <div id={panelId} className="ai-setup-support-section__panel" role="region" aria-labelledby={buttonId}>
-          {children}
-        </div>
-      ) : null}
+      <CollapsiblePanel contentClassName="ai-setup-support-section__panel" expanded={expanded} id={panelId} labelledBy={buttonId}>
+        {children}
+      </CollapsiblePanel>
     </section>
   );
 }

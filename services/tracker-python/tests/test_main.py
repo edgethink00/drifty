@@ -627,6 +627,68 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["deleted"], 2)
         mock_db.delete_activity_segments.assert_called_once_with(["1", "3"])
 
+    def test_delete_history_range_forwards_payload_to_database(self) -> None:
+        mock_db = MagicMock()
+        mock_db.delete_history_range.return_value = {
+            "activitySegments": 3,
+            "classifications": 2,
+            "youtubeMetadata": 1,
+            "dryRun": True,
+        }
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.delete_history_range(
+                {
+                    "start": "2026-04-01",
+                    "end": "2026-04-06",
+                    "scopes": {"activity": True, "aiClassifications": False, "youtubeMetadata": True},
+                    "dryRun": True,
+                }
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["data"],
+            {"activitySegments": 3, "classifications": 2, "youtubeMetadata": 1, "dryRun": True},
+        )
+        mock_db.delete_history_range.assert_called_once_with(
+            start="2026-04-01",
+            end="2026-04-06",
+            scopes={"activity": True, "aiClassifications": False, "youtubeMetadata": True},
+            dry_run=True,
+        )
+
+    def test_delete_history_range_defaults_to_all_time_real_delete(self) -> None:
+        mock_db = MagicMock()
+        mock_db.delete_history_range.return_value = {
+            "activitySegments": 0,
+            "classifications": 0,
+            "youtubeMetadata": 0,
+            "dryRun": False,
+        }
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.delete_history_range(
+                {"scopes": {"activity": True, "aiClassifications": True, "youtubeMetadata": True}}
+            )
+
+        self.assertTrue(result["ok"])
+        mock_db.delete_history_range.assert_called_once_with(
+            start=None,
+            end=None,
+            scopes={"activity": True, "aiClassifications": True, "youtubeMetadata": True},
+            dry_run=False,
+        )
+
+    def test_delete_history_range_requires_scopes_object(self) -> None:
+        mock_db = MagicMock()
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.delete_history_range({"start": "2026-04-01"})
+
+        self.assertFalse(result["ok"])
+        mock_db.delete_history_range.assert_not_called()
+
     def test_handle_idle_sample_trims_and_skips_when_threshold_reached(self) -> None:
         mock_db = MagicMock()
         now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)

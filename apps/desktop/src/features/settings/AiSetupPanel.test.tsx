@@ -153,6 +153,8 @@ describe("AiSetupPanel", () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: /^Work profile$/i }));
     expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
     expect(screen.queryByRole("region", { name: /^Model being used$/i })).toBeNull();
     expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();
@@ -328,6 +330,7 @@ describe("AiSetupPanel", () => {
     });
 
     render(<PrivacySettingsSection />);
+    fireEvent.click(screen.getByRole("button", { name: /AI data sending/i }));
     const optionalFieldLists = screen.getAllByRole("list", { name: /Optional AI classification fields/i });
     const privacyOptionalFields = optionalFieldLists[optionalFieldLists.length - 1];
     if (!privacyOptionalFields) throw new Error("Privacy settings should render optional AI classification fields.");

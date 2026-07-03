@@ -11,6 +11,8 @@ import type {
   ClassificationRuleCandidate,
   ClassificationRuleCandidateQuery,
   ClassificationRuleInput,
+  DeleteHistoryRangeQuery,
+  DeleteHistoryRangeResult,
   DeveloperDiagnosticsSettings,
   DriftAlarmTrayStatus,
   CurrentActivitySnapshot,
@@ -249,6 +251,15 @@ export const trackerClient: TrackerApi = {
   async deleteActivitySegments(ids: readonly string[]) {
     const result = await safeInvoke<{ deleted: number }>("tracker_delete_activity_segments", { query: { ids } });
     return result ?? { deleted: 0 };
+  },
+  async deleteHistoryRange(query: DeleteHistoryRangeQuery) {
+    const result = await safeInvoke<DeleteHistoryRangeResult>("tracker_delete_history_range", { query });
+    return result ?? {
+      activitySegments: 0,
+      classifications: 0,
+      youtubeMetadata: 0,
+      dryRun: query.dryRun ?? false,
+    };
   },
   async searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery) {
     const result = await safeInvoke<ClassificationRuleCandidate[]>("tracker_search_classification_rule_candidates", { query });

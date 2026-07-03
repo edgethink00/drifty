@@ -13,6 +13,7 @@ type HistoryViewProps = {
   readonly loadingMore?: boolean;
   readonly onDeleteSelected: (ids: readonly string[]) => Promise<void>;
   readonly onLoadMore?: () => Promise<void> | void;
+  readonly onOpenDeleteHistory?: () => void;
   readonly onSearchQueryChange?: (query: string) => void;
   readonly searchQuery?: string;
   readonly searchUsesBackend?: boolean;
@@ -32,6 +33,7 @@ export function HistoryView({
   loadingMore = false,
   onDeleteSelected,
   onLoadMore,
+  onOpenDeleteHistory,
   onSearchQueryChange,
   searchQuery,
   searchUsesBackend = false,
@@ -154,6 +156,11 @@ export function HistoryView({
         >
           {selectedCount === 0 ? "Delete selected" : deleteLabel}
         </button>
+        {onOpenDeleteHistory ? (
+          <button type="button" className="settings-btn danger" onClick={onOpenDeleteHistory}>
+            Delete history…
+          </button>
+        ) : null}
       </div>
 
       {groups.length === 0 ? (

@@ -384,6 +384,23 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
 }
 
+.content--settings .settings-btn.danger {
+  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+.content--settings .settings-btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
+  color: var(--warn);
+}
+
+.content--settings .settings-btn.danger:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .content--settings .settings-input,
 .content--settings .settings-select,
 .content--settings .settings-select-control__trigger {

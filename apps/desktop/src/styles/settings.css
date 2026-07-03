@@ -903,8 +903,17 @@
 }
 
 .settings-btn:hover { background: var(--bg-2); color: var(--text); transform: none; }
-.settings-btn.danger { border-color: var(--warn); color: var(--warn); }
-.settings-btn.danger:hover { background: var(--warn-soft); }
+.settings-btn.danger {
+  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+.settings-btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
+  color: var(--warn);
+}
+.settings-btn.danger:disabled { cursor: default; opacity: 0.5; }
 
 .settings-avatar-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
 

@@ -512,6 +512,25 @@ def delete_activity_segments(payload: dict):
     return response(True, {"deleted": deleted})
 
 
+def delete_history_range(payload: dict):
+    scopes = payload.get("scopes")
+    if not isinstance(scopes, dict):
+        return response(False, error="scopes is required")
+    start = payload.get("start")
+    if start is not None and not isinstance(start, str):
+        return response(False, error="start must be a string")
+    end = payload.get("end")
+    if end is not None and not isinstance(end, str):
+        return response(False, error="end must be a string")
+    result = database().delete_history_range(
+        start=start or None,
+        end=end or None,
+        scopes=scopes,
+        dry_run=_bool_payload(payload.get("dryRun")),
+    )
+    return response(True, result)
+
+
 def search_classification_rule_candidates(payload: dict):
     query = payload.get("query", "")
     if not isinstance(query, str):
@@ -697,6 +716,7 @@ COMMANDS = {
     "save_classification_rule": save_classification_rule,
     "delete_classification_rule": delete_classification_rule,
     "delete_activity_segments": delete_activity_segments,
+    "delete_history_range": delete_history_range,
     "search_classification_rule_candidates": search_classification_rule_candidates,
     "apply_classification_rules": apply_classification_rules,
     "save_classifications": save_classifications,

@@ -1,6 +1,35 @@
-import { AiPrivacyReview } from "./AiPrivacyReview";
+import { useEffect, useState } from "react";
 
-export function PrivacySettingsSection() {
+import { AiPrivacyReview } from "./AiPrivacyReview";
+import {
+  AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
+  readAiPrivacyRequestSettings,
+  type AiPrivacyRequestSettings,
+} from "./aiPrivacyRequestSettings";
+import { DeleteHistoryModal } from "./DeleteHistoryModal";
+import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
+
+type PrivacySettingsSectionProps = {
+  readonly onHistoryDeleted?: () => Promise<void> | void;
+};
+
+export function PrivacySettingsSection({ onHistoryDeleted }: PrivacySettingsSectionProps = {}) {
+  const [aiSettings, setAiSettings] = useState<AiPrivacyRequestSettings>(() => readAiPrivacyRequestSettings());
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  useEffect(() => {
+    const syncSettings = () => setAiSettings(readAiPrivacyRequestSettings());
+    window.addEventListener("storage", syncSettings);
+    window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, syncSettings);
+    return () => {
+      window.removeEventListener("storage", syncSettings);
+      window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, syncSettings);
+    };
+  }, []);
+
+  const optionalValues = Object.values(aiSettings.optional);
+  const optionalOnCount = optionalValues.filter(Boolean).length;
+
   return (
     <div className="settings-section settings-section--privacy">
       <div className="settings-block">
@@ -20,7 +49,40 @@ export function PrivacySettingsSection() {
           <div className="ctrl"><span className="chip">Opt-in only</span></div>
         </div>
       </div>
-      <AiPrivacyReview />
+      <SettingsCollapsibleCard
+        subtitle="What Drifty can send for AI classification"
+        summary={
+          <>
+            <span className={`chip${optionalOnCount > 0 ? " green" : ""}`}>{optionalOnCount} of {optionalValues.length} optional on</span>
+            <span className="chip gray">4 locked local</span>
+          </>
+        }
+        title="AI data sending"
+      >
+        <AiPrivacyReview />
+      </SettingsCollapsibleCard>
+      <div className="settings-block">
+        <h3>Danger zone</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Delete tracked history</div>
+            <div className="desc">Permanently remove local activity data for a time range. This cannot be undone.</div>
+          </div>
+          <div className="ctrl">
+            <button className="settings-btn danger" type="button" onClick={() => setDeleteModalOpen(true)}>
+              Delete history…
+            </button>
+          </div>
+        </div>
+      </div>
+      {deleteModalOpen ? (
+        <DeleteHistoryModal
+          onClose={() => setDeleteModalOpen(false)}
+          onDeleted={async () => {
+            await onHistoryDeleted?.();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
