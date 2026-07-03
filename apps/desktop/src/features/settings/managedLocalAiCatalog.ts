@@ -6,6 +6,7 @@ export type ManagedLocalAiModel = {
   readonly downloadSize: string;
   readonly diskRequired: string;
   readonly minimumMemory: string;
+  readonly estimatedRuntimeMemoryBytes: number | null;
   readonly recommended: boolean;
 };
 
@@ -18,6 +19,7 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     downloadSize: "~1.4 GB",
     diskRequired: "3 GB free",
     minimumMemory: "8 GB RAM",
+    estimatedRuntimeMemoryBytes: 2_147_483_648,
     recommended: false,
   },
   {
@@ -28,6 +30,7 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     downloadSize: "~2.8 GB",
     diskRequired: "6 GB free",
     minimumMemory: "16 GB RAM",
+    estimatedRuntimeMemoryBytes: 3_758_096_384,
     recommended: true,
   },
   {
@@ -38,6 +41,7 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     downloadSize: "~7.2 GB",
     diskRequired: "15 GB free",
     minimumMemory: "16 GB RAM",
+    estimatedRuntimeMemoryBytes: 9_288_286_208,
     recommended: false,
   },
   {
@@ -48,6 +52,7 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     downloadSize: "~15 GB",
     diskRequired: "30 GB free",
     minimumMemory: "36 GB RAM",
+    estimatedRuntimeMemoryBytes: 19_864_223_744,
     recommended: false,
   },
 ] satisfies readonly ManagedLocalAiModel[];

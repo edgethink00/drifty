@@ -23,6 +23,18 @@ fn catalog_uses_current_local_models() {
 }
 
 #[test]
+fn catalog_reports_runtime_memory_estimate_above_artifact_size() {
+    for model in managed_ai_catalog() {
+        let spec = require_model(&model.id).expect("catalog model has spec");
+        assert!(
+            model.estimated_runtime_memory_bytes > spec.expected_size_bytes,
+            "{} runtime memory estimate must exceed its artifact size",
+            model.id
+        );
+    }
+}
+
+#[test]
 fn install_downloads_model_artifact_before_marking_installed() {
     let root = tempfile::tempdir().expect("create temp root");
     let status = install_model_at_root_with_downloader(
