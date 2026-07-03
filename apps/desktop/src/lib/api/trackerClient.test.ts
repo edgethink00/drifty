@@ -144,6 +144,54 @@ describe("trackerClient", () => {
     });
   });
 
+  it("previews browser history import through the tracker command", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({
+      lookbackDays: 7,
+      candidateCount: 3,
+      segmentCount: 2,
+      estimatedSeconds: 780,
+      browserCount: 1,
+      profileCount: 1,
+      databaseCount: 1,
+      errorCount: 0,
+      windowStart: "2026-05-13T13:15:00.000Z",
+      windowEnd: "2026-05-20T13:15:00.000Z",
+    });
+
+    const result = await trackerClient.previewBrowserHistoryImport({ lookbackDays: 7 });
+
+    expect(result.segmentCount).toBe(2);
+    expect(invoke).toHaveBeenCalledWith("tracker_preview_browser_history_import", {
+      query: { lookbackDays: 7 },
+    });
+  });
+
+  it("imports browser history through the tracker command", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({
+      lookbackDays: 7,
+      candidateCount: 3,
+      segmentCount: 2,
+      estimatedSeconds: 780,
+      browserCount: 1,
+      profileCount: 1,
+      databaseCount: 1,
+      errorCount: 0,
+      insertedCount: 2,
+      skippedDuplicateCount: 0,
+      windowStart: "2026-05-13T13:15:00.000Z",
+      windowEnd: "2026-05-20T13:15:00.000Z",
+    });
+
+    const result = await trackerClient.importBrowserHistory({ lookbackDays: 7 });
+
+    expect(result.insertedCount).toBe(2);
+    expect(invoke).toHaveBeenCalledWith("tracker_import_browser_history", {
+      query: { lookbackDays: 7 },
+    });
+  });
+
   it("invokes tray_update_icon_style with the selected style", async () => {
     const { trackerClient } = await import("./trackerClient");
     invoke.mockResolvedValueOnce(null);

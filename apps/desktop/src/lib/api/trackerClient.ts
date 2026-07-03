@@ -4,6 +4,9 @@ import type {
   ActivitySegment,
   AppIconMap,
   AppIdentity,
+  BrowserHistoryImportPreview,
+  BrowserHistoryImportQuery,
+  BrowserHistoryImportResult,
   ClassificationMetrics,
   ClassificationQuery,
   ClassificationRule,
@@ -70,6 +73,24 @@ function getTrackerUnavailableStatus(message: string): TrackerStatus {
     databasePath: null,
     trackerMode: "unavailable",
     message,
+  };
+}
+
+function emptyBrowserHistoryImportPreview(query?: BrowserHistoryImportQuery): BrowserHistoryImportPreview {
+  const lookbackDays = query?.lookbackDays ?? 7;
+  const windowEnd = new Date();
+  const windowStart = new Date(windowEnd.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+  return {
+    lookbackDays,
+    candidateCount: 0,
+    segmentCount: 0,
+    estimatedSeconds: 0,
+    browserCount: 0,
+    profileCount: 0,
+    databaseCount: 0,
+    errorCount: 0,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
   };
 }
 
@@ -285,6 +306,26 @@ export const trackerClient: TrackerApi = {
       unclassifiedSegments: 0,
       aiClassifiedSegments: 0,
       staleClassifications: 0,
+    };
+  },
+  async previewBrowserHistoryImport(query?: BrowserHistoryImportQuery) {
+    if (shouldUsePreviewData()) return emptyBrowserHistoryImportPreview(query);
+    const result = await safeInvoke<BrowserHistoryImportPreview>("tracker_preview_browser_history_import", { query: query ?? {} });
+    return result ?? emptyBrowserHistoryImportPreview(query);
+  },
+  async importBrowserHistory(query?: BrowserHistoryImportQuery) {
+    if (shouldUsePreviewData()) {
+      return {
+        ...emptyBrowserHistoryImportPreview(query),
+        insertedCount: 0,
+        skippedDuplicateCount: 0,
+      };
+    }
+    const result = await safeInvoke<BrowserHistoryImportResult>("tracker_import_browser_history", { query: query ?? {} });
+    return result ?? {
+      ...emptyBrowserHistoryImportPreview(query),
+      insertedCount: 0,
+      skippedDuplicateCount: 0,
     };
   },
   async updateTrayProductivityIcon(mix: ProductivityShareMix) {

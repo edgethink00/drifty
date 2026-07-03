@@ -190,6 +190,30 @@ impl TrackerController {
         )
     }
 
+    pub fn preview_browser_history_import(
+        &self,
+        app: &AppHandle,
+        lookback_days: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "preview_browser_history_import",
+            build_browser_history_import_payload(lookback_days),
+        )
+    }
+
+    pub fn import_browser_history(
+        &self,
+        app: &AppHandle,
+        lookback_days: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "import_browser_history",
+            build_browser_history_import_payload(lookback_days),
+        )
+    }
+
     pub fn get_hourly_summary(
         &self,
         app: &AppHandle,
@@ -295,6 +319,7 @@ impl TrackerController {
         )
     }
 
+    // CLIPPY-ALLOW: this mirrors the Python command payload flags one-to-one.
     #[allow(clippy::too_many_arguments)]
     pub fn delete_history_range(
         &self,
@@ -976,6 +1001,10 @@ fn build_developer_diagnostics_payload(
     })
 }
 
+fn build_browser_history_import_payload(lookback_days: Option<u32>) -> Value {
+    json!({ "lookbackDays": lookback_days.unwrap_or(2).clamp(1, 30) })
+}
+
 fn merged_accessibility_granted(python_granted: bool, native_granted: Option<bool>) -> bool {
     match native_granted {
         Some(value) => value,
@@ -1122,6 +1151,7 @@ fn serve_process_is_stale(
 
 #[cfg(target_os = "macos")]
 fn current_process_accessibility_trusted() -> Option<bool> {
+    // SAFETY: AXIsProcessTrusted is a read-only macOS accessibility trust probe.
     Some(core_foundation_boolean_to_bool(unsafe {
         AXIsProcessTrusted()
     }))
@@ -1264,6 +1294,25 @@ mod tests {
                 "forceFrontmostFallbackCapture": false,
                 "forceBrowserHistoryUrlFallback": true,
             })
+        );
+    }
+
+    #[test]
+    fn browser_history_import_payload_defaults_to_last_48_hours() {
+        let payload = build_browser_history_import_payload(None);
+
+        assert_eq!(payload, json!({ "lookbackDays": 2 }));
+    }
+
+    #[test]
+    fn browser_history_import_payload_clamps_extreme_values() {
+        assert_eq!(
+            build_browser_history_import_payload(Some(0)),
+            json!({ "lookbackDays": 1 })
+        );
+        assert_eq!(
+            build_browser_history_import_payload(Some(365)),
+            json!({ "lookbackDays": 30 })
         );
     }
 

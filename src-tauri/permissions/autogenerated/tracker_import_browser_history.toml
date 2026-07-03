@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-import-browser-history"
+description = "Enables the tracker_import_browser_history command without any pre-configured scope."
+commands.allow = ["tracker_import_browser_history"]
+
+[[permission]]
+identifier = "deny-tracker-import-browser-history"
+description = "Denies the tracker_import_browser_history command without any pre-configured scope."
+commands.deny = ["tracker_import_browser_history"]

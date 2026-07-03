@@ -27,6 +27,8 @@ export type TrackerCommand =
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
+  | "tracker_preview_browser_history_import"
+  | "tracker_import_browser_history"
   | "tray_update_productivity_icon"
   | "tray_update_icon_style"
   | "tray_update_drift_alarm_status";
@@ -189,6 +191,26 @@ export interface ClassificationMetrics {
   staleClassifications: number;
 }
 
+export type BrowserHistoryImportQuery = { readonly lookbackDays?: number };
+
+export interface BrowserHistoryImportPreview {
+  readonly lookbackDays: number;
+  readonly candidateCount: number;
+  readonly segmentCount: number;
+  readonly estimatedSeconds: number;
+  readonly browserCount: number;
+  readonly profileCount: number;
+  readonly databaseCount: number;
+  readonly errorCount: number;
+  readonly windowStart: string;
+  readonly windowEnd: string;
+}
+
+export interface BrowserHistoryImportResult extends BrowserHistoryImportPreview {
+  readonly insertedCount: number;
+  readonly skippedDuplicateCount: number;
+}
+
 export interface ClassificationQuery extends Partial<DateRangeQuery>, Partial<DayQuery> {
   limit?: number;
 }
@@ -247,6 +269,8 @@ export interface TrackerApi {
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
+  previewBrowserHistoryImport(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportPreview>;
+  importBrowserHistory(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportResult>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
   updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;

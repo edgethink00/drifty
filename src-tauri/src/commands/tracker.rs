@@ -72,6 +72,12 @@ pub struct DeveloperDiagnosticsQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BrowserHistoryImportQuery {
+    pub lookback_days: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClassificationQuery {
     pub day: Option<String>,
     pub start: Option<String>,
@@ -324,6 +330,38 @@ pub async fn tracker_set_developer_diagnostics(
                 query.force_frontmost_fallback_capture,
                 query.force_browser_history_url_fallback,
             )
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_preview_browser_history_import(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: Option<BrowserHistoryImportQuery>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .preview_browser_history_import(&app, query.and_then(|value| value.lookback_days))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_import_browser_history(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: Option<BrowserHistoryImportQuery>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .import_browser_history(&app, query.and_then(|value| value.lookback_days))
             .map_err(|error| error.to_string())
     })
     .await
