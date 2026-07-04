@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { MANAGED_LOCAL_AI_FALLBACK_CATALOG, type ManagedLocalAiModel } from "./managedLocalAiCatalog";
+import { MANAGED_LOCAL_AI_FALLBACK_CATALOG, type ManagedLocalAiModel, type ManagedLocalAiModelFit } from "./managedLocalAiCatalog";
 
 export { MANAGED_LOCAL_AI_FALLBACK_CATALOG };
-export type { ManagedLocalAiModel };
+export type { ManagedLocalAiModel, ManagedLocalAiModelFit };
 
 export type ManagedLocalAiInstallState = "not_installed" | "installing" | "installed" | "starting" | "running" | "error";
 
@@ -87,6 +87,8 @@ function parseManagedModel(value: unknown): ManagedLocalAiModel[] {
     minimumMemory: stringValue(value.minimumMemory),
     estimatedRuntimeMemoryBytes: parseMemoryUsageBytes(value.estimatedRuntimeMemoryBytes),
     recommended: value.recommended === true,
+    fit: parseFit(value.fit),
+    fitDetail: nullableString(value.fitDetail),
   }];
 }
 
@@ -136,6 +138,10 @@ function parseProgress(value: unknown): ManagedLocalAiDownloadProgress | null {
 
 function parseErrorKind(value: unknown): ManagedLocalAiStatusErrorKind | null {
   return value === "download_failed" || value === "model_artifact_missing" ? value : null;
+}
+
+function parseFit(value: unknown): ManagedLocalAiModelFit | null {
+  return value === "good" || value === "tight" || value === "insufficient" ? value : null;
 }
 
 function parseTier(value: unknown): ManagedLocalAiModel["tier"] | null {

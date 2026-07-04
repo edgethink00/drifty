@@ -78,6 +78,7 @@ function ManagedLocalAiModelRow({
   const downloadProgressText = managedLocalAiProgressText(downloadProgress);
   const artifactDir = installedModel?.artifactDir ?? null;
   const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
+  const unsupported = model.fit === "insufficient";
   const showInFinderDisabled = busyThisModel || finderOpening || !artifactDir;
 
   const handleShowInFinder = async () => {
@@ -99,15 +100,18 @@ function ManagedLocalAiModelRow({
   };
 
   return (
-    <article className={`ai-managed-model${isSelected ? " is-selected" : ""}`} aria-label={`${model.label} managed local model`}>
+    <article className={`ai-managed-model${isSelected ? " is-selected" : ""}${unsupported ? " is-unsupported" : ""}`} aria-label={`${model.label} managed local model`}>
       <div className="ai-managed-model__copy">
         <strong>{model.label}</strong>
         <p>{model.detail}</p>
+        {model.fitDetail ? <p className="ai-managed-model__fit-note">{model.fitDetail}</p> : null}
       </div>
       <div className="ai-managed-model__meta">
         <div className="ai-managed-model__badges">
           <span className="ai-managed-model__tier">{model.tier}</span>
-          {model.recommended ? <span className="chip green">Recommended</span> : null}
+          {model.recommended ? <span className="chip green">{model.fit ? "Recommended for your Mac" : "Recommended"}</span> : null}
+          {model.fit === "tight" ? <span className="chip gold">May be slow on this Mac</span> : null}
+          {unsupported ? <span className="chip gray">Not enough memory</span> : null}
         </div>
         <dl className="ai-managed-model__facts">
           <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
@@ -141,7 +145,7 @@ function ManagedLocalAiModelRow({
           <button
             type="button"
             className={`settings-btn ai-managed-model__primary-action ai-managed-model__download-action${errorThisModel ? " is-retry" : ""}`}
-            disabled={anyManagedActionRunning}
+            disabled={anyManagedActionRunning || unsupported}
             onClick={() => void onInstallModel(model.id)}
           >
             <ManagedModelActionIcon icon="download" />

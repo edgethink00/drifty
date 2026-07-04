@@ -842,11 +842,13 @@ function LocalModelCard({
 }) {
   const status = flow.managedLocalAi.status;
   const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
+  const unsupported = model.fit === "insufficient";
   const installingThisModel = flow.managedLocalAi.actionModelId === model.id
     || (status?.state === "installing" && status.selectedModelId === model.id);
   const failedThisModel = status?.state === "error" && status.selectedModelId === model.id;
   const ready = localModelIsReady(model.id, status);
-  const disabled = ready
+  const disabled = unsupported
+    || ready
     || (flow.managedLocalAi.loading && status === null)
     || Boolean(flow.managedLocalAi.actionModelId)
     || status?.state === "installing"
@@ -867,17 +869,18 @@ function LocalModelCard({
 
   return (
     <article
-      className={`dc-onb-local-card${selected ? " dc-onb-local-card--selected" : ""}`}
+      className={`dc-onb-local-card${selected ? " dc-onb-local-card--selected" : ""}${unsupported ? " dc-onb-local-card--unsupported" : ""}`}
       aria-label={`${model.label} local AI model`}
     >
       <div className="dc-onb-local-card__copy">
         <div className="dc-onb-local-card__title-line">
           <strong>{model.label}</strong>
           <span className={model.recommended ? "dc-onb-local-card__tier dc-onb-local-card__tier--recommended" : "dc-onb-local-card__tier"}>
-            {model.recommended ? "Recommended" : titleCase(model.tier)}
+            {model.recommended ? (model.fit ? "Recommended for your Mac" : "Recommended") : titleCase(model.tier)}
           </span>
         </div>
         <p>{description}</p>
+        {!ready && model.fitDetail ? <p className="dc-onb-local-card__fit-note">{model.fitDetail}</p> : null}
       </div>
       <dl className="dc-onb-local-card__meta">
         <div>

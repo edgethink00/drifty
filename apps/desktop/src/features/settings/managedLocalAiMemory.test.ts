@@ -13,6 +13,8 @@ const model: ManagedLocalAiModel = {
   minimumMemory: "16 GB RAM",
   estimatedRuntimeMemoryBytes: 3_758_096_384,
   recommended: true,
+  fit: null,
+  fitDetail: null,
 };
 
 function statusWith(overrides: Partial<ManagedLocalAiStatus>): ManagedLocalAiStatus {

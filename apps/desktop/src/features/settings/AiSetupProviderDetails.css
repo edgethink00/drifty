@@ -510,3 +510,15 @@
   text-align: left;
   width: 100%;
 }
+
+.ai-managed-model.is-unsupported {
+  opacity: 0.62;
+}
+
+.ai-managed-model__fit-note {
+  color: color-mix(in srgb, var(--text) 62%, transparent);
+  flex-basis: 100%;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  margin: 0;
+}
