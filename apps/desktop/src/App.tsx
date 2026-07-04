@@ -4816,27 +4816,7 @@ export default function App() {
     setOnboardingOpen(true);
   }
 
-  async function handleStartTracking() {
-    setError(null);
-    try {
-      const nextStatus: TrackerStatus | undefined = await trackerClient.start();
-      await refresh();
-      capturePostHogEvent("tracker_action", {
-        action: "start",
-        result: "success",
-        tracker_mode: toTrackerModeAnalytics(nextStatus?.trackerMode ?? status?.trackerMode),
-        running: nextStatus?.running ?? true,
-      });
-    } catch (e) {
-      setError(toErrorMessage(e));
-      capturePostHogEvent("tracker_action", {
-        action: "start",
-        result: "error",
-        error_kind: toAnalyticsErrorKind(e),
-      });
-    }
-  }
-
+  // Throws on failure (after surfacing the error) so onboarding completion can abort.
   async function handleStartTrackingFromOnboarding() {
     setError(null);
     try {
@@ -4857,6 +4837,14 @@ export default function App() {
         error_kind: toAnalyticsErrorKind(e),
       });
       throw new Error(message);
+    }
+  }
+
+  async function handleStartTracking() {
+    try {
+      await handleStartTrackingFromOnboarding();
+    } catch {
+      // Error already surfaced via setError and analytics.
     }
   }
 
