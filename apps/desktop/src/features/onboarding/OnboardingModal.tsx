@@ -24,7 +24,6 @@ export function OnboardingModal({
   initialDisplayName,
   trackerStatus,
   accessibilityGranted,
-  onRefreshTracker,
   onStartTracking,
   onCheckAccessibility,
   onRequestAccessibility,
@@ -43,7 +42,6 @@ export function OnboardingModal({
   initialDisplayName: string;
   trackerStatus: TrackerStatus | null;
   accessibilityGranted: boolean;
-  onRefreshTracker: () => Promise<void>;
   onStartTracking: () => Promise<void>;
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
@@ -70,7 +68,6 @@ export function OnboardingModal({
     initialDisplayName,
     trackerStatus,
     accessibilityGranted,
-    onRefreshTracker,
     onStartTracking,
     onCheckAccessibility,
     onRequestAccessibility,

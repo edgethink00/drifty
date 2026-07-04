@@ -5,17 +5,12 @@ export type OnboardingStep =
   | "choose_setup"
   | "account"
   | "job"
-  | "data_review"
   | "permissions"
   | "nudges"
   | "ready"
   | "connect_server"
   | "test_connection"
-  | "self_data_review"
-  | "privacy"
-  | "work_profile"
-  | "accessibility"
-  | "notifications";
+  | "self_data_review";
 
 export type OnboardingStepDef = { id: OnboardingStep; label: string };
 export type OnboardingStepsOptions = { readonly skipAccountStep?: boolean };

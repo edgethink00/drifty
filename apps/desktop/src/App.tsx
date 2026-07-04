@@ -5226,7 +5226,6 @@ export default function App() {
       initialDisplayName={profileDraft.displayName}
       trackerStatus={status}
       accessibilityGranted={accessibilityGranted}
-      onRefreshTracker={() => refresh().then(() => undefined)}
       onStartTracking={handleStartTrackingFromOnboarding}
       onCheckAccessibility={handleCheckAccessibility}
       onRequestAccessibility={handleRequestAccessibility}

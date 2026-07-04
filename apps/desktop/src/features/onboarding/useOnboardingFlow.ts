@@ -38,7 +38,6 @@ type UseOnboardingFlowOptions = {
   readonly initialDisplayName: string;
   readonly trackerStatus: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
-  readonly onRefreshTracker: () => Promise<void>;
   readonly onStartTracking: () => Promise<void>;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
@@ -57,7 +56,6 @@ export function useOnboardingFlow({
   initialDisplayName,
   trackerStatus,
   accessibilityGranted: accessibilityGrantedFromApp,
-  onRefreshTracker,
   onStartTracking,
   onCheckAccessibility,
   onRequestAccessibility,
@@ -110,7 +108,6 @@ export function useOnboardingFlow({
     accessibilityGrantedFromApp,
     onCheckAccessibility,
     onEnableDriftAlerts,
-    onRefreshTracker,
     onRequestAccessibility,
     setSetupError,
     step,
@@ -136,11 +133,8 @@ export function useOnboardingFlow({
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
     managedLocalReady: connection.managedLocalReady,
-    notificationsReady: permissions.notificationsReady,
     setupChoice: connection.setupChoice,
     step,
-    workDomain,
-    workType,
   });
   const blockedHint = useMemo(() => blockedHintForStep({
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,

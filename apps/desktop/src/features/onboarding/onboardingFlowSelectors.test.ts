@@ -11,11 +11,8 @@ const baseAdvanceState = {
   isCustomEndpointSetup: false,
   isManagedProviderSetup: false,
   managedLocalReady: false,
-  notificationsReady: false,
   setupChoice: "simple",
   step: "permissions",
-  workDomain: null,
-  workType: null,
 } as const;
 
 describe("onboardingFlowSelectors", () => {
@@ -30,13 +27,6 @@ describe("onboardingFlowSelectors", () => {
       accessibilityRecheckPending: true,
     })).toBe(false);
     expect(canAdvanceOnboarding(baseAdvanceState)).toBe(true);
-  });
-
-  it("keeps Notifications recommended rather than required on the permissions step", () => {
-    expect(canAdvanceOnboarding({
-      ...baseAdvanceState,
-      notificationsReady: false,
-    })).toBe(true);
   });
 
   it("explains the permissions block with the Accessibility hint", () => {

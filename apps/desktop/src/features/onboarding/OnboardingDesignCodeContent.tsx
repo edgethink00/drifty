@@ -1234,12 +1234,6 @@ function titleForDesignCodeStep(flow: OnboardingFlow): string {
       return "How your data is handled";
     case "ready":
       return flow.setupChoice === "simple" && flow.accountConnected ? "You're ready to go" : "You're ready to start";
-    case "data_review":
-    case "privacy":
-    case "work_profile":
-    case "accessibility":
-    case "notifications":
-      return flow.title;
   }
 }
 

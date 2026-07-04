@@ -10,11 +10,8 @@ export function canAdvanceOnboarding({
   isCustomEndpointSetup,
   isManagedProviderSetup,
   managedLocalReady,
-  notificationsReady,
   setupChoice,
   step,
-  workDomain,
-  workType,
 }: {
   readonly accessibilityReady: boolean;
   readonly accessibilityRecheckPending: boolean;
@@ -25,11 +22,8 @@ export function canAdvanceOnboarding({
   readonly isCustomEndpointSetup: boolean;
   readonly isManagedProviderSetup: boolean;
   readonly managedLocalReady: boolean;
-  readonly notificationsReady: boolean;
   readonly setupChoice: SetupChoice | null;
   readonly step: OnboardingStep;
-  readonly workDomain: string | null;
-  readonly workType: string | null;
 }): boolean {
   switch (step) {
     case "welcome":
@@ -39,11 +33,9 @@ export function canAdvanceOnboarding({
     case "account":
       return accountConnected;
     case "job":
-    case "data_review":
     case "self_data_review":
     case "nudges":
     case "ready":
-    case "privacy":
       return true;
     case "permissions":
       return accessibilityReady && !accessibilityRecheckPending;
@@ -54,12 +46,6 @@ export function canAdvanceOnboarding({
       return false;
     case "test_connection":
       return connectionPhase === "success";
-    case "work_profile":
-      return Boolean(workType) && Boolean(workDomain);
-    case "accessibility":
-      return accessibilityReady && !accessibilityRecheckPending;
-    case "notifications":
-      return notificationsReady;
   }
 }
 
@@ -99,12 +85,9 @@ export function blockedHintForStep({
     case "test_connection":
       if (connectionPhase === "failed") return "Connection failed. Try again or edit your details.";
       return "Checking your connection.";
-    case "accessibility":
     case "permissions":
       if (accessibilityRecheckPending) return "Checking Accessibility access.";
       return "Enable Accessibility to continue.";
-    case "notifications":
-      return "Allow Notifications to finish setup.";
     default:
       return null;
   }
@@ -134,8 +117,6 @@ export function titleForStep({
       return "Connect your account";
     case "job":
       return "What do you usually do?";
-    case "data_review":
-      return "Review your data settings";
     case "connect_server":
       return isByokSetup
         ? "Add your OpenRouter key"
@@ -156,14 +137,6 @@ export function titleForStep({
       return "Set up drift alerts";
     case "ready":
       return setupChoice === "simple" && accountConnected ? "You're ready to go" : "You're ready to start";
-    case "privacy":
-      return "What Drifty records";
-    case "work_profile":
-      return "Tell us about your work";
-    case "accessibility":
-      return "Enable Accessibility";
-    case "notifications":
-      return "Allow notifications";
   }
 }
 

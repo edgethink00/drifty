@@ -140,17 +140,12 @@ function parseOnboardingStep(value: unknown): OnboardingStep | null {
     case "choose_setup":
     case "account":
     case "job":
-    case "data_review":
     case "permissions":
     case "nudges":
     case "ready":
     case "connect_server":
     case "test_connection":
     case "self_data_review":
-    case "privacy":
-    case "work_profile":
-    case "accessibility":
-    case "notifications":
       return value;
     default:
       return null;

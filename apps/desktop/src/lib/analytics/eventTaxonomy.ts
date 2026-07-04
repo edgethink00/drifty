@@ -36,17 +36,12 @@ export const ONBOARDING_STEPS = [
   "choose_setup",
   "account",
   "job",
-  "data_review",
   "permissions",
   "nudges",
   "ready",
   "connect_server",
   "test_connection",
   "self_data_review",
-  "privacy",
-  "work_profile",
-  "accessibility",
-  "notifications",
 ] as const;
 export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] as const;
 export const PERMISSIONS = ["accessibility", "notifications"] as const;
