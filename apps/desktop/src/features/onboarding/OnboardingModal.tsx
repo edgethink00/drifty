@@ -80,15 +80,6 @@ export function OnboardingModal({
     devInitialStep: __devInitialStep,
   });
 
-  useEffect(() => {
-    if (flow.step !== "account" || !flow.accountConnected) return;
-    const timeoutId = window.setTimeout(() => {
-      const nextStep = flow.steps[flow.stepIndex + 1]?.id;
-      if (nextStep) flow.setStep(nextStep);
-    }, 850);
-    return () => window.clearTimeout(timeoutId);
-  }, [flow.accountConnected, flow.step, flow.stepIndex, flow.steps, flow.setStep]);
-
   return (
     <section
       ref={flow.screenRef}

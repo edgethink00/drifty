@@ -32,6 +32,9 @@ import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
+// Long enough for the "Account connected" success state to register before moving on.
+const ACCOUNT_CONNECTED_ADVANCE_MS = 1200;
+
 type UseOnboardingFlowOptions = {
   readonly userId: string;
   readonly accountConnected: boolean;
@@ -180,6 +183,17 @@ export function useOnboardingFlow({
   useEffect(() => {
     capturePostHogEvent("onboarding_step_viewed", { step });
   }, [step]);
+
+  // Once the account is connected, hold on the visible success state briefly,
+  // then advance on its own — the account step renders no Continue button.
+  useEffect(() => {
+    if (step !== "account" || !accountConnected) return;
+    const timeoutId = window.setTimeout(() => {
+      const nextStep = steps[stepIndex + 1]?.id;
+      if (nextStep) setStep(nextStep);
+    }, ACCOUNT_CONNECTED_ADVANCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [accountConnected, step, stepIndex, steps]);
 
   useEffect(() => {
     if (!progressEnabled) return;

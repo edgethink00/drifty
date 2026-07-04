@@ -357,7 +357,8 @@ function selectWorkDomain(option: string) {
 
 async function waitForConnectedAccountAutoAdvance() {
   await screen.findByRole("dialog", { name: /connect your account/i }, { timeout: 6_000 });
-  expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+  expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull();
   expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
   await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 });
 }
@@ -521,10 +522,10 @@ describe("App onboarding", () => {
 
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /what do you usually work on\?/i })).toBeTruthy();
     expect(screen.getByLabelText(/search activities/i, { selector: "input" })).toBeTruthy();
     const onboardingDragStrip = document.querySelector(".onboarding-window-drag-strip");
@@ -600,7 +601,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
     expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
   });
@@ -725,11 +726,11 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
   });
 
   it("treats an email-less non-anonymous account as connected", async () => {
@@ -742,9 +743,9 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /account connected/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
   });
 
   it("waits for profile loading to settle before showing onboarding", async () => {

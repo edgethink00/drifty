@@ -1,4 +1,5 @@
 import { GoogleMark } from "../GoogleMark";
+import { SuccessIcon } from "./shared";
 
 export function AccountStep({
   accountConnected,
@@ -15,36 +16,35 @@ export function AccountStep({
       <p className="dc-onb-account__copy">
         Your account keeps focus and drift insights synced across your devices.
       </p>
-      <div className="dc-onb-account__buttons">
-        <button
-          type="button"
-          className="dc-onb-account__google"
-          onClick={onStartCloudTrialWithGoogle}
-          disabled={accountConnected}
-        >
-          {accountConnected ? (
-            <span>Account connected</span>
-          ) : (
-            <>
-              <GoogleMark />
-              <span>Continue with Google</span>
-            </>
-          )}
-        </button>
-        <div className="dc-onb-divider" aria-hidden="true">
-          <span />
-          or
-          <span />
+      {accountConnected ? (
+        <div className="dc-onb-account__connected" role="status">
+          <SuccessIcon />
+          <span>Account connected</span>
         </div>
-        <button
-          type="button"
-          className="dc-onb-account__email"
-          onClick={onStartCloudTrialWithEmail}
-          disabled={accountConnected}
-        >
-          {accountConnected ? "Signed in" : "Continue with email"}
-        </button>
-      </div>
+      ) : (
+        <div className="dc-onb-account__buttons">
+          <button
+            type="button"
+            className="dc-onb-account__google"
+            onClick={onStartCloudTrialWithGoogle}
+          >
+            <GoogleMark />
+            <span>Continue with Google</span>
+          </button>
+          <div className="dc-onb-divider" aria-hidden="true">
+            <span />
+            or
+            <span />
+          </div>
+          <button
+            type="button"
+            className="dc-onb-account__email"
+            onClick={onStartCloudTrialWithEmail}
+          >
+            Continue with email
+          </button>
+        </div>
+      )}
       <p className="dc-onb-account__helper">
         Drifty never shares your activity data with teammates unless you choose to join a team or share a report.
       </p>
