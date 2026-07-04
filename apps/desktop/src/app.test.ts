@@ -7,6 +7,7 @@ import {
   buildDailyTotals,
   buildHourlyBuckets,
   buildEffectiveProductivityDurations,
+  buildProductivityDurations,
   buildProductivityPersona,
   computePreservedFocusStrikeSeconds,
   DRIFTY_PRODUCTIVITY_RUBRIC_VERSION,
@@ -204,6 +205,25 @@ describe('domain helpers', () => {
     expect(sites[0].siteDomain).toBe('tauri.app');
     expect(blocks).toHaveLength(6);
     expect(blocks[0].siteDomain).toBe('tauri.app');
+  });
+
+  it('keeps unclassified segments out of productivity buckets while ratios stay anchored to tracked time', () => {
+    const mixedSegments = [
+      classifiedSegment({ id: 'known-focus', startHour: 9, startMinute: 0, durationMinutes: 30, appName: 'Code', category: 'workspace', productivity: 'focus' }),
+      classifiedSegment({ id: 'known-neutral', startHour: 9, startMinute: 30, durationMinutes: 15, appName: 'Spotify', category: 'music', productivity: 'neutral' }),
+      classifiedSegment({ id: 'stored-unknown', startHour: 9, startMinute: 45, durationMinutes: 15, appName: 'Notion', category: 'unknown', productivity: 'neutral' }),
+      segment({ id: 'pending-unknown', start: localIso(10, 0), end: localIso(10, 15), appName: 'SomeUnmappedApp' }),
+    ];
+
+    expect(effectiveProductivityDuration(mixedSegments, 'focus')).toBe(30 * 60);
+    expect(effectiveProductivityDuration(mixedSegments, 'neutral')).toBe(15 * 60);
+    expect(effectiveProductivityDuration(mixedSegments, 'drift')).toBe(0);
+
+    const directTotals = buildProductivityDurations(mixedSegments);
+    expect(directTotals.find((entry) => entry.productivity === 'neutral')?.totalSeconds).toBe(15 * 60);
+    // The unclassified 30 minutes stay out of every bucket and out of the
+    // ratio denominator: charts describe the 45 classified minutes only.
+    expect(directTotals.find((entry) => entry.productivity === 'focus')?.ratio).toBeCloseTo((30 * 60) / (45 * 60));
   });
 
   it('folds contextual communication productivity into the three user-facing labels', () => {

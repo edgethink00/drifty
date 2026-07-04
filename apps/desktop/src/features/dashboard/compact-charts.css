@@ -229,3 +229,11 @@
   }
 
 }
+
+.flow-compact-productivity-circle__note {
+  color: var(--text-muted, color-mix(in srgb, var(--text) 55%, var(--surface)));
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  margin-top: 0.35rem;
+}

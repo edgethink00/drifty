@@ -946,19 +946,23 @@ export function buildProductivityDurations(segments: ActivitySegment[], options?
     segments: 0,
     ratio: 0,
   }));
-  const totalSeconds = totalDurationSeconds(segments);
 
   for (const segment of segments) {
-    const { productivity } = classifyActivity(segment, options);
+    const { category, productivity } = classifyActivity(segment, options);
+    // Unclassified time (pending AI, blank screens, LLM unknown) is not a
+    // productivity verdict; keep it out of the buckets and the ratio
+    // denominator so charts describe classified time only.
+    if (category === "unknown") continue;
     const target = totals.find((entry) => entry.productivity === productivity);
     if (!target) continue;
     target.totalSeconds += segment.durationSeconds;
     target.segments += 1;
   }
 
+  const classifiedSeconds = totals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
   return totals.map((entry) => ({
     ...entry,
-    ratio: totalSeconds > 0 ? entry.totalSeconds / totalSeconds : 0,
+    ratio: classifiedSeconds > 0 ? entry.totalSeconds / classifiedSeconds : 0,
   }));
 }
 
@@ -970,10 +974,10 @@ export function buildEffectiveProductivityDurations(segments: ActivitySegment[],
     ratio: 0,
   }));
   const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
-  const totalSeconds = totalDurationSeconds(segments);
 
   for (const segment of segments) {
     const classification = classifyActivityDetailed(segment, options);
+    if (classification.category === "unknown") continue;
     const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
     const target = totals.find((entry) => entry.productivity === effectiveProductivity.productivity);
     if (!target) continue;
@@ -981,9 +985,10 @@ export function buildEffectiveProductivityDurations(segments: ActivitySegment[],
     target.segments += 1;
   }
 
+  const classifiedSeconds = totals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
   return totals.map((entry) => ({
     ...entry,
-    ratio: totalSeconds > 0 ? entry.totalSeconds / totalSeconds : 0,
+    ratio: classifiedSeconds > 0 ? entry.totalSeconds / classifiedSeconds : 0,
   }));
 }
 
@@ -1150,6 +1155,7 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
   let focusSeconds = 0;
   let neutralSeconds = 0;
   let driftSeconds = 0;
+  let unclassifiedSeconds = 0;
   let focusSegments = 0;
   let driftSegments = 0;
   let communicationSeconds = 0;
@@ -1195,8 +1201,10 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
     } else if (classification.productivity === "drift") {
       driftSeconds += durationSeconds;
       driftSegments += 1;
-    } else {
+    } else if (classification.category !== "unknown") {
       neutralSeconds += durationSeconds;
+    } else {
+      unclassifiedSeconds += durationSeconds;
     }
 
     if (classification.category === "communication") {
@@ -1205,17 +1213,20 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
   }
 
   const totalSeconds = totalDurationSeconds(segments);
+  // Productivity shares describe classified time only; unclassified time
+  // (pending AI, blank screens) must not dilute focus/neutral/drift ratios.
+  const classifiedSeconds = totalSeconds - unclassifiedSeconds;
   const topSurfaceSeconds = Math.max(0, ...surfaceTotals.values());
   const totalHours = totalSeconds / 3600;
 
   return {
     totalSeconds,
     focusSeconds,
-    focusShare: totalSeconds > 0 ? focusSeconds / totalSeconds : 0,
+    focusShare: classifiedSeconds > 0 ? focusSeconds / classifiedSeconds : 0,
     neutralSeconds,
-    neutralShare: totalSeconds > 0 ? neutralSeconds / totalSeconds : 0,
+    neutralShare: classifiedSeconds > 0 ? neutralSeconds / classifiedSeconds : 0,
     driftSeconds,
-    driftShare: totalSeconds > 0 ? driftSeconds / totalSeconds : 0,
+    driftShare: classifiedSeconds > 0 ? driftSeconds / classifiedSeconds : 0,
     focusAverageSegmentSeconds: focusSegments > 0 ? focusSeconds / focusSegments : 0,
     driftAverageSegmentSeconds: driftSegments > 0 ? driftSeconds / driftSegments : 0,
     contextSwitches,

@@ -33,7 +33,12 @@ export function CompactProductivityCircleChart({
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;
   const focusEntry = entries.find((entry) => entry.productivity === "focus");
   const focusSeconds = focusEntry?.totalSeconds ?? 0;
-  const focusPercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
+  // Entries carry classified time only; the remainder up to totalSeconds is
+  // unclassified (pending AI, blank screens) and stays out of the percent.
+  const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const unclassifiedSeconds = Math.max(0, totalSeconds - classifiedSeconds);
+  const hasPendingClassification = flowBlocks.some((block) => block.category === "unknown" && block.classificationSource === "unknown");
+  const focusPercent = classifiedSeconds > 0 ? Math.round((focusSeconds / classifiedSeconds) * 100) : 0;
   const circleLabel = formatCompactBarLabel("Productivity", entries, (entry) => productivityLabel(entry.productivity));
   const gap = activeEntries.length > 1 ? 1.6 : 0;
   const circleSegments = buildDonutArcSegments(activeEntries, (entry) => entry.ratio, 50, 50, 40, gap / DONUT_CIRCUMFERENCE);
@@ -42,7 +47,7 @@ export function CompactProductivityCircleChart({
     setHoveredSegment({
       label: productivityLabel(entry.productivity),
       durationLabel: formatCompactDurationFromSeconds(entry.totalSeconds),
-      shareLabel: `${Math.round(entry.ratio * 100)}%`,
+      shareLabel: `${classifiedSeconds > 0 ? Math.round((entry.totalSeconds / classifiedSeconds) * 100) : 0}%`,
       dotClassName: `productivity-dot--${entry.productivity}`,
       color: PRODUCTIVITY_COLORS[entry.productivity],
       appBreakdown: buildCompactClassificationBreakdown(flowBlocks, (block) => block.productivity === entry.productivity),
@@ -87,6 +92,11 @@ export function CompactProductivityCircleChart({
           ))}
         </div>
       </div>
+      {unclassifiedSeconds >= 60 ? (
+        <div className="flow-compact-productivity-circle__note">
+          {formatCompactDurationFromSeconds(unclassifiedSeconds)} {hasPendingClassification ? "classifying…" : "unclassified"}
+        </div>
+      ) : null}
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
     </div>
   );

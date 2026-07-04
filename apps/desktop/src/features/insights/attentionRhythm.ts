@@ -183,7 +183,8 @@ export function buildAttentionRhythm(
   const cutoffDay = visibleThroughDay(visibility);
 
   for (const segment of segments) {
-    const { productivity } = classifyActivity(segment, options);
+    const { category, productivity } = classifyActivity(segment, options);
+    if (category === "unknown") continue;
     const grid = totals[productivity];
     for (const overlap of segmentHourOverlaps(segment, cutoffDay)) {
       addToGrid(grid, overlap);
