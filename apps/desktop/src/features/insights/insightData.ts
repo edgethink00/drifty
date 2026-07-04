@@ -108,7 +108,7 @@ export function buildWeeklyBreakdown(
     const { category, productivity } = classifyActivity(segment, options);
     if (productivity === "focus") focus[index] += seconds;
     else if (productivity === "drift") drift[index] += seconds;
-    else neutral[index] += seconds;
+    else if (category !== "unknown") neutral[index] += seconds;
     categories[index].set(category, (categories[index].get(category) ?? 0) + seconds);
     dates[index].add(localDateKey(started));
   }

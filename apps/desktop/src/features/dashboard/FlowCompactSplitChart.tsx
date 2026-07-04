@@ -25,7 +25,13 @@ export function FlowCompactSplitChart({
   const activeCategoryEntries = categoryEntries
     .filter((entry) => entry.totalSeconds > 0)
     .slice()
-    .sort((left, right) => right.totalSeconds - left.totalSeconds);
+    .sort((left, right) => {
+      // Unclassified is bookkeeping, not a real category: keep it last.
+      if ((left.category === "unknown") !== (right.category === "unknown")) {
+        return left.category === "unknown" ? 1 : -1;
+      }
+      return right.totalSeconds - left.totalSeconds;
+    });
 
   return (
     <section className="flow-compact-split-chart" aria-label="Compact flow classification chart">

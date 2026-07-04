@@ -32,7 +32,7 @@ export function categoryLabel(category: CategoryDuration["category"]) {
     case "entertainment": return "Entertainment";
     case "shopping": return "Shopping";
     case "utility": return "Utility";
-    case "unknown": return "Unknown";
+    case "unknown": return "Unclassified";
   }
 }
 
