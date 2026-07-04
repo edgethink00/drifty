@@ -93,7 +93,7 @@
   height: 60px;
   transform-origin: 50% 50%;
   filter: drop-shadow(0 8px 18px rgba(244, 132, 95, 0.28));
-  animation: firstDayPrepFlip 3.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  animation: firstDayPrepFlip 4.16s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
 /* ---- Copy ---- */

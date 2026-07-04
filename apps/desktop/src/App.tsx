@@ -62,7 +62,7 @@ import {
   aiConnectionIssueKindFromMessage,
 } from "./features/ai-connection/aiConnectionHealth";
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary, type ClassificationLevel } from "./features/classification/aiClassificationService";
 import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -309,9 +309,17 @@ const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = 2;
 const FIRST_DAY_PREPARATION_MAX_MS = 300 * 1000; // ultimate "never trap the user" backstop
 const FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES = 80;
 const FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE = 10; // small batches so each call finishes fast on slow local models
-const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 45 * 1000; // per-batch: treat as hung if a single batch takes this long
+const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 75 * 1000; // per-batch hang cutoff — generous so a slow-but-working local model (4B) isn't killed mid-batch
 const FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT = 4; // give up only after this many consecutive no-save batches
-const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [-1, -2] as const;
+// Onboarding classifies at "normal" granularity (one AI call per domain+title signature,
+// fanned out to matching segments) — ~fine accuracy at meaningfully fewer AI calls.
+const FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL: ClassificationLevel = "normal";
+// Just after the logical day rolls over (start-of-day, e.g. 4am) "today" is nearly
+// empty, so the gate completes the most recent logical day that actually has data.
+const FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS = 15;
+// Offset 0 re-runs the revealed target day to mop up anything the (time-capped)
+// foreground gate left unclassified; -1/-2 cover the rest of the imported window.
+const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [0, -1, -2] as const;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -4729,8 +4737,22 @@ export default function App() {
     const runClassificationForDay = (day: string) => {
       const query = toClassificationQueryForDay(day);
       return localAiClassificationOptions
-        ? runAiClassificationUntilEmpty(query, undefined, localAiClassificationOptions)
-        : runAiClassificationUntilEmpty(query);
+        ? runAiClassificationUntilEmpty(query, undefined, { ...localAiClassificationOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
+        : runAiClassificationUntilEmpty(query, undefined, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
+    };
+
+    // The most recent logical day (today, then yesterday, then the day before) that has
+    // enough segments to be worth completing before reveal.
+    const resolveFirstDayTargetDay = async (logicalToday: string): Promise<string> => {
+      for (const day of [logicalToday, shiftIsoDate(logicalToday, -1), shiftIsoDate(logicalToday, -2)]) {
+        try {
+          const metrics = await trackerClient.getClassificationMetrics(toClassificationQueryForDay(day));
+          if (metrics.totalSegments >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS) return day;
+        } catch {
+          // best-effort; fall through to the next candidate
+        }
+      }
+      return logicalToday;
     };
 
     // Classify a single day one batch at a time so the loading screen can report
@@ -4761,14 +4783,18 @@ export default function App() {
         // going until nothing is left or several no-progress batches in a row.
         const summary = await firstDayPreparationRaceTimeout(
           localAiClassificationOptions
-            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, localAiClassificationOptions)
-            : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE),
+            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...localAiClassificationOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
+            : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL }),
           FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS,
           batchTimeoutSummary,
         );
         await reportProgress();
-        if (summary.selectedSegments === 0 || summary.status === "disabled") break; // nothing left / AI off
-        if (summary.savedRecords > 0) {
+        if (summary.status === "disabled") break; // AI off
+        // A timed-out batch returns the fabricated `batchTimeoutSummary` (selectedSegments: 0).
+        // Do NOT treat that as "nothing left" — only a real empty result ends the loop.
+        const timedOut = summary === batchTimeoutSummary;
+        if (!timedOut && summary.selectedSegments === 0) break; // genuinely nothing left
+        if (!timedOut && summary.savedRecords > 0) {
           consecutiveNoProgress = 0;
           continue;
         }
@@ -4780,7 +4806,7 @@ export default function App() {
     };
 
     void (async () => {
-      const today = logicalTodayIsoDate(startOfDayMinutes);
+      let today = logicalTodayIsoDate(startOfDayMinutes);
       const aiAvailable = Boolean(localAiClassificationOptions) || canUseCloudAiClassification;
       try {
         if (!shouldBlockLocalTrackerAccess) {
@@ -4791,7 +4817,11 @@ export default function App() {
             await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
             clearLocalActivityCaches();
           }
-          // refresh() materializes and persists today's built-in heuristic classifications,
+          // Complete + reveal the most recent logical day that has data, and open the
+          // dashboard there — right after the day rolls over "today" is often empty.
+          today = await resolveFirstDayTargetDay(today);
+          selectDay(today);
+          // refresh() materializes and persists the day's built-in heuristic classifications,
           // so nothing renders as bare "unclassified" even before AI runs.
           await refresh(today, { foreground: true });
 
