@@ -18,14 +18,14 @@ MAX_IMPORT_VISITS_PER_PROFILE: Final = 5_000
 VALID_URL_SCHEMES: Final = frozenset({"http", "https"})
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryImportRequest:
     lookback_days: int
     observed_at: datetime
     profile_roots: Mapping[str, Path] | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryImportVisit:
     import_key: str
     url: str
@@ -41,14 +41,14 @@ class BrowserHistoryImportVisit:
     youtube_is_shorts: bool | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class HistoryVisitReadOutcome:
     visits: tuple[BrowserHistoryImportVisit, ...]
     errors: tuple[str, ...]
     database_count: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryImportPreview:
     lookback_days: int
     candidate_count: int
@@ -76,7 +76,7 @@ class BrowserHistoryImportPreview:
         }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryImportResult:
     preview: BrowserHistoryImportPreview
     inserted_count: int
