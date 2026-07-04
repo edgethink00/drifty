@@ -10,7 +10,7 @@ const baseAdvanceState = {
   customEndpointIsValid: false,
   isCustomEndpointSetup: false,
   isManagedProviderSetup: false,
-  managedLocalStarted: false,
+  managedLocalReady: false,
   notificationsReady: false,
   setupChoice: "simple",
   step: "permissions",
@@ -48,6 +48,7 @@ describe("onboardingFlowSelectors", () => {
       customEndpointModelIssue: null,
       isCustomEndpointSetup: false,
       isManagedProviderSetup: false,
+      managedLocalStarted: false,
       step: "permissions",
     })).toBe("Enable Accessibility to continue.");
   });

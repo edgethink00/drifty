@@ -1,4 +1,4 @@
-import { buildRollingFocusSeconds } from "@drifty/domain";
+import { buildRollingFocusSeconds, isBrowserHistoryImportSegment } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
@@ -41,11 +41,14 @@ export type PublishLeaderboardPeriodsResult = LeaderboardResult<LeaderboardPubli
 
 export async function buildLeaderboardPublishPayloads(input: Omit<PublishLeaderboardPeriodsInput, "mode">): Promise<LeaderboardPublishPayloads> {
   const allPeriodWindowStartDay = getLeaderboardWindowStartDay(input.leaderboardWindowEndDay, "monthly");
-  const allPeriodSegments = await trackerClient.getTimeline(getLogicalDayRange(
+  const fetchedSegments = await trackerClient.getTimeline(getLogicalDayRange(
     allPeriodWindowStartDay,
     input.leaderboardWindowEndDay,
     input.startOfDayMinutes,
   ));
+  // Imported (estimated) browser-history segments stay local-only; never publish them
+  // to the shared leaderboard totals.
+  const allPeriodSegments = fetchedSegments.filter((segment) => !isBrowserHistoryImportSegment(segment));
 
   return {
     segmentCount: allPeriodSegments.length,

@@ -84,6 +84,32 @@ describe("leaderboardPublisher", () => {
     expect(result.payloads[0]?.payloadKey).not.toContain("siteTitle");
   });
 
+  it("excludes browser history import estimates from published focus totals", async () => {
+    const today = todayIsoDate();
+    getTimeline.mockResolvedValue([
+      makeSegment(today, 3600),
+      {
+        ...makeSegment(today, 1800),
+        id: `${today}-imported`,
+        source: "browser-history-import",
+        siteSource: "browser-history-import",
+      },
+    ]);
+
+    const result = await buildLeaderboardPublishPayloads({
+      profileDisplayName: "Alex",
+      leaderboardWindowEndDay: today,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+    });
+
+    expect(result.segmentCount).toBe(1);
+    for (const payload of result.payloads) {
+      expect(payload.focusSeconds).toBe(3600);
+    }
+  });
+
   it("publishes auto aggregates without updating profiles", async () => {
     const today = todayIsoDate();
     getTimeline.mockResolvedValue([makeSegment(today, 3600)]);

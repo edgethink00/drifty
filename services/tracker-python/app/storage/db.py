@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 
+BROWSER_HISTORY_IMPORT_SOURCE = "browser-history-import"
 VALID_RULE_TARGET_KINDS = {"app", "site"}
 VALID_RULE_MATCH_SCOPES = {"surface", "detail"}
 VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", "siteUrl"}
@@ -45,17 +46,46 @@ BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]],
 BrowserHistoryTitlePolicy = Callable[[Optional[str]], bool]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BrowserHistoryBackfillConfig:
     observed_at: str
     max_age_seconds: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BrowserHistoryBackfillResult:
     segment_id: int
     site_url: str | None
     youtube_video_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ImportedActivitySegment:
+    import_key: str
+    started_at: str
+    ended_at: str
+    duration_seconds: int
+    app_name: str
+    bundle_id: str | None
+    window_title: str | None
+    site_domain: str | None
+    site_title: str | None
+    site_url: str | None
+    youtube_video_id: str | None
+    youtube_playlist_id: str | None
+    youtube_is_shorts: int | None
+    browser_name: str | None
+    site_source: str
+    platform: str
+    source: str
+    confidence: float
+    raw_context_json: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportedActivityInsertResult:
+    inserted_count: int
+    skipped_duplicate_count: int
 
 
 class TrackerDatabase:
@@ -107,6 +137,12 @@ class TrackerDatabase:
                 CREATE TABLE IF NOT EXISTS tracker_meta (
                   key TEXT PRIMARY KEY,
                   value TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS browser_history_import_keys (
+                  import_key TEXT PRIMARY KEY,
+                  segment_id INTEGER REFERENCES activity_segments(id) ON DELETE SET NULL,
+                  imported_at TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS youtube_video_metadata (
@@ -586,12 +622,16 @@ class TrackerDatabase:
 
     def trim_latest_segment(self, ended_at: str) -> None:
         with self.connect() as conn:
+            # Imported history segments describe the past, not the live session;
+            # idle/power trims must never truncate or delete them.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
+                WHERE source != ?
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
-                """
+                """,
+                (BROWSER_HISTORY_IMPORT_SOURCE,),
             ).fetchone()
             if not last:
                 return
@@ -662,6 +702,108 @@ class TrackerDatabase:
                     segment.get("raw_context_json"),
                 ),
             )
+
+    def insert_imported_activity_segments(
+        self,
+        segments: list[ImportedActivitySegment],
+        imported_at: str,
+    ) -> ImportedActivityInsertResult:
+        inserted_count = 0
+        skipped_duplicate_count = 0
+        with self.connect() as conn:
+            for segment in segments:
+                # A re-run can regroup visits into a session with a new import key
+                # (e.g. the session gained a visit), and imports can cover time the
+                # live tracker already recorded. Skip any segment whose
+                # [started_at, ended_at) range overlaps an existing segment so
+                # imported time is never double-counted.
+                overlapping = conn.execute(
+                    """
+                    SELECT 1 FROM activity_segments
+                    WHERE datetime(started_at) < datetime(?)
+                      AND datetime(ended_at) > datetime(?)
+                    LIMIT 1
+                    """,
+                    (
+                        self._normalize_range_bound(segment.ended_at),
+                        self._normalize_range_bound(segment.started_at),
+                    ),
+                ).fetchone()
+                if overlapping is not None:
+                    skipped_duplicate_count += 1
+                    continue
+
+                key_cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO browser_history_import_keys (
+                        import_key,
+                        segment_id,
+                        imported_at
+                    ) VALUES (?, NULL, ?)
+                    """,
+                    (segment.import_key, imported_at),
+                )
+                if key_cursor.rowcount == 0:
+                    skipped_duplicate_count += 1
+                    continue
+
+                segment_cursor = conn.execute(
+                    """
+                    INSERT INTO activity_segments (
+                        started_at,
+                        ended_at,
+                        duration_seconds,
+                        app_name,
+                        bundle_id,
+                        window_title,
+                        site_domain,
+                        site_title,
+                        site_url,
+                        youtube_video_id,
+                        youtube_playlist_id,
+                        youtube_is_shorts,
+                        browser_name,
+                        site_source,
+                        platform,
+                        source,
+                        confidence,
+                        raw_context_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        segment.started_at,
+                        segment.ended_at,
+                        segment.duration_seconds,
+                        segment.app_name,
+                        segment.bundle_id,
+                        segment.window_title,
+                        segment.site_domain,
+                        segment.site_title,
+                        segment.site_url,
+                        segment.youtube_video_id,
+                        segment.youtube_playlist_id,
+                        segment.youtube_is_shorts,
+                        segment.browser_name,
+                        segment.site_source,
+                        segment.platform,
+                        segment.source,
+                        segment.confidence,
+                        segment.raw_context_json,
+                    ),
+                )
+                conn.execute(
+                    """
+                    UPDATE browser_history_import_keys
+                    SET segment_id = ?
+                    WHERE import_key = ?
+                    """,
+                    (segment_cursor.lastrowid, segment.import_key),
+                )
+                inserted_count += 1
+        return ImportedActivityInsertResult(
+            inserted_count=inserted_count,
+            skipped_duplicate_count=skipped_duplicate_count,
+        )
 
     @staticmethod
     def _normalize_range_bound(value: str) -> str:

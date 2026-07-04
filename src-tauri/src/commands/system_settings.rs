@@ -23,6 +23,7 @@ extern "C" {
 pub enum SystemSettingsPane {
     Accessibility,
     Notifications,
+    FullDiskAccess,
 }
 
 impl SystemSettingsPane {
@@ -31,6 +32,10 @@ impl SystemSettingsPane {
             Self::Accessibility => &[
                 "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            ],
+            Self::FullDiskAccess => &[
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
             ],
             Self::Notifications => &[
                 "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=so.drifty.mac",

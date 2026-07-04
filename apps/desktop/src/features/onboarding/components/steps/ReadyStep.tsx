@@ -1,8 +1,10 @@
 import type { CloudTrialStartedNoticeModel } from "../../../billing/CloudTrialStartedNotice";
+import { BrowserHistoryBootstrapPreference } from "../BrowserHistoryBootstrapPreference";
 import { StartupLoginPreference } from "../StartupLoginPreference";
 import type { SetupChoice } from "../../onboardingFlow";
 
 type ReadyStepProps = {
+  readonly browserHistoryBootstrapEnabled: boolean;
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   readonly localAiSummaryLabel: string;
   readonly openAtLoginEnabled: boolean;
@@ -11,10 +13,12 @@ type ReadyStepProps = {
   readonly userManagedConnectionLabel: string;
   readonly userManagedSetupLabel: string;
   readonly isUserManagedProviderSetup: boolean;
+  readonly onBrowserHistoryBootstrapChange: (enabled: boolean) => void;
   readonly onOpenAtLoginChange: (enabled: boolean) => void;
 };
 
 export function ReadyStep({
+  browserHistoryBootstrapEnabled,
   cloudTrialStartedNotice,
   isUserManagedProviderSetup,
   localAiSummaryLabel,
@@ -23,6 +27,7 @@ export function ReadyStep({
   setupChoice,
   userManagedConnectionLabel,
   userManagedSetupLabel,
+  onBrowserHistoryBootstrapChange,
   onOpenAtLoginChange,
 }: ReadyStepProps) {
   return (
@@ -83,6 +88,10 @@ export function ReadyStep({
         </ul>
       )}
       <StartupLoginPreference enabled={openAtLoginEnabled} onChange={onOpenAtLoginChange} />
+      <BrowserHistoryBootstrapPreference
+        enabled={browserHistoryBootstrapEnabled}
+        onChange={onBrowserHistoryBootstrapChange}
+      />
       <p className="onb-account__helper">You can pause Drifty any time from the menu bar.</p>
     </>
   );

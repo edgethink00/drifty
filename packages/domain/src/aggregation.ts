@@ -450,18 +450,39 @@ type FlowBlockCandidate = {
   strongestOverlapSeconds: number;
 };
 
-export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0): FlowBlock[] {
-  const candidates = new Map<string, FlowBlockCandidate>();
-  const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
+// One segment's overlap contribution to a single flow-chart bucket. Emitted in the same
+// segment-then-bucket order used by `buildFlowBlocks`, so any aggregation built on top of
+// this iterator sees candidates inserted in the exact order `buildFlowBlocks` relies on.
+interface FlowBucketContribution {
+  readonly segment: ActivitySegment;
+  /** `${day}-${minuteOfDay}-${colorKey}` — one accumulation candidate per colorKey per bucket. */
+  readonly candidateKey: string;
+  /** `${day}-${minuteOfDay}` — the visible block the winning candidate fills. */
+  readonly bucketKey: string;
+  readonly colorKey: string;
+  readonly minuteOfDay: number;
+  readonly hour: number;
+  readonly quarter: number;
+  readonly overlapSeconds: number;
+}
+
+// Shared bucketing pass for the flow chart: walks each segment across `intervalMinutes`
+// buckets, filters to the logical `day`, and reports the clamped overlap seconds per bucket.
+// `buildFlowBlocks` and `selectFlowVisibleSegmentIds` both consume this so the winner rule
+// (colorKey grouping + overlap accumulation + logical-day filtering) stays defined once.
+function forEachFlowBucketContribution(
+  segments: ActivitySegment[],
+  day: string,
+  intervalMinutes: FlowIntervalMinutes,
+  boundaryMinutes: number,
+  visit: (contribution: FlowBucketContribution) => void,
+): void {
   const intervalMs = intervalMinutes * 60 * 1000;
-  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
 
   for (const segment of segments) {
     const start = new Date(segment.startedAt);
     const end = new Date(segment.endedAt);
     let cursor = new Date(start);
-    const classification = classifyActivityDetailed(segment, options);
-    const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
 
     while (cursor < end) {
       const blockStart = new Date(cursor);
@@ -478,8 +499,6 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
       const minuteOfDay = hour * 60 + bucketMinute;
       const quarter = Math.floor(bucketMinute / 15);
       const colorKey = segment.siteDomain || segment.appName;
-      const key = `${day}-${minuteOfDay}-${colorKey}`;
-      const existing = candidates.get(key);
       const overlapSeconds = Math.max(
         0,
         Math.round((Math.min(end.getTime(), blockEnd.getTime()) - Math.max(start.getTime(), blockStart.getTime())) / 1000),
@@ -490,94 +509,111 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
         continue;
       }
 
-      if (!existing) {
-        candidates.set(key, {
-          block: {
-            id: `${day}-${minuteOfDay}`,
-            day,
-            hour,
-            quarter,
-            minuteOfDay,
-            appName: segment.appName,
-            bundleId: segment.bundleId ?? null,
-            windowTitle: segment.windowTitle ?? null,
-            browserName: segment.browserName ?? null,
-            siteDomain: segment.siteDomain ?? null,
-            siteTitle: segment.siteTitle ?? null,
-            siteUrl: segment.siteUrl ?? null,
-            youtubeVideoId: segment.youtubeVideoId ?? null,
-            youtubePlaylistId: segment.youtubePlaylistId ?? null,
-            youtubeIsShorts: segment.youtubeIsShorts ?? null,
-            youtubeCategory: segment.youtubeCategory ?? null,
-            youtubeChannelId: segment.youtubeChannelId ?? null,
-            youtubeChannelName: segment.youtubeChannelName ?? null,
-            youtubeTitle: segment.youtubeTitle ?? null,
-            youtubeDescription: segment.youtubeDescription ?? null,
-            youtubeKeywords: segment.youtubeKeywords ?? null,
-            youtubeDurationSeconds: segment.youtubeDurationSeconds ?? null,
-            youtubeViewCount: segment.youtubeViewCount ?? null,
-            youtubeIsLive: segment.youtubeIsLive ?? null,
-            youtubeIsUnlisted: segment.youtubeIsUnlisted ?? null,
-            youtubePublishDate: segment.youtubePublishDate ?? null,
-            youtubeUploadDate: segment.youtubeUploadDate ?? null,
-            category: classification.category,
-            productivity: effectiveProductivity.productivity,
-            sourceProductivity: classification.productivity,
-            productivityBasis: effectiveProductivity.basis,
-            classificationSource: classification.source,
-            aiClassification: classification.source === "llm",
-            aiCachedClassification: classification.aiCached ?? null,
-            classificationReason: classification.reason,
-            colorKey,
-            durationSeconds: overlapSeconds,
-          },
-          strongestOverlapSeconds: overlapSeconds,
-        });
-      } else {
-        existing.block.durationSeconds += overlapSeconds;
-        if (existing.strongestOverlapSeconds < overlapSeconds) {
-          existing.block = {
-            ...existing.block,
-            appName: segment.appName,
-            bundleId: segment.bundleId ?? null,
-            windowTitle: segment.windowTitle ?? null,
-            browserName: segment.browserName ?? null,
-            siteDomain: segment.siteDomain ?? null,
-            siteTitle: segment.siteTitle ?? null,
-            siteUrl: segment.siteUrl ?? null,
-            youtubeVideoId: segment.youtubeVideoId ?? null,
-            youtubePlaylistId: segment.youtubePlaylistId ?? null,
-            youtubeIsShorts: segment.youtubeIsShorts ?? null,
-            youtubeCategory: segment.youtubeCategory ?? null,
-            youtubeChannelId: segment.youtubeChannelId ?? null,
-            youtubeChannelName: segment.youtubeChannelName ?? null,
-            youtubeTitle: segment.youtubeTitle ?? null,
-            youtubeDescription: segment.youtubeDescription ?? null,
-            youtubeKeywords: segment.youtubeKeywords ?? null,
-            youtubeDurationSeconds: segment.youtubeDurationSeconds ?? null,
-            youtubeViewCount: segment.youtubeViewCount ?? null,
-            youtubeIsLive: segment.youtubeIsLive ?? null,
-            youtubeIsUnlisted: segment.youtubeIsUnlisted ?? null,
-            youtubePublishDate: segment.youtubePublishDate ?? null,
-            youtubeUploadDate: segment.youtubeUploadDate ?? null,
-            category: classification.category,
-            productivity: effectiveProductivity.productivity,
-            sourceProductivity: classification.productivity,
-            productivityBasis: effectiveProductivity.basis,
-            classificationSource: classification.source,
-            aiClassification: classification.source === "llm",
-            aiCachedClassification: classification.aiCached ?? null,
-            classificationReason: classification.reason,
-            colorKey,
-            durationSeconds: existing.block.durationSeconds,
-          };
-          existing.strongestOverlapSeconds = overlapSeconds;
-        }
-      }
+      visit({
+        segment,
+        candidateKey: `${day}-${minuteOfDay}-${colorKey}`,
+        bucketKey: `${day}-${minuteOfDay}`,
+        colorKey,
+        minuteOfDay,
+        hour,
+        quarter,
+        overlapSeconds,
+      });
 
       cursor = blockEnd;
     }
   }
+}
+
+// The descriptive (non-positional) fields a flow block shows on hover, taken from the
+// segment that currently owns the block (its strongest single-bucket overlap).
+function flowBlockDescriptorFromSegment(
+  segment: ActivitySegment,
+  classification: ActivityClassificationDetail,
+  effectiveProductivity: EffectiveProductivityResolution,
+  colorKey: string,
+) {
+  return {
+    appName: segment.appName,
+    bundleId: segment.bundleId ?? null,
+    windowTitle: segment.windowTitle ?? null,
+    browserName: segment.browserName ?? null,
+    siteDomain: segment.siteDomain ?? null,
+    siteTitle: segment.siteTitle ?? null,
+    siteUrl: segment.siteUrl ?? null,
+    youtubeVideoId: segment.youtubeVideoId ?? null,
+    youtubePlaylistId: segment.youtubePlaylistId ?? null,
+    youtubeIsShorts: segment.youtubeIsShorts ?? null,
+    youtubeCategory: segment.youtubeCategory ?? null,
+    youtubeChannelId: segment.youtubeChannelId ?? null,
+    youtubeChannelName: segment.youtubeChannelName ?? null,
+    youtubeTitle: segment.youtubeTitle ?? null,
+    youtubeDescription: segment.youtubeDescription ?? null,
+    youtubeKeywords: segment.youtubeKeywords ?? null,
+    youtubeDurationSeconds: segment.youtubeDurationSeconds ?? null,
+    youtubeViewCount: segment.youtubeViewCount ?? null,
+    youtubeIsLive: segment.youtubeIsLive ?? null,
+    youtubeIsUnlisted: segment.youtubeIsUnlisted ?? null,
+    youtubePublishDate: segment.youtubePublishDate ?? null,
+    youtubeUploadDate: segment.youtubeUploadDate ?? null,
+    category: classification.category,
+    productivity: effectiveProductivity.productivity,
+    sourceProductivity: classification.productivity,
+    productivityBasis: effectiveProductivity.basis,
+    classificationSource: classification.source,
+    aiClassification: classification.source === "llm",
+    aiCachedClassification: classification.aiCached ?? null,
+    classificationReason: classification.reason,
+    colorKey,
+  } as const;
+}
+
+export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0): FlowBlock[] {
+  const candidates = new Map<string, FlowBlockCandidate>();
+  const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const classificationBySegmentId = new Map<string, ActivityClassificationDetail>();
+  const classificationFor = (segment: ActivitySegment): ActivityClassificationDetail => {
+    let classification = classificationBySegmentId.get(segment.id);
+    if (!classification) {
+      classification = classifyActivityDetailed(segment, options);
+      classificationBySegmentId.set(segment.id, classification);
+    }
+    return classification;
+  };
+
+  forEachFlowBucketContribution(segments, day, intervalMinutes, boundaryMinutes, ({ segment, candidateKey, minuteOfDay, hour, quarter, colorKey, overlapSeconds }) => {
+    const classification = classificationFor(segment);
+    const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
+    const descriptor = flowBlockDescriptorFromSegment(segment, classification, effectiveProductivity, colorKey);
+    const existing = candidates.get(candidateKey);
+
+    if (!existing) {
+      candidates.set(candidateKey, {
+        block: {
+          id: `${day}-${minuteOfDay}`,
+          day,
+          hour,
+          quarter,
+          minuteOfDay,
+          ...descriptor,
+          durationSeconds: overlapSeconds,
+        },
+        strongestOverlapSeconds: overlapSeconds,
+      });
+      return;
+    }
+
+    existing.block.durationSeconds += overlapSeconds;
+    if (existing.strongestOverlapSeconds < overlapSeconds) {
+      existing.block = {
+        ...existing.block,
+        ...descriptor,
+        durationSeconds: existing.block.durationSeconds,
+      };
+      existing.strongestOverlapSeconds = overlapSeconds;
+    }
+  });
 
   const blocks = new Map<string, FlowBlock>();
   for (const candidate of candidates.values()) {
@@ -589,6 +625,59 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
   }
 
   return Array.from(blocks.values()).sort((left, right) => logicalMinuteOfDay(left.minuteOfDay, boundaryMinutes) - logicalMinuteOfDay(right.minuteOfDay, boundaryMinutes));
+}
+
+type FlowVisibleCandidate = {
+  readonly bucketKey: string;
+  durationSeconds: number;
+  readonly segmentIds: Set<string>;
+};
+
+// The set of segment ids that fill each bucket's *winning* candidate at the given zoom —
+// exactly the segments whose overlap the flow chart aggregates into the block it draws (and
+// whose fields it surfaces on hover). Mirrors `buildFlowBlocks`' winner rule: candidates are
+// grouped by colorKey (`siteDomain || appName`) per bucket, overlap seconds accumulate per
+// candidate, and the candidate with the most accumulated seconds wins each bucket (ties keep
+// the first-seen candidate, matching `buildFlowBlocks`' strict `<` replacement). Membership
+// depends only on durations, so it is independent of classification state (`options` is
+// accepted for signature parity with `buildFlowBlocks`). Used by the first-day gate to reveal
+// once every visible block is classified, rather than after the entire day is classified.
+export function selectFlowVisibleSegmentIds(
+  segments: ActivitySegment[],
+  day: string,
+  intervalMinutes: FlowIntervalMinutes = 5,
+  options?: ClassificationOptions,
+  startOfDayMinutes = 0,
+): Set<string> {
+  void options;
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const candidates = new Map<string, FlowVisibleCandidate>();
+
+  forEachFlowBucketContribution(segments, day, intervalMinutes, boundaryMinutes, ({ segment, candidateKey, bucketKey, overlapSeconds }) => {
+    const existing = candidates.get(candidateKey);
+    if (!existing) {
+      candidates.set(candidateKey, { bucketKey, durationSeconds: overlapSeconds, segmentIds: new Set([segment.id]) });
+      return;
+    }
+    existing.durationSeconds += overlapSeconds;
+    existing.segmentIds.add(segment.id);
+  });
+
+  // Resolve the winning candidate per bucket in candidate-insertion order (strict `<`) so a
+  // later, equal-duration candidate never displaces an earlier one — same as buildFlowBlocks.
+  const winners = new Map<string, FlowVisibleCandidate>();
+  for (const candidate of candidates.values()) {
+    const existing = winners.get(candidate.bucketKey);
+    if (!existing || existing.durationSeconds < candidate.durationSeconds) {
+      winners.set(candidate.bucketKey, candidate);
+    }
+  }
+
+  const visible = new Set<string>();
+  for (const winner of winners.values()) {
+    for (const id of winner.segmentIds) visible.add(id);
+  }
+  return visible;
 }
 
 export function buildDailyTotals(segments: ActivitySegment[], startDay: string, endDay: string, startOfDayMinutes = 0): DailyTotal[] {

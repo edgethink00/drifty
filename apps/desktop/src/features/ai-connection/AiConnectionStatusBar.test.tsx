@@ -21,7 +21,7 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
-  it("returns running with a green light while classification is active", () => {
+  it("returns a classifying state with a green light while classification is active", () => {
     const status = resolveAiConnectionStatus(statusInput({
       localProviderStatus: { kind: "connected" },
       localProviderLabel: "DeepSeek V4 Flash BYOK",
@@ -30,9 +30,25 @@ describe("resolveAiConnectionStatus", () => {
 
     expect(status).toMatchObject({
       tone: "ok",
-      label: "Running",
+      label: "Classifying…",
       providerLabel: "DeepSeek V4 Flash BYOK",
       memoryLabel: null,
+      activity: "classifying",
+    });
+  });
+
+  it("shows the remaining count while classifying when it is known", () => {
+    const status = resolveAiConnectionStatus(statusInput({
+      canUseCloudAi: true,
+      classificationRunning: true,
+      classificationRemaining: 12,
+    }));
+
+    expect(status).toMatchObject({
+      tone: "ok",
+      label: "Classifying…",
+      providerLabel: "12 left",
+      activity: "classifying",
     });
   });
 
@@ -157,6 +173,26 @@ describe("AiConnectionStatusBar", () => {
     fireEvent.click(screen.getByRole("button", { name: /open ai settings/i }));
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the pill as classifying so the dot can pulse", () => {
+    render(
+      <AiConnectionStatusBar
+        status={{
+          tone: "ok",
+          label: "Classifying…",
+          providerLabel: "12 left",
+          memoryLabel: null,
+          activity: "classifying",
+        }}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    const status = screen.getByRole("button", { name: /ai connection/i });
+    expect(status.getAttribute("data-activity")).toBe("classifying");
+    expect(status.textContent).toContain("Classifying…");
+    expect(status.textContent).toContain("12 left");
   });
 
   it("renders local AI memory when provided", () => {

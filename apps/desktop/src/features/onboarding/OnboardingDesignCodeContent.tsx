@@ -15,9 +15,11 @@ import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressTe
 import { managedModelRuntimeMemoryLabel } from "../settings/managedLocalAiMemory";
 import driftyIconUrl from "../../assets/drifty-icon.png";
 import { GoogleMark } from "./components/GoogleMark";
+import { BrowserHistoryBootstrapPreference } from "./components/BrowserHistoryBootstrapPreference";
 import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
 import type { SetupChoice } from "./onboardingFlow";
 import type { OnboardingFlow } from "./useOnboardingFlow";
+import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 const TRIAL_DAYS = 7;
@@ -614,6 +616,7 @@ function DropdownOption({
 function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const accessibilityEnabled = flow.accessibilityGranted;
   const notificationsEnabled = flow.notificationsReady;
+  const safariHistory = useSafariHistoryPermission(flow.step);
 
   return (
     <>
@@ -637,12 +640,24 @@ function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           disabled={notificationsEnabled}
           onClick={() => void flow.handleNotificationPermissionClick()}
         />
+        {safariHistory.show ? (
+          <PermissionRow
+            title="Safari history"
+            description="Lets Drifty import your Safari browsing history — needs Full Disk Access."
+            pill={safariHistory.readable ? "Enabled" : "Optional"}
+            tone={safariHistory.readable ? "success" : "neutral"}
+            disabled={safariHistory.opening || safariHistory.readable}
+            actionLabel={safariHistory.readable ? "Enabled" : safariHistory.opening ? "Opening…" : "Enable"}
+            onClick={safariHistory.onEnable}
+          />
+        ) : null}
       </ul>
     </>
   );
 }
 
 function PermissionRow({
+  actionLabel,
   description,
   disabled,
   onClick,
@@ -650,6 +665,7 @@ function PermissionRow({
   title,
   tone,
 }: {
+  readonly actionLabel?: string;
   readonly description: string;
   readonly disabled: boolean;
   readonly onClick: () => void;
@@ -666,7 +682,7 @@ function PermissionRow({
       <div className="dc-onb-row__action">
         <span className={`dc-onb-pill dc-onb-pill--${tone}`}>{pill}</span>
         <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled}>
-          {disabled ? "Enabled" : "Enable"}
+          {actionLabel ?? (disabled ? "Enabled" : "Enable")}
         </button>
       </div>
     </li>
@@ -1138,6 +1154,10 @@ function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
           onClick={() => flow.setOpenAtLoginEnabled((current) => !current)}
         />
       </div>
+      <BrowserHistoryBootstrapPreference
+        enabled={flow.browserHistoryBootstrapEnabled}
+        onChange={flow.setBrowserHistoryBootstrapEnabled}
+      />
       <p className="dc-onb-muted-note dc-onb-muted-note--ready">You can pause Drifty any time from the menu bar.</p>
     </>
   );

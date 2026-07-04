@@ -16,6 +16,7 @@ from app.tracker.browser_history import (
     chromium_history_paths_for_root,
     firefox_history_paths_for_root,
     is_browser_history_supported_app,
+    is_firefox_family_browser,
 )
 
 
@@ -157,6 +158,68 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertEqual(metadata.site_url, "https://docs.example.test/local")
         self.assertEqual(metadata.site_domain, "docs.example.test")
         self.assertEqual(metadata.match_state, "browser-history-title")
+
+    def test_chromium_history_paths_discovers_root_level_history(self) -> None:
+        # Opera's main profile stores History directly in the user-data root
+        # rather than a Default/ subfolder.
+        root_history = self.root / "History"
+        root_history.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(root_history)) as conn:
+            conn.execute("CREATE TABLE urls(id INTEGER PRIMARY KEY)")
+            conn.commit()
+        self._write_chromium_history("Profile 1", [])
+
+        paths = chromium_history_paths_for_root(self.root)
+
+        self.assertEqual(paths, [root_history, self.root / "Profile 1" / "History"])
+
+    def test_firefox_family_membership_covers_zen_and_floorp(self) -> None:
+        self.assertTrue(is_firefox_family_browser("Firefox"))
+        self.assertTrue(is_firefox_family_browser("Zen"))
+        self.assertTrue(is_firefox_family_browser("Floorp"))
+        self.assertFalse(is_firefox_family_browser("Google Chrome"))
+        self.assertFalse(is_firefox_family_browser("Whale"))
+
+    def test_new_browsers_are_supported_apps(self) -> None:
+        for app_name in ("Whale", "Vivaldi", "Opera", "Zen", "Floorp"):
+            self.assertTrue(is_browser_history_supported_app(app_name), app_name)
+
+    def test_browser_history_metadata_reads_whale_chromium_profile(self) -> None:
+        self._write_chromium_history(
+            "Default",
+            [("https://mail.example.test/whale", "Whale Mail", 50)],
+        )
+
+        metadata = browser_history_metadata(
+            "Whale",
+            "Whale Mail - NAVER Whale",
+            profile_roots={"Whale": self.root},
+        )
+
+        self.assertEqual(metadata.site_url, "https://mail.example.test/whale")
+        self.assertEqual(metadata.site_domain, "mail.example.test")
+        self.assertEqual(metadata.site_title, "Whale Mail")
+        self.assertEqual(metadata.match_state, "browser-history-title")
+        self.assertEqual(metadata.browser_automation_status, "granted")
+        self.assertEqual(metadata.browser_history_status, "matched")
+
+    def test_browser_history_metadata_reads_zen_firefox_profile(self) -> None:
+        self._write_firefox_places(
+            "abcd.Default (release)",
+            [("https://blog.example.test/zen", "Zen Blog", 40)],
+        )
+
+        metadata = browser_history_metadata(
+            "Zen",
+            "Zen Blog - Zen Browser",
+            profile_roots={"Zen": self.root},
+        )
+
+        self.assertEqual(metadata.site_url, "https://blog.example.test/zen")
+        self.assertEqual(metadata.site_domain, "blog.example.test")
+        self.assertEqual(metadata.site_title, "Zen Blog")
+        self.assertEqual(metadata.match_state, "browser-history-title")
+        self.assertEqual(metadata.browser_history_status, "matched")
 
     def test_browser_history_metadata_rejects_non_url_rows(self) -> None:
         self._write_chromium_history("Default", [("not a url", "Lecture - YouTube", 50)])

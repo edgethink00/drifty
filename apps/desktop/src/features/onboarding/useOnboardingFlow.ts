@@ -30,6 +30,7 @@ import { useMainActivities } from "./useMainActivities";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
+import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
 type UseOnboardingFlowOptions = {
   readonly userId: string;
@@ -91,6 +92,7 @@ export function useOnboardingFlow({
   const [jobTypeOther] = useState("");
   const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(restoredProgress?.driftAlarmEnabled ?? false);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(restoredProgress?.extremeNudgeEnabled ?? false);
+  const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
   const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -114,6 +116,7 @@ export function useOnboardingFlow({
     step,
     trackerStatus,
   });
+  const safariHistoryPermission = useSafariHistoryPermission(step);
 
   const steps = useMemo(() => getOnboardingSteps(connection.setupChoice, {
     skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
@@ -132,7 +135,7 @@ export function useOnboardingFlow({
     customEndpointIsValid: connection.customEndpointIsValid,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
-    managedLocalStarted: connection.managedLocalStarted,
+    managedLocalReady: connection.managedLocalReady,
     notificationsReady: permissions.notificationsReady,
     setupChoice: connection.setupChoice,
     step,
@@ -147,6 +150,7 @@ export function useOnboardingFlow({
     customEndpointModelIssue: connection.customEndpointModelIssue,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
+    managedLocalStarted: connection.managedLocalStarted,
     step,
   }), [
     canAdvance,
@@ -155,6 +159,7 @@ export function useOnboardingFlow({
     connection.customEndpointModelIssue,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
+    connection.managedLocalStarted,
     permissions.accessibilityRecheckPending,
     step,
   ]);
@@ -228,6 +233,7 @@ export function useOnboardingFlow({
       displayName,
       driftAlarmEnabled,
       extremeNudgeEnabled,
+      browserHistoryBootstrapEnabled,
       jobType,
       jobTypeOther,
       mainActivities,
@@ -288,8 +294,10 @@ export function useOnboardingFlow({
   return {
     ...connection,
     ...permissions,
+    safariHistoryPermission,
     accountConnected,
     addMainActivity,
+    browserHistoryBootstrapEnabled,
     blockedHint,
     canAdvance,
     cloudTrialStartedNotice,
@@ -305,6 +313,7 @@ export function useOnboardingFlow({
     progressPct,
     screenRef,
     setDriftAlarmEnabled,
+    setBrowserHistoryBootstrapEnabled,
     setExtremeNudgeEnabled,
     setMainActivityOther,
     setOpenAtLoginEnabled,

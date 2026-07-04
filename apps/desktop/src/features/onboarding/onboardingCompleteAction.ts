@@ -8,6 +8,7 @@ type CompleteOnboardingInput = {
   readonly displayName: string;
   readonly driftAlarmEnabled: boolean;
   readonly extremeNudgeEnabled: boolean;
+  readonly browserHistoryBootstrapEnabled: boolean;
   readonly jobType: string | null;
   readonly jobTypeOther: string;
   readonly mainActivities: readonly string[];
@@ -31,6 +32,7 @@ export async function completeOnboardingAction({
   displayName,
   driftAlarmEnabled,
   extremeNudgeEnabled,
+  browserHistoryBootstrapEnabled,
   jobType,
   jobTypeOther,
   mainActivities,
@@ -86,6 +88,7 @@ export async function completeOnboardingAction({
     driftThresholdMinutes: null,
     driftAlarmEnabled,
     extremeNudgeEnabled,
+    browserHistoryBootstrapEnabled,
   });
   if (!result.success) {
     setStorageError(result.error);

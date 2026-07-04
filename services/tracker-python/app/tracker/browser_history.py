@@ -17,6 +17,9 @@ from app.tracker.browser_automation import BrowserMetadata, normalize_domain, yo
 _CHROMIUM_HISTORY_LIMIT: Final = 200
 _FIREFOX_HISTORY_LIMIT: Final = 200
 _CHROMIUM_EPOCH_OFFSET_SECONDS: Final = 11_644_473_600
+# Safari's History.db stores visit_time as seconds since the Cocoa reference date
+# (2001-01-01 UTC). Seconds between the Unix epoch (1970) and the Cocoa epoch.
+_COCOA_EPOCH_OFFSET_SECONDS: Final = 978_307_200
 _HISTORY_TIMESTAMP_MICROSECONDS: Final = 1_000_000
 BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS: Final = 3 * 60
 _VALID_URL_SCHEMES: Final = frozenset({"http", "https"})
@@ -29,8 +32,51 @@ _BROWSER_ROOTS: Final[dict[str, Path]] = {
     "Chromium": Path.home() / "Library/Application Support/Chromium",
     "Arc": Path.home() / "Library/Application Support/Arc/User Data",
     "Aside": Path.home() / "Library/Application Support/Aside",
+    "Vivaldi": Path.home() / "Library/Application Support/Vivaldi",
+    "Opera": Path.home() / "Library/Application Support/com.operasoftware.Opera",
+    "Whale": Path.home() / "Library/Application Support/Naver/Whale",
     "Firefox": Path.home() / "Library/Application Support/Firefox/Profiles",
+    "Zen": Path.home() / "Library/Application Support/zen/Profiles",
+    "Floorp": Path.home() / "Library/Application Support/Floorp/Profiles",
+    # Safari keeps a single History.db directly under ~/Library/Safari (no
+    # Chromium Default/ or Firefox profile layout). The database is TCC-protected
+    # and only readable with Full Disk Access.
+    "Safari": Path.home() / "Library/Safari",
 }
+
+# Firefox-family browsers use profiles.ini-style profile directories with a
+# places.sqlite history database and unix-microsecond visit timestamps, unlike
+# the Chromium family (Default/History with WebKit-epoch timestamps).
+_FIREFOX_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset({"Firefox", "Zen", "Floorp"})
+
+# Safari-family browsers use a single History.db (history_items join history_visits)
+# with Cocoa-epoch second timestamps, gated behind Full Disk Access.
+_SAFARI_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset({"Safari"})
+
+_SAFARI_HISTORY_ROOT: Final[Path] = Path.home() / "Library/Safari"
+# Records the default URL scheme handler chosen in System Settings > Desktop & Dock.
+# Not TCC-protected; parsed with stdlib plistlib.
+_LAUNCH_SERVICES_SECURE_PLIST: Final[Path] = (
+    Path.home() / "Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist"
+)
+
+
+def is_firefox_family_browser(app_name: str) -> bool:
+    return app_name in _FIREFOX_FAMILY_BROWSERS
+
+
+def is_safari_family_browser(app_name: str) -> bool:
+    return app_name in _SAFARI_FAMILY_BROWSERS
+
+
+def safari_history_paths_for_root(root: Path) -> list[Path]:
+    history_path = root / "History.db"
+    # is_file() may itself be denied by TCC when Full Disk Access is off; treat
+    # that (and a missing database) the same way — nothing readable here.
+    try:
+        return [history_path] if history_path.is_file() else []
+    except OSError:
+        return []
 
 
 @dataclass(frozen=True)
@@ -66,6 +112,11 @@ def chromium_history_paths_for_root(root: Path) -> list[Path]:
     default_path = root / "Default" / "History"
     if default_path.exists():
         paths.append(default_path)
+    # Opera's main profile keeps History directly in the user-data root rather
+    # than a Default/ subfolder; newer builds also mirror it under Default/.
+    root_history_path = root / "History"
+    if root_history_path.is_file():
+        paths.append(root_history_path)
     for profile_dir in sorted(root.iterdir(), key=lambda path: path.name):
         history_path = profile_dir / "History"
         if profile_dir.name != "Default" and profile_dir.is_dir() and history_path.exists():
@@ -189,7 +240,7 @@ def browser_history_metadata(
 
 
 def _read_history_candidates(app_name: str, root: Path) -> _HistoryReadOutcome:
-    if app_name == "Firefox":
+    if is_firefox_family_browser(app_name):
         return _read_history_files(app_name, firefox_history_paths_for_root(root), _read_firefox_candidates)
     return _read_history_files(app_name, chromium_history_paths_for_root(root), _read_chromium_candidates)
 
@@ -308,7 +359,7 @@ def _observed_at_unix_seconds(observed_at: str | None) -> float | None:
 
 def _candidate_visited_at_unix_seconds(candidate: BrowserHistoryCandidate) -> float:
     visited_at_seconds = candidate.visited_at / _HISTORY_TIMESTAMP_MICROSECONDS
-    if candidate.browser_name == "Firefox":
+    if is_firefox_family_browser(candidate.browser_name):
         return visited_at_seconds
     return visited_at_seconds - _CHROMIUM_EPOCH_OFFSET_SECONDS
 
@@ -344,3 +395,82 @@ def _is_viable_url(url: str) -> bool:
     if parsed.scheme not in _VALID_URL_SCHEMES:
         return False
     return bool(parsed.netloc)
+
+
+def safari_history_readable(root: Path | None = None) -> bool:
+    """Attempt a copy-and-open of Safari's History.db.
+
+    This attempt is also what registers Drifty in the Full Disk Access list: even a
+    denied read causes macOS to add the app to System Settings > Privacy > Full Disk
+    Access, where the user can toggle it on. Returns True only when the database is
+    actually readable (Full Disk Access granted and a History.db exists). Any denial,
+    missing database, or corruption returns False and never raises.
+    """
+    history_path = (_SAFARI_HISTORY_ROOT if root is None else root) / "History.db"
+    try:
+        with TemporaryDirectory() as tempdir:
+            copied_path = _copy_history_database(history_path, Path(tempdir))
+            with closing(sqlite3.connect(copied_path)) as conn:
+                conn.execute("SELECT 1 FROM history_visits LIMIT 1").fetchone()
+        return True
+    except (OSError, sqlite3.DatabaseError):
+        return False
+
+
+def default_browser_is_safari(plist_path: Path | None = None) -> bool:
+    """Report whether Safari is the default browser via LaunchServices.
+
+    Rule (conservative, per the Safari-onboarding-row decision):
+      - Read the LaunchServices secure plist and find the LSHandlers entry whose
+        LSHandlerURLScheme is "http" (or "https"); its role bundle id names the
+        default browser. Safari when the id contains "safari", otherwise False.
+      - No http/https handler entry at all -> Safari is the macOS system fallback
+        default -> True.
+      - Absent plist (never customized) -> no handler found -> True.
+      - Any parse/read error (corrupt or unreadable plist) -> False, so a broken
+        read never spuriously shows the Safari row.
+    """
+    # Imported lazily: plistlib pulls in xml.parsers.expat at import time, and this
+    # module is on a hot import path shared by live tracking that never needs it.
+    # A mis-linked interpreter without expat degrades to conservative False.
+    try:
+        import plistlib
+    except Exception:
+        return False
+
+    path = _LAUNCH_SERVICES_SECURE_PLIST if plist_path is None else plist_path
+    try:
+        with path.open("rb") as handle:
+            data = plistlib.load(handle)
+    except FileNotFoundError:
+        # Never customized: Safari is the system default until a handler is set.
+        return True
+    except Exception:
+        # Corrupt or otherwise unreadable plist: be conservative, don't show the row.
+        return False
+
+    handlers = data.get("LSHandlers") if isinstance(data, dict) else None
+    if not isinstance(handlers, list):
+        return True
+
+    for handler in handlers:
+        if not isinstance(handler, dict):
+            continue
+        if handler.get("LSHandlerURLScheme") in ("http", "https"):
+            role = handler.get("LSHandlerRoleAll") or handler.get("LSHandlerRoleViewer")
+            if isinstance(role, str) and role:
+                return "safari" in role.lower()
+            # Entry present but no bundle id -> fall through to other handlers.
+    # No http/https handler entry: Safari is the system fallback default.
+    return True
+
+
+def browser_history_environment() -> dict[str, bool]:
+    """Minimized environment info for the Safari onboarding row (booleans only).
+
+    Never returns paths, URLs, or titles (privacy rule).
+    """
+    return {
+        "safariHistoryReadable": safari_history_readable(),
+        "defaultBrowserIsSafari": default_browser_is_safari(),
+    }

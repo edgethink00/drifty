@@ -8,6 +8,10 @@ type PermissionsStepProps = {
   readonly openingSettingsPane: "accessibility" | "notifications" | null;
   readonly onNotificationPermission: () => void;
   readonly onRequestAccessibility: () => void;
+  readonly safariHistoryShow?: boolean;
+  readonly safariHistoryReadable?: boolean;
+  readonly safariHistoryOpening?: boolean;
+  readonly onEnableSafariHistory?: () => void;
 };
 
 export function PermissionsStep({
@@ -18,6 +22,10 @@ export function PermissionsStep({
   openingSettingsPane,
   onNotificationPermission,
   onRequestAccessibility,
+  safariHistoryShow = false,
+  safariHistoryReadable = false,
+  safariHistoryOpening = false,
+  onEnableSafariHistory,
 }: PermissionsStepProps) {
   return (
     <>
@@ -70,6 +78,29 @@ export function PermissionsStep({
             </button>
           </div>
         </li>
+        {safariHistoryShow ? (
+          <li className="onb-perms__row">
+            <div className="onb-perms__info">
+              <span className="onb-perms__name">Safari history</span>
+              <span className="onb-perms__desc">
+                Lets Drifty import your Safari browsing history — needs Full Disk Access.
+              </span>
+            </div>
+            <div className="onb-perms__control">
+              <span className={`onb-status-pill${safariHistoryReadable ? " onb-status-pill--ready" : ""}`}>
+                {safariHistoryReadable ? "Enabled" : "Optional"}
+              </span>
+              <button
+                type="button"
+                className="onb-button onb-button--ghost onb-perms__action"
+                onClick={onEnableSafariHistory}
+                disabled={safariHistoryOpening || safariHistoryReadable}
+              >
+                {safariHistoryReadable ? "Enabled" : safariHistoryOpening ? "Opening…" : "Enable"}
+              </button>
+            </div>
+          </li>
+        ) : null}
       </ul>
     </>
   );

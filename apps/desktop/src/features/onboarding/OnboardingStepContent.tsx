@@ -107,6 +107,10 @@ export function OnboardingStepContent({
           openingSettingsPane={flow.openingSettingsPane}
           onNotificationPermission={() => void flow.handleNotificationPermissionClick()}
           onRequestAccessibility={() => void flow.handleRequestAccessibilityClick()}
+          safariHistoryShow={flow.safariHistoryPermission.show}
+          safariHistoryReadable={flow.safariHistoryPermission.readable}
+          safariHistoryOpening={flow.safariHistoryPermission.opening}
+          onEnableSafariHistory={flow.safariHistoryPermission.onEnable}
         />
       );
     case "nudges":
@@ -121,6 +125,7 @@ export function OnboardingStepContent({
     case "ready":
       return (
         <ReadyStep
+          browserHistoryBootstrapEnabled={flow.browserHistoryBootstrapEnabled}
           cloudTrialStartedNotice={flow.cloudTrialStartedNotice}
           isUserManagedProviderSetup={flow.isUserManagedProviderSetup}
           localAiSummaryLabel={flow.localAiSummaryLabel}
@@ -129,6 +134,7 @@ export function OnboardingStepContent({
           setupChoice={flow.setupChoice}
           userManagedConnectionLabel={flow.userManagedConnectionLabel}
           userManagedSetupLabel={flow.userManagedSetupLabel}
+          onBrowserHistoryBootstrapChange={flow.setBrowserHistoryBootstrapEnabled}
           onOpenAtLoginChange={flow.setOpenAtLoginEnabled}
         />
       );

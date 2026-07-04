@@ -1162,3 +1162,24 @@
   font-weight: 620;
   letter-spacing: -0.02em;
 }
+
+.browser-history-bootstrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.browser-history-bootstrap__status {
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.browser-history-bootstrap--success .browser-history-bootstrap__status {
+  color: var(--success-text, var(--text-soft));
+}
+
+.browser-history-bootstrap--error .browser-history-bootstrap__status {
+  color: var(--danger-text, var(--text-soft));
+}

@@ -18,6 +18,7 @@ import {
 } from "./DashboardAiUnavailableNotice";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
+import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
@@ -45,6 +46,7 @@ type DashboardPageProps = {
   readonly hasTimelineData: boolean;
   readonly historyClassificationOptions: ClassificationOptions;
   readonly historySegments: ActivitySegment[];
+  readonly browserHistoryBootstrapNotice: BrowserHistoryBootstrapNoticeModel | null;
   readonly initialDataLoading: boolean;
   readonly isPreviewSurface: boolean;
   readonly selectedDay: string;
@@ -91,6 +93,7 @@ export function DashboardPage({
   hasTimelineData,
   historyClassificationOptions,
   historySegments,
+  browserHistoryBootstrapNotice,
   initialDataLoading,
   isPreviewSurface,
   selectedDay,
@@ -119,6 +122,8 @@ export function DashboardPage({
     initialDataLoading ? "page--loading-skeleton" : null,
   ].filter(Boolean).join(" ");
   const isDashboardReplayActive = dashboardReplay !== null;
+  const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
+    ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused. Use the sidebar control or move to a day with recorded activity.");
 
   return (
     <div className={pageClassName}>
@@ -214,7 +219,11 @@ export function DashboardPage({
               />
             </div>
           ) : (
-            <EmptyState title="No timeline yet" detail={statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused. Use the sidebar control or move to a day with recorded activity."} />
+            <EmptyState title="No timeline yet" detail={emptyTimelineDetail}>
+              {dashPeriod === "Today" && browserHistoryBootstrapNotice ? (
+                <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />
+              ) : null}
+            </EmptyState>
           )}
         </>
       )}

@@ -4,6 +4,10 @@ import type {
   ActivitySegment,
   AppIconMap,
   AppIdentity,
+  BrowserHistoryEnvironment,
+  BrowserHistoryImportPreview,
+  BrowserHistoryImportQuery,
+  BrowserHistoryImportResult,
   ClassificationMetrics,
   ClassificationQuery,
   ClassificationRule,
@@ -70,6 +74,33 @@ function getTrackerUnavailableStatus(message: string): TrackerStatus {
     databasePath: null,
     trackerMode: "unavailable",
     message,
+  };
+}
+
+function emptyBrowserHistoryImportPreview(query?: BrowserHistoryImportQuery): BrowserHistoryImportPreview {
+  // Mirrors the Rust-side default lookback window (unwrap_or(2)).
+  const lookbackDays = query?.lookbackDays ?? 2;
+  const windowEnd = new Date();
+  const windowStart = new Date(windowEnd.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+  return {
+    lookbackDays,
+    candidateCount: 0,
+    segmentCount: 0,
+    estimatedSeconds: 0,
+    browserCount: 0,
+    profileCount: 0,
+    databaseCount: 0,
+    errorCount: 0,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+  };
+}
+
+function emptyBrowserHistoryImportResult(query?: BrowserHistoryImportQuery): BrowserHistoryImportResult {
+  return {
+    ...emptyBrowserHistoryImportPreview(query),
+    insertedCount: 0,
+    skippedDuplicateCount: 0,
   };
 }
 
@@ -286,6 +317,22 @@ export const trackerClient: TrackerApi = {
       aiClassifiedSegments: 0,
       staleClassifications: 0,
     };
+  },
+  async previewBrowserHistoryImport(query?: BrowserHistoryImportQuery) {
+    if (shouldUsePreviewData()) return emptyBrowserHistoryImportPreview(query);
+    const result = await safeInvoke<BrowserHistoryImportPreview>("tracker_preview_browser_history_import", { query: query ?? {} });
+    return result ?? emptyBrowserHistoryImportPreview(query);
+  },
+  async importBrowserHistory(query?: BrowserHistoryImportQuery) {
+    if (shouldUsePreviewData()) return emptyBrowserHistoryImportResult(query);
+    const result = await safeInvoke<BrowserHistoryImportResult>("tracker_import_browser_history", { query: query ?? {} });
+    return result ?? emptyBrowserHistoryImportResult(query);
+  },
+  async getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment> {
+    const fallback: BrowserHistoryEnvironment = { safariHistoryReadable: false, defaultBrowserIsSafari: false };
+    if (shouldUsePreviewData()) return fallback;
+    const result = await safeInvoke<BrowserHistoryEnvironment>("tracker_get_browser_history_environment");
+    return result ?? fallback;
   },
   async updateTrayProductivityIcon(mix: ProductivityShareMix) {
     if (shouldUsePreviewData()) return;

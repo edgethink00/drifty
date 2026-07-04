@@ -2,11 +2,15 @@ import type { AiConnectionIssueKind } from "./aiConnectionHealth";
 
 export type AiConnectionTone = "ok" | "warning" | "error" | "neutral";
 
+/** Ambient activity accent for the pill; "classifying" drives the pulsing dot. */
+export type AiConnectionActivity = "classifying";
+
 export type AiConnectionStatus = {
   readonly tone: AiConnectionTone;
   readonly label: string;
   readonly providerLabel: string;
   readonly memoryLabel: string | null;
+  readonly activity?: AiConnectionActivity;
 };
 
 export type AiConnectionStatusInput = {
@@ -15,6 +19,8 @@ export type AiConnectionStatusInput = {
   readonly localProviderLabel: string | null;
   readonly localMemoryUsageBytes: number | null;
   readonly classificationRunning: boolean;
+  /** Best-effort count of segments still to classify for the active run; null if unknown. */
+  readonly classificationRemaining?: number | null;
   readonly classificationIssueKind: AiConnectionIssueKind | null;
   readonly cloudIssueKind: AiConnectionIssueKind | null;
 };
@@ -39,11 +45,16 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
   }
 
   if (input.classificationRunning) {
+    const remaining = input.classificationRemaining;
+    const remainingLabel = typeof remaining === "number" && Number.isFinite(remaining) && remaining > 0
+      ? `${remaining.toLocaleString()} left`
+      : null;
     return {
       tone: "ok",
-      label: "Running",
-      providerLabel: input.localProviderLabel ?? "Drifty Cloud",
+      label: "Classifying…",
+      providerLabel: remainingLabel ?? input.localProviderLabel ?? "Drifty Cloud",
       memoryLabel: memoryLabelForLocalProvider(input),
+      activity: "classifying",
     };
   }
 
@@ -114,6 +125,7 @@ export function AiConnectionStatusBar({
       className="ai-connection-status"
       aria-label={`AI connection: ${status.label}, ${status.providerLabel}${status.memoryLabel ? `, memory in use ${status.memoryLabel}` : ""}. Open AI settings`}
       data-tone={status.tone}
+      data-activity={status.activity ?? undefined}
       onClick={onOpenSettings}
     >
       <span className="ai-connection-status__dot" aria-hidden="true" />

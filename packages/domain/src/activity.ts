@@ -1,5 +1,5 @@
-export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "unknown";
-export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "browser-history-title" | "window-title" | "unknown" | null;
+export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "browser-history-import" | "unknown";
+export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "browser-history-title" | "browser-history-import" | "window-title" | "unknown" | null;
 export type BrowserAutomationStatus = "granted" | "denied" | "unavailable" | "stale" | "empty_result" | "not_applicable";
 export type BrowserHistoryStatus = "unsupported" | "no_profile_root" | "no_readable_database" | "no_match" | "matched";
 export type SystemTransientActivity = "mission_control" | "app_switcher" | "launchpad" | "spotlight" | "system_overlay" | null;
@@ -103,6 +103,10 @@ export interface ActivitySegment {
   source: TrackerSource;
   confidence?: number | null;
   classification?: StoredActivityClassification | null;
+}
+
+export function isBrowserHistoryImportSegment(segment: Pick<ActivitySegment, "siteSource" | "source">): boolean {
+  return segment.source === "browser-history-import" || segment.siteSource === "browser-history-import";
 }
 
 export interface CurrentActivitySnapshot {

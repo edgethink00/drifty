@@ -877,6 +877,9 @@
   color: var(--dc-onb-soft);
   font-size: 12.5px;
   line-height: 1.45;
+  /* Reserve two lines so the 1-line "Ready" card is the same height as the 2-line
+     description cards — every model block stays uniform. */
+  min-height: 2.9em;
 }
 
 .dc-onb-local-card__meta {
@@ -903,6 +906,15 @@
   margin: 0;
   font-size: 12.5px;
   font-weight: 560;
+}
+
+/* Uniform action button across states: "Ready" / "Download" / "Downloading NN%" all
+   render at the same width so the model rows line up. */
+.dc-onb-local-card .dc-onb-secondary-button {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 118px;
+  text-align: center;
 }
 
 @media (max-height: 560px) {
@@ -1101,12 +1113,15 @@
   font-size: 12.5px;
 }
 
-.dc-onb-login-row {
+.dc-onb-login-row,
+.dc-onb-card .onb-browser-history-preference {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 11px 18px;
+  box-sizing: border-box;
+  min-height: 47px;
+  padding: 0 18px;
   border: 1px solid var(--dc-onb-line-weak);
   border-radius: 12px;
   background: var(--dc-onb-raised);
@@ -1117,6 +1132,65 @@
   color: var(--dc-onb-text);
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
+}
+
+.dc-onb-card .onb-browser-history-preference {
+  margin-top: 8px;
+  color: var(--dc-onb-text);
+}
+
+.dc-onb-card .onb-browser-history-preference__title {
+  color: var(--dc-onb-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dc-onb-card .onb-browser-history-preference__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dc-onb-card .onb-browser-history-preference__toggle .onb-toggle__track {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #d7d5cd;
+  transition: background 0.2s;
+}
+
+.dc-onb-card .onb-browser-history-preference__toggle.onb-toggle--on .onb-toggle__track {
+  background: var(--dc-onb-accent);
+}
+
+.dc-onb-card .onb-browser-history-preference__toggle .onb-toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s;
+}
+
+.dc-onb-card .onb-browser-history-preference__toggle.onb-toggle--on .onb-toggle__thumb {
+  transform: translateX(16px);
+}
+
+.dc-onb-card .onb-browser-history-preference__toggle .onb-toggle__label {
+  width: 24px;
+  color: var(--dc-onb-soft);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
 }
 
 .dc-onb-card .dc-onb-actions {

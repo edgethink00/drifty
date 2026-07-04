@@ -27,6 +27,8 @@ export type TrackerCommand =
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
+  | "tracker_preview_browser_history_import"
+  | "tracker_import_browser_history"
   | "tray_update_productivity_icon"
   | "tray_update_icon_style"
   | "tray_update_drift_alarm_status";
@@ -189,8 +191,46 @@ export interface ClassificationMetrics {
   staleClassifications: number;
 }
 
+export type BrowserHistoryImportQuery = { readonly lookbackDays?: number };
+
+export interface BrowserHistoryImportPreview {
+  readonly lookbackDays: number;
+  readonly candidateCount: number;
+  readonly segmentCount: number;
+  readonly estimatedSeconds: number;
+  readonly browserCount: number;
+  readonly profileCount: number;
+  readonly databaseCount: number;
+  readonly errorCount: number;
+  readonly windowStart: string;
+  readonly windowEnd: string;
+}
+
+export interface BrowserHistoryImportResult extends BrowserHistoryImportPreview {
+  readonly insertedCount: number;
+  readonly skippedDuplicateCount: number;
+}
+
+/**
+ * Minimized environment info for the Safari onboarding Full Disk Access row.
+ * Booleans only — never carries paths, URLs, or titles (privacy rule).
+ */
+export interface BrowserHistoryEnvironment {
+  /** True once Safari's History.db is readable (Full Disk Access granted). */
+  readonly safariHistoryReadable: boolean;
+  /** True when Safari is (or is the system fallback for) the default browser. */
+  readonly defaultBrowserIsSafari: boolean;
+}
+
 export interface ClassificationQuery extends Partial<DateRangeQuery>, Partial<DayQuery> {
   limit?: number;
+  /**
+   * Optional allow-list of segment ids to prioritize. When present, classification selection
+   * is restricted to these segments (applied client-side over the fetched unclassified pool);
+   * unknown to the tracker backend, which safely ignores the extra field. Additive: callers
+   * that omit it keep the previous whole-range selection behavior.
+   */
+  segmentIds?: readonly string[];
 }
 
 export interface ProductivityShareMix {
@@ -247,6 +287,9 @@ export interface TrackerApi {
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
+  previewBrowserHistoryImport(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportPreview>;
+  importBrowserHistory(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportResult>;
+  getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
   updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;

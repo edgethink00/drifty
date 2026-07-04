@@ -50,6 +50,7 @@ import {
   type DashboardAiUnavailablePreviewCase,
   type DashboardAiUnavailablePreviewState,
 } from "./features/dashboard/dashboardAiUnavailablePreview";
+import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { TeamPage } from "./features/team/TeamPage";
@@ -62,6 +63,7 @@ import {
 } from "./features/ai-connection/aiConnectionHealth";
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -100,6 +102,8 @@ import {
   hasCompletedUserOnboarding,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
+import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
+import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { OnboardingV22Preview } from "./features/onboarding/previews/OnboardingV22Preview";
 import {
   WatcherPeek,
@@ -1061,6 +1065,12 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  // One-shot: armed only by completing onboarding in this session — never re-read
+  // from storage, so the bootstrap import cannot re-fire on later launches.
+  const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
+  const [preparingFirstDay, setPreparingFirstDay] = useState(false);
+  const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
+  const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
@@ -1123,13 +1133,17 @@ export default function App() {
       active = false;
     };
   }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
+  // Keep the compact onboarding window chrome through the first-day preparation gate,
+  // so the loading screen runs in the small onboarding window rather than the full app
+  // window. Only apply when the desired state actually flips to avoid a resize flicker
+  // across the onboarding -> gate handoff.
+  const onboardingChromeAppliedRef = useRef(false);
   useEffect(() => {
-    if (!onboardingOpen) return;
-    void setOnboardingWindowPresentation(true, true);
-    return () => {
-      void setOnboardingWindowPresentation(false, true);
-    };
-  }, [onboardingOpen]);
+    const wantsOnboardingChrome = onboardingOpen || preparingFirstDay;
+    if (wantsOnboardingChrome === onboardingChromeAppliedRef.current) return;
+    onboardingChromeAppliedRef.current = wantsOnboardingChrome;
+    void setOnboardingWindowPresentation(wantsOnboardingChrome, true);
+  }, [onboardingOpen, preparingFirstDay]);
   const {
     user,
     status: authStatus,
@@ -1250,12 +1264,14 @@ export default function App() {
     : canUseCloudAiClassification
       ? "cloud"
       : "disabled";
+  const classificationActivity = useClassificationActivity();
   const aiConnectionStatus = resolveAiConnectionStatus({
     canUseCloudAi: canUseCloudAiClassification,
     localProviderStatus: localAiProviderStatus,
     localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
     localMemoryUsageBytes: localAiMemoryUsageBytes,
-    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
+    classificationRunning: classificationActivity.running || classificationActionLoading || classificationSummary?.status === "running",
+    classificationRemaining: classificationActivity.remaining,
     classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
     cloudIssueKind: billingEntitlementError
       ? aiConnectionIssueKindFromMessage(billingEntitlementError)
@@ -1524,11 +1540,11 @@ export default function App() {
     driftAlarmHistorySegmentsRef.current = nextSegments;
   }
 
-  function selectDay(day: string | ((currentDay: string) => string)) {
+  function selectDay(day: string | ((currentDay: string) => string), options?: { userSelected?: boolean }) {
     autoSelectedLatestDayRef.current = true;
     setSelectedDay((currentDay) => {
       const nextDay = typeof day === "function" ? day(currentDay) : day;
-      userSelectedDayRef.current = nextDay !== logicalTodayIsoDate(startOfDayMinutes);
+      userSelectedDayRef.current = (options?.userSelected ?? true) && nextDay !== logicalTodayIsoDate(startOfDayMinutes);
       return nextDay;
     });
   }
@@ -2294,6 +2310,53 @@ export default function App() {
     }
   }
 
+  const clearLocalActivityCaches = useCallback(() => {
+    compactHistoryCacheGenerationRef.current += 1;
+    compactHistoryCacheRef.current.clear();
+    compactHistoryInFlightRef.current.clear();
+    setCompactHistoryCacheRevision((revision) => revision + 1);
+    setHistorySegmentsLoadedRange(null);
+    setDashboardWeekRefreshState({ key: null, status: "idle" });
+  }, []);
+
+  const isPreviewSurface = shouldUsePreviewData();
+  const shouldStartBrowserHistoryBootstrap =
+    activeTab === "dashboard"
+    && dashPeriod === "Today"
+    && hasLoadedOnce
+    && !loading
+    && selectedDay === logicalTodayIsoDate(startOfDayMinutes)
+    && segmentsLoadedDay === selectedDay
+    && segments.length === 0;
+  const { notice: browserHistoryBootstrapNotice, reset: resetBrowserHistoryBootstrap } = useBrowserHistoryBootstrap({
+    blocked: shouldBlockLocalTrackerAccess,
+    clearLocalActivityCaches,
+    enabled: browserHistoryBootstrapEnabled && !preparingFirstDay,
+    isPreviewSurface,
+    refresh,
+    refreshHistoryData,
+    selectedDayRef,
+    setError,
+    shouldStart: shouldStartBrowserHistoryBootstrap,
+  });
+
+  const { rearm: rearmFirstDayPreparation } = useFirstDayPreparation({
+    canUseCloudAiClassification,
+    clearLocalActivityCaches,
+    localAiClassificationOptions,
+    onReveal: () => setPreparingFirstDay(false),
+    preparingFirstDay,
+    refresh,
+    runAiClassification,
+    runAiClassificationUntilEmpty,
+    selectDay,
+    selectedDayRef,
+    setPhase: setFirstDayPreparationPhase,
+    setProgress: setFirstDayPreparationProgress,
+    shouldBlockLocalTrackerAccess,
+    startOfDayMinutes,
+  });
+
   const loadMoreHistorySegments = useCallback(async (): Promise<void> => {
     if (historyLoadingMore || !historyHasMoreSegments || historyNextCursor === null || historySegmentsLoadedRange === null) return;
 
@@ -2536,13 +2599,8 @@ export default function App() {
   }, [activeTab, classificationRange, dashPeriod, hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, startOfWeek, trendsRange]);
 
   useEffect(() => {
-    compactHistoryCacheGenerationRef.current += 1;
-    compactHistoryCacheRef.current.clear();
-    compactHistoryInFlightRef.current.clear();
-    setCompactHistoryCacheRevision((revision) => revision + 1);
-    setHistorySegmentsLoadedRange(null);
-    setDashboardWeekRefreshState({ key: null, status: "idle" });
-  }, [classificationRules, startOfDayMinutes, startOfWeek]);
+    clearLocalActivityCaches();
+  }, [classificationRules, clearLocalActivityCaches, startOfDayMinutes, startOfWeek]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -4590,6 +4648,9 @@ export default function App() {
     if (shouldBlockLocalTrackerAccess) return;
     if (!hasLoadedOnce) return;
     if (classificationActionLoading) return;
+    // The first-day preparation gate is already classifying today in the foreground;
+    // running the periodic batch concurrently would double-classify the same day.
+    if (preparingFirstDay) return;
     if (aiClassificationInFlightRef.current) return;
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
@@ -4641,7 +4702,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, preparingFirstDay, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -4693,6 +4754,11 @@ export default function App() {
   }, [dashboardAiRecoveryKey]);
 
   useEffect(() => {
+    // Account switches disarm the one-shot bootstrap; onboarding completion re-arms it.
+    setBrowserHistoryBootstrapEnabled(false);
+  }, [user?.id]);
+
+  useEffect(() => {
     if (isDevOnboardingBypassEnabled()) {
       setOnboardingOpen(false);
       return;
@@ -4733,7 +4799,16 @@ export default function App() {
     }
     setDriftAlertsEnabled(state.driftAlarmEnabled);
     setExtremeNudgeEnabled(state.extremeNudgeEnabled);
+    setBrowserHistoryBootstrapEnabled(state.browserHistoryBootstrapEnabled);
+    resetBrowserHistoryBootstrap();
+    selectDay(logicalTodayIsoDate(startOfDayMinutes));
+    navigateToTab("dashboard", "Today");
     setOnboardingOpen(false);
+    if (state.browserHistoryBootstrapEnabled && !shouldBlockLocalTrackerAccess) {
+      rearmFirstDayPreparation();
+      setFirstDayPreparationPhase("importing");
+      setPreparingFirstDay(true);
+    }
   }
 
   async function handleOpenDeveloperOnboarding() {
@@ -5180,6 +5255,10 @@ export default function App() {
     );
   }
 
+  if (preparingFirstDay) {
+    return <FirstDayPreparationScreen phase={firstDayPreparationPhase} progress={firstDayPreparationProgress} />;
+  }
+
   return (
     <div className={shellClassName}>
       <div className="window-chrome">
@@ -5355,6 +5434,7 @@ export default function App() {
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAiUnavailableState={dashboardAiUnavailableState}
             dashboardAppUsage={dashboardAppUsage}
+            browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
             dashboardCategoryTotals={dashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
             dashboardEffectiveProductivityTotals={dashboardEffectiveProductivityTotals}
@@ -5371,7 +5451,7 @@ export default function App() {
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
             initialDataLoading={loading && !hasLoadedOnce}
-            isPreviewSurface={shouldUsePreviewData()}
+            isPreviewSurface={isPreviewSurface}
             selectedDay={selectedDay}
             selectedDayLabel={selectedDayLabel}
             startOfDayMinutes={startOfDayMinutes}

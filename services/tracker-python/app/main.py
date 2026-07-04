@@ -150,6 +150,14 @@ def _bool_payload(value: object) -> bool:
     return value is True
 
 
+def _int_payload(value: object, *, default: int, min_value: int, max_value: int, name: str) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be an integer")
+    return min(max(value, min_value), max_value)
+
+
 def _float_meta(value: str | None) -> float | None:
     if value is None:
         return None
@@ -164,6 +172,49 @@ def day_bounds(payload: dict) -> tuple[str | None, str | None]:
         day = payload["day"]
         return f"{day}T00:00:00", f"{day}T23:59:59"
     return payload.get("start"), payload.get("end")
+
+
+def _datetime_payload(value: object, *, name: str) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an ISO datetime") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _browser_history_profile_roots_payload(value: object) -> dict[str, Path] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("profileRoots must be an object")
+    roots: dict[str, Path] = {}
+    for browser_name, root in value.items():
+        if not isinstance(browser_name, str) or not isinstance(root, str):
+            raise ValueError("profileRoots must map browser names to paths")
+        roots[browser_name] = Path(root)
+    return roots
+
+
+def _browser_history_import_request(payload: dict):
+    from app.tracker.browser_history_import import BrowserHistoryImportRequest, DEFAULT_LOOKBACK_DAYS
+
+    return BrowserHistoryImportRequest(
+        lookback_days=_int_payload(
+            payload.get("lookbackDays"),
+            default=DEFAULT_LOOKBACK_DAYS,
+            min_value=1,
+            max_value=30,
+            name="lookbackDays",
+        ),
+        observed_at=_datetime_payload(payload.get("observedAt"), name="observedAt"),
+        profile_roots=_browser_history_profile_roots_payload(payload.get("profileRoots")),
+    )
 
 
 def is_running() -> bool:
@@ -559,6 +610,35 @@ def get_classification_metrics(payload: dict):
     return response(True, database().classification_metrics(start, end))
 
 
+def preview_browser_history_import(payload: dict):
+    from app.tracker.browser_history_import import preview_browser_history_import as preview_import
+
+    try:
+        request = _browser_history_import_request(payload)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    return response(True, preview_import(request).to_payload())
+
+
+def get_browser_history_environment(payload: dict):
+    from app.tracker.browser_history import browser_history_environment
+
+    # Returns booleans only (safariHistoryReadable, defaultBrowserIsSafari) for the
+    # Safari onboarding-row decision and Full Disk Access polling. The readable check
+    # also registers Drifty in the Full Disk Access list. No paths/URLs/titles.
+    return response(True, browser_history_environment())
+
+
+def import_browser_history(payload: dict):
+    from app.tracker.browser_history_import import import_browser_history as run_import
+
+    try:
+        request = _browser_history_import_request(payload)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    return response(True, run_import(database(), request).to_payload())
+
+
 def set_developer_diagnostics(payload: dict):
     force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
     force_frontmost_fallback_capture = _bool_payload(payload.get("forceFrontmostFallbackCapture"))
@@ -722,6 +802,9 @@ COMMANDS = {
     "save_classifications": save_classifications,
     "refresh_non_ai_classifications": refresh_non_ai_classifications,
     "get_classification_metrics": get_classification_metrics,
+    "preview_browser_history_import": preview_browser_history_import,
+    "import_browser_history": import_browser_history,
+    "get_browser_history_environment": get_browser_history_environment,
     "set_developer_diagnostics": set_developer_diagnostics,
 }
 

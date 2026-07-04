@@ -99,6 +99,11 @@ function buildBuiltInHeuristicClassificationRecord(
     includeAiClassifications: false,
   });
   if (!isBuiltInHeuristicSource(classification.source)) return null;
+  // Leave YouTube browse/home/feed pages that resolve to "unknown" unclassified, so
+  // runAiClassification can inherit their category from nearby video activity (and only
+  // fall back to a sustained=drift / brief=unknown rule when there is no neighbor).
+  // Materializing them as "unknown" here would lock them out of that inheritance.
+  if (classification.source === "youtube" && classification.category === "unknown") return null;
 
   return {
     segmentId: segment.id,

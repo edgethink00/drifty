@@ -26,6 +26,7 @@ export function saveUserOnboardingState({
   jobTypeOther,
   driftAlarmEnabled,
   extremeNudgeEnabled,
+  browserHistoryBootstrapEnabled,
   focusGoalHours,
   driftThresholdMinutes,
 }: {
@@ -39,6 +40,7 @@ export function saveUserOnboardingState({
   jobTypeOther: string;
   driftAlarmEnabled: boolean;
   extremeNudgeEnabled: boolean;
+  browserHistoryBootstrapEnabled: boolean;
   focusGoalHours: number | null;
   driftThresholdMinutes: number | null;
 }): SaveUserOnboardingStateResult {
@@ -54,6 +56,7 @@ export function saveUserOnboardingState({
     jobTypeOther,
     driftAlarmEnabled,
     extremeNudgeEnabled,
+    browserHistoryBootstrapEnabled,
     focusGoalHours,
     driftThresholdMinutes,
     purpose: null,
