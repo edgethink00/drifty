@@ -107,6 +107,10 @@ export function OnboardingStepContent({
           openingSettingsPane={flow.openingSettingsPane}
           onNotificationPermission={() => void flow.handleNotificationPermissionClick()}
           onRequestAccessibility={() => void flow.handleRequestAccessibilityClick()}
+          safariHistoryShow={flow.safariHistoryPermission.show}
+          safariHistoryReadable={flow.safariHistoryPermission.readable}
+          safariHistoryOpening={flow.safariHistoryPermission.opening}
+          onEnableSafariHistory={flow.safariHistoryPermission.onEnable}
         />
       );
     case "nudges":

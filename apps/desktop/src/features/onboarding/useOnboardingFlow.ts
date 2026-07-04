@@ -24,6 +24,7 @@ import { useMainActivities } from "./useMainActivities";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
+import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
 type UseOnboardingFlowOptions = {
   readonly userId: string;
@@ -88,6 +89,7 @@ export function useOnboardingFlow({
     step,
     trackerStatus,
   });
+  const safariHistoryPermission = useSafariHistoryPermission(step);
 
   const steps = useMemo(() => getOnboardingSteps(connection.setupChoice, {
     skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
@@ -231,6 +233,7 @@ export function useOnboardingFlow({
   return {
     ...connection,
     ...permissions,
+    safariHistoryPermission,
     accountConnected,
     addMainActivity,
     browserHistoryBootstrapEnabled,

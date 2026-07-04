@@ -202,6 +202,29 @@
   width: 8px;
 }
 
+/* Ambient "classifying" pulse — subtle status, not an alert. */
+.ai-connection-status[data-activity="classifying"] .ai-connection-status__dot {
+  animation: ai-connection-classifying-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-connection-classifying-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ai-connection-dot) 12%, transparent);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-connection-dot) 22%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-connection-status[data-activity="classifying"] .ai-connection-status__dot {
+    animation: none;
+  }
+}
+
 .ai-connection-status__label,
 .ai-connection-status__provider,
 .ai-connection-status__memory {

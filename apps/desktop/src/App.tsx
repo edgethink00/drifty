@@ -62,7 +62,8 @@ import {
   aiConnectionIssueKindFromMessage,
 } from "./features/ai-connection/aiConnectionHealth";
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary, type ClassificationLevel } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -99,10 +100,10 @@ import { buildDebugLogPayload } from "./features/settings/debugLog";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
-  readUserOnboardingState,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
+import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { OnboardingV22Preview } from "./features/onboarding/previews/OnboardingV22Preview";
 import {
   WatcherPeek,
@@ -301,34 +302,6 @@ const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 const DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT = 20;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
-const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = 2;
-// The intent is to reveal a *classified* dashboard, so we wait while today's AI
-// classification keeps making progress. We only cut it short when a batch stalls
-// (a genuine hang, e.g. an unauthenticated cloud call) or when the overall phase
-// exceeds its cap — after which the remainder finishes in the background.
-const FIRST_DAY_PREPARATION_MAX_MS = 300 * 1000; // ultimate "never trap the user" backstop
-const FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES = 80;
-const FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE = 10; // small batches so each call finishes fast on slow local models
-const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 75 * 1000; // per-batch hang cutoff — generous so a slow-but-working local model (4B) isn't killed mid-batch
-const FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT = 4; // give up only after this many consecutive no-save batches
-// Onboarding classifies at "normal" granularity (one AI call per domain+title signature,
-// fanned out to matching segments) — ~fine accuracy at meaningfully fewer AI calls.
-const FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL: ClassificationLevel = "normal";
-// Just after the logical day rolls over (start-of-day, e.g. 4am) "today" is nearly
-// empty, so the gate completes the most recent logical day that actually has data.
-const FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS = 15;
-// Offset 0 re-runs the revealed target day to mop up anything the (time-capped)
-// foreground gate left unclassified; -1/-2 cover the rest of the imported window.
-const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [0, -1, -2] as const;
-
-// Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
-// hung AI classification request can never trap the user on the loading screen.
-function firstDayPreparationRaceTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 // Compact history is mostly closed-day data that rarely changes, so it does not need
@@ -1092,13 +1065,12 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(
-    () => readUserOnboardingState("local")?.browserHistoryBootstrapEnabled === true,
-  );
+  // One-shot: armed only by completing onboarding in this session — never re-read
+  // from storage, so the bootstrap import cannot re-fire on later launches.
+  const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
-  const firstDayPreparationRunRef = useRef(false);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
@@ -1292,12 +1264,14 @@ export default function App() {
     : canUseCloudAiClassification
       ? "cloud"
       : "disabled";
+  const classificationActivity = useClassificationActivity();
   const aiConnectionStatus = resolveAiConnectionStatus({
     canUseCloudAi: canUseCloudAiClassification,
     localProviderStatus: localAiProviderStatus,
     localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
     localMemoryUsageBytes: localAiMemoryUsageBytes,
-    classificationRunning: classificationActionLoading || classificationSummary?.status === "running",
+    classificationRunning: classificationActivity.running || classificationActionLoading || classificationSummary?.status === "running",
+    classificationRemaining: classificationActivity.remaining,
     classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
     cloudIssueKind: billingEntitlementError
       ? aiConnectionIssueKindFromMessage(billingEntitlementError)
@@ -1566,11 +1540,11 @@ export default function App() {
     driftAlarmHistorySegmentsRef.current = nextSegments;
   }
 
-  function selectDay(day: string | ((currentDay: string) => string)) {
+  function selectDay(day: string | ((currentDay: string) => string), options?: { userSelected?: boolean }) {
     autoSelectedLatestDayRef.current = true;
     setSelectedDay((currentDay) => {
       const nextDay = typeof day === "function" ? day(currentDay) : day;
-      userSelectedDayRef.current = nextDay !== logicalTodayIsoDate(startOfDayMinutes);
+      userSelectedDayRef.current = (options?.userSelected ?? true) && nextDay !== logicalTodayIsoDate(startOfDayMinutes);
       return nextDay;
     });
   }
@@ -2364,6 +2338,23 @@ export default function App() {
     selectedDayRef,
     setError,
     shouldStart: shouldStartBrowserHistoryBootstrap,
+  });
+
+  const { rearm: rearmFirstDayPreparation } = useFirstDayPreparation({
+    canUseCloudAiClassification,
+    clearLocalActivityCaches,
+    localAiClassificationOptions,
+    onReveal: () => setPreparingFirstDay(false),
+    preparingFirstDay,
+    refresh,
+    runAiClassification,
+    runAiClassificationUntilEmpty,
+    selectDay,
+    selectedDayRef,
+    setPhase: setFirstDayPreparationPhase,
+    setProgress: setFirstDayPreparationProgress,
+    shouldBlockLocalTrackerAccess,
+    startOfDayMinutes,
   });
 
   const loadMoreHistorySegments = useCallback(async (): Promise<void> => {
@@ -4657,6 +4648,9 @@ export default function App() {
     if (shouldBlockLocalTrackerAccess) return;
     if (!hasLoadedOnce) return;
     if (classificationActionLoading) return;
+    // The first-day preparation gate is already classifying today in the foreground;
+    // running the periodic batch concurrently would double-classify the same day.
+    if (preparingFirstDay) return;
     if (aiClassificationInFlightRef.current) return;
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
@@ -4708,7 +4702,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, preparingFirstDay, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
 
   useEffect(() => {
     void runAutoAiClassificationBatch();
@@ -4717,154 +4711,6 @@ export default function App() {
     }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [runAutoAiClassificationBatch]);
-
-  // First-day preparation gate: after opted-in onboarding, import the last 48h of
-  // browser history and finish classifying *today* before revealing the dashboard.
-  // Older days within the window are left to a background pass so the reveal is fast.
-  useEffect(() => {
-    if (!preparingFirstDay) return;
-    if (firstDayPreparationRunRef.current) return;
-    firstDayPreparationRunRef.current = true;
-
-    let settled = false;
-    const reveal = () => {
-      if (settled) return;
-      settled = true;
-      setPreparingFirstDay(false);
-    };
-    const safetyTimeout = setTimeout(reveal, FIRST_DAY_PREPARATION_MAX_MS);
-
-    const runClassificationForDay = (day: string) => {
-      const query = toClassificationQueryForDay(day);
-      return localAiClassificationOptions
-        ? runAiClassificationUntilEmpty(query, undefined, { ...localAiClassificationOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
-        : runAiClassificationUntilEmpty(query, undefined, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
-    };
-
-    // The most recent logical day (today, then yesterday, then the day before) that has
-    // enough segments to be worth completing before reveal.
-    const resolveFirstDayTargetDay = async (logicalToday: string): Promise<string> => {
-      for (const day of [logicalToday, shiftIsoDate(logicalToday, -1), shiftIsoDate(logicalToday, -2)]) {
-        try {
-          const metrics = await trackerClient.getClassificationMetrics(toClassificationQueryForDay(day));
-          if (metrics.totalSegments >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS) return day;
-        } catch {
-          // best-effort; fall through to the next candidate
-        }
-      }
-      return logicalToday;
-    };
-
-    // Classify a single day one batch at a time so the loading screen can report
-    // real progress (classified / total) as the AI works through today's segments.
-    const classifyTodayWithProgress = async (day: string) => {
-      const query = toClassificationQueryForDay(day);
-      const reportProgress = async () => {
-        try {
-          const metrics = await trackerClient.getClassificationMetrics(query);
-          if (metrics.totalSegments > 0) {
-            setFirstDayPreparationProgress(Math.min(1, metrics.classifiedSegments / metrics.totalSegments));
-          }
-        } catch {
-          // progress is best-effort; never let it interrupt classification
-        }
-      };
-      await reportProgress();
-      const batchTimeoutSummary: AiClassificationSummary = {
-        status: "error",
-        selectedSegments: 0,
-        savedRecords: 0,
-        message: "Classification timed out.",
-      };
-      let consecutiveNoProgress = 0;
-      for (let batch = 0; batch < FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES; batch += 1) {
-        // Small batches so each call finishes fast; a single stalled/failed batch is
-        // treated as a hang after the timeout but does NOT abandon the rest — we keep
-        // going until nothing is left or several no-progress batches in a row.
-        const summary = await firstDayPreparationRaceTimeout(
-          localAiClassificationOptions
-            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...localAiClassificationOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
-            : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL }),
-          FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS,
-          batchTimeoutSummary,
-        );
-        await reportProgress();
-        if (summary.status === "disabled") break; // AI off
-        // A timed-out batch returns the fabricated `batchTimeoutSummary` (selectedSegments: 0).
-        // Do NOT treat that as "nothing left" — only a real empty result ends the loop.
-        const timedOut = summary === batchTimeoutSummary;
-        if (!timedOut && summary.selectedSegments === 0) break; // genuinely nothing left
-        if (!timedOut && summary.savedRecords > 0) {
-          consecutiveNoProgress = 0;
-          continue;
-        }
-        consecutiveNoProgress += 1;
-        if (consecutiveNoProgress >= FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT) break;
-      }
-      // No forced 100%: the progress bar reflects real classified/total coverage.
-      await reportProgress();
-    };
-
-    void (async () => {
-      let today = logicalTodayIsoDate(startOfDayMinutes);
-      const aiAvailable = Boolean(localAiClassificationOptions) || canUseCloudAiClassification;
-      try {
-        if (!shouldBlockLocalTrackerAccess) {
-          setFirstDayPreparationPhase("importing");
-          setFirstDayPreparationProgress(null);
-          const preview = await trackerClient.previewBrowserHistoryImport({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
-          if (preview.segmentCount > 0) {
-            await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
-            clearLocalActivityCaches();
-          }
-          // Complete + reveal the most recent logical day that has data, and open the
-          // dashboard there — right after the day rolls over "today" is often empty.
-          today = await resolveFirstDayTargetDay(today);
-          selectDay(today);
-          // refresh() materializes and persists the day's built-in heuristic classifications,
-          // so nothing renders as bare "unclassified" even before AI runs.
-          await refresh(today, { foreground: true });
-
-          if (aiAvailable && !settled) {
-            setFirstDayPreparationPhase("classifying");
-            // Intent: reveal a fully-classified *today*. Wait until today's segments are
-            // all classified (the loop exits when nothing is left). The only escape hatches
-            // are a genuinely stalled/hung provider and the overall safety backstop below.
-            await classifyTodayWithProgress(today);
-            await refresh(today);
-          }
-        }
-      } catch {
-        // Never trap the user on the loading screen; reveal with whatever we have.
-      } finally {
-        clearTimeout(safetyTimeout);
-        reveal();
-      }
-
-      // Background: classify the rest of the 48h window without blocking the reveal.
-      if (aiAvailable && !shouldBlockLocalTrackerAccess) {
-        void (async () => {
-          for (const offset of FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS) {
-            const day = shiftIsoDate(today, offset);
-            try {
-              const summary = await runClassificationForDay(day);
-              if (summary.savedRecords > 0 && selectedDayRef.current === day) await refresh(day);
-            } catch {
-              // best-effort background classification
-            }
-          }
-        })();
-      }
-    })();
-
-    return () => {
-      clearTimeout(safetyTimeout);
-    };
-    // Intentionally keyed only on `preparingFirstDay`: this is a one-shot run guarded
-    // by firstDayPreparationRunRef, and re-running on other dep changes would clear the
-    // safety-reveal timeout mid-flight and could trap the user on the loading screen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preparingFirstDay]);
 
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
@@ -4908,9 +4754,9 @@ export default function App() {
   }, [dashboardAiRecoveryKey]);
 
   useEffect(() => {
-    const onboardingUserId = user?.id ?? "local";
-    setBrowserHistoryBootstrapEnabled(readUserOnboardingState(onboardingUserId)?.browserHistoryBootstrapEnabled === true);
-  }, [onboardingOpen, user?.id]);
+    // Account switches disarm the one-shot bootstrap; onboarding completion re-arms it.
+    setBrowserHistoryBootstrapEnabled(false);
+  }, [user?.id]);
 
   useEffect(() => {
     if (isDevOnboardingBypassEnabled()) {
@@ -4959,7 +4805,7 @@ export default function App() {
     navigateToTab("dashboard", "Today");
     setOnboardingOpen(false);
     if (state.browserHistoryBootstrapEnabled && !shouldBlockLocalTrackerAccess) {
-      firstDayPreparationRunRef.current = false;
+      rearmFirstDayPreparation();
       setFirstDayPreparationPhase("importing");
       setPreparingFirstDay(true);
     }

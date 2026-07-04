@@ -23,7 +23,9 @@ const {
   trackerGetHourlySummary,
   trackerPreviewBrowserHistoryImport,
   trackerImportBrowserHistory,
+  trackerGetBrowserHistoryEnvironment,
   openSystemSettingsPane,
+  openFullDiskAccessSettingsPane,
   billingMocks,
   appFeatureSwitches,
   startupSettingsClient,
@@ -65,7 +67,9 @@ const {
   trackerGetHourlySummary: vi.fn(),
   trackerPreviewBrowserHistoryImport: vi.fn(),
   trackerImportBrowserHistory: vi.fn(),
+  trackerGetBrowserHistoryEnvironment: vi.fn(),
   openSystemSettingsPane: vi.fn(),
+  openFullDiskAccessSettingsPane: vi.fn(),
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
@@ -114,6 +118,7 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 
 vi.mock("./lib/api/systemSettingsClient", () => ({
   openSystemSettingsPane,
+  openFullDiskAccessSettingsPane,
 }));
 
 vi.mock("./lib/api/startupSettingsClient", () => ({
@@ -172,6 +177,7 @@ vi.mock("./lib/api/trackerClient", () => ({
     updateTrayProductivityIcon: vi.fn().mockResolvedValue(undefined),
     previewBrowserHistoryImport: trackerPreviewBrowserHistoryImport,
     importBrowserHistory: trackerImportBrowserHistory,
+    getBrowserHistoryEnvironment: trackerGetBrowserHistoryEnvironment,
   },
 }));
 
@@ -459,6 +465,10 @@ describe("App onboarding", () => {
       errorCount: 0,
       windowStart: "2026-07-01T13:15:00.000Z",
       windowEnd: "2026-07-03T13:15:00.000Z",
+    });
+    trackerGetBrowserHistoryEnvironment.mockResolvedValue({
+      safariHistoryReadable: false,
+      defaultBrowserIsSafari: false,
     });
     trackerImportBrowserHistory.mockResolvedValue({
       lookbackDays: 2,
@@ -1161,6 +1171,65 @@ describe("App onboarding", () => {
     expect(openSystemSettingsPane).not.toHaveBeenCalledWith("accessibility");
   });
 
+  it("shows the Safari history row on the permissions step for a Safari-default user", async () => {
+    setTauriRuntime();
+    trackerGetBrowserHistoryEnvironment.mockResolvedValue({
+      safariHistoryReadable: false,
+      defaultBrowserIsSafari: true,
+    });
+    trackerPreviewBrowserHistoryImport.mockResolvedValue({
+      lookbackDays: 2,
+      candidateCount: 40,
+      segmentCount: 20,
+      estimatedSeconds: 3600,
+      browserCount: 1,
+      profileCount: 1,
+      databaseCount: 1,
+      errorCount: 0,
+      windowStart: "2026-07-01T13:15:00.000Z",
+      windowEnd: "2026-07-03T13:15:00.000Z",
+    });
+
+    render(<App />);
+
+    await advanceToPermissionsStep();
+    expect(await screen.findByText("Safari history")).toBeTruthy();
+
+    const safariRow = screen.getByText("Safari history").closest("li");
+    fireEvent.click(within(safariRow as HTMLElement).getByRole("button", { name: /^enable$/i }));
+    await waitFor(() => {
+      expect(openFullDiskAccessSettingsPane).toHaveBeenCalled();
+    });
+  });
+
+  it("hides the Safari history row for a non-Safari user with plenty of supported history", async () => {
+    setTauriRuntime();
+    trackerGetBrowserHistoryEnvironment.mockResolvedValue({
+      safariHistoryReadable: false,
+      defaultBrowserIsSafari: false,
+    });
+    trackerPreviewBrowserHistoryImport.mockResolvedValue({
+      lookbackDays: 2,
+      candidateCount: 40,
+      segmentCount: 20,
+      estimatedSeconds: 3600,
+      browserCount: 1,
+      profileCount: 1,
+      databaseCount: 1,
+      errorCount: 0,
+      windowStart: "2026-07-01T13:15:00.000Z",
+      windowEnd: "2026-07-03T13:15:00.000Z",
+    });
+
+    render(<App />);
+
+    await advanceToPermissionsStep();
+    await waitFor(() => {
+      expect(trackerGetBrowserHistoryEnvironment).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("Safari history")).toBeNull();
+  });
+
   it("uses downloaded-model lookup copy before initial managed status resolves and applies native ready events", async () => {
     setTauriRuntime();
     const statusDeferred = createDeferred<ManagedLocalAiStatus>();
@@ -1451,6 +1520,19 @@ describe("App onboarding", () => {
 
     // The stale different-model "running" must be ignored: the 4B row stays downloading
     // and Continue stays blocked (no flash back to a ready state).
+    expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    // The 500ms status poll that runs while installing can also return the stale
+    // previously-loaded model as "running"; that too must not flash Ready.
+    const statusCallsBeforeStalePoll = invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length;
+    managedStatus = runningManagedModel("drifty-qwen3-5-2b-economy");
+    await waitFor(
+      () => expect(invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length).toBeGreaterThan(statusCallsBeforeStalePoll),
+      { timeout: 2_000 },
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
     expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
   });

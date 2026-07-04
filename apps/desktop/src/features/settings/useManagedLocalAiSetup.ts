@@ -122,6 +122,11 @@ export function useManagedLocalAiSetup(
     try {
       const nextStatus = await getManagedLocalAiStatus();
       if (!mountedRef.current) return;
+      // While an install is in flight, a poll can still report a *different*
+      // (previously-loaded) model as "installed"/"running"; applying it would flash the
+      // UI back to "ready" for the wrong model. Only statuses about a model we are
+      // installing (or about no model at all) are applied.
+      if (isStaleDifferentModelStatus(nextStatus, pendingReadyNotificationModelIdsRef.current)) return;
       setStatus(nextStatus);
       syncManagedSetup(nextStatus, { activateProvider: false });
       notifyReadyOnce(nextStatus);
@@ -177,14 +182,15 @@ export function useManagedLocalAiSetup(
     }
     try {
       const nextStatus = await action(modelId);
-      syncManagedSetup(nextStatus, { activateProvider: options.activateProvider });
-      notifyReadyOnce(nextStatus);
       // When we optimistically showed "installing", ignore an action return that is about
       // a *different* (previously-loaded) model — it briefly reports that model as
-      // "installed"/"running", which would flash the UI back to "ready" and let the user
-      // advance mid-download. A return about the model we're installing is applied as normal.
-      if (mountedRef.current && (!options.optimisticInstalling || nextStatus.selectedModelId === modelId)) {
-        setStatus(nextStatus);
+      // "installed"/"running", which would flash the UI back to "ready", transiently
+      // activate the wrong model id/base URL, and let the user advance mid-download.
+      // A return about the model we're installing is applied as normal.
+      if (!options.optimisticInstalling || nextStatus.selectedModelId === modelId) {
+        syncManagedSetup(nextStatus, { activateProvider: options.activateProvider });
+        notifyReadyOnce(nextStatus);
+        if (mountedRef.current) setStatus(nextStatus);
       }
     } catch (error) {
       pendingReadyNotificationModelIdsRef.current.delete(modelId);
@@ -211,6 +217,15 @@ function messageFromError(error: unknown): string {
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function isStaleDifferentModelStatus(
+  status: ManagedLocalAiStatus,
+  pendingInstallModelIds: ReadonlySet<string>,
+): boolean {
+  if (pendingInstallModelIds.size === 0) return false;
+  if (!status.selectedModelId) return false;
+  return !pendingInstallModelIds.has(status.selectedModelId);
 }
 
 function isReadyManagedLocalAiStatus(status: ManagedLocalAiStatus): status is ManagedLocalAiStatus & {

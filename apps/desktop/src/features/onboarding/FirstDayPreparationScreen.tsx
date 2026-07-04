@@ -27,7 +27,7 @@ const PHASE_COPY: Record<FirstDayPreparationPhase, PhaseCopy> = {
   },
 };
 
-const LINE_ROTATION_MS = 6760;
+const LINE_ROTATION_MS = 8450;
 
 type FirstDayPreparationScreenProps = {
   readonly phase: FirstDayPreparationPhase;

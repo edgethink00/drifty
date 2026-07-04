@@ -19,13 +19,17 @@
 }
 
 /* Hourglass turning over, mirroring the app's brand-capture-flip motion
-   (overshoot past 180deg, then settle). The mark is 180deg-symmetric, so each
-   turn leaves it upright and the loop is seamless. */
+   (overshoot past 180deg, then settle). The shape is 180deg-symmetric but the
+   diagonal gradient is not, so the cycle must keep rotating forward to 360deg —
+   snapping back from 180 to 0 reads as the colors swapping for a frame. */
 @keyframes firstDayPrepFlip {
-  0%, 40% { transform: rotate(0deg); }
-  62% { transform: rotate(188deg); }
-  69% { transform: rotate(176deg); }
-  76%, 100% { transform: rotate(180deg); }
+  0%, 20% { transform: rotate(0deg); }
+  31% { transform: rotate(188deg); }
+  34.5% { transform: rotate(176deg); }
+  38%, 70% { transform: rotate(180deg); }
+  81% { transform: rotate(368deg); }
+  84.5% { transform: rotate(356deg); }
+  88%, 100% { transform: rotate(360deg); }
 }
 
 @keyframes firstDayPrepIndeterminate {
@@ -93,7 +97,8 @@
   height: 60px;
   transform-origin: 50% 50%;
   filter: drop-shadow(0 8px 18px rgba(244, 132, 95, 0.28));
-  animation: firstDayPrepFlip 4.16s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  /* Two flips per cycle (0 -> 180 -> 360); 5.2s per flip. */
+  animation: firstDayPrepFlip 10.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
 /* ---- Copy ---- */
