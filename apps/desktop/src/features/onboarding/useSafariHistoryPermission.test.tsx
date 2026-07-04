@@ -2,7 +2,6 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PermissionsStep } from "./components/steps/PermissionsStep";
 import type { OnboardingStep } from "./onboardingFlow";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
@@ -25,22 +24,20 @@ function safariRow(): HTMLElement {
   return row;
 }
 
+// Minimal render harness for the hook: mirrors the Safari row semantics of the
+// onboarding permissions step (row shown when `show`, button label tracks state).
 function Harness({ step }: { readonly step: OnboardingStep }) {
   const safari = useSafariHistoryPermission(step);
+  if (!safari.show) return null;
   return (
-    <PermissionsStep
-      accessibilityGranted
-      accessibilityReady
-      notificationPermission="granted"
-      notificationsReady
-      openingSettingsPane={null}
-      onNotificationPermission={() => {}}
-      onRequestAccessibility={() => {}}
-      safariHistoryShow={safari.show}
-      safariHistoryReadable={safari.readable}
-      safariHistoryOpening={safari.opening}
-      onEnableSafariHistory={safari.onEnable}
-    />
+    <ul>
+      <li>
+        <span>Safari history</span>
+        <button type="button" onClick={safari.onEnable} disabled={safari.opening || safari.readable}>
+          {safari.readable ? "Enabled" : safari.opening ? "Opening…" : "Enable"}
+        </button>
+      </li>
+    </ul>
   );
 }
 
