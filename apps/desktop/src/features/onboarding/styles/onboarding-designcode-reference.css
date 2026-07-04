@@ -877,6 +877,9 @@
   color: var(--dc-onb-soft);
   font-size: 12.5px;
   line-height: 1.45;
+  /* Reserve two lines so the 1-line "Ready" card is the same height as the 2-line
+     description cards — every model block stays uniform. */
+  min-height: 2.9em;
 }
 
 .dc-onb-local-card__meta {
@@ -903,6 +906,15 @@
   margin: 0;
   font-size: 12.5px;
   font-weight: 560;
+}
+
+/* Uniform action button across states: "Ready" / "Download" / "Downloading NN%" all
+   render at the same width so the model rows line up. */
+.dc-onb-local-card .dc-onb-secondary-button {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 118px;
+  text-align: center;
 }
 
 @media (max-height: 560px) {

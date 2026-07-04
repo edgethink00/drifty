@@ -1412,6 +1412,49 @@ describe("App onboarding", () => {
     });
   });
 
+  it("does not flash back to Ready when the install command returns a stale running status", async () => {
+    setTauriRuntime();
+    let managedStatus: ManagedLocalAiStatus = {
+      state: "not_installed", selectedModelId: null, installedModels: [], baseUrl: null, model: null,
+      message: "Choose a local model and Drifty will download it inside the app.",
+      artifactDir: null, progress: null, errorKind: null, memoryUsageBytes: null,
+    };
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      switch (command) {
+        case "managed_ai_catalog":
+          return Promise.resolve(managedCatalog);
+        case "managed_ai_status":
+          return Promise.resolve(managedStatus);
+        case "managed_ai_install": {
+          const modelId = modelIdFromArgs(args);
+          managedStatus = { ...installManagedModel(modelId), state: "installing", message: "Downloading..." };
+          // The install command briefly reports a *different*, previously-loaded model as
+          // running; this stale return must not clobber the optimistic "installing" state
+          // (which would flash Continue back on mid-download).
+          return Promise.resolve(runningManagedModel("drifty-qwen3-5-2b-economy"));
+        }
+        default:
+          return Promise.resolve({});
+      }
+    });
+    render(<App />);
+
+    await chooseLocalAiSetup();
+    const localDialog = await screen.findByRole("dialog", { name: /set up your local ai model/i });
+    const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
+    await act(async () => {
+      fireEvent.click(within(defaultModel).getByRole("button", { name: /^download$/i }));
+    });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+    // Flush the resolved install command + the guarded status update.
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    // The stale different-model "running" must be ignored: the 4B row stays downloading
+    // and Continue stays blocked (no flash back to a ready state).
+    expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("shows a retry action when managed model download reports an error before the install command returns", async () => {
     setTauriRuntime();
     const installDeferred = createDeferred<ManagedLocalAiStatus>();

@@ -179,7 +179,13 @@ export function useManagedLocalAiSetup(
       const nextStatus = await action(modelId);
       syncManagedSetup(nextStatus, { activateProvider: options.activateProvider });
       notifyReadyOnce(nextStatus);
-      if (mountedRef.current) setStatus(nextStatus);
+      // When we optimistically showed "installing", ignore an action return that is about
+      // a *different* (previously-loaded) model — it briefly reports that model as
+      // "installed"/"running", which would flash the UI back to "ready" and let the user
+      // advance mid-download. A return about the model we're installing is applied as normal.
+      if (mountedRef.current && (!options.optimisticInstalling || nextStatus.selectedModelId === modelId)) {
+        setStatus(nextStatus);
+      }
     } catch (error) {
       pendingReadyNotificationModelIdsRef.current.delete(modelId);
       if (mountedRef.current) setStatus(fallbackManagedLocalAiStatus(messageFromError(error)));
