@@ -18,6 +18,12 @@ from app.tracker.browser_automation import (
     is_supported_browser_app,
     youtube_ids,
 )
+from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
+
+# Recovers a video id for the occasional YouTube capture that lands mid SPA-navigation with
+# the video title but a bare base URL (see youtube_video_recovery). Capture runs on a single
+# thread, so a plain module-level instance is safe and cost-free.
+_youtube_video_id_memory = YouTubeVideoIdMemory()
 from app.tracker.browser_history import (
     browser_history_metadata,
     is_browser_history_supported_app,
@@ -398,6 +404,13 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     if browser_automation_status is None and not _is_supported_browser_app(app_name):
         browser_automation_status = "not_applicable"
 
+    youtube_video_id, site_url = _youtube_video_id_memory.observe(
+        window_title,
+        browser.site_domain,
+        browser.site_url,
+        browser.youtube_video_id,
+    )
+
     return Snapshot(
         observed_at=observed_at,
         app_name=app_name,
@@ -407,8 +420,8 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         browser_name=browser.browser_name,
         site_domain=browser.site_domain,
         site_title=browser.site_title,
-        site_url=browser.site_url,
-        youtube_video_id=browser.youtube_video_id,
+        site_url=site_url,
+        youtube_video_id=youtube_video_id,
         youtube_playlist_id=browser.youtube_playlist_id,
         youtube_is_shorts=browser.youtube_is_shorts,
         site_source=site_source,
