@@ -8,6 +8,7 @@ import {
   type AiClassificationSummary,
   type ClassificationLevel,
 } from "../classification/aiClassificationService";
+import { getManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
 import type { FirstDayPreparationPhase } from "./FirstDayPreparationScreen";
 
@@ -37,6 +38,13 @@ const FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS = 15;
 // Offset 0 re-runs the revealed target day to mop up anything the (time-capped)
 // foreground gate left unclassified; -1/-2 cover the rest of the imported window.
 const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [0, -1, -2] as const;
+// Poll cadence for the in-gate managed-model download wait; download progress
+// feeds the loading bar, so keep it responsive.
+const FIRST_DAY_PREPARATION_DOWNLOAD_POLL_MS = 1_500;
+// After a (time-capped) reveal, the background pass keeps waiting for a managed
+// model that is still downloading before classifying — slower poll, generous cap.
+const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_POLL_MS = 5_000;
+const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS = 60 * 60 * 1000;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -45,6 +53,10 @@ function firstDayPreparationRaceTimeout<T>(promise: Promise<T>, ms: number, fall
     promise,
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
   ]);
+}
+
+function firstDayPreparationDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 type RunAiClassificationBatch = (
@@ -61,7 +73,13 @@ type RefreshDashboard = (
 export type UseFirstDayPreparationOptions = {
   readonly preparingFirstDay: boolean;
   readonly canUseCloudAiClassification: boolean;
-  readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
+  /**
+   * Live view of the local AI options. The managed-model attach watcher fills the
+   * AI setup while the gate runs, so the gate reads this ref instead of a snapshot.
+   */
+  readonly localAiClassificationOptionsRef: MutableRefObject<LocalAiClassificationOptions | null>;
+  /** True when the user picked managed Local AI (its download may still be running). */
+  readonly managedLocalSelected: boolean;
   readonly shouldBlockLocalTrackerAccess: boolean;
   readonly startOfDayMinutes: number;
   readonly selectedDayRef: MutableRefObject<string>;
@@ -96,7 +114,8 @@ export async function resolveFirstDayTargetDay(logicalToday: string): Promise<st
 export function useFirstDayPreparation({
   canUseCloudAiClassification,
   clearLocalActivityCaches,
-  localAiClassificationOptions,
+  localAiClassificationOptionsRef,
+  managedLocalSelected,
   onReveal,
   preparingFirstDay,
   refresh,
@@ -130,11 +149,51 @@ export function useFirstDayPreparation({
     };
     const safetyTimeout = setTimeout(reveal, FIRST_DAY_PREPARATION_MAX_MS);
 
-    const runClassificationForDay = (day: string) => {
+    const runClassificationForDay = (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
       const query = toClassificationQueryForDay(day);
-      return localAiClassificationOptions
-        ? runAiClassificationUntilEmpty(query, undefined, { ...localAiClassificationOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
+      return classifyOptions
+        ? runAiClassificationUntilEmpty(query, undefined, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
         : runAiClassificationUntilEmpty(query, undefined, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
+    };
+
+    // Wait for a managed local model that onboarding left downloading. The app-level
+    // attach watcher fills the AI setup when the download lands; here we surface the
+    // download progress on the loading bar and hand back the options once they exist.
+    // Bails when there is genuinely nothing to wait for (no download, or it failed).
+    const waitForManagedModelOptions = async (): Promise<LocalAiClassificationOptions | null> => {
+      while (!settled) {
+        const options = localAiClassificationOptionsRef.current;
+        if (options) return options;
+        try {
+          const status = await getManagedLocalAiStatus();
+          if (status.state === "error") return null;
+          if (status.state === "not_installed" && !status.selectedModelId) return null;
+          setProgress(status.progress ? Math.min(1, Math.max(0, status.progress.percent / 100)) : null);
+        } catch {
+          // status is best-effort; keep waiting on the options ref
+        }
+        await firstDayPreparationDelay(FIRST_DAY_PREPARATION_DOWNLOAD_POLL_MS);
+      }
+      return localAiClassificationOptionsRef.current;
+    };
+
+    // Same wait after the reveal, without progress reporting: the dashboard is
+    // already visible, so a long download only delays the background fill-in.
+    const waitForManagedModelInBackground = async (): Promise<LocalAiClassificationOptions | null> => {
+      const deadline = Date.now() + FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS;
+      while (Date.now() < deadline) {
+        const options = localAiClassificationOptionsRef.current;
+        if (options) return options;
+        try {
+          const status = await getManagedLocalAiStatus();
+          if (status.state === "error") return null;
+          if (status.state === "not_installed" && !status.selectedModelId) return null;
+        } catch {
+          // keep waiting on the options ref
+        }
+        await firstDayPreparationDelay(FIRST_DAY_PREPARATION_BACKGROUND_MODEL_POLL_MS);
+      }
+      return localAiClassificationOptionsRef.current;
     };
 
     // Resolve the flow chart's visible segment set for `day` at the default 3-minute zoom.
@@ -155,7 +214,7 @@ export function useFirstDayPreparation({
     // Classify a single day one batch at a time, prioritizing the flow chart's visible set, so
     // the loading screen can report real progress (classified-in-set / set-size) and the loop
     // ends — revealing the dashboard — as soon as every visible block is classified.
-    const classifyTodayWithProgress = async (day: string) => {
+    const classifyTodayWithProgress = async (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
       const dayQuery = toClassificationQueryForDay(day);
       const visibleIds = await resolveVisibleSegmentIds(day);
       const visibleSet = new Set(visibleIds);
@@ -202,8 +261,8 @@ export function useFirstDayPreparation({
         // treated as a hang after the timeout but does NOT abandon the rest — we keep
         // going until nothing is left or several no-progress batches in a row.
         if (!pendingBatch) {
-          pendingBatch = localAiClassificationOptions
-            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...localAiClassificationOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
+          pendingBatch = classifyOptions
+            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
             : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
         }
         const summary = await firstDayPreparationRaceTimeout(
@@ -237,7 +296,11 @@ export function useFirstDayPreparation({
 
     void (async () => {
       let today = logicalTodayIsoDate(startOfDayMinutes);
-      const aiAvailable = Boolean(localAiClassificationOptions) || canUseCloudAiClassification;
+      // Managed Local AI counts as "available" even while its download is still
+      // running — the gate waits for it (phase "downloading") instead of skipping AI.
+      const aiCouldBecomeAvailable = Boolean(localAiClassificationOptionsRef.current)
+        || canUseCloudAiClassification
+        || managedLocalSelected;
       try {
         if (!shouldBlockLocalTrackerAccess) {
           setPhase("importing");
@@ -257,13 +320,22 @@ export function useFirstDayPreparation({
           // so nothing renders as bare "unclassified" even before AI runs.
           await refresh(today, { foreground: true });
 
-          if (aiAvailable && !settled) {
-            setPhase("classifying");
-            // Intent: reveal a fully-classified *today*. Wait until today's segments are
-            // all classified (the loop exits when nothing is left). The only escape hatches
-            // are a genuinely stalled/hung provider and the overall safety backstop below.
-            await classifyTodayWithProgress(today);
-            await refresh(today);
+          if (aiCouldBecomeAvailable && !settled) {
+            let classifyOptions = localAiClassificationOptionsRef.current;
+            if (!classifyOptions && !canUseCloudAiClassification && managedLocalSelected) {
+              setPhase("downloading");
+              setProgress(null);
+              classifyOptions = await waitForManagedModelOptions();
+            }
+            if ((classifyOptions || canUseCloudAiClassification) && !settled) {
+              setPhase("classifying");
+              setProgress(null);
+              // Intent: reveal a fully-classified *today*. Wait until today's segments are
+              // all classified (the loop exits when nothing is left). The only escape hatches
+              // are a genuinely stalled/hung provider and the overall safety backstop below.
+              await classifyTodayWithProgress(today, classifyOptions);
+              await refresh(today);
+            }
           }
         }
       } catch {
@@ -274,12 +346,19 @@ export function useFirstDayPreparation({
       }
 
       // Background: classify the rest of the 48h window without blocking the reveal.
-      if (aiAvailable && !shouldBlockLocalTrackerAccess) {
+      // A managed model that outlived the gate's backstop is awaited here, so the
+      // revealed (heuristic) dashboard still fills in with AI classifications.
+      if (aiCouldBecomeAvailable && !shouldBlockLocalTrackerAccess) {
         void (async () => {
+          let backgroundOptions = localAiClassificationOptionsRef.current;
+          if (!backgroundOptions && !canUseCloudAiClassification && managedLocalSelected) {
+            backgroundOptions = await waitForManagedModelInBackground();
+            if (!backgroundOptions) return;
+          }
           for (const offset of FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS) {
             const day = shiftIsoDate(today, offset);
             try {
-              const summary = await runClassificationForDay(day);
+              const summary = await runClassificationForDay(day, backgroundOptions);
               if (summary.savedRecords > 0 && selectedDayRef.current === day) await refresh(day);
             } catch {
               // best-effort background classification

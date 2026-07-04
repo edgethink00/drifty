@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./styles/first-day-preparation.css";
 
-export type FirstDayPreparationPhase = "importing" | "classifying";
+export type FirstDayPreparationPhase = "importing" | "downloading" | "classifying";
 
 type PhaseCopy = {
   readonly title: string;
@@ -14,6 +14,13 @@ const PHASE_COPY: Record<FirstDayPreparationPhase, PhaseCopy> = {
     lines: [
       "Gathering your last 48 hours…",
       "Pulling in where you've been…",
+    ],
+  },
+  downloading: {
+    title: "Setting up your local AI",
+    lines: [
+      "Downloading your local model…",
+      "Classification will run entirely on this Mac…",
     ],
   },
   classifying: {

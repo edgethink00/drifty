@@ -228,7 +228,7 @@ function isStaleDifferentModelStatus(
   return !pendingInstallModelIds.has(status.selectedModelId);
 }
 
-function isReadyManagedLocalAiStatus(status: ManagedLocalAiStatus): status is ManagedLocalAiStatus & {
+export function isReadyManagedLocalAiStatus(status: ManagedLocalAiStatus): status is ManagedLocalAiStatus & {
   readonly selectedModelId: string;
   readonly baseUrl: string;
   readonly model: string;
@@ -248,7 +248,7 @@ function isReadyManagedLocalAiStatus(status: ManagedLocalAiStatus): status is Ma
   }
 }
 
-async function sendManagedLocalAiReadyNotification(modelLabel: string): Promise<void> {
+export async function sendManagedLocalAiReadyNotification(modelLabel: string): Promise<void> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
   try {
     const { sendNotification } = await import("@tauri-apps/plugin-notification");

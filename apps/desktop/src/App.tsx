@@ -203,6 +203,8 @@ import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceL
 import { selectInsightSegments } from "./features/insights/insightSegments";
 import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
+import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
+import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "./lib/activityLabels";
@@ -2342,10 +2344,28 @@ export default function App() {
     shouldStart: shouldStartBrowserHistoryBootstrap,
   });
 
+  // Live view of the local AI options for the first-day gate: the managed-model
+  // attach watcher can fill the setup while the gate is running.
+  const localAiClassificationOptionsRef = useRef(localAiClassificationOptions);
+  useEffect(() => {
+    localAiClassificationOptionsRef.current = localAiClassificationOptions;
+  }, [localAiClassificationOptions]);
+  // Picking Local AI in onboarding routes classification to the managed model the
+  // moment the download starts (driftyRoute "local"), so the route — not the
+  // provider default — is the "user chose Local AI" signal.
+  const managedLocalSelected = isManagedLocalAiRoute(localAiSetup);
+  // Once onboarding closes with a managed download still in flight, this watcher
+  // writes the ready model into the AI setup and sends the ready notification.
+  useManagedLocalModelAttach(
+    !onboardingOpen && managedLocalSelected && localAiClassificationOptions === null,
+    setLocalAiSetup,
+  );
+
   const { rearm: rearmFirstDayPreparation } = useFirstDayPreparation({
     canUseCloudAiClassification,
     clearLocalActivityCaches,
-    localAiClassificationOptions,
+    localAiClassificationOptionsRef,
+    managedLocalSelected,
     onReveal: () => setPreparingFirstDay(false),
     preparingFirstDay,
     refresh,

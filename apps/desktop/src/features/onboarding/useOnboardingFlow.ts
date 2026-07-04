@@ -135,7 +135,7 @@ export function useOnboardingFlow({
     customEndpointIsValid: connection.customEndpointIsValid,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
-    managedLocalReady: connection.managedLocalReady,
+    managedLocalStarted: connection.managedLocalStarted,
     setupChoice: connection.setupChoice,
     step,
   });
@@ -147,7 +147,6 @@ export function useOnboardingFlow({
     customEndpointModelIssue: connection.customEndpointModelIssue,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
-    managedLocalStarted: connection.managedLocalStarted,
     step,
   }), [
     canAdvance,
@@ -156,7 +155,6 @@ export function useOnboardingFlow({
     connection.customEndpointModelIssue,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
-    connection.managedLocalStarted,
     permissions.accessibilityRecheckPending,
     step,
   ]);

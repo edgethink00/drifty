@@ -1287,7 +1287,7 @@ describe("App onboarding", () => {
 
     const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
     await waitFor(() => expect(within(defaultModel).getByRole("button", { name: /^ready$/i })).toBeTruthy());
-    expect(within(localDialog).getByText(/managed local ai runtime is running/i)).toBeTruthy();
+    expect(within(localDialog).getByText(/model ready — classification runs entirely on this mac/i)).toBeTruthy();
     expect(within(localDialog).queryByText(/looking for downloaded local models/i)).toBeNull();
 
     await act(async () => {
@@ -1296,7 +1296,7 @@ describe("App onboarding", () => {
     });
   });
 
-  it("blocks Local AI onboarding until the managed model download completes, then applies the model", async () => {
+  it("lets Local AI onboarding continue while the download runs, then attaches the model after close", async () => {
     setTauriRuntime();
     const installDeferred = createDeferred<ManagedLocalAiStatus>();
     let managedStatus: ManagedLocalAiStatus = {
@@ -1361,34 +1361,27 @@ describe("App onboarding", () => {
     expect(within(localDialog).getAllByText(/1\.2\/2\.7 GB/i).length).toBeGreaterThan(0);
     expect(within(localDialog).queryByRole("button", { name: /^downloading 42%$/i })).toBeNull();
 
-    // The user must not advance while the managed model is still downloading — the
-    // first-day preparation gate that follows depends on the model being ready.
-    const continueDuringDownload = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
-    expect(continueDuringDownload.disabled).toBe(true);
-
-    // Complete the download; only then can onboarding continue.
-    const completedStatus = installManagedModel("drifty-qwen3-5-4b-default");
-    managedStatus = completedStatus;
-    installDeferred.resolve(completedStatus);
-
+    // A started download no longer blocks onboarding — the first-day gate (and the
+    // app-level attach watcher) finish the setup once the model lands.
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/activity goes to the selected local model on this mac, not to drifty cloud/i)).toBeTruthy();
 
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
+    expect(screen.getByText(/local model downloading/i)).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to start/i })).toBeNull();
     });
 
-    await waitFor(() => {
-      expect(sendNotificationMock).toHaveBeenCalledWith({
-        title: "Local AI model ready",
-        body: "Qwen 3.5 4B is ready for private classification.",
-      });
-    });
+    // The download finishes only after onboarding has closed; the attach watcher
+    // writes the ready model into the AI setup and sends the ready notification.
+    const completedStatus = installManagedModel("drifty-qwen3-5-4b-default");
+    managedStatus = completedStatus;
+    installDeferred.resolve(completedStatus);
+
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}")).toMatchObject({
         provider: "managed_local",
@@ -1397,8 +1390,14 @@ describe("App onboarding", () => {
         managedLocalBaseUrl: "http://127.0.0.1:39217/v1",
         managedLocalModel: "drifty-qwen3.5-4b-local",
       });
-    });
-  });
+    }, { timeout: 8_000 });
+    await waitFor(() => {
+      expect(sendNotificationMock).toHaveBeenCalledWith({
+        title: "Local AI model ready",
+        body: "Qwen 3.5 4B is ready for private classification.",
+      });
+    }, { timeout: 8_000 });
+  }, 25_000);
 
   it("shows native ready status before the managed catalog refresh finishes", async () => {
     setTauriRuntime();
@@ -1419,7 +1418,7 @@ describe("App onboarding", () => {
     await chooseLocalAiSetup();
     const localDialog = await screen.findByRole("dialog", { name: /set up your local ai model/i });
 
-    await waitFor(() => expect(within(localDialog).getByText(/managed local ai runtime is running/i)).toBeTruthy());
+    await waitFor(() => expect(within(localDialog).getByText(/model ready — classification runs entirely on this mac/i)).toBeTruthy());
     expect(within(localDialog).queryByText(/checking managed local ai/i)).toBeNull();
     const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
     expect(within(defaultModel).getByRole("button", { name: /^ready$/i })).toBeTruthy();
@@ -1547,9 +1546,9 @@ describe("App onboarding", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     // The stale different-model "running" must be ignored: the 4B row stays downloading
-    // and Continue stays blocked (no flash back to a ready state).
+    // and the status row must not flash the ready state for the wrong model.
     expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/model ready — classification runs entirely on this mac/i)).toBeNull();
 
     // The 500ms status poll that runs while installing can also return the stale
     // previously-loaded model as "running"; that too must not flash Ready.
@@ -1562,7 +1561,7 @@ describe("App onboarding", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/model ready — classification runs entirely on this mac/i)).toBeNull();
   });
 
   it("shows a retry action when managed model download reports an error before the install command returns", async () => {

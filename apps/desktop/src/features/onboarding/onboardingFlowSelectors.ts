@@ -9,7 +9,7 @@ export function canAdvanceOnboarding({
   customEndpointIsValid,
   isCustomEndpointSetup,
   isManagedProviderSetup,
-  managedLocalReady,
+  managedLocalStarted,
   setupChoice,
   step,
 }: {
@@ -21,7 +21,7 @@ export function canAdvanceOnboarding({
   readonly customEndpointIsValid: boolean;
   readonly isCustomEndpointSetup: boolean;
   readonly isManagedProviderSetup: boolean;
-  readonly managedLocalReady: boolean;
+  readonly managedLocalStarted: boolean;
   readonly setupChoice: SetupChoice | null;
   readonly step: OnboardingStep;
 }): boolean {
@@ -40,7 +40,9 @@ export function canAdvanceOnboarding({
     case "permissions":
       return accessibilityReady && !accessibilityRecheckPending;
     case "connect_server":
-      if (isManagedProviderSetup) return managedLocalReady;
+      // A managed download only needs to have started — it finishes in the
+      // background and the first-day gate waits for it before classifying.
+      if (isManagedProviderSetup) return managedLocalStarted;
       if (setupChoice === "byok") return apiKeyIsValid;
       if (isCustomEndpointSetup) return customEndpointIsValid;
       return false;
@@ -57,7 +59,6 @@ export function blockedHintForStep({
   customEndpointModelIssue,
   isCustomEndpointSetup,
   isManagedProviderSetup,
-  managedLocalStarted,
   step,
 }: {
   readonly accessibilityRecheckPending: boolean;
@@ -67,7 +68,6 @@ export function blockedHintForStep({
   readonly customEndpointModelIssue: string | null;
   readonly isCustomEndpointSetup: boolean;
   readonly isManagedProviderSetup: boolean;
-  readonly managedLocalStarted: boolean;
   readonly step: OnboardingStep;
 }): string | null {
   if (canAdvance) return null;
@@ -75,11 +75,7 @@ export function blockedHintForStep({
     case "account":
       return "Connect an account to continue.";
     case "connect_server":
-      if (isManagedProviderSetup) {
-        return managedLocalStarted
-          ? "Wait for the local model download to finish."
-          : "Start a local model download to continue.";
-      }
+      if (isManagedProviderSetup) return "Start a local model download to continue.";
       if (isCustomEndpointSetup) return customEndpointBaseUrlIssue ?? customEndpointModelIssue ?? "Enter your custom endpoint details.";
       return "Enter an OpenRouter key that starts with sk-or-.";
     case "test_connection":

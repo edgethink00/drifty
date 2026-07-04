@@ -10,10 +10,29 @@ const baseAdvanceState = {
   customEndpointIsValid: false,
   isCustomEndpointSetup: false,
   isManagedProviderSetup: false,
-  managedLocalReady: false,
+  managedLocalStarted: false,
   setupChoice: "simple",
   step: "permissions",
 } as const;
+
+describe("canAdvanceOnboarding (managed local download)", () => {
+  it("lets a started managed download advance before it finishes", () => {
+    expect(canAdvanceOnboarding({
+      ...baseAdvanceState,
+      isManagedProviderSetup: true,
+      setupChoice: "local_ai",
+      step: "connect_server",
+      managedLocalStarted: true,
+    })).toBe(true);
+    expect(canAdvanceOnboarding({
+      ...baseAdvanceState,
+      isManagedProviderSetup: true,
+      setupChoice: "local_ai",
+      step: "connect_server",
+      managedLocalStarted: false,
+    })).toBe(false);
+  });
+});
 
 describe("onboardingFlowSelectors", () => {
   it("requires Accessibility readiness on the combined permissions step", () => {
@@ -38,7 +57,6 @@ describe("onboardingFlowSelectors", () => {
       customEndpointModelIssue: null,
       isCustomEndpointSetup: false,
       isManagedProviderSetup: false,
-      managedLocalStarted: false,
       step: "permissions",
     })).toBe("Enable Accessibility to continue.");
   });
