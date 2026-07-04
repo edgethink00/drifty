@@ -250,8 +250,8 @@ function makeTrackerStatus(overrides: Partial<TrackerStatus> = {}): TrackerStatu
 }
 
 const managedCatalog = [
-  { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", recommended: false },
-  { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", recommended: true },
+  { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", estimatedRuntimeMemoryBytes: 2_147_483_648, recommended: false },
+  { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", estimatedRuntimeMemoryBytes: 3_758_096_384, recommended: true },
 ] as const;
 
 function installManagedModel(modelId: string): ManagedLocalAiStatus {
@@ -298,16 +298,18 @@ function configureManagedAiMocks() {
         return Promise.resolve(managedCatalog);
       case "managed_ai_status":
         return Promise.resolve(managedStatus);
-      case "managed_ai_install": {
-        const modelId = modelIdFromArgs(args);
-        managedStatus = installManagedModel(modelId);
-        return Promise.resolve(managedStatus);
+        case "managed_ai_install": {
+          const modelId = modelIdFromArgs(args);
+          managedStatus = installManagedModel(modelId);
+          return Promise.resolve(managedStatus);
+        }
+        case "ai_classification_openai_chat":
+          return Promise.resolve({ status: 200, body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}", latencyMs: 42 });
+        default:
+          return Promise.resolve({});
       }
-      default:
-        return Promise.resolve({});
-    }
-  });
-}
+    });
+  }
 
 function modelIdFromArgs(args: unknown): string {
   if (!args || typeof args !== "object" || !("modelId" in args) || typeof args.modelId !== "string") return "";
@@ -437,14 +439,14 @@ describe("App onboarding", () => {
     window.localStorage.clear();
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       running: false,
-      accessibilityGranted: false,
+      accessibilityGranted: true,
       trackerMode: "unavailable",
       message: "Tracker not available in this environment",
     }));
     isPermissionGranted.mockResolvedValue(false);
     requestPermission.mockResolvedValue("granted");
-    accessibilityGetStatus.mockResolvedValue({ granted: false });
-    accessibilityRequestAccess.mockResolvedValue({ granted: false });
+    accessibilityGetStatus.mockResolvedValue({ granted: true });
+    accessibilityRequestAccess.mockResolvedValue({ granted: true });
     startupSettingsClient.isAvailable.mockReturnValue(false);
     startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue({
       success: true,
@@ -1157,6 +1159,8 @@ describe("App onboarding", () => {
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       accessibilityGranted: false,
     }));
+    accessibilityGetStatus.mockResolvedValue({ granted: false });
+    accessibilityRequestAccess.mockResolvedValue({ granted: false });
 
     render(<App />);
 
@@ -1228,6 +1232,29 @@ describe("App onboarding", () => {
       expect(trackerGetBrowserHistoryEnvironment).toHaveBeenCalled();
     });
     expect(screen.queryByText("Safari history")).toBeNull();
+  });
+
+  it("blocks the combined permissions step until Accessibility is granted on desktop", async () => {
+    setTauriRuntime();
+    trackerGetStatus.mockResolvedValue(makeTrackerStatus({
+      accessibilityGranted: false,
+    }));
+    accessibilityGetStatus.mockResolvedValue({ granted: false });
+
+    render(<App />);
+
+    await advanceToPermissionsStep();
+    const continueButton = await screen.findByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
+    await waitFor(() => expect(continueButton.disabled).toBe(true));
+    expect(screen.getByText(/enable accessibility to continue/i)).toBeTruthy();
+
+    trackerGetStatus.mockResolvedValue(makeTrackerStatus({
+      accessibilityGranted: true,
+    }));
+    accessibilityGetStatus.mockResolvedValue({ granted: true });
+    fireEvent.focus(window);
+
+    await waitFor(() => expect(continueButton.disabled).toBe(false), { timeout: 3_000 });
   });
 
   it("uses downloaded-model lookup copy before initial managed status resolves and applies native ready events", async () => {
@@ -1626,6 +1653,12 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /testing connection/i })).toBeTruthy();
     expect(screen.getByText(/openrouter key shape valid/i)).toBeTruthy();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", expect.objectContaining({
+      request: expect.objectContaining({
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKey: "sk-or-validkey1234",
+      }),
+    })));
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: /connection successful/i })).toBeTruthy();
     }, { timeout: 6000 });
@@ -1634,6 +1667,38 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
     expect(screen.getByText(/masked openrouter key/i).textContent).toContain("1234");
     expect(screen.queryByText(/validkey1234/i)).toBeNull();
+  }, 15_000);
+
+  it("keeps BYOK onboarding blocked when the real OpenRouter connection test fails", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "ai_classification_openai_chat") {
+        return Promise.resolve({ status: 401, body: "{\"error\":\"invalid key\"}", latencyMs: 31 });
+      }
+      if (command === "managed_ai_catalog") return Promise.resolve(managedCatalog);
+      if (command === "managed_ai_status") return Promise.resolve({
+        state: "not_installed",
+        selectedModelId: null,
+        installedModels: [],
+        baseUrl: null,
+        model: null,
+        message: "",
+        artifactDir: null,
+        progress: null,
+        errorKind: null,
+        memoryUsageBytes: null,
+      });
+      return Promise.resolve({});
+    });
+    render(<App />);
+
+    await chooseByokSetup();
+    fireEvent.change(await screen.findByLabelText(/openrouter api key/i), { target: { value: "sk-or-invalidkey1234" } });
+    await clickEnabledAction(/^test connection$/i);
+
+    expect(await screen.findByRole("dialog", { name: /connection failed/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(screen.getByText(/provider returned http 401/i)).toBeTruthy();
+    const continueButton = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
+    expect(continueButton.disabled).toBe(true);
   }, 15_000);
 
   it("stores a custom endpoint setup from onboarding after connection review", async () => {

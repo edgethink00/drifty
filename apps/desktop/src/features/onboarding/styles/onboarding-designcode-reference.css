@@ -1416,3 +1416,14 @@
     justify-content: space-between;
   }
 }
+
+.dc-onb-local-card--unsupported {
+  opacity: 0.62;
+}
+
+.dc-onb-local-card__fit-note {
+  margin: 4px 0 0;
+  color: var(--dc-onb-soft);
+  font-size: 11.5px;
+  line-height: 1.4;
+}

@@ -4,6 +4,7 @@ mod auth_session_store;
 mod cloud_device_store;
 mod commands;
 mod donut_icon;
+mod openrouter_key_store;
 mod tracker;
 mod tray;
 
@@ -69,6 +70,21 @@ fn auth_save_session(_app: AppHandle, value: String) -> Result<(), String> {
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
     auth_session_store::clear_saved_session(&app)
+}
+
+#[tauri::command]
+fn openrouter_load_api_key() -> Result<Option<String>, String> {
+    openrouter_key_store::load_api_key()
+}
+
+#[tauri::command]
+fn openrouter_save_api_key(value: String) -> Result<(), String> {
+    openrouter_key_store::save_api_key(&value)
+}
+
+#[tauri::command]
+fn openrouter_clear_api_key() -> Result<(), String> {
+    openrouter_key_store::clear_api_key()
 }
 
 #[tauri::command]
@@ -260,6 +276,9 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            openrouter_load_api_key,
+            openrouter_save_api_key,
+            openrouter_clear_api_key,
             cloud_device_identity,
             cloud_device_install_id,
             app_reveal_main_window,

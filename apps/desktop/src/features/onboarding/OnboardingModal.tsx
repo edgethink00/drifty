@@ -29,6 +29,7 @@ export function OnboardingModal({
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
+  localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
   onStartCloudTrialWithGoogle,
@@ -47,6 +48,7 @@ export function OnboardingModal({
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
+  localAiSetup: LocalAiSetupState;
   onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   onStartCloudTrialWithGoogle: () => void;
@@ -73,6 +75,7 @@ export function OnboardingModal({
     onCheckAccessibility,
     onRequestAccessibility,
     onEnableDriftAlerts,
+    localAiSetup,
     onLocalAiSetupChange,
     cloudTrialStartedNotice,
     onAcknowledgeCloudTrialStartedNotice,

@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressText";
+import { managedModelRuntimeMemoryLabel } from "../settings/managedLocalAiMemory";
 import driftyIconUrl from "../../assets/drifty-icon.png";
 import { GoogleMark } from "./components/GoogleMark";
 import { BrowserHistoryBootstrapPreference } from "./components/BrowserHistoryBootstrapPreference";
@@ -323,6 +324,7 @@ export function OnboardingDesignCodeContent({
               </div>
             ) : null}
             <span className="dc-onb-actions-spacer" />
+            {flow.step === "permissions" && flow.blockedHint ? <p className="dc-onb-hint">{flow.blockedHint}</p> : null}
             <button type="submit" className="onb-button onb-button--primary dc-onb-primary" disabled={!flow.canAdvance}>
               {footerLabel}
             </button>
@@ -855,11 +857,14 @@ function LocalModelCard({
   readonly selected: boolean;
 }) {
   const status = flow.managedLocalAi.status;
+  const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
+  const unsupported = model.fit === "insufficient";
   const installingThisModel = flow.managedLocalAi.actionModelId === model.id
     || (status?.state === "installing" && status.selectedModelId === model.id);
   const failedThisModel = status?.state === "error" && status.selectedModelId === model.id;
   const ready = localModelIsReady(model.id, status);
-  const disabled = ready
+  const disabled = unsupported
+    || ready
     || (flow.managedLocalAi.loading && status === null)
     || Boolean(flow.managedLocalAi.actionModelId)
     || status?.state === "installing"
@@ -880,27 +885,30 @@ function LocalModelCard({
 
   return (
     <article
-      className={`dc-onb-local-card${selected ? " dc-onb-local-card--selected" : ""}`}
+      className={`dc-onb-local-card${selected ? " dc-onb-local-card--selected" : ""}${unsupported ? " dc-onb-local-card--unsupported" : ""}`}
       aria-label={`${model.label} local AI model`}
     >
       <div className="dc-onb-local-card__copy">
         <div className="dc-onb-local-card__title-line">
           <strong>{model.label}</strong>
           <span className={model.recommended ? "dc-onb-local-card__tier dc-onb-local-card__tier--recommended" : "dc-onb-local-card__tier"}>
-            {model.recommended ? "Recommended" : titleCase(model.tier)}
+            {model.recommended ? (model.fit ? "Recommended for your Mac" : "Recommended") : titleCase(model.tier)}
           </span>
         </div>
         <p>{description}</p>
+        {!ready && model.fitDetail ? <p className="dc-onb-local-card__fit-note">{model.fitDetail}</p> : null}
       </div>
       <dl className="dc-onb-local-card__meta">
         <div>
           <dt>Download</dt>
           <dd>{model.downloadSize}</dd>
         </div>
-        <div>
-          <dt>Memory</dt>
-          <dd>{model.minimumMemory}</dd>
-        </div>
+        {runtimeMemoryLabel ? (
+          <div>
+            <dt>RAM while running</dt>
+            <dd>{runtimeMemoryLabel}</dd>
+          </div>
+        ) : null}
       </dl>
       <button
         type="button"
@@ -1041,6 +1049,8 @@ function TestConnectionStep({ flow }: { readonly flow: OnboardingFlow }) {
           ? flow.isByokSetup
             ? "Your OpenRouter key is connected and ready for AI classification."
             : "Your custom endpoint is connected and ready for AI classification."
+          : flow.connectionPhase === "failed"
+            ? `Drifty could not connect: ${flow.connectionFailureLabel ?? "Connection test failed."}`
           : flow.isByokSetup
             ? "Checking that Drifty can use your masked OpenRouter key."
             : "Checking that Drifty can use your custom endpoint."}
@@ -1256,7 +1266,7 @@ function summaryItemsForFlow(flow: OnboardingFlow): ReadonlyArray<{ readonly lab
       { label: "Account connected" },
       {
         label: flow.setupChoice === "local_ai"
-          ? flow.managedLocalStarted ? "Local model downloading" : "Local model ready"
+          ? flow.managedLocalReady ? "Local model ready" : "Local model downloading"
           : flow.isByokSetup ? "OpenRouter key connected" : "Custom endpoint connected",
       },
       { label: "Tracking ready" },

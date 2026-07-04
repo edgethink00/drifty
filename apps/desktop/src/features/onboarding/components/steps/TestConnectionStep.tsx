@@ -31,7 +31,7 @@ export function TestConnectionStep({
               ? "Your custom endpoint is connected and ready for AI classification."
               : "Your Local AI server is connected and ready for classification."
           : connectionPhase === "failed"
-            ? `Drifty could not complete "${connectionFailureLabel ?? "the connection check"}". Review the details below and try again.`
+            ? `Drifty could not connect: ${connectionFailureLabel ?? "Connection test failed."}`
             : isByokSetup
               ? "Checking that Drifty can use your masked OpenRouter key."
               : isCustomEndpointSetup

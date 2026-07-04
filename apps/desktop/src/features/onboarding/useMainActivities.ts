@@ -1,9 +1,19 @@
 import { useState } from "react";
 import { MAX_MAIN_ACTIVITY_SELECTIONS } from "./constants";
 
-export function useMainActivities() {
-  const [mainActivities, setMainActivities] = useState<string[]>([]);
-  const [mainActivityOther, setMainActivityOther] = useState("");
+type UseMainActivitiesInitialState = {
+  readonly mainActivities?: readonly string[] | undefined;
+  readonly mainActivityOther?: string | undefined;
+};
+
+export function useMainActivities(initialState: UseMainActivitiesInitialState = {}) {
+  const [mainActivities, setMainActivities] = useState<string[]>(() =>
+    Array.from(new Set(initialState.mainActivities ?? []))
+      .map((activity) => activity.trim())
+      .filter(Boolean)
+      .slice(0, MAX_MAIN_ACTIVITY_SELECTIONS),
+  );
+  const [mainActivityOther, setMainActivityOther] = useState(initialState.mainActivityOther ?? "");
 
   function toggleMainActivity(option: string) {
     setMainActivities((current) => {

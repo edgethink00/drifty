@@ -23,6 +23,86 @@ fn catalog_uses_current_local_models() {
 }
 
 #[test]
+fn catalog_fit_matrix_matches_machine_memory() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let fit_labels = |machine: u64| {
+        super::catalog_for_machine(Some(machine))
+            .into_iter()
+            .map(|model| model.fit.expect("fit is set when machine memory is known"))
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(fit_labels(8 * GIB), vec!["good", "tight", "insufficient", "insufficient"]);
+    assert_eq!(fit_labels(16 * GIB), vec!["good", "good", "tight", "insufficient"]);
+    assert_eq!(fit_labels(32 * GIB), vec!["good", "good", "good", "insufficient"]);
+    assert_eq!(fit_labels(36 * GIB), vec!["good", "good", "good", "tight"]);
+    assert_eq!(fit_labels(48 * GIB), vec!["good", "good", "good", "good"]);
+}
+
+#[test]
+fn catalog_recommends_best_fitting_model_for_machine() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let recommended_id = |machine: u64| {
+        super::catalog_for_machine(Some(machine))
+            .into_iter()
+            .find(|model| model.recommended)
+            .map(|model| model.id)
+    };
+
+    assert_eq!(recommended_id(8 * GIB).as_deref(), Some("drifty-qwen3-5-2b-economy"));
+    assert_eq!(recommended_id(16 * GIB).as_deref(), Some("drifty-qwen3-5-4b-default"));
+    assert_eq!(recommended_id(64 * GIB).as_deref(), Some("drifty-qwen3-5-4b-default"));
+}
+
+#[test]
+fn catalog_without_machine_memory_keeps_static_recommendation_and_no_fit() {
+    let models = super::catalog_for_machine(None);
+    let recommended = models
+        .iter()
+        .find(|model| model.recommended)
+        .expect("static recommendation preserved");
+
+    assert_eq!(recommended.id, "drifty-qwen3-5-4b-default");
+    assert!(models.iter().all(|model| model.fit.is_none() && model.fit_detail.is_none()));
+}
+
+#[test]
+fn catalog_fit_detail_explains_tight_and_insufficient_models() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let models = super::catalog_for_machine(Some(16 * GIB));
+
+    let gemma = models.iter().find(|model| model.id == "drifty-gemma-4-12b-local").expect("gemma");
+    assert_eq!(gemma.fit.as_deref(), Some("tight"));
+    assert_eq!(
+        gemma.fit_detail.as_deref(),
+        Some("May be slow and heavy alongside other apps on a 16 GB Mac.")
+    );
+
+    let smart = models.iter().find(|model| model.id == "drifty-qwen3-6-27b-smart").expect("smart");
+    assert_eq!(smart.fit.as_deref(), Some("insufficient"));
+    assert_eq!(
+        smart.fit_detail.as_deref(),
+        Some("Needs at least 36 GB of memory — this Mac has 16 GB.")
+    );
+
+    let default = models.iter().find(|model| model.id == "drifty-qwen3-5-4b-default").expect("default");
+    assert_eq!(default.fit.as_deref(), Some("good"));
+    assert!(default.fit_detail.is_none());
+}
+
+#[test]
+fn catalog_reports_runtime_memory_estimate_above_artifact_size() {
+    for model in managed_ai_catalog() {
+        let spec = require_model(&model.id).expect("catalog model has spec");
+        assert!(
+            model.estimated_runtime_memory_bytes > spec.expected_size_bytes,
+            "{} runtime memory estimate must exceed its artifact size",
+            model.id
+        );
+    }
+}
+
+#[test]
 fn install_downloads_model_artifact_before_marking_installed() {
     let root = tempfile::tempdir().expect("create temp root");
     let status = install_model_at_root_with_downloader(

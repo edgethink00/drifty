@@ -5231,6 +5231,7 @@ export default function App() {
       onCheckAccessibility={handleCheckAccessibility}
       onRequestAccessibility={handleRequestAccessibility}
       onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
+      localAiSetup={localAiSetup}
       onLocalAiSetupChange={setLocalAiSetup}
       cloudTrialStartedNotice={cloudTrialStartedNotice}
       onStartCloudTrialWithGoogle={() => void signInWithGoogle()}

@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+const GIB: u64 = 1024 * 1024 * 1024;
+
 #[derive(Clone, Copy)]
 pub(super) struct ManagedAiModelSpec {
     pub(super) id: &'static str,
@@ -13,6 +15,9 @@ pub(super) struct ManagedAiModelSpec {
     pub(super) download_url: &'static str,
     pub(super) file_name: &'static str,
     pub(super) expected_size_bytes: u64,
+    pub(super) estimated_runtime_memory_bytes: u64,
+    pub(super) min_memory_bytes: u64,
+    pub(super) good_memory_bytes: u64,
     pub(super) recommended: bool,
 }
 
@@ -29,6 +34,9 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         download_url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
         file_name: "Qwen3.5-2B-Q4_K_M.gguf",
         expected_size_bytes: 1_280_835_840,
+        estimated_runtime_memory_bytes: 2_147_483_648,
+        min_memory_bytes: 8 * GIB,
+        good_memory_bytes: 8 * GIB,
         recommended: false,
     },
     ManagedAiModelSpec {
@@ -43,6 +51,9 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         download_url: "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
         file_name: "Qwen3.5-4B-Q4_K_M.gguf",
         expected_size_bytes: 2_740_937_888,
+        estimated_runtime_memory_bytes: 3_758_096_384,
+        min_memory_bytes: 8 * GIB,
+        good_memory_bytes: 16 * GIB,
         recommended: true,
     },
     ManagedAiModelSpec {
@@ -57,6 +68,9 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         download_url: "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/gemma-4-12b-it-Q4_K_M.gguf",
         file_name: "gemma-4-12b-it-Q4_K_M.gguf",
         expected_size_bytes: 7_121_860_000,
+        estimated_runtime_memory_bytes: 9_288_286_208,
+        min_memory_bytes: 16 * GIB,
+        good_memory_bytes: 32 * GIB,
         recommended: false,
     },
     ManagedAiModelSpec {
@@ -71,6 +85,9 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         download_url: "https://huggingface.co/unsloth/Qwen3.6-27B-GGUF/resolve/main/Qwen3.6-27B-Q4_K_M.gguf",
         file_name: "Qwen3.6-27B-Q4_K_M.gguf",
         expected_size_bytes: 16_817_244_384,
+        estimated_runtime_memory_bytes: 19_864_223_744,
+        min_memory_bytes: 36 * GIB,
+        good_memory_bytes: 48 * GIB,
         recommended: false,
     },
 ];
@@ -85,7 +102,10 @@ pub struct ManagedAiCatalogModel {
     pub(super) download_size: String,
     pub(super) disk_required: String,
     pub(super) minimum_memory: String,
+    pub(super) estimated_runtime_memory_bytes: u64,
     pub(super) recommended: bool,
+    pub(super) fit: Option<String>,
+    pub(super) fit_detail: Option<String>,
 }
 
 pub(super) fn catalog_model(spec: ManagedAiModelSpec) -> ManagedAiCatalogModel {
@@ -97,6 +117,85 @@ pub(super) fn catalog_model(spec: ManagedAiModelSpec) -> ManagedAiCatalogModel {
         download_size: spec.download_size.to_string(),
         disk_required: spec.disk_required.to_string(),
         minimum_memory: spec.minimum_memory.to_string(),
+        estimated_runtime_memory_bytes: spec.estimated_runtime_memory_bytes,
         recommended: spec.recommended,
+        fit: None,
+        fit_detail: None,
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ManagedAiModelFit {
+    Good,
+    Tight,
+    Insufficient,
+}
+
+impl ManagedAiModelFit {
+    fn as_str(self) -> &'static str {
+        match self {
+            ManagedAiModelFit::Good => "good",
+            ManagedAiModelFit::Tight => "tight",
+            ManagedAiModelFit::Insufficient => "insufficient",
+        }
+    }
+}
+
+pub(super) fn model_fit(spec: ManagedAiModelSpec, machine_memory_bytes: u64) -> ManagedAiModelFit {
+    if machine_memory_bytes < spec.min_memory_bytes {
+        ManagedAiModelFit::Insufficient
+    } else if machine_memory_bytes >= spec.good_memory_bytes {
+        ManagedAiModelFit::Good
+    } else {
+        ManagedAiModelFit::Tight
+    }
+}
+
+pub(super) fn catalog_model_for_machine(
+    spec: ManagedAiModelSpec,
+    machine_memory_bytes: Option<u64>,
+    recommended_id: Option<&str>,
+) -> ManagedAiCatalogModel {
+    let mut model = catalog_model(spec);
+    let Some(machine) = machine_memory_bytes else {
+        return model;
+    };
+    let fit = model_fit(spec, machine);
+    model.fit = Some(fit.as_str().to_string());
+    model.fit_detail = fit_detail(spec, fit, machine);
+    model.recommended = recommended_id == Some(spec.id);
+    model
+}
+
+pub(super) fn recommended_model_id(machine_memory_bytes: u64) -> Option<&'static str> {
+    const PREFERENCE: &[&str] = &[
+        "drifty-qwen3-5-4b-default",
+        "drifty-qwen3-5-2b-economy",
+        "drifty-gemma-4-12b-local",
+        "drifty-qwen3-6-27b-smart",
+    ];
+    PREFERENCE.iter().copied().find(|id| {
+        MANAGED_MODELS.iter().any(|spec| {
+            spec.id == *id && model_fit(*spec, machine_memory_bytes) == ManagedAiModelFit::Good
+        })
+    })
+}
+
+fn fit_detail(spec: ManagedAiModelSpec, fit: ManagedAiModelFit, machine_memory_bytes: u64) -> Option<String> {
+    match fit {
+        ManagedAiModelFit::Good => None,
+        ManagedAiModelFit::Tight => Some(format!(
+            "May be slow and heavy alongside other apps on a {} GB Mac.",
+            whole_gigabytes(machine_memory_bytes)
+        )),
+        ManagedAiModelFit::Insufficient => Some(format!(
+            "Needs at least {} GB of memory — this Mac has {} GB.",
+            whole_gigabytes(spec.min_memory_bytes),
+            whole_gigabytes(machine_memory_bytes)
+        )),
+    }
+}
+
+fn whole_gigabytes(bytes: u64) -> u64 {
+    (bytes + GIB / 2) / GIB
 }

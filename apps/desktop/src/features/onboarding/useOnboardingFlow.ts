@@ -19,6 +19,12 @@ import {
   footerLabelForStep,
   titleForStep,
 } from "./onboardingFlowSelectors";
+import {
+  clampOnboardingProgressStep,
+  clearOnboardingProgress,
+  readOnboardingProgress,
+  writeOnboardingProgress,
+} from "./onboardingProgress";
 import type { UserOnboardingState } from "./onboardingState";
 import { useMainActivities } from "./useMainActivities";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
@@ -37,6 +43,7 @@ type UseOnboardingFlowOptions = {
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
   readonly onEnableDriftAlerts: () => void;
+  readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   readonly onAcknowledgeCloudTrialStartedNotice: () => void;
@@ -55,30 +62,50 @@ export function useOnboardingFlow({
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
+  localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
   onAcknowledgeCloudTrialStartedNotice,
   onComplete,
   devInitialStep,
 }: UseOnboardingFlowOptions) {
+  const progressEnabled = devInitialStep === undefined;
+  const restoredProgress = useMemo(() => {
+    if (!progressEnabled) return null;
+    const savedProgress = readOnboardingProgress(userId);
+    if (!savedProgress) return null;
+    return clampOnboardingProgressStep(savedProgress, {
+      accountConnected,
+      skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
+    });
+  }, [accountConnected, progressEnabled, userId]);
   const [displayName] = useState(initialDisplayName.trim());
-  const { addMainActivity, mainActivities, mainActivityOther, setMainActivityOther, toggleMainActivity } = useMainActivities();
-  const [workType, setWorkType] = useState<string | null>(null);
-  const [workTypeOther, setWorkTypeOther] = useState("");
-  const [workDomain, setWorkDomain] = useState<string | null>(null);
-  const [workDomainOther, setWorkDomainOther] = useState("");
+  const { addMainActivity, mainActivities, mainActivityOther, setMainActivityOther, toggleMainActivity } = useMainActivities({
+    mainActivities: restoredProgress?.mainActivities,
+    mainActivityOther: restoredProgress?.mainActivityOther,
+  });
+  const [workType, setWorkType] = useState<string | null>(restoredProgress?.workType ?? null);
+  const [workTypeOther, setWorkTypeOther] = useState(restoredProgress?.workTypeOther ?? "");
+  const [workDomain, setWorkDomain] = useState<string | null>(restoredProgress?.workDomain ?? null);
+  const [workDomainOther, setWorkDomainOther] = useState(restoredProgress?.workDomainOther ?? "");
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
-  const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(false);
-  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(false);
+  const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(restoredProgress?.driftAlarmEnabled ?? false);
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(restoredProgress?.extremeNudgeEnabled ?? false);
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
-  const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(true);
-  const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? "welcome");
+  const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
+  const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
 
   const { screenRef, stepBodyRef, titleRef } = useOnboardingModalA11y(step);
-  const connection = useOnboardingConnectionFlow({ onLocalAiSetupChange, step });
+  const connection = useOnboardingConnectionFlow({
+    initialCustomEndpointDraft: restoredProgress?.customEndpointDraft,
+    initialSetupChoice: restoredProgress?.setupChoice,
+    localAiSetup,
+    onLocalAiSetupChange,
+    step,
+  });
   const permissions = useOnboardingPermissions({
     accessibilityGrantedFromApp,
     onCheckAccessibility,
@@ -166,6 +193,39 @@ export function useOnboardingFlow({
     capturePostHogEvent("onboarding_step_viewed", { step });
   }, [step]);
 
+  useEffect(() => {
+    if (!progressEnabled) return;
+    writeOnboardingProgress(userId, {
+      step,
+      setupChoice: connection.setupChoice,
+      mainActivities,
+      mainActivityOther,
+      workType,
+      workTypeOther,
+      workDomain,
+      workDomainOther,
+      driftAlarmEnabled,
+      extremeNudgeEnabled,
+      openAtLoginEnabled,
+      customEndpointDraft: connection.customEndpointDraft,
+    });
+  }, [
+    connection.customEndpointDraft,
+    connection.setupChoice,
+    driftAlarmEnabled,
+    extremeNudgeEnabled,
+    mainActivities,
+    mainActivityOther,
+    openAtLoginEnabled,
+    progressEnabled,
+    step,
+    userId,
+    workDomain,
+    workDomainOther,
+    workType,
+    workTypeOther,
+  ]);
+
   async function completeOnboarding() {
     let didComplete = false;
     await completeOnboardingAction({
@@ -195,6 +255,7 @@ export function useOnboardingFlow({
       workTypeOther,
     });
     if (didComplete) {
+      clearOnboardingProgress(userId);
       capturePostHogEvent("onboarding_completed", {
         ...(connection.setupChoice ? { setup_choice: connection.setupChoice } : {}),
         accessibility_granted: permissions.accessibilityGranted,

@@ -1,5 +1,10 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import type { LocalAiSetupState } from "../settings/localAiSetup";
+import {
+  DEFAULT_LOCAL_AI_SETUP,
+  type LocalAiSetupState,
+} from "../settings/localAiSetup";
+import { testLocalAiConnection } from "../settings/aiConnectionTest";
+import { saveOpenRouterApiKey } from "../settings/openRouterApiKeyStore";
 import { useManagedLocalAiSetup } from "../settings/useManagedLocalAiSetup";
 import type { CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";
 import {
@@ -16,18 +21,25 @@ import {
 import { hasManagedLocalInstallStarted, isManagedLocalReady } from "./onboardingManagedLocalStatus";
 
 type UseOnboardingConnectionFlowOptions = {
+  readonly initialCustomEndpointDraft?: CustomEndpointDraft | undefined;
+  readonly initialSetupChoice?: SetupChoice | null | undefined;
+  readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly step: OnboardingStep;
 };
 
 export function useOnboardingConnectionFlow({
+  initialCustomEndpointDraft,
+  initialSetupChoice,
+  localAiSetup,
   onLocalAiSetupChange,
   step,
 }: UseOnboardingConnectionFlowOptions) {
-  const [setupChoice, setSetupChoice] = useState<SetupChoice | null>("simple");
-  const [apiKey, setApiKey] = useState("");
+  const [setupChoice, setSetupChoice] = useState<SetupChoice | null>(initialSetupChoice ?? "simple");
+  const [apiKey, setApiKey] = useState(localAiSetup.openRouterApiKey.trim());
+  const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [maskedApiKey, setMaskedApiKey] = useState<string | null>(null);
-  const [customEndpointDraft, setCustomEndpointDraft] = useState<CustomEndpointDraft>(CUSTOM_ENDPOINT_DEFAULT_DRAFT);
+  const [customEndpointDraft, setCustomEndpointDraft] = useState<CustomEndpointDraft>(initialCustomEndpointDraft ?? CUSTOM_ENDPOINT_DEFAULT_DRAFT);
   const [connectionPhase, setConnectionPhase] = useState<ConnectionPhase>("idle");
   const [checkStatuses, setCheckStatuses] = useState<ConnectionCheckStatus[]>([]);
   const [connectionFailureLabel, setConnectionFailureLabel] = useState<string | null>(null);
@@ -74,6 +86,13 @@ export function useOnboardingConnectionFlow({
     });
   }, [managedLocalAi.status, onLocalAiSetupChange, setupChoice]);
 
+  useEffect(() => {
+    if (apiKeyTouched || setupChoice !== "byok") return;
+    const savedApiKey = localAiSetup.openRouterApiKey.trim();
+    if (!savedApiKey || apiKey === savedApiKey) return;
+    setApiKey(savedApiKey);
+  }, [apiKey, apiKeyTouched, localAiSetup.openRouterApiKey, setupChoice]);
+
   useEffect(() => runConnectionTest(step), [
     apiKey,
     apiKeyIsValid,
@@ -81,8 +100,10 @@ export function useOnboardingConnectionFlow({
     customEndpointBaseUrlIssue,
     customEndpointDraft.baseUrl,
     customEndpointDraft.model,
+    customEndpointIsValid,
     customEndpointModelIssue,
     isByokSetup,
+    isCustomEndpointSetup,
     onLocalAiSetupChange,
     setupChoice,
     step,
@@ -102,7 +123,15 @@ export function useOnboardingConnectionFlow({
   }
 
   function handleApiKeyChange(value: string) {
+    setApiKeyTouched(true);
     setApiKey(value);
+    const normalizedApiKey = value.trim();
+    if (!normalizedApiKey || normalizedApiKey.toLowerCase().startsWith("sk-or-")) {
+      void saveOpenRouterApiKey(normalizedApiKey);
+      onLocalAiSetupChange((current) => current.openRouterApiKey === normalizedApiKey
+        ? current
+        : { ...current, openRouterApiKey: normalizedApiKey });
+    }
     resetConnectionValidation();
     setMaskedApiKey(null);
   }
@@ -118,7 +147,7 @@ export function useOnboardingConnectionFlow({
     }));
   }
 
-  function runConnectionTest(stepToRun: OnboardingStep) {
+  function runConnectionTest(stepToRun: OnboardingStep): (() => void) | undefined {
     if (stepToRun !== "test_connection") return;
     const checks = connectionChecks;
     const failIndex = isByokSetup
@@ -128,46 +157,106 @@ export function useOnboardingConnectionFlow({
         : customEndpointModelIssue !== null
           ? 1
           : -1;
+    let cancelled = false;
+
     setConnectionPhase("testing");
     setConnectionFailureLabel(null);
-    setCheckStatuses(checks.map(() => "pending"));
-    let cancelled = false;
-    const timers: number[] = [];
-    function runCheck(index: number) {
+
+    if (failIndex >= 0) {
+      const message = localValidationFailureMessage(failIndex);
+      setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failIndex ? "success" : statusIndex === failIndex ? "error" : "pending"));
+      setConnectionFailureLabel(message);
+      setConnectionPhase("failed");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const localSuccessCount = isByokSetup ? 1 : 2;
+    setCheckStatuses(checks.map((_, statusIndex) => statusIndex < localSuccessCount ? "success" : statusIndex === localSuccessCount ? "loading" : "pending"));
+    const setupSnapshot = connectionTestSetup();
+    if (!setupSnapshot) {
+      setConnectionFailureLabel("Complete the selected provider settings before testing.");
+      setConnectionPhase("failed");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void testLocalAiConnection(setupSnapshot).then((result) => {
       if (cancelled) return;
-      if (index >= checks.length) {
-        setMaskedApiKey(setupChoice === "byok" ? maskApiKey(apiKey) : null);
-        if (setupChoice === "custom_endpoint") {
-          onLocalAiSetupChange((current) => ({
-            ...current,
-            provider: "self_hosted",
-            selfHostedBaseUrl: customEndpointDraft.baseUrl.trim(),
-            selfHostedModel: customEndpointDraft.model.trim(),
-          }));
-        }
-        setConnectionPhase("success");
+      if (result.kind === "error") {
+        const failedIndex = remoteFailureIndex(result.message, checks.length);
+        setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failedIndex ? "success" : statusIndex === failedIndex ? "error" : "pending"));
+        setConnectionFailureLabel(result.message);
+        setConnectionPhase("failed");
         return;
       }
-      setCheckStatuses((current) => current.map((status, statusIndex) => (statusIndex === index ? "loading" : status)));
-      const timerId = window.setTimeout(() => {
-        if (cancelled) return;
-        const failedHere = failIndex === index;
-        setCheckStatuses((current) => current.map((status, statusIndex) => (statusIndex === index ? failedHere ? "error" : "success" : status)));
-        if (failedHere) {
-          setConnectionFailureLabel(checks[index]?.label ?? "the connection check");
-          setConnectionPhase("failed");
-          return;
-        }
-        runCheck(index + 1);
-      }, 260);
-      timers.push(timerId);
-    }
-    const startTimerId = window.setTimeout(() => runCheck(0), 120);
-    timers.push(startTimerId);
+      setCheckStatuses(checks.map(() => "success"));
+      setMaskedApiKey(setupChoice === "byok" ? maskApiKey(apiKey) : null);
+      if (setupChoice === "byok") {
+        onLocalAiSetupChange((current) => ({
+          ...current,
+          provider: "openrouter_byok",
+          openRouterApiKey: apiKey.trim(),
+        }));
+      }
+      if (setupChoice === "custom_endpoint") {
+        onLocalAiSetupChange((current) => ({
+          ...current,
+          provider: "self_hosted",
+          selfHostedBaseUrl: customEndpointDraft.baseUrl.trim(),
+          selfHostedModel: customEndpointDraft.model.trim(),
+        }));
+      }
+      setConnectionPhase("success");
+    }).catch((error) => {
+      if (cancelled) return;
+      const failedIndex = isByokSetup ? 1 : checks.length - 1;
+      setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failedIndex ? "success" : statusIndex === failedIndex ? "error" : "pending"));
+      setConnectionFailureLabel(messageFromUnknownError(error));
+      setConnectionPhase("failed");
+    });
+
     return () => {
       cancelled = true;
-      for (const timerId of timers) window.clearTimeout(timerId);
     };
+  }
+
+  function connectionTestSetup(): LocalAiSetupState | null {
+    if (isByokSetup && apiKeyIsValid) {
+      return {
+        ...DEFAULT_LOCAL_AI_SETUP,
+        provider: "openrouter_byok",
+        openRouterApiKey: apiKey.trim(),
+      };
+    }
+    if (isCustomEndpointSetup && customEndpointIsValid) {
+      return {
+        ...DEFAULT_LOCAL_AI_SETUP,
+        provider: "self_hosted",
+        selfHostedBaseUrl: customEndpointDraft.baseUrl.trim(),
+        selfHostedModel: customEndpointDraft.model.trim(),
+      };
+    }
+    return null;
+  }
+
+  function localValidationFailureMessage(index: number): string {
+    if (isByokSetup) return "OpenRouter key should start with sk-or-.";
+    if (index === 0) return customEndpointBaseUrlIssue ?? "Endpoint URL is invalid.";
+    return customEndpointModelIssue ?? "Model id is required.";
+  }
+
+  function remoteFailureIndex(message: string, checksLength: number): number {
+    if (isByokSetup && message.toLowerCase().includes("no assistant message")) return Math.min(2, checksLength - 1);
+    return isByokSetup ? Math.min(1, checksLength - 1) : checksLength - 1;
+  }
+
+  function messageFromUnknownError(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "string" && error.trim()) return error.trim();
+    return "Connection test failed.";
   }
 
   return {
