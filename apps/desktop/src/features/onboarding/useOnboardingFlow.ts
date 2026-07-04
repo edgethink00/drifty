@@ -42,6 +42,7 @@ type UseOnboardingFlowOptions = {
   readonly trackerStatus: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
   readonly onStartTracking: () => Promise<void>;
+  readonly onEarlyTrackingStart: () => void;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
   readonly onEnableDriftAlerts: () => void;
@@ -60,6 +61,7 @@ export function useOnboardingFlow({
   trackerStatus,
   accessibilityGranted: accessibilityGrantedFromApp,
   onStartTracking,
+  onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
@@ -110,6 +112,7 @@ export function useOnboardingFlow({
   const permissions = useOnboardingPermissions({
     accessibilityGrantedFromApp,
     onCheckAccessibility,
+    onEarlyTrackingStart,
     onEnableDriftAlerts,
     onRequestAccessibility,
     setSetupError,

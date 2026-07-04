@@ -1,15 +1,23 @@
+import { useLiveTrackingPreview } from "../../useLiveTrackingPreview";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const accessibilityEnabled = flow.accessibilityGranted;
   const notificationsEnabled = flow.notificationsReady;
   const safariHistory = flow.safariHistoryPermission;
+  // Live proof the permission works: show what tracking sees right now.
+  const liveAppName = useLiveTrackingPreview(accessibilityEnabled);
 
   return (
     <>
       <p className="dc-onb-copy">
         Drifty needs a couple of Mac permissions to see your focus and drift patterns. Everything is processed for your own timeline.
       </p>
+      {liveAppName ? (
+        <p className="dc-onb-live-note" role="status">
+          I can see you&apos;re in <strong>{liveAppName}</strong> right now — tracking works.
+        </p>
+      ) : null}
       <ul className="dc-onb-row-list">
         <PermissionRow
           title="Accessibility"

@@ -25,6 +25,7 @@ export function OnboardingModal({
   trackerStatus,
   accessibilityGranted,
   onStartTracking,
+  onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
@@ -43,6 +44,7 @@ export function OnboardingModal({
   trackerStatus: TrackerStatus | null;
   accessibilityGranted: boolean;
   onStartTracking: () => Promise<void>;
+  onEarlyTrackingStart: () => void;
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
   onEnableDriftAlerts: () => void;
@@ -69,6 +71,7 @@ export function OnboardingModal({
     trackerStatus,
     accessibilityGranted,
     onStartTracking,
+    onEarlyTrackingStart,
     onCheckAccessibility,
     onRequestAccessibility,
     onEnableDriftAlerts,

@@ -5238,6 +5238,18 @@ export default function App() {
       trackerStatus={status}
       accessibilityGranted={accessibilityGranted}
       onStartTracking={handleStartTrackingFromOnboarding}
+      onEarlyTrackingStart={() => {
+        // Opportunistic: capture the rest of onboarding in the first day. Failures
+        // stay silent — the completion-time start still surfaces real errors.
+        void (async () => {
+          try {
+            await trackerClient.start();
+            await refresh();
+          } catch {
+            // silent early start; completion retries with full error handling
+          }
+        })();
+      }}
       onCheckAccessibility={handleCheckAccessibility}
       onRequestAccessibility={handleRequestAccessibility}
       onEnableDriftAlerts={() => setDriftAlertsEnabled(true)}
