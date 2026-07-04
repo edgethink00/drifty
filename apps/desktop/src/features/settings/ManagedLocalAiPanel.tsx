@@ -3,6 +3,7 @@ import { ManagedModelActionIcon } from "./ManagedModelActionIcon";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { managedLocalAiProgressText } from "./managedLocalAiProgressText";
+import { managedModelRuntimeMemoryLabel } from "./managedLocalAiMemory";
 
 export type ManagedLocalAiPanelProps = {
   readonly actionModelId: string | null;
@@ -76,6 +77,7 @@ function ManagedLocalAiModelRow({
   const downloadProgress = installingThisModel ? status.progress : null;
   const downloadProgressText = managedLocalAiProgressText(downloadProgress);
   const artifactDir = installedModel?.artifactDir ?? null;
+  const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
   const showInFinderDisabled = busyThisModel || finderOpening || !artifactDir;
 
   const handleShowInFinder = async () => {
@@ -109,7 +111,7 @@ function ManagedLocalAiModelRow({
         </div>
         <dl className="ai-managed-model__facts">
           <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
-          <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
+          {runtimeMemoryLabel ? <div><dt>RAM while running</dt><dd>{runtimeMemoryLabel}</dd></div> : null}
         </dl>
       </div>
       <div className="ai-managed-model__actions">

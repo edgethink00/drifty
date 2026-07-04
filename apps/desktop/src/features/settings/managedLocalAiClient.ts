@@ -85,6 +85,7 @@ function parseManagedModel(value: unknown): ManagedLocalAiModel[] {
     downloadSize: stringValue(value.downloadSize),
     diskRequired: stringValue(value.diskRequired),
     minimumMemory: stringValue(value.minimumMemory),
+    estimatedRuntimeMemoryBytes: parseMemoryUsageBytes(value.estimatedRuntimeMemoryBytes),
     recommended: value.recommended === true,
   }];
 }

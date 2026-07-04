@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressText";
+import { managedModelRuntimeMemoryLabel } from "../settings/managedLocalAiMemory";
 import driftyIconUrl from "../../assets/drifty-icon.png";
 import { GoogleMark } from "./components/GoogleMark";
 import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
@@ -840,6 +841,7 @@ function LocalModelCard({
   readonly selected: boolean;
 }) {
   const status = flow.managedLocalAi.status;
+  const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
   const installingThisModel = flow.managedLocalAi.actionModelId === model.id
     || (status?.state === "installing" && status.selectedModelId === model.id);
   const failedThisModel = status?.state === "error" && status.selectedModelId === model.id;
@@ -882,10 +884,12 @@ function LocalModelCard({
           <dt>Download</dt>
           <dd>{model.downloadSize}</dd>
         </div>
-        <div>
-          <dt>Memory</dt>
-          <dd>{model.minimumMemory}</dd>
-        </div>
+        {runtimeMemoryLabel ? (
+          <div>
+            <dt>RAM while running</dt>
+            <dd>{runtimeMemoryLabel}</dd>
+          </div>
+        ) : null}
       </dl>
       <button
         type="button"

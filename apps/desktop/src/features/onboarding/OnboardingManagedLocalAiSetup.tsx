@@ -1,4 +1,5 @@
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
+import { managedModelRuntimeMemoryLabel } from "../settings/managedLocalAiMemory";
 
 type OnboardingManagedLocalAiSetupProps = {
   readonly actionModelId: string | null;
@@ -56,6 +57,7 @@ function OnboardingManagedLocalAiModel({
   const installing = status?.selectedModelId === model.id && status.state === "installing";
   const failed = status?.selectedModelId === model.id && status.state === "error";
   const busy = actionModelId === model.id || installing;
+  const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
   const actionDisabled = ready || (loading && status === null) || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
 
   return (
@@ -67,7 +69,7 @@ function OnboardingManagedLocalAiModel({
       </div>
       <dl className="onb-managed-model__facts">
         <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
-        <div><dt>Memory</dt><dd>{model.minimumMemory}</dd></div>
+        {runtimeMemoryLabel ? <div><dt>RAM while running</dt><dd>{runtimeMemoryLabel}</dd></div> : null}
       </dl>
       <button
         type="button"

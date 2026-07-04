@@ -238,8 +238,8 @@ function makeTrackerStatus(overrides: Partial<TrackerStatus> = {}): TrackerStatu
 }
 
 const managedCatalog = [
-  { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", recommended: false },
-  { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", recommended: true },
+  { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", estimatedRuntimeMemoryBytes: 2_147_483_648, recommended: false },
+  { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", estimatedRuntimeMemoryBytes: 3_758_096_384, recommended: true },
 ] as const;
 
 function installManagedModel(modelId: string): ManagedLocalAiStatus {
