@@ -11,8 +11,11 @@ type RenderAccountMenuOptions = {
 
 function renderAccountMenu({ userAvatarUrl = null, userEmail = null }: RenderAccountMenuOptions = {}) {
   const handlers = {
+    onProfile: vi.fn(),
     onAiSetting: vi.fn(),
     onSettings: vi.fn(),
+    onToggleTheme: vi.fn(),
+    onCheckForUpdates: vi.fn(),
     onFeedback: vi.fn(),
     onSignIn: vi.fn(),
     onSignOut: vi.fn(),
@@ -26,6 +29,7 @@ function renderAccountMenu({ userAvatarUrl = null, userEmail = null }: RenderAcc
         isSidebarCollapsed={false}
         userAvatarUrl={userAvatarUrl}
         userEmail={userEmail}
+        isDarkMode={false}
         onToggle={() => setIsOpen((open) => !open)}
         {...handlers}
       />
@@ -64,7 +68,6 @@ describe("AccountMenu", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll(".account-trigger__chevron-mark")).toHaveLength(2);
     expect(screen.getByRole("menu", { name: /account menu/i })).toBeTruthy();
-    expect(screen.getByLabelText(/^Drifty Version /).textContent).toMatch(/^Version\d+\.\d+\.\d+$/);
     expect(screen.getByRole("menuitem", { name: /^AI Setting$/ })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /^Settings$/ })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: /^Drifty Cloud$/ })).toBeNull();
@@ -84,23 +87,32 @@ describe("AccountMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /^pat\.lee93$/i }));
 
     const menu = screen.getByRole("menu", { name: /account menu/i });
-    const firstChildren = Array.from(menu.children).slice(0, 3);
+    const firstChildren = Array.from(menu.children).slice(0, 2);
 
-    expect(firstChildren[0]?.classList.contains("account-menu-version")).toBe(true);
-    expect(firstChildren[1]?.classList.contains("account-popover__email")).toBe(true);
-    expect(firstChildren[1]?.textContent).toBe("pat.lee93@example.com");
-    expect(firstChildren[2]?.classList.contains("account-menu-separator")).toBe(true);
-    expect(firstChildren[2]?.getAttribute("role")).toBe("separator");
+    expect(firstChildren[0]?.classList.contains("account-popover__email")).toBe(true);
+    expect(firstChildren[0]?.textContent).toBe("pat.lee93@example.com");
+    expect(firstChildren[1]?.classList.contains("account-menu-separator")).toBe(true);
+    expect(firstChildren[1]?.getAttribute("role")).toBe("separator");
   });
 
-  it("routes account AI setting before regular settings", () => {
+  it("lists settings above AI setting", () => {
     const { handlers } = renderAccountMenu();
     fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
     const menuItems = screen.getAllByRole("menuitem").map((item) => item.textContent);
 
-    expect(menuItems.slice(0, 2)).toEqual(["✦AI Setting", "⚙Settings"]);
+    expect(menuItems.slice(0, 2)).toEqual(["Settings", "AI Setting"]);
     fireEvent.click(screen.getByRole("menuitem", { name: /^AI Setting$/ }));
     expect(handlers.onAiSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles theme from the account menu", () => {
+    const { handlers } = renderAccountMenu();
+    fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
+
+    const themeToggle = screen.getByRole("menuitemcheckbox", { name: /dark mode/i });
+    expect(themeToggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(themeToggle);
+    expect(handlers.onToggleTheme).toHaveBeenCalledTimes(1);
   });
 
   it("routes account settings", () => {

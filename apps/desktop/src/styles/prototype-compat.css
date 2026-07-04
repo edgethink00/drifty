@@ -218,8 +218,8 @@
 }
 
 .account-popover__email {
-  margin: 0 4px;
-  padding: 0 4px 7px;
+  margin: 0;
+  padding: 0 8px 7px 5px;
   color: var(--text-soft);
   font-size: 11px;
   line-height: 1.2;
@@ -232,14 +232,14 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7.2px;
   min-height: 34.5px;
-  padding: 6.5px 8px;
+  padding: 6.5px 8px 6.5px 5px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13.75px;
   line-height: 1.2;
   text-align: left;
   box-shadow: none;
@@ -248,8 +248,13 @@
 .account-menu-item:hover { background: color-mix(in srgb, var(--bg-2) 72%, transparent); transform: none; }
 .account-menu-item:disabled { opacity: .42; }
 .account-menu-item--danger { color: var(--warn); }
-.account-menu-icon { width: 19px; text-align: center; color: currentColor; font-size: 16px; line-height: 1; }
-.account-menu-separator { height: 1px; background: var(--line); margin: 6px 4px; }
+.account-menu-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; color: currentColor; }
+.account-menu-icon svg { display: block; width: 17px; height: 17px; }
+.account-menu-toggle { margin-left: auto; flex: none; display: inline-flex; align-items: center; width: 30px; height: 17px; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--text) 22%, transparent); transition: background 140ms ease; }
+.account-menu-toggle[data-on="true"] { background: var(--accent, #4a7dff); }
+.account-menu-toggle__knob { width: 13px; height: 13px; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.28); transition: transform 140ms ease; }
+.account-menu-toggle[data-on="true"] .account-menu-toggle__knob { transform: translateX(13px); }
+.account-menu-separator { height: 1px; background: var(--line); margin: 6px 5px; }
 .account-menu-separator--account { margin-top: 0; }
 
 /* Page wrapper (each page in App.tsx uses `<div class="page">`) */

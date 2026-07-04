@@ -5397,12 +5397,23 @@ export default function App() {
             isSidebarCollapsed={isSidebarVisuallyCollapsed}
             userAvatarUrl={profile?.avatar_url || profileDraft.avatarUrl || authMetadataAvatarUrl}
             userEmail={user?.email ?? null}
+            isDarkMode={theme === "dark"}
             onToggle={() => setAccountMenuOpen((open) => !open)}
+            onProfile={() => {
+              openProfileEditor();
+              setAccountMenuOpen(false);
+            }}
             onAiSetting={() => {
               openAiSetupSettings();
             }}
             onSettings={() => {
               openSettingsTab();
+            }}
+            onToggleTheme={() => {
+              toggleTheme();
+            }}
+            onCheckForUpdates={() => {
+              handleTrayCheckForUpdates();
             }}
             onFeedback={() => {
               setFeedbackModalOpen(true);
