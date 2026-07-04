@@ -35,7 +35,7 @@ const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v5-privacy-youtube-category";
+const AI_CLASSIFICATION_PROMPT_VERSION = "v6-productivity-rubric";
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
 const REDDIT_COMMUNITY_PATTERN = /\br\/([A-Za-z0-9_]{2,32})\b/i;
@@ -43,6 +43,9 @@ const REDDIT_DOMAIN_PATTERN = /(^|\.)reddit\.com$/i;
 const VALID_REDDIT_COMMUNITY_PATTERN = /^[a-z0-9_]{2,32}$/;
 const KNOWN_BROWSER_APP_NAMES = new Set(["arc", "brave browser", "chromium", "firefox", "google chrome", "google chrome canary", "microsoft edge", "safari"]);
 const KNOWN_BROWSER_BUNDLE_IDS = new Set(["com.apple.safari", "com.brave.browser", "com.google.chrome", "com.google.chrome.canary", "com.microsoft.edgemac", "company.thebrowser.browser", "org.chromium.chromium", "org.mozilla.firefox"]);
+const SYSTEM_SURFACE_APP_NAMES = new Set(["loginwindow", "screensaverengine", "lockscreen", "windowserver"]);
+const BLANK_BROWSER_DOMAINS = new Set(["newtab", "about:blank"]);
+const BLANK_BROWSER_TITLE_PATTERN = /^(?:new tab|새 탭|about:blank|untitled|제목 없음|무제)(?:\s+[-—–]|$)|(?:^|[-—–]\s+)(?:시작 페이지|start page)$/;
 
 const AI_MODEL_TOKEN_PRICES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-3.1-flash-lite": { input: 0, output: 0 },
@@ -686,6 +689,9 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
     : null;
   const redditCommunity = redditCommunityForSegment(segment, siteUrl, contentContextEnabled);
+  // durationSeconds is intentionally excluded from the fingerprint so repeated
+  // visits to the same activity reuse one cached classification; the exact
+  // duration is still sent to the provider as evidence.
   const providerInput = {
     fingerprintVersion: AI_CLASSIFICATION_PROMPT_VERSION,
     appName: cleanText(segment.appName) ?? "Unknown",
@@ -697,7 +703,6 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     ...(youtubeChannelName ? { youtubeChannelName } : {}),
     ...(youtubeCategory ? { youtubeCategory } : {}),
     ...(redditCommunity ? { redditCommunity } : {}),
-    durationSeconds: segment.durationSeconds,
     ...(workProfile ? { workProfile } : {}),
   };
 
@@ -877,7 +882,17 @@ function skippedAiClassificationReason(segment: ActivitySegment): string | null 
     return "Skipped AI classification because the tracker could not determine the frontmost app.";
   }
 
-  if (!isBrowserSegment(segment) || hasMeaningfulActivityContext(segment)) return null;
+  if (SYSTEM_SURFACE_APP_NAMES.has(normalizeComparableText(segment.appName))) {
+    return "Skipped AI classification because the frontmost app is a macOS system surface.";
+  }
+
+  if (!isBrowserSegment(segment)) return null;
+
+  if (isBlankBrowserContext(segment)) {
+    return "Skipped AI classification because the browser showed an empty page such as a new tab.";
+  }
+
+  if (hasMeaningfulActivityContext(segment)) return null;
 
   const status = segment.browserAutomationStatus;
   if (status && status !== "granted" && status !== "not_applicable") {
@@ -904,6 +919,24 @@ function hasMeaningfulActivityContext(segment: ActivitySegment): boolean {
       || cleanText(segment.youtubeChannelName)
       || cleanText(segment.youtubeCategory),
   );
+}
+
+// New-tab and blank pages carry no classifiable signal; classifying them
+// wastes provider quota and produces invented labels.
+function isBlankBrowserContext(segment: ActivitySegment): boolean {
+  const domain = normalizeComparableText(segment.siteDomain);
+  if (domain && !BLANK_BROWSER_DOMAINS.has(domain)) return false;
+  if (!isBlankBrowserText(segment.siteTitle) || !isBlankBrowserText(segment.windowTitle)) return false;
+  if (cleanText(segment.youtubeTitle) || cleanText(segment.youtubeChannelName) || cleanText(segment.youtubeCategory)) {
+    return false;
+  }
+  return Boolean(cleanText(segment.siteDomain) || cleanText(segment.siteTitle) || cleanText(segment.windowTitle));
+}
+
+function isBlankBrowserText(value: string | null | undefined): boolean {
+  const normalized = normalizeComparableText(value);
+  if (!normalized) return true;
+  return BLANK_BROWSER_TITLE_PATTERN.test(normalized);
 }
 
 async function saveInheritedYouTubeBrowseClassifications(

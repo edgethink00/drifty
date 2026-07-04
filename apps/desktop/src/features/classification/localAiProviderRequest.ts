@@ -141,6 +141,7 @@ function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[],
     ...redditPromptGuidance(payload),
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
+    "Use neutral only for genuinely in-between activities, such as background music while working or brief communication with unclear purpose. Do not use neutral as an uncertainty fallback: if your reason says the activity is professional or work-related, the label must be focus, even for supporting tools, consoles, account setup, or work-relevant research. If the evidence is insufficient to decide, use category unknown with confidence 0.5 or lower instead of guessing.",
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
     JSON.stringify(payload.map(promptItem)),
   ].join("\n");

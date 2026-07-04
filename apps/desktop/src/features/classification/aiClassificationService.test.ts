@@ -558,6 +558,87 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("saves blank new-tab browser activity as system unknown instead of calling cloud AI", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "newtab",
+      siteTitle: "New Tab",
+      windowTitle: "New Tab - Google Chrome - Ari",
+      source: "nsworkspace",
+    });
+
+    try {
+      const { runAiClassification, invoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment]);
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(result.savedRecords).toBe(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(getReusableAiClassifications).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "unknown",
+        productivity: "neutral",
+        source: "system",
+        aiResult: false,
+        reason: expect.stringContaining("empty page"),
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("saves macOS system surfaces like loginwindow as system unknown instead of calling cloud AI", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "loginwindow",
+      windowTitle: null,
+      source: "nsworkspace",
+    });
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([segment]);
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(result.savedRecords).toBe(1);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "unknown",
+        productivity: "neutral",
+        source: "system",
+        aiResult: false,
+        reason: expect.stringContaining("system surface"),
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("still classifies browser activity whose title starts like a blank marker but has a real site", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "notion.so",
+      siteTitle: "New Tab Settings Guide",
+      windowTitle: "New Tab Settings Guide - Google Chrome",
+      source: "nsworkspace",
+    });
+
+    try {
+      const { runAiClassification, invoke } = await importServiceWithSegments([segment]);
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(invoke).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("counts contextless browser system skips before threshold AI batches", async () => {
     const segments = Array.from({ length: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD }, (_, index) => createUnknownSegment(index, {
       appName: "Google Chrome",
@@ -1524,7 +1605,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v5-privacy-youtube-category" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v6-productivity-rubric" })]);
     } finally {
       cleanupServiceMocks();
     }
