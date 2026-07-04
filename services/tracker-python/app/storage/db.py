@@ -46,20 +46,20 @@ BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]],
 BrowserHistoryTitlePolicy = Callable[[Optional[str]], bool]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryBackfillConfig:
     observed_at: str
     max_age_seconds: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BrowserHistoryBackfillResult:
     segment_id: int
     site_url: str | None
     youtube_video_id: str | None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ImportedActivitySegment:
     import_key: str
     started_at: str
@@ -82,7 +82,7 @@ class ImportedActivitySegment:
     raw_context_json: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ImportedActivityInsertResult:
     inserted_count: int
     skipped_duplicate_count: int

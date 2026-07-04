@@ -118,6 +118,36 @@ async function assertExecutable(path) {
   });
 }
 
+function assertSmokeTest(path) {
+  // A frozen PyInstaller build can succeed while the interpreter that built it
+  // (e.g. Xcode's bundled Python 3.9) rejects a 3.10+-only construct at import
+  // time, so the binary crashes on first run. Catch that here, before packaging.
+  // Uses a throwaway --db so this never touches a real tracker database.
+  const smokeRoot = mkdtempSync(resolve(tmpdir(), "drifty-tracker-sidecar-smoke-"));
+  try {
+    const smokeDb = resolve(smokeRoot, "smoke.sqlite3");
+    const result = run(
+      path,
+      ["--db", smokeDb, "--request-json", '{"command":"get_status","payload":{}}'],
+      { capture: true },
+    );
+    if (result.status !== 0) {
+      fail(`sidecar smoke test failed (exit ${result.status}): ${path}\n${result.stderr.trim()}`);
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(result.stdout.trim());
+    } catch {
+      fail(`sidecar smoke test produced non-JSON output: ${path}\n${result.stdout}`);
+    }
+    if (parsed?.ok !== true) {
+      fail(`sidecar smoke test returned ok=false: ${path}\n${result.stdout}`);
+    }
+  } finally {
+    rmSync(smokeRoot, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   const startedAt = Date.now();
   const { target: explicitTarget } = parseArgs(process.argv.slice(2));
@@ -181,6 +211,7 @@ async function main() {
     copyFileSync(builtBinary, outputPath);
     chmodSync(outputPath, 0o755);
     await assertExecutable(outputPath);
+    assertSmokeTest(outputPath);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
