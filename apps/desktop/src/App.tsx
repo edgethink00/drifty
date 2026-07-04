@@ -1071,6 +1071,8 @@ export default function App() {
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
+  // First work activity from the just-finished onboarding, echoed in the gate's loading copy.
+  const [firstDayWorkLabel, setFirstDayWorkLabel] = useState<string | null>(null);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [classificationMetrics, setClassificationMetrics] = useState<ClassificationMetrics | null>(null);
   const [aiClassificationUsage, setAiClassificationUsage] = useState<AiClassificationUsageSummary | null>(null);
@@ -4806,6 +4808,7 @@ export default function App() {
     setOnboardingOpen(false);
     if (state.browserHistoryBootstrapEnabled && !shouldBlockLocalTrackerAccess) {
       rearmFirstDayPreparation();
+      setFirstDayWorkLabel(state.workType);
       setFirstDayPreparationPhase("importing");
       setPreparingFirstDay(true);
     }
@@ -5243,7 +5246,13 @@ export default function App() {
   }
 
   if (preparingFirstDay) {
-    return <FirstDayPreparationScreen phase={firstDayPreparationPhase} progress={firstDayPreparationProgress} />;
+    return (
+      <FirstDayPreparationScreen
+        phase={firstDayPreparationPhase}
+        progress={firstDayPreparationProgress}
+        workActivityLabel={firstDayWorkLabel}
+      />
+    );
   }
 
   return (
