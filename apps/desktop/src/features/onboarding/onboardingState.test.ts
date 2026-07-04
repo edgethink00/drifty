@@ -47,6 +47,8 @@ describe("onboardingState", () => {
   });
 
   it("preserves multiple work activities for AI work profile settings", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+
     const savedState = saveUserWorkProfileSettings("local", {
       workActivities: ["Coding", "Writing"],
       workActivityOther: "",
@@ -63,5 +65,18 @@ describe("onboardingState", () => {
     });
     expect(readUserWorkProfileSettings("local").workActivities).toEqual(["Coding", "Writing"]);
     expect(summarizeUserWorkProfile("local")).toBe("Coding, Writing in AI");
+  });
+
+  it("refuses to create an onboarding-completed record from a work profile save alone", () => {
+    const savedState = saveUserWorkProfileSettings("local", {
+      workActivities: ["Coding"],
+      workActivityOther: "",
+      workDomain: "AI",
+      workDomainOther: "",
+    });
+
+    expect(savedState).toBeNull();
+    expect(window.localStorage.getItem(getUserOnboardingStorageKey("local"))).toBeNull();
+    expect(readUserOnboardingState("local")).toBeNull();
   });
 });
