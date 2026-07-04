@@ -76,12 +76,12 @@ export function OnboardingDesignCodeContent({
     return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
   }, []);
 
-  const title = titleForDesignCodeStep(flow);
+  const title = flow.title;
   const showTitle = flow.step !== "welcome" && flow.step !== "account";
   const showFooter = flow.step !== "account";
   const showDots = flow.step !== "welcome" && flow.step !== "account";
   const showBack = flow.stepIndex > 0;
-  const footerLabel = footerLabelForDesignCodeStep(flow);
+  const footerLabel = flow.footerLabel;
   const selectedActivities = flow.mainActivities;
   const activityOptions = useMemo(() => {
     const query = activityQuery.trim().toLowerCase();
@@ -1206,41 +1206,6 @@ function ExtremeConfirmDialog({
       </section>
     </div>
   );
-}
-
-function titleForDesignCodeStep(flow: OnboardingFlow): string {
-  switch (flow.step) {
-    case "welcome":
-      return "Welcome to drifty";
-    case "job":
-      return "What do you usually do?";
-    case "permissions":
-      return "Set up permissions";
-    case "nudges":
-      return "Set up drift alerts";
-    case "choose_setup":
-      return "Choose your setup";
-    case "account":
-      return "Connect your account";
-    case "connect_server":
-      if (flow.isByokSetup) return "Add your OpenRouter key";
-      if (flow.isCustomEndpointSetup) return "Add your custom endpoint";
-      return "Set up your local AI model";
-    case "test_connection":
-      if (flow.connectionPhase === "success") return "Connection successful";
-      if (flow.connectionPhase === "failed") return "Connection failed";
-      return "Testing connection";
-    case "self_data_review":
-      return "How your data is handled";
-    case "ready":
-      return flow.setupChoice === "simple" && flow.accountConnected ? "You're ready to go" : "You're ready to start";
-  }
-}
-
-function footerLabelForDesignCodeStep(flow: OnboardingFlow): string {
-  if (flow.step === "ready") return "Start tracking";
-  if (flow.step === "connect_server" && flow.isUserManagedProviderSetup) return "Test connection";
-  return "Continue";
 }
 
 function serverDescriptionForSetup(setupChoice: SetupChoice | null): string {

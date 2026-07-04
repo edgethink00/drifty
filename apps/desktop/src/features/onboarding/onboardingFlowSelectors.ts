@@ -122,7 +122,7 @@ export function titleForStep({
         ? "Add your OpenRouter key"
         : isCustomEndpointSetup
           ? "Add your custom endpoint"
-          : "Set up your Local AI model";
+          : "Set up your local AI model";
     case "test_connection":
       return connectionPhase === "success"
         ? "Connection successful"
@@ -130,7 +130,7 @@ export function titleForStep({
           ? "Connection failed"
           : "Testing connection";
     case "self_data_review":
-      return "Review how your data is handled";
+      return "How your data is handled";
     case "permissions":
       return "Set up permissions";
     case "nudges":
@@ -141,28 +141,13 @@ export function titleForStep({
 }
 
 export function footerLabelForStep({
-  isFinalStep,
   isUserManagedProviderSetup,
   step,
 }: {
-  readonly isFinalStep: boolean;
   readonly isUserManagedProviderSetup: boolean;
   readonly step: OnboardingStep;
 }): string {
-  switch (step) {
-    case "job":
-    case "choose_setup":
-    case "test_connection":
-    case "self_data_review":
-    case "nudges":
-      return "Continue";
-    case "connect_server":
-      return isUserManagedProviderSetup ? "Test connection" : "Continue";
-    case "permissions":
-      return "Continue";
-    case "ready":
-      return "Start tracking";
-    default:
-      return isFinalStep ? "Finish setup" : "Continue";
-  }
+  if (step === "ready") return "Start tracking";
+  if (step === "connect_server" && isUserManagedProviderSetup) return "Test connection";
+  return "Continue";
 }

@@ -172,13 +172,7 @@ export function useOnboardingFlow({
     connection.setupChoice,
     step,
   ]);
-  const subtitle = step === "choose_setup"
-    ? "Start with Drifty Cloud, run AI locally, bring your own key, or point Drifty at an OpenAI-compatible endpoint."
-    : "";
-  const titleIsVisible = step !== "welcome";
-  const progressPct = ((stepIndex + 1) / steps.length) * 100;
   const footerLabel = footerLabelForStep({
-    isFinalStep,
     isUserManagedProviderSetup: connection.isUserManagedProviderSetup,
     step,
   });
@@ -304,7 +298,6 @@ export function useOnboardingFlow({
     mainActivityOther,
     openAtLoginEnabled,
     permissionSummaryLabel,
-    progressPct,
     screenRef,
     setDriftAlarmEnabled,
     setBrowserHistoryBootstrapEnabled,
@@ -318,9 +311,7 @@ export function useOnboardingFlow({
     stepIndex,
     steps,
     storageError,
-    subtitle,
     title,
-    titleIsVisible,
     titleRef,
     toggleMainActivity,
     workDomain,
