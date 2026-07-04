@@ -20,9 +20,14 @@ import {
 import { toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
+import { withClassificationActivity } from "./classificationActivity";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
+// A `segmentIds` allow-list can't be pushed to the tracker query, so fetch a generous slice of
+// the day's unclassified pool and filter client-side. A single logical day's unclassified
+// segments stay comfortably under this ceiling.
+const ALLOW_LISTED_UNCLASSIFIED_SCAN_LIMIT = 5000;
 export const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -80,9 +85,9 @@ type EdgeClassificationResponse = {
 
 // Granularity of AI classification:
 // - "fine"  : classify every unknown segment individually (most accurate).
-// - "normal": classify one representative per (domain + title) signature, then apply
+// - "normal": classify one representative per (app + domain + title) signature, then apply
 //             it to all segments sharing that signature. ~fine accuracy, fewer calls.
-// - "coarse": one representative per domain (fastest, loses per-page nuance).
+// - "coarse": one representative per app + domain (fastest, loses per-page nuance).
 export type ClassificationLevel = "fine" | "normal" | "coarse";
 
 export type AiClassificationRunOptions = {
@@ -94,15 +99,16 @@ export type AiClassificationRunOptions = {
 type ClassificationCluster = {
   readonly representatives: MinimizedActivityPayload[];
   /** Group members keyed by their representative's segmentId; null for "fine" (no clustering). */
-  readonly membersByRepSegmentId: Map<unknown, MinimizedActivityPayload[]> | null;
+  readonly membersByRepSegmentId: Map<string, MinimizedActivityPayload[]> | null;
 };
 
 function classificationSignatureKey(payload: MinimizedActivityPayload, level: ClassificationLevel): string {
+  const app = (payload.bundleId ?? payload.appName).toLowerCase().trim();
   const domain = (payload.siteDomain ?? hostnameFromUrl(payload.siteUrl) ?? "").toLowerCase().trim();
-  if (level === "coarse") return domain;
+  if (level === "coarse") return `${app}|${domain}`;
   const rawTitle = (payload.siteTitle ?? payload.youtubeTitle ?? payload.windowTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
   const titleStem = rawTitle.split(" ").slice(0, 3).join(" ");
-  return `${domain}|${titleStem}`;
+  return `${app}|${domain}|${titleStem}`;
 }
 
 export function clusterPayloadsByLevel(misses: MinimizedActivityPayload[], level: ClassificationLevel): ClassificationCluster {
@@ -117,7 +123,7 @@ export function clusterPayloadsByLevel(misses: MinimizedActivityPayload[], level
     else groups.set(key, [item]);
   }
   const representatives: MinimizedActivityPayload[] = [];
-  const membersByRepSegmentId = new Map<unknown, MinimizedActivityPayload[]>();
+  const membersByRepSegmentId = new Map<string, MinimizedActivityPayload[]>();
   for (const members of groups.values()) {
     const representative = members[0];
     representatives.push(representative);
@@ -129,7 +135,7 @@ export function clusterPayloadsByLevel(misses: MinimizedActivityPayload[], level
 // Fan a representative's classification out to every segment that shares its signature.
 export function expandClusterRecords(
   representativeRecords: ActivityClassificationRecord[],
-  membersByRepSegmentId: Map<unknown, MinimizedActivityPayload[]> | null,
+  membersByRepSegmentId: Map<string, MinimizedActivityPayload[]> | null,
 ): ActivityClassificationRecord[] {
   if (!membersByRepSegmentId) return representativeRecords;
   const expanded: ActivityClassificationRecord[] = [];
@@ -140,7 +146,7 @@ export function expandClusterRecords(
       continue;
     }
     for (const member of members) {
-      expanded.push({ ...record, segmentId: member.segmentId, inputFingerprint: member.inputFingerprint as string });
+      expanded.push({ ...record, segmentId: member.segmentId, inputFingerprint: member.inputFingerprint });
     }
   }
   return expanded;
@@ -274,8 +280,22 @@ export function diffAiClassificationUsageSummary(
 }
 
 export async function runAiClassification(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+  return withClassificationActivity(
+    () => runAiClassificationImpl(query, batchSize, options),
+    (summary) => summary.metrics?.unclassifiedSegments ?? null,
+  );
+}
+
+async function runAiClassificationImpl(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+  // Optional allow-list: prioritize only these segment ids (e.g. the flow chart's visible set).
+  // The tracker query can't filter by id, so pull a wide slice of the day's unclassified pool
+  // and filter client-side before capping to the batch size. Absent an allow-list this is the
+  // original single-limit fetch.
+  const allowList = query.segmentIds && query.segmentIds.length > 0 ? new Set(query.segmentIds) : null;
   const selectedBatchSize = Math.min(query.limit ?? batchSize, EDGE_MAX_BATCH_SIZE);
-  const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
+  const fetchLimit = allowList ? ALLOW_LISTED_UNCLASSIFIED_SCAN_LIMIT : selectedBatchSize;
+  const fetched = await trackerClient.getUnclassifiedSegments({ ...query, limit: fetchLimit });
+  const segments = (allowList ? fetched.filter((segment) => allowList.has(segment.id)) : fetched).slice(0, selectedBatchSize);
   const privacySettings = readAiPrivacyRequestSettings();
   const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
   const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile, privacySettings)));
@@ -363,7 +383,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
       status: "error",
       selectedSegments: payload.length,
       savedRecords: preAiSavedRecords + reusableResult.saved,
-      message: `AI classification returned no usable classifications for ${reusableResult.misses.length} unknown ${reusableResult.misses.length === 1 ? "segment" : "segments"}.`,
+      message: `AI classification returned no usable classifications for ${representatives.length} unknown ${representatives.length === 1 ? "segment" : "segments"}.`,
       metrics,
     };
   }
@@ -381,6 +401,13 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
 }
 
 export async function runAiClassificationForUnknownThreshold(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+  return withClassificationActivity(
+    () => runAiClassificationForUnknownThresholdImpl(query, threshold, options),
+    (summary) => summary.metrics?.unclassifiedSegments ?? null,
+  );
+}
+
+async function runAiClassificationForUnknownThresholdImpl(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = EDGE_MAX_BATCH_SIZE;
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
   const privacySettings = readAiPrivacyRequestSettings();
@@ -531,6 +558,13 @@ async function saveLiveResultIfRequested(result: LiveAiClassificationResult, opt
 }
 
 export async function runAiClassificationUntilEmpty(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+  return withClassificationActivity(
+    () => runAiClassificationUntilEmptyImpl(query, batchSize, options),
+    (summary) => summary.metrics?.unclassifiedSegments ?? null,
+  );
+}
+
+async function runAiClassificationUntilEmptyImpl(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   let selectedSegments = 0;
   let savedRecords = 0;
   let processedBatches = 0;
@@ -1210,7 +1244,7 @@ async function runLocalAiClassification(
   selectedSegments: number,
   deterministicSavedRecords: number,
   representatives: MinimizedActivityPayload[],
-  membersByRepSegmentId: Map<unknown, MinimizedActivityPayload[]> | null,
+  membersByRepSegmentId: Map<string, MinimizedActivityPayload[]> | null,
   provider: LocalAiProviderConfig,
   workProfile: string | null,
 ): Promise<AiClassificationSummary> {

@@ -63,7 +63,9 @@ export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClass
     // A capture taken mid in-page navigation can land with a bare base URL (no video id),
     // which looks like a browse page — but if the window title names a specific video the
     // user is watching one, so classify it as a video rather than an unknown home/feed page.
-    if (youTubeVideoNameFromWindowTitle(segment.windowTitle)) {
+    // Only the bare base URL qualifies: search/feed/channel titles also end in " - YouTube",
+    // so those pages must stay unknown for inheritance/AI to handle.
+    if (youtubePathFromUrl(segment.siteUrl) === "/" && youTubeVideoNameFromWindowTitle(segment.windowTitle)) {
       return { category: "entertainment", productivity: "drift" };
     }
     return { category: "unknown", productivity: "neutral" };

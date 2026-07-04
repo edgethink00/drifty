@@ -1926,12 +1926,13 @@ describe("runAiClassification cloud contract", () => {
 import { clusterPayloadsByLevel, expandClusterRecords } from "./aiClassificationService";
 import type { MinimizedActivityPayload } from "./localAiProviderRequest";
 
-function payload(id: string, siteDomain: string | null, siteTitle: string | null): MinimizedActivityPayload {
+function payload(id: string, siteDomain: string | null, siteTitle: string | null, overrides: Partial<MinimizedActivityPayload> = {}): MinimizedActivityPayload {
   return {
     segmentId: id, inputFingerprint: `fp-${id}`, startedAt: "2026-07-03T00:00:00Z", endedAt: "2026-07-03T00:01:00Z",
     durationSeconds: 60, appName: "Google Chrome", bundleId: null, browserName: "Google Chrome",
     siteDomain, siteUrl: siteDomain ? `https://${siteDomain}/x` : null, siteTitle, windowTitle: siteTitle,
     youtubeTitle: null, youtubeChannelName: null, youtubeCategory: null, youtubeIsShorts: null,
+    ...overrides,
   };
 }
 
@@ -1960,6 +1961,24 @@ describe("classification level clustering", () => {
     const { representatives } = clusterPayloadsByLevel(misses, "coarse");
     // all github into one, youtube one -> 2 representatives
     expect(representatives).toHaveLength(2);
+  });
+
+  it("normal keeps different desktop apps with identical empty titles in separate clusters", () => {
+    const appMisses = [
+      payload("e", null, null, { appName: "Xcode", bundleId: "com.apple.dt.Xcode", browserName: null }),
+      payload("f", null, null, { appName: "Figma", bundleId: "com.figma.Desktop", browserName: null }),
+    ];
+    const { representatives } = clusterPayloadsByLevel(appMisses, "normal");
+    expect(representatives.map((r) => r.segmentId).sort()).toEqual(["e", "f"]);
+  });
+
+  it("coarse keeps different desktop apps without a domain in separate clusters", () => {
+    const appMisses = [
+      payload("e", null, null, { appName: "Xcode", bundleId: null, browserName: null }),
+      payload("f", null, null, { appName: "Figma", bundleId: null, browserName: null }),
+    ];
+    const { representatives } = clusterPayloadsByLevel(appMisses, "coarse");
+    expect(representatives.map((r) => r.segmentId).sort()).toEqual(["e", "f"]);
   });
 
   it("expandClusterRecords fans a representative result out to all members", () => {

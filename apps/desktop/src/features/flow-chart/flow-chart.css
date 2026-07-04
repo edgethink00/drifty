@@ -255,7 +255,15 @@
   box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface) 38%, transparent);
   line-height: 0;
   overflow: hidden;
-  transition: box-shadow var(--transition-fast), filter var(--transition-fast);
+  /* Background fades so re-classified blocks ease to their new color instead of snapping when
+     background AI classification updates the selected day. */
+  transition: box-shadow var(--transition-fast), filter var(--transition-fast), background-color 360ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-cell {
+    transition: box-shadow var(--transition-fast), filter var(--transition-fast);
+  }
 }
 
 button.flow-cell { cursor: pointer; }

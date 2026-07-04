@@ -170,6 +170,72 @@ describe("YouTube classification", () => {
     }));
   });
 
+  it("keeps a YouTube search results page unknown even when the title reads like a video", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteTitle: "react useEffect tutorial - YouTube",
+      siteUrl: "https://www.youtube.com/results?search_query=react+useEffect+tutorial",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "react useEffect tutorial - YouTube - Chrome",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "youtube",
+    }));
+  });
+
+  it("keeps a YouTube channel page unknown even when the title reads like a video", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteTitle: "Fireship - YouTube",
+      siteUrl: "https://www.youtube.com/@Fireship",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "Fireship - YouTube - Chrome",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "youtube",
+    }));
+  });
+
+  it("keeps a short subscriptions feed visit neutral even when the title reads like a video", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      durationSeconds: 29,
+      siteTitle: "구독 - YouTube",
+      siteUrl: "https://www.youtube.com/feed/subscriptions",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "구독 - YouTube - Chrome",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "youtube",
+    }));
+  });
+
+  it("classifies a sustained subscriptions feed visit as drift regardless of the window title", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      durationSeconds: 45,
+      siteTitle: "구독 - YouTube",
+      siteUrl: "https://www.youtube.com/feed/subscriptions",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "구독 - YouTube - Chrome",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+    }));
+  });
+
   it("classifies title-only YouTube video windows only when YouTube is the browser site suffix", () => {
     const classification = classifyActivityDetailed(youtubeSegment({
       siteDomain: null,
