@@ -211,8 +211,26 @@ export interface BrowserHistoryImportResult extends BrowserHistoryImportPreview 
   readonly skippedDuplicateCount: number;
 }
 
+/**
+ * Minimized environment info for the Safari onboarding Full Disk Access row.
+ * Booleans only — never carries paths, URLs, or titles (privacy rule).
+ */
+export interface BrowserHistoryEnvironment {
+  /** True once Safari's History.db is readable (Full Disk Access granted). */
+  readonly safariHistoryReadable: boolean;
+  /** True when Safari is (or is the system fallback for) the default browser. */
+  readonly defaultBrowserIsSafari: boolean;
+}
+
 export interface ClassificationQuery extends Partial<DateRangeQuery>, Partial<DayQuery> {
   limit?: number;
+  /**
+   * Optional allow-list of segment ids to prioritize. When present, classification selection
+   * is restricted to these segments (applied client-side over the fetched unclassified pool);
+   * unknown to the tracker backend, which safely ignores the extra field. Additive: callers
+   * that omit it keep the previous whole-range selection behavior.
+   */
+  segmentIds?: readonly string[];
 }
 
 export interface ProductivityShareMix {
@@ -271,6 +289,7 @@ export interface TrackerApi {
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
   previewBrowserHistoryImport(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportPreview>;
   importBrowserHistory(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportResult>;
+  getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
   updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;

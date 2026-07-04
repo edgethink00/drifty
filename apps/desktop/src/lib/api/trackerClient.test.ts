@@ -192,6 +192,41 @@ describe("trackerClient", () => {
     });
   });
 
+  it("reads the browser history environment through the tracker command", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({ safariHistoryReadable: true, defaultBrowserIsSafari: true });
+
+    const result = await trackerClient.getBrowserHistoryEnvironment();
+
+    expect(result).toEqual({ safariHistoryReadable: true, defaultBrowserIsSafari: true });
+    expect(invoke).toHaveBeenCalledWith("tracker_get_browser_history_environment", undefined);
+  });
+
+  it("returns a false browser history environment outside Tauri", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    const { trackerClient } = await import("./trackerClient");
+
+    const result = await trackerClient.getBrowserHistoryEnvironment();
+
+    expect(result).toEqual({ safariHistoryReadable: false, defaultBrowserIsSafari: false });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("defaults empty browser history import results to the 2-day product lookback outside Tauri", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    const { trackerClient } = await import("./trackerClient");
+
+    const preview = await trackerClient.previewBrowserHistoryImport();
+    const result = await trackerClient.importBrowserHistory();
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(preview.lookbackDays).toBe(2);
+    expect(preview.segmentCount).toBe(0);
+    expect(result.lookbackDays).toBe(2);
+    expect(result.insertedCount).toBe(0);
+    expect(result.skippedDuplicateCount).toBe(0);
+  });
+
   it("invokes tray_update_icon_style with the selected style", async () => {
     const { trackerClient } = await import("./trackerClient");
     invoke.mockResolvedValueOnce(null);

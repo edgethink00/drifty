@@ -9,14 +9,18 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import urlparse, urlunparse
 
-from app.tracker.browser_automation import normalize_domain
+from app.tracker.browser_automation import normalize_domain, youtube_ids
 from app.tracker.browser_history import (
     _BROWSER_ROOTS,
     _CHROMIUM_EPOCH_OFFSET_SECONDS,
+    _COCOA_EPOCH_OFFSET_SECONDS,
     _HISTORY_TIMESTAMP_MICROSECONDS,
     _copy_history_database,
     chromium_history_paths_for_root,
     firefox_history_paths_for_root,
+    is_firefox_family_browser,
+    is_safari_family_browser,
+    safari_history_paths_for_root,
 )
 
 from .models import (
@@ -53,7 +57,9 @@ def read_import_visits(request: BrowserHistoryImportRequest) -> HistoryVisitRead
 
 
 def _history_paths(browser_name: str, root: Path) -> list[Path]:
-    if browser_name == "Firefox":
+    if is_safari_family_browser(browser_name):
+        return safari_history_paths_for_root(root)
+    if is_firefox_family_browser(browser_name):
         return firefox_history_paths_for_root(root)
     return chromium_history_paths_for_root(root)
 
@@ -65,7 +71,9 @@ def _read_profile_visits(
     start: datetime,
     end: datetime,
 ) -> list[BrowserHistoryImportVisit]:
-    if browser_name == "Firefox":
+    if is_safari_family_browser(browser_name):
+        return _read_safari_visits(browser_name, profile_name, history_path, start, end)
+    if is_firefox_family_browser(browser_name):
         return _read_firefox_visits(browser_name, profile_name, history_path, start, end)
     return _read_chromium_visits(browser_name, profile_name, history_path, start, end)
 
@@ -122,6 +130,37 @@ def _read_firefox_visits(
     )
 
 
+def _read_safari_visits(
+    browser_name: str,
+    profile_name: str,
+    history_path: Path,
+    start: datetime,
+    end: datetime,
+) -> list[BrowserHistoryImportVisit]:
+    # Safari stores the title on history_visits and the url on history_items, with
+    # visit_time as REAL seconds since the Cocoa epoch (2001-01-01). Cast to INTEGER
+    # so the shared `_query_visits` int check accepts it (sub-second precision is
+    # irrelevant to session bucketing).
+    query = (
+        "SELECT history_items.url, history_visits.title, "
+        "CAST(history_visits.visit_time AS INTEGER) AS visited_at "
+        "FROM history_visits "
+        "JOIN history_items ON history_items.id = history_visits.history_item "
+        "WHERE history_items.url IS NOT NULL AND history_visits.title IS NOT NULL "
+        "AND history_visits.visit_time >= ? AND history_visits.visit_time <= ? "
+        "ORDER BY history_visits.visit_time ASC "
+        "LIMIT ?"
+    )
+    return _query_visits(
+        history_path,
+        query,
+        (_safari_timestamp(start), _safari_timestamp(end), MAX_IMPORT_VISITS_PER_PROFILE),
+        browser_name,
+        profile_name,
+        _safari_datetime,
+    )
+
+
 def _query_visits(
     history_path: Path,
     query: str,
@@ -141,6 +180,7 @@ def _query_visits(
             domain = normalize_domain(sanitized_url)
             if domain is None:
                 continue
+            video_id, playlist_id, is_shorts = youtube_ids(url)
             visits.append(
                 BrowserHistoryImportVisit(
                     import_key=_import_key(browser_name, profile_name, raw_visited_at, sanitized_url),
@@ -150,6 +190,9 @@ def _query_visits(
                     browser_name=browser_name,
                     profile_name=profile_name,
                     site_domain=domain,
+                    youtube_video_id=video_id,
+                    youtube_playlist_id=playlist_id,
+                    youtube_is_shorts=is_shorts,
                 )
             )
     return visits
@@ -186,3 +229,11 @@ def _chromium_datetime(value: int) -> datetime:
 
 def _firefox_datetime(value: int) -> datetime:
     return datetime.fromtimestamp(value / _HISTORY_TIMESTAMP_MICROSECONDS, timezone.utc)
+
+
+def _safari_timestamp(value: datetime) -> int:
+    return int(value.timestamp() - _COCOA_EPOCH_OFFSET_SECONDS)
+
+
+def _safari_datetime(value: int) -> datetime:
+    return datetime.fromtimestamp(value + _COCOA_EPOCH_OFFSET_SECONDS, timezone.utc)

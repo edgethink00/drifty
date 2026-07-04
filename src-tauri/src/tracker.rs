@@ -214,6 +214,10 @@ impl TrackerController {
         )
     }
 
+    pub fn get_browser_history_environment(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_browser_history_environment", json!({}))
+    }
+
     pub fn get_hourly_summary(
         &self,
         app: &AppHandle,

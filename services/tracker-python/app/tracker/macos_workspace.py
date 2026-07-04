@@ -18,16 +18,16 @@ from app.tracker.browser_automation import (
     is_supported_browser_app,
     youtube_ids,
 )
+from app.tracker.browser_history import (
+    browser_history_metadata,
+    is_browser_history_supported_app,
+)
 from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
 
 # Recovers a video id for the occasional YouTube capture that lands mid SPA-navigation with
 # the video title but a bare base URL (see youtube_video_recovery). Capture runs on a single
 # thread, so a plain module-level instance is safe and cost-free.
 _youtube_video_id_memory = YouTubeVideoIdMemory()
-from app.tracker.browser_history import (
-    browser_history_metadata,
-    is_browser_history_supported_app,
-)
 
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
 FrontmostCaptureSource = Literal["system-events", "lsappinfo", "unavailable"]
@@ -409,6 +409,10 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
         browser.site_domain,
         browser.site_url,
         browser.youtube_video_id,
+        # Only exact-match captures (confidence 1.0 above) may teach the title -> id memory;
+        # e.g. a "front-fallback" tab read can describe a different window, and learning a
+        # wrong pair would replay it later at full confidence.
+        learn=capture_confidence >= 1.0,
     )
 
     return Snapshot(

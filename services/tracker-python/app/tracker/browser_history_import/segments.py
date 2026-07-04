@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 from app.storage.db import ImportedActivitySegment
-from app.tracker.browser_automation import youtube_ids
 
 from .models import (
     BROWSER_HISTORY_IMPORT_SOURCE,
@@ -25,6 +25,8 @@ from .models import (
 # a same-site session that was split by a brief detour merge back together.
 _LOW_SIGNAL_PATH_MARKERS: tuple[str, ...] = ("/signin", "/login", "/logout", "/oauth", "/sso")
 _LOW_SIGNAL_HOSTS: frozenset[str] = frozenset({"accounts.google.com"})
+# google.com plus country domains: google.de, google.co.kr, google.com.au, ...
+_GOOGLE_SEARCH_HOST_PATTERN = re.compile(r"(^|\.)google\.(com|[a-z]{2}|com?\.[a-z]{2})$")
 
 
 def is_low_signal_url(url: str) -> bool:
@@ -41,7 +43,7 @@ def is_low_signal_url(url: str) -> bool:
     while host.startswith("www."):
         host = host[4:]
     path = (parts.path or "").lower()
-    if (host == "google.com" or host.endswith(".google.com")) and path.startswith("/search"):
+    if _GOOGLE_SEARCH_HOST_PATTERN.search(host) and path.startswith("/search"):
         return True
     if host in _LOW_SIGNAL_HOSTS:
         return True
@@ -123,7 +125,10 @@ def _segment_from_session(
     if duration_seconds < MIN_SESSION_DURATION_SECONDS:
         return None
 
-    video_id, playlist_id, is_shorts = youtube_ids(first_visit.url)
+    # Extracted by the reader from the raw URL; the sanitized url has no query params.
+    video_id = first_visit.youtube_video_id
+    playlist_id = first_visit.youtube_playlist_id
+    is_shorts = first_visit.youtube_is_shorts
     return ImportedActivitySegment(
         import_key=_session_import_key(visits),
         started_at=first_visit.visited_at.isoformat(),

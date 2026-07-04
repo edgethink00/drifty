@@ -620,6 +620,15 @@ def preview_browser_history_import(payload: dict):
     return response(True, preview_import(request).to_payload())
 
 
+def get_browser_history_environment(payload: dict):
+    from app.tracker.browser_history import browser_history_environment
+
+    # Returns booleans only (safariHistoryReadable, defaultBrowserIsSafari) for the
+    # Safari onboarding-row decision and Full Disk Access polling. The readable check
+    # also registers Drifty in the Full Disk Access list. No paths/URLs/titles.
+    return response(True, browser_history_environment())
+
+
 def import_browser_history(payload: dict):
     from app.tracker.browser_history_import import import_browser_history as run_import
 
@@ -795,6 +804,7 @@ COMMANDS = {
     "get_classification_metrics": get_classification_metrics,
     "preview_browser_history_import": preview_browser_history_import,
     "import_browser_history": import_browser_history,
+    "get_browser_history_environment": get_browser_history_environment,
     "set_developer_diagnostics": set_developer_diagnostics,
 }
 

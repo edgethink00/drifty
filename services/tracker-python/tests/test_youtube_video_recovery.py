@@ -9,11 +9,14 @@ if str(SERVICE_ROOT) not in sys.path:
 from app.tracker.youtube_video_recovery import (  # noqa: E402
     YouTubeVideoIdMemory,
     canonical_watch_url,
+    is_base_url_blip,
     youtube_video_name,
 )
 
 WATCH = "https://www.youtube.com/watch?v=abc123&t=10s"
 BASE = "https://www.youtube.com/"
+SEARCH = "https://www.youtube.com/results?search_query=%EC%97%98%ED%94%84"
+PLAYLIST = "https://www.youtube.com/playlist?list=PL123"
 VIDEO_TITLE = "판타지 애니 몰아보기 [애니리뷰] - YouTube - 오디오 재생 - Aside"
 HOME_TITLE = "YouTube - Aside"
 
@@ -36,6 +39,41 @@ class YouTubeVideoNameTests(unittest.TestCase):
     def test_missing_title_returns_none(self) -> None:
         self.assertIsNone(youtube_video_name(None, "youtube.com"))
         self.assertIsNone(youtube_video_name("just a window", "youtube.com"))
+
+    def test_notification_count_prefix_is_stripped(self) -> None:
+        self.assertEqual(
+            youtube_video_name("(3) Cool video - YouTube - Aside", "youtube.com"),
+            "Cool video",
+        )
+        # A prefix-only title must not degenerate into an empty or "youtube" key.
+        self.assertIsNone(youtube_video_name("(3) YouTube - Aside", "youtube.com"))
+
+
+class BaseUrlBlipTests(unittest.TestCase):
+    def test_bare_base_urls_are_blips(self) -> None:
+        for url in (BASE, "https://www.youtube.com", "https://youtube.com/", "https://m.youtube.com/", "http://www.youtube.com/"):
+            with self.subTest(url=url):
+                self.assertTrue(is_base_url_blip(url))
+
+    def test_page_urls_are_not_blips(self) -> None:
+        for url in (
+            WATCH,
+            SEARCH,
+            PLAYLIST,
+            "https://www.youtube.com/@somechannel",
+            "https://www.youtube.com/feed/subscriptions",
+            "https://www.youtube.com/?bp=abc",
+            "https://www.youtube.com/#shorts",
+            "https://music.youtube.com/",
+            "https://example.com/",
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(is_base_url_blip(url))
+
+    def test_missing_or_unparseable_url_is_not_a_blip(self) -> None:
+        self.assertFalse(is_base_url_blip(None))
+        self.assertFalse(is_base_url_blip(""))
+        self.assertFalse(is_base_url_blip("not a url"))
 
 
 class YouTubeVideoIdMemoryTests(unittest.TestCase):
@@ -62,6 +100,48 @@ class YouTubeVideoIdMemoryTests(unittest.TestCase):
         vid, url = self.memory.observe("Different video - YouTube - Aside", "youtube.com", BASE, None)
         self.assertIsNone(vid)
         self.assertEqual(url, BASE)
+
+    def test_search_results_for_a_learned_title_are_not_rewritten(self) -> None:
+        # Searching YouTube for a watched video's exact name yields the same "<name> - YouTube"
+        # title with a /results URL and no v param — that is a browse page, not a watch blip.
+        self.memory.observe(VIDEO_TITLE, "youtube.com", WATCH, "abc123")
+        vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", SEARCH, None)
+        self.assertIsNone(vid)
+        self.assertEqual(url, SEARCH)
+
+    def test_playlist_sharing_a_learned_title_is_not_rewritten(self) -> None:
+        self.memory.observe(VIDEO_TITLE, "youtube.com", WATCH, "abc123")
+        vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", PLAYLIST, None)
+        self.assertIsNone(vid)
+        self.assertEqual(url, PLAYLIST)
+
+    def test_music_youtube_base_url_is_not_rewritten(self) -> None:
+        music_base = "https://music.youtube.com/"
+        self.memory.observe(VIDEO_TITLE, "youtube.com", WATCH, "abc123")
+        vid, url = self.memory.observe(VIDEO_TITLE, "music.youtube.com", music_base, None)
+        self.assertIsNone(vid)
+        self.assertEqual(url, music_base)
+
+    def test_low_confidence_capture_does_not_teach_the_memory(self) -> None:
+        # A front-fallback tab read may describe a different window; its id must not be
+        # remembered, so a later blip with the same title stays unrecovered.
+        vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", WATCH, "abc123", learn=False)
+        self.assertEqual((vid, url), ("abc123", WATCH))  # capture itself passes through
+        vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", BASE, None)
+        self.assertIsNone(vid)
+        self.assertEqual(url, BASE)
+
+    def test_low_confidence_blip_still_gets_a_learned_recovery(self) -> None:
+        self.memory.observe(VIDEO_TITLE, "youtube.com", WATCH, "abc123")
+        vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", BASE, None, learn=False)
+        self.assertEqual(vid, "abc123")
+        self.assertEqual(url, canonical_watch_url("abc123"))
+
+    def test_notification_count_prefix_shares_the_memory_key(self) -> None:
+        self.memory.observe(f"(3) {VIDEO_TITLE}", "youtube.com", WATCH, "abc123")
+        vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", BASE, None)
+        self.assertEqual(vid, "abc123")
+        self.assertEqual(url, canonical_watch_url("abc123"))
 
     def test_present_id_passes_through_unchanged(self) -> None:
         vid, url = self.memory.observe(VIDEO_TITLE, "youtube.com", WATCH, "xyz789")

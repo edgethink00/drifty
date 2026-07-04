@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-browser-history-environment"
+description = "Enables the tracker_get_browser_history_environment command without any pre-configured scope."
+commands.allow = ["tracker_get_browser_history_environment"]
+
+[[permission]]
+identifier = "deny-tracker-get-browser-history-environment"
+description = "Denies the tracker_get_browser_history_environment command without any pre-configured scope."
+commands.deny = ["tracker_get_browser_history_environment"]

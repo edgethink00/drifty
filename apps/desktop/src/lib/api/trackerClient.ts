@@ -4,6 +4,7 @@ import type {
   ActivitySegment,
   AppIconMap,
   AppIdentity,
+  BrowserHistoryEnvironment,
   BrowserHistoryImportPreview,
   BrowserHistoryImportQuery,
   BrowserHistoryImportResult,
@@ -77,7 +78,8 @@ function getTrackerUnavailableStatus(message: string): TrackerStatus {
 }
 
 function emptyBrowserHistoryImportPreview(query?: BrowserHistoryImportQuery): BrowserHistoryImportPreview {
-  const lookbackDays = query?.lookbackDays ?? 7;
+  // Mirrors the Rust-side default lookback window (unwrap_or(2)).
+  const lookbackDays = query?.lookbackDays ?? 2;
   const windowEnd = new Date();
   const windowStart = new Date(windowEnd.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
   return {
@@ -91,6 +93,14 @@ function emptyBrowserHistoryImportPreview(query?: BrowserHistoryImportQuery): Br
     errorCount: 0,
     windowStart: windowStart.toISOString(),
     windowEnd: windowEnd.toISOString(),
+  };
+}
+
+function emptyBrowserHistoryImportResult(query?: BrowserHistoryImportQuery): BrowserHistoryImportResult {
+  return {
+    ...emptyBrowserHistoryImportPreview(query),
+    insertedCount: 0,
+    skippedDuplicateCount: 0,
   };
 }
 
@@ -314,19 +324,15 @@ export const trackerClient: TrackerApi = {
     return result ?? emptyBrowserHistoryImportPreview(query);
   },
   async importBrowserHistory(query?: BrowserHistoryImportQuery) {
-    if (shouldUsePreviewData()) {
-      return {
-        ...emptyBrowserHistoryImportPreview(query),
-        insertedCount: 0,
-        skippedDuplicateCount: 0,
-      };
-    }
+    if (shouldUsePreviewData()) return emptyBrowserHistoryImportResult(query);
     const result = await safeInvoke<BrowserHistoryImportResult>("tracker_import_browser_history", { query: query ?? {} });
-    return result ?? {
-      ...emptyBrowserHistoryImportPreview(query),
-      insertedCount: 0,
-      skippedDuplicateCount: 0,
-    };
+    return result ?? emptyBrowserHistoryImportResult(query);
+  },
+  async getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment> {
+    const fallback: BrowserHistoryEnvironment = { safariHistoryReadable: false, defaultBrowserIsSafari: false };
+    if (shouldUsePreviewData()) return fallback;
+    const result = await safeInvoke<BrowserHistoryEnvironment>("tracker_get_browser_history_environment");
+    return result ?? fallback;
   },
   async updateTrayProductivityIcon(mix: ProductivityShareMix) {
     if (shouldUsePreviewData()) return;

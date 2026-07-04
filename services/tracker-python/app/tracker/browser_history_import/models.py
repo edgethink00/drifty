@@ -34,6 +34,11 @@ class BrowserHistoryImportVisit:
     browser_name: str
     profile_name: str
     site_domain: str
+    # Extracted from the raw URL before sanitization strips query params
+    # (/watch?v= ids live in the query string).
+    youtube_video_id: str | None = None
+    youtube_playlist_id: str | None = None
+    youtube_is_shorts: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

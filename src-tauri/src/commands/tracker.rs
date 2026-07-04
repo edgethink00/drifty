@@ -369,6 +369,21 @@ pub async fn tracker_import_browser_history(
 }
 
 #[tauri::command]
+pub async fn tracker_get_browser_history_environment(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_browser_history_environment(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_get_hourly_summary(
     app: AppHandle,
     controller: State<'_, TrackerController>,

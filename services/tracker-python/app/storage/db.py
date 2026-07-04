@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.tracker.youtube_metadata import YouTubeVideoMetadata
 
 
+BROWSER_HISTORY_IMPORT_SOURCE = "browser-history-import"
 VALID_RULE_TARGET_KINDS = {"app", "site"}
 VALID_RULE_MATCH_SCOPES = {"surface", "detail"}
 VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", "siteUrl"}
@@ -621,12 +622,16 @@ class TrackerDatabase:
 
     def trim_latest_segment(self, ended_at: str) -> None:
         with self.connect() as conn:
+            # Imported history segments describe the past, not the live session;
+            # idle/power trims must never truncate or delete them.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
+                WHERE source != ?
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
-                """
+                """,
+                (BROWSER_HISTORY_IMPORT_SOURCE,),
             ).fetchone()
             if not last:
                 return
@@ -707,6 +712,27 @@ class TrackerDatabase:
         skipped_duplicate_count = 0
         with self.connect() as conn:
             for segment in segments:
+                # A re-run can regroup visits into a session with a new import key
+                # (e.g. the session gained a visit), and imports can cover time the
+                # live tracker already recorded. Skip any segment whose
+                # [started_at, ended_at) range overlaps an existing segment so
+                # imported time is never double-counted.
+                overlapping = conn.execute(
+                    """
+                    SELECT 1 FROM activity_segments
+                    WHERE datetime(started_at) < datetime(?)
+                      AND datetime(ended_at) > datetime(?)
+                    LIMIT 1
+                    """,
+                    (
+                        self._normalize_range_bound(segment.ended_at),
+                        self._normalize_range_bound(segment.started_at),
+                    ),
+                ).fetchone()
+                if overlapping is not None:
+                    skipped_duplicate_count += 1
+                    continue
+
                 key_cursor = conn.execute(
                     """
                     INSERT OR IGNORE INTO browser_history_import_keys (
