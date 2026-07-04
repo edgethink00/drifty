@@ -1762,7 +1762,7 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("does not inherit YouTube browse classification from a video 181 seconds away", async () => {
+  it("does not inherit from a video 181 seconds away and falls back to sustained-browse drift without AI", async () => {
     const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/");
     const neighbor = createYouTubeVideoSegment(2, {
       startedAt: "2026-05-22T09:08:01.000Z",
@@ -1774,10 +1774,33 @@ describe("runAiClassification cloud contract", () => {
       const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([browse], { timeline: [neighbor] });
       const result = await runAiClassification({ day: "2026-05-22" });
 
+      // Too far to inherit (181s > 180s), and a bare browse page has no content for AI —
+      // so the sustained-browse=drift fallback classifies it deterministically.
       expect(result.status).toBe("saved");
-      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).not.toHaveBeenCalled();
       expect(saveClassifications).toHaveBeenCalledTimes(1);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", source: "llm", aiResult: true })]);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([
+        expect.objectContaining({ segmentId: "segment-1", source: "youtube", category: "entertainment", productivity: "drift", aiResult: false }),
+      ]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("falls back a brief isolated YouTube browse page to neutral unknown without AI", async () => {
+    const browse = createYouTubeBrowseSegment(1, "https://www.youtube.com/");
+    browse.durationSeconds = 12;
+    browse.endedAt = "2026-05-22T09:00:12.000Z";
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([browse], { timeline: [] });
+      const result = await runAiClassification({ day: "2026-05-22" });
+
+      expect(result.status).toBe("saved");
+      expect(invoke).not.toHaveBeenCalled();
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([
+        expect.objectContaining({ segmentId: "segment-1", source: "youtube", category: "unknown", productivity: "neutral", aiResult: false }),
+      ]);
     } finally {
       cleanupServiceMocks();
     }
@@ -1897,5 +1920,60 @@ describe("runAiClassification cloud contract", () => {
     } finally {
       cleanupServiceMocks();
     }
+  });
+});
+
+import { clusterPayloadsByLevel, expandClusterRecords } from "./aiClassificationService";
+import type { MinimizedActivityPayload } from "./localAiProviderRequest";
+
+function payload(id: string, siteDomain: string | null, siteTitle: string | null): MinimizedActivityPayload {
+  return {
+    segmentId: id, inputFingerprint: `fp-${id}`, startedAt: "2026-07-03T00:00:00Z", endedAt: "2026-07-03T00:01:00Z",
+    durationSeconds: 60, appName: "Google Chrome", bundleId: null, browserName: "Google Chrome",
+    siteDomain, siteUrl: siteDomain ? `https://${siteDomain}/x` : null, siteTitle, windowTitle: siteTitle,
+    youtubeTitle: null, youtubeChannelName: null, youtubeCategory: null, youtubeIsShorts: null,
+  };
+}
+
+describe("classification level clustering", () => {
+  const misses = [
+    payload("a", "github.com", "user/repo issues"),
+    payload("b", "github.com", "user/repo issues"),   // same domain+title as a
+    payload("c", "github.com", "torvalds profile"),   // same domain, different title
+    payload("d", "youtube.com", "coding tutorial"),
+  ];
+
+  it("fine keeps every segment (no clustering)", () => {
+    const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(misses, "fine");
+    expect(representatives).toHaveLength(4);
+    expect(membersByRepSegmentId).toBeNull();
+  });
+
+  it("normal clusters by domain+title", () => {
+    const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(misses, "normal");
+    // a+b merge (same domain+title); c and d separate -> 3 representatives
+    expect(representatives.map((r) => r.segmentId).sort()).toEqual(["a", "c", "d"]);
+    expect(membersByRepSegmentId?.get("a")?.map((m) => m.segmentId)).toEqual(["a", "b"]);
+  });
+
+  it("coarse clusters by domain only", () => {
+    const { representatives } = clusterPayloadsByLevel(misses, "coarse");
+    // all github into one, youtube one -> 2 representatives
+    expect(representatives).toHaveLength(2);
+  });
+
+  it("expandClusterRecords fans a representative result out to all members", () => {
+    const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(misses, "normal");
+    const repRecord = {
+      segmentId: "a", inputFingerprint: "fp-a", category: "workspace", productivity: "focus",
+      source: "llm", confidence: 0.9, reason: "r", model: "m", promptVersion: null,
+      taxonomyVersion: null, inputHash: null, aiResult: true, stale: false, classifiedAt: "2026-07-03T00:00:00Z",
+    } as unknown as import("@drifty/domain").ActivityClassificationRecord;
+    const expanded = expandClusterRecords([repRecord], membersByRepSegmentId);
+    const forA = expanded.filter((r) => r.segmentId === "a" || r.segmentId === "b");
+    expect(forA.map((r) => r.segmentId).sort()).toEqual(["a", "b"]);
+    expect(forA.every((r) => r.category === "workspace" && r.productivity === "focus")).toBe(true);
+    // each fanned record carries its own segment's fingerprint
+    expect(expanded.find((r) => r.segmentId === "b")?.inputFingerprint).toBe("fp-b");
   });
 });

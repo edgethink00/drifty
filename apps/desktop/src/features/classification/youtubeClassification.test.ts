@@ -138,6 +138,38 @@ describe("YouTube classification", () => {
     }));
   });
 
+  it("classifies a base-URL YouTube capture as a video when the window title names one", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "판타지 애니 몰아보기 [애니리뷰] - YouTube - 오디오 재생 - Aside",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "entertainment",
+      productivity: "drift",
+      source: "youtube",
+    }));
+  });
+
+  it("keeps a base-URL YouTube home page unknown when the title names no video", () => {
+    const classification = classifyActivityDetailed(youtubeSegment({
+      siteTitle: "YouTube",
+      siteUrl: "https://www.youtube.com/",
+      youtubeVideoId: null,
+      youtubeCategory: null,
+      windowTitle: "YouTube - Aside",
+    }));
+
+    expect(classification).toEqual(expect.objectContaining({
+      category: "unknown",
+      productivity: "neutral",
+      source: "youtube",
+    }));
+  });
+
   it("classifies title-only YouTube video windows only when YouTube is the browser site suffix", () => {
     const classification = classifyActivityDetailed(youtubeSegment({
       siteDomain: null,

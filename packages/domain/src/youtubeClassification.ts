@@ -60,6 +60,12 @@ export function classifyYouTubeActivity(segment: ActivitySegment): ActivityClass
   }
 
   if (isYouTubeBrowsePage(segment)) {
+    // A capture taken mid in-page navigation can land with a bare base URL (no video id),
+    // which looks like a browse page — but if the window title names a specific video the
+    // user is watching one, so classify it as a video rather than an unknown home/feed page.
+    if (youTubeVideoNameFromWindowTitle(segment.windowTitle)) {
+      return { category: "entertainment", productivity: "drift" };
+    }
     return { category: "unknown", productivity: "neutral" };
   }
 
@@ -96,6 +102,18 @@ export function isYouTubeBrowsePage(segment: ActivitySegment): boolean {
   if (path === "/" || path === "/results" || path === "/feed" || path.startsWith("/feed/")) return true;
   if (/^\/@[^/]+(?:\/.*)?$/.test(path)) return true;
   return path.startsWith("/channel/") || path.startsWith("/c/") || path.startsWith("/user/");
+}
+
+// The specific video name in a "<name> - YouTube[ - <status>][ - <app>]" window title,
+// or null for the bare home/feed title ("YouTube") and non-video windows.
+function youTubeVideoNameFromWindowTitle(windowTitle?: string | null): string | null {
+  const title = (windowTitle ?? "").trim();
+  if (!title) return null;
+  const markerIndex = title.toLowerCase().indexOf(" - youtube");
+  if (markerIndex <= 0) return null;
+  const name = title.slice(0, markerIndex).trim();
+  if (!name || name.toLowerCase() === "youtube") return null;
+  return name;
 }
 
 export const isYouTubeNavigationPage = isYouTubeBrowsePage;

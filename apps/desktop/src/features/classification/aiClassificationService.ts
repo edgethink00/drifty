@@ -1,4 +1,4 @@
-import { classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment } from "@drifty/domain";
+import { classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import type {
   ActivityCategory,
   ActivityClassificationRecord,
@@ -78,10 +78,73 @@ type EdgeClassificationResponse = {
   latencyMs?: unknown;
 };
 
+// Granularity of AI classification:
+// - "fine"  : classify every unknown segment individually (most accurate).
+// - "normal": classify one representative per (domain + title) signature, then apply
+//             it to all segments sharing that signature. ~fine accuracy, fewer calls.
+// - "coarse": one representative per domain (fastest, loses per-page nuance).
+export type ClassificationLevel = "fine" | "normal" | "coarse";
+
 export type AiClassificationRunOptions = {
   localProvider?: LocalAiProviderConfig | null;
   persistLiveResult?: boolean;
+  level?: ClassificationLevel;
 };
+
+type ClassificationCluster = {
+  readonly representatives: MinimizedActivityPayload[];
+  /** Group members keyed by their representative's segmentId; null for "fine" (no clustering). */
+  readonly membersByRepSegmentId: Map<unknown, MinimizedActivityPayload[]> | null;
+};
+
+function classificationSignatureKey(payload: MinimizedActivityPayload, level: ClassificationLevel): string {
+  const domain = (payload.siteDomain ?? hostnameFromUrl(payload.siteUrl) ?? "").toLowerCase().trim();
+  if (level === "coarse") return domain;
+  const rawTitle = (payload.siteTitle ?? payload.youtubeTitle ?? payload.windowTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  const titleStem = rawTitle.split(" ").slice(0, 3).join(" ");
+  return `${domain}|${titleStem}`;
+}
+
+export function clusterPayloadsByLevel(misses: MinimizedActivityPayload[], level: ClassificationLevel): ClassificationCluster {
+  if (level === "fine" || misses.length === 0) {
+    return { representatives: misses, membersByRepSegmentId: null };
+  }
+  const groups = new Map<string, MinimizedActivityPayload[]>();
+  for (const item of misses) {
+    const key = classificationSignatureKey(item, level);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(item);
+    else groups.set(key, [item]);
+  }
+  const representatives: MinimizedActivityPayload[] = [];
+  const membersByRepSegmentId = new Map<unknown, MinimizedActivityPayload[]>();
+  for (const members of groups.values()) {
+    const representative = members[0];
+    representatives.push(representative);
+    membersByRepSegmentId.set(representative.segmentId, members);
+  }
+  return { representatives, membersByRepSegmentId };
+}
+
+// Fan a representative's classification out to every segment that shares its signature.
+export function expandClusterRecords(
+  representativeRecords: ActivityClassificationRecord[],
+  membersByRepSegmentId: Map<unknown, MinimizedActivityPayload[]> | null,
+): ActivityClassificationRecord[] {
+  if (!membersByRepSegmentId) return representativeRecords;
+  const expanded: ActivityClassificationRecord[] = [];
+  for (const record of representativeRecords) {
+    const members = membersByRepSegmentId.get(record.segmentId);
+    if (!members) {
+      expanded.push(record);
+      continue;
+    }
+    for (const member of members) {
+      expanded.push({ ...record, segmentId: member.segmentId, inputFingerprint: member.inputFingerprint as string });
+    }
+  }
+  return expanded;
+}
 
 export type LiveAiClassificationResult =
   | { kind: "classified"; classification: ActivityClassificationRecord }
@@ -234,8 +297,9 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     : { saved: 0 };
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
   const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload, deterministicSegmentIds);
-  const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId));
-  const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved;
+  const browseFallbackResult = await saveFallbackYouTubeBrowseClassifications(segments, payload, new Set<string>([...deterministicSegmentIds, ...inheritedResult.segmentIds]));
+  const unknownPayload = payload.filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId) && !browseFallbackResult.segmentIds.has(item.segmentId));
+  const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved + browseFallbackResult.saved;
 
   if (unknownPayload.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
@@ -261,8 +325,12 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     };
   }
 
+  // Classify one representative per cluster (fine = per-segment), then fan the result
+  // out to every segment sharing the representative's signature.
+  const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(reusableResult.misses, options.level ?? "fine");
+
   if (options.localProvider) {
-    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
+    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, representatives, membersByRepSegmentId, options.localProvider, workProfile);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -280,7 +348,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     body: await withCloudDevicePayload({
       ...cloudApiClientMetadata,
       ...(workProfile ? { workProfile } : {}),
-      items: toEdgeClassificationRequestItems(reusableResult.misses),
+      items: toEdgeClassificationRequestItems(representatives),
     }),
   });
 
@@ -288,7 +356,7 @@ export async function runAiClassification(query: ClassificationQuery, batchSize 
     throw new Error(await edgeFunctionErrorMessage(error));
   }
 
-  const aiRecords = toClassificationRecords(data, reusableResult.misses);
+  const aiRecords = expandClusterRecords(toClassificationRecords(data, representatives), membersByRepSegmentId);
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
@@ -324,10 +392,11 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
     ? await trackerClient.saveClassifications(deterministicRecords)
     : { saved: 0 };
   const inheritedResult = await saveInheritedYouTubeBrowseClassifications(segments, payload, deterministicSegmentIds);
+  const browseFallbackResult = await saveFallbackYouTubeBrowseClassifications(segments, payload, new Set<string>([...deterministicSegmentIds, ...inheritedResult.segmentIds]));
   const unknownPayload = payload
-    .filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId))
+    .filter((item) => !deterministicSegmentIds.has(item.segmentId) && !inheritedResult.segmentIds.has(item.segmentId) && !browseFallbackResult.segmentIds.has(item.segmentId))
     .slice(0, threshold);
-  const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved;
+  const preAiSavedRecords = deterministicSaveResult.saved + inheritedResult.saved + browseFallbackResult.saved;
 
   const reusableResult = await saveReusableAiClassifications(unknownPayload);
 
@@ -371,7 +440,7 @@ export async function runAiClassificationForUnknownThreshold(query: Classificati
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, options.localProvider, workProfile);
+    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, null, options.localProvider, workProfile);
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -824,6 +893,48 @@ async function saveInheritedYouTubeBrowseClassifications(
   return { saved: saveResult.saved, segmentIds: new Set(inheritedRecords.map((record) => record.segmentId)) };
 }
 
+// Deterministic fallback for YouTube browse pages with no nearby video to inherit from:
+// a sustained stay on the recommendation feed/home reads as drift, a brief pass-through
+// stays neutral. Keeps them out of the AI payload (a bare browse page has no content to
+// classify) — inheritance is tried first, this only handles the leftovers.
+async function saveFallbackYouTubeBrowseClassifications(
+  segments: ActivitySegment[],
+  payload: MinimizedActivityPayload[],
+  excludedSegmentIds: ReadonlySet<string>,
+): Promise<{ saved: number; segmentIds: Set<string> }> {
+  const payloadById = new Map(payload.map((item) => [item.segmentId, item]));
+  const targets = segments.filter((segment) => isYouTubeBrowsePage(segment) && !excludedSegmentIds.has(segment.id));
+  if (targets.length === 0) return { saved: 0, segmentIds: new Set<string>() };
+
+  const classifiedAt = new Date().toISOString();
+  const records = targets.map((segment): ActivityClassificationRecord | null => {
+    const sourcePayload = payloadById.get(segment.id);
+    if (!sourcePayload) return null;
+    const sustained = segment.durationSeconds >= YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS;
+    return {
+      segmentId: segment.id,
+      inputFingerprint: sourcePayload.inputFingerprint,
+      category: sustained ? "entertainment" : "unknown",
+      productivity: sustained ? "drift" : "neutral",
+      source: "youtube",
+      confidence: sustained ? 0.6 : 0.5,
+      reason: sustained
+        ? "Sustained YouTube recommendation browsing without nearby video context."
+        : "Brief YouTube browse without nearby video context.",
+      model: null,
+      promptVersion: null,
+      taxonomyVersion: "v1",
+      aiResult: false,
+      latencyMs: null,
+      classifiedAt,
+    };
+  }).filter((record): record is ActivityClassificationRecord => record !== null);
+  if (records.length === 0) return { saved: 0, segmentIds: new Set<string>() };
+
+  const saveResult = await trackerClient.saveClassifications(records);
+  return { saved: saveResult.saved, segmentIds: new Set(records.map((record) => record.segmentId)) };
+}
+
 function youtubeBrowseInheritanceTimelineRange(targets: ActivitySegment[]): { start: string; end: string } | null {
   let earliestStart = Number.POSITIVE_INFINITY;
   let latestEnd = Number.NEGATIVE_INFINITY;
@@ -1098,11 +1209,12 @@ async function runLocalAiClassification(
   query: ClassificationQuery,
   selectedSegments: number,
   deterministicSavedRecords: number,
-  unknownPayload: MinimizedActivityPayload[],
+  representatives: MinimizedActivityPayload[],
+  membersByRepSegmentId: Map<unknown, MinimizedActivityPayload[]> | null,
   provider: LocalAiProviderConfig,
   workProfile: string | null,
 ): Promise<AiClassificationSummary> {
-  const providerRequest = toLocalProviderRequest(provider, unknownPayload, workProfile);
+  const providerRequest = toLocalProviderRequest(provider, representatives, workProfile);
   if (!providerRequest) {
     return {
       status: "disabled",
@@ -1122,14 +1234,14 @@ async function runLocalAiClassification(
   }
 
   const data = toLocalClassificationResponse(response, providerRequest.model);
-  const aiRecords = toClassificationRecords(data, unknownPayload);
+  const aiRecords = expandClusterRecords(toClassificationRecords(data, representatives), membersByRepSegmentId);
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
       status: "error",
       selectedSegments,
       savedRecords: deterministicSavedRecords,
-      message: `AI classification returned no usable classifications for ${unknownPayload.length} unknown ${unknownPayload.length === 1 ? "segment" : "segments"}.`,
+      message: `AI classification returned no usable classifications for ${representatives.length} unknown ${representatives.length === 1 ? "segment" : "segments"}.`,
       metrics,
     };
   }
