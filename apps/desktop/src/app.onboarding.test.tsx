@@ -1732,6 +1732,22 @@ describe("App onboarding", () => {
     });
   }, 15_000);
 
+  it("keeps custom endpoint drafts out of the saved AI setup until the connection test passes", async () => {
+    render(<App />);
+
+    await chooseCustomEndpointSetup();
+
+    expect(await screen.findByRole("dialog", { name: /add your custom endpoint/i })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/custom endpoint base url/i), { target: { value: "http://draft-only:9999/v1" } });
+    fireEvent.change(screen.getByLabelText(/custom endpoint model/i), { target: { value: "draft-model" } });
+
+    // Typing alone must not flip the persisted provider or leak the draft endpoint.
+    const persisted = JSON.parse(window.localStorage.getItem("drifty.aiSetup.v1") ?? "{}");
+    expect(persisted.provider ?? null).not.toBe("self_hosted");
+    expect(persisted.selfHostedBaseUrl ?? "").not.toBe("http://draft-only:9999/v1");
+    expect(persisted.selfHostedModel ?? "").not.toBe("draft-model");
+  }, 15_000);
+
   it("does not present unverified Screen Recording or Browser Activity as enabled", async () => {
     render(<App />);
 
