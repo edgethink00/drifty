@@ -118,8 +118,6 @@ function youTubeVideoNameFromWindowTitle(windowTitle?: string | null): string | 
   return name;
 }
 
-export const isYouTubeNavigationPage = isYouTubeBrowsePage;
-
 export function isYouTubeFeedPage(segment: ActivitySegment): boolean {
   const site = normalizeYouTubeSite(segment.siteDomain);
   if (!isYouTubeSite(site) || site === "music.youtube.com" || segment.youtubeVideoId) return false;

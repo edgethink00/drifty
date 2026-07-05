@@ -1,33 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivityClassificationRecord, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleDetailKind, ClassificationRuleInput, ClassificationSource, CurrentActivitySnapshot, DayRibbonSegment, DriftAlarmTrayStatus, FlowBlock, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
   buildRollingFocusSeconds,
-  categorizeActivity,
   buildCategoryDurations,
   buildProductivityDurations,
   buildEffectiveProductivityDurations,
-  computePreservedFocusStrikeSeconds,
-  canonicalizeClassificationRuleSiteUrl,
   classifyActivity,
-  classifyActivityDetailed,
-  isYouTubeBrowsePage,
   buildDailyTotals,
   buildDayRibbonSegments,
   buildHourlySummary,
   buildProductivityPersona,
-  logicalDayEndExclusiveMs,
-  logicalDayIsoDateForDate,
-  logicalDayStartMs,
-  logicalMinuteOfDay,
-  type CategoryDuration,
-  type ProductivityDuration,
-  formatTimelineItems,
   shiftIsoDate,
-  siteTargetFromCanonicalUrl,
   todayIsoDate,
   totalDurationSeconds,
 } from "@drifty/domain";
@@ -53,15 +40,14 @@ import {
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
-import { TeamPage } from "./features/team/TeamPage";
-import { useTeamController } from "./features/team/useTeamController";
+import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import {
   aiConnectionIssueKindFromMessage,
 } from "./features/ai-connection/aiConnectionHealth";
-import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults } from "./features/app-icons/appIconRequests";
+import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { ClassificationPage } from "./features/classification/ClassificationPage";
@@ -82,7 +68,7 @@ import {
 } from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
-import { useAuth, type AuthState } from "./features/auth/AuthContext";
+import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
@@ -134,7 +120,6 @@ import {
   showNativeWatcherPeek,
   type EndOfDayReviewAction,
 } from "./features/companion/watcherBridge";
-import type { ExtremeNudgeToastEvent } from "./features/companion/ExtremeNudgeToast";
 import {
   applyNativeExtremeNudge,
   hideNativeDriftAlarm,
@@ -154,9 +139,8 @@ import { useCloudBillingController } from "./features/billing/useCloudBillingCon
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
-import { getAccountDisplayName, getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
-import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey, normalizeClassificationRuleDetail } from "./features/classification/classificationViewData";
-import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./features/classification/classificationViewData";
+import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
+import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_PREVIEW_OPTIONS, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
@@ -182,35 +166,29 @@ import type { ClassificationRange, InsightRange } from "./features/dashboard/das
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
 import { applyFocusDriftReplayReveal, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
-import { buildMonthV2Overview } from "./features/dashboard/monthOverview";
-import type { MonthCellStyle } from "./features/dashboard/monthOverview";
 import {
   WeekDashboardDayModelCache,
   buildWeekDashboardModel,
+  emptyWeekDashboardModel,
   prewarmClosedWeekDashboardDays,
   syncWeekDashboardDayModelCacheSettings,
-  type WeekDashboardCacheStats,
   type WeekDashboardDayModelCacheSettings,
-  type WeekDashboardModel,
 } from "./features/dashboard/weekDashboardModel";
 import { useDashboardDemoReplayController } from "./features/dashboard/useDashboardDemoReplayController";
 import { buildSelectedDashboardReplayAnchor } from "./features/dashboard/dashboardDemoReplaySource";
 import type { DemoDashboardReplayKind } from "./features/dashboard/demoDashboardReplay";
 import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUpdateDialogBlocking, resolveDashboardDemoReplayEffectiveData } from "./features/dashboard/dashboardDemoReplayEffectiveData";
 import { buildDashboardDemoReplaySidebarCard } from "./features/dashboard/dashboardDemoReplaySidebarCard";
-import { DONUT_CIRCUMFERENCE, buildAttentionRhythm, buildDonutView, buildInsightSourceLists, buildWeeklyBreakdown, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./features/insights/insightData";
-import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartColumn, WeeklyChartMode } from "./features/insights/insightData";
+import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown } from "./features/insights/insightData";
 import { selectInsightSegments } from "./features/insights/insightSegments";
-import { getLeaderboardPeriodFocusLabel } from "./features/leaderboard/leaderboardWindow";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_OPTIONS, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_OPTIONS, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
-import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS } from "./lib/activityLabels";
-import { WEEKDAY_LABELS, clockHourForLogicalHour, describeRelativeDay, filterSegmentsForRange, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatHourLabel, formatLocalDateTime, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage, weekdayOrderIndex } from "./lib/formatting";
+import { CATEGORY_COLORS } from "./lib/activityLabels";
+import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
-import { Toggle } from "./components/Toggle";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
 import { activityNav, commandBarTabs, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
 import {
@@ -228,71 +206,17 @@ import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
-import { resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardRefreshInputs } from "./features/dashboard/dashboardRefreshPolicy";
+import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
 import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
-
-function shouldDeferTabBody(tabId: TabId): boolean {
-  return tabId === "history" || tabId === "trends";
-}
-
-function useDeferredTabBodyReady(activeTab: TabId): boolean {
-  const [readyTab, setReadyTab] = useState<TabId | null>(() => (shouldDeferTabBody(activeTab) ? null : activeTab));
-
-  useEffect(() => {
-    if (!shouldDeferTabBody(activeTab)) {
-      setReadyTab(activeTab);
-      return undefined;
-    }
-
-    setReadyTab(null);
-    const timeoutId = window.setTimeout(() => setReadyTab(activeTab), 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [activeTab]);
-
-  return readyTab === activeTab;
-}
-
-type PlanItem = {
-  id: string;
-  title: string;
-  estimate: string;
-  completed: boolean;
-  source: "Quick add" | "Pinned";
-};
-
-type CompactHistoryLoad = {
-  readonly key: string;
-  readonly start: string;
-  readonly end: string;
-  readonly loadedAtMs: number;
-  readonly materialized: BuiltInHeuristicClassificationMaterialization;
-};
-
-type CompactHistoryRange = {
-  readonly start: string;
-  readonly end: string;
-};
-
-type DashboardPreviousWeekFocusLoad = {
-  readonly key: string;
-  readonly focusSeconds: number;
-};
-
-type DashboardWeekRefreshStatus = "idle" | "loading" | "error";
-
-type DashboardWeekRefreshState = {
-  readonly key: string | null;
-  readonly status: DashboardWeekRefreshStatus;
-};
-
-type AppIconLoadRequest = {
-  readonly segments: readonly ActivitySegment[];
-  readonly shouldReportFailure?: () => boolean;
-  readonly failureMessage: string;
-};
+import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
+import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, type ClassificationCorrectionDraft, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
+import { compactHistoryRangeContains, compactHistoryRangeKey, findFreshCompactHistoryLoad, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
+import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
+import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
+import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
@@ -301,199 +225,14 @@ const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
 const DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS = 1400;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
-const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
-const DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT = 20;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
-// Compact history is mostly closed-day data that rarely changes, so it does not need
-// to expire on the 30s live-refresh cadence. A longer TTL keeps the prefetch cache
-// warm across typical "browse Today, then open Week/Trends" navigation, avoiding
-// a full tracker IPC on most period switches.
-const COMPACT_HISTORY_CACHE_TTL_MS = 5 * 60_000;
-const DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS = 4000;
-const EMPTY_ACTIVITY_SEGMENTS: ActivitySegment[] = [];
-type ClassificationCorrectionScope = "surface" | "detail";
-
-type ClassificationCorrectionDraft = {
-  readonly scope: ClassificationCorrectionScope;
-  readonly rowId: string | null;
-  readonly targetKind: ClassificationRuleInput["targetKind"];
-  readonly targetValue: string;
-  readonly detailKind: ClassificationRuleDetailKind | null;
-  readonly detailValue: string | null;
-  readonly detailDisplayLabel: string | null;
-  readonly category: ActivityCategory;
-  readonly productivity: ProductivityLabel;
-};
-
-function compactHistoryRangeKey(range: CompactHistoryRange): string {
-  return `${range.start}:${range.end}`;
-}
-
-function isFreshCompactHistoryLoad(load: CompactHistoryLoad): boolean {
-  return Date.now() - load.loadedAtMs <= COMPACT_HISTORY_CACHE_TTL_MS;
-}
-
 function isLastCaptureJustNow(value: string, nowMs = Date.now()): boolean {
   const capturedAtMs = new Date(value).getTime();
   if (Number.isNaN(capturedAtMs)) return false;
   return Math.max(0, nowMs - capturedAtMs) < LAST_CAPTURE_JUST_NOW_MS;
 }
-
-function compactHistoryRangeContains(outer: CompactHistoryRange, inner: CompactHistoryRange): boolean {
-  return new Date(outer.start).getTime() <= new Date(inner.start).getTime()
-    && new Date(outer.end).getTime() >= new Date(inner.end).getTime();
-}
-
-function findFreshCompactHistoryLoad(cache: ReadonlyMap<string, CompactHistoryLoad>, range: CompactHistoryRange): CompactHistoryLoad | null {
-  const exact = cache.get(compactHistoryRangeKey(range));
-  if (exact && isFreshCompactHistoryLoad(exact) && compactHistoryRangeContains(exact, range)) return exact;
-
-  for (const load of cache.values()) {
-    if (isFreshCompactHistoryLoad(load) && compactHistoryRangeContains(load, range)) return load;
-  }
-  return null;
-}
-
-function rememberDriftAlarmSourceSegment(
-  cache: Map<string, ActivitySegment>,
-  sourceSegmentId: string | null,
-  segment: ActivitySegment,
-): void {
-  if (!sourceSegmentId) return;
-  cache.delete(sourceSegmentId);
-  cache.set(sourceSegmentId, segment);
-
-  while (cache.size > DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT) {
-    const oldest = cache.keys().next();
-    if (oldest.done) return;
-    cache.delete(oldest.value);
-  }
-}
-
-function extremeNudgeErrorDiagnostic(error: unknown): string | null {
-  const message = toErrorMessage(error);
-  const separatorIndex = message.lastIndexOf(": ");
-  if (separatorIndex < 0) return null;
-
-  const diagnostic = message.slice(separatorIndex + 2).trim();
-  return /^[a-z0-9_]+$/.test(diagnostic) ? diagnostic : null;
-}
-
-function classificationRuleTargetForSegment(segment: ActivitySegment): Pick<ClassificationRuleInput, "targetKind" | "targetValue"> | null {
-  const siteTarget = segment.siteDomain?.trim() || segment.siteUrl?.trim() || "";
-  if (siteTarget) return { targetKind: "site", targetValue: siteTarget };
-
-  const appTarget = segment.bundleId?.trim() || segment.appName.trim();
-  if (appTarget) return { targetKind: "app", targetValue: appTarget };
-
-  return null;
-}
-
-function classificationRuleDetailForSegment(segment: ActivitySegment): Pick<ClassificationCorrectionDraft, "detailKind" | "detailValue"> {
-  if (segment.youtubeTitle?.trim()) return { detailKind: "youtubeTitle", detailValue: segment.youtubeTitle.trim() };
-  if (segment.siteTitle?.trim()) return { detailKind: "siteTitle", detailValue: segment.siteTitle.trim() };
-  if (segment.windowTitle?.trim()) return { detailKind: "windowTitle", detailValue: segment.windowTitle.trim() };
-  return { detailKind: null, detailValue: null };
-}
-
-function classificationRuleUrlDetailForSegment(segment: ActivitySegment): Pick<ClassificationCorrectionDraft, "targetKind" | "targetValue" | "detailKind" | "detailValue"> | null {
-  const canonicalUrl = canonicalizeClassificationRuleSiteUrl(segment.siteUrl);
-  if (!canonicalUrl) return null;
-  const siteTarget = siteTargetFromCanonicalUrl(canonicalUrl);
-  if (!siteTarget) return null;
-  return {
-    targetKind: "site",
-    targetValue: siteTarget,
-    detailKind: "siteUrl",
-    detailValue: canonicalUrl,
-  };
-}
-
-function buildClassificationCorrectionDraft({
-  rowId,
-  scope,
-  segment,
-  classificationOptions,
-  detailDisplayLabel,
-}: {
-  readonly rowId: string | null;
-  readonly scope: ClassificationCorrectionScope;
-  readonly segment: ActivitySegment;
-  readonly classificationOptions: ClassificationOptions;
-  readonly detailDisplayLabel: string | null;
-}): ClassificationCorrectionDraft | null {
-  const target = classificationRuleTargetForSegment(segment);
-  if (!target) return null;
-  const classification = classifyActivityDetailed(segment, classificationOptions);
-  const urlDetail = scope === "detail" ? classificationRuleUrlDetailForSegment(segment) : null;
-  const detail = urlDetail ?? (scope === "detail" ? classificationRuleDetailForSegment(segment) : { detailKind: null, detailValue: null });
-  if (scope === "detail" && (!detail.detailKind || !normalizeClassificationRuleDetail(detail.detailValue))) return null;
-  return {
-    scope,
-    rowId,
-    targetKind: urlDetail?.targetKind ?? target.targetKind,
-    targetValue: urlDetail?.targetValue ?? target.targetValue,
-    detailKind: detail.detailKind,
-    detailValue: detail.detailValue,
-    detailDisplayLabel: scope === "detail" ? detailDisplayLabel : null,
-    category: classification.category,
-    productivity: classification.productivity,
-  };
-}
-
-function buildClassificationCorrectionRecord({
-  category,
-  classifiedAt,
-  productivity,
-  segment,
-}: {
-  readonly category: ActivityCategory;
-  readonly classifiedAt: string;
-  readonly productivity: ProductivityLabel;
-  readonly segment: ActivitySegment;
-}): ActivityClassificationRecord {
-  return {
-    segmentId: segment.id,
-    category,
-    productivity,
-    source: "manual",
-    confidence: 1,
-    reason: "Manual classification correction.",
-    inputFingerprint: `manual:classification-correction:${segment.id}:${segment.endedAt}`,
-    aiResult: false,
-    stale: false,
-    classifiedAt,
-  };
-}
-
-function scheduleIdleWork(callback: () => void): () => void {
-  if (typeof window.requestIdleCallback === "function" && typeof window.cancelIdleCallback === "function") {
-    const cancelIdleCallback = window.cancelIdleCallback;
-    const handle = window.requestIdleCallback(callback, { timeout: 1200 });
-    return () => cancelIdleCallback(handle);
-  }
-
-  const handle = window.setTimeout(callback, 1);
-  return () => window.clearTimeout(handle);
-}
-
-function emptyWeekDashboardModel(): WeekDashboardModel {
-  const emptyStats: WeekDashboardCacheStats = {
-    closedDayHits: 0,
-    closedDaysComputed: 0,
-    futureDaysSkipped: 0,
-    liveDaysComputed: 0,
-  };
-  return { rows: [], calendarEvents: new Map(), cacheStats: emptyStats };
-}
-
-const initialPlanItems: PlanItem[] = [
-  { id: "plan-1", title: "Review the morning focus block", estimate: "10m", completed: false, source: "Pinned" },
-  { id: "plan-2", title: "Protect the next deep-work window", estimate: "15m", completed: false, source: "Pinned" },
-  { id: "plan-3", title: "Close with one short reflection", estimate: "5m", completed: true, source: "Pinned" },
-];
 
 function loadClassificationMetrics(day: string): Promise<ClassificationMetrics | null> {
   const client = trackerClient as Partial<typeof trackerClient>;
@@ -510,195 +249,8 @@ function isRendererFocused(): boolean {
   return document.visibilityState === "visible" && document.hasFocus();
 }
 
-function getDriftAlarmPollTimelineRange(day: string, startOfDayMinutes: number): { start: string; end: string } {
-  const nowMs = Date.now();
-  const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
-  const logicalDayStartMs = new Date(selectedDayRange.start).getTime();
-  const lowerBoundMs = Number.isFinite(logicalDayStartMs) ? logicalDayStartMs : nowMs - DRIFT_ALARM_TIMELINE_LOOKBACK_MS;
-  const startMs = Math.min(nowMs, Math.max(nowMs - DRIFT_ALARM_TIMELINE_LOOKBACK_MS, lowerBoundMs));
-
-  return {
-    start: formatLocalDateTime(startMs),
-    end: formatLocalDateTime(nowMs),
-  };
-}
-
-type LiveTailCursor = {
-  readonly afterSegmentId: string | null;
-  readonly afterEndedAt: string | null;
-};
-
-function activitySegmentEndedAtMs(segment: ActivitySegment): number {
-  const endedAtMs = new Date(segment.endedAt).getTime();
-  return Number.isFinite(endedAtMs) ? endedAtMs : Number.NEGATIVE_INFINITY;
-}
-
-function latestActivitySegmentCursor(segments: readonly ActivitySegment[]): LiveTailCursor {
-  let latestSegment: ActivitySegment | null = null;
-  let latestEndedAtMs = Number.NEGATIVE_INFINITY;
-
-  for (const segment of segments) {
-    const endedAtMs = activitySegmentEndedAtMs(segment);
-    if (endedAtMs > latestEndedAtMs) {
-      latestSegment = segment;
-      latestEndedAtMs = endedAtMs;
-      continue;
-    }
-    if (endedAtMs !== latestEndedAtMs || latestSegment === null) continue;
-
-    const latestId = Number(latestSegment.id);
-    const segmentId = Number(segment.id);
-    if (Number.isFinite(segmentId) && (!Number.isFinite(latestId) || segmentId > latestId)) {
-      latestSegment = segment;
-    }
-  }
-
-  if (!latestSegment && segments.length > 0) {
-    latestSegment = segments[segments.length - 1] ?? null;
-  }
-
-  return {
-    afterSegmentId: latestSegment?.id ?? null,
-    afterEndedAt: latestSegment?.endedAt ?? null,
-  };
-}
-
-function mergeActivitySegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
-  if (liveSegments.length === 0) return [...baseSegments];
-
-  const segmentsById = new Map<string, ActivitySegment>();
-  for (const segment of baseSegments) {
-    segmentsById.set(segment.id, segment);
-  }
-  for (const segment of liveSegments) {
-    const existing = segmentsById.get(segment.id) ?? null;
-    segmentsById.set(segment.id, existing ? selectActivitySegment(existing, segment) : segment);
-  }
-
-  return Array.from(segmentsById.values());
-}
-
-function mergeDriftAlarmSegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
-  return mergeActivitySegments(baseSegments, liveSegments);
-}
-
-function selectActivitySegment(existing: ActivitySegment, incoming: ActivitySegment): ActivitySegment {
-  const existingEndedAtMs = activitySegmentEndedAtMs(existing);
-  const incomingEndedAtMs = activitySegmentEndedAtMs(incoming);
-
-  if (Number.isFinite(existingEndedAtMs) && Number.isFinite(incomingEndedAtMs)) {
-    if (incomingEndedAtMs > existingEndedAtMs) return preserveClassification(incoming, existing);
-    if (incomingEndedAtMs < existingEndedAtMs) return existing;
-  }
-
-  if (existing.classification && !incoming.classification) return existing;
-  return incoming;
-}
-
-function preserveClassification(segment: ActivitySegment, fallbackSegment: ActivitySegment): ActivitySegment {
-  if (segment.classification || !fallbackSegment.classification) return segment;
-  return { ...segment, classification: fallbackSegment.classification };
-}
-
-type DriftAlarmEvaluationInput = {
-  readonly checkedAt?: Date;
-  readonly snapshot: CurrentActivitySnapshot | null;
-  readonly liveSegments: readonly ActivitySegment[];
-  readonly updateRendererState?: boolean;
-};
-
-type DriftAlarmEvaluator = (input: DriftAlarmEvaluationInput) => void;
-
-type DriftAlarmTrayPublishOptions = {
-  readonly updateRendererState?: boolean;
-};
-
 function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
-}
-
-type TeamsBetaSurfaceProps = {
-  readonly hasRequiredAccountAuth: boolean;
-  readonly isEffectiveAuthRequired: boolean;
-  readonly isPolicySignedIn: boolean;
-  readonly isSupabaseConfigured: boolean;
-  readonly showAiClassificationImpact: boolean;
-  readonly startOfDayMinutes: number;
-  readonly user: AuthState["user"];
-  readonly onAuthRequired: () => void;
-};
-
-function TeamsBetaSurface({
-  hasRequiredAccountAuth,
-  isEffectiveAuthRequired,
-  isPolicySignedIn,
-  isSupabaseConfigured,
-  showAiClassificationImpact,
-  startOfDayMinutes,
-  user,
-  onAuthRequired,
-}: TeamsBetaSurfaceProps) {
-  const {
-    activeTeamPeriod,
-    invites: teamInvites,
-    rows: teamRows,
-    selectedTeam,
-    teamActionError,
-    teamActionLoading,
-    teamError,
-    teamLoading,
-    teamStatusMessage,
-    teamStatusTone,
-    teams,
-    handleAcceptInvite,
-    handleCreateInvite,
-    handleCreateTeam,
-    handlePublishTeamFocus,
-    handleRevokeInvite,
-    handleStopTeamFocusSharing,
-    refreshTeamData,
-    selectTeam,
-    setActiveTeamPeriod,
-  } = useTeamController({
-    activeTab: "team",
-    hasRequiredAccountAuth,
-    isEffectiveAuthRequired,
-    isSupabaseConfigured,
-    showAiClassificationImpact,
-    startOfDayMinutes,
-    user,
-    onAuthRequired,
-  });
-
-  return (
-    <TeamPage
-      actionError={teamActionError}
-      activePeriod={activeTeamPeriod}
-      error={teamError}
-      hasRequiredAccountAuth={hasRequiredAccountAuth}
-      isActionLoading={teamActionLoading}
-      isLoading={teamLoading}
-      isSignedIn={isPolicySignedIn}
-      isSupabaseEnabled={isSupabaseConfigured}
-      invites={teamInvites}
-      rows={teamRows}
-      selectedTeam={selectedTeam}
-      statusMessage={teamStatusMessage}
-      statusTone={teamStatusTone}
-      teams={teams}
-      onAcceptInvite={handleAcceptInvite}
-      onCopyInvite={copyTextToClipboard}
-      onCreateInvite={handleCreateInvite}
-      onCreateTeam={handleCreateTeam}
-      onPeriodChange={setActiveTeamPeriod}
-      onPublishTeamFocus={handlePublishTeamFocus}
-      onRefresh={refreshTeamData}
-      onRevokeInvite={handleRevokeInvite}
-      onSelectTeam={selectTeam}
-      onSignIn={onAuthRequired}
-      onStopTeamFocusSharing={handleStopTeamFocusSharing}
-    />
-  );
 }
 
 export default function App() {

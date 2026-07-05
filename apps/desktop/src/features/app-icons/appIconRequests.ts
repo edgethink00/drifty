@@ -47,3 +47,9 @@ export function appIconIdentityKey(identity: AppIdentity): string {
 function hasIconEntry(appIcons: AppIconMap, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(appIcons, key);
 }
+
+export type AppIconLoadRequest = {
+  readonly segments: readonly ActivitySegment[];
+  readonly shouldReportFailure?: () => boolean;
+  readonly failureMessage: string;
+};

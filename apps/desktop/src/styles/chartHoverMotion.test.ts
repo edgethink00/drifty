@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readCssWithImports } from "../test/readStyles";
 
 const baseStyles = readCssWithImports("src/styles.css");
-const motionStyles = readFileSync("src/features/chartHoverMotion.css", "utf8");
+const motionStyles = readFileSync("src/styles/chartHoverMotion.css", "utf8");
 
 function cssRule(source: string, selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

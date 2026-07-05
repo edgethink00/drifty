@@ -52,4 +52,62 @@ describe("CompactProductivityCircleChart", () => {
     expect(within(legend).getByText("0.7h")).toBeTruthy();
     expect(within(legend).queryByText("5h 33m")).toBeNull();
   });
+
+  it("excludes unclassified time from the focus percent and reports it in a note", () => {
+    const totalSeconds = 4 * 3600;
+    const entries = [
+      { productivity: "focus", totalSeconds: 3600, segments: 2, ratio: 3600 / totalSeconds },
+      { productivity: "neutral", totalSeconds: 0, segments: 0, ratio: 0 },
+      { productivity: "drift", totalSeconds: 3600, segments: 1, ratio: 3600 / totalSeconds },
+    ] satisfies ProductivityDuration[];
+
+    const { container } = render(
+      <CompactProductivityCircleChart
+        entries={entries}
+        totalSeconds={totalSeconds}
+        flowBlocks={[]}
+        appIcons={{}}
+      />,
+    );
+
+    const center = container.querySelector(".flow-compact-productivity-circle__center strong");
+    // 1h focus of 2h classified = 50%, not 25% of the 4h tracked total.
+    expect(center?.textContent).toBe("50%");
+    const note = container.querySelector(".flow-compact-productivity-circle__note");
+    expect(note?.textContent).toBe("2h unclassified");
+  });
+
+  it("labels the unclassified note as classifying while AI classification is pending", () => {
+    const totalSeconds = 3600 + 300;
+    const entries = [
+      { productivity: "focus", totalSeconds: 3600, segments: 1, ratio: 3600 / totalSeconds },
+      { productivity: "neutral", totalSeconds: 0, segments: 0, ratio: 0 },
+      { productivity: "drift", totalSeconds: 0, segments: 0, ratio: 0 },
+    ] satisfies ProductivityDuration[];
+    const pendingBlock = {
+      id: "flow-block",
+      day: "2026-07-04",
+      hour: 9,
+      quarter: 0,
+      minuteOfDay: 9 * 60,
+      appName: "Notion",
+      category: "unknown",
+      productivity: "neutral",
+      classificationSource: "unknown",
+      colorKey: "notion",
+      durationSeconds: 300,
+    };
+
+    const { container } = render(
+      <CompactProductivityCircleChart
+        entries={entries}
+        totalSeconds={totalSeconds}
+        flowBlocks={[pendingBlock as never]}
+        appIcons={{}}
+      />,
+    );
+
+    const note = container.querySelector(".flow-compact-productivity-circle__note");
+    expect(note?.textContent).toBe("5m classifying…");
+  });
 });

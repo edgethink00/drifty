@@ -9,15 +9,6 @@ export function formatHourLabel(hour: number): string {
   return formatCompactHourLabel(hour);
 }
 
-export function normalizeStartOfDayMinutes(minutes?: number): number {
-  if (!Number.isFinite(minutes)) return 0;
-  return Math.min(MINUTES_PER_DAY - 1, Math.max(0, Math.round(minutes ?? 0)));
-}
-
-export function clockHourForLogicalHour(logicalHour: number, startOfDayMinutes: number): number {
-  return Math.floor((logicalHour * 60 + startOfDayMinutes) / 60) % 24;
-}
-
 export function minuteOfDayForCell(logicalHour: number, minuteOffset: number, startOfDayMinutes: number): number {
   return (logicalHour * 60 + minuteOffset + startOfDayMinutes) % MINUTES_PER_DAY;
 }

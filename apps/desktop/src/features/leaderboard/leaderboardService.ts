@@ -1,5 +1,6 @@
 import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
+import { localDateKey } from "../../lib/formatting";
 import { fallbackDisplayName } from "../profile/profileService";
 
 export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
@@ -54,18 +55,14 @@ export type PublishOwnFocusTotalOptions = {
 
 type LeaderboardTable = "leaderboard_focus_totals" | "profiles";
 
-function isoDay(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function shiftDay(day: string, offset: number) {
   const date = new Date(`${day}T12:00:00`);
   date.setDate(date.getDate() + offset);
-  return isoDay(date);
+  return localDateKey(date);
 }
 
 function previewLeaderboardRows(period: LeaderboardPeriod, limit: number): LeaderboardRow[] {
-  const today = isoDay(new Date());
+  const today = localDateKey(new Date());
   const windowStart = period === "daily" ? today : shiftDay(today, period === "monthly" ? -29 : -6);
   const names = ["Testing1", "arishin220", "minji_kim", "junseo", "haruka", "drifty", "soonjae", "yuki"];
   const focusSeconds = [141_540, 9_960, 8_520, 6_240, 4_520, 3_120, 2_400, 1_830];

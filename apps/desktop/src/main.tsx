@@ -11,7 +11,7 @@ import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
 import "./features/loading/loading-skeletons.css";
 import "./features/leaderboard/leaderboard.css";
-import "./features/chartHoverMotion.css";
+import "./styles/chartHoverMotion.css";
 
 type BootstrapSurface = "app" | "watcher" | "drift-alarm";
 type ResolvedBootstrapSurface = BootstrapSurface | "privacy-review-concepts";

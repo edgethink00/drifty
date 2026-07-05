@@ -48,6 +48,38 @@ describe("FlowChartView color mode", () => {
     expect(cell.classList.contains("flow-cell--workspace")).toBe(true);
   });
 
+  it("marks unknown-category blocks as unclassified with a pending pulse in both color modes", () => {
+    const pendingBlock = makeFlowBlock({
+      category: "unknown",
+      productivity: "neutral",
+      classificationSource: "unknown",
+      siteDomain: "notion.so",
+      siteTitle: "Notion",
+    });
+    render(<FlowChartView blocks={[pendingBlock]} appIcons={{}} intervalMinutes={3} />);
+
+    const cell = screen.getByRole("button", { name: /unclassified.*neutral/i });
+    expect(cell.classList.contains("flow-cell--unclassified")).toBe(true);
+    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    expect(cell.classList.contains("flow-cell--unclassified")).toBe(true);
+    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(true);
+  });
+
+  it("does not pulse stored unclassified blocks such as system-skipped blank screens", () => {
+    const storedBlock = makeFlowBlock({
+      category: "unknown",
+      productivity: "neutral",
+      classificationSource: "stored",
+    });
+    render(<FlowChartView blocks={[storedBlock]} appIcons={{}} intervalMinutes={3} />);
+
+    const cell = screen.getByRole("button", { name: /unclassified.*neutral/i });
+    expect(cell.classList.contains("flow-cell--unclassified")).toBe(true);
+    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(false);
+  });
+
   it("shows readable identity chips before the hover detail and avoids repeated site pills", async () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 

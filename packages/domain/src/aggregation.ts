@@ -95,23 +95,6 @@ export interface DayRibbonSegment {
   }>;
 }
 
-export interface CategoryHourCell {
-  hour: number;
-  totalSeconds: number;
-  ratio: number;
-}
-
-export interface CategoryHourRow {
-  category: ActivityCategory;
-  totalSeconds: number;
-  cells: CategoryHourCell[];
-}
-
-export interface CategoryHourMatrix {
-  rows: CategoryHourRow[];
-  peakSeconds: number;
-}
-
 export type ClassificationSurface = "browser" | "app";
 export type ClassificationSource = "youtube" | "domain-db" | "app-db" | "context" | "fallback" | "llm" | "manual" | "rule" | "stored" | "unknown";
 
@@ -401,31 +384,6 @@ export function formatTimelineItems(segments: ActivitySegment[]) {
       startedLabel: timelineTimeFormatter.format(new Date(segment.startedAt)),
       endedLabel: timelineTimeFormatter.format(new Date(segment.endedAt)),
     }));
-}
-
-export function mergeAdjacentSegments(segments: ActivitySegment[]): ActivitySegment[] {
-  if (segments.length === 0) return [];
-
-  const sorted = segments.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  const merged: ActivitySegment[] = [{ ...sorted[0] }];
-
-  for (const segment of sorted.slice(1)) {
-    const last = merged[merged.length - 1];
-    const canMerge =
-      last.appName === segment.appName &&
-      (last.windowTitle ?? null) === (segment.windowTitle ?? null) &&
-      last.endedAt === segment.startedAt;
-
-    if (!canMerge) {
-      merged.push({ ...segment });
-      continue;
-    }
-
-    last.endedAt = segment.endedAt;
-    last.durationSeconds += segment.durationSeconds;
-  }
-
-  return merged;
 }
 
 export function secondsToLabel(totalSeconds: number): string {
@@ -946,19 +904,23 @@ export function buildProductivityDurations(segments: ActivitySegment[], options?
     segments: 0,
     ratio: 0,
   }));
-  const totalSeconds = totalDurationSeconds(segments);
 
   for (const segment of segments) {
-    const { productivity } = classifyActivity(segment, options);
+    const { category, productivity } = classifyActivity(segment, options);
+    // Unclassified time (pending AI, blank screens, LLM unknown) is not a
+    // productivity verdict; keep it out of the buckets and the ratio
+    // denominator so charts describe classified time only.
+    if (category === "unknown") continue;
     const target = totals.find((entry) => entry.productivity === productivity);
     if (!target) continue;
     target.totalSeconds += segment.durationSeconds;
     target.segments += 1;
   }
 
+  const classifiedSeconds = totals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
   return totals.map((entry) => ({
     ...entry,
-    ratio: totalSeconds > 0 ? entry.totalSeconds / totalSeconds : 0,
+    ratio: classifiedSeconds > 0 ? entry.totalSeconds / classifiedSeconds : 0,
   }));
 }
 
@@ -970,10 +932,10 @@ export function buildEffectiveProductivityDurations(segments: ActivitySegment[],
     ratio: 0,
   }));
   const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
-  const totalSeconds = totalDurationSeconds(segments);
 
   for (const segment of segments) {
     const classification = classifyActivityDetailed(segment, options);
+    if (classification.category === "unknown") continue;
     const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
     const target = totals.find((entry) => entry.productivity === effectiveProductivity.productivity);
     if (!target) continue;
@@ -981,9 +943,10 @@ export function buildEffectiveProductivityDurations(segments: ActivitySegment[],
     target.segments += 1;
   }
 
+  const classifiedSeconds = totals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
   return totals.map((entry) => ({
     ...entry,
-    ratio: totalSeconds > 0 ? entry.totalSeconds / totalSeconds : 0,
+    ratio: classifiedSeconds > 0 ? entry.totalSeconds / classifiedSeconds : 0,
   }));
 }
 
@@ -1065,57 +1028,6 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
   return merged;
 }
 
-export function buildCategoryHourMatrix(segments: ActivitySegment[], options?: ClassificationOptions): CategoryHourMatrix {
-  const categoryHours = new Map<ActivityCategory, number[]>(
-    CATEGORY_ORDER.map((category) => [category, Array.from({ length: 24 }, () => 0)]),
-  );
-
-  for (const segment of segments) {
-    const { category } = classifyActivity(segment, options);
-    let cursor = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
-
-    while (cursor < end) {
-      const current = new Date(cursor);
-      const hourStart = new Date(current.getFullYear(), current.getMonth(), current.getDate(), current.getHours(), 0, 0, 0);
-      const hourEnd = new Date(hourStart);
-      hourEnd.setHours(hourEnd.getHours() + 1);
-      const overlapEnd = Math.min(end, hourEnd.getTime());
-      const overlapSeconds = Math.max(0, Math.round((overlapEnd - cursor) / 1000));
-
-      if (overlapSeconds > 0) {
-        const target = categoryHours.get(category);
-        if (target) target[current.getHours()] += overlapSeconds;
-      }
-
-      cursor = overlapEnd;
-    }
-  }
-
-  const peakSeconds = Math.max(
-    1,
-    ...Array.from(categoryHours.values()).flat(),
-  );
-
-  return {
-    peakSeconds,
-    rows: CATEGORY_ORDER.map((category) => {
-      const hours = categoryHours.get(category) ?? Array.from({ length: 24 }, () => 0);
-      const totalSeconds = hours.reduce((sum, value) => sum + value, 0);
-
-      return {
-        category,
-        totalSeconds,
-        cells: hours.map((total, hour) => ({
-          hour,
-          totalSeconds: total,
-          ratio: total > 0 ? total / peakSeconds : 0,
-        })),
-      };
-    }),
-  };
-}
-
 const PRODUCTIVITY_PERSONAS: Record<ProductivityPersonaId, { id: ProductivityPersonaId; name: ProductivityPersonaName }> = {
   deep_diver: { id: "deep_diver", name: "Deep Diver" },
   deep_focus_deep_drift: { id: "deep_focus_deep_drift", name: "Deep Focus, Deep Drift" },
@@ -1150,6 +1062,7 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
   let focusSeconds = 0;
   let neutralSeconds = 0;
   let driftSeconds = 0;
+  let unclassifiedSeconds = 0;
   let focusSegments = 0;
   let driftSegments = 0;
   let communicationSeconds = 0;
@@ -1195,8 +1108,10 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
     } else if (classification.productivity === "drift") {
       driftSeconds += durationSeconds;
       driftSegments += 1;
-    } else {
+    } else if (classification.category !== "unknown") {
       neutralSeconds += durationSeconds;
+    } else {
+      unclassifiedSeconds += durationSeconds;
     }
 
     if (classification.category === "communication") {
@@ -1205,17 +1120,20 @@ function buildProductivityPersonaMetrics(segments: ActivitySegment[], options: C
   }
 
   const totalSeconds = totalDurationSeconds(segments);
+  // Productivity shares describe classified time only; unclassified time
+  // (pending AI, blank screens) must not dilute focus/neutral/drift ratios.
+  const classifiedSeconds = totalSeconds - unclassifiedSeconds;
   const topSurfaceSeconds = Math.max(0, ...surfaceTotals.values());
   const totalHours = totalSeconds / 3600;
 
   return {
     totalSeconds,
     focusSeconds,
-    focusShare: totalSeconds > 0 ? focusSeconds / totalSeconds : 0,
+    focusShare: classifiedSeconds > 0 ? focusSeconds / classifiedSeconds : 0,
     neutralSeconds,
-    neutralShare: totalSeconds > 0 ? neutralSeconds / totalSeconds : 0,
+    neutralShare: classifiedSeconds > 0 ? neutralSeconds / classifiedSeconds : 0,
     driftSeconds,
-    driftShare: totalSeconds > 0 ? driftSeconds / totalSeconds : 0,
+    driftShare: classifiedSeconds > 0 ? driftSeconds / classifiedSeconds : 0,
     focusAverageSegmentSeconds: focusSegments > 0 ? focusSeconds / focusSegments : 0,
     driftAverageSegmentSeconds: driftSegments > 0 ? driftSeconds / driftSegments : 0,
     contextSwitches,

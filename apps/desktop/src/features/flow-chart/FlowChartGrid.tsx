@@ -4,7 +4,8 @@ import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
 import type { FlowHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
-import { buildCellGroupAriaLabels, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
+import { clockHourForLogicalHour } from "../../lib/formatting";
+import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
 import { flowBlockHoverGroupPosition, type FlowBlockHoverGroup } from "./flowHoverGroups";
 
 type FlowChartGridProps = {
@@ -95,10 +96,13 @@ export function FlowChartGrid({
                   ? flowBlockHoverGroupPosition(hoverGroup, block.minuteOfDay)
                   : null;
                 const hoverGroupClass = hoverGroupPosition ? ` flow-cell--hover-group flow-cell--hover-group-${hoverGroupPosition}` : "";
+                const unclassifiedClass = block.category === "unknown"
+                  ? ` flow-cell--unclassified${block.classificationSource === "unknown" ? " flow-cell--unclassified-pending" : ""}`
+                  : "";
 
                 return (
                   <button
-                    className={`flow-cell flow-cell--${colorMode === "productivity" ? block.productivity : block.category}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
+                    className={`flow-cell flow-cell--${colorMode === "productivity" ? block.productivity : block.category}${unclassifiedClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}

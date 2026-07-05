@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatRoundedDuration } from "../../lib/formatting";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 
 const leaderboardPeriodOptions = [
@@ -160,12 +161,12 @@ export function LeaderboardView({
               <div className="leaderboard-hero__stats leaderboard-row__meta leaderboard-row__meta--compact" aria-label="Profile ranking summary">
                 <div className="leaderboard-stat">
                   <span className="label-mono">Focus time</span>
-                  <strong>{formatDuration(focusSeconds7d)}</strong>
+                  <strong>{formatRoundedDuration(focusSeconds7d)}</strong>
                 </div>
                 {activePeriod !== "daily" ? (
                   <div className="leaderboard-stat">
                     <span className="label-mono">Daily avg</span>
-                    <strong>{formatDuration(getDailyAverageSeconds(focusSeconds7d, activePeriod))}</strong>
+                    <strong>{formatRoundedDuration(getDailyAverageSeconds(focusSeconds7d, activePeriod))}</strong>
                   </div>
                 ) : null}
                 <div className="leaderboard-stat">
@@ -214,7 +215,7 @@ export function LeaderboardView({
                       <ProfileAvatar className="leaderboard-podium-card__avatar" name={row.display_name} src={row.avatar_url} />
                       <div className="leaderboard-podium-card__copy">
                         <strong>Rank {row.rank}</strong>
-                        <span>{formatDuration(row.focus_seconds_7d)}</span>
+                        <span>{formatRoundedDuration(row.focus_seconds_7d)}</span>
                       </div>
                     </article>
                   ))}
@@ -254,7 +255,7 @@ export function LeaderboardView({
                 </div>
                 <div>
                   <span className="label-mono">Total worktime</span>
-                  <strong>{formatDuration(totalFocusSeconds7d)}</strong>
+                  <strong>{formatRoundedDuration(totalFocusSeconds7d)}</strong>
                 </div>
                 <div>
                   <span className="label-mono">Showing</span>
@@ -312,12 +313,12 @@ export function LeaderboardView({
                           </div>
 
                           <div className="leaderboard-row__meta leaderboard-row__meta--compact">
-                            <div className="leaderboard-stat" aria-label={`Focus time ${formatDuration(row.focus_seconds_7d)}`}>
-                              <strong>{formatDuration(row.focus_seconds_7d)}</strong>
+                            <div className="leaderboard-stat" aria-label={`Focus time ${formatRoundedDuration(row.focus_seconds_7d)}`}>
+                              <strong>{formatRoundedDuration(row.focus_seconds_7d)}</strong>
                             </div>
                             {row.period !== "daily" ? (
-                              <div className="leaderboard-stat" aria-label={`Daily average ${formatDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period))}`}>
-                                <strong>{formatDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period))}</strong>
+                              <div className="leaderboard-stat" aria-label={`Daily average ${formatRoundedDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period))}`}>
+                                <strong>{formatRoundedDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period))}</strong>
                               </div>
                             ) : null}
                           </div>
@@ -353,7 +354,7 @@ function ParticipationWindow({
   return (
     <div className="leaderboard-window" aria-label="Rolling focus window preview">
       <span className="label-mono">Your focus window</span>
-      <strong>{formatDuration(focusSeconds7d)}</strong>
+      <strong>{formatRoundedDuration(focusSeconds7d)}</strong>
       <p>{formatWindow(windowStartDay, windowEndDay)}</p>
     </div>
   );
@@ -396,18 +397,6 @@ function getDailyAverageSeconds(totalSeconds: number, period: LeaderboardPeriod)
   if (period === "monthly") return Math.round(totalSeconds / 30);
   if (period === "weekly") return Math.round(totalSeconds / 7);
   return totalSeconds;
-}
-
-function formatDuration(totalSeconds: number) {
-  if (totalSeconds <= 0) return "0m";
-
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.round((totalSeconds % 3600) / 60);
-
-  if (hours === 0) return `${minutes}m`;
-  if (minutes === 0) return `${hours}h`;
-
-  return `${hours}h ${minutes}m`;
 }
 
 function formatRank(rank: number | null) {
