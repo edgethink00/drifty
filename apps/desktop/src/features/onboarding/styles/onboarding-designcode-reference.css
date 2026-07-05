@@ -181,10 +181,18 @@
 .dc-onb-welcome__preview {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: min(360px, 100%);
   margin-top: 14px;
   animation: dcOnbRise 0.55s 0.48s both;
+}
+
+.dc-onb-welcome__preview-hours {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--dc-onb-soft);
 }
 
 .dc-onb-welcome__preview-strip {

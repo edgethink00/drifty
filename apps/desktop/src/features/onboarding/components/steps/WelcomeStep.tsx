@@ -24,6 +24,10 @@ export function WelcomeStep() {
         I show where your time actually goes, and gently help you stay with the work that matters.
       </span>
       <div className="dc-onb-welcome__preview" aria-hidden="true">
+        <div className="dc-onb-welcome__preview-hours">
+          <span>9 AM</span>
+          <span>6 PM</span>
+        </div>
         <div className="dc-onb-welcome__preview-strip">
           {PREVIEW_SEGMENTS.map((segment, index) => (
             <span
