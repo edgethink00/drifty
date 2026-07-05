@@ -11,7 +11,7 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
         Drifty will now track your focus and drift in the background while you work.
       </p>
       <ul className="dc-onb-ready-list">
-        {summaryItems.map((item, index) => (
+        {summaryItems.map((item) => (
           <li className="dc-onb-ready-item" key={item.label}>
             <CheckMarkIcon />
             {item.sub ? (
@@ -22,7 +22,6 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
             ) : (
               <span className="dc-onb-ready-item__label">{item.label}</span>
             )}
-            {index === 0 ? null : <span className="dc-onb-ready-item__divider" aria-hidden="true" />}
           </li>
         ))}
       </ul>

@@ -65,7 +65,7 @@
   max-height: none;
   display: flex;
   flex-direction: column;
-  padding: clamp(30px, 5.4vh, 48px) clamp(40px, 7.5vw, 72px);
+  padding: clamp(36px, 6.5vh, 58px) clamp(48px, 9vw, 86px);
   background: var(--dc-onb-surface);
   border: 0;
   border-radius: 0;
@@ -98,7 +98,7 @@
 .dc-onb-content {
   width: 100%;
   max-width: 640px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .dc-onb-content--account {
@@ -1134,17 +1134,8 @@
   display: flex;
   align-items: center;
   gap: 15px;
-  padding: 11px 20px;
+  padding: 8px 20px;
   font-size: 14px;
-}
-
-.dc-onb-ready-item__divider {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 1px;
-  background: rgba(28, 28, 25, 0.08);
 }
 
 .dc-onb-ready-item__label,
@@ -1251,7 +1242,7 @@
   gap: 14px;
   width: min(100%, 640px);
   min-height: 41px;
-  margin: auto auto 0;
+  margin: auto 0 0;
   padding-top: 22px;
   flex-shrink: 0;
 }
@@ -1434,7 +1425,7 @@
 
   .onboarding-card.dc-onb-card {
     height: 100%;
-    padding: 26px 24px;
+    padding: 36px 48px;
   }
 
   .dc-onb-data-grid {
