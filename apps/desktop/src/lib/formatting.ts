@@ -35,9 +35,15 @@ export function chunk<T>(items: T[], size: number): T[][] {
   return r;
 }
 
-export function formatDuration(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600), m = Math.floor((totalSeconds % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+export { secondsToLabel as formatDuration } from "@drifty/domain";
+
+export function formatRoundedDuration(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "0m";
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.round((totalSeconds % 3600) / 60);
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
 }
 
 export function formatCompactDurationFromSeconds(totalSeconds: number): string {
