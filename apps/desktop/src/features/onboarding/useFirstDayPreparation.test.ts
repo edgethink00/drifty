@@ -4,6 +4,8 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
+import { logicalTodayIsoDate } from "../../lib/formatting";
+import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
 import {
   resolveFirstDayTargetDay,
   useFirstDayPreparation,
@@ -20,6 +22,14 @@ const trackerMocks = vi.hoisted(() => ({
 
 vi.mock("../../lib/api/trackerClient", () => ({
   trackerClient: trackerMocks,
+}));
+
+const managedAiMocks = vi.hoisted(() => ({
+  getManagedLocalAiStatus: vi.fn(),
+}));
+
+vi.mock("../settings/managedLocalAiClient", () => ({
+  getManagedLocalAiStatus: managedAiMocks.getManagedLocalAiStatus,
 }));
 
 const CLASSIFY_STALL_MS = 75 * 1000;
@@ -77,7 +87,8 @@ function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): Us
   return {
     preparingFirstDay: true,
     canUseCloudAiClassification: true,
-    localAiClassificationOptions: null,
+    localAiClassificationOptionsRef: { current: null },
+    managedLocalSelected: false,
     shouldBlockLocalTrackerAccess: false,
     startOfDayMinutes: 0,
     selectedDayRef: { current: "2026-07-04" },
@@ -96,6 +107,18 @@ function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): Us
 describe("useFirstDayPreparation", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    managedAiMocks.getManagedLocalAiStatus.mockReset().mockResolvedValue({
+      state: "not_installed",
+      selectedModelId: null,
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "",
+      artifactDir: null,
+      progress: null,
+      errorKind: null,
+      memoryUsageBytes: null,
+    });
     trackerMocks.getClassificationMetrics.mockReset().mockResolvedValue(metrics(20, 0));
     trackerMocks.previewBrowserHistoryImport.mockReset().mockResolvedValue(emptyImportPreview());
     trackerMocks.importBrowserHistory.mockReset().mockResolvedValue({
@@ -181,10 +204,12 @@ describe("useFirstDayPreparation", () => {
 
   it("reveals once the flow chart's visible set is classified, even with other segments unclassified", async () => {
     // Two segments in distinct 3-minute buckets: each is its bucket's sole (winning) candidate,
-    // so the visible set is exactly {seg-1, seg-2}.
+    // so the visible set is exactly {seg-1, seg-2}. Dated on the gate's own logical
+    // today so the test does not rot when the calendar day changes.
+    const gateToday = logicalTodayIsoDate(0);
     const visibleSegments = [
-      { id: "seg-1", appName: "AppA", startedAt: "2026-07-04T09:00:00", endedAt: "2026-07-04T09:02:00" },
-      { id: "seg-2", appName: "AppB", startedAt: "2026-07-04T10:00:00", endedAt: "2026-07-04T10:02:00" },
+      { id: "seg-1", appName: "AppA", startedAt: `${gateToday}T09:00:00`, endedAt: `${gateToday}T09:02:00` },
+      { id: "seg-2", appName: "AppB", startedAt: `${gateToday}T10:00:00`, endedAt: `${gateToday}T10:02:00` },
     ];
     trackerMocks.getTimeline.mockResolvedValue(visibleSegments);
     // The whole day still has unclassified segments beyond the visible set...
@@ -204,6 +229,66 @@ describe("useFirstDayPreparation", () => {
     // The classify batches were scoped to the visible set via the segmentIds allow-list.
     const firstQuery = runAiClassification.mock.calls[0]?.[0] as { segmentIds?: string[] } | undefined;
     expect(firstQuery?.segmentIds).toEqual(["seg-1", "seg-2"]);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for a managed model download before classifying, then uses the attached options", async () => {
+    const optionsRef = { current: null as LocalAiClassificationOptions | null };
+    managedAiMocks.getManagedLocalAiStatus.mockResolvedValue({
+      state: "installing",
+      selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Downloading…",
+      artifactDir: null,
+      progress: { percent: 44, downloadedBytes: 1_200, totalBytes: 2_700 },
+      errorKind: null,
+      memoryUsageBytes: null,
+    });
+    const runAiClassification = vi.fn().mockResolvedValue(emptySummary);
+    const options = makeOptions({
+      canUseCloudAiClassification: false,
+      managedLocalSelected: true,
+      localAiClassificationOptionsRef: optionsRef,
+      runAiClassification,
+    });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+
+    // Download still running: the gate sits in the downloading phase, showing
+    // real download progress, without classifying or revealing.
+    expect(options.setPhase).toHaveBeenCalledWith("downloading");
+    expect(options.setProgress).toHaveBeenCalledWith(0.44);
+    expect(runAiClassification).not.toHaveBeenCalled();
+    expect(options.onReveal).not.toHaveBeenCalled();
+
+    // The model lands: the app-level attach watcher fills the AI setup → ref flips.
+    optionsRef.current = {
+      localProvider: { provider: "managed_local", baseUrl: "http://127.0.0.1:39217/v1", model: "qwen", modelId: "drifty-qwen3-5-4b-default" },
+    };
+    await vi.advanceTimersByTimeAsync(1_500);
+    await flushAsync(20);
+
+    expect(options.setPhase).toHaveBeenCalledWith("classifying");
+    expect(runAiClassification).toHaveBeenCalled();
+    expect(runAiClassification.mock.calls[0]?.[2]).toMatchObject({
+      level: "normal",
+      localProvider: { modelId: "drifty-qwen3-5-4b-default" },
+    });
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("bails out of the download wait when no managed download was ever started", async () => {
+    const options = makeOptions({ canUseCloudAiClassification: false, managedLocalSelected: true });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+
+    // Status says nothing is installed or installing → reveal without classification.
+    expect(options.setPhase).toHaveBeenCalledWith("downloading");
+    expect(options.runAiClassification).not.toHaveBeenCalled();
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 

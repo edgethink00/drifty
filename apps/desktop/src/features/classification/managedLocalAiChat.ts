@@ -63,7 +63,7 @@ async function requestForReadyManagedLocalRuntime(
   return requestWithManagedLocalRuntime(request, provider, startedStatus);
 }
 
-async function ensureManagedLocalAiReady(modelId: string): Promise<ManagedLocalAiStatus> {
+export async function ensureManagedLocalAiReady(modelId: string): Promise<ManagedLocalAiStatus> {
   const startedStatus = await startManagedLocalAi(modelId);
   const readyStartedStatus = readyManagedLocalStatus(startedStatus, modelId);
   if (readyStartedStatus) return readyStartedStatus;

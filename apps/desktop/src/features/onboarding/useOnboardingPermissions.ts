@@ -6,6 +6,8 @@ import type { NotificationPermissionState, OnboardingStep } from "./onboardingFl
 type UseOnboardingPermissionsOptions = {
   readonly accessibilityGrantedFromApp: boolean;
   readonly onCheckAccessibility: () => Promise<boolean>;
+  /** Fired once when Accessibility flips to granted mid-onboarding: tracking starts right away. */
+  readonly onEarlyTrackingStart: () => void;
   readonly onEnableDriftAlerts: () => void;
   readonly onRequestAccessibility: () => Promise<boolean>;
   readonly setSetupError: Dispatch<SetStateAction<string | null>>;
@@ -16,6 +18,7 @@ type UseOnboardingPermissionsOptions = {
 export function useOnboardingPermissions({
   accessibilityGrantedFromApp,
   onCheckAccessibility,
+  onEarlyTrackingStart,
   onEnableDriftAlerts,
   onRequestAccessibility,
   setSetupError,
@@ -42,6 +45,18 @@ export function useOnboardingPermissions({
   useEffect(() => {
     onRequestAccessibilityRef.current = onRequestAccessibility;
   }, [onRequestAccessibility]);
+
+  // Accessibility granted is the moment capture becomes possible; start tracking
+  // right away (once) so the first day includes the time spent finishing onboarding.
+  const earlyTrackingStartedRef = useRef(false);
+  const previousAccessibilityGrantedRef = useRef(accessibilityGranted);
+  useEffect(() => {
+    const wasGranted = previousAccessibilityGrantedRef.current;
+    previousAccessibilityGrantedRef.current = accessibilityGranted;
+    if (wasGranted || !accessibilityGranted || earlyTrackingStartedRef.current) return;
+    earlyTrackingStartedRef.current = true;
+    onEarlyTrackingStart();
+  }, [accessibilityGranted, onEarlyTrackingStart]);
 
   useEffect(() => {
     if (step !== "permissions") {

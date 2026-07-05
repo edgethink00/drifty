@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./styles/first-day-preparation.css";
 
-export type FirstDayPreparationPhase = "importing" | "classifying";
+export type FirstDayPreparationPhase = "importing" | "downloading" | "classifying";
 
 type PhaseCopy = {
   readonly title: string;
@@ -14,6 +14,13 @@ const PHASE_COPY: Record<FirstDayPreparationPhase, PhaseCopy> = {
     lines: [
       "Gathering your last 48 hours…",
       "Pulling in where you've been…",
+    ],
+  },
+  downloading: {
+    title: "Setting up your local AI",
+    lines: [
+      "Downloading your local model…",
+      "Classification will run entirely on this Mac…",
     ],
   },
   classifying: {
@@ -29,15 +36,29 @@ const PHASE_COPY: Record<FirstDayPreparationPhase, PhaseCopy> = {
 
 const LINE_ROTATION_MS = 8450;
 
+// The one personalized touch: lead the classifying phase with the work the user
+// named during onboarding, so the first loading screen shows Drifty remembered.
+function classifyingLines(workActivityLabel: string | null | undefined): readonly string[] {
+  const base = PHASE_COPY.classifying.lines;
+  if (!workActivityLabel) return base;
+  return [`Sorting your ${workActivityLabel} time…`, ...base];
+}
+
 type FirstDayPreparationScreenProps = {
   readonly phase: FirstDayPreparationPhase;
   /** 0..1 for a determinate bar, or null while the step has no measurable progress. */
   readonly progress: number | null;
+  /** First work activity from onboarding (e.g. "Designing"), used to personalize the classifying copy. */
+  readonly workActivityLabel?: string | null;
 };
 
-export function FirstDayPreparationScreen({ phase, progress }: FirstDayPreparationScreenProps) {
+export function FirstDayPreparationScreen({ phase, progress, workActivityLabel }: FirstDayPreparationScreenProps) {
   const copy = PHASE_COPY[phase];
-  const line = useRotatingLine(copy.lines, phase);
+  const lines = useMemo(
+    () => (phase === "classifying" ? classifyingLines(workActivityLabel) : PHASE_COPY[phase].lines),
+    [phase, workActivityLabel],
+  );
+  const line = useRotatingLine(lines, phase);
   const determinate = progress !== null && Number.isFinite(progress);
   const percent = determinate ? Math.min(100, Math.max(0, Math.round((progress as number) * 100))) : null;
 

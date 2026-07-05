@@ -191,7 +191,16 @@ export function AccountMenu({
       role="menu"
       aria-label="Account menu"
     >
-      {userEmail ? <div className="account-popover__email" title={userEmail}>{userEmail}</div> : null}
+      <div className="account-popover__account">
+        {isSignedIn ? (
+          <>
+            <div className="account-popover__name">{displayName}</div>
+            <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
+          </>
+        ) : (
+          <div className="account-popover__name">Not signed in</div>
+        )}
+      </div>
       <div className="account-menu-separator account-menu-separator--account" role="separator" />
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon"><SettingsIcon /></span>

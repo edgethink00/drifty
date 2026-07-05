@@ -36,4 +36,16 @@ describe("FirstDayPreparationScreen", () => {
     expect(screen.getByText("100%")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
   });
+
+  it("leads the classifying copy with the user's onboarding work activity", () => {
+    render(<FirstDayPreparationScreen phase="classifying" progress={0.4} workActivityLabel="Designing" />);
+
+    expect(screen.getByText("Sorting your Designing time…")).toBeTruthy();
+  });
+
+  it("falls back to the generic classifying copy without a work activity", () => {
+    render(<FirstDayPreparationScreen phase="classifying" progress={0.4} workActivityLabel={null} />);
+
+    expect(screen.getByText("Reading through your day…")).toBeTruthy();
+  });
 });

@@ -89,8 +89,9 @@ describe("AccountMenu", () => {
     const menu = screen.getByRole("menu", { name: /account menu/i });
     const firstChildren = Array.from(menu.children).slice(0, 2);
 
-    expect(firstChildren[0]?.classList.contains("account-popover__email")).toBe(true);
-    expect(firstChildren[0]?.textContent).toBe("pat.lee93@example.com");
+    expect(firstChildren[0]?.classList.contains("account-popover__account")).toBe(true);
+    expect(firstChildren[0]?.textContent).toContain("pat.lee93");
+    expect(firstChildren[0]?.textContent).toContain("pat.lee93@example.com");
     expect(firstChildren[1]?.classList.contains("account-menu-separator")).toBe(true);
     expect(firstChildren[1]?.getAttribute("role")).toBe("separator");
   });

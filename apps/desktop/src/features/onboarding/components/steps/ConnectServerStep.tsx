@@ -1,9 +1,10 @@
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../../../settings/managedLocalAiClient";
 import { managedLocalAiProgressText } from "../../../settings/managedLocalAiProgressText";
 import { managedModelRuntimeMemoryLabel } from "../../../settings/managedLocalAiMemory";
+import { isManagedLocalReady } from "../../onboardingManagedLocalStatus";
 import type { SetupChoice } from "../../onboardingFlow";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
-import { SpinnerIcon } from "./shared";
+import { SpinnerIcon, SuccessIcon } from "./shared";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 
@@ -23,16 +24,21 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
   const selectedModelId = flow.managedLocalAi.status?.selectedModelId
     ?? flow.managedLocalAi.actionModelId
     ?? DEFAULT_LOCAL_MODEL_ID;
-  const statusBusy = (flow.managedLocalAi.loading && status === null)
+  const statusReady = isManagedLocalReady(status);
+  const statusBusy = !statusReady && (
+    (flow.managedLocalAi.loading && status === null)
     || (Boolean(flow.managedLocalAi.actionModelId) && status?.state !== "error")
     || status?.state === "installing"
-    || status?.state === "starting";
-  const statusMessage = localModelStatusMessage(flow.managedLocalAi.loading, status);
+    || status?.state === "starting"
+  );
+  const statusMessage = statusReady
+    ? "Model ready — classification runs entirely on this Mac."
+    : localModelStatusMessage(flow.managedLocalAi.loading, status);
 
   return (
     <div className="dc-onb-local">
-      <div className="dc-onb-status" role="status">
-        {statusBusy ? <SpinnerIcon /> : null}
+      <div className={statusReady ? "dc-onb-status dc-onb-status--ready" : "dc-onb-status"} role="status">
+        {statusBusy ? <SpinnerIcon /> : statusReady ? <SuccessIcon /> : null}
         {statusMessage}
       </div>
       <div className="dc-onb-local__cards">

@@ -42,6 +42,7 @@ type UseOnboardingFlowOptions = {
   readonly trackerStatus: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
   readonly onStartTracking: () => Promise<void>;
+  readonly onEarlyTrackingStart: () => void;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
   readonly onEnableDriftAlerts: () => void;
@@ -60,6 +61,7 @@ export function useOnboardingFlow({
   trackerStatus,
   accessibilityGranted: accessibilityGrantedFromApp,
   onStartTracking,
+  onEarlyTrackingStart,
   onCheckAccessibility,
   onRequestAccessibility,
   onEnableDriftAlerts,
@@ -110,6 +112,7 @@ export function useOnboardingFlow({
   const permissions = useOnboardingPermissions({
     accessibilityGrantedFromApp,
     onCheckAccessibility,
+    onEarlyTrackingStart,
     onEnableDriftAlerts,
     onRequestAccessibility,
     setSetupError,
@@ -135,7 +138,7 @@ export function useOnboardingFlow({
     customEndpointIsValid: connection.customEndpointIsValid,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
-    managedLocalReady: connection.managedLocalReady,
+    managedLocalStarted: connection.managedLocalStarted,
     setupChoice: connection.setupChoice,
     step,
   });
@@ -147,7 +150,6 @@ export function useOnboardingFlow({
     customEndpointModelIssue: connection.customEndpointModelIssue,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
-    managedLocalStarted: connection.managedLocalStarted,
     step,
   }), [
     canAdvance,
@@ -156,7 +158,6 @@ export function useOnboardingFlow({
     connection.customEndpointModelIssue,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
-    connection.managedLocalStarted,
     permissions.accessibilityRecheckPending,
     step,
   ]);
