@@ -169,11 +169,6 @@ export interface HourlyBucket {
   }>;
 }
 
-export interface TimelineGroup {
-  dateLabel: string;
-  segments: ActivitySegment[];
-}
-
 export interface SiteDuration {
   siteDomain: string;
   totalSeconds: number;
