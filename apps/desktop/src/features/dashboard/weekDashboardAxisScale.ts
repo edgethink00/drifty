@@ -14,7 +14,7 @@ export const WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT = Math.round(
     / WEEK_DASHBOARD_AXIS_SCALE_CONTROL_DEFAULT_PERCENT,
 );
 
-const WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX = 56;
+export const WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX = 56;
 
 export function clampWeekDashboardAxisScalePercent(value: number): number {
   if (!Number.isFinite(value)) return WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT;

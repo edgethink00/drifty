@@ -1,4 +1,5 @@
 import type { WeekCalendarEvent } from "./weekCalendar";
+import { WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX } from "./weekDashboardAxisScale";
 
 export type WeekCalendarEventLayout = {
   readonly eventHeight: number;
@@ -19,9 +20,21 @@ export function buildWeekCalendarEventLayout(
   event: WeekCalendarEvent,
   calendarHourHeight: number,
 ): WeekCalendarEventLayout {
+  // The micro/tiny pixel heights below are fixed because they are sized to fit
+  // the identity icons. They were tuned against the baseline hour height, so
+  // when the axis is compressed under that baseline each fixed floor spans more
+  // minutes of the timeline than it did at 100% and short blocks overrun their
+  // time slot, colliding with neighbours. Rather than shrink the pixels, widen
+  // the minute thresholds by the same compression ratio: more short blocks fall
+  // into the smaller fixed heights, easing the crowding. At the baseline height
+  // the ratio is 1, so this is a no-op at 100%.
+  const axisCompressionRatio =
+    calendarHourHeight > 0 ? WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX / calendarHourHeight : 1;
+  const microThresholdMinutes = MICRO_EVENT_MAX_ACTIVE_MINUTES * axisCompressionRatio;
+  const tinyThresholdMinutes = TINY_EVENT_MAX_ACTIVE_MINUTES * axisCompressionRatio;
   const rawEventHeight = (event.durationMinutes / 60) * calendarHourHeight;
-  const isMicroEvent = event.activeDurationMinutes <= MICRO_EVENT_MAX_ACTIVE_MINUTES;
-  const isTinyEvent = event.activeDurationMinutes <= TINY_EVENT_MAX_ACTIVE_MINUTES;
+  const isMicroEvent = event.activeDurationMinutes <= microThresholdMinutes;
+  const isTinyEvent = event.activeDurationMinutes <= tinyThresholdMinutes;
   const hidesInlineText = isMicroEvent;
   const shortEventMinHeight = event.isGroupedCluster ? 18 : 10;
   const shortEventMaxHeight = event.isGroupedCluster ? 26 : 24;

@@ -69,4 +69,36 @@ describe("buildWeekCalendarEventLayout", () => {
     expect(layout.isTinyEvent).toBe(true);
     expect(layout.showsIdentityStrip).toBe(false);
   });
+
+  it("widens the micro/tiny minute thresholds as the axis compresses below baseline", () => {
+    // A 12-minute event sits above the 10-minute tiny cutoff at the baseline
+    // 56px/hr height, but at the compressed 42px/hr default (75%) the cutoff
+    // widens to ~13.3 minutes, so the same event now collapses to the fixed
+    // tiny height instead of overrunning its slot.
+    const event = makeWeekCalendarEvent({
+      activeDurationMinutes: 12,
+      durationMinutes: 12,
+      isShort: true,
+    });
+
+    const atBaseline = buildWeekCalendarEventLayout(event, 56);
+    expect(atBaseline.isTinyEvent).toBe(false);
+
+    const atCompressed = buildWeekCalendarEventLayout(event, 42);
+    expect(atCompressed.isTinyEvent).toBe(true);
+    expect(atCompressed.eventHeight).toBe(12);
+  });
+
+  it("pushes near-micro events to the micro strip once the axis compresses", () => {
+    // 3.5 active minutes is tiny (not micro) at baseline, but micro once the
+    // 3-minute cutoff widens to ~4 minutes under the compressed default.
+    const event = makeWeekCalendarEvent({
+      activeDurationMinutes: 3.5,
+      durationMinutes: 3.5,
+      isShort: true,
+    });
+
+    expect(buildWeekCalendarEventLayout(event, 56).isMicroEvent).toBe(false);
+    expect(buildWeekCalendarEventLayout(event, 42).isMicroEvent).toBe(true);
+  });
 });
