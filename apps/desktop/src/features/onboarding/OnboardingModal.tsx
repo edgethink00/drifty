@@ -24,7 +24,6 @@ export function OnboardingModal({
   initialDisplayName,
   trackerStatus,
   accessibilityGranted,
-  onRefreshTracker,
   onStartTracking,
   onCheckAccessibility,
   onRequestAccessibility,
@@ -43,7 +42,6 @@ export function OnboardingModal({
   initialDisplayName: string;
   trackerStatus: TrackerStatus | null;
   accessibilityGranted: boolean;
-  onRefreshTracker: () => Promise<void>;
   onStartTracking: () => Promise<void>;
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
@@ -70,7 +68,6 @@ export function OnboardingModal({
     initialDisplayName,
     trackerStatus,
     accessibilityGranted,
-    onRefreshTracker,
     onStartTracking,
     onCheckAccessibility,
     onRequestAccessibility,
@@ -82,15 +79,6 @@ export function OnboardingModal({
     onComplete,
     devInitialStep: __devInitialStep,
   });
-
-  useEffect(() => {
-    if (flow.step !== "account" || !flow.accountConnected) return;
-    const timeoutId = window.setTimeout(() => {
-      const nextStep = flow.steps[flow.stepIndex + 1]?.id;
-      if (nextStep) flow.setStep(nextStep);
-    }, 850);
-    return () => window.clearTimeout(timeoutId);
-  }, [flow.accountConnected, flow.step, flow.stepIndex, flow.steps, flow.setStep]);
 
   return (
     <section

@@ -1,12 +1,14 @@
+import driftyIconUrl from "../../../../assets/drifty-icon.png";
+
 export function WelcomeStep() {
   return (
-    <div className="onb-welcome">
-      <span className="tw-line tw-line--one tw-title">Hey, I&apos;m drifty.</span>
-      <span className="tw-line tw-line--two tw-title tw-title--muted">Your AI time tracker.</span>
-      <span className="tw-line tw-line--three tw-message">
+    <div className="dc-onb-welcome">
+      <img className="dc-onb-welcome__icon" src={driftyIconUrl} alt="" aria-hidden="true" />
+      <span className="dc-onb-welcome__headline">Welcome to drifty.</span>
+      <span className="dc-onb-welcome__headline dc-onb-welcome__headline--muted">Your AI time tracker.</span>
+      <span className="dc-onb-welcome__body">
         I show where your time actually goes, and gently help you stay with the work that matters.
       </span>
-      <span className="tw-line tw-line--four tw-sub">Let&apos;s set up a few things — about a minute.</span>
     </div>
   );
 }

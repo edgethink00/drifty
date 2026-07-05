@@ -1,107 +1,77 @@
-import type { NotificationPermissionState } from "../../onboardingFlow";
+import type { OnboardingFlow } from "../../useOnboardingFlow";
 
-type PermissionsStepProps = {
-  readonly accessibilityGranted: boolean;
-  readonly accessibilityReady: boolean;
-  readonly notificationPermission: NotificationPermissionState;
-  readonly notificationsReady: boolean;
-  readonly openingSettingsPane: "accessibility" | "notifications" | null;
-  readonly onNotificationPermission: () => void;
-  readonly onRequestAccessibility: () => void;
-  readonly safariHistoryShow?: boolean;
-  readonly safariHistoryReadable?: boolean;
-  readonly safariHistoryOpening?: boolean;
-  readonly onEnableSafariHistory?: () => void;
-};
+export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
+  const accessibilityEnabled = flow.accessibilityGranted;
+  const notificationsEnabled = flow.notificationsReady;
+  const safariHistory = flow.safariHistoryPermission;
 
-export function PermissionsStep({
-  accessibilityGranted,
-  accessibilityReady,
-  notificationPermission,
-  notificationsReady,
-  openingSettingsPane,
-  onNotificationPermission,
-  onRequestAccessibility,
-  safariHistoryShow = false,
-  safariHistoryReadable = false,
-  safariHistoryOpening = false,
-  onEnableSafariHistory,
-}: PermissionsStepProps) {
   return (
     <>
-      <p className="onb-step-desc">
-        Drifty needs a couple of Mac permissions to see your focus and drift patterns. Everything is processed for your
-        own timeline.
+      <p className="dc-onb-copy">
+        Drifty needs a couple of Mac permissions to see your focus and drift patterns. Everything is processed for your own timeline.
       </p>
-      <ul className="onb-perms" aria-label="Required permissions">
-        <li className="onb-perms__row">
-          <div className="onb-perms__info">
-            <span className="onb-perms__name">Accessibility</span>
-            <span className="onb-perms__desc">Lets Drifty see your active app and window — required to track at all.</span>
-          </div>
-          <div className="onb-perms__control">
-            <span className={`onb-status-pill${accessibilityReady ? " onb-status-pill--ready" : ""}`}>
-              {accessibilityGranted ? "Enabled" : accessibilityReady ? "Ready" : "Required"}
-            </span>
-            <button
-              type="button"
-              className="onb-button onb-button--ghost onb-perms__action"
-              onClick={onRequestAccessibility}
-              disabled={openingSettingsPane === "accessibility" || accessibilityReady}
-            >
-              {openingSettingsPane === "accessibility"
-                ? "Opening…"
-                : accessibilityReady
-                  ? accessibilityGranted
-                    ? "Enabled"
-                    : "Ready"
-                  : "Enable"}
-            </button>
-          </div>
-        </li>
-        <li className="onb-perms__row">
-          <div className="onb-perms__info">
-            <span className="onb-perms__name">Notifications</span>
-            <span className="onb-perms__desc">Lets Drifty send gentle focus nudges and setup alerts.</span>
-          </div>
-          <div className="onb-perms__control">
-            <span className={`onb-status-pill${notificationsReady ? " onb-status-pill--ready" : ""}`}>
-              {notificationsReady ? "Enabled" : "Recommended"}
-            </span>
-            <button
-              type="button"
-              className="onb-button onb-button--ghost onb-perms__action"
-              onClick={onNotificationPermission}
-              disabled={notificationPermission === "checking" || notificationsReady}
-            >
-              {notificationsReady ? "Enabled" : "Enable"}
-            </button>
-          </div>
-        </li>
-        {safariHistoryShow ? (
-          <li className="onb-perms__row">
-            <div className="onb-perms__info">
-              <span className="onb-perms__name">Safari history</span>
-              <span className="onb-perms__desc">
-                Lets Drifty import your Safari browsing history — needs Full Disk Access.
-              </span>
-            </div>
-            <div className="onb-perms__control">
-              <span className={`onb-status-pill${safariHistoryReadable ? " onb-status-pill--ready" : ""}`}>
-                {safariHistoryReadable ? "Enabled" : "Optional"}
-              </span>
-              <button
-                type="button"
-                className="onb-button onb-button--ghost onb-perms__action"
-                onClick={onEnableSafariHistory}
-                disabled={safariHistoryOpening || safariHistoryReadable}
-              >
-                {safariHistoryReadable ? "Enabled" : safariHistoryOpening ? "Opening…" : "Enable"}
-              </button>
-            </div>
-          </li>
+      <ul className="dc-onb-row-list">
+        <PermissionRow
+          title="Accessibility"
+          description="Lets Drifty see your active app and window — required to track at all."
+          pill={accessibilityEnabled ? "Enabled" : "Required"}
+          tone={accessibilityEnabled ? "success" : "required"}
+          disabled={accessibilityEnabled}
+          onClick={() => void flow.handleRequestAccessibilityClick()}
+        />
+        <PermissionRow
+          title="Notifications"
+          description="Lets Drifty send gentle focus nudges and setup alerts."
+          pill={notificationsEnabled ? "Enabled" : "Recommended"}
+          tone={notificationsEnabled ? "success" : "neutral"}
+          disabled={notificationsEnabled}
+          onClick={() => void flow.handleNotificationPermissionClick()}
+        />
+        {safariHistory.show ? (
+          <PermissionRow
+            title="Safari history"
+            description="Lets Drifty import your Safari browsing history — needs Full Disk Access."
+            pill={safariHistory.readable ? "Enabled" : "Optional"}
+            tone={safariHistory.readable ? "success" : "neutral"}
+            disabled={safariHistory.opening || safariHistory.readable}
+            actionLabel={safariHistory.readable ? "Enabled" : safariHistory.opening ? "Opening…" : "Enable"}
+            onClick={safariHistory.onEnable}
+          />
         ) : null}
       </ul>
     </>
+  );
+}
+
+function PermissionRow({
+  actionLabel,
+  description,
+  disabled,
+  onClick,
+  pill,
+  title,
+  tone,
+}: {
+  readonly actionLabel?: string;
+  readonly description: string;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+  readonly pill: string;
+  readonly title: string;
+  readonly tone: "success" | "required" | "neutral";
+}) {
+  return (
+    <li className="dc-onb-row">
+      <div className="dc-onb-row__copy">
+        <span className="dc-onb-row__title">{title}</span>
+        <span className="dc-onb-row__desc">{description}</span>
+      </div>
+      <div className="dc-onb-row__action">
+        <span className={`dc-onb-pill dc-onb-pill--${tone}`}>{pill}</span>
+        <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled}>
+          {actionLabel ?? (disabled ? "Enabled" : "Enable")}
+        </button>
+      </div>
+    </li>
   );
 }

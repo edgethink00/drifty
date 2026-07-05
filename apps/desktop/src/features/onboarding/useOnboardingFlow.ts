@@ -32,13 +32,15 @@ import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 
+// Long enough for the "Account connected" success state to register before moving on.
+const ACCOUNT_CONNECTED_ADVANCE_MS = 1200;
+
 type UseOnboardingFlowOptions = {
   readonly userId: string;
   readonly accountConnected: boolean;
   readonly initialDisplayName: string;
   readonly trackerStatus: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
-  readonly onRefreshTracker: () => Promise<void>;
   readonly onStartTracking: () => Promise<void>;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
@@ -57,7 +59,6 @@ export function useOnboardingFlow({
   initialDisplayName,
   trackerStatus,
   accessibilityGranted: accessibilityGrantedFromApp,
-  onRefreshTracker,
   onStartTracking,
   onCheckAccessibility,
   onRequestAccessibility,
@@ -110,7 +111,6 @@ export function useOnboardingFlow({
     accessibilityGrantedFromApp,
     onCheckAccessibility,
     onEnableDriftAlerts,
-    onRefreshTracker,
     onRequestAccessibility,
     setSetupError,
     step,
@@ -136,11 +136,8 @@ export function useOnboardingFlow({
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
     managedLocalReady: connection.managedLocalReady,
-    notificationsReady: permissions.notificationsReady,
     setupChoice: connection.setupChoice,
     step,
-    workDomain,
-    workType,
   });
   const blockedHint = useMemo(() => blockedHintForStep({
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
@@ -178,13 +175,7 @@ export function useOnboardingFlow({
     connection.setupChoice,
     step,
   ]);
-  const subtitle = step === "choose_setup"
-    ? "Start with Drifty Cloud, run AI locally, bring your own key, or point Drifty at an OpenAI-compatible endpoint."
-    : "";
-  const titleIsVisible = step !== "welcome";
-  const progressPct = ((stepIndex + 1) / steps.length) * 100;
   const footerLabel = footerLabelForStep({
-    isFinalStep,
     isUserManagedProviderSetup: connection.isUserManagedProviderSetup,
     step,
   });
@@ -192,6 +183,17 @@ export function useOnboardingFlow({
   useEffect(() => {
     capturePostHogEvent("onboarding_step_viewed", { step });
   }, [step]);
+
+  // Once the account is connected, hold on the visible success state briefly,
+  // then advance on its own — the account step renders no Continue button.
+  useEffect(() => {
+    if (step !== "account" || !accountConnected) return;
+    const timeoutId = window.setTimeout(() => {
+      const nextStep = steps[stepIndex + 1]?.id;
+      if (nextStep) setStep(nextStep);
+    }, ACCOUNT_CONNECTED_ADVANCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [accountConnected, step, stepIndex, steps]);
 
   useEffect(() => {
     if (!progressEnabled) return;
@@ -310,7 +312,6 @@ export function useOnboardingFlow({
     mainActivityOther,
     openAtLoginEnabled,
     permissionSummaryLabel,
-    progressPct,
     screenRef,
     setDriftAlarmEnabled,
     setBrowserHistoryBootstrapEnabled,
@@ -324,9 +325,7 @@ export function useOnboardingFlow({
     stepIndex,
     steps,
     storageError,
-    subtitle,
     title,
-    titleIsVisible,
     titleRef,
     toggleMainActivity,
     workDomain,

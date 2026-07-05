@@ -167,24 +167,28 @@ export function saveUserWorkProfileSettings(
   const nextWorkProfile = normalizeWorkProfileSettings(workProfile);
   if (!summarizeWorkProfileSettings(nextWorkProfile)) return null;
 
+  // The stored record doubles as the onboarding-completed flag, so a work-profile
+  // save must never create it from scratch — only update an existing one.
   const currentState = readUserOnboardingState(userId);
+  if (!currentState) return null;
+
   const nextState: UserOnboardingState = {
     version: ONBOARDING_STORAGE_VERSION,
     completed: true,
-    displayName: currentState?.displayName ?? "",
+    displayName: currentState.displayName,
     workType: nextWorkProfile.workActivities[0] ?? null,
     workTypeOther: nextWorkProfile.workActivities.includes("Other") ? nextWorkProfile.workActivityOther : "",
     workDomain: nextWorkProfile.workDomain,
     workDomainOther: nextWorkProfile.workDomainOther,
     jobType: summarizeWorkActivities(nextWorkProfile) || null,
     jobTypeOther: nextWorkProfile.workActivities.includes("Other") ? nextWorkProfile.workActivityOther : "",
-    driftAlarmEnabled: currentState?.driftAlarmEnabled ?? false,
-    extremeNudgeEnabled: currentState?.extremeNudgeEnabled ?? false,
-    browserHistoryBootstrapEnabled: currentState?.browserHistoryBootstrapEnabled ?? false,
-    focusGoalHours: currentState?.focusGoalHours ?? null,
-    driftThresholdMinutes: currentState?.driftThresholdMinutes ?? null,
-    purpose: currentState?.purpose ?? null,
-    completedAt: currentState?.completedAt ?? new Date().toISOString(),
+    driftAlarmEnabled: currentState.driftAlarmEnabled,
+    extremeNudgeEnabled: currentState.extremeNudgeEnabled,
+    browserHistoryBootstrapEnabled: currentState.browserHistoryBootstrapEnabled,
+    focusGoalHours: currentState.focusGoalHours,
+    driftThresholdMinutes: currentState.driftThresholdMinutes,
+    purpose: currentState.purpose,
+    completedAt: currentState.completedAt,
   };
   writeOnboardingStateToStorageKey(getUserOnboardingStorageKey(userId), nextState);
   return nextState;

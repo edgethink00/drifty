@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
-import { openSystemSettingsPane, type SystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
 import type { NotificationPermissionState, OnboardingStep } from "./onboardingFlow";
 
@@ -8,7 +7,6 @@ type UseOnboardingPermissionsOptions = {
   readonly accessibilityGrantedFromApp: boolean;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onEnableDriftAlerts: () => void;
-  readonly onRefreshTracker: () => Promise<void>;
   readonly onRequestAccessibility: () => Promise<boolean>;
   readonly setSetupError: Dispatch<SetStateAction<string | null>>;
   readonly step: OnboardingStep;
@@ -19,32 +17,23 @@ export function useOnboardingPermissions({
   accessibilityGrantedFromApp,
   onCheckAccessibility,
   onEnableDriftAlerts,
-  onRefreshTracker,
   onRequestAccessibility,
   setSetupError,
   step,
   trackerStatus,
 }: UseOnboardingPermissionsOptions) {
-  const [openingSettingsPane, setOpeningSettingsPane] = useState<SystemSettingsPane | null>(null);
-  const [accessibilityJustGranted, setAccessibilityJustGranted] = useState(false);
   const [accessibilityRecheckPending, setAccessibilityRecheckPending] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>(() =>
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "unknown" : "unavailable",
   );
 
-  const onRefreshTrackerRef = useRef(onRefreshTracker);
   const onCheckAccessibilityRef = useRef(onCheckAccessibility);
   const onRequestAccessibilityRef = useRef(onRequestAccessibility);
   const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const trackerUnavailable = trackerStatus?.trackerMode === "unavailable";
   const accessibilityGranted = accessibilityGrantedFromApp || Boolean(trackerStatus?.accessibilityGranted);
   const accessibilityReady = accessibilityGranted || (!isDesktopRuntime && trackerUnavailable);
-  const previousAccessibilityGrantedRef = useRef(accessibilityGranted);
   const notificationsReady = notificationPermission === "granted" || notificationPermission === "unavailable";
-
-  useEffect(() => {
-    onRefreshTrackerRef.current = onRefreshTracker;
-  }, [onRefreshTracker]);
 
   useEffect(() => {
     onCheckAccessibilityRef.current = onCheckAccessibility;
@@ -55,7 +44,7 @@ export function useOnboardingPermissions({
   }, [onRequestAccessibility]);
 
   useEffect(() => {
-    if (step !== "accessibility" && step !== "permissions") {
+    if (step !== "permissions") {
       setAccessibilityRecheckPending(true);
       return;
     }
@@ -94,41 +83,8 @@ export function useOnboardingPermissions({
     };
   }, [accessibilityReady, step]);
 
-  useEffect(() => {
-    const wasAccessibilityGranted = previousAccessibilityGrantedRef.current;
-    previousAccessibilityGrantedRef.current = accessibilityGranted;
-    if (step === "accessibility" && !wasAccessibilityGranted && accessibilityGranted) {
-      setAccessibilityJustGranted(true);
-    }
-  }, [accessibilityGranted, step]);
-
-  useEffect(() => {
-    if (step !== "accessibility") setAccessibilityJustGranted(false);
-  }, [step]);
-
-  async function handleRefreshTrackerClick() {
-    setSetupError(null);
-    try {
-      await onRefreshTrackerRef.current();
-      capturePostHogEvent("tracker_action", {
-        action: "refresh",
-        result: "success",
-        tracker_mode: trackerStatus?.trackerMode === "unavailable" ? "unavailable" : "tracking",
-        running: trackerStatus?.running === true,
-      });
-    } catch (error) {
-      setSetupError(error instanceof Error ? error.message : "Unable to refresh tracker status.");
-      capturePostHogEvent("tracker_action", {
-        action: "refresh",
-        result: "error",
-        error_kind: toAnalyticsErrorKind(error),
-      });
-    }
-  }
-
   async function handleRequestAccessibilityClick() {
     setSetupError(null);
-    setOpeningSettingsPane("accessibility");
     try {
       const granted = await onRequestAccessibilityRef.current();
       capturePostHogEvent("permission_action", {
@@ -146,46 +102,6 @@ export function useOnboardingPermissions({
         accessibility_granted: false,
         error_kind: toAnalyticsErrorKind(error),
       });
-    } finally {
-      setOpeningSettingsPane(null);
-    }
-  }
-
-  async function handleOpenSettingsPane(pane: SystemSettingsPane) {
-    setSetupError(null);
-    setOpeningSettingsPane(pane);
-    try {
-      const opened = await openSystemSettingsPane(pane);
-      if (!opened) {
-        setSetupError("System Settings can only be opened from the macOS desktop app.");
-        capturePostHogEvent("permission_action", {
-          permission: pane,
-          action: "open_settings",
-          result: "unavailable",
-          accessibility_granted: accessibilityGranted,
-          notifications_granted: notificationPermission === "granted",
-        });
-        return;
-      }
-      capturePostHogEvent("permission_action", {
-        permission: pane,
-        action: "open_settings",
-        result: "success",
-        accessibility_granted: accessibilityGranted,
-        notifications_granted: notificationPermission === "granted",
-      });
-    } catch (error) {
-      setSetupError(error instanceof Error ? error.message : "Unable to open System Settings.");
-      capturePostHogEvent("permission_action", {
-        permission: pane,
-        action: "open_settings",
-        result: "error",
-        accessibility_granted: accessibilityGranted,
-        notifications_granted: notificationPermission === "granted",
-        error_kind: toAnalyticsErrorKind(error),
-      });
-    } finally {
-      setOpeningSettingsPane(null);
     }
   }
 
@@ -255,15 +171,11 @@ export function useOnboardingPermissions({
 
   return {
     accessibilityGranted,
-    accessibilityJustGranted,
     accessibilityReady,
     accessibilityRecheckPending,
     handleNotificationPermissionClick,
-    handleOpenSettingsPane,
-    handleRefreshTrackerClick,
     handleRequestAccessibilityClick,
     notificationPermission,
     notificationsReady,
-    openingSettingsPane,
   };
 }

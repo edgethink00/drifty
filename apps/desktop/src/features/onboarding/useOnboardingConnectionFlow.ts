@@ -136,15 +136,11 @@ export function useOnboardingConnectionFlow({
     setMaskedApiKey(null);
   }
 
+  // Draft edits stay local to onboarding; the global AI setup only changes once
+  // the connection test succeeds, so abandoning setup never leaves a half-configured provider.
   function handleCustomEndpointDraftChange(nextDraft: CustomEndpointDraft) {
     setCustomEndpointDraft(nextDraft);
     resetConnectionValidation();
-    onLocalAiSetupChange((current) => ({
-      ...current,
-      provider: "self_hosted",
-      selfHostedBaseUrl: nextDraft.baseUrl,
-      selfHostedModel: nextDraft.model,
-    }));
   }
 
   function runConnectionTest(stepToRun: OnboardingStep): (() => void) | undefined {
