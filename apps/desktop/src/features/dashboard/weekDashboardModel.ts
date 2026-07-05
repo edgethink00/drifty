@@ -184,6 +184,16 @@ export function prewarmClosedWeekDashboardDays(input: WeekDashboardModelInput): 
   return warmedDays;
 }
 
+export function emptyWeekDashboardModel(): WeekDashboardModel {
+  const emptyStats: WeekDashboardCacheStats = {
+    closedDayHits: 0,
+    closedDaysComputed: 0,
+    futureDaysSkipped: 0,
+    liveDaysComputed: 0,
+  };
+  return { rows: [], calendarEvents: new Map(), cacheStats: emptyStats };
+}
+
 function appendDayModel(model: WeekDashboardDayModel, rows: WeekDayRow[], calendarEvents: Map<string, WeekCalendarEvent[]>): void {
   rows.push(model.row);
   calendarEvents.set(model.day, model.calendarEvents);

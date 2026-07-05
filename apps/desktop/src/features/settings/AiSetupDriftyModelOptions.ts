@@ -1,5 +1,6 @@
 import type { SettingsSelectOption } from "./SettingsSelect";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
+import { isRetryableManagedModelError, managedDownloadButtonLabel } from "./managedLocalAiLabels";
 
 export const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
 export const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Individual (Cloud)";
@@ -42,7 +43,7 @@ export function driftyModelOptions(
         value: model.id,
         label: model.label,
         disabled: true,
-        actionLabel: modelActionLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null),
+        actionLabel: managedDownloadButtonLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null),
         actionAriaLabel: `Download ${model.label} managed local model`,
         actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
         onAction: (modelId: string) => {
@@ -68,16 +69,6 @@ export function isSelectableManagedModel(modelId: string, status: ManagedLocalAi
     default:
       return assertNever(status.state);
   }
-}
-
-function modelActionLabel(isBusy: boolean, failed: boolean, percent: number | null): string {
-  if (isBusy) return percent === null ? "Downloading..." : `Downloading ${percent.toFixed(0)}%`;
-  if (failed) return "Retry";
-  return "Download";
-}
-
-function isRetryableManagedModelError(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
-  return errorKind === "download_failed" || errorKind === "model_artifact_missing";
 }
 
 class AiSetupDriftyModelOptionsError extends Error {

@@ -4,7 +4,8 @@ import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
 import type { FlowHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
-import { buildCellGroupAriaLabels, clockHourForLogicalHour, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
+import { clockHourForLogicalHour } from "../../lib/formatting";
+import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
 import { flowBlockHoverGroupPosition, type FlowBlockHoverGroup } from "./flowHoverGroups";
 
 type FlowChartGridProps = {

@@ -1,12 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+import { logicalMinuteOfDay, normalizeStartOfDayMinutes, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartGrid } from "./FlowChartGrid";
 import { FlowChartHeader } from "./FlowChartHeader";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowHoverCard, FlowLegendHoverCard, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { buildFlowBlockHoverGroups } from "./flowHoverGroups";
-import { normalizeStartOfDayMinutes } from "./flowChartFormat";
 import { useFlowChartHoverDelegation } from "./useFlowChartHoverDelegation";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;

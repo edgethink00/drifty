@@ -1,5 +1,6 @@
 import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelinePage, TimelinePageQuery, TimelineQuery, TimelineSearchQuery, TrackerStatus } from "@drifty/domain";
+import { localDateKey } from "../formatting";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
 type PreviewSegmentSpec = readonly [
@@ -37,24 +38,20 @@ const PREVIEW_APP_ICON_SOURCES: Readonly<Record<string, string>> = {
   "notion.id": "./assets/notion-CceIbM-j.png",
 };
 
-function isoDay(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function todayIsoDate() {
-  return isoDay(new Date());
+  return localDateKey(new Date());
 }
 
 function shiftDay(day: string, offset: number) {
   const date = new Date(`${day}T12:00:00`);
   date.setDate(date.getDate() + offset);
-  return isoDay(date);
+  return localDateKey(date);
 }
 
 function at(day: string, hour: number, minute: number) {
   const date = new Date(`${day}T00:00:00`);
   date.setHours(hour, minute, 0, 0);
-  return `${isoDay(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
+  return `${localDateKey(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
 }
 
 function secondsBetween(startedAt: string, endedAt: string) {

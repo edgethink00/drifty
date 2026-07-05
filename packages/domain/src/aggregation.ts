@@ -95,23 +95,6 @@ export interface DayRibbonSegment {
   }>;
 }
 
-export interface CategoryHourCell {
-  hour: number;
-  totalSeconds: number;
-  ratio: number;
-}
-
-export interface CategoryHourRow {
-  category: ActivityCategory;
-  totalSeconds: number;
-  cells: CategoryHourCell[];
-}
-
-export interface CategoryHourMatrix {
-  rows: CategoryHourRow[];
-  peakSeconds: number;
-}
-
 export type ClassificationSurface = "browser" | "app";
 export type ClassificationSource = "youtube" | "domain-db" | "app-db" | "context" | "fallback" | "llm" | "manual" | "rule" | "stored" | "unknown";
 
@@ -401,31 +384,6 @@ export function formatTimelineItems(segments: ActivitySegment[]) {
       startedLabel: timelineTimeFormatter.format(new Date(segment.startedAt)),
       endedLabel: timelineTimeFormatter.format(new Date(segment.endedAt)),
     }));
-}
-
-export function mergeAdjacentSegments(segments: ActivitySegment[]): ActivitySegment[] {
-  if (segments.length === 0) return [];
-
-  const sorted = segments.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  const merged: ActivitySegment[] = [{ ...sorted[0] }];
-
-  for (const segment of sorted.slice(1)) {
-    const last = merged[merged.length - 1];
-    const canMerge =
-      last.appName === segment.appName &&
-      (last.windowTitle ?? null) === (segment.windowTitle ?? null) &&
-      last.endedAt === segment.startedAt;
-
-    if (!canMerge) {
-      merged.push({ ...segment });
-      continue;
-    }
-
-    last.endedAt = segment.endedAt;
-    last.durationSeconds += segment.durationSeconds;
-  }
-
-  return merged;
 }
 
 export function secondsToLabel(totalSeconds: number): string {
@@ -1068,57 +1026,6 @@ export function buildDayRibbonSegments(segments: ActivitySegment[], day: string,
   }
 
   return merged;
-}
-
-export function buildCategoryHourMatrix(segments: ActivitySegment[], options?: ClassificationOptions): CategoryHourMatrix {
-  const categoryHours = new Map<ActivityCategory, number[]>(
-    CATEGORY_ORDER.map((category) => [category, Array.from({ length: 24 }, () => 0)]),
-  );
-
-  for (const segment of segments) {
-    const { category } = classifyActivity(segment, options);
-    let cursor = new Date(segment.startedAt).getTime();
-    const end = new Date(segment.endedAt).getTime();
-
-    while (cursor < end) {
-      const current = new Date(cursor);
-      const hourStart = new Date(current.getFullYear(), current.getMonth(), current.getDate(), current.getHours(), 0, 0, 0);
-      const hourEnd = new Date(hourStart);
-      hourEnd.setHours(hourEnd.getHours() + 1);
-      const overlapEnd = Math.min(end, hourEnd.getTime());
-      const overlapSeconds = Math.max(0, Math.round((overlapEnd - cursor) / 1000));
-
-      if (overlapSeconds > 0) {
-        const target = categoryHours.get(category);
-        if (target) target[current.getHours()] += overlapSeconds;
-      }
-
-      cursor = overlapEnd;
-    }
-  }
-
-  const peakSeconds = Math.max(
-    1,
-    ...Array.from(categoryHours.values()).flat(),
-  );
-
-  return {
-    peakSeconds,
-    rows: CATEGORY_ORDER.map((category) => {
-      const hours = categoryHours.get(category) ?? Array.from({ length: 24 }, () => 0);
-      const totalSeconds = hours.reduce((sum, value) => sum + value, 0);
-
-      return {
-        category,
-        totalSeconds,
-        cells: hours.map((total, hour) => ({
-          hour,
-          totalSeconds: total,
-          ratio: total > 0 ? total / peakSeconds : 0,
-        })),
-      };
-    }),
-  };
 }
 
 const PRODUCTIVITY_PERSONAS: Record<ProductivityPersonaId, { id: ProductivityPersonaId; name: ProductivityPersonaName }> = {

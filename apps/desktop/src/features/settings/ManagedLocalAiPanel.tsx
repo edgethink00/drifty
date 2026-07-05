@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ManagedModelActionIcon } from "./ManagedModelActionIcon";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
+import { isRetryableManagedModelError, managedDownloadButtonLabel } from "./managedLocalAiLabels";
 import { managedLocalAiProgressText } from "./managedLocalAiProgressText";
 import { managedModelRuntimeMemoryLabel } from "./managedLocalAiMemory";
 
@@ -166,14 +167,4 @@ function installedManagedModel(modelId: string, status: ManagedLocalAiStatus | n
     return { artifactDir: status.artifactDir };
   }
   return null;
-}
-
-function isRetryableManagedModelError(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
-  return errorKind === "download_failed" || errorKind === "model_artifact_missing";
-}
-
-function managedDownloadButtonLabel(isBusy: boolean, isError: boolean, percent: number | null): string {
-  if (isBusy) return percent === null ? "Downloading..." : `Downloading ${percent.toFixed(0)}%`;
-  if (isError) return "Retry";
-  return "Download";
 }

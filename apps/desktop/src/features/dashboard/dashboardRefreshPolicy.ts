@@ -44,3 +44,17 @@ export function resolveDashboardRefreshMode({
 
   return "background";
 }
+
+export type DashboardPreviousWeekFocusLoad = {
+  readonly key: string;
+  readonly focusSeconds: number;
+};
+
+export type DashboardWeekRefreshStatus = "idle" | "loading" | "error";
+
+export type DashboardWeekRefreshState = {
+  readonly key: string | null;
+  readonly status: DashboardWeekRefreshStatus;
+};
+
+export const DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS = 4000;
