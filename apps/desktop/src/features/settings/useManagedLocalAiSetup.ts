@@ -28,6 +28,7 @@ type RunActionOptions = {
 
 const MANAGED_LOCAL_AI_STATUS_EVENT = "managed-ai-status";
 
+
 export type UseManagedLocalAiSetupResult = {
   readonly actionModelId: string | null;
   readonly catalog: readonly ManagedLocalAiModel[];
@@ -54,9 +55,16 @@ export function useManagedLocalAiSetup(
     onLocalAiSetupChange((current) => {
       const provider = options.activateProvider ? "managed_local" : current.provider;
       const driftyRoute = options.activateProvider ? "local" : current.driftyRoute;
-      const managedLocalModelId = normalizeManagedLocalModelId(nextStatus.selectedModelId ?? current.managedLocalModelId);
-      const managedLocalBaseUrl = nextStatus.baseUrl ?? current.managedLocalBaseUrl;
-      const managedLocalModel = nextStatus.model ?? current.managedLocalModel;
+      // The managedLocal* fields mean "this runtime setup is usable" — everything
+      // downstream (classification options, the first-day gate's download wait)
+      // treats their presence as model-ready. Rust reports base_url/model even in
+      // download-progress statuses, so only a genuinely ready status may fill them.
+      const runtimeReady = isReadyManagedLocalAiStatus(nextStatus);
+      const managedLocalModelId = runtimeReady
+        ? normalizeManagedLocalModelId(nextStatus.selectedModelId)
+        : current.managedLocalModelId;
+      const managedLocalBaseUrl = runtimeReady ? nextStatus.baseUrl : current.managedLocalBaseUrl;
+      const managedLocalModel = runtimeReady ? nextStatus.model : current.managedLocalModel;
       if (
         current.provider === provider
         && current.driftyRoute === driftyRoute

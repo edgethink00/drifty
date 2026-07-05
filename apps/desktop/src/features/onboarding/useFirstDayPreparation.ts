@@ -60,6 +60,7 @@ function firstDayPreparationDelay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+
 type RunAiClassificationBatch = (
   query: ReturnType<typeof toClassificationQueryForDay>,
   batchSize?: number,
@@ -170,7 +171,7 @@ export function useFirstDayPreparation({
           if (status.state === "error") return null;
           if (status.state === "not_installed" && !status.selectedModelId) return null;
           setProgress(status.progress ? Math.min(1, Math.max(0, status.progress.percent / 100)) : null);
-        } catch {
+        } catch (error) {
           // status is best-effort; keep waiting on the options ref
         }
         await firstDayPreparationDelay(FIRST_DAY_PREPARATION_DOWNLOAD_POLL_MS);
@@ -266,8 +267,15 @@ export function useFirstDayPreparation({
             ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
             : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
         }
+        // A rejected batch (e.g. a provider that is still coming up) counts as a
+        // failed batch instead of aborting the whole gate run.
         const summary = await firstDayPreparationRaceTimeout(
-          pendingBatch,
+          pendingBatch.catch((error): AiClassificationSummary => ({
+            status: "error",
+            selectedSegments: 0,
+            savedRecords: 0,
+            message: error instanceof Error ? error.message : "Classification failed.",
+          })),
           FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS,
           batchTimeoutSummary,
         );
@@ -337,7 +345,7 @@ export function useFirstDayPreparation({
               setPhase("downloading");
               try {
                 await ensureManagedLocalAiReady(classifyOptions.localProvider.modelId);
-              } catch {
+              } catch (error) {
                 // best-effort warmup; classification retries have their own path
               }
             }
@@ -352,7 +360,7 @@ export function useFirstDayPreparation({
             }
           }
         }
-      } catch {
+      } catch (error) {
         // Never trap the user on the loading screen; reveal with whatever we have.
       } finally {
         clearTimeout(safetyTimeout);
