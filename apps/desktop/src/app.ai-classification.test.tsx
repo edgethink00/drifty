@@ -696,7 +696,7 @@ describe("App AI classification controls", () => {
     expect(styles).toMatch(/\.classification-panel-view__category-row:has\(\.category-dot--entertainment\)\s*{[\s\S]*--classification-category-tone:\s*var\(--category-entertainment\);[\s\S]*\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-category-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__source-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-selected-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__activity-row\s*{[\s\S]*align-items:\s*center;/);
-  }, 10_000);
+  });
 
   it("auto-runs one 20-item AI classification batch for the logical day when the renderer is not focused", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
