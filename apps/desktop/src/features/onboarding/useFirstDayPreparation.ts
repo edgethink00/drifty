@@ -9,6 +9,7 @@ import {
   type ClassificationLevel,
 } from "../classification/aiClassificationService";
 import { getManagedLocalAiStatus } from "../settings/managedLocalAiClient";
+import { ensureManagedLocalAiReady } from "../classification/managedLocalAiChat";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
 import type { FirstDayPreparationPhase } from "./FirstDayPreparationScreen";
 
@@ -326,6 +327,19 @@ export function useFirstDayPreparation({
               setPhase("downloading");
               setProgress(null);
               classifyOptions = await waitForManagedModelOptions();
+            }
+            // Warm the managed runtime inside the gate: the model file being
+            // installed is not enough — llama-server (fetched on first start)
+            // must be up before classification can succeed. Failures fall
+            // through: the classify batches surface them and the reveal
+            // backstop still applies.
+            if (classifyOptions?.localProvider.provider === "managed_local" && !settled) {
+              setPhase("downloading");
+              try {
+                await ensureManagedLocalAiReady(classifyOptions.localProvider.modelId);
+              } catch {
+                // best-effort warmup; classification retries have their own path
+              }
             }
             if ((classifyOptions || canUseCloudAiClassification) && !settled) {
               setPhase("classifying");

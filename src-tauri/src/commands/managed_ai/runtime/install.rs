@@ -2,6 +2,7 @@ use std::{
     fs::{self, File},
     io::{Cursor, Read},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use flate2::read::GzDecoder;
@@ -13,6 +14,11 @@ use super::RUNTIME_FILE_NAME;
 
 const RUNTIME_RELEASE_DIR: &str = "llama-b9690";
 const RUNTIME_ARCHIVE_TIMEOUT_SECS: u64 = 120;
+
+// Concurrent managed_ai_start calls (gate classification, live classification,
+// connection tests) must not race the download/unpack: each install wipes the
+// shared staging dir, so two interleaved installs destroy each other's files.
+static RUNTIME_INSTALL_LOCK: Mutex<()> = Mutex::new(());
 
 struct RuntimeArchive {
     arch: &'static str,
@@ -37,6 +43,10 @@ pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiErro
     if let Some(env_path) = debug_env_runtime_path() {
         return Ok(env_path);
     }
+
+    let _install_guard = RUNTIME_INSTALL_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     let runtime_path = runtime_path(root);
     if runtime_path.is_file() {

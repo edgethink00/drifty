@@ -4,6 +4,7 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
+import { logicalTodayIsoDate } from "../../lib/formatting";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
 import {
   resolveFirstDayTargetDay,
@@ -203,10 +204,12 @@ describe("useFirstDayPreparation", () => {
 
   it("reveals once the flow chart's visible set is classified, even with other segments unclassified", async () => {
     // Two segments in distinct 3-minute buckets: each is its bucket's sole (winning) candidate,
-    // so the visible set is exactly {seg-1, seg-2}.
+    // so the visible set is exactly {seg-1, seg-2}. Dated on the gate's own logical
+    // today so the test does not rot when the calendar day changes.
+    const gateToday = logicalTodayIsoDate(0);
     const visibleSegments = [
-      { id: "seg-1", appName: "AppA", startedAt: "2026-07-04T09:00:00", endedAt: "2026-07-04T09:02:00" },
-      { id: "seg-2", appName: "AppB", startedAt: "2026-07-04T10:00:00", endedAt: "2026-07-04T10:02:00" },
+      { id: "seg-1", appName: "AppA", startedAt: `${gateToday}T09:00:00`, endedAt: `${gateToday}T09:02:00` },
+      { id: "seg-2", appName: "AppB", startedAt: `${gateToday}T10:00:00`, endedAt: `${gateToday}T10:02:00` },
     ];
     trackerMocks.getTimeline.mockResolvedValue(visibleSegments);
     // The whole day still has unclassified segments beyond the visible set...
