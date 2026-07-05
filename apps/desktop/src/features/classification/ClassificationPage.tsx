@@ -4,10 +4,9 @@ import {
   type ActivityCategory,
   type AppIconMap,
   type ClassificationOptions,
-  type ClassificationRuleDetailKind,
-  type ClassificationRuleTargetKind,
   type ProductivityLabel,
 } from "@drifty/domain";
+import type { ClassificationCorrectionDraft } from "./classificationCorrection";
 import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
@@ -72,17 +71,13 @@ type ClassificationPageProps = {
   readonly onTodayClassificationRange: () => void;
 };
 
-type ClassificationCorrectionDraft = {
-  readonly scope: "surface" | "detail";
-  readonly rowId: string | null;
-  readonly targetKind: ClassificationRuleTargetKind;
-  readonly targetValue: string;
-  readonly detailKind: ClassificationRuleDetailKind | null;
-  readonly detailValue: string | null;
-  readonly detailDisplayLabel: string | null;
-  readonly category: ActivityCategory;
-  readonly productivity: ProductivityLabel;
-};
+function ClassificationEditGlyph() {
+  return (
+    <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
+    </svg>
+  );
+}
 
 export function ClassificationPage({
   appIcons,
@@ -362,9 +357,7 @@ export function ClassificationPage({
                         data-active={String(classificationCorrectionDraft?.scope === "surface")}
                         onClick={onStartClassificationSurfaceCorrection}
                       >
-                        <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                          <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
-                        </svg>
+                        <ClassificationEditGlyph />
                         <span className="sr-only">Reclassify</span>
                       </button>
                     </div>
@@ -420,9 +413,7 @@ export function ClassificationPage({
                                 data-active={String(classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id)}
                                 onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
-                                <svg className="classification-correction__edit-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                  <path d="M10.5 2.5l3 3L6 13l-3.5.5.5-3.5z" />
-                                </svg>
+                                <ClassificationEditGlyph />
                                 <span className="sr-only">Reclassify</span>
                               </button>
                             </div>

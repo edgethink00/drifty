@@ -1,4 +1,5 @@
 import type { ActivitySegment } from "@drifty/domain";
+import { mergeActivitySegments } from "../../lib/activitySegments";
 import type { DashboardPeriod } from "./dashboardPeriods";
 
 export type DashboardSegmentRange = {
@@ -38,7 +39,7 @@ export function selectDashboardSegments(input: DashboardSegmentSelectionInput): 
       ?? selectCoveredSourceSegments(input.historySource, input.requiredHistoryRange, input.visibleRange)
       ?? [];
     const liveSegments = filterSegmentsByRange(input.selectedDaySegments, input.visibleRange);
-    return mergeDashboardSegments(rangeSegments, liveSegments);
+    return mergeActivitySegments(rangeSegments, liveSegments);
   }
 
   return filterSegmentsByRange(input.historySource?.segments ?? [], input.visibleRange);
@@ -68,37 +69,4 @@ function filterSegmentsByRange(segments: readonly ActivitySegment[], range: Dash
     const segmentEndMs = new Date(segment.endedAt).getTime();
     return segmentEndMs >= startMs && segmentStartMs <= endMs;
   });
-}
-
-function mergeDashboardSegments(baseSegments: readonly ActivitySegment[], liveSegments: readonly ActivitySegment[]): ActivitySegment[] {
-  if (liveSegments.length === 0) return [...baseSegments];
-
-  const segmentsById = new Map<string, ActivitySegment>();
-  for (const segment of baseSegments) {
-    segmentsById.set(segment.id, segment);
-  }
-  for (const segment of liveSegments) {
-    const existing = segmentsById.get(segment.id) ?? null;
-    segmentsById.set(segment.id, existing ? selectDashboardSegment(existing, segment) : segment);
-  }
-
-  return Array.from(segmentsById.values());
-}
-
-function selectDashboardSegment(existing: ActivitySegment, incoming: ActivitySegment): ActivitySegment {
-  const existingEndedAtMs = new Date(existing.endedAt).getTime();
-  const incomingEndedAtMs = new Date(incoming.endedAt).getTime();
-
-  if (Number.isFinite(existingEndedAtMs) && Number.isFinite(incomingEndedAtMs)) {
-    if (incomingEndedAtMs > existingEndedAtMs) return preserveClassification(incoming, existing);
-    if (incomingEndedAtMs < existingEndedAtMs) return existing;
-  }
-
-  if (existing.classification && !incoming.classification) return existing;
-  return incoming;
-}
-
-function preserveClassification(segment: ActivitySegment, fallbackSegment: ActivitySegment): ActivitySegment {
-  if (segment.classification || !fallbackSegment.classification) return segment;
-  return { ...segment, classification: fallbackSegment.classification };
 }
