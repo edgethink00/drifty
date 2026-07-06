@@ -223,7 +223,6 @@ const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
-const DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS = 1400;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
@@ -274,6 +273,9 @@ export default function App() {
   const [status, setStatus] = useState<TrackerStatus | null>(null);
   const hasTrackerStatus = status !== null;
   const [brandCaptureMotionKey, setBrandCaptureMotionKey] = useState(0);
+  const triggerBrandCaptureMotion = useCallback(() => {
+    setBrandCaptureMotionKey((currentKey) => currentKey + 1);
+  }, []);
   const brandCaptureEventAtRef = useRef<string | null>(null);
   const hasObservedBrandCaptureRef = useRef(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
@@ -334,7 +336,6 @@ export default function App() {
   const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
-  const [devLogoAnimationPreviewEnabled, setDevLogoAnimationPreviewEnabled] = useState(false);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
   const [forceBrowserHistoryUrlFallbackEnabled, setForceBrowserHistoryUrlFallbackEnabled] = useState(resolveInitialForceBrowserHistoryUrlFallbackEnabled);
@@ -2322,12 +2323,11 @@ export default function App() {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
     if (settingsSection === "dev") setSettingsSection("general");
-    if (devLogoAnimationPreviewEnabled) setDevLogoAnimationPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-  }, [devLogoAnimationPreviewEnabled, devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection]);
+  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -2338,17 +2338,6 @@ export default function App() {
       console.warn("Failed to sync Dev Mode menu state", message);
     });
   }, [devModeEnabled]);
-
-  useEffect(() => {
-    if (!isDevModeActive || !devLogoAnimationPreviewEnabled) return undefined;
-
-    setBrandCaptureMotionKey((currentKey) => currentKey + 1);
-    const intervalId = window.setInterval(() => {
-      setBrandCaptureMotionKey((currentKey) => currentKey + 1);
-    }, DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS);
-
-    return () => window.clearInterval(intervalId);
-  }, [devLogoAnimationPreviewEnabled, isDevModeActive]);
 
   useEffect(() => {
     const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
@@ -4897,9 +4886,19 @@ export default function App() {
         <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
         <div
           className="brand"
+          role="button"
+          tabIndex={0}
           aria-label="Drifty"
+          title="Drifty"
           data-capture-motion-key={brandCaptureMotionKey}
           data-capture-motion={brandCaptureMotionKey > 0 ? "capture-flip" : undefined}
+          onClick={triggerBrandCaptureMotion}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              triggerBrandCaptureMotion();
+            }
+          }}
         >
           <img key={brandCaptureMotionKey} className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
         </div>
@@ -5392,7 +5391,6 @@ export default function App() {
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
-                    logoAnimationPreviewEnabled={devLogoAnimationPreviewEnabled}
                     weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
                     watcherMode={watcherMode}
                     watcherPeekEnabled={watcherPeekEnabled}
@@ -5407,7 +5405,6 @@ export default function App() {
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
-                    onLogoAnimationPreviewChange={setDevLogoAnimationPreviewEnabled}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
                     onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
