@@ -70,15 +70,16 @@ describe("buildWeekCalendarEventLayout", () => {
     expect(layout.showsIdentityStrip).toBe(false);
   });
 
-  it("widens the micro/tiny minute thresholds as the axis compresses below baseline", () => {
-    // A 12-minute event sits above the 10-minute tiny cutoff at the baseline
-    // 56px/hr height, but at the compressed 42px/hr default (75%) the cutoff
-    // widens to ~13.3 minutes, so the same event now collapses to the fixed
-    // tiny height instead of overrunning its slot.
+  it("widens the micro/tiny minute thresholds for loose short blocks as the axis compresses", () => {
+    // A 12-minute non-grouped block sits above the 10-minute tiny cutoff at the
+    // baseline 56px/hr height, but at the compressed 42px/hr default (75%) the
+    // cutoff widens to ~13.3 minutes, so the same block now collapses to the
+    // fixed tiny height instead of overrunning its slot.
     const event = makeWeekCalendarEvent({
       activeDurationMinutes: 12,
       durationMinutes: 12,
       isShort: true,
+      isGroupedCluster: false,
     });
 
     const atBaseline = buildWeekCalendarEventLayout(event, 56);
@@ -89,16 +90,34 @@ describe("buildWeekCalendarEventLayout", () => {
     expect(atCompressed.eventHeight).toBe(12);
   });
 
-  it("pushes near-micro events to the micro strip once the axis compresses", () => {
+  it("pushes near-micro loose short blocks to the micro strip once the axis compresses", () => {
     // 3.5 active minutes is tiny (not micro) at baseline, but micro once the
     // 3-minute cutoff widens to ~4 minutes under the compressed default.
     const event = makeWeekCalendarEvent({
       activeDurationMinutes: 3.5,
       durationMinutes: 3.5,
       isShort: true,
+      isGroupedCluster: false,
     });
 
     expect(buildWeekCalendarEventLayout(event, 56).isMicroEvent).toBe(false);
     expect(buildWeekCalendarEventLayout(event, 42).isMicroEvent).toBe(true);
+  });
+
+  it("exempts grouped clusters from the axis-compression collapse so identity strips survive", () => {
+    // Grouped clusters carry the identity strip and get their own taller
+    // short-height floor, so the compression widening must not sweep them into
+    // the tiny bucket and hide their icons. A 12-minute cluster stays above the
+    // unscaled 10-minute cutoff at both the baseline and the compressed default.
+    const event = makeWeekCalendarEvent({
+      activeDurationMinutes: 12,
+      durationMinutes: 12,
+      isShort: true,
+      isGroupedCluster: true,
+    });
+
+    const atCompressed = buildWeekCalendarEventLayout(event, 42);
+    expect(atCompressed.isTinyEvent).toBe(false);
+    expect(atCompressed.showsIdentityStrip).toBe(true);
   });
 });
