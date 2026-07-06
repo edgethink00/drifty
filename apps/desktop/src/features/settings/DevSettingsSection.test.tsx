@@ -47,7 +47,6 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
     forceChromiumAxCaptureEnabled: false,
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
-    logoAnimationPreviewEnabled: false,
     weekDashboardAxisScalePercent,
     watcherMode: "periodic" as const,
     watcherPeekEnabled: false,
@@ -62,7 +61,6 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
     onForceChromiumAxCaptureChange: vi.fn(),
     onForceChromiumAxExtremeNudgeChange: vi.fn(),
     onForceFrontmostFallbackCaptureChange: vi.fn(),
-    onLogoAnimationPreviewChange: vi.fn(),
     onOpenDebugLogs: vi.fn(),
     onOpenOnboardingV22Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
@@ -133,7 +131,6 @@ describe("DevSettingsSection", () => {
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
-      logoAnimationPreviewEnabled: false,
       weekDashboardAxisScalePercent: 80,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
@@ -146,7 +143,6 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxCaptureChange: vi.fn(),
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
-      onLogoAnimationPreviewChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
@@ -168,14 +164,6 @@ describe("DevSettingsSection", () => {
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
   });
 
-  it("calls the logo animation preview handler when toggled", () => {
-    const props = renderProductionDevSettings();
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle logo animation preview" }));
-
-    expect(props.onLogoAnimationPreviewChange).toHaveBeenCalledWith(true);
-  });
-
   it("does not expose the isolated onboarding v2.1 preview", () => {
     const props = {
       dashboardAiUnavailablePreview: null,
@@ -185,7 +173,6 @@ describe("DevSettingsSection", () => {
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
-      logoAnimationPreviewEnabled: false,
       weekDashboardAxisScalePercent: 80,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
@@ -198,7 +185,6 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxCaptureChange: vi.fn(),
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
-      onLogoAnimationPreviewChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
