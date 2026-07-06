@@ -35,7 +35,8 @@ type DevSettingsSectionProps = {
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
-  readonly onOpenTeamsBeta: () => void;
+  readonly teamsBetaEnabled: boolean;
+  readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
@@ -75,7 +76,8 @@ export function DevSettingsSection({
   onForceFrontmostFallbackCaptureChange,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
-  onOpenTeamsBeta,
+  teamsBetaEnabled,
+  onTeamsBetaChange,
   onPreviewDashboardAiUnavailableCase,
   onPreviewDriftAlarm,
   onReplayDashboardDemo,
@@ -177,7 +179,8 @@ export function DevSettingsSection({
           onEndOfDayReviewPreview={onEndOfDayReviewPreview}
           onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
           onOpenReplayOnboarding={onOpenReplayOnboarding}
-          onOpenTeamsBeta={onOpenTeamsBeta}
+          teamsBetaEnabled={teamsBetaEnabled}
+          onTeamsBetaChange={onTeamsBetaChange}
           onPreviewDriftAlarm={onPreviewDriftAlarm}
           onShowWatcherPeek={onShowWatcherPeek}
           onWatcherModeChange={onWatcherModeChange}
