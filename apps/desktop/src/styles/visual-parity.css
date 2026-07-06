@@ -323,12 +323,14 @@
     text-align: center;
   }
 
+  /* Collapsed rail shows the section icon (centered) instead of the first-letter glyph. */
   .sidebar--collapsed .settings-nav-item::before {
-    content: attr(data-rail-label);
-    font-family: var(--font-sans);
-    font-size: 0.72rem;
-    font-weight: 650;
-    line-height: 1;
+    content: none;
+  }
+
+  .sidebar--collapsed .settings-nav-item__icon svg {
+    width: 17px;
+    height: 17px;
   }
 
   .sidebar--collapsed .settings-nav-item__label {
