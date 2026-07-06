@@ -28,8 +28,17 @@ export function buildWeekCalendarEventLayout(
   // the minute thresholds by the same compression ratio: more short blocks fall
   // into the smaller fixed heights, easing the crowding. At the baseline height
   // the ratio is 1, so this is a no-op at 100%.
+  //
+  // Grouped clusters are exempt: they carry the identity strip, get their own
+  // taller short-height floor below, and are summaries rather than the loose
+  // short blocks this collapse targets. Scaling their threshold would sweep
+  // clusters up to ~13 active minutes into the tiny bucket at the default 75%
+  // axis and hide their identity icons entirely, so keep their thresholds at
+  // the unscaled baseline (matching pre-compression behaviour).
   const axisCompressionRatio =
-    calendarHourHeight > 0 ? WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX / calendarHourHeight : 1;
+    event.isGroupedCluster || calendarHourHeight <= 0
+      ? 1
+      : WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX / calendarHourHeight;
   const microThresholdMinutes = MICRO_EVENT_MAX_ACTIVE_MINUTES * axisCompressionRatio;
   const tinyThresholdMinutes = TINY_EVENT_MAX_ACTIVE_MINUTES * axisCompressionRatio;
   const rawEventHeight = (event.durationMinutes / 60) * calendarHourHeight;
