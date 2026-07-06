@@ -22,6 +22,8 @@ export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassi
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 
+export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
+
 export const FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY = "drifty.dev.forceChromiumAxCapture";
 
 export const FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY = "drifty.dev.forceFrontmostFallbackCapture";
@@ -286,6 +288,11 @@ export function resolveInitialAiClassificationVisibility(): boolean {
 export function resolveInitialDevModeEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialTeamsBetaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(TEAMS_BETA_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialForceChromiumAxCaptureEnabled(): boolean {

@@ -64,7 +64,8 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
     onOpenDebugLogs: vi.fn(),
     onOpenOnboardingV22Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
-    onOpenTeamsBeta: vi.fn(),
+    teamsBetaEnabled: false,
+    onTeamsBetaChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onPreviewDriftAlarm: vi.fn(),
     onReplayDashboardDemo: vi.fn(),
@@ -100,14 +101,14 @@ describe("DevSettingsSection", () => {
     expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
   });
 
-  it("opens Teams beta from the Dev preview block when the internal flag is enabled", () => {
+  it("toggles Teams beta from the Dev preview block when the internal flag is enabled", () => {
     featureSwitches.teamsBetaEnabled = true;
 
     const props = renderProductionDevSettings();
 
     expect(screen.getByText("Teams beta")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Open Teams beta$/ }));
-    expect(props.onOpenTeamsBeta).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
+    expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
   it("does not leave an empty Dev preview block in production diagnostics", () => {
@@ -146,7 +147,8 @@ describe("DevSettingsSection", () => {
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
-      onOpenTeamsBeta: vi.fn(),
+      teamsBetaEnabled: false,
+      onTeamsBetaChange: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onResetWeekDashboardAxisScalePercent: vi.fn(),
@@ -188,7 +190,8 @@ describe("DevSettingsSection", () => {
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
-      onOpenTeamsBeta: vi.fn(),
+      teamsBetaEnabled: false,
+      onTeamsBetaChange: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onResetWeekDashboardAxisScalePercent: vi.fn(),
