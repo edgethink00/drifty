@@ -13,7 +13,6 @@ import {
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
   onboardingV22PreviewEnabled: false,
-  projectClassificationPreviewEnabled: false,
   teamsBetaEnabled: false,
 }));
 
@@ -27,9 +26,6 @@ vi.mock("../../appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
   get ONBOARDING_V2_2_PREVIEW_ENABLED() {
     return featureSwitches.onboardingV22PreviewEnabled;
-  },
-  get PROJECT_CLASSIFICATION_PREVIEW_ENABLED() {
-    return featureSwitches.projectClassificationPreviewEnabled;
   },
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
   get TEAMS_BETA_ENABLED() {
@@ -98,7 +94,6 @@ describe("DevSettingsSection", () => {
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
     featureSwitches.onboardingV22PreviewEnabled = false;
-    featureSwitches.projectClassificationPreviewEnabled = false;
     featureSwitches.teamsBetaEnabled = false;
   });
 
@@ -276,17 +271,15 @@ describe("DevSettingsSection", () => {
     expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(90);
   });
 
-  it("hides the project classification controls when the preview switch is off", () => {
+  it("always shows the project classification toggle in the Dev section", () => {
     renderProductionDevSettings();
-    expect(screen.queryByRole("switch", { name: "Toggle project classification preview" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Project classification (preview)" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Project classification (preview)" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Toggle project classification preview" })).toBeTruthy();
   });
 
-  it("toggles the project classification preview when enabled", () => {
-    featureSwitches.projectClassificationPreviewEnabled = true;
+  it("toggles the project classification preview when clicked", () => {
     const props = renderProductionDevSettings();
 
-    expect(screen.getByRole("heading", { name: "Project classification (preview)" })).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle project classification preview" }));
 
     expect(props.onProjectClassificationEnabledChange).toHaveBeenCalledWith(true);

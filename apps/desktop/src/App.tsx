@@ -67,7 +67,7 @@ import {
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, PROJECT_CLASSIFICATION_PREVIEW_ENABLED, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
@@ -344,10 +344,11 @@ export default function App() {
   const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled && teamsBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
-  // Project classification is a developer preview: it only exists in non-production
-  // builds (PROJECT_CLASSIFICATION_PREVIEW_ENABLED) and can be toggled off in Dev.
+  // Project classification is a Dev-mode preview control (opt-in, off by default):
+  // the Dev-settings toggle is the sole gate, so it is available in any build —
+  // including public/prerelease binaries — only after the user turns it on.
   const [devProjectClassificationEnabled, setDevProjectClassificationEnabled] = useState(resolveInitialProjectClassificationEnabled);
-  const projectClassificationFeatureEnabled = PROJECT_CLASSIFICATION_PREVIEW_ENABLED && devProjectClassificationEnabled;
+  const projectClassificationFeatureEnabled = devProjectClassificationEnabled;
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
   const [forceBrowserHistoryUrlFallbackEnabled, setForceBrowserHistoryUrlFallbackEnabled] = useState(resolveInitialForceBrowserHistoryUrlFallbackEnabled);

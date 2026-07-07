@@ -291,12 +291,12 @@ export function resolveInitialDevModeEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
 }
 
-// Defaults to ON in dev builds (only non-production builds ever read this — see
-// PROJECT_CLASSIFICATION_PREVIEW_ENABLED) so developers keep the feature visible
-// until they explicitly toggle it off.
+// Off by default (opt-in): the Dev-settings toggle is the sole gate for the
+// project-classification preview, so the Projects/Intelligence surfaces stay hidden
+// in every build until a developer explicitly enables them in Dev mode.
 export function resolveInitialProjectClassificationEnabled(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY) !== "0";
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialTeamsBetaEnabled(): boolean {
