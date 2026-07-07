@@ -1,8 +1,11 @@
+import gc
 import os
 import sqlite3
 import sys
 import time
 import unittest
+import warnings
+from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -35,6 +38,18 @@ class TrackerDatabaseTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
+
+    def test_database_context_closes_connection_without_resource_warning(self) -> None:
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always", ResourceWarning)
+            with self.database.connect() as conn:
+                conn.execute("SELECT 1").fetchone()
+
+            del conn
+            gc.collect()
+
+        resource_warnings = [str(warning.message) for warning in captured if warning.category is ResourceWarning]
+        self.assertEqual([], resource_warnings)
 
     def _insert_activity_segment(
         self,
@@ -1614,7 +1629,7 @@ class TrackerDatabaseTests(unittest.TestCase):
 
     def test_surface_classification_rule_rows_serialize_with_surface_match_scope(self) -> None:
         legacy_path = Path(self.tempdir.name) / "legacy-rules.sqlite3"
-        with sqlite3.connect(legacy_path) as conn:
+        with closing(sqlite3.connect(legacy_path)) as conn:
             conn.execute(
                 """
                 CREATE TABLE classification_rules (
@@ -1648,6 +1663,7 @@ class TrackerDatabaseTests(unittest.TestCase):
                 """,
                 ("legacy-rule", "2026-04-06T09:00:00+00:00", "2026-04-06T09:00:00+00:00"),
             )
+            conn.commit()
         legacy_database = TrackerDatabase(legacy_path)
         serialized = legacy_database.get_classification_rules()[0]
 
