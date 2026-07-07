@@ -118,6 +118,30 @@
   padding: 0.9rem;
 }
 
+.profile-embed-card__variant {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.profile-embed-card__variant-label {
+  opacity: 0.85;
+}
+
+.profile-embed-card__variant-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.profile-embed-card__variant-row .settings-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-embed-card--link {
+  margin-top: var(--space-3);
+}
+
 .profile-embed-card__code {
   font-family: var(--font-mono, ui-monospace, Menlo, monospace);
   font-size: 0.76rem;

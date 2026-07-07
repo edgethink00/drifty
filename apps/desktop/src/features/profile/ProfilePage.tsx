@@ -85,24 +85,30 @@ export function ProfilePage({
     }
   };
 
-  const badgeEmbedPreview = (alt: string) => (
-    <img src={previewSrc} alt={alt} height={20} style={{ display: "block" }} />
-  );
-  type EmbedRow = {
-    key: string;
-    label: string;
-    snippet: string;
-    preview?: ReactNode;
-    /** Overrides the copy action + accessible name (used by the profile-link card). */
-    onCopy?: () => void;
-    copyAriaLabel?: string;
-  };
-  const embedRows: EmbedRow[] = snippets
+  // Embeds are grouped by what they LOOK like (badge vs card), with the paste formats
+  // listed under each visual — the badge is one artifact whether it lands in a README
+  // or a website, so it gets one preview and two code variants.
+  type EmbedVariant = { key: string; label: string; snippet: string };
+  type EmbedGroup = { key: string; title: string; preview: ReactNode; variants: EmbedVariant[] };
+  const embedGroups: EmbedGroup[] = snippets
     ? [
-        { key: "markdown", label: "GitHub README (Markdown)", snippet: snippets.markdown, preview: badgeEmbedPreview("README badge preview") },
-        { key: "iframe", label: "Website card (iframe)", snippet: snippets.iframe, preview: <FocusCardEmbedPreview displayName={displayName} focusSeconds={focusSeconds7d} /> },
-        { key: "html", label: "Website badge (HTML)", snippet: snippets.html, preview: badgeEmbedPreview("Website badge preview") },
-        { key: "link", label: "Profile link", snippet: snippets.profileUrl, onCopy: onCopyProfileLink, copyAriaLabel: "Copy profile link" },
+        {
+          key: "badge",
+          title: "Focus badge",
+          preview: <img src={previewSrc} alt="Focus badge preview" height={20} style={{ display: "block" }} />,
+          variants: [
+            { key: "markdown", label: "GitHub README · Markdown", snippet: snippets.markdown },
+            { key: "html", label: "Website · HTML", snippet: snippets.html },
+          ],
+        },
+        {
+          key: "card",
+          title: "Focus card",
+          preview: <FocusCardEmbedPreview displayName={displayName} focusSeconds={focusSeconds7d} />,
+          variants: [
+            { key: "iframe", label: "Website · iframe", snippet: snippets.iframe },
+          ],
+        },
       ]
     : [];
 
@@ -199,36 +205,48 @@ export function ProfilePage({
               </div>
             </div>
             {snippets ? (
-              <div className="profile-embed-grid">
-                {embedRows.map((row) => (
-                  <div key={row.key} className="profile-embed-card">
-                    <div className="profile-embed-card__head">
-                      <span className="label-mono">{row.label}</span>
-                      <button
-                        type="button"
-                        className="settings-btn"
-                        aria-label={row.copyAriaLabel}
-                        onClick={() => {
-                          if (row.onCopy) {
-                            row.onCopy();
-                            return;
-                          }
-                          void copy(row.key, row.snippet);
-                        }}
-                      >
-                        {copiedKey === row.key ? "Copied" : "Copy"}
-                      </button>
+              <>
+                <div className="profile-embed-grid">
+                  {embedGroups.map((group) => (
+                    <div key={group.key} className="profile-embed-card">
+                      <div className="profile-embed-card__head">
+                        <span className="label-mono">{group.title}</span>
+                      </div>
+                      <div className="profile-embed-card__preview">{group.preview}</div>
+                      {group.variants.map((variant) => (
+                        <div key={variant.key} className="profile-embed-card__variant">
+                          <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
+                          <div className="profile-embed-card__variant-row">
+                            <input
+                              className="settings-input profile-embed-card__code"
+                              readOnly
+                              value={variant.snippet}
+                              onFocus={(event) => event.currentTarget.select()}
+                            />
+                            <button type="button" className="settings-btn" onClick={() => void copy(variant.key, variant.snippet)}>
+                              {copiedKey === variant.key ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    {row.preview ? <div className="profile-embed-card__preview">{row.preview}</div> : null}
+                  ))}
+                </div>
+                <div className="profile-embed-card profile-embed-card--link">
+                  <span className="label-mono">Profile link</span>
+                  <div className="profile-embed-card__variant-row">
                     <input
                       className="settings-input profile-embed-card__code"
                       readOnly
-                      value={row.snippet}
+                      value={snippets.profileUrl}
                       onFocus={(event) => event.currentTarget.select()}
                     />
+                    <button type="button" className="settings-btn" aria-label="Copy profile link" onClick={onCopyProfileLink}>
+                      Copy
+                    </button>
                   </div>
-                ))}
-              </div>
+                </div>
+              </>
             ) : (
               <div>
                 <p className="capture-recency">Save your profile once to mint your public link, then your embeds appear here.</p>
