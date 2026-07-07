@@ -193,10 +193,7 @@ export function AccountMenu({
     >
       <div className="account-popover__account">
         {isSignedIn ? (
-          <>
-            <div className="account-popover__name">{displayName}</div>
-            <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
-          </>
+          <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
         ) : (
           <div className="account-popover__name">Not signed in</div>
         )}
