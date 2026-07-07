@@ -40,6 +40,7 @@ import {
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
+import { useFocusCard } from "./features/share/useFocusCard";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
@@ -827,6 +828,11 @@ export default function App() {
     startOfDayMinutes,
     user,
     onAuthRequired: requestLeaderboardAuth,
+  });
+  const focusCard = useFocusCard({
+    windowEndDay: leaderboardWindowEndDay,
+    startOfDayMinutes,
+    includeAiClassifications: showAiClassificationImpact,
   });
   const aiClassificationProviderKey = localAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
@@ -5750,6 +5756,7 @@ export default function App() {
         isEmbedOpen={isEmbedOpen}
         embedPublicId={profile?.public_id ?? null}
         embedFocusSeconds={embedFocusSeconds}
+        focusCard={focusCard}
         onCloseEditor={closeProfileEditor}
         onCloseSelectedProfile={closeSelectedProfile}
         onCloseEmbed={closeEmbed}
