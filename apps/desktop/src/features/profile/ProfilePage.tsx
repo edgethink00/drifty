@@ -88,17 +88,26 @@ export function ProfilePage({
   const badgeEmbedPreview = (alt: string) => (
     <img src={previewSrc} alt={alt} height={20} style={{ display: "block" }} />
   );
-  const embedRows: Array<{ key: string; label: string; snippet: string; preview?: ReactNode }> = snippets
+  type EmbedRow = {
+    key: string;
+    label: string;
+    snippet: string;
+    preview?: ReactNode;
+    /** Overrides the copy action + accessible name (used by the profile-link card). */
+    onCopy?: () => void;
+    copyAriaLabel?: string;
+  };
+  const embedRows: EmbedRow[] = snippets
     ? [
         { key: "markdown", label: "GitHub README (Markdown)", snippet: snippets.markdown, preview: badgeEmbedPreview("README badge preview") },
         { key: "iframe", label: "Website card (iframe)", snippet: snippets.iframe, preview: <FocusCardEmbedPreview displayName={displayName} focusSeconds={focusSeconds7d} /> },
         { key: "html", label: "Website badge (HTML)", snippet: snippets.html, preview: badgeEmbedPreview("Website badge preview") },
-        { key: "link", label: "Profile link", snippet: snippets.profileUrl },
+        { key: "link", label: "Profile link", snippet: snippets.profileUrl, onCopy: onCopyProfileLink, copyAriaLabel: "Copy profile link" },
       ]
     : [];
 
   return (
-    <div className="page">
+    <div className="page profile-page">
       <div className="pg-head">
         <div>
           <h1>Your public profile</h1>
@@ -120,24 +129,33 @@ export function ProfilePage({
         </section>
       ) : (
         <div className="leaderboard-panel__stack">
-          {/* Identity */}
+          {/* Identity + leaderboard status */}
           <section className="leaderboard-profile-block" aria-label="Your public identity">
-            <section className="leaderboard-hero" aria-label="Profile identity">
-              <div className="leaderboard-hero__identity">
-                <ProfileAvatar className="leaderboard-hero__avatar" name={displayName} src={avatarUrl || null} />
-                <div className="leaderboard-hero__main">
-                  <div className="leaderboard-hero__name-row">
-                    <h3>{displayName}</h3>
-                    <button type="button" className="settings-btn" onClick={onEditProfile}>Edit profile</button>
-                  </div>
-                  {trimmedBio ? <p className="leaderboard-profile-bio">{trimmedBio}</p> : <p className="leaderboard-profile-bio">Add a short bio so your public card feels complete.</p>}
-                  <ProfileSocialLinks profile={{ website_url: websiteUrl, github_url: githubUrl, linkedin_url: linkedinUrl }} />
+            <div className="profile-identity__main">
+              <ProfileAvatar className="leaderboard-hero__avatar" name={displayName} src={avatarUrl || null} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="profile-identity__name-row">
+                  <h3>{displayName}</h3>
+                  <button type="button" className="ghost-button" onClick={onEditProfile}>Edit profile</button>
                 </div>
+                <p className="profile-identity__bio">{trimmedBio || "Add a short bio so your public card feels complete."}</p>
+                <ProfileSocialLinks profile={{ website_url: websiteUrl, github_url: githubUrl, linkedin_url: linkedinUrl }} />
               </div>
-            </section>
+            </div>
+            <div className="profile-identity__board" aria-label="Leaderboard participation">
+              <span className="label-mono">Leaderboard</span>
+              <span className="profile-identity__board-status">
+                {isLeaderboardOptedIn
+                  ? leaderboardRank !== null
+                    ? `On the board · #${leaderboardRank}`
+                    : "On the board"
+                  : "Not on the board — joining is separate from your focus card."}
+              </span>
+              <button type="button" className="ghost-button" onClick={onOpenLeaderboard}>Open leaderboard</button>
+            </div>
           </section>
 
-          {/* Public focus card */}
+          {/* Public focus card control */}
           <section className="leaderboard-profile-block" aria-label="Public focus card">
             <div className="leaderboard-section-kicker">
               <div>
@@ -146,10 +164,12 @@ export function ProfilePage({
               </div>
               <span className="leaderboard-privacy-badge">Aggregates only</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "4px 0 0" }}>
-              <img src={previewSrc} alt="Drifty focus badge preview" height={20} style={{ display: "block" }} />
-              <div style={{ flex: 1, minWidth: 220 }}>
-                <p className="capture-recency" style={{ margin: 0 }}>
+            <div className="profile-card-control__row">
+              <span className="profile-card-control__badge">
+                <img src={previewSrc} alt="Drifty focus badge preview" height={20} style={{ display: "block" }} />
+              </span>
+              <div className="profile-card-control__copy">
+                <p className="capture-recency">
                   {card.enabled === true
                     ? "On — anyone with your link can see your weekly focus, drift/neutral split, and daily focus."
                     : card.enabled === null
@@ -179,32 +199,35 @@ export function ProfilePage({
               </div>
             </div>
             {snippets ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="profile-embed-grid">
                 {embedRows.map((row) => (
-                  <label key={row.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span className="label-mono">{row.label}</span>
-                    {row.preview ? (
-                      <div style={{ padding: "12px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--surface-strong, #f1f1ec) 55%, transparent)", border: "1px dashed color-mix(in srgb, var(--line, #d9d9d2) 80%, transparent)", width: "fit-content", maxWidth: "100%" }}>
-                        {row.preview}
-                      </div>
-                    ) : null}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input
-                        className="settings-input"
-                        style={{ flex: 1, fontFamily: "monospace", fontSize: "0.8rem" }}
-                        readOnly
-                        value={row.snippet}
-                        onFocus={(event) => event.currentTarget.select()}
-                      />
-                      <button type="button" className="settings-btn" onClick={() => void copy(row.key, row.snippet)}>
+                  <div key={row.key} className="profile-embed-card">
+                    <div className="profile-embed-card__head">
+                      <span className="label-mono">{row.label}</span>
+                      <button
+                        type="button"
+                        className="settings-btn"
+                        aria-label={row.copyAriaLabel}
+                        onClick={() => {
+                          if (row.onCopy) {
+                            row.onCopy();
+                            return;
+                          }
+                          void copy(row.key, row.snippet);
+                        }}
+                      >
                         {copiedKey === row.key ? "Copied" : "Copy"}
                       </button>
                     </div>
-                  </label>
+                    {row.preview ? <div className="profile-embed-card__preview">{row.preview}</div> : null}
+                    <input
+                      className="settings-input profile-embed-card__code"
+                      readOnly
+                      value={row.snippet}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                  </div>
                 ))}
-                <div>
-                  <button type="button" className="ghost-button" onClick={onCopyProfileLink}>Copy profile link</button>
-                </div>
               </div>
             ) : (
               <div>
@@ -212,23 +235,6 @@ export function ProfilePage({
                 <button type="button" className="settings-btn" onClick={onEditProfile}>Set up profile</button>
               </div>
             )}
-          </section>
-
-          {/* Leaderboard summary */}
-          <section className="leaderboard-profile-block" aria-label="Leaderboard participation">
-            <div className="leaderboard-section-kicker">
-              <div>
-                <span className="label-mono">Leaderboard</span>
-                <p>
-                  {isLeaderboardOptedIn
-                    ? leaderboardRank !== null
-                      ? `On the board · #${leaderboardRank}`
-                      : "On the board"
-                    : "Not on the board — joining is separate from your focus card."}
-                </p>
-              </div>
-              <button type="button" className="ghost-button" onClick={onOpenLeaderboard}>Open leaderboard</button>
-            </div>
           </section>
 
           {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
@@ -249,16 +255,16 @@ function FocusCardEmbedPreview({ displayName, focusSeconds }: { displayName: str
   const name = displayName.trim() || "drifty";
   const isLive = focusSeconds > 0;
   return (
-    <div aria-label="Website card preview" style={{ width: 340, maxWidth: "100%", border: "1px solid var(--line, #e2e2dc)", borderRadius: 14, padding: "14px 16px", background: "var(--surface, #fff)", display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 1px 2px rgba(0,0,0,.04)" }}>
+    <div aria-label="Website card preview" style={{ width: 320, maxWidth: "100%", border: "1px solid var(--line, #e2e2dc)", borderRadius: 14, padding: "13px 15px", background: "var(--surface, #fff)", display: "flex", flexDirection: "column", gap: 9, boxShadow: "0 1px 2px rgba(0,0,0,.05)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--surface-strong, #f2f2ee)", border: "1px solid var(--line, #e2e2dc)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#1c7e3c" }}>
-          {(name.charAt(0) || "D").toUpperCase()}
+        <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--surface-strong, #f2f2ee)", border: "1px solid var(--line, #e2e2dc)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#1c7e3c" }}>
+        {(name.charAt(0) || "D").toUpperCase()}
         </span>
         <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</strong>
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <span className="label-mono">Focus · this week</span>
-        <span style={{ fontSize: "1.35rem", fontWeight: 800, letterSpacing: "-0.02em", color: "#1c7e3c", lineHeight: 1 }}>
+        <span style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "-0.02em", color: "#1c7e3c", lineHeight: 1 }}>
           {isLive ? formatFocusDuration(focusSeconds) : "—"}
         </span>
       </div>
