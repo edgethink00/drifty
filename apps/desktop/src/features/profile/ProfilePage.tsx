@@ -9,6 +9,7 @@ import { ProfileSocialLinks, copyTextToClipboard } from "./ProfileModals";
 import { renderFocusBadgeSvg, formatFocusDuration, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets, functionsBaseFromSupabaseUrl } from "../share/embedSnippets";
 import type { FocusCardControls } from "../share/useFocusCard";
+import type { DailyProductivityPoint } from "../share/dailyProductivity";
 
 export type ProfilePageProps = {
   isSupabaseEnabled: boolean;
@@ -22,6 +23,8 @@ export type ProfilePageProps = {
   publicId: string | null;
   /** Local rolling 7-day focus, for the badge preview (works without any cloud state). */
   focusSeconds7d: number;
+  /** Local 30-day focus/drift series for the chart; null while loading. */
+  dailyProductivity: readonly DailyProductivityPoint[] | null;
   card: FocusCardControls;
   isLeaderboardOptedIn: boolean;
   leaderboardRank: number | null;
@@ -45,6 +48,7 @@ export function ProfilePage({
   linkedinUrl,
   publicId,
   focusSeconds7d,
+  dailyProductivity,
   card,
   isLeaderboardOptedIn,
   leaderboardRank,
@@ -65,6 +69,24 @@ export function ProfilePage({
 
   const trimmedBio = bio.trim();
   const cardLocked = card.enabled !== true;
+  const chartStats = (() => {
+    if (!dailyProductivity || dailyProductivity.length === 0) return null;
+    let focusTotal = 0;
+    let driftTotal = 0;
+    let best: DailyProductivityPoint = dailyProductivity[0];
+    for (const point of dailyProductivity) {
+      focusTotal += point.focus;
+      driftTotal += point.drift;
+      if (point.focus > best.focus) best = point;
+    }
+    const classified = focusTotal + driftTotal;
+    return {
+      focusTotal,
+      driftTotal,
+      sharePct: classified > 0 ? Math.round((focusTotal / classified) * 100) : 0,
+      bestDayLabel: best.focus > 0 ? `${best.day.slice(5)} · ${formatFocusDuration(best.focus)}` : "—",
+    };
+  })();
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "";
   const functionsBase = supabaseUrl ? functionsBaseFromSupabaseUrl(supabaseUrl) : "";
   const snippets = publicId ? buildEmbedSnippets(publicId, functionsBase) : null;
@@ -179,25 +201,23 @@ export function ProfilePage({
           </section>
 
           {/* Public focus card control */}
-          <section className="leaderboard-profile-block" aria-label="Public focus card">
-            <div className="leaderboard-section-kicker">
-              <div>
-                <span className="label-mono">Public focus card</span>
-                <p>One switch controls everything below. Off means your card and badges show nothing.</p>
-              </div>
-              <span className="leaderboard-privacy-badge">Aggregates only</span>
-            </div>
+          <section className="leaderboard-profile-block profile-card-control" aria-label="Public focus card">
             <div className="profile-card-control__row">
+              <span className="label-mono">Public focus card</span>
+              <span className={`profile-card-control__state${card.enabled === true ? " profile-card-control__state--on" : ""}`}>
+                {card.enabled === true ? "On" : card.enabled === null ? "…" : "Off"}
+              </span>
               <div className="profile-card-control__copy">
                 <p className="capture-recency">
                   {card.enabled === true
-                    ? "On — anyone with your link can see your weekly focus, drift/neutral split, and daily focus."
+                    ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus."
                     : card.enabled === null
                       ? "Checking…"
-                      : "Off — turn on to share your focus card publicly."}
+                      : "One switch controls everything below — off means your card and badges show nothing."}
                 </p>
                 {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
               </div>
+              <span className="leaderboard-privacy-badge">Aggregates only</span>
               {card.enabled === true ? (
                 <button type="button" className="ghost-button" disabled={card.busy} onClick={() => void card.disable()}>
                   {card.busy ? "Saving…" : "Make private"}
@@ -208,6 +228,27 @@ export function ProfilePage({
                 </button>
               )}
             </div>
+          </section>
+
+          {/* Last 30 days — local focus/drift chart */}
+          <section className="leaderboard-profile-block" aria-label="Last 30 days focus and drift">
+            <div className="profile-chart__head">
+              <span className="label-mono">Last 30 days · focus vs drift</span>
+              {chartStats ? (
+                <div className="profile-chart__stats">
+                  <span><i className="profile-chart__dot profile-chart__dot--focus" />focus <strong>{formatFocusDuration(chartStats.focusTotal)}</strong></span>
+                  <span><i className="profile-chart__dot profile-chart__dot--drift" />drift <strong>{formatFocusDuration(chartStats.driftTotal)}</strong></span>
+                  <span>share <strong>{chartStats.sharePct}%</strong></span>
+                  <span>best <strong>{chartStats.bestDayLabel}</strong></span>
+                </div>
+              ) : null}
+            </div>
+            {dailyProductivity && dailyProductivity.length > 0 ? (
+              <FocusDriftChart series={dailyProductivity} />
+            ) : (
+              <p className="capture-recency">Loading local history…</p>
+            )}
+            <p className="capture-recency profile-chart__note">Computed locally. Only daily focus is published when your card is on — drift stays on this device.</p>
           </section>
 
           {/* Embeds */}
@@ -293,6 +334,46 @@ export function ProfilePage({
       )}
 
       {shareMessage ? <div className="leaderboard-share-toast" role="status">{shareMessage}</div> : null}
+    </div>
+  );
+}
+
+// Stacked per-day bars: focus (green) with drift (red) on top. Pure SVG, local data only.
+function FocusDriftChart({ series }: { series: readonly DailyProductivityPoint[] }) {
+  const H = 96;
+  const n = series.length;
+  const max = Math.max(...series.map((point) => point.focus + point.drift), 1);
+  const gap = n > 14 ? 2.4 : 5;
+  const barW = (1000 - gap * (n - 1)) / n;
+
+  return (
+    <div className="profile-chart" role="img" aria-label={`Daily focus and drift, last ${n} days`}>
+      <svg viewBox={`0 0 1000 ${H + 2}`} preserveAspectRatio="none" className="profile-chart__svg">
+        {series.map((point, index) => {
+          const x = index * (barW + gap);
+          const focusH = (point.focus / max) * H;
+          const driftH = (point.drift / max) * H;
+          const isEmpty = point.focus + point.drift === 0;
+          return (
+            <g key={point.day}>
+              <title>{`${point.day} · focus ${formatFocusDuration(point.focus)} · drift ${formatFocusDuration(point.drift)}`}</title>
+              {isEmpty ? (
+                <rect x={x} y={H - 2} width={barW} height={2} rx={1} fill="#d6d8cd" />
+              ) : (
+                <>
+                  <rect x={x} y={H - focusH} width={barW} height={Math.max(focusH, point.focus > 0 ? 2 : 0)} rx={1.5} fill="#2e9e4f" />
+                  <rect x={x} y={H - focusH - driftH} width={barW} height={Math.max(driftH, point.drift > 0 ? 2 : 0)} rx={1.5} fill="#dc5a4e" opacity={0.9} />
+                </>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="profile-chart__axis">
+        <span>{series[0]?.day.slice(5)}</span>
+        <span>{series[Math.floor(n / 2)]?.day.slice(5)}</span>
+        <span>{series[n - 1]?.day.slice(5)}</span>
+      </div>
     </div>
   );
 }

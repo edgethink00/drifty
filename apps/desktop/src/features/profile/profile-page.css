@@ -1,7 +1,17 @@
 /* Profile tab — public presence hub. Leans on the shared tokens (leaderboard.css palette). */
 
 .profile-page .leaderboard-panel__stack {
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* Denser blocks on this page than the leaderboard defaults. */
+.profile-page .leaderboard-profile-block {
+  gap: var(--space-2);
+}
+
+.profile-page .profile-identity__board,
+.profile-page .profile-identity__link {
+  padding-top: 0.55rem;
 }
 
 /* Identity card ------------------------------------------------------------- */
@@ -55,11 +65,30 @@
 }
 
 /* Focus-card control -------------------------------------------------------- */
+.profile-card-control {
+  padding-block: var(--space-2);
+}
+
 .profile-card-control__row {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+.profile-card-control__state {
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.6rem;
+  text-transform: uppercase;
+}
+
+.profile-card-control__state--on {
+  background: color-mix(in srgb, #2e9e4f 16%, transparent);
+  color: #1c7e3c;
 }
 
 .profile-card-control__copy {
@@ -68,6 +97,63 @@
 }
 
 .profile-card-control__copy p {
+  margin: 0;
+}
+
+/* 30-day chart ---------------------------------------------------------------- */
+.profile-chart__head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.profile-chart__stats {
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: var(--space-2);
+}
+
+.profile-chart__stats strong {
+  color: var(--ink);
+}
+
+.profile-chart__dot {
+  border-radius: 2px;
+  display: inline-block;
+  height: 8px;
+  margin-right: 0.3rem;
+  width: 8px;
+}
+
+.profile-chart__dot--focus {
+  background: #2e9e4f;
+}
+
+.profile-chart__dot--drift {
+  background: #dc5a4e;
+}
+
+.profile-chart__svg {
+  display: block;
+  height: 110px;
+  width: 100%;
+}
+
+.profile-chart__axis {
+  color: color-mix(in srgb, var(--ink) 45%, transparent);
+  display: flex;
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+  font-size: 0.64rem;
+  justify-content: space-between;
+  letter-spacing: 0.06em;
+  margin-top: 0.25rem;
+}
+
+.profile-chart__note {
   margin: 0;
 }
 

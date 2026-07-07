@@ -31,6 +31,7 @@ function renderPage(overrides: Partial<Parameters<typeof ProfilePage>[0]> = {}) 
     linkedinUrl: "",
     publicId: PUBLIC_ID,
     focusSeconds7d: 20 * 3600 + 59 * 60,
+    dailyProductivity: null,
     card: mockCard(),
     isLeaderboardOptedIn: true,
     leaderboardRank: 3,
@@ -122,6 +123,20 @@ describe("ProfilePage", () => {
     expect(screen.getByText(/save your profile once to mint your public link/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /set up profile/i }));
     expect(onEditProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the 30-day focus/drift chart with summary stats", () => {
+    const series = Array.from({ length: 30 }, (_, index) => ({
+      day: `2026-06-${String(index + 1).padStart(2, "0")}`,
+      focus: index === 29 ? 7200 : 3600,
+      drift: 600,
+      neutral: 300,
+    }));
+    renderPage({ dailyProductivity: series });
+
+    expect(screen.getByRole("img", { name: /daily focus and drift, last 30 days/i })).toBeTruthy();
+    expect(screen.getByText(/last 30 days · focus vs drift/i)).toBeTruthy();
+    expect(screen.getByText("06-30 · 2h 0m")).toBeTruthy(); // best day chip
   });
 
   it("summarizes leaderboard participation and links to the board", () => {

@@ -41,6 +41,7 @@ import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHisto
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { useFocusCard } from "./features/share/useFocusCard";
+import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
 import { ProfilePage } from "./features/profile/ProfilePage";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { HistoryView } from "./features/history/HistoryView";
@@ -828,6 +829,12 @@ export default function App() {
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
+  });
+  const profileDailyProductivity = useDailyProductivitySeries({
+    windowEndDay: leaderboardWindowEndDay,
+    startOfDayMinutes,
+    includeAiClassifications: showAiClassificationImpact,
+    enabled: activeTab === "profile",
   });
   const aiClassificationProviderKey = localAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
@@ -5414,6 +5421,7 @@ export default function App() {
             linkedinUrl={leaderboardProfileLinkedinUrl}
             publicId={profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null)}
             focusSeconds7d={localRollingFocusSeconds}
+            dailyProductivity={profileDailyProductivity}
             card={focusCard}
             isLeaderboardOptedIn={isLeaderboardOptedIn}
             leaderboardRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
