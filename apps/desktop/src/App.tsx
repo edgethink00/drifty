@@ -190,7 +190,7 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
@@ -230,7 +230,6 @@ const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
-const DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS = 1400;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
@@ -281,6 +280,9 @@ export default function App() {
   const [status, setStatus] = useState<TrackerStatus | null>(null);
   const hasTrackerStatus = status !== null;
   const [brandCaptureMotionKey, setBrandCaptureMotionKey] = useState(0);
+  const triggerBrandCaptureMotion = useCallback(() => {
+    setBrandCaptureMotionKey((currentKey) => currentKey + 1);
+  }, []);
   const brandCaptureEventAtRef = useRef<string | null>(null);
   const hasObservedBrandCaptureRef = useRef(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
@@ -336,12 +338,12 @@ export default function App() {
   } = useUpdateController();
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
+  const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
-  const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled;
+  const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled && teamsBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
-  const [devLogoAnimationPreviewEnabled, setDevLogoAnimationPreviewEnabled] = useState(false);
   // Project classification is a developer preview: it only exists in non-production
   // builds (PROJECT_CLASSIFICATION_PREVIEW_ENABLED) and can be toggled off in Dev.
   const [devProjectClassificationEnabled, setDevProjectClassificationEnabled] = useState(resolveInitialProjectClassificationEnabled);
@@ -570,11 +572,6 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
-  const openTeamsBeta = useCallback(() => {
-    if (!canOpenTeamsBeta) return;
-    navigateToTab("team");
-    setAccountMenuOpen(false);
-  }, [canOpenTeamsBeta, navigateToTab]);
   const handleSettingsBack = useCallback(() => {
     setAccountMenuOpen(false);
     if (canNavigateBack) {
@@ -2343,12 +2340,17 @@ export default function App() {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
     if (settingsSection === "dev") setSettingsSection("general");
-    if (devLogoAnimationPreviewEnabled) setDevLogoAnimationPreviewEnabled(false);
+    if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-  }, [devLogoAnimationPreviewEnabled, devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection]);
+  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection, teamsBetaEnabled]);
+
+  useEffect(() => {
+    const effectiveTeamsBetaEnabled = TEAMS_BETA_ENABLED && DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
+    window.localStorage.setItem(TEAMS_BETA_STORAGE_KEY, effectiveTeamsBetaEnabled ? "1" : "0");
+  }, [devModeEnabled, teamsBetaEnabled]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -2359,17 +2361,6 @@ export default function App() {
       console.warn("Failed to sync Dev Mode menu state", message);
     });
   }, [devModeEnabled]);
-
-  useEffect(() => {
-    if (!isDevModeActive || !devLogoAnimationPreviewEnabled) return undefined;
-
-    setBrandCaptureMotionKey((currentKey) => currentKey + 1);
-    const intervalId = window.setInterval(() => {
-      setBrandCaptureMotionKey((currentKey) => currentKey + 1);
-    }, DEV_LOGO_ANIMATION_PREVIEW_INTERVAL_MS);
-
-    return () => window.clearInterval(intervalId);
-  }, [devLogoAnimationPreviewEnabled, isDevModeActive]);
 
   useEffect(() => {
     const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
@@ -5067,9 +5058,19 @@ export default function App() {
         <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
         <div
           className="brand"
+          role="button"
+          tabIndex={0}
           aria-label="Drifty"
+          title="Drifty"
           data-capture-motion-key={brandCaptureMotionKey}
           data-capture-motion={brandCaptureMotionKey > 0 ? "capture-flip" : undefined}
+          onClick={triggerBrandCaptureMotion}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              triggerBrandCaptureMotion();
+            }
+          }}
         >
           <img key={brandCaptureMotionKey} className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
         </div>
@@ -5099,6 +5100,18 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        {canOpenTeamsBeta ? (
+          <>
+            <div className="nav-label">Team</div>
+            <nav className="sidebar-nav" aria-label="Team navigation">
+              <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("team")}>
+                <NavIcon type="team" /><span>Team</span>
+                {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Team</span> : null}
+              </button>
+            </nav>
+          </>
+        ) : null}
 
         <div className="sidebar-foot">
           <div className="tracker-control" data-state={sidebarTrackerControlState}>
@@ -5605,7 +5618,6 @@ export default function App() {
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
-                    logoAnimationPreviewEnabled={devLogoAnimationPreviewEnabled}
                     projectClassificationEnabled={devProjectClassificationEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
@@ -5623,13 +5635,13 @@ export default function App() {
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
-                    onLogoAnimationPreviewChange={setDevLogoAnimationPreviewEnabled}
                     onProjectClassificationEnabledChange={setDevProjectClassificationEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
                     onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
-                    onOpenTeamsBeta={openTeamsBeta}
+                    teamsBetaEnabled={teamsBetaEnabled}
+                    onTeamsBetaChange={setTeamsBetaEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}

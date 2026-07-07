@@ -601,7 +601,7 @@ export function InsightSourceGroup({
               <span className="drift-time-trend__sources-rank" aria-hidden="true">{index + 1}</span>
               <span className="drift-time-trend__sources-icon" aria-hidden="true">
                 {item.isSite && item.siteDomain
-                  ? <SiteFavicon domain={item.siteDomain} size={14} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
+                  ? <SiteFavicon domain={item.siteDomain} size={22} fallbackIconSrc={appIcons[item.bundleId ?? item.appName] ?? null} />
                   : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
               </span>
               <span className="drift-time-trend__sources-name">{item.label}</span>

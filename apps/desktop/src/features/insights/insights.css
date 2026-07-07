@@ -2163,6 +2163,13 @@
   place-items: center;
 }
 
+.drift-time-trend__sources-icon .site-favicon,
+.drift-time-trend__sources-icon .app-glyph--sm,
+.drift-time-trend__sources-icon .app-icon--sm {
+  width: 22px;
+  height: 22px;
+}
+
 .drift-time-trend__sources-name {
   grid-column: 3;
   grid-row: 1;

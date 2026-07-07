@@ -22,7 +22,7 @@ export const commandBarTabs = [
   { id: "settings", label: "Settings", sub: "App preferences" },
 ] satisfies ReadonlyArray<{ id: TabId; label: string; sub: string }>;
 
-export type NavIconType = "home" | "calendar" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "settings";
+export type NavIconType = "home" | "calendar" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "team" | "settings";
 
 export type NavItem = {
   id: TabId;

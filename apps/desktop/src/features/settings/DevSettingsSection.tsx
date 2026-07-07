@@ -21,7 +21,6 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
-  readonly logoAnimationPreviewEnabled: boolean;
   readonly projectClassificationEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
   readonly projectClassificationCorrectionsBusy: boolean;
@@ -41,12 +40,12 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
-  readonly onLogoAnimationPreviewChange: (enabled: boolean) => void;
   readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
-  readonly onOpenTeamsBeta: () => void;
+  readonly teamsBetaEnabled: boolean;
+  readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
@@ -69,7 +68,6 @@ export function DevSettingsSection({
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
-  logoAnimationPreviewEnabled,
   projectClassificationEnabled,
   projectClassificationAiReviewEvents,
   projectClassificationCorrectionsBusy,
@@ -89,12 +87,12 @@ export function DevSettingsSection({
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
-  onLogoAnimationPreviewChange,
   onProjectClassificationEnabledChange,
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
-  onOpenTeamsBeta,
+  teamsBetaEnabled,
+  onTeamsBetaChange,
   onPreviewDashboardAiUnavailableCase,
   onPreviewDriftAlarm,
   onReplayDashboardDemo,
@@ -127,18 +125,6 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <button type="button" className="settings-btn" onClick={onOpenDebugLogs}>View debug logs</button>
-          </div>
-        </div>
-      </div>
-      <div className="settings-block settings-block--dev-preview">
-        <h3>Motion preview</h3>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Logo animation preview</div>
-            <div className="desc">Loop the capture flip on the sidebar logo for motion review.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={logoAnimationPreviewEnabled} onChange={onLogoAnimationPreviewChange} ariaLabel="Toggle logo animation preview" />
           </div>
         </div>
       </div>
@@ -208,7 +194,8 @@ export function DevSettingsSection({
           onEndOfDayReviewPreview={onEndOfDayReviewPreview}
           onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
           onOpenReplayOnboarding={onOpenReplayOnboarding}
-          onOpenTeamsBeta={onOpenTeamsBeta}
+          teamsBetaEnabled={teamsBetaEnabled}
+          onTeamsBetaChange={onTeamsBetaChange}
           onPreviewDriftAlarm={onPreviewDriftAlarm}
           onShowWatcherPeek={onShowWatcherPeek}
           onWatcherModeChange={onWatcherModeChange}

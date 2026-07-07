@@ -51,7 +51,6 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
     forceChromiumAxCaptureEnabled: false,
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
-    logoAnimationPreviewEnabled: false,
     projectPassRuns: [],
     projectClassificationEnabled: false,
     projectClassificationAiReviewEvents: [],
@@ -72,11 +71,11 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
     onForceChromiumAxCaptureChange: vi.fn(),
     onForceChromiumAxExtremeNudgeChange: vi.fn(),
     onForceFrontmostFallbackCaptureChange: vi.fn(),
-    onLogoAnimationPreviewChange: vi.fn(),
     onOpenDebugLogs: vi.fn(),
     onOpenOnboardingV22Preview: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
-    onOpenTeamsBeta: vi.fn(),
+    teamsBetaEnabled: false,
+    onTeamsBetaChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onPreviewDriftAlarm: vi.fn(),
     onReplayDashboardDemo: vi.fn(),
@@ -113,14 +112,14 @@ describe("DevSettingsSection", () => {
     expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
   });
 
-  it("opens Teams beta from the Dev preview block when the internal flag is enabled", () => {
+  it("toggles Teams beta from the Dev preview block when the internal flag is enabled", () => {
     featureSwitches.teamsBetaEnabled = true;
 
     const props = renderProductionDevSettings();
 
     expect(screen.getByText("Teams beta")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Open Teams beta$/ }));
-    expect(props.onOpenTeamsBeta).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
+    expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
   it("does not leave an empty Dev preview block in production diagnostics", () => {
@@ -144,7 +143,6 @@ describe("DevSettingsSection", () => {
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
-      logoAnimationPreviewEnabled: false,
     projectPassRuns: [],
     projectClassificationEnabled: false,
     projectClassificationAiReviewEvents: [],
@@ -163,11 +161,11 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxCaptureChange: vi.fn(),
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
-      onLogoAnimationPreviewChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
-      onOpenTeamsBeta: vi.fn(),
+      teamsBetaEnabled: false,
+      onTeamsBetaChange: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onResetWeekDashboardAxisScalePercent: vi.fn(),
@@ -185,14 +183,6 @@ describe("DevSettingsSection", () => {
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
   });
 
-  it("calls the logo animation preview handler when toggled", () => {
-    const props = renderProductionDevSettings();
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle logo animation preview" }));
-
-    expect(props.onLogoAnimationPreviewChange).toHaveBeenCalledWith(true);
-  });
-
   it("does not expose the isolated onboarding v2.1 preview", () => {
     const props = {
       dashboardAiUnavailablePreview: null,
@@ -202,7 +192,6 @@ describe("DevSettingsSection", () => {
       forceChromiumAxCaptureEnabled: false,
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
-      logoAnimationPreviewEnabled: false,
     projectPassRuns: [],
     projectClassificationEnabled: false,
     projectClassificationAiReviewEvents: [],
@@ -221,11 +210,11 @@ describe("DevSettingsSection", () => {
       onForceChromiumAxCaptureChange: vi.fn(),
       onForceChromiumAxExtremeNudgeChange: vi.fn(),
       onForceFrontmostFallbackCaptureChange: vi.fn(),
-      onLogoAnimationPreviewChange: vi.fn(),
       onOpenDebugLogs: vi.fn(),
       onOpenOnboardingV22Preview: vi.fn(),
       onOpenReplayOnboarding: vi.fn(),
-      onOpenTeamsBeta: vi.fn(),
+      teamsBetaEnabled: false,
+      onTeamsBetaChange: vi.fn(),
       onPreviewDashboardAiUnavailableCase: vi.fn(),
       onPreviewDriftAlarm: vi.fn(),
       onResetWeekDashboardAxisScalePercent: vi.fn(),
