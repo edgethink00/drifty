@@ -17,9 +17,13 @@ export type AccountSettingsSectionProps = {
   readonly cloudStatusRefreshing: boolean;
   readonly currentBillingPlan: BillingPlanId | null;
   readonly isSupabaseConfigured: boolean;
+  readonly publicProfileDisplayName?: string | null;
+  readonly publicProfileStatus?: string | null;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
+  readonly onEditPublicProfile?: () => void;
   readonly onManageCloudBilling: () => void | Promise<void>;
+  readonly onOpenLeaderboard?: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
@@ -46,9 +50,13 @@ export function AccountSettingsSection({
   cloudStatusRefreshing,
   currentBillingPlan,
   isSupabaseConfigured,
+  publicProfileDisplayName,
+  publicProfileStatus,
   shouldShowCloudCheckoutPlans,
   userEmail,
+  onEditPublicProfile,
   onManageCloudBilling,
+  onOpenLeaderboard,
   onRefreshCloudStatus,
   onRevokeCloudDevice,
   onSignIn,
@@ -95,6 +103,24 @@ export function AccountSettingsSection({
               </button>
             </div>
           ) : null}
+        </div>
+      </div>
+
+      <div className="settings-block">
+        <h3>Public profile</h3>
+        <div className="settings-row settings-row--stacked-action">
+          <div>
+            <div className="lbl">{publicProfileDisplayName?.trim() || "Leaderboard profile"}</div>
+            <div className="desc">{publicProfileStatus?.trim() || "Shown with your aggregate focus total when you join the leaderboard."}</div>
+          </div>
+          <div className="ctrl account-public-profile-actions">
+            <button type="button" className="settings-btn" onClick={onEditPublicProfile} disabled={!onEditPublicProfile}>
+              Edit public profile
+            </button>
+            <button type="button" className="settings-btn" onClick={onOpenLeaderboard} disabled={!onOpenLeaderboard}>
+              Open leaderboard
+            </button>
+          </div>
         </div>
       </div>
 

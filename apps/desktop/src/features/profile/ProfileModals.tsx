@@ -98,23 +98,39 @@ export function EditProfileModal({
           </div>
         </div>
 
-        <div className="leaderboard-profile-sidebar__form">
-          <div className="leaderboard-photo-control">
-            <span>Profile photo</span>
-            <div className="leaderboard-photo-control__actions">
-              <label className="settings-btn leaderboard-photo-control__upload">
-                Upload photo
-                <input type="file" accept="image/*" onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
-              </label>
-              {avatarUrl.trim() ? <button type="button" className="ghost-button" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>Remove</button> : null}
+        <div className="profile-editor-layout">
+          <aside className="profile-editor-preview" aria-label="Public profile preview">
+            <label className="profile-photo-picker">
+              {avatarUrl.trim() ? <img className="profile-editor-preview__avatar" src={avatarUrl} alt="" aria-hidden="true" /> : <span className="profile-editor-preview__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}
+              <span className="profile-photo-picker__badge" aria-hidden="true">
+                <span className="profile-photo-picker__camera" />
+              </span>
+              <span className="sr-only">Choose profile photo</span>
+              <input type="file" accept="image/*" onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
+            </label>
+            <div className="profile-editor-preview__copy">
+              <span className="label-mono">Public preview</span>
+              <strong>{profileDraft.displayName.trim() || displayName}</strong>
+              <p>{profileDraft.bio.trim() || "No public bio yet."}</p>
             </div>
-            <p>Shown on your public leaderboard profile.</p>
+            <ProfileSocialLinks profile={{ website_url: profileDraft.websiteUrl, github_url: profileDraft.githubUrl, linkedin_url: profileDraft.linkedinUrl }} />
+            <p className="profile-editor-preview__privacy">Only this profile card and aggregate leaderboard totals are public.</p>
+          </aside>
+
+          <div className="leaderboard-profile-sidebar__form">
+            <div className="leaderboard-photo-control">
+              <span>Profile photo</span>
+              <div className="leaderboard-photo-control__hint">
+                <p>Select the preview image to choose a file.</p>
+                {avatarUrl.trim() ? <button type="button" className="ghost-button" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>Remove</button> : null}
+              </div>
+            </div>
+            <label><span>Display name</span><input className="settings-input" value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label><span>Bio</span><textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} /></label>
+            <label><span>Website</span><input className="settings-input" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label><span>GitHub</span><input className="settings-input" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label><span>LinkedIn</span><input className="settings-input" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
           </div>
-          <label><span>Display name</span><input className="settings-input" value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-          <label><span>Bio</span><textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} /></label>
-          <label><span>Website</span><input className="settings-input" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-          <label><span>GitHub</span><input className="settings-input" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-          <label><span>LinkedIn</span><input className="settings-input" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
         </div>
 
         {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}

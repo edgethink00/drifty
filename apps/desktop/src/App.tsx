@@ -5467,12 +5467,22 @@ export default function App() {
                     cloudDeviceRevokingId={cloudDeviceRevokingId}
                     cloudDevices={effectiveBillingEntitlement?.cloudDevices ?? cloudDevices}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
-                    currentBillingPlan={currentBillingPlan}
-                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
-                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
-                    userEmail={user?.email ?? null}
-                    onManageCloudBilling={handleManageCloudBilling}
-                    onRefreshCloudStatus={refreshBillingEntitlement}
+	                    currentBillingPlan={currentBillingPlan}
+	                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
+	                    publicProfileDisplayName={leaderboardProfileDisplayName}
+	                    publicProfileStatus={
+	                      isLeaderboardOptedIn
+	                        ? ownLeaderboardEntry?.rank
+	                          ? `On the board as #${ownLeaderboardEntry.rank}`
+	                          : "On the board"
+	                        : "Not on the board yet"
+	                    }
+	                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
+	                    userEmail={user?.email ?? null}
+	                    onEditPublicProfile={openProfileEditor}
+	                    onManageCloudBilling={handleManageCloudBilling}
+	                    onOpenLeaderboard={() => navigateToTab("leaderboard")}
+	                    onRefreshCloudStatus={refreshBillingEntitlement}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
                     onSignIn={() => setAuthModalOpen(true)}
                     onStartCloudSetup={handleStartDriftyCloudSetup}

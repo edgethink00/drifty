@@ -47,13 +47,13 @@ describe("AccountMenu", () => {
     expect(ACCOUNT_POPOVER_EXPANDED_GAP_PX).toBe(5);
   });
 
-  it("renders signed-out users with Unknown and the default profile avatar", () => {
+  it("renders signed-out users with the branded fallback label and the default profile avatar", () => {
     const { container } = renderAccountMenu();
     const trigger = screen.getByRole("button", { name: /^unknown$/i });
     const chevrons = container.querySelector(".account-trigger__chevrons");
     const chevronMarks = container.querySelectorAll(".account-trigger__chevron-mark");
 
-    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("Unknown");
+    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("ㅕnknown");
     expect(trigger.querySelector(".account-avatar--placeholder svg")).toBeTruthy();
     expect(trigger.querySelector(".account-avatar img")).toBeNull();
     expect(trigger.querySelector(".account-trigger__settings-icon")).toBeNull();

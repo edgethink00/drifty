@@ -8,3 +8,9 @@
 .content--settings .settings-section--account .settings-row--stacked-action > .ctrl {
   justify-self: start;
 }
+
+.content--settings .settings-section--account .account-public-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
