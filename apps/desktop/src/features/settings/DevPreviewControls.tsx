@@ -3,9 +3,7 @@ import { Toggle } from "../../components/Toggle";
 import {
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED,
-  ONBOARDING_V2_2_PREVIEW_ENABLED,
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED,
-  TEAMS_BETA_ENABLED,
 } from "../../appFeatureSwitches";
 import { DRIFT_ALARM_PREVIEW_OPTIONS } from "../companion/driftAlarmData";
 import {
@@ -70,28 +68,24 @@ export function DevPreviewControls({
           </div>
         </div>
       ) : null}
-      {ONBOARDING_V2_2_PREVIEW_ENABLED ? (
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Onboarding v2.2 preview</div>
-            <div className="desc">Open the v2.2 onboarding design prototype in an isolated preview. Dev builds only.</div>
-          </div>
-          <div className="ctrl">
-            <button type="button" className="settings-btn" onClick={onOpenOnboardingV22Preview}>Open preview</button>
-          </div>
+      <div className="settings-row">
+        <div>
+          <div className="lbl">Onboarding v2.2 preview</div>
+          <div className="desc">Open the v2.2 onboarding design prototype in an isolated Dev-mode preview.</div>
         </div>
-      ) : null}
-      {TEAMS_BETA_ENABLED ? (
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Teams beta</div>
-            <div className="desc">Show the Team section in the sidebar for the internal aggregate team focus surface. Dev builds only.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
-          </div>
+        <div className="ctrl">
+          <button type="button" className="settings-btn" onClick={onOpenOnboardingV22Preview}>Open preview</button>
         </div>
-      ) : null}
+      </div>
+      <div className="settings-row">
+        <div>
+          <div className="lbl">Teams beta</div>
+          <div className="desc">Show the Team section in the sidebar for the internal aggregate team focus surface. Dev-mode opt-in.</div>
+        </div>
+        <div className="ctrl">
+          <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
+        </div>
+      </div>
       {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
         <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}>
           <div>
@@ -105,7 +99,7 @@ export function DevPreviewControls({
         <div className="settings-row">
           <div>
             <div className="lbl">Drift alarm previews</div>
-            <div className="desc">Open sample alarm panels without waiting for tracker drift. Dev builds only.</div>
+            <div className="desc">Open sample alarm panels without waiting for tracker drift. Dev-mode preview tool.</div>
           </div>
           <div className="ctrl settings-row__actions">
             {DRIFT_ALARM_PREVIEW_OPTIONS.map((option) => (

@@ -103,7 +103,8 @@ export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
-const SIGNED_OUT_TRIGGER_LABEL = "Unknown";
+const SIGNED_OUT_TRIGGER_LABEL = "ㅕnknown";
+const SIGNED_OUT_TRIGGER_ARIA_LABEL = "Unknown";
 
 type AccountMenuProps = {
   readonly isOpen: boolean;
@@ -142,6 +143,7 @@ export function AccountMenu({
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : SIGNED_OUT_TRIGGER_LABEL;
+  const triggerLabel = isSignedIn ? displayName : SIGNED_OUT_TRIGGER_ARIA_LABEL;
   const trimmedUserAvatarUrl = userAvatarUrl?.trim();
   const shouldShowUserAvatar = isSignedIn && Boolean(trimmedUserAvatarUrl);
 
@@ -193,10 +195,7 @@ export function AccountMenu({
     >
       <div className="account-popover__account">
         {isSignedIn ? (
-          <>
-            <div className="account-popover__name">{displayName}</div>
-            <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
-          </>
+          <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
         ) : (
           <div className="account-popover__name">Not signed in</div>
         )}
@@ -267,7 +266,7 @@ export function AccountMenu({
         type="button"
         className="account-trigger"
         onClick={onToggle}
-        aria-label={displayName}
+        aria-label={triggerLabel}
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >

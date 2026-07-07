@@ -1091,7 +1091,7 @@ describe("App leaderboard participation", () => {
     fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
 
     fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
-    await screen.findByText("Upload photo");
+    await screen.findByLabelText(/choose profile photo/i);
     const editor = document.querySelector(".profile-editor-modal");
     if (!(editor instanceof HTMLElement)) throw new Error("Profile editor modal did not open");
     fireEvent.change(within(editor).getByLabelText(/display name/i), { target: { value: "Alex Drifty" } });
