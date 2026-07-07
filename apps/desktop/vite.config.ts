@@ -46,6 +46,7 @@ export default defineConfig(({ command, mode }) => {
     test: {
       environment: "node",
       globals: true,
+      setupFiles: ["./src/test/setupTimezone.ts"],
     },
   };
 });
