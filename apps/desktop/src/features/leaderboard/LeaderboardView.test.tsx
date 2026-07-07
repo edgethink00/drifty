@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LeaderboardRow } from "./leaderboardService";
 import { LeaderboardView } from "./LeaderboardView";
+import { EditProfileModal } from "../profile/ProfileModals";
 
 type TestProps = Parameters<typeof LeaderboardView>[0];
 
@@ -122,6 +123,57 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText("alex@example.com")).toBeNull();
 
     fireEvent.click(within(nameRow).getByRole("button", { name: /edit profile/i }));
+
+    expect(onEditProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the profile editor avatar itself as the photo change control", () => {
+    render(
+      <EditProfileModal
+        displayName="Alex"
+        avatarUrl="data:image/png;base64,avatar"
+        profileDraft={{
+          displayName: "Alex",
+          bio: "Building quiet tools.",
+          avatarUrl: "data:image/png;base64,avatar",
+          websiteUrl: "",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        }}
+        profileLoading={false}
+        profileSaving={false}
+        profileMessage={null}
+        profileError={null}
+        onClose={vi.fn()}
+        onPhotoSelected={vi.fn()}
+        onRemovePhoto={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/choose profile photo/i).getAttribute("type")).toBe("file");
+    expect(screen.queryByText(/upload picture/i)).toBeNull();
+  });
+
+  it("turns an empty public link preview into an edit affordance", () => {
+    const onEditProfile = vi.fn();
+    renderView({
+      profileDisplayName: "Alex",
+      profileBio: "Building quiet tools for deeper work.",
+      profileWebsiteUrl: "",
+      profileGithubUrl: "",
+      profileLinkedinUrl: "",
+      onEditProfile,
+    });
+
+    const hero = screen.getByLabelText(/your leaderboard profile/i);
+    const addLinksButton = within(hero).getByRole("button", { name: /add public links/i });
+
+    expect(within(hero).getByText(/add a website, github, or linkedin/i)).toBeTruthy();
+
+    fireEvent.click(addLinksButton);
 
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });

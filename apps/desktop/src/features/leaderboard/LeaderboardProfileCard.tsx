@@ -66,9 +66,9 @@ export function LeaderboardProfileCard({
               <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`}>
                 {isOptedIn
                   ? currentUserRank !== null
-                    ? `On the board · ${formatRank(currentUserRank)}`
-                    : "On the board"
-                  : "Not on the board yet"}
+                    ? `Joined · ${formatRank(currentUserRank)}`
+                    : "Joined"
+                  : "Not joined"}
               </span>
               <button type="button" className="settings-btn" onClick={() => onEditProfile?.()} disabled={!onEditProfile}>Edit profile</button>
             </div>
@@ -81,23 +81,28 @@ export function LeaderboardProfileCard({
               </div>
             ) : (
               <div className="leaderboard-profile-links leaderboard-profile-links--empty" aria-label="Public profile links">
-                <span>No public links yet</span>
+                <span>Add a website, GitHub, or LinkedIn so people can find your public work.</span>
+                {onEditProfile ? (
+                  <button type="button" className="ghost-button leaderboard-profile-links__empty-action" onClick={() => onEditProfile()}>
+                    Add public links
+                  </button>
+                ) : null}
               </div>
             )}
             <div className={`leaderboard-hero__actions${isOptedIn ? " leaderboard-hero__actions--live" : ""}`}>
               <div className="leaderboard-participation-summary" aria-label="Leaderboard publishing status">
                 <span className={`leaderboard-participation-summary__dot${isOptedIn ? " leaderboard-participation-summary__dot--live" : ""}`} aria-hidden="true" />
                 <div>
-                  <strong>{isOptedIn ? "Public board active" : "Private until you join"}</strong>
-                  <p>{isOptedIn ? "Your profile card and aggregate focus total are visible." : "Nothing is published until you opt in."}</p>
+                  <strong>{isOptedIn ? "Joined to leaderboard" : "Private until you join"}</strong>
+                  <p>{isOptedIn ? "Your public profile card and aggregate focus total are visible." : "Nothing is published until you join."}</p>
                 </div>
               </div>
               <div className="leaderboard-hero__button-group">
                 {isOptedIn ? (
                   <>
-                    <button type="button" className="settings-btn" onClick={() => onViewOwnProfile?.()} disabled={!onViewOwnProfile}>View profile</button>
-                    <button type="button" className="settings-btn" onClick={() => onShareProfile?.()} disabled={!onShareProfile}>Share</button>
-                    <button type="button" className="settings-btn" onClick={() => onEmbedProfile?.()} disabled={!onEmbedProfile}>Embed</button>
+                    <button type="button" className="settings-btn leaderboard-hero__primary-action" onClick={() => onViewOwnProfile?.()} disabled={!onViewOwnProfile}>View profile</button>
+                    <button type="button" className="ghost-button" onClick={() => onShareProfile?.()} disabled={!onShareProfile}>Share</button>
+                    <button type="button" className="ghost-button" onClick={() => onEmbedProfile?.()} disabled={!onEmbedProfile}>Embed</button>
                     <button type="button" className="ghost-button leaderboard-hero__participation" onClick={() => onOptOut?.()} disabled={isActionLoading || !onOptOut}>{isActionLoading ? "Leaving…" : "Leave leaderboard"}</button>
                   </>
                 ) : (

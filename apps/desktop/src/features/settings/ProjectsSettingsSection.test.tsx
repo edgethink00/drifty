@@ -127,4 +127,14 @@ describe("ProjectsSettingsSection", () => {
 
     expect(screen.getByRole("button", { name: /New project/i })).toBeTruthy();
   });
+
+  it("keeps empty project guidance with the New project card", () => {
+    renderSection({ projects: [] });
+
+    const projectList = screen.getByRole("list", { name: "Projects" });
+    const guidance = screen.getByLabelText("Project setup guidance");
+
+    expect(projectList.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(guidance.textContent).toContain("Create a project, then run analysis.");
+  });
 });

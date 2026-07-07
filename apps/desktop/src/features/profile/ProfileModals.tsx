@@ -91,11 +91,14 @@ export function EditProfileModal({
   onChange: (updater: Partial<ProfileDraft>) => void;
   onSave: () => void;
 }) {
+  const trimmedAvatarUrl = avatarUrl.trim();
+  const photoActionText = trimmedAvatarUrl ? "Change photo" : "Add photo";
+
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal profile-modal profile-editor-modal" aria-labelledby="edit-profile-title" onClick={(event) => event.stopPropagation()}>
         <div className="profile-modal__header">
-          {avatarUrl.trim() ? <img className="profile-modal__avatar" src={avatarUrl} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
+          {trimmedAvatarUrl ? <img className="profile-modal__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
           <div>
             <span className="label-mono">Edit profile</span>
             <h2 id="edit-profile-title">{displayName}</h2>
@@ -104,14 +107,21 @@ export function EditProfileModal({
 
         <div className="profile-editor-layout">
           <aside className="profile-editor-preview" aria-label="Public profile preview">
-            <label className="profile-photo-picker">
-              {avatarUrl.trim() ? <img className="profile-editor-preview__avatar" src={avatarUrl} alt="" aria-hidden="true" /> : <span className="profile-editor-preview__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}
-              <span className="profile-photo-picker__badge" aria-hidden="true">
-                <span className="profile-photo-picker__camera" />
-              </span>
-              <span className="sr-only">Choose profile photo</span>
-              <input type="file" accept="image/*" onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
-            </label>
+            <div className="profile-editor-preview__photo">
+              <label className="profile-photo-picker">
+                {trimmedAvatarUrl ? <img className="profile-editor-preview__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <span className="profile-editor-preview__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}
+                <span className="profile-photo-picker__badge" aria-hidden="true">
+                  <span className="profile-photo-picker__camera" />
+                </span>
+                <span className="profile-photo-picker__action" aria-hidden="true">{photoActionText}</span>
+                <input type="file" accept="image/*" aria-label="Choose profile photo" onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
+              </label>
+              {trimmedAvatarUrl ? (
+                <button type="button" className="profile-photo-picker__remove" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>
+                  Remove photo
+                </button>
+              ) : null}
+            </div>
             <div className="profile-editor-preview__copy">
               <span className="label-mono">Public preview</span>
               <strong>{profileDraft.displayName.trim() || displayName}</strong>
@@ -122,13 +132,6 @@ export function EditProfileModal({
           </aside>
 
           <div className="leaderboard-profile-sidebar__form">
-            <div className="leaderboard-photo-control">
-              <span>Profile photo</span>
-              <div className="leaderboard-photo-control__hint">
-                <p>Select the preview image to choose a file.</p>
-                {avatarUrl.trim() ? <button type="button" className="ghost-button" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>Remove</button> : null}
-              </div>
-            </div>
             <label><span>Display name</span><input className="settings-input" value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             <label><span>Bio</span><textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} /></label>
             <label><span>Website</span><input className="settings-input" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
@@ -164,7 +167,7 @@ export function ProfileSocialLinks({ profile }: { profile: { website_url?: strin
     }
   }
 
-  if (links.length === 0) return <p className="profile-socials profile-socials--empty">No public links yet.</p>;
+  if (links.length === 0) return <p className="profile-socials profile-socials--empty">No public links added.</p>;
 
   return (
     <div className="profile-socials" aria-label="Public profile links">

@@ -82,23 +82,25 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.3rem;
-  height: 1.3rem;
-  padding: 0;
+  min-height: 1.45rem;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: help;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .projects-help__trigger:hover,
 .projects-help:focus-within .projects-help__trigger {
   color: var(--text);
   border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
 }
 
 .projects-help__tip {
@@ -142,14 +144,19 @@
 
 /* ── Analysis model strip ── */
 .projects-model-status {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
-  padding: 0.6rem 0.9rem;
+  padding: 0.7rem 0.9rem;
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--line);
+}
+
+.projects-model-status.is-disconnected {
+  border-color: color-mix(in srgb, var(--warn) 28%, var(--line));
+  background: color-mix(in srgb, var(--warn-soft) 24%, var(--surface));
 }
 
 .projects-model-status__info {
@@ -163,12 +170,34 @@
   font-family: var(--font-mono);
   font-size: 0.62rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 
 .projects-model-status__value {
   font-size: 0.86rem;
+  color: var(--text);
+}
+
+.projects-model-status__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.45rem;
+  padding: 0 var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--line));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--warn-soft) 35%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.projects-model-status__chip.is-connected {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
   color: var(--text);
 }
 
@@ -189,13 +218,13 @@
 }
 
 .projects-page__banner--warn {
-  border-color: color-mix(in srgb, #d98b2b 50%, transparent);
-  background: color-mix(in srgb, #d98b2b 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
+  background: color-mix(in srgb, var(--warn-soft) 34%, var(--surface));
 }
 
 .projects-page__banner--error {
-  border-color: color-mix(in srgb, #d64545 55%, transparent);
-  color: #b23b3b;
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  color: var(--warn);
 }
 
 /* ── At-a-glance project charts ── */
@@ -220,10 +249,9 @@
   gap: 0.6rem;
 }
 
-/* Project cards stay on one row and shrink to fit as more are added (no wrap). */
 .projects-list__items {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
   gap: 0.7rem;
   align-items: start;
   margin: 0;
@@ -232,8 +260,27 @@
 }
 
 .projects-list__items > .project-card {
-  flex: 1 1 0;
   min-width: 0;
+}
+
+.projects-list__empty-guidance {
+  display: grid;
+  gap: 0.32rem;
+  max-width: 31rem;
+  padding: 0 var(--space-1);
+}
+
+.projects-list__empty-guidance strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.projects-list__empty-guidance p {
+  max-width: 30rem;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 /* Project card */
@@ -449,6 +496,7 @@
 .projects-model-status__actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
   flex: none;
 }

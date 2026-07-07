@@ -278,6 +278,13 @@ export function ProjectsSettingsSection({
             </button>
           </li>
         </ul>
+        {projects.length === 0 ? (
+          <div className="projects-list__empty-guidance" aria-label="Project setup guidance">
+            <span className="label-mono">No active projects yet</span>
+            <strong>Create a project, then run analysis.</strong>
+            <p>Projects work best when the description says what should count: client work, course study, launch prep, or a personal build.</p>
+          </div>
+        ) : null}
       </div>
 
       {editorOpen ? (

@@ -59,7 +59,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
         <div className="projects-page__title">
           <h1>Projects</h1>
           <span className="projects-help">
-            <button type="button" className="projects-help__trigger" aria-label="What are projects?">?</button>
+            <button type="button" className="projects-help__trigger" aria-label="What are projects?">How it works</button>
             <span className="projects-help__tip" role="tooltip">Group your tracked time by what it was for. Describe a project in plain language and Drifty's analysis model attributes your activity to it.</span>
           </span>
         </div>
@@ -115,15 +115,16 @@ export function ProjectsPage(props: ProjectsPageProps) {
         {props.runError ? (
           <div className="projects-page__banner projects-page__banner--error" role="alert">Analysis failed: {props.runError}</div>
         ) : null}
-        <div className="projects-model-status" role="group" aria-label="Analysis model">
+        <div className={`projects-model-status${props.analysisConnected ? " is-connected" : " is-disconnected"}`} role="group" aria-label="Project analysis model">
           <div className="projects-model-status__info">
-            <span className="projects-model-status__label">Analysis model</span>
-            <span className="projects-model-status__value">
-              {analysisModelLabel(props.analysisSetup)} · {props.analysisConnected ? "Connected" : "Not connected"}
-            </span>
+            <span className="projects-model-status__label">Project analysis</span>
+            <span className="projects-model-status__value">{analysisModelLabel(props.analysisSetup)}</span>
           </div>
+          <span className={`projects-model-status__chip${props.analysisConnected ? " is-connected" : ""}`}>
+            {props.analysisConnected ? "Connected" : "Needs setup"}
+          </span>
           <div className="projects-model-status__actions">
-            <button type="button" className="settings-btn" onClick={props.onConfigureModel}>Configure in AI setup →</button>
+            <button type="button" className="settings-btn" onClick={props.onConfigureModel}>AI setup</button>
             <button
               type="button"
               className="settings-btn settings-btn--primary"
