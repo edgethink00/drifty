@@ -44,4 +44,15 @@ describe("buildEmbedSnippets", () => {
   it("provides a raw-data JSON url on the badge endpoint", () => {
     expect(snippets.dataUrl).toBe(`${snippets.badgeUrl}&format=json`);
   });
+
+  it("threads theme and range options into the urls, omitting defaults", () => {
+    const dark30 = buildEmbedSnippets(PUBLIC_ID, FUNCTIONS_BASE, { theme: "dark", range: 30 });
+    expect(dark30.badgeUrl).toContain("&theme=dark");
+    expect(dark30.embedUrl).toContain("&theme=dark");
+    expect(dark30.embedUrl).toContain("&range=30");
+    expect(dark30.iframe).toContain('height="200"');
+    // Defaults stay clean.
+    expect(snippets.badgeUrl).not.toContain("theme=");
+    expect(snippets.embedUrl).not.toContain("range=");
+  });
 });

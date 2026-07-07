@@ -71,8 +71,9 @@ describe("ProfilePage", () => {
     expect(values.some((v) => v.includes(`drifty.so/profile/?id=${PUBLIC_ID}`))).toBe(true);
     expect(values.some((v) => v.includes("&format=json"))).toBe(true);
 
-    const preview = screen.getByAltText("Focus badge preview") as HTMLImageElement;
-    expect(preview.getAttribute("src")?.startsWith("data:image/svg+xml")).toBe(true);
+    const previews = screen.getAllByAltText(/focus badge preview/i) as HTMLImageElement[];
+    expect(previews).toHaveLength(2); // light + dark, both live-rendered
+    expect(previews.every((img) => img.getAttribute("src")?.startsWith("data:image/svg+xml"))).toBe(true);
   });
 
   it("locks embeds while the card is private: previews visible, snippets unavailable", () => {
@@ -80,7 +81,7 @@ describe("ProfilePage", () => {
 
     expect(screen.getByText(/private — these go live/i)).toBeTruthy();
     // Visuals stay visible…
-    expect(screen.getByAltText("Focus badge preview")).toBeTruthy();
+    expect(screen.getAllByAltText(/focus badge preview/i).length).toBeGreaterThan(0);
     // …but the snippet inputs and copy buttons are disabled.
     const inputs = document.querySelectorAll<HTMLInputElement>(".profile-embed-stack input");
     expect(inputs.length).toBeGreaterThan(0);
@@ -123,6 +124,20 @@ describe("ProfilePage", () => {
     expect(screen.getByText(/save your profile once to mint your public link/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /set up profile/i }));
     expect(onEditProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates snippets and preview together when theme/range options change", () => {
+    renderPage({ card: mockCard({ enabled: true }) });
+
+    const values = () => (screen.getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
+    expect(values().some((v) => v.includes("theme=dark"))).toBe(false);
+
+    fireEvent.click(screen.getByRole("radio", { name: /focus badge preview \(dark\)/i }));
+    expect(values().some((v) => v.includes("badge?id=") && v.includes("&theme=dark"))).toBe(true);
+    expect(values().some((v) => v.includes("drifty.so/embed") && v.includes("&theme=dark"))).toBe(true);
+
+    fireEvent.click(screen.getByRole("radio", { name: "30d" }));
+    expect(values().some((v) => v.includes("&range=30"))).toBe(true);
   });
 
   it("renders the 30-day focus/drift chart with summary stats", () => {

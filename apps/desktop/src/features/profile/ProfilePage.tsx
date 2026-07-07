@@ -8,6 +8,7 @@ import { ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
 import { ProfileSocialLinks, copyTextToClipboard } from "./ProfileModals";
 import { renderFocusBadgeSvg, formatFocusDuration, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets, functionsBaseFromSupabaseUrl } from "../share/embedSnippets";
+import type { BadgeThemeOption, CardRangeOption } from "../share/embedSnippets";
 import type { FocusCardControls } from "../share/useFocusCard";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 
@@ -61,6 +62,9 @@ export function ProfilePage({
   onSignIn,
 }: ProfilePageProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // One options state drives previews AND snippets in the same tick (YouTube/Cal.com pattern).
+  const [embedTheme, setEmbedTheme] = useState<BadgeThemeOption>("light");
+  const [cardRange, setCardRange] = useState<CardRangeOption>(7);
 
   const { refresh: refreshCard } = card;
   useEffect(() => {
@@ -89,14 +93,17 @@ export function ProfilePage({
   })();
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "";
   const functionsBase = supabaseUrl ? functionsBaseFromSupabaseUrl(supabaseUrl) : "";
-  const snippets = publicId ? buildEmbedSnippets(publicId, functionsBase) : null;
+  const snippets = publicId ? buildEmbedSnippets(publicId, functionsBase, { theme: embedTheme, range: cardRange }) : null;
 
   const isLive = card.enabled === true && focusSeconds7d > 0;
-  const previewSvg = renderFocusBadgeSvg({
-    value: focusSeconds7d > 0 ? formatFocusDuration(focusSeconds7d) : "—",
-    accent: isLive ? FOCUS_GREEN : AWAY_GREY,
-  });
-  const previewSrc = `data:image/svg+xml;utf8,${encodeURIComponent(previewSvg)}`;
+  const badgeSrcFor = (theme: BadgeThemeOption) => {
+    const svg = renderFocusBadgeSvg({
+      value: focusSeconds7d > 0 ? formatFocusDuration(focusSeconds7d) : "—",
+      theme,
+      accent: isLive ? FOCUS_GREEN : AWAY_GREY,
+    });
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  };
 
   const copy = async (key: string, text: string) => {
     try {
@@ -112,13 +119,32 @@ export function ProfilePage({
   // listed under each visual — the badge is one artifact whether it lands in a README
   // or a website, so it gets one preview and two code variants.
   type EmbedVariant = { key: string; label: string; snippet: string };
-  type EmbedGroup = { key: string; title: string; preview: ReactNode; variants: EmbedVariant[] };
+  type EmbedGroup = { key: string; title: string; preview: ReactNode; controls?: ReactNode; variants: EmbedVariant[] };
   const embedGroups: EmbedGroup[] = snippets
     ? [
         {
           key: "badge",
           title: "Focus badge",
-          preview: <img src={previewSrc} alt="Focus badge preview" height={20} style={{ display: "block" }} />,
+          // Theme picker = the preview itself: both themes rendered live with your own
+          // data (github-readme-stats gallery pattern); picking one rewrites the snippets.
+          preview: (
+            <div className="profile-theme-picker" role="radiogroup" aria-label="Badge theme">
+              {(["light", "dark"] as const).map((theme) => (
+                <button
+                  key={theme}
+                  type="button"
+                  role="radio"
+                  aria-checked={embedTheme === theme}
+                  className={`profile-theme-picker__option${embedTheme === theme ? " profile-theme-picker__option--active" : ""} profile-theme-picker__option--${theme}`}
+                  disabled={cardLocked}
+                  onClick={() => setEmbedTheme(theme)}
+                >
+                  <img src={badgeSrcFor(theme)} alt={`Focus badge preview (${theme})`} height={20} style={{ display: "block" }} />
+                  <span className="profile-theme-picker__label">{theme}</span>
+                </button>
+              ))}
+            </div>
+          ),
           variants: [
             { key: "markdown", label: "GitHub README · Markdown", snippet: snippets.markdown },
             { key: "html", label: "Website · HTML", snippet: snippets.html },
@@ -127,7 +153,31 @@ export function ProfilePage({
         {
           key: "card",
           title: "Focus card",
-          preview: <FocusCardEmbedPreview displayName={displayName} focusSeconds={focusSeconds7d} />,
+          controls: (
+            <div className="profile-range-picker" role="radiogroup" aria-label="Card chart range">
+              {([7, 30] as const).map((range) => (
+                <button
+                  key={range}
+                  type="button"
+                  role="radio"
+                  aria-checked={cardRange === range}
+                  className={`profile-range-picker__option${cardRange === range ? " profile-range-picker__option--active" : ""}`}
+                  disabled={cardLocked}
+                  onClick={() => setCardRange(range)}
+                >
+                  {range}d
+                </button>
+              ))}
+            </div>
+          ),
+          preview: (
+            <FocusCardEmbedPreview
+              displayName={displayName}
+              focusSeconds={focusSeconds7d}
+              theme={embedTheme}
+              dailyFocus={dailyProductivity?.slice(-cardRange).map((point) => point.focus) ?? null}
+            />
+          ),
           variants: [
             { key: "iframe", label: "Website · iframe", snippet: snippets.iframe },
           ],
@@ -210,7 +260,7 @@ export function ProfilePage({
               <div className="profile-card-control__copy">
                 <p className="capture-recency">
                   {card.enabled === true
-                    ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus."
+                    ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus. Turning it off pauses these links — they resume when you turn it back on."
                     : card.enabled === null
                       ? "Checking…"
                       : "One switch controls everything below — off means your card and badges show nothing."}
@@ -269,6 +319,7 @@ export function ProfilePage({
                     <div key={group.key} className="profile-embed-card">
                       <div className="profile-embed-card__head">
                         <span className="label-mono">{group.title}</span>
+                        {group.controls ?? null}
                       </div>
                       <div className="profile-embed-card__preview">{group.preview}</div>
                       {group.variants.map((variant) => (
@@ -380,28 +431,57 @@ function FocusDriftChart({ series }: { series: readonly DailyProductivityPoint[]
 
 // Local mock of the hosted drifty.so/embed card so users can see what the iframe embed
 // will look like before pasting it anywhere. Purely presentational; mirrors the embed
-// page's layout (avatar · name · weekly focus · powered-by footer).
-function FocusCardEmbedPreview({ displayName, focusSeconds }: { displayName: string; focusSeconds: number }) {
+// page's layout (avatar · name · weekly focus · daily bars · powered-by footer) and
+// re-renders live as the theme/range options change.
+function FocusCardEmbedPreview({
+  displayName,
+  focusSeconds,
+  theme = "light",
+  dailyFocus = null,
+}: {
+  displayName: string;
+  focusSeconds: number;
+  theme?: BadgeThemeOption;
+  dailyFocus?: readonly number[] | null;
+}) {
   const name = displayName.trim() || "drifty";
   const isLive = focusSeconds > 0;
+  const dark = theme === "dark";
+  const palette = dark
+    ? { surface: "#181c16", surfaceStrong: "#232821", line: "#2c3128", ink: "#f3f5f0", muted: "#a7aca2", green: "#57c47a", stub: "#3a4036" }
+    : { surface: "#ffffff", surfaceStrong: "#f2f2ee", line: "#e2e2dc", ink: "#17201a", muted: "#6b6f66", green: "#1c7e3c", stub: "#d6d8cd" };
+  const bars = dailyFocus && dailyFocus.length > 0 ? dailyFocus : null;
+  const barMax = bars ? Math.max(...bars, 1) : 1;
+
   return (
-    <div aria-label="Website card preview" style={{ width: 320, maxWidth: "100%", border: "1px solid var(--line, #e2e2dc)", borderRadius: 14, padding: "13px 15px", background: "var(--surface, #fff)", display: "flex", flexDirection: "column", gap: 9, boxShadow: "0 1px 2px rgba(0,0,0,.05)" }}>
+    <div aria-label="Website card preview" style={{ width: 320, maxWidth: "100%", border: `1px solid ${palette.line}`, borderRadius: 14, padding: "13px 15px", background: palette.surface, color: palette.ink, display: "flex", flexDirection: "column", gap: 9, boxShadow: "0 1px 2px rgba(0,0,0,.05)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--surface-strong, #f2f2ee)", border: "1px solid var(--line, #e2e2dc)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#1c7e3c" }}>
+        <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: "50%", background: palette.surfaceStrong, border: `1px solid ${palette.line}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: palette.green }}>
         {(name.charAt(0) || "D").toUpperCase()}
         </span>
         <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</strong>
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <span className="label-mono">Focus · this week</span>
-        <span style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "-0.02em", color: "#1c7e3c", lineHeight: 1 }}>
+        <span className="label-mono" style={{ color: palette.muted }}>Focus · this week</span>
+        <span style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "-0.02em", color: palette.green, lineHeight: 1 }}>
           {isLive ? formatFocusDuration(focusSeconds) : "—"}
         </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--line, #e9e9e4)", paddingTop: 8, fontSize: "0.72rem", color: "var(--muted, #6b6f66)" }}>
+      {bars ? (
+        <svg viewBox={`0 0 100 16`} preserveAspectRatio="none" style={{ width: "100%", height: 26, display: "block" }} aria-hidden="true">
+          {bars.map((value, index) => {
+            const n = bars.length;
+            const gap = n > 14 ? 0.6 : 1.6;
+            const barW = (100 - gap * (n - 1)) / n;
+            const h = value > 0 ? Math.max(1.5, (value / barMax) * 14) : 0.8;
+            return <rect key={index} x={index * (barW + gap)} y={16 - h} width={barW} height={h} rx={0.6} fill={value > 0 ? (index === n - 1 ? palette.green : "#2e9e4f") : palette.stub} />;
+          })}
+        </svg>
+      ) : null}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${palette.line}`, paddingTop: 8, fontSize: "0.72rem", color: palette.muted }}>
         <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#2e9e4f" : "#9a9e96" }} />
         <span>live preview</span>
-        <span style={{ marginLeft: "auto", fontWeight: 600 }}>powered by <strong>drifty</strong> ↗</span>
+        <span style={{ marginLeft: "auto", fontWeight: 600 }}>powered by <strong style={{ color: palette.ink }}>drifty</strong> ↗</span>
       </div>
     </div>
   );
