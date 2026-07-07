@@ -41,10 +41,20 @@
 }
 
 .profile-identity__link {
+  align-items: center;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem var(--space-2);
   padding-top: var(--space-2);
+}
+
+.profile-identity__link > .label-mono {
+  flex: 0 0 158px;
+}
+
+.profile-identity__link .profile-embed-card__variant-row {
+  flex: 1 1 320px;
 }
 
 .profile-identity__board {
@@ -275,19 +285,27 @@
   color: #1c7e3c;
 }
 
+/* Label sits left of the code row (not above it) to keep the cards short;
+   on narrow widths the row wraps back under the label naturally. */
 .profile-embed-card__variant {
-  display: grid;
-  gap: 0.35rem;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem var(--space-2);
 }
 
 .profile-embed-card__variant-label {
+  flex: 0 0 158px;
+  line-height: 1.25;
   opacity: 0.85;
 }
 
 .profile-embed-card__variant-row {
   align-items: center;
   display: flex;
+  flex: 1 1 320px;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .profile-embed-card__variant-row .settings-input {
@@ -296,7 +314,16 @@
 }
 
 .profile-embed-card--link {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem var(--space-2);
   margin-top: var(--space-3);
+}
+
+.profile-embed-card--link > .label-mono {
+  flex: 0 0 158px;
+  line-height: 1.25;
 }
 
 .profile-embed-card__code {
