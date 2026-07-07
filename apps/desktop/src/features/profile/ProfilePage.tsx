@@ -215,6 +215,9 @@ export function ProfilePage({
       <div className="pg-head">
         <div>
           <h1>Your public profile</h1>
+          <p className="capture-recency profile-page__privacy">
+            Only opt-in aggregates are shared (daily focus/drift totals, weekly split) — raw app, site, window, and session history stays on your device.
+          </p>
         </div>
       </div>
 
@@ -273,11 +276,7 @@ export function ProfilePage({
               </span>
               <button type="button" className="ghost-button" onClick={onOpenLeaderboard}>Open leaderboard</button>
             </div>
-          </section>
-
-          {/* Public focus card + embeds — one sharing block (switch → embeds → privacy note) */}
-          <section className="leaderboard-profile-block profile-share-block" aria-label="Public focus card">
-            <div className="profile-card-control__row">
+            <div className="profile-identity__control profile-card-control__row" aria-label="Public focus card">
               <span className="label-mono">Public focus card</span>
               <span className={`profile-card-control__state${card.enabled === true ? " profile-card-control__state--on" : ""}`}>
                 {card.enabled === true ? "On" : card.enabled === null ? "…" : "Off"}
@@ -288,7 +287,7 @@ export function ProfilePage({
                     ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus. Turning it off pauses these links — they resume when you turn it back on."
                     : card.enabled === null
                       ? "Checking…"
-                      : "One switch controls the embeds below — off means your card and badges show nothing."}
+                      : "One switch controls your card, badges, and embeds — off means they show nothing."}
                 </p>
                 {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
               </div>
@@ -303,8 +302,11 @@ export function ProfilePage({
                 </button>
               )}
             </div>
+          </section>
 
-            <div className="profile-share-block__section leaderboard-section-kicker">
+          {/* Embeds — collapsed by default */}
+          <section className="leaderboard-profile-block" aria-label="Embeds">
+            <div className="leaderboard-section-kicker">
               <div>
                 <span className="label-mono">Embeds</span>
                 <p>
@@ -384,9 +386,6 @@ export function ProfilePage({
                 <button type="button" className="settings-btn" onClick={onEditProfile}>Set up profile</button>
               </div>
             )}
-            <p className="capture-recency profile-share-block__privacy">
-              Only opt-in aggregates are shared (daily focus/drift totals, weekly split) — raw app, site, window, and session history stays on your device.
-            </p>
           </section>
 
           {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}

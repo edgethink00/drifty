@@ -74,17 +74,17 @@
   margin-left: auto;
 }
 
-/* Sharing block: switch → embeds → privacy note, one card ------------------- */
-.profile-share-block__section {
-  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  padding-top: var(--space-2);
+/* Page-head privacy subtitle. */
+.profile-page__privacy {
+  margin: 0.35rem 0 0;
+  max-width: 78ch;
+  opacity: 0.85;
 }
 
-.profile-share-block__privacy {
+/* Focus-card switch row inside the identity card. */
+.profile-identity__control {
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  margin: 0;
-  opacity: 0.8;
-  padding-top: var(--space-2);
+  padding-top: 0.55rem;
 }
 
 .profile-card-control__row {
