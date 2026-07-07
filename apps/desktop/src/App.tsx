@@ -806,6 +806,10 @@ export default function App() {
     handleShareLeaderboardProfile,
     handleViewOwnLeaderboardProfile,
     openProfileEditor,
+    isEmbedOpen,
+    embedFocusSeconds,
+    openEmbed,
+    closeEmbed,
     refreshLeaderboardData,
     syncLeaderboardPublication,
     removeProfilePhoto,
@@ -5432,6 +5436,7 @@ export default function App() {
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
             onShareProfile={() => void handleShareLeaderboardProfile()}
+            onEmbedProfile={openEmbed}
             onSignIn={() => void handleLeaderboardOptIn()}
             onViewOwnProfile={() => void handleViewOwnLeaderboardProfile()}
           />
@@ -5733,8 +5738,12 @@ export default function App() {
         selectedProfileError={selectedProfileError}
         selectedProfileLoading={selectedProfileLoading}
         selectedPublicProfile={selectedPublicProfile}
+        isEmbedOpen={isEmbedOpen}
+        embedPublicId={profile?.public_id ?? null}
+        embedFocusSeconds={embedFocusSeconds}
         onCloseEditor={closeProfileEditor}
         onCloseSelectedProfile={closeSelectedProfile}
+        onCloseEmbed={closeEmbed}
         onDraftChange={updateProfileDraft}
         onPhotoSelected={(event) => void handleProfilePhotoSelected(event)}
         onRemovePhoto={removeProfilePhoto}

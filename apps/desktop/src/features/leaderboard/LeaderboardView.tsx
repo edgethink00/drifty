@@ -37,6 +37,7 @@ export type LeaderboardViewProps = {
   onEditProfile?: () => void;
   onViewOwnProfile?: () => void;
   onShareProfile?: () => void;
+  onEmbedProfile?: () => void;
   onOptOut?: () => void;
   onPeriodChange?: (period: LeaderboardPeriod) => void;
   onSelectProfile?: (row: LeaderboardRow) => void;
@@ -71,6 +72,7 @@ export function LeaderboardView({
   onEditProfile,
   onViewOwnProfile,
   onShareProfile,
+  onEmbedProfile,
   onOptOut,
   onPeriodChange,
   onSelectProfile,
@@ -143,6 +145,7 @@ export function LeaderboardView({
                       <>
                         <button type="button" className="settings-btn" onClick={() => onViewOwnProfile?.()} disabled={!onViewOwnProfile}>View profile</button>
                         <button type="button" className="settings-btn" onClick={() => onShareProfile?.()} disabled={!onShareProfile}>Share</button>
+                        <button type="button" className="settings-btn" onClick={() => onEmbedProfile?.()} disabled={!onEmbedProfile}>Embed</button>
                         <button type="button" className="ghost-button leaderboard-hero__participation" onClick={() => onOptOut?.()} disabled={isActionLoading || !onOptOut}>{isActionLoading ? "Leaving…" : "Leave leaderboard"}</button>
                       </>
                     ) : (

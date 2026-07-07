@@ -34,6 +34,7 @@ export type LeaderboardPageProps = {
   onPeriodChange: (period: LeaderboardPeriod) => void;
   onSelectProfile: (row: LeaderboardRow) => void;
   onShareProfile: () => void;
+  onEmbedProfile?: () => void;
   onSignIn: () => void;
   onViewOwnProfile: () => void;
 };
@@ -71,6 +72,7 @@ export function LeaderboardPage({
   onPeriodChange,
   onSelectProfile,
   onShareProfile,
+  onEmbedProfile,
   onSignIn,
   onViewOwnProfile,
 }: LeaderboardPageProps) {
@@ -112,6 +114,7 @@ export function LeaderboardPage({
           onEditProfile={onEditProfile}
           onViewOwnProfile={onViewOwnProfile}
           onShareProfile={onShareProfile}
+          onEmbedProfile={onEmbedProfile}
           onOptOut={onOptOut}
           onPeriodChange={onPeriodChange}
           onSelectProfile={onSelectProfile}
