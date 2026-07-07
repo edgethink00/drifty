@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { TrackerStatus } from "@drifty/domain";
 import { StrictMode, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 
@@ -200,14 +200,9 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: true,
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
-  IS_PRODUCTION_BUILD: false,
-  ONBOARDING_V2_2_PREVIEW_ENABLED: false,
-  RELEASE_CHANNEL: "dev",
-  TEAMS_BETA_ENABLED: true,
   get REPLAY_ONBOARDING_DEV_TOOL_ENABLED() {
     return appFeatureSwitches.replayOnboardingDevToolEnabled;
   },
-  WATCHER_PEEK_PROTOTYPE_ENABLED: true,
   isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
 }));
 
@@ -421,6 +416,10 @@ async function advanceToReadyStep(options: { activity?: string } = {}) {
 }
 
 describe("App onboarding", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { id: "user-1", email: "alex@example.com" };

@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, ONBOARDING_V2_2_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { ProjectCorrectionsCard } from "../classification/ProjectCorrectionsCard";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
@@ -105,14 +105,7 @@ export function DevSettingsSection({
   onWatcherPeriodicMaxChange,
   onWatcherPeriodicMinChange,
 }: DevSettingsSectionProps) {
-  const showWatcherPeekSettings = WATCHER_PEEK_SETTINGS_VISIBLE && WATCHER_PEEK_PROTOTYPE_ENABLED;
-  const showDevPreviewBlock =
-    REPLAY_ONBOARDING_DEV_TOOL_ENABLED ||
-    ONBOARDING_V2_2_PREVIEW_ENABLED ||
-    TEAMS_BETA_ENABLED ||
-    END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ||
-    DRIFT_ALARM_PANEL_PREVIEWS_ENABLED ||
-    showWatcherPeekSettings;
+  const showWatcherPeekSettings = WATCHER_PEEK_SETTINGS_VISIBLE;
 
   return (
     <div className="settings-section">
@@ -183,27 +176,25 @@ export function DevSettingsSection({
           </div>
         </div>
       </div>
-      {showDevPreviewBlock ? (
-        <DevPreviewControls
-          endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
-          showWatcherPeekSettings={showWatcherPeekSettings}
-          watcherMode={watcherMode}
-          watcherPeekEnabled={watcherPeekEnabled}
-          watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
-          watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
-          onEndOfDayReviewPreview={onEndOfDayReviewPreview}
-          onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
-          onOpenReplayOnboarding={onOpenReplayOnboarding}
-          teamsBetaEnabled={teamsBetaEnabled}
-          onTeamsBetaChange={onTeamsBetaChange}
-          onPreviewDriftAlarm={onPreviewDriftAlarm}
-          onShowWatcherPeek={onShowWatcherPeek}
-          onWatcherModeChange={onWatcherModeChange}
-          onWatcherPeekEnabledChange={onWatcherPeekEnabledChange}
-          onWatcherPeriodicMaxChange={onWatcherPeriodicMaxChange}
-          onWatcherPeriodicMinChange={onWatcherPeriodicMinChange}
-        />
-      ) : null}
+      <DevPreviewControls
+        endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
+        showWatcherPeekSettings={showWatcherPeekSettings}
+        watcherMode={watcherMode}
+        watcherPeekEnabled={watcherPeekEnabled}
+        watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
+        watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
+        onEndOfDayReviewPreview={onEndOfDayReviewPreview}
+        onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
+        onOpenReplayOnboarding={onOpenReplayOnboarding}
+        teamsBetaEnabled={teamsBetaEnabled}
+        onTeamsBetaChange={onTeamsBetaChange}
+        onPreviewDriftAlarm={onPreviewDriftAlarm}
+        onShowWatcherPeek={onShowWatcherPeek}
+        onWatcherModeChange={onWatcherModeChange}
+        onWatcherPeekEnabledChange={onWatcherPeekEnabledChange}
+        onWatcherPeriodicMaxChange={onWatcherPeriodicMaxChange}
+        onWatcherPeriodicMinChange={onWatcherPeriodicMinChange}
+      />
       {DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED ? (
         <div className="settings-block settings-block--dev-preview">
           <h3>Dashboard replay</h3>
@@ -223,7 +214,7 @@ export function DevSettingsSection({
             <div>
               <div className="lbl">AI unavailable preview</div>
               <div className="desc">
-                Apply a selected AI unavailable case to the dashboard three days ago. {dashboardAiUnavailablePreview ? `Active on ${formatDayLabel(dashboardAiUnavailablePreview.appliedDay)}.` : "Dev builds only."}
+                Apply a selected AI unavailable case to the dashboard three days ago. {dashboardAiUnavailablePreview ? `Active on ${formatDayLabel(dashboardAiUnavailablePreview.appliedDay)}.` : "Dev-mode preview tool."}
               </div>
             </div>
             <div className="ctrl settings-row__actions">

@@ -6,15 +6,11 @@ describe("app feature switches", () => {
     vi.resetModules();
   });
 
-  it("keeps production as the only release channel that disables background prototypes while keeping Dev-mode tools available", async () => {
+  it("keeps Dev-mode tools available in release builds", async () => {
     vi.stubEnv("VITE_DRIFTY_CHANNEL", "production");
 
     const switches = await import("./appFeatureSwitches");
 
-    expect(switches.RELEASE_CHANNEL).toBe("production");
-    expect(switches.IS_PRODUCTION_BUILD).toBe(true);
-    expect(switches.TEAMS_BETA_ENABLED).toBe(false);
-    expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(false);
     expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
     expect(switches.AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED).toBe(true);
     expect(switches.DEV_SETTINGS_ENABLED).toBe(true);
@@ -25,15 +21,11 @@ describe("app feature switches", () => {
     expect(switches.END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED).toBe(true);
   });
 
-  it("treats beta as an unsupported channel and falls back to dev", async () => {
-    vi.stubEnv("VITE_DRIFTY_CHANNEL", "beta");
+  it("does not let release-channel values change feature availability", async () => {
+    vi.stubEnv("VITE_DRIFTY_CHANNEL", "internal");
 
     const switches = await import("./appFeatureSwitches");
 
-    expect(switches.RELEASE_CHANNEL).toBe("dev");
-    expect(switches.IS_PRODUCTION_BUILD).toBe(false);
-    expect(switches.TEAMS_BETA_ENABLED).toBe(true);
-    expect(switches.WATCHER_PEEK_PROTOTYPE_ENABLED).toBe(true);
     expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
     expect(switches.AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED).toBe(true);
     expect(switches.DEV_SETTINGS_ENABLED).toBe(true);
@@ -43,19 +35,17 @@ describe("app feature switches", () => {
     expect(switches.END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED).toBe(true);
   });
 
-  it("keeps the onboarding bypass dev-only even when the raw skip flag is present", async () => {
+  it("passes through the compile-time onboarding bypass flag", async () => {
     const switches = await import("./appFeatureSwitches");
 
-    expect(switches.resolveDevOnboardingBypass("dev", true)).toBe(true);
-    expect(switches.resolveDevOnboardingBypass("dev", false)).toBe(false);
-    expect(switches.resolveDevOnboardingBypass("production", true)).toBe(false);
+    expect(switches.resolveDevOnboardingBypass(true)).toBe(true);
+    expect(switches.resolveDevOnboardingBypass(false)).toBe(false);
   });
 
-  it("keeps the onboarding auth-step bypass dev-only even when the raw skip flag is present", async () => {
+  it("passes through the compile-time onboarding auth-step bypass flag", async () => {
     const switches = await import("./appFeatureSwitches");
 
-    expect(switches.resolveDevOnboardingAuthBypass("dev", true)).toBe(true);
-    expect(switches.resolveDevOnboardingAuthBypass("dev", false)).toBe(false);
-    expect(switches.resolveDevOnboardingAuthBypass("production", true)).toBe(false);
+    expect(switches.resolveDevOnboardingAuthBypass(true)).toBe(true);
+    expect(switches.resolveDevOnboardingAuthBypass(false)).toBe(false);
   });
 });

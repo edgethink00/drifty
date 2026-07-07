@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { TrackerStatus } from "@drifty/domain";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   authState,
@@ -143,10 +143,6 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: true,
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
-  IS_PRODUCTION_BUILD: false,
-  RELEASE_CHANNEL: "dev",
-  TEAMS_BETA_ENABLED: true,
-  WATCHER_PEEK_PROTOTYPE_ENABLED: true,
   isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
 }));
 
@@ -204,6 +200,10 @@ async function advanceToAccountStep() {
 }
 
 describe("App onboarding cloud login", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();

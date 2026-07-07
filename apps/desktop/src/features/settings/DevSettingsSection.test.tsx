@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DevSettingsSection } from "./DevSettingsSection";
 import {
   DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS,
@@ -12,8 +12,6 @@ import {
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
-  onboardingV22PreviewEnabled: false,
-  teamsBetaEnabled: false,
 }));
 
 vi.mock("../../appFeatureSwitches", () => ({
@@ -24,14 +22,7 @@ vi.mock("../../appFeatureSwitches", () => ({
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: false,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
-  get ONBOARDING_V2_2_PREVIEW_ENABLED() {
-    return featureSwitches.onboardingV22PreviewEnabled;
-  },
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
-  get TEAMS_BETA_ENABLED() {
-    return featureSwitches.teamsBetaEnabled;
-  },
-  WATCHER_PEEK_PROTOTYPE_ENABLED: false,
 }));
 
 function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
@@ -91,15 +82,15 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
 }
 
 describe("DevSettingsSection", () => {
-  beforeEach(() => {
-    featureSwitches.demoDashboardReplayDevToolEnabled = false;
-    featureSwitches.onboardingV22PreviewEnabled = false;
-    featureSwitches.teamsBetaEnabled = false;
+  afterEach(() => {
+    cleanup();
   });
 
-  it("opens the onboarding v2.2 preview when the dev tool is enabled", () => {
-    featureSwitches.onboardingV22PreviewEnabled = true;
+  beforeEach(() => {
+    featureSwitches.demoDashboardReplayDevToolEnabled = false;
+  });
 
+  it("opens the onboarding v2.2 preview from the Dev preview block", () => {
     const props = renderProductionDevSettings();
 
     expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
@@ -107,9 +98,7 @@ describe("DevSettingsSection", () => {
     expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles Teams beta from the Dev preview block when the internal flag is enabled", () => {
-    featureSwitches.teamsBetaEnabled = true;
-
+  it("toggles Teams beta from the Dev preview block", () => {
     const props = renderProductionDevSettings();
 
     expect(screen.getByText("Teams beta")).toBeTruthy();
@@ -117,13 +106,15 @@ describe("DevSettingsSection", () => {
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
-  it("does not leave an empty Dev preview block in production diagnostics", () => {
+  it("keeps core Dev preview controls visible without release-channel feature gates", () => {
     renderProductionDevSettings();
 
     expect(screen.getByRole("heading", { name: /^Debug logs$/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^AX fallback diagnostics$/ })).toBeTruthy();
     expect(screen.getByText("Force browser history URL fallback")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: /^Dev$/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: /^Dev$/ })).toBeTruthy();
+    expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
+    expect(screen.getByText("Teams beta")).toBeTruthy();
     expect(screen.queryByRole("group", { name: /^Pre-release update$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();

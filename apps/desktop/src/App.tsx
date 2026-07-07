@@ -67,7 +67,7 @@ import {
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
@@ -341,7 +341,7 @@ export default function App() {
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
-  const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled && teamsBetaEnabled;
+  const canOpenTeamsBeta = devModeEnabled && teamsBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
   // Project classification is a Dev-mode preview control (opt-in, off by default):
@@ -2349,7 +2349,7 @@ export default function App() {
   }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
-    const effectiveTeamsBetaEnabled = TEAMS_BETA_ENABLED && DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
+    const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
     window.localStorage.setItem(TEAMS_BETA_STORAGE_KEY, effectiveTeamsBetaEnabled ? "1" : "0");
   }, [devModeEnabled, teamsBetaEnabled]);
 
@@ -3430,7 +3430,6 @@ export default function App() {
   const currentMinuteOfDay = liveClock ? liveClock.getHours() * 60 + liveClock.getMinutes() : null;
 
   useEffect(() => {
-    if (!WATCHER_PEEK_PROTOTYPE_ENABLED) return;
     if (!watcherPeekEnabled) return;
     if (selectedDay !== todayDay) return;
     if (!status?.running) return;
