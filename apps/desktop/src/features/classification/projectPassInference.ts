@@ -11,6 +11,11 @@ const OPENAI_BASE_URL = "https://api.openai.com/v1";
 // Output must hold one assignment + optional correction per run in the chunk;
 // a chunk of ~80 runs needs several thousand tokens, so keep this generous.
 const PROJECT_PASS_MAX_TOKENS = 8192;
+// Heavy-pass chunks can run for minutes on reasoning models — well past the
+// native command's 60s default — so every provider request pins its own budget.
+// Kept slightly above the Supabase edge wall-clock limit so cloud failures
+// surface the server's error instead of a client-side abort.
+const PROJECT_PASS_TIMEOUT_MS = 180_000;
 const REVIEW_EDGE_FUNCTION = "review-activity";
 
 export interface ProjectPassInferenceDeps {
@@ -69,6 +74,7 @@ function buildOpenAiCompatibleRequest(baseUrl: string, apiKey: string | null, mo
     messages: [{ role: "user", content: prompt }],
     maxTokens: PROJECT_PASS_MAX_TOKENS,
     temperature: 0,
+    timeoutMs: PROJECT_PASS_TIMEOUT_MS,
   };
 }
 
@@ -104,6 +110,7 @@ function buildAnthropicRequest(apiKey: string, model: string, prompt: string): R
     messages: [{ role: "user", content: prompt }],
     maxTokens: PROJECT_PASS_MAX_TOKENS,
     temperature: 0,
+    timeoutMs: PROJECT_PASS_TIMEOUT_MS,
   };
 }
 
@@ -155,15 +162,38 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
     deps.invokeCloud ??
     (async (prompt: string) => {
       if (!supabase) throw new Error("Supabase is not configured.");
-      const { data, error } = await supabase.functions.invoke(REVIEW_EDGE_FUNCTION, { body: { prompt } });
-      if (error) throw new Error(error.message ?? "review-activity failed");
-      const payload = data as { content?: unknown; model?: unknown; tokensIn?: unknown; tokensOut?: unknown };
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error("Sign in to use Drifty Cloud analysis.");
+      // WKWebView fetch aborts long response-less waits (the LLM streams nothing
+      // until it finishes), so the cloud call rides the same native Rust HTTP
+      // command as every other provider. The edge function accepts the OpenAI
+      // chat shape on this path and picks the model server-side.
+      const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
+      const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
+      const response = await invokeChat({
+        baseUrl: `${supabaseUrl}/functions/v1/${REVIEW_EDGE_FUNCTION}`,
+        apiKey: accessToken,
+        model: "drifty-cloud",
+        messages: [{ role: "user", content: prompt }],
+        maxTokens: PROJECT_PASS_MAX_TOKENS,
+        temperature: 0,
+        timeoutMs: PROJECT_PASS_TIMEOUT_MS,
+        headers: { apikey: anonKey },
+      });
+      const status = typeof response.status === "number" ? response.status : 0;
+      if (status < 200 || status >= 300) {
+        const detail = typeof response.body === "string" ? response.body.slice(0, 200) : "";
+        throw new Error(`Drifty Cloud analysis failed (HTTP ${status})${detail ? `: ${detail}` : ""}`);
+      }
+      const parsed = parseNativeBody(response.body);
+      const usage = usageFromParsedBody(parsed, "drifty-cloud");
       return {
-        content: typeof payload.content === "string" ? payload.content : "",
-        model: typeof payload.model === "string" ? payload.model : null,
-        tokensIn: typeof payload.tokensIn === "number" ? payload.tokensIn : null,
-        tokensOut: typeof payload.tokensOut === "number" ? payload.tokensOut : null,
-        latencyMs: null,
+        content: contentFromParsedBody(parsed),
+        model: usage.model,
+        tokensIn: usage.tokensIn,
+        tokensOut: usage.tokensOut,
+        latencyMs: typeof response.latencyMs === "number" ? response.latencyMs : null,
       };
     });
 
