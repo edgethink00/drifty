@@ -3,6 +3,7 @@
 // Deliberately separate from the Leaderboard tab (which is just the ranking board);
 // a user can publish a focus card without ever joining the leaderboard.
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
 import { ProfileSocialLinks, copyTextToClipboard } from "./ProfileModals";
 import { renderFocusBadgeSvg, formatFocusDuration, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
@@ -84,11 +85,14 @@ export function ProfilePage({
     }
   };
 
-  const embedRows: Array<{ key: string; label: string; snippet: string }> = snippets
+  const badgeEmbedPreview = (alt: string) => (
+    <img src={previewSrc} alt={alt} height={20} style={{ display: "block" }} />
+  );
+  const embedRows: Array<{ key: string; label: string; snippet: string; preview?: ReactNode }> = snippets
     ? [
-        { key: "markdown", label: "GitHub README (Markdown)", snippet: snippets.markdown },
-        { key: "iframe", label: "Website card (iframe)", snippet: snippets.iframe },
-        { key: "html", label: "Website badge (HTML)", snippet: snippets.html },
+        { key: "markdown", label: "GitHub README (Markdown)", snippet: snippets.markdown, preview: badgeEmbedPreview("README badge preview") },
+        { key: "iframe", label: "Website card (iframe)", snippet: snippets.iframe, preview: <FocusCardEmbedPreview displayName={displayName} focusSeconds={focusSeconds7d} /> },
+        { key: "html", label: "Website badge (HTML)", snippet: snippets.html, preview: badgeEmbedPreview("Website badge preview") },
         { key: "link", label: "Profile link", snippet: snippets.profileUrl },
       ]
     : [];
@@ -179,6 +183,11 @@ export function ProfilePage({
                 {embedRows.map((row) => (
                   <label key={row.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <span className="label-mono">{row.label}</span>
+                    {row.preview ? (
+                      <div style={{ padding: "12px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--surface-strong, #f1f1ec) 55%, transparent)", border: "1px dashed color-mix(in srgb, var(--line, #d9d9d2) 80%, transparent)", width: "fit-content", maxWidth: "100%" }}>
+                        {row.preview}
+                      </div>
+                    ) : null}
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <input
                         className="settings-input"
@@ -229,6 +238,35 @@ export function ProfilePage({
       )}
 
       {shareMessage ? <div className="leaderboard-share-toast" role="status">{shareMessage}</div> : null}
+    </div>
+  );
+}
+
+// Local mock of the hosted drifty.so/embed card so users can see what the iframe embed
+// will look like before pasting it anywhere. Purely presentational; mirrors the embed
+// page's layout (avatar · name · weekly focus · powered-by footer).
+function FocusCardEmbedPreview({ displayName, focusSeconds }: { displayName: string; focusSeconds: number }) {
+  const name = displayName.trim() || "drifty";
+  const isLive = focusSeconds > 0;
+  return (
+    <div aria-label="Website card preview" style={{ width: 340, maxWidth: "100%", border: "1px solid var(--line, #e2e2dc)", borderRadius: 14, padding: "14px 16px", background: "var(--surface, #fff)", display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 1px 2px rgba(0,0,0,.04)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--surface-strong, #f2f2ee)", border: "1px solid var(--line, #e2e2dc)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#1c7e3c" }}>
+          {(name.charAt(0) || "D").toUpperCase()}
+        </span>
+        <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</strong>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <span className="label-mono">Focus · this week</span>
+        <span style={{ fontSize: "1.35rem", fontWeight: 800, letterSpacing: "-0.02em", color: "#1c7e3c", lineHeight: 1 }}>
+          {isLive ? formatFocusDuration(focusSeconds) : "—"}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--line, #e9e9e4)", paddingTop: 8, fontSize: "0.72rem", color: "var(--muted, #6b6f66)" }}>
+        <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: isLive ? "#2e9e4f" : "#9a9e96" }} />
+        <span>live preview</span>
+        <span style={{ marginLeft: "auto", fontWeight: 600 }}>powered by <strong>drifty</strong> ↗</span>
+      </div>
     </div>
   );
 }
