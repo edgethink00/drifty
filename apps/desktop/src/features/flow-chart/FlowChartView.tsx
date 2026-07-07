@@ -7,6 +7,7 @@ import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowHoverCard, FlowLegendHoverCard, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { buildFlowBlockHoverGroups } from "./flowHoverGroups";
 import { useFlowChartHoverDelegation } from "./useFlowChartHoverDelegation";
+import type { ProjectLegendEntry } from "./projectFlowView";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
@@ -20,6 +21,10 @@ export function FlowChartView({
   onIntervalChange,
   showEmptyGrid = false,
   startOfDayMinutes = 0,
+  projectModeAvailable = false,
+  projectLegend,
+  colorMode: controlledColorMode,
+  onColorModeChange,
 }: {
   blocks: FlowBlock[];
   appIcons: Record<string, string | null>;
@@ -28,10 +33,17 @@ export function FlowChartView({
   onIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   showEmptyGrid?: boolean;
   startOfDayMinutes?: number;
+  projectModeAvailable?: boolean;
+  projectLegend?: readonly ProjectLegendEntry[];
+  colorMode?: FlowColorMode;
+  onColorModeChange?: (mode: FlowColorMode) => void;
 }) {
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
-  const [colorMode, setColorMode] = useState<FlowColorMode>("category");
+  const [internalColorMode, setInternalColorMode] = useState<FlowColorMode>("category");
+  const colorMode = controlledColorMode ?? internalColorMode;
+  const setColorMode = onColorModeChange ?? setInternalColorMode;
+  const effectiveColorMode: FlowColorMode = colorMode === "project" && !projectModeAvailable ? "category" : colorMode;
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
   const hoveredBlockCardRef = useRef<HTMLDivElement>(null);
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
@@ -65,21 +77,23 @@ export function FlowChartView({
   if (blocks.length === 0 && !showEmptyGrid) return null;
 
   return (
-    <section className="flow-chart-card" aria-label={`${intervalMinutes}-minute flow chart`} data-flow-interval={intervalMinutes} data-flow-color-mode={colorMode} style={chartStyle}>
+    <section className="flow-chart-card" aria-label={`${intervalMinutes}-minute flow chart`} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} style={chartStyle}>
       <FlowChartHeader
         blocks={blocks}
-        colorMode={colorMode}
+        colorMode={effectiveColorMode}
         hoveredLegendCardRef={hoveredLegendCardRef}
         intervalMinutes={intervalMinutes}
         onColorModeChange={setColorMode}
         onIntervalChange={onIntervalChange}
         setHoveredLegend={setHoveredLegend}
+        projectModeAvailable={projectModeAvailable}
+        projectLegend={projectLegend}
       />
 
       <FlowChartGrid
         blockByCell={blockByCell}
         boundaryMinutes={boundaryMinutes}
-        colorMode={colorMode}
+        colorMode={effectiveColorMode}
         currentHourIndex={currentHourIndex}
         currentMinuteOffset={currentMinuteOffset}
         hoverGroupsByCell={hoverGroupsByCell}

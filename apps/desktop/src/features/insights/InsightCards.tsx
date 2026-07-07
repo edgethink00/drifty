@@ -1,7 +1,7 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { DONUT_CIRCUMFERENCE, WEEKLY_BREAKDOWN_WEEKDAYS, buildDonutView, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./insightData";
-import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartMode, WeeklyChartSegment } from "./insightData";
+import { DONUT_CIRCUMFERENCE, NO_PROJECT_KEY, WEEKLY_BREAKDOWN_WEEKDAYS, buildDonutView, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./insightData";
+import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartMode, WeeklyChartProjectSeriesItem, WeeklyChartSegment } from "./insightData";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
 import { buildProductivityPersona, classifyActivity, logicalDayIsoDateForDate } from "@drifty/domain";
@@ -177,6 +177,10 @@ export function WeeklyCategoryRow({
   segments,
   classificationOptions,
   appIcons,
+  projectSeries,
+  projectMeta,
+  projectBySegmentId,
+  projectModeAvailable = false,
 }: {
   weekly: WeeklyBreakdownDay[];
   categoryTotals: Array<{ category: ActivityCategory; totalSeconds: number }>;
@@ -184,29 +188,33 @@ export function WeeklyCategoryRow({
   segments: ActivitySegment[];
   classificationOptions: ClassificationOptions;
   appIcons: AppIconMap;
+  projectSeries?: readonly WeeklyChartProjectSeriesItem[];
+  projectMeta?: ReadonlyMap<string, { readonly label: string; readonly color: string }>;
+  projectBySegmentId?: ReadonlyMap<string, string>;
+  projectModeAvailable?: boolean;
 }) {
   const [mode, setMode] = useState<WeeklyChartMode>("category");
+  // A vanished project set (or an empty range) must not strand the chart in project mode.
+  const effectiveMode: WeeklyChartMode = mode === "project" && !projectModeAvailable ? "category" : mode;
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const categorySeries = useMemo<DonutCategorySlice[]>(
     () => categoryTotals.map((entry) => ({ category: entry.category, seconds: entry.totalSeconds })),
     [categoryTotals],
   );
   const hasData = weekly.some((day) => day.isActive);
-  const chart = useMemo(() => buildWeeklyChartView(weekly, mode, categorySeries), [categorySeries, mode, weekly]);
+  const chart = useMemo(() => buildWeeklyChartView(weekly, effectiveMode, categorySeries, projectSeries), [categorySeries, effectiveMode, projectSeries, weekly]);
   const productivityDonut = useMemo(() => buildDonutView("productivity", categorySeries, productivityTotals), [categorySeries, productivityTotals]);
   const categoryDonut = useMemo(() => buildDonutView("category", categorySeries, productivityTotals), [categorySeries, productivityTotals]);
 
   const hoverPayloads = useMemo(() => {
-    const totalSeconds = mode === "productivity"
-      ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.reduce((sum, productivity) => sum + productivityTotals[productivity], 0)
-      : categoryTotals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
     const entries = new Map<string, CompactClassificationHoverPayload>();
 
     function buildBreakdown(matchesSegment: (segment: ActivitySegment) => boolean) {
       return buildCompactActivityBreakdown(segments.filter(matchesSegment));
     }
 
-    if (mode === "productivity") {
+    if (effectiveMode === "productivity") {
+      const totalSeconds = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.reduce((sum, productivity) => sum + productivityTotals[productivity], 0);
       const productivityEntries = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
         key: productivity,
         label: productivityLabel(productivity),
@@ -227,7 +235,38 @@ export function WeeklyCategoryRow({
           appBreakdown: buildBreakdown((segment) => classifyActivity(segment, classificationOptions).productivity === entry.key),
         });
       }
+    } else if (effectiveMode === "project") {
+      // Assigned time buckets by project; classified-but-unassigned time collects
+      // in the shared "No project" bucket (matching the chart's stacked series).
+      const matchesProject = (segment: ActivitySegment, key: string): boolean => key === NO_PROJECT_KEY
+        ? !projectBySegmentId?.get(segment.id) && classifyActivity(segment, classificationOptions).category !== "unknown"
+        : projectBySegmentId?.get(segment.id) === key;
+      const projectSecondsByKey = new Map<string, number>();
+      for (const segment of segments) {
+        const projectId = projectBySegmentId?.get(segment.id);
+        if (projectId) {
+          projectSecondsByKey.set(projectId, (projectSecondsByKey.get(projectId) ?? 0) + segment.durationSeconds);
+        } else if (classifyActivity(segment, classificationOptions).category !== "unknown") {
+          projectSecondsByKey.set(NO_PROJECT_KEY, (projectSecondsByKey.get(NO_PROJECT_KEY) ?? 0) + segment.durationSeconds);
+        }
+      }
+      const totalSeconds = [...projectSecondsByKey.values()].reduce((sum, value) => sum + value, 0);
+      for (const item of projectSeries ?? []) {
+        const seconds = projectSecondsByKey.get(item.key) ?? 0;
+        if (seconds <= 0) continue;
+        const meta = projectMeta?.get(item.key);
+        entries.set(item.key, {
+          label: meta?.label ?? "Project",
+          durationLabel: formatCompactDurationFromSeconds(seconds),
+          shareLabel: `${Math.round((seconds / Math.max(totalSeconds, 1)) * 100)}%`,
+          dotClassName: "",
+          color: meta?.color ?? item.color,
+          disableRemoteFavicons: true,
+          appBreakdown: buildBreakdown((segment) => matchesProject(segment, item.key)),
+        });
+      }
     } else {
+      const totalSeconds = categoryTotals.reduce((sum, entry) => sum + entry.totalSeconds, 0);
       for (const entry of categoryTotals) {
         if (entry.totalSeconds <= 0) continue;
         entries.set(entry.category, {
@@ -243,7 +282,7 @@ export function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [categoryTotals, classificationOptions, mode, productivityTotals, segments]);
+  }, [categoryTotals, classificationOptions, effectiveMode, productivityTotals, segments, projectSeries, projectMeta, projectBySegmentId]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -259,8 +298,13 @@ export function WeeklyCategoryRow({
       const started = new Date(activitySegment.startedAt);
       if (Number.isNaN(started.getTime()) || weekdayOrderIndex(started) !== weekdayIndex) return false;
       weekdayDates.add(localDateKey(started));
+      if (effectiveMode === "project") {
+        return segment.key === NO_PROJECT_KEY
+          ? !projectBySegmentId?.get(activitySegment.id) && classifyActivity(activitySegment, classificationOptions).category !== "unknown"
+          : projectBySegmentId?.get(activitySegment.id) === segment.key;
+      }
       const classification = classifyActivity(activitySegment, classificationOptions);
-      return mode === "productivity"
+      return effectiveMode === "productivity"
         ? classification.productivity === segment.key
         : classification.category === segment.key;
     });
@@ -284,7 +328,8 @@ export function WeeklyCategoryRow({
       <WeeklyTrendChart
         chart={chart}
         hasData={hasData}
-        mode={mode}
+        mode={effectiveMode}
+        projectModeAvailable={projectModeAvailable}
         onHideSegmentHover={() => setHoveredSegment(null)}
         onModeChange={setMode}
         onMoveSegmentHover={moveSegmentHover}

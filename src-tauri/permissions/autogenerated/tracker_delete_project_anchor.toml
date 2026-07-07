@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-delete-project-anchor"
+description = "Enables the tracker_delete_project_anchor command without any pre-configured scope."
+commands.allow = ["tracker_delete_project_anchor"]
+
+[[permission]]
+identifier = "deny-tracker-delete-project-anchor"
+description = "Denies the tracker_delete_project_anchor command without any pre-configured scope."
+commands.deny = ["tracker_delete_project_anchor"]

@@ -1348,6 +1348,16 @@ async function readClassificationWorkProfile(useLocalFallback: boolean): Promise
   return normalizeOnboardingWorkProfile(readUserOnboardingState(onboardingUserId));
 }
 
+/**
+ * Work profile string for AI prompts, honoring the privacy toggle. Null when the
+ * user opted out of sending it or no profile exists. Shared by the live
+ * classification path and the heavy project pass so both ground on the same context.
+ */
+export async function resolveClassificationWorkProfileForPrompt(useLocalFallback: boolean): Promise<string | null> {
+  if (!readAiPrivacyRequestSettings().optional.workProfile) return null;
+  return readClassificationWorkProfile(useLocalFallback);
+}
+
 async function readSignedInUserId(): Promise<string | null> {
   if (!supabase) return null;
   try {

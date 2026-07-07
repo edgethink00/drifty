@@ -610,6 +610,116 @@ def get_classification_metrics(payload: dict):
     return response(True, database().classification_metrics(start, end))
 
 
+def get_projects(payload: dict):
+    return response(True, database().get_projects())
+
+
+def save_project(payload: dict):
+    project_input = payload.get("input", payload)
+    if not isinstance(project_input, dict):
+        return response(False, error="input must be an object")
+    try:
+        project = database().save_project(project_input)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    return response(True, project)
+
+
+def delete_project(payload: dict):
+    project_id = payload.get("id")
+    if not isinstance(project_id, str) or not project_id:
+        return response(False, error="id is required")
+    deleted = database().delete_project(project_id)
+    return response(True, {"deleted": deleted})
+
+
+def save_project_anchors(payload: dict):
+    project_id = payload.get("projectId", payload.get("project_id"))
+    if not isinstance(project_id, str) or not project_id:
+        return response(False, error="projectId is required")
+    anchors = payload.get("anchors", [])
+    if not isinstance(anchors, list):
+        return response(False, error="anchors must be a list")
+    try:
+        result = database().save_project_anchors(project_id, anchors)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    return response(True, result)
+
+
+def delete_project_anchor(payload: dict):
+    project_id = payload.get("projectId", payload.get("project_id"))
+    kind = payload.get("kind")
+    value = payload.get("value")
+    if not isinstance(project_id, str) or not project_id:
+        return response(False, error="projectId is required")
+    if not isinstance(kind, str) or not isinstance(value, str):
+        return response(False, error="kind and value are required")
+    deleted = database().delete_project_anchor(project_id, kind, value)
+    return response(True, {"deleted": deleted})
+
+
+def save_project_exemplar(payload: dict):
+    project_id = payload.get("projectId", payload.get("project_id"))
+    run_summary = payload.get("runSummary", payload.get("run_summary"))
+    source = payload.get("source")
+    if not isinstance(project_id, str) or not project_id:
+        return response(False, error="projectId is required")
+    if not isinstance(run_summary, str):
+        return response(False, error="runSummary is required")
+    if not isinstance(source, str):
+        return response(False, error="source is required")
+    try:
+        exemplar = database().save_project_exemplar(project_id, run_summary, source)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    return response(True, exemplar)
+
+
+def save_project_assignments(payload: dict):
+    assignments = payload.get("assignments", [])
+    if not isinstance(assignments, list):
+        return response(False, error="assignments must be a list")
+    return response(True, database().save_project_assignments(assignments))
+
+
+def get_project_assignments(payload: dict):
+    start, end = day_bounds(payload)
+    return response(True, database().get_project_assignments(start, end))
+
+
+def record_project_pass(payload: dict):
+    pass_input = payload.get("input", payload)
+    if not isinstance(pass_input, dict):
+        return response(False, error="input must be an object")
+    return response(True, database().record_project_pass(pass_input))
+
+
+def get_project_pass_runs(payload: dict):
+    start, end = day_bounds(payload)
+    return response(True, database().get_project_pass_runs(start, end))
+
+
+def save_ai_review_events(payload: dict):
+    events = payload.get("events", [])
+    if not isinstance(events, list):
+        return response(False, error="events must be a list")
+    saved = database().save_ai_review_events(events)
+    return response(True, {"saved": saved})
+
+
+def get_ai_review_events(payload: dict):
+    start, end = day_bounds(payload)
+    return response(True, database().get_ai_review_events(start, end))
+
+
+def revert_ai_review_event(payload: dict):
+    event_id = payload.get("id")
+    if not isinstance(event_id, int) or isinstance(event_id, bool):
+        return response(False, error="id must be an integer")
+    return response(True, database().revert_ai_review_event(event_id))
+
+
 def preview_browser_history_import(payload: dict):
     from app.tracker.browser_history_import import preview_browser_history_import as preview_import
 
@@ -802,6 +912,19 @@ COMMANDS = {
     "save_classifications": save_classifications,
     "refresh_non_ai_classifications": refresh_non_ai_classifications,
     "get_classification_metrics": get_classification_metrics,
+    "get_projects": get_projects,
+    "save_project": save_project,
+    "delete_project": delete_project,
+    "save_project_anchors": save_project_anchors,
+    "delete_project_anchor": delete_project_anchor,
+    "save_project_exemplar": save_project_exemplar,
+    "save_project_assignments": save_project_assignments,
+    "get_project_assignments": get_project_assignments,
+    "record_project_pass": record_project_pass,
+    "get_project_pass_runs": get_project_pass_runs,
+    "save_ai_review_events": save_ai_review_events,
+    "get_ai_review_events": get_ai_review_events,
+    "revert_ai_review_event": revert_ai_review_event,
     "preview_browser_history_import": preview_browser_history_import,
     "import_browser_history": import_browser_history,
     "get_browser_history_environment": get_browser_history_environment,

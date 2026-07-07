@@ -34,7 +34,8 @@ describe("AiSetupPanel", () => {
     renderPanel();
 
     const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
-    expect(within(setupTabs).getByRole("tab", { name: /^Providers$/i }).getAttribute("aria-selected")).toBe("true");
+    expect(within(setupTabs).getByRole("tab", { name: /^Classification$/i }).getAttribute("aria-selected")).toBe("true");
+    expect(within(setupTabs).getByRole("tab", { name: /^Intelligence$/i }).getAttribute("aria-selected")).toBe("false");
     expect(within(setupTabs).getByRole("tab", { name: /^Profile & info$/i }).getAttribute("aria-selected")).toBe("false");
     expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });

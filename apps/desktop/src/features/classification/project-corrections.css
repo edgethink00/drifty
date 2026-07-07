@@ -1,0 +1,68 @@
+.corrections-card {
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.1rem;
+}
+
+.corrections-card__head h3 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.corrections-card__head p {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.corrections-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.corrections-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.corrections-item__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.corrections-item__change {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.86rem;
+  flex-wrap: wrap;
+}
+
+.corrections-item__arrow {
+  color: var(--text-muted);
+}
+
+.corrections-item__to {
+  font-weight: 600;
+}
+
+.corrections-item__reason {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.corrections-item__revert {
+  flex: none;
+}

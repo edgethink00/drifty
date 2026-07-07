@@ -1,23 +1,27 @@
-export type AiSetupPanelTab = "providers" | "profile";
+export type AiSetupPanelTab = "providers" | "intelligence" | "profile";
 
 const AI_SETUP_PANEL_TABS = [
-  { id: "providers", label: "Providers", icon: "providers" },
+  { id: "providers", label: "Classification", icon: "providers" },
+  { id: "intelligence", label: "Intelligence", icon: "intelligence" },
   { id: "profile", label: "Profile & info", icon: "profile" },
 ] as const satisfies readonly {
   readonly id: AiSetupPanelTab;
   readonly label: string;
-  readonly icon: "providers" | "profile";
+  readonly icon: "providers" | "intelligence" | "profile";
 }[];
 
 type AiSetupPanelTabsProps = {
   readonly activeTab: AiSetupPanelTab;
   readonly onChange: (tab: AiSetupPanelTab) => void;
+  /** Hide the Intelligence tab when the project-classification preview is off. */
+  readonly showIntelligenceTab?: boolean;
 };
 
-export function AiSetupPanelTabs({ activeTab, onChange }: AiSetupPanelTabsProps) {
+export function AiSetupPanelTabs({ activeTab, onChange, showIntelligenceTab = true }: AiSetupPanelTabsProps) {
+  const tabs = AI_SETUP_PANEL_TABS.filter((tab) => showIntelligenceTab || tab.id !== "intelligence");
   return (
     <div className="ai-setup-panel-tabs" role="tablist" aria-label="AI setup sections">
-      {AI_SETUP_PANEL_TABS.map((tab) => (
+      {tabs.map((tab) => (
         <button
           key={tab.id}
           type="button"
@@ -35,13 +39,20 @@ export function AiSetupPanelTabs({ activeTab, onChange }: AiSetupPanelTabsProps)
   );
 }
 
-function AiSetupPanelTabIcon({ icon }: { readonly icon: "providers" | "profile" }) {
+function AiSetupPanelTabIcon({ icon }: { readonly icon: "providers" | "intelligence" | "profile" }) {
   switch (icon) {
     case "providers":
       return (
         <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
           <path d="M4 5.5h12M4 10h12M4 14.5h12" />
           <path d="M7 3.8v3.4M13 8.3v3.4M9.5 12.8v3.4" />
+        </svg>
+      );
+    case "intelligence":
+      return (
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M10 2.5a5 5 0 0 1 3 9v2.2H7V11.5a5 5 0 0 1 3-9Z" />
+          <path d="M8 16.2h4M8.6 18h2.8" />
         </svg>
       );
     case "profile":

@@ -7,6 +7,9 @@ import type { FlowColorMode } from "./FlowChartTypes";
 import { clockHourForLogicalHour } from "../../lib/formatting";
 import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
 import { flowBlockHoverGroupPosition, type FlowBlockHoverGroup } from "./flowHoverGroups";
+import { NO_PROJECT_COLOR } from "./projectFlowView";
+
+type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
 
 type FlowChartGridProps = {
   readonly blockByCell: ReadonlyMap<string, FlowBlock>;
@@ -96,17 +99,25 @@ export function FlowChartGrid({
                   ? flowBlockHoverGroupPosition(hoverGroup, block.minuteOfDay)
                   : null;
                 const hoverGroupClass = hoverGroupPosition ? ` flow-cell--hover-group flow-cell--hover-group-${hoverGroupPosition}` : "";
-                const unclassifiedClass = block.category === "unknown"
+                const isProjectMode = colorMode === "project";
+                const unclassifiedClass = !isProjectMode && block.category === "unknown"
                   ? ` flow-cell--unclassified${block.classificationSource === "unknown" ? " flow-cell--unclassified-pending" : ""}`
                   : "";
+                const colorClass = isProjectMode
+                  ? "flow-cell--project"
+                  : `flow-cell--${colorMode === "productivity" ? block.productivity : block.category}`;
+                const cellStyle: FlowProjectCellStyle | undefined = isProjectMode
+                  ? { "--flow-project-color": block.projectColor ?? NO_PROJECT_COLOR }
+                  : undefined;
 
                 return (
                   <button
-                    className={`flow-cell flow-cell--${colorMode === "productivity" ? block.productivity : block.category}${unclassifiedClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
+                    className={`flow-cell ${colorClass}${unclassifiedClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
                     data-flow-minute={block.minuteOfDay}
+                    style={cellStyle}
                   >
                     <span className="flow-cell__mark" aria-hidden="true" />
                   </button>

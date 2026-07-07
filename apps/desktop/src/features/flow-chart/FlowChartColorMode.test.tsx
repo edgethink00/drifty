@@ -80,6 +80,34 @@ describe("FlowChartView color mode", () => {
     expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(false);
   });
 
+  it("offers a Project color mode only when project data is available and colors cells by project", () => {
+    const blocks = [
+      makeFlowBlock({ minuteOfDay: 14 * 60, projectColor: "#112233" }),
+      makeFlowBlock({ id: "flow-block-2", minuteOfDay: 14 * 60 + 3, appName: "Slack", siteDomain: null, colorKey: "slack", projectColor: null }),
+    ];
+    const projectLegend = [
+      { projectId: "p1", name: "Drifty", color: "#112233" },
+      { projectId: null, name: "No project", color: "#9ca3af" },
+    ];
+
+    const { rerender } = render(<FlowChartView blocks={blocks} appIcons={{}} intervalMinutes={3} />);
+    expect(screen.queryByRole("button", { name: "Project" })).toBeNull();
+
+    rerender(<FlowChartView blocks={blocks} appIcons={{}} intervalMinutes={3} projectModeAvailable projectLegend={projectLegend} />);
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+
+    const chart = screen.getByLabelText("3-minute flow chart");
+    expect(chart.getAttribute("data-flow-color-mode")).toBe("project");
+    const cells = chart.querySelectorAll("button.flow-cell--project");
+    expect(cells.length).toBe(2);
+    expect((cells[0] as HTMLElement).style.getPropertyValue("--flow-project-color")).toBe("#112233");
+    // Unassigned cell falls back to the gray convention, not hidden.
+    expect((cells[1] as HTMLElement).style.getPropertyValue("--flow-project-color")).toBe("#9ca3af");
+    // Legend lists the project and the gray "No project" bucket.
+    expect(within(chart).getByText("Drifty")).toBeTruthy();
+    expect(within(chart).getByText("No project")).toBeTruthy();
+  });
+
   it("shows readable identity chips before the hover detail and avoids repeated site pills", async () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 

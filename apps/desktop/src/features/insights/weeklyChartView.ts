@@ -2,7 +2,13 @@ import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS
 import type { ActivityCategory, ProductivityLabel } from "@drifty/domain";
 import type { DonutCategorySlice, WeeklyBreakdownDay } from "./insightData";
 
-export type WeeklyChartMode = "productivity" | "category";
+export type WeeklyChartMode = "productivity" | "category" | "project";
+
+/** A project series entry for the weekly chart: project id key + resolved color, ordered by the caller. */
+export interface WeeklyChartProjectSeriesItem {
+  readonly key: string;
+  readonly color: string;
+}
 
 export interface WeeklyChartSegment {
   key: string;
@@ -26,7 +32,9 @@ export interface WeeklyChartView {
 }
 
 type WeeklyChartSeriesItem = {
-  readonly key: ProductivityLabel | ActivityCategory;
+  // Widened to string so project ids (arbitrary) can key the same machinery as
+  // productivity labels and activity categories.
+  readonly key: ProductivityLabel | ActivityCategory | string;
   readonly color: string;
   readonly order: number;
 };
@@ -55,10 +63,16 @@ export function buildWeeklyChartView(
   weekly: WeeklyBreakdownDay[],
   mode: WeeklyChartMode,
   categorySeries: DonutCategorySlice[],
+  projectSeries: readonly WeeklyChartProjectSeriesItem[] = [],
 ): WeeklyChartView {
+  // Unclassified ("unknown") time is excluded from the category lens so the three
+  // modes share a denominator (classified time) and their bars match in length.
+  const classifiedCategorySeries = categorySeries.filter((slice) => slice.category !== "unknown");
   const series: WeeklyChartSeriesItem[] = mode === "productivity"
     ? FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity, order) => ({ key: productivity, color: PRODUCTIVITY_COLORS[productivity], order }))
-    : categorySeries.map((slice, order) => ({ key: slice.category, color: CATEGORY_COLORS[slice.category], order }));
+    : mode === "project"
+      ? projectSeries.map((item, order) => ({ key: item.key, color: item.color, order }))
+      : classifiedCategorySeries.map((slice, order) => ({ key: slice.category, color: CATEGORY_COLORS[slice.category], order }));
 
   const valueFor = (day: WeeklyBreakdownDay, key: WeeklyChartSeriesItem["key"]): number => {
     if (mode === "productivity") {
@@ -69,15 +83,18 @@ export function buildWeeklyChartView(
         default: return 0;
       }
     }
+    if (mode === "project") return day.projectSeconds[key] ?? 0;
     return categorySecondsFor(day, key);
   };
 
   const dayTotals = weekly.map((day) => series.reduce((sum, item) => sum + valueFor(day, item.key), 0));
 
-  const categoryKeys = categorySeries.map((slice) => slice.category);
+  const categoryKeys = classifiedCategorySeries.map((slice) => slice.category);
+  const projectKeys = projectSeries.map((item) => item.key);
   const productivityHours = weekly.map((day) => (day.focusSeconds + day.neutralSeconds + day.driftSeconds) / 3600);
   const categoryHours = weekly.map((day) => categoryKeys.reduce((sum, key) => sum + (day.categorySeconds[key] ?? 0), 0) / 3600);
-  const maxHours = Math.max(0, ...productivityHours, ...categoryHours);
+  const projectHours = weekly.map((day) => projectKeys.reduce((sum, key) => sum + (day.projectSeconds[key] ?? 0), 0) / 3600);
+  const maxHours = Math.max(0, ...productivityHours, ...categoryHours, ...projectHours);
   const axisMax = maxHours > 0 ? maxHours / 0.93 : 1;
   const step = chooseChartStepHours(maxHours);
 

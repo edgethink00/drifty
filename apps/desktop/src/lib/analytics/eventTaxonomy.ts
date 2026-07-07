@@ -17,7 +17,7 @@ export const POSTHOG_EVENT_NAMES = [
 
 export type PostHogEventName = (typeof POSTHOG_EVENT_NAMES)[number];
 
-export const APP_SURFACES = ["dashboard", "classification", "history", "trends", "leaderboard", "team", "settings", "onboarding", "billing", "auth"] as const;
+export const APP_SURFACES = ["dashboard", "classification", "projects", "history", "trends", "leaderboard", "team", "settings", "onboarding", "billing", "auth"] as const;
 export const DASHBOARD_PERIODS = ["day", "week", "month"] as const;
 export const SETTINGS_SECTIONS = [
   "general",

@@ -21,6 +21,20 @@ import type {
   DriftAlarmTrayStatus,
   CurrentActivitySnapshot,
   LiveTailQuery,
+  Project,
+  ProjectAnchor,
+  ProjectAnchorKind,
+  ProjectAssignmentRecord,
+  ProjectAssignmentsSaveResult,
+  ProjectExemplar,
+  ProjectExemplarSource,
+  ProjectInput,
+  ProjectPassRun,
+  ProjectPassRunInput,
+  ProjectPassRunRecord,
+  AiReviewEvent,
+  AiReviewEventInput,
+  AiReviewEventRevertResult,
   ProductivityShareMix,
   RawEventsQuery,
   SiteDuration,
@@ -317,6 +331,67 @@ export const trackerClient: TrackerApi = {
       aiClassifiedSegments: 0,
       staleClassifications: 0,
     };
+  },
+  async getProjects() {
+    const result = await safeInvoke<Project[]>("tracker_get_projects");
+    return result ?? [];
+  },
+  async saveProject(input: ProjectInput) {
+    const result = await safeInvoke<Project>("tracker_save_project", { query: { input } });
+    return result ?? {
+      id: input.id ?? "",
+      name: input.name,
+      description: input.description,
+      color: input.color ?? "",
+      status: input.status ?? "active",
+      anchors: [],
+      createdAt: "",
+      updatedAt: "",
+    };
+  },
+  async deleteProject(id: string) {
+    const result = await safeInvoke<{ deleted: number }>("tracker_delete_project", { query: { id } });
+    return result ?? { deleted: 0 };
+  },
+  async saveProjectAnchors(projectId: string, anchors: ProjectAnchor[]) {
+    const result = await safeInvoke<ProjectAnchor[]>("tracker_save_project_anchors", { query: { projectId, anchors } });
+    return result ?? [];
+  },
+  async deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string) {
+    const result = await safeInvoke<{ deleted: number }>("tracker_delete_project_anchor", { query: { projectId, kind, value } });
+    return result ?? { deleted: 0 };
+  },
+  async saveProjectExemplar(projectId: string, runSummary: string, source: ProjectExemplarSource) {
+    const result = await safeInvoke<ProjectExemplar>("tracker_save_project_exemplar", { query: { projectId, runSummary, source } });
+    return result ?? { id: 0, projectId, runSummary, source, createdAt: "" };
+  },
+  async saveProjectAssignments(assignments: ProjectAssignmentRecord[]) {
+    const result = await safeInvoke<ProjectAssignmentsSaveResult>("tracker_save_project_assignments", { query: { assignments } });
+    return result ?? { saved: 0, skippedManual: 0 };
+  },
+  async getProjectAssignments(query: TimelineQuery) {
+    const result = await safeInvoke<ProjectAssignmentRecord[]>("tracker_get_project_assignments", { query });
+    return result ?? [];
+  },
+  async recordProjectPass(input: ProjectPassRunInput) {
+    const result = await safeInvoke<ProjectPassRunRecord>("tracker_record_project_pass", { query: { input } });
+    return result ?? { id: 0, ranAt: "" };
+  },
+  async getProjectPassRuns(query: TimelineQuery) {
+    const result = await safeInvoke<ProjectPassRun[]>("tracker_get_project_pass_runs", { query });
+    return result ?? [];
+  },
+  async saveAiReviewEvents(events: AiReviewEventInput[]) {
+    const result = await safeInvoke<{ saved: number }>("tracker_save_ai_review_events", { query: { events } });
+    return result ?? { saved: 0 };
+  },
+  async getAiReviewEvents(query: TimelineQuery) {
+    const result = await safeInvoke<AiReviewEvent[]>("tracker_get_ai_review_events", { query });
+    return result ?? [];
+  },
+  async revertAiReviewEvent(id: number) {
+    const result = await safeInvoke<AiReviewEventRevertResult>("tracker_revert_ai_review_event", { query: { id } });
+    return result ?? { reverted: false, restored: false };
   },
   async previewBrowserHistoryImport(query?: BrowserHistoryImportQuery) {
     if (shouldUsePreviewData()) return emptyBrowserHistoryImportPreview(query);

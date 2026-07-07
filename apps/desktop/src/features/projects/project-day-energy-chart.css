@@ -1,0 +1,183 @@
+/* Intraday project energy chart — a stacked area of which project got your
+   time through one day. Mirrors the calm inset of the Focus/Drift chart. */
+
+.project-day-energy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.project-day-energy__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.project-day-energy__eyebrow {
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
+}
+
+.project-day-energy__peak {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Legend ── */
+.project-day-energy__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-day-energy__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: var(--type-caption-size);
+  color: var(--text-muted);
+}
+
+.project-day-energy__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.project-day-energy__legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12rem;
+}
+
+.project-day-energy__legend-value {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Plot ── */
+.project-day-energy__plot {
+  position: relative;
+}
+
+.project-day-energy__svg {
+  display: block;
+  width: 100%;
+  height: clamp(5rem, 11vw, 7.5rem);
+  overflow: visible;
+}
+
+.project-day-energy__grid {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.26;
+  vector-effect: non-scaling-stroke;
+}
+
+.project-day-energy__band {
+  opacity: 0.86;
+  stroke: var(--surface);
+  stroke-width: 0.3;
+  vector-effect: non-scaling-stroke;
+}
+
+.project-day-energy__hit {
+  fill: transparent;
+  cursor: default;
+  pointer-events: all;
+}
+
+/* ── Hover tooltip (screen-fixed at the pointer) ── */
+.project-day-energy__tooltip {
+  position: fixed;
+  left: var(--project-day-tooltip-x);
+  top: var(--project-day-tooltip-y);
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 18rem;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+  transform: translate(-50%, calc(-100% - 0.6rem));
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.project-day-energy__tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.project-day-energy__tooltip-label {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-day-energy__tooltip-meta {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── X axis ── */
+.project-day-energy__axis {
+  position: relative;
+  height: 0.72rem;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.project-day-energy__axis span {
+  position: absolute;
+  left: var(--project-day-axis-x);
+  top: 0;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+}
+
+.project-day-energy__axis span:first-child {
+  transform: none;
+}
+
+.project-day-energy__axis span:last-child {
+  transform: translateX(-100%);
+}
+
+/* ── Empty state ── */
+.project-day-energy--empty {
+  gap: var(--space-3);
+}
+
+.project-day-energy__empty {
+  margin: 0;
+  padding: var(--space-5) 0;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+}

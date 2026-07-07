@@ -33,12 +33,12 @@ export function DashboardDemoReplayControls({
   };
 
   return (
-    <div className="settings-row" role="group" aria-label="Dashboard demo replay">
+    <div className="settings-row settings-row--fallback settings-row--demo-replay" role="group" aria-label="Dashboard demo replay">
       <div>
         <div className="lbl">Dashboard demo replay</div>
         <div className="desc">Replay the selected dashboard day or week for recording.</div>
       </div>
-      <div className="ctrl settings-row__actions">
+      <div className="ctrl settings-row__actions settings-row__actions--wrap">
         <button type="button" className="settings-btn" disabled={!controlsReady} onClick={() => onReplay?.("day")}>Replay Your Day</button>
         <button type="button" className="settings-btn" disabled={!controlsReady} onClick={() => onReplay?.("week")}>Replay Your Week</button>
         <input

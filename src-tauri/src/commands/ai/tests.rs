@@ -4,7 +4,10 @@ use std::thread;
 
 use serde_json::json;
 
-use super::{post_openai_chat, AiClassificationChatRequest};
+use super::{
+    post_anthropic_chat, post_openai_chat, AiClassificationAnthropicChatRequest,
+    AiClassificationChatRequest,
+};
 
 #[test]
 fn posts_openai_compatible_chat_body_with_headers() {
@@ -152,6 +155,74 @@ fn rejects_requests_without_any_non_empty_model() {
     let error = post_openai_chat(request).expect_err("blank models array is rejected");
 
     assert_eq!(error, "AI provider model is required.");
+}
+
+#[test]
+fn posts_anthropic_messages_body_with_key_and_version_headers() {
+    let (address, server) = capture_one_chat_request();
+    let request = anthropic_request(format!("http://{address}"));
+
+    let response = post_anthropic_chat(request).expect("anthropic request succeeds");
+
+    let request = server.join().expect("join server");
+    assert_eq!(response.status, 200);
+    assert!(request.starts_with("POST /messages HTTP/1.1"));
+    assert!(request.contains("x-api-key: sk-ant-test"));
+    assert!(request.contains("anthropic-version: 2023-06-01"));
+    assert!(!request.contains("authorization:"));
+    let body = request_body_json(&request);
+    assert_eq!(body.get("model"), Some(&json!("claude-sonnet-5")));
+    assert_eq!(body.get("max_tokens"), Some(&json!(256)));
+    assert_eq!(
+        body.get("messages"),
+        Some(&json!([{ "role": "user", "content": "classify" }]))
+    );
+}
+
+#[test]
+fn defaults_anthropic_version_and_max_tokens_when_absent() {
+    let (address, server) = capture_one_chat_request();
+    let mut request = anthropic_request(format!("http://{address}"));
+    request.anthropic_version = None;
+    request.max_tokens = None;
+
+    post_anthropic_chat(request).expect("anthropic request succeeds");
+
+    let request = server.join().expect("join server");
+    assert!(request.contains("anthropic-version: 2023-06-01"));
+    let body = request_body_json(&request);
+    assert_eq!(body.get("max_tokens"), Some(&json!(4096)));
+}
+
+#[test]
+fn rejects_anthropic_request_without_api_key() {
+    let mut request = anthropic_request("http://127.0.0.1:9".to_string());
+    request.api_key = "  ".to_string();
+    let error = post_anthropic_chat(request).expect_err("blank api key is rejected");
+
+    assert_eq!(error, "Anthropic API key is required.");
+}
+
+#[test]
+fn rejects_anthropic_request_without_model() {
+    let mut request = anthropic_request("http://127.0.0.1:9".to_string());
+    request.model = " ".to_string();
+    let error = post_anthropic_chat(request).expect_err("blank model is rejected");
+
+    assert_eq!(error, "Anthropic model is required.");
+}
+
+fn anthropic_request(base_url: String) -> AiClassificationAnthropicChatRequest {
+    AiClassificationAnthropicChatRequest {
+        base_url: Some(base_url),
+        api_key: "sk-ant-test".to_string(),
+        model: "claude-sonnet-5".to_string(),
+        messages: vec![json!({ "role": "user", "content": "classify" })],
+        max_tokens: Some(256),
+        timeout_ms: None,
+        temperature: Some(0.0),
+        anthropic_version: Some("2023-06-01".to_string()),
+    }
 }
 
 fn capture_one_chat_request() -> (std::net::SocketAddr, thread::JoinHandle<String>) {

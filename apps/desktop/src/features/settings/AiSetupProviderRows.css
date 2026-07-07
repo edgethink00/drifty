@@ -86,6 +86,28 @@
   width: 1.28rem;
 }
 
+.ai-setup-brand-mark--openai {
+  background: color-mix(in srgb, #10a37f 18%, var(--surface));
+  color: #10a37f;
+}
+
+.ai-setup-brand-mark--openai svg {
+  fill: currentColor;
+  height: 1.24rem;
+  width: 1.24rem;
+}
+
+.ai-setup-brand-mark--anthropic {
+  background: color-mix(in srgb, #d97757 22%, var(--surface));
+  color: #d97757;
+}
+
+.ai-setup-brand-mark--anthropic svg {
+  fill: currentColor;
+  height: 1.16rem;
+  width: 1.16rem;
+}
+
 .ai-setup-choice__copy {
   display: grid;
   min-width: 0;

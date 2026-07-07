@@ -13,6 +13,7 @@ import {
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
   onboardingV22PreviewEnabled: false,
+  projectClassificationPreviewEnabled: false,
   teamsBetaEnabled: false,
 }));
 
@@ -26,6 +27,9 @@ vi.mock("../../appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
   get ONBOARDING_V2_2_PREVIEW_ENABLED() {
     return featureSwitches.onboardingV22PreviewEnabled;
+  },
+  get PROJECT_CLASSIFICATION_PREVIEW_ENABLED() {
+    return featureSwitches.projectClassificationPreviewEnabled;
   },
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
   get TEAMS_BETA_ENABLED() {
@@ -48,6 +52,12 @@ function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
     forceChromiumAxExtremeNudgeEnabled: false,
     forceFrontmostFallbackCaptureEnabled: false,
     logoAnimationPreviewEnabled: false,
+    projectPassRuns: [],
+    projectClassificationEnabled: false,
+    projectClassificationAiReviewEvents: [],
+    projectClassificationCorrectionsBusy: false,
+    onProjectClassificationEnabledChange: vi.fn(),
+    onRevertProjectClassificationCorrection: vi.fn(),
     weekDashboardAxisScalePercent,
     watcherMode: "periodic" as const,
     watcherPeekEnabled: false,
@@ -89,6 +99,7 @@ describe("DevSettingsSection", () => {
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
     featureSwitches.onboardingV22PreviewEnabled = false;
+    featureSwitches.projectClassificationPreviewEnabled = false;
     featureSwitches.teamsBetaEnabled = false;
   });
 
@@ -134,6 +145,12 @@ describe("DevSettingsSection", () => {
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
       logoAnimationPreviewEnabled: false,
+    projectPassRuns: [],
+    projectClassificationEnabled: false,
+    projectClassificationAiReviewEvents: [],
+    projectClassificationCorrectionsBusy: false,
+    onProjectClassificationEnabledChange: vi.fn(),
+    onRevertProjectClassificationCorrection: vi.fn(),
       weekDashboardAxisScalePercent: 80,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
@@ -186,6 +203,12 @@ describe("DevSettingsSection", () => {
       forceChromiumAxExtremeNudgeEnabled: false,
       forceFrontmostFallbackCaptureEnabled: false,
       logoAnimationPreviewEnabled: false,
+    projectPassRuns: [],
+    projectClassificationEnabled: false,
+    projectClassificationAiReviewEvents: [],
+    projectClassificationCorrectionsBusy: false,
+    onProjectClassificationEnabledChange: vi.fn(),
+    onRevertProjectClassificationCorrection: vi.fn(),
       weekDashboardAxisScalePercent: 80,
       watcherMode: "periodic" as const,
       watcherPeekEnabled: false,
@@ -262,5 +285,21 @@ describe("DevSettingsSection", () => {
     expect(scaleInput.getAttribute("value")).toBe("100");
     expect(screen.getByRole("button", { name: "Reset" }).getAttribute("disabled")).toBe("");
     expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(90);
+  });
+
+  it("hides the project classification controls when the preview switch is off", () => {
+    renderProductionDevSettings();
+    expect(screen.queryByRole("switch", { name: "Toggle project classification preview" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Project classification (preview)" })).toBeNull();
+  });
+
+  it("toggles the project classification preview when enabled", () => {
+    featureSwitches.projectClassificationPreviewEnabled = true;
+    const props = renderProductionDevSettings();
+
+    expect(screen.getByRole("heading", { name: "Project classification (preview)" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle project classification preview" }));
+
+    expect(props.onProjectClassificationEnabledChange).toHaveBeenCalledWith(true);
   });
 });

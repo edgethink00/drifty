@@ -389,6 +389,129 @@ impl TrackerController {
         )
     }
 
+    pub fn get_projects(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_projects", json!({}))
+    }
+
+    pub fn save_project(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "save_project", json!({ "input": input }))
+    }
+
+    pub fn delete_project(&self, app: &AppHandle, id: String) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "delete_project", json!({ "id": id }))
+    }
+
+    pub fn save_project_anchors(
+        &self,
+        app: &AppHandle,
+        project_id: String,
+        anchors: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "save_project_anchors",
+            json!({ "projectId": project_id, "anchors": anchors }),
+        )
+    }
+
+    pub fn delete_project_anchor(
+        &self,
+        app: &AppHandle,
+        project_id: String,
+        kind: String,
+        value: String,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "delete_project_anchor",
+            json!({ "projectId": project_id, "kind": kind, "value": value }),
+        )
+    }
+
+    pub fn save_project_exemplar(
+        &self,
+        app: &AppHandle,
+        project_id: String,
+        run_summary: String,
+        source: String,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "save_project_exemplar",
+            json!({ "projectId": project_id, "runSummary": run_summary, "source": source }),
+        )
+    }
+
+    pub fn save_project_assignments(
+        &self,
+        app: &AppHandle,
+        assignments: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "save_project_assignments",
+            json!({ "assignments": assignments }),
+        )
+    }
+
+    pub fn get_project_assignments(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_project_assignments",
+            build_period_payload(day, start, end),
+        )
+    }
+
+    pub fn record_project_pass(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "record_project_pass", json!({ "input": input }))
+    }
+
+    pub fn get_project_pass_runs(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_project_pass_runs", build_period_payload(day, start, end))
+    }
+
+    pub fn save_ai_review_events(
+        &self,
+        app: &AppHandle,
+        events: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "save_ai_review_events", json!({ "events": events }))
+    }
+
+    pub fn get_ai_review_events(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_ai_review_events",
+            build_period_payload(day, start, end),
+        )
+    }
+
+    pub fn revert_ai_review_event(
+        &self,
+        app: &AppHandle,
+        id: i64,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "revert_ai_review_event", json!({ "id": id }))
+    }
+
     pub fn refresh_non_ai_classifications(
         &self,
         app: &AppHandle,

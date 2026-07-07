@@ -1,1 +1,1 @@
-export type FlowColorMode = "category" | "productivity";
+export type FlowColorMode = "category" | "productivity" | "project";

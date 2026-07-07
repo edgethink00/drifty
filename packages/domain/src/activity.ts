@@ -25,7 +25,7 @@ export interface ActivityClassification {
   productivity: ProductivityLabel;
 }
 
-export type StoredClassificationSource = "llm" | "manual" | "rule" | "fallback" | "system" | "unknown" | "app-db" | "domain-db" | "youtube";
+export type StoredClassificationSource = "llm" | "manual" | "rule" | "fallback" | "system" | "unknown" | "app-db" | "domain-db" | "youtube" | "ai_review";
 
 export interface StoredActivityClassification extends ActivityClassification {
   source: StoredClassificationSource;
@@ -213,6 +213,8 @@ export interface FlowBlock {
   aiClassification?: boolean | null;
   aiCachedClassification?: boolean | null;
   classificationReason?: string | null;
+  projectId?: string | null;
+  projectColor?: string | null;
   colorKey: string;
   durationSeconds: number;
 }

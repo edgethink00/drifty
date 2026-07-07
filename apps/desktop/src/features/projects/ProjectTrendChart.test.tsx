@@ -1,0 +1,192 @@
+// @vitest-environment jsdom
+
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import type { ActivitySegment, Project } from "@drifty/domain";
+
+import { ProjectTrendChart } from "./ProjectTrendChart";
+
+// Local (no "Z") midday timestamps so each segment buckets into the expected
+// calendar day regardless of the test machine's timezone.
+function seg(id: string, startedAt: string, durationSeconds: number): ActivitySegment {
+  return { id, startedAt, endedAt: startedAt, durationSeconds, appName: "App" } as ActivitySegment;
+}
+
+function project(id: string, name: string, color: string): Project {
+  return {
+    id,
+    name,
+    description: "",
+    color,
+    status: "active",
+    anchors: [],
+    createdAt: "2026-07-01T00:00:00Z",
+    updatedAt: "2026-07-01T00:00:00Z",
+  };
+}
+
+const PROJECTS: Project[] = [
+  project("p-alpha", "Project Alpha", "#3b82f6"),
+  project("p-beta", "Project Beta", "#ef4444"),
+];
+
+// Segments spanning three days across two projects plus one unassigned segment.
+const SEGMENTS: ActivitySegment[] = [
+  seg("s1", "2026-07-04T09:00:00", 3600), // Alpha
+  seg("s2", "2026-07-05T10:00:00", 1800), // Beta
+  seg("s3", "2026-07-06T11:00:00", 2400), // Alpha
+  seg("s4", "2026-07-06T13:00:00", 1200), // unassigned → No project
+];
+
+const ASSIGNMENTS = new Map<string, string>([
+  ["s1", "p-alpha"],
+  ["s2", "p-beta"],
+  ["s3", "p-alpha"],
+  // s4 intentionally left unassigned
+]);
+
+describe("ProjectTrendChart", () => {
+  it("renders a pill legend with both projects and a No project band", () => {
+    render(
+      <ProjectTrendChart
+        segments={SEGMENTS}
+        projectBySegmentId={ASSIGNMENTS}
+        projects={PROJECTS}
+        days={7}
+        endDay="2026-07-06"
+      />,
+    );
+
+    expect(screen.getByText("Project Alpha")).toBeTruthy();
+    expect(screen.getByText("Project Beta")).toBeTruthy();
+    expect(screen.getByText("No project")).toBeTruthy();
+  });
+
+  it("draws one smooth stacked area band (fill + line) per active series", () => {
+    const { container } = render(
+      <ProjectTrendChart
+        segments={SEGMENTS}
+        projectBySegmentId={ASSIGNMENTS}
+        projects={PROJECTS}
+        days={7}
+        endDay="2026-07-06"
+      />,
+    );
+
+    // Project Alpha + Project Beta + No project → three stacked bands.
+    expect(container.querySelectorAll(".ptc-area")).toHaveLength(3);
+    expect(container.querySelectorAll(".ptc-line")).toHaveLength(3);
+    // The area path is a smooth curve (uses cubic-bezier "C" commands), not a polyline.
+    const firstArea = container.querySelector(".ptc-area");
+    expect(firstArea?.getAttribute("d")).toContain("C");
+  });
+
+  it("labels every day on the x-axis, not every third", () => {
+    render(
+      <ProjectTrendChart
+        segments={SEGMENTS}
+        projectBySegmentId={ASSIGNMENTS}
+        projects={PROJECTS}
+        days={7}
+        endDay="2026-07-06"
+      />,
+    );
+
+    // Every visible day (7/4–7/6) gets its own compact "M/D" tick.
+    expect(screen.getByText("7/4")).toBeTruthy();
+    expect(screen.getByText("7/5")).toBeTruthy();
+    expect(screen.getByText("7/6")).toBeTruthy();
+  });
+
+  it("defaults to a 14-day window when days is omitted", () => {
+    // A segment ~9 days before endDay is inside the default 14-day window but
+    // outside a 7-day one; the fitted span reaching back to it proves the default.
+    const withOld: ActivitySegment[] = [seg("s0", "2026-06-27T09:00:00", 1800), ...SEGMENTS];
+    const withOldAssign = new Map<string, string>([...ASSIGNMENTS, ["s0", "p-alpha"]]);
+    render(
+      <ProjectTrendChart
+        segments={withOld}
+        projectBySegmentId={withOldAssign}
+        projects={PROJECTS}
+        endDay="2026-07-06"
+      />,
+    );
+
+    // The window fits to real data: its oldest day (6/27) is only in range under
+    // the 14-day default, and the eyebrow shows the fitted span, not a fixed count.
+    expect(screen.getByText("6/27")).toBeTruthy();
+    expect(screen.getByText(/6\/27 – 7\/6/)).toBeTruthy();
+  });
+
+  it("fits the window edge-to-edge to the days that have data", () => {
+    // 14-day window ending 7/6, but the segments only cover 7/4–7/6.
+    render(
+      <ProjectTrendChart
+        segments={SEGMENTS}
+        projectBySegmentId={ASSIGNMENTS}
+        projects={PROJECTS}
+        days={14}
+        endDay="2026-07-06"
+      />,
+    );
+
+    // Eyebrow shows the trimmed data span, and empty leading days are dropped.
+    expect(screen.getByText(/7\/4 – 7\/6/)).toBeTruthy();
+    expect(screen.queryByText("6/25")).toBeNull();
+  });
+
+  it("omits the No project band when every segment is assigned", () => {
+    const allAssigned = new Map<string, string>([...ASSIGNMENTS, ["s4", "p-beta"]]);
+    const { container } = render(
+      <ProjectTrendChart
+        segments={SEGMENTS}
+        projectBySegmentId={allAssigned}
+        projects={PROJECTS}
+        days={7}
+        endDay="2026-07-06"
+      />,
+    );
+
+    expect(screen.getByText("Project Alpha")).toBeTruthy();
+    expect(screen.queryByText("No project")).toBeNull();
+    expect(container.querySelectorAll(".ptc-area")).toHaveLength(2);
+  });
+
+  it("scales the y-axis to project time, not the dominant unassigned band", () => {
+    // 1h of project time under a 5h unassigned pile on the same day.
+    const segs: ActivitySegment[] = [
+      seg("p1", "2026-07-06T09:00:00", 3600), // 1h → Alpha
+      seg("n1", "2026-07-06T11:00:00", 18000), // 5h → unassigned
+    ];
+    render(
+      <ProjectTrendChart
+        segments={segs}
+        projectBySegmentId={new Map([["p1", "p-alpha"]])}
+        projects={PROJECTS}
+        days={7}
+        endDay="2026-07-06"
+      />,
+    );
+
+    // Axis tops out near the 1h project total; a 6h-total scale would show these.
+    expect(screen.queryByText("4h")).toBeNull();
+    expect(screen.queryByText("6h")).toBeNull();
+    // The unassigned band still renders (faint) for context.
+    expect(screen.getByText("No project")).toBeTruthy();
+  });
+
+  it("shows an empty state and no area bands when there are no segments", () => {
+    const { container } = render(
+      <ProjectTrendChart
+        segments={[]}
+        projectBySegmentId={new Map()}
+        projects={PROJECTS}
+        days={7}
+        endDay="2026-07-06"
+      />,
+    );
+
+    expect(screen.getByText(/No project activity in this range yet/i)).toBeTruthy();
+    expect(container.querySelectorAll(".ptc-area")).toHaveLength(0);
+  });
+});

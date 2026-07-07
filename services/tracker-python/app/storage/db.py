@@ -28,6 +28,12 @@ BROWSER_HISTORY_IMPORT_SOURCE = "browser-history-import"
 VALID_RULE_TARGET_KINDS = {"app", "site"}
 VALID_RULE_MATCH_SCOPES = {"surface", "detail"}
 VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", "siteUrl"}
+
+VALID_PROJECT_STATUSES = {"active", "archived"}
+VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword"}
+VALID_PROJECT_EXEMPLAR_SOURCES = {"user_confirmed", "user_corrected"}
+DEFAULT_PROJECT_COLOR = "#6366f1"
+PROJECT_EXEMPLAR_CAP = 20
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
@@ -205,6 +211,93 @@ class TrackerDatabase:
 
                 CREATE INDEX IF NOT EXISTS idx_activity_classifications_reusable_ai
                 ON activity_classifications(input_fingerprint, ai_result, stale, classified_at DESC, segment_id DESC);
+
+                CREATE TABLE IF NOT EXISTS projects (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  color TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'active',
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS project_anchors (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                  kind TEXT NOT NULL,
+                  value TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  UNIQUE(project_id, kind, value)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_project_anchors_project
+                ON project_anchors(project_id);
+
+                CREATE TABLE IF NOT EXISTS project_exemplars (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                  run_summary TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_project_exemplars_project
+                ON project_exemplars(project_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS activity_project_assignments (
+                  segment_id INTEGER PRIMARY KEY REFERENCES activity_segments(id) ON DELETE CASCADE,
+                  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+                  source TEXT NOT NULL,
+                  confidence REAL,
+                  reason TEXT,
+                  pass_id INTEGER,
+                  chunk_fingerprint TEXT,
+                  assigned_at TEXT NOT NULL,
+                  stale INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_activity_project_assignments_project
+                ON activity_project_assignments(project_id);
+
+                CREATE TABLE IF NOT EXISTS project_pass_runs (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ran_at TEXT NOT NULL,
+                  range_start TEXT NOT NULL,
+                  range_end TEXT NOT NULL,
+                  trigger TEXT NOT NULL,
+                  model TEXT,
+                  provider TEXT,
+                  runs_count INTEGER,
+                  tokens_in INTEGER,
+                  tokens_out INTEGER,
+                  latency_ms INTEGER,
+                  assignments_count INTEGER,
+                  corrections_count INTEGER,
+                  prompt_version TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_project_pass_runs_ran_at
+                ON project_pass_runs(ran_at DESC);
+
+                CREATE TABLE IF NOT EXISTS ai_review_events (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  segment_id INTEGER NOT NULL,
+                  pass_id INTEGER NOT NULL REFERENCES project_pass_runs(id),
+                  prev_category TEXT,
+                  prev_productivity TEXT,
+                  prev_source TEXT,
+                  new_category TEXT,
+                  new_productivity TEXT,
+                  confidence REAL,
+                  reason TEXT,
+                  created_at TEXT NOT NULL,
+                  reverted_at TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_ai_review_events_segment
+                ON ai_review_events(segment_id, created_at DESC);
                 """
             )
             self._ensure_columns(conn)
@@ -1406,6 +1499,465 @@ class TrackerDatabase:
                 else:
                     skipped_count += 1
         return {"matchedCount": matched_count, "appliedCount": applied_count, "skippedCount": skipped_count}
+
+    def get_projects(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            project_rows = conn.execute(
+                """
+                SELECT id, name, description, color, status, created_at, updated_at
+                FROM projects
+                ORDER BY datetime(created_at) ASC, id ASC
+                """
+            ).fetchall()
+            anchor_rows = conn.execute(
+                "SELECT project_id, kind, value, source FROM project_anchors ORDER BY id ASC"
+            ).fetchall()
+        anchors_by_project: dict[str, list[dict[str, Any]]] = {}
+        for row in anchor_rows:
+            anchors_by_project.setdefault(row["project_id"], []).append(
+                {"kind": row["kind"], "value": row["value"], "source": row["source"]}
+            )
+        return [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "description": row["description"],
+                "color": row["color"],
+                "status": row["status"],
+                "anchors": anchors_by_project.get(row["id"], []),
+                "createdAt": row["created_at"],
+                "updatedAt": row["updated_at"],
+            }
+            for row in project_rows
+        ]
+
+    def _get_project(self, project_id: str) -> dict[str, Any] | None:
+        return next((project for project in self.get_projects() if project["id"] == project_id), None)
+
+    def save_project(self, project_input: dict[str, Any]) -> dict[str, Any]:
+        name = str(project_input.get("name", "")).strip()
+        if not name:
+            raise ValueError("name is required")
+        description = str(project_input.get("description", "")).strip()
+        color = str(project_input.get("color", "")).strip() or DEFAULT_PROJECT_COLOR
+        status = str(project_input.get("status", "active")).strip() or "active"
+        if status not in VALID_PROJECT_STATUSES:
+            raise ValueError("status must be 'active' or 'archived'")
+
+        project_id = str(project_input.get("id") or uuid.uuid4())
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            existing = conn.execute(
+                "SELECT created_at FROM projects WHERE id = ?", (project_id,)
+            ).fetchone()
+            created_at = existing["created_at"] if existing else timestamp
+            conn.execute(
+                """
+                INSERT INTO projects (id, name, description, color, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    color = excluded.color,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at
+                """,
+                (project_id, name, description, color, status, created_at, timestamp),
+            )
+        project = self._get_project(project_id)
+        assert project is not None
+        return project
+
+    def delete_project(self, project_id: str) -> int:
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE activity_project_assignments SET project_id = NULL WHERE project_id = ?",
+                (project_id,),
+            )
+            cursor = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            return cursor.rowcount
+
+    def _get_project_anchors(self, project_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, value, source FROM project_anchors WHERE project_id = ? ORDER BY id ASC",
+                (project_id,),
+            ).fetchall()
+        return [{"kind": row["kind"], "value": row["value"], "source": row["source"]} for row in rows]
+
+    def save_project_anchors(self, project_id: str, anchors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            if conn.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone() is None:
+                raise ValueError("project not found")
+            for anchor in anchors:
+                kind = str(anchor.get("kind", "")).strip()
+                value = str(anchor.get("value", "")).strip()
+                source = str(anchor.get("source", "harvested")).strip() or "harvested"
+                if kind not in VALID_PROJECT_ANCHOR_KINDS or not value:
+                    continue
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO project_anchors (project_id, kind, value, source, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (project_id, kind, value, source, timestamp),
+                )
+        return self._get_project_anchors(project_id)
+
+    def delete_project_anchor(self, project_id: str, kind: str, value: str) -> int:
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM project_anchors WHERE project_id = ? AND kind = ? AND value = ?",
+                (project_id, kind, value),
+            )
+            return cursor.rowcount
+
+    def save_project_exemplar(self, project_id: str, run_summary: str, source: str) -> dict[str, Any]:
+        run_summary = str(run_summary or "").strip()
+        if not run_summary:
+            raise ValueError("runSummary is required")
+        if source not in VALID_PROJECT_EXEMPLAR_SOURCES:
+            raise ValueError("source must be 'user_confirmed' or 'user_corrected'")
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            if conn.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone() is None:
+                raise ValueError("project not found")
+            cursor = conn.execute(
+                """
+                INSERT INTO project_exemplars (project_id, run_summary, source, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (project_id, run_summary, source, timestamp),
+            )
+            exemplar_id = cursor.lastrowid
+            conn.execute(
+                """
+                DELETE FROM project_exemplars
+                WHERE project_id = ?
+                  AND id NOT IN (
+                    SELECT id FROM project_exemplars
+                    WHERE project_id = ?
+                    ORDER BY datetime(created_at) DESC, id DESC
+                    LIMIT ?
+                  )
+                """,
+                (project_id, project_id, PROJECT_EXEMPLAR_CAP),
+            )
+        return {
+            "id": exemplar_id,
+            "projectId": project_id,
+            "runSummary": run_summary,
+            "source": source,
+            "createdAt": timestamp,
+        }
+
+    def get_project_exemplars(self, project_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, run_summary, source, created_at
+                FROM project_exemplars
+                WHERE project_id = ?
+                ORDER BY datetime(created_at) DESC, id DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "projectId": project_id,
+                "runSummary": row["run_summary"],
+                "source": row["source"],
+                "createdAt": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def save_project_assignments(self, assignments: list[dict[str, Any]]) -> dict[str, int]:
+        saved = 0
+        skipped_manual = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            for item in assignments:
+                raw_segment_id = item.get("segmentId", item.get("segment_id"))
+                if raw_segment_id is None:
+                    continue
+                try:
+                    segment_id = int(raw_segment_id)
+                except (TypeError, ValueError):
+                    continue
+
+                source = str(item.get("source") or "ai")
+                existing = conn.execute(
+                    "SELECT source FROM activity_project_assignments WHERE segment_id = ?",
+                    (segment_id,),
+                ).fetchone()
+                if existing is not None and existing["source"] == "manual" and source != "manual":
+                    skipped_manual += 1
+                    continue
+
+                confidence = item.get("confidence")
+                conn.execute(
+                    """
+                    INSERT INTO activity_project_assignments (
+                        segment_id, project_id, source, confidence, reason, pass_id, chunk_fingerprint, assigned_at, stale
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(segment_id) DO UPDATE SET
+                        project_id = excluded.project_id,
+                        source = excluded.source,
+                        confidence = excluded.confidence,
+                        reason = excluded.reason,
+                        pass_id = excluded.pass_id,
+                        chunk_fingerprint = excluded.chunk_fingerprint,
+                        assigned_at = excluded.assigned_at,
+                        stale = excluded.stale
+                    """,
+                    (
+                        segment_id,
+                        item.get("projectId", item.get("project_id")),
+                        source,
+                        float(confidence) if confidence is not None else None,
+                        item.get("reason"),
+                        item.get("passId", item.get("pass_id")),
+                        item.get("chunkFingerprint", item.get("chunk_fingerprint")),
+                        item.get("assignedAt") or item.get("assigned_at") or timestamp,
+                        1 if item.get("stale") else 0,
+                    ),
+                )
+                saved += 1
+        return {"saved": saved, "skippedManual": skipped_manual}
+
+    def get_project_assignments(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                a.segment_id,
+                a.project_id,
+                a.source,
+                a.confidence,
+                a.reason,
+                a.pass_id,
+                a.chunk_fingerprint,
+                a.assigned_at,
+                a.stale
+            FROM activity_project_assignments a
+            JOIN activity_segments s ON s.id = a.segment_id
+            WHERE 1 = 1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end, table_name="s")
+        query += " ORDER BY datetime(s.started_at) ASC, a.segment_id ASC"
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {
+                "segmentId": str(row["segment_id"]),
+                "projectId": row["project_id"],
+                "source": row["source"],
+                "confidence": row["confidence"],
+                "reason": row["reason"],
+                "passId": row["pass_id"],
+                "chunkFingerprint": row["chunk_fingerprint"],
+                "assignedAt": row["assigned_at"],
+                "stale": bool(row["stale"]),
+            }
+            for row in rows
+        ]
+
+    def record_project_pass(self, pass_input: dict[str, Any]) -> dict[str, Any]:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        ran_at = pass_input.get("ranAt") or pass_input.get("ran_at") or timestamp
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO project_pass_runs (
+                    ran_at, range_start, range_end, trigger, model, provider,
+                    runs_count, tokens_in, tokens_out, latency_ms,
+                    assignments_count, corrections_count, prompt_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ran_at,
+                    pass_input.get("rangeStart", pass_input.get("range_start")),
+                    pass_input.get("rangeEnd", pass_input.get("range_end")),
+                    str(pass_input.get("trigger", "manual")),
+                    pass_input.get("model"),
+                    pass_input.get("provider"),
+                    pass_input.get("runsCount", pass_input.get("runs_count")),
+                    pass_input.get("tokensIn", pass_input.get("tokens_in")),
+                    pass_input.get("tokensOut", pass_input.get("tokens_out")),
+                    pass_input.get("latencyMs", pass_input.get("latency_ms")),
+                    pass_input.get("assignmentsCount", pass_input.get("assignments_count")),
+                    pass_input.get("correctionsCount", pass_input.get("corrections_count")),
+                    str(pass_input.get("promptVersion", pass_input.get("prompt_version", ""))),
+                ),
+            )
+            pass_id = cursor.lastrowid
+        return {"id": pass_id, "ranAt": ran_at}
+
+    def get_project_pass_runs(self, start: str | None = None, end: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        query = "SELECT * FROM project_pass_runs WHERE 1 = 1"
+        params: list[Any] = []
+        if start:
+            query += " AND datetime(ran_at) >= datetime(?)"
+            params.append(self._normalize_range_bound(start))
+        if end:
+            query += " AND datetime(ran_at) <= datetime(?)"
+            params.append(self._normalize_range_bound(end))
+        query += " ORDER BY datetime(ran_at) DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "ranAt": row["ran_at"],
+                "rangeStart": row["range_start"],
+                "rangeEnd": row["range_end"],
+                "trigger": row["trigger"],
+                "model": row["model"],
+                "provider": row["provider"],
+                "runsCount": row["runs_count"],
+                "tokensIn": row["tokens_in"],
+                "tokensOut": row["tokens_out"],
+                "latencyMs": row["latency_ms"],
+                "assignmentsCount": row["assignments_count"],
+                "correctionsCount": row["corrections_count"],
+                "promptVersion": row["prompt_version"],
+            }
+            for row in rows
+        ]
+
+    @staticmethod
+    def _serialize_ai_review_event(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "segmentId": str(row["segment_id"]),
+            "passId": row["pass_id"],
+            "prevCategory": row["prev_category"],
+            "prevProductivity": row["prev_productivity"],
+            "prevSource": row["prev_source"],
+            "newCategory": row["new_category"],
+            "newProductivity": row["new_productivity"],
+            "confidence": row["confidence"],
+            "reason": row["reason"],
+            "createdAt": row["created_at"],
+            "revertedAt": row["reverted_at"],
+        }
+
+    def save_ai_review_events(self, events: list[dict[str, Any]]) -> int:
+        saved = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            for event in events:
+                raw_segment_id = event.get("segmentId", event.get("segment_id"))
+                pass_id = event.get("passId", event.get("pass_id"))
+                if raw_segment_id is None or pass_id is None:
+                    continue
+                try:
+                    segment_id = int(raw_segment_id)
+                except (TypeError, ValueError):
+                    continue
+                confidence = event.get("confidence")
+                conn.execute(
+                    """
+                    INSERT INTO ai_review_events (
+                        segment_id, pass_id, prev_category, prev_productivity, prev_source,
+                        new_category, new_productivity, confidence, reason, created_at, reverted_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        segment_id,
+                        pass_id,
+                        event.get("prevCategory", event.get("prev_category")),
+                        event.get("prevProductivity", event.get("prev_productivity")),
+                        event.get("prevSource", event.get("prev_source")),
+                        event.get("newCategory", event.get("new_category")),
+                        event.get("newProductivity", event.get("new_productivity")),
+                        float(confidence) if confidence is not None else None,
+                        event.get("reason"),
+                        event.get("createdAt") or event.get("created_at") or timestamp,
+                    ),
+                )
+                saved += 1
+        return saved
+
+    def get_ai_review_events(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                e.id, e.segment_id, e.pass_id, e.prev_category, e.prev_productivity, e.prev_source,
+                e.new_category, e.new_productivity, e.confidence, e.reason, e.created_at, e.reverted_at
+            FROM ai_review_events e
+            JOIN activity_segments s ON s.id = e.segment_id
+            WHERE 1 = 1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end, table_name="s")
+        query += " ORDER BY datetime(e.created_at) DESC, e.id DESC"
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._serialize_ai_review_event(row) for row in rows]
+
+    def revert_ai_review_event(self, event_id: int) -> dict[str, Any]:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            event = conn.execute(
+                "SELECT * FROM ai_review_events WHERE id = ?", (event_id,)
+            ).fetchone()
+            if event is None or event["reverted_at"] is not None:
+                return {"reverted": False, "restored": False}
+
+            current = conn.execute(
+                "SELECT source FROM activity_classifications WHERE segment_id = ?",
+                (event["segment_id"],),
+            ).fetchone()
+            restored = False
+            if (
+                current is not None
+                and current["source"] == "ai_review"
+                and event["prev_category"] is not None
+                and event["prev_productivity"] is not None
+            ):
+                conn.execute(
+                    """
+                    UPDATE activity_classifications
+                    SET category = ?, productivity = ?, source = ?, refreshed_at = ?
+                    WHERE segment_id = ?
+                    """,
+                    (
+                        event["prev_category"],
+                        event["prev_productivity"],
+                        event["prev_source"] or "llm",
+                        timestamp,
+                        event["segment_id"],
+                    ),
+                )
+                restored = True
+            conn.execute(
+                "UPDATE ai_review_events SET reverted_at = ? WHERE id = ?",
+                (timestamp, event_id),
+            )
+        return {"reverted": True, "restored": restored}
+
+    def get_reverted_ai_review_segment_ids(self, segment_ids: list[str]) -> list[str]:
+        ids: list[int] = []
+        for raw in segment_ids:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT DISTINCT segment_id FROM ai_review_events
+                WHERE reverted_at IS NOT NULL AND segment_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+        return [str(row["segment_id"]) for row in rows]
 
     def save_classifications(self, classifications: list[dict[str, Any]]) -> int:
         saved = 0

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-ai-review-events"
+description = "Enables the tracker_get_ai_review_events command without any pre-configured scope."
+commands.allow = ["tracker_get_ai_review_events"]
+
+[[permission]]
+identifier = "deny-tracker-get-ai-review-events"
+description = "Denies the tracker_get_ai_review_events command without any pre-configured scope."
+commands.deny = ["tracker_get_ai_review_events"]

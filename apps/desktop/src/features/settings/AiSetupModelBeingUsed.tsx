@@ -2,12 +2,13 @@ import type { Dispatch, SetStateAction } from "react";
 
 import driftyLogoUrl from "../../assets/drifty-icon.png";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
-import type { AiConnectionStatus, AiConnectionTone } from "../ai-connection/AiConnectionStatusBar";
+import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DRIFTY_CLOUD_MODEL_ID, driftyModelOptions, isSelectableManagedModel } from "./AiSetupDriftyModelOptions";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import type { DriftyRoute } from "./DriftySetupPanel";
-import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
+import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
+import { type SettingsSelectOption } from "./SettingsSelect";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 
@@ -134,9 +135,10 @@ export function AiSetupModelBeingUsed({
   };
 
   return (
-    <section className="ai-setup-model-zone" aria-label="Model being used">
-      <div className="ai-setup-model-zone__head">
-        <h4 className="ai-setup-provider-heading">Model being used</h4>
+    <ModelBeingUsedCard
+      regionAriaLabel="Model being used"
+      heading="Model being used"
+      headingAction={
         <button
           type="button"
           className="settings-btn ai-setup-current-model__test"
@@ -146,60 +148,23 @@ export function AiSetupModelBeingUsed({
         >
           {connectionTestRunning ? "Testing..." : "Test connection"}
         </button>
-      </div>
-      <div className={`ai-setup-current-model${classNameForConnectionTone(connectionStatus.tone)}`}>
-        <div
-          className="ai-setup-current-model__ai-status"
-          data-tone={connectionStatus.tone}
-          role={connectionStatus.tone === "error" ? "alert" : "status"}
-          aria-label={`AI status: ${connectionStatus.label}, ${connectionStatus.providerLabel}`}
-        >
-          <span className="ai-setup-current-model__ai-status-dot" aria-hidden="true" />
-          <span className="ai-setup-current-model__ai-status-label">{connectionStatus.label}</span>
-          <span className="ai-setup-current-model__ai-status-provider">{connectionStatus.providerLabel}</span>
-        </div>
-        <div className="ai-setup-current-model__controls">
-          <SettingsSelect
-            ariaLabel="AI provider"
-            className="ai-setup-select-control"
-            value={selectedProvider}
-            options={PROVIDER_OPTIONS}
-            onChange={handleProviderChange}
-          />
-          <span className="ai-setup-current-model__slash" aria-hidden="true">/</span>
-          <SettingsSelect
-            ariaLabel="AI model"
-            className="ai-setup-select-control ai-setup-select-control--model"
-            value={selectedModelValue}
-            options={modelOptions}
-            onChange={handleModelChange}
-          />
-        </div>
-        {connectionTestMessage ? (
-          <p
-            className={`ai-setup-current-model__status${connectionTestKind ? ` is-${connectionTestKind}` : ""}`}
-            role={connectionTestKind === "error" ? "alert" : "status"}
-          >
-            {connectionTestMessage}
-          </p>
-        ) : null}
-      </div>
-    </section>
+      }
+      tone={connectionStatus.tone}
+      statusLabel={connectionStatus.label}
+      statusProviderLabel={connectionStatus.providerLabel}
+      statusAriaLabel={`AI status: ${connectionStatus.label}, ${connectionStatus.providerLabel}`}
+      providerAriaLabel="AI provider"
+      providerValue={selectedProvider}
+      providerOptions={PROVIDER_OPTIONS}
+      onProviderChange={(value) => handleProviderChange(value as AiSetupSection)}
+      modelAriaLabel="AI model"
+      modelValue={selectedModelValue}
+      modelOptions={modelOptions}
+      onModelChange={handleModelChange}
+      statusMessage={connectionTestMessage}
+      statusMessageKind={connectionTestKind}
+    />
   );
-}
-
-function classNameForConnectionTone(tone: AiConnectionTone): string {
-  switch (tone) {
-    case "ok":
-      return " is-success";
-    case "error":
-      return " is-error";
-    case "warning":
-    case "neutral":
-      return "";
-    default:
-      return assertNever(tone);
-  }
 }
 
 class AiSetupModelProviderError extends Error {

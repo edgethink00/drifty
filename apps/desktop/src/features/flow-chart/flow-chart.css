@@ -299,6 +299,10 @@ button.flow-cell:focus {
 .flow-cell--utility { background: var(--category-utility); }
 .flow-cell--unknown { background: var(--category-unknown); }
 
+/* Project color mode: dynamic per-project color via inline variable; unassigned
+   time falls back to the neutral gray (never hidden — the grid stays complete). */
+.flow-cell--project { background: var(--flow-project-color, var(--category-unknown)); }
+
 /* Unclassified time is "no verdict yet": keep the established unknown tone in
    both color modes so it stays readable, and pulse only while AI
    classification is still pending. */
