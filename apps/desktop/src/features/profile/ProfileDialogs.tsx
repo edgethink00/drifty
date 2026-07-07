@@ -1,6 +1,6 @@
 import type { ChangeEvent } from "react";
 import type { LeaderboardRow } from "../leaderboard/leaderboardService";
-import { EditProfileModal, ProfileModal, type ProfileDraft } from "./ProfileModals";
+import { EditProfileModal, EmbedModal, ProfileModal, type ProfileDraft } from "./ProfileModals";
 import type { PublicProfile } from "./profileService";
 
 export type ProfileDialogsProps = {
@@ -16,8 +16,12 @@ export type ProfileDialogsProps = {
   selectedProfileError: string | null;
   selectedProfileLoading: boolean;
   selectedPublicProfile: PublicProfile | null;
+  isEmbedOpen: boolean;
+  embedPublicId: string | null;
+  embedFocusSeconds: number | null;
   onCloseEditor: () => void;
   onCloseSelectedProfile: () => void;
+  onCloseEmbed: () => void;
   onDraftChange: (updater: Partial<ProfileDraft>) => void;
   onPhotoSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemovePhoto: () => void;
@@ -37,8 +41,12 @@ export function ProfileDialogs({
   selectedProfileError,
   selectedProfileLoading,
   selectedPublicProfile,
+  isEmbedOpen,
+  embedPublicId,
+  embedFocusSeconds,
   onCloseEditor,
   onCloseSelectedProfile,
+  onCloseEmbed,
   onDraftChange,
   onPhotoSelected,
   onRemovePhoto,
@@ -70,6 +78,14 @@ export function ProfileDialogs({
           onRemovePhoto={onRemovePhoto}
           onChange={onDraftChange}
           onSave={onSaveProfile}
+        />
+      ) : null}
+
+      {isEmbedOpen && embedPublicId ? (
+        <EmbedModal
+          publicId={embedPublicId}
+          focusSeconds={embedFocusSeconds}
+          onClose={onCloseEmbed}
         />
       ) : null}
     </>

@@ -20,6 +20,7 @@ export type LeaderboardProfileCardProps = {
   readonly onOptIn?: () => void;
   readonly onOptOut?: () => void;
   readonly onShareProfile?: () => void;
+  readonly onEmbedProfile?: () => void;
   readonly onSignIn?: () => void;
   readonly onViewOwnProfile?: () => void;
 };
@@ -42,6 +43,7 @@ export function LeaderboardProfileCard({
   onOptIn,
   onOptOut,
   onShareProfile,
+  onEmbedProfile,
   onSignIn,
   onViewOwnProfile,
 }: LeaderboardProfileCardProps) {
@@ -95,6 +97,7 @@ export function LeaderboardProfileCard({
                   <>
                     <button type="button" className="settings-btn" onClick={() => onViewOwnProfile?.()} disabled={!onViewOwnProfile}>View profile</button>
                     <button type="button" className="settings-btn" onClick={() => onShareProfile?.()} disabled={!onShareProfile}>Share</button>
+                    <button type="button" className="settings-btn" onClick={() => onEmbedProfile?.()} disabled={!onEmbedProfile}>Embed</button>
                     <button type="button" className="ghost-button leaderboard-hero__participation" onClick={() => onOptOut?.()} disabled={isActionLoading || !onOptOut}>{isActionLoading ? "Leaving…" : "Leave leaderboard"}</button>
                   </>
                 ) : (
