@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
@@ -50,6 +51,19 @@ TIMELINE_SEARCH_FIELDS = (
 
 BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]], Any]
 BrowserHistoryTitlePolicy = Callable[[Optional[str]], bool]
+
+
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
 
 
 @dataclass(frozen=True)
@@ -102,7 +116,7 @@ class TrackerDatabase:
         self._init_db()
 
     def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
+        connection = sqlite3.connect(self.db_path, factory=ClosingConnection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
