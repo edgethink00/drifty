@@ -803,6 +803,7 @@ export default function App() {
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
+    handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
     handleShareLeaderboardProfile,
@@ -5415,10 +5416,10 @@ export default function App() {
             isSignedIn={isPolicySignedIn || leaderboardUsesPreviewProfile}
             displayName={leaderboardProfileDisplayName}
             avatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
-            bio={leaderboardProfileBio}
-            websiteUrl={leaderboardProfileWebsiteUrl}
-            githubUrl={leaderboardProfileGithubUrl}
-            linkedinUrl={leaderboardProfileLinkedinUrl}
+            draft={profileDraft}
+            onDraftChange={updateProfileDraft}
+            onSaveProfile={() => void handleSaveProfile()}
+            isSavingProfile={profileSaving}
             publicId={profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null)}
             focusSeconds7d={localRollingFocusSeconds}
             dailyProductivity={profileDailyProductivity}

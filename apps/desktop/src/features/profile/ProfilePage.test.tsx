@@ -25,10 +25,18 @@ function renderPage(overrides: Partial<Parameters<typeof ProfilePage>[0]> = {}) 
     isSignedIn: true,
     displayName: "Alex",
     avatarUrl: "",
-    bio: "Building quiet tools.",
-    websiteUrl: "https://drifty.so",
-    githubUrl: "",
-    linkedinUrl: "",
+    draft: {
+      displayName: "Alex",
+      bio: "Building quiet tools.",
+      avatarUrl: "",
+      websiteUrl: "https://drifty.so",
+      githubUrl: "",
+      linkedinUrl: "",
+      isPublic: true,
+    },
+    onDraftChange: vi.fn(),
+    onSaveProfile: vi.fn(),
+    isSavingProfile: false,
     publicId: PUBLIC_ID,
     focusSeconds7d: 20 * 3600 + 59 * 60,
     dailyProductivity: null,
@@ -62,13 +70,26 @@ describe("ProfilePage", () => {
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
   });
 
+  it("edits profile fields inline and saves", () => {
+    const onDraftChange = vi.fn();
+    const onSaveProfile = vi.fn();
+    renderPage({ onDraftChange, onSaveProfile });
+
+    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Alex D" } });
+    expect(onDraftChange).toHaveBeenCalledWith({ displayName: "Alex D" });
+    fireEvent.change(screen.getByLabelText("Website"), { target: { value: "https://ex.io" } });
+    expect(onDraftChange).toHaveBeenCalledWith({ websiteUrl: "https://ex.io" });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(onSaveProfile).toHaveBeenCalledTimes(1);
+  });
+
   it("shows identity, loads card state on mount, and renders embed snippets when the card is on", () => {
     const card = mockCard({ enabled: true });
     renderPage({ card });
     expandEmbeds();
 
-    expect(screen.getByRole("heading", { name: "Alex" })).toBeTruthy();
-    expect(screen.getByText("Building quiet tools.")).toBeTruthy();
+    expect((screen.getByLabelText("Display name") as HTMLInputElement).value).toBe("Alex");
+    expect((screen.getByLabelText("Bio") as HTMLTextAreaElement).value).toBe("Building quiet tools.");
     expect(card.refresh).toHaveBeenCalled();
 
     const values = (screen.getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);

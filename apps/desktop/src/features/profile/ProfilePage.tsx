@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
-import { ProfileSocialLinks, copyTextToClipboard } from "./ProfileModals";
+import { copyTextToClipboard } from "./ProfileModals";
+import type { ProfileDraft } from "./ProfileModals";
 import { renderFocusBadgeSvg, formatFocusDuration, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets, functionsBaseFromSupabaseUrl } from "../share/embedSnippets";
 import type { BadgeThemeOption, CardRangeOption } from "../share/embedSnippets";
@@ -17,10 +18,11 @@ export type ProfilePageProps = {
   isSignedIn: boolean;
   displayName: string;
   avatarUrl: string;
-  bio: string;
-  websiteUrl: string;
-  githubUrl: string;
-  linkedinUrl: string;
+  /** Editable profile fields, shown inline (same draft the editor modal uses). */
+  draft: ProfileDraft;
+  onDraftChange: (updater: Partial<ProfileDraft>) => void;
+  onSaveProfile: () => void;
+  isSavingProfile: boolean;
   publicId: string | null;
   /** Local rolling 7-day focus, for the badge preview (works without any cloud state). */
   focusSeconds7d: number;
@@ -43,10 +45,10 @@ export function ProfilePage({
   isSignedIn,
   displayName,
   avatarUrl,
-  bio,
-  websiteUrl,
-  githubUrl,
-  linkedinUrl,
+  draft,
+  onDraftChange,
+  onSaveProfile,
+  isSavingProfile,
   publicId,
   focusSeconds7d,
   dailyProductivity,
@@ -72,7 +74,6 @@ export function ProfilePage({
     if (isSignedIn) void refreshCard();
   }, [isSignedIn, refreshCard]);
 
-  const trimmedBio = bio.trim();
   const cardLocked = card.enabled !== true;
   const chartStats = (() => {
     if (!dailyProductivity || dailyProductivity.length === 0) return null;
@@ -173,7 +174,7 @@ export function ProfilePage({
           ),
           preview: (
             <FocusCardEmbedPreview
-              displayName={displayName}
+              displayName={draft.displayName || displayName}
               focusSeconds={focusSeconds7d}
               theme={embedTheme}
               dailyFocus={dailyProductivity?.slice(-cardRange).map((point) => point.focus) ?? null}
@@ -239,14 +240,54 @@ export function ProfilePage({
           {/* Identity + leaderboard status */}
           <section className="leaderboard-profile-block" aria-label="Your public identity">
             <div className="profile-identity__main">
-              <ProfileAvatar className="leaderboard-hero__avatar" name={displayName} src={avatarUrl || null} />
-              <div style={{ minWidth: 0, flex: 1 }}>
+              <ProfileAvatar className="leaderboard-hero__avatar" name={draft.displayName || displayName} src={avatarUrl || null} />
+              <div className="profile-identity__form">
                 <div className="profile-identity__name-row">
-                  <h3>{displayName}</h3>
-                  <button type="button" className="ghost-button" onClick={onEditProfile}>Edit profile</button>
+                  <input
+                    className="settings-input profile-identity__name-input"
+                    aria-label="Display name"
+                    placeholder="Display name"
+                    value={draft.displayName}
+                    onChange={(event) => onDraftChange({ displayName: event.target.value })}
+                  />
+                  <button type="button" className="ghost-button" onClick={onEditProfile}>Change photo</button>
+                  <button type="button" className="settings-btn" disabled={isSavingProfile} onClick={onSaveProfile}>
+                    {isSavingProfile ? "Saving…" : "Save"}
+                  </button>
                 </div>
-                <p className="profile-identity__bio">{trimmedBio || "Add a short bio so your public card feels complete."}</p>
-                <ProfileSocialLinks profile={{ website_url: websiteUrl, github_url: githubUrl, linkedin_url: linkedinUrl }} />
+                <textarea
+                  className="settings-input profile-identity__bio-input"
+                  aria-label="Bio"
+                  placeholder="Short bio — shows on your public card."
+                  rows={2}
+                  value={draft.bio}
+                  onChange={(event) => onDraftChange({ bio: event.target.value })}
+                />
+                <div className="profile-identity__links">
+                  <input
+                    className="settings-input"
+                    aria-label="Website"
+                    placeholder="Website (https://…)"
+                    value={draft.websiteUrl}
+                    onChange={(event) => onDraftChange({ websiteUrl: event.target.value })}
+                  />
+                  <input
+                    className="settings-input"
+                    aria-label="GitHub"
+                    placeholder="GitHub"
+                    value={draft.githubUrl}
+                    onChange={(event) => onDraftChange({ githubUrl: event.target.value })}
+                  />
+                  <input
+                    className="settings-input"
+                    aria-label="LinkedIn"
+                    placeholder="LinkedIn"
+                    value={draft.linkedinUrl}
+                    onChange={(event) => onDraftChange({ linkedinUrl: event.target.value })}
+                  />
+                </div>
+                {profileError ? <p className="capture-recency capture-recency--error" style={{ margin: 0 }}>{profileError}</p> : null}
+                {profileMessage ? <p className="capture-recency" style={{ margin: 0 }}>{profileMessage}</p> : null}
               </div>
             </div>
             <div className="profile-identity__control profile-card-control__row" aria-label="Public focus card">
@@ -387,8 +428,6 @@ export function ProfilePage({
             )}
           </section>
 
-          {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
-          {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
         </div>
       )}
 

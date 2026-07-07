@@ -94,6 +94,7 @@ type UseLeaderboardProfileControllerResult = {
   readonly handleLeaderboardOptIn: () => Promise<void>;
   readonly handleLeaderboardOptOut: () => Promise<void>;
   readonly handleProfilePhotoSelected: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  readonly handleSaveProfile: () => Promise<boolean>;
   readonly handleSaveProfileFromModal: () => Promise<void>;
   readonly handleSelectLeaderboardProfile: (row: LeaderboardRow) => Promise<void>;
   readonly handleShareLeaderboardProfile: () => Promise<void>;
@@ -1105,6 +1106,7 @@ export function useLeaderboardProfileController({
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
+    handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
     handleShareLeaderboardProfile,

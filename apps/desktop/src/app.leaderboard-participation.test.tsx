@@ -1098,14 +1098,10 @@ describe("App leaderboard participation", () => {
     fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
     expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
 
-    // Profile editing now lives in the Profile tab (reached from the board's strip).
+    // Profile editing now lives inline on the Profile tab (reached from the board's strip).
     fireEvent.click(await screen.findByRole("button", { name: /open profile/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
-    await screen.findByLabelText(/choose profile photo/i);
-    const editor = document.querySelector(".profile-editor-modal");
-    if (!(editor instanceof HTMLElement)) throw new Error("Profile editor modal did not open");
-    fireEvent.change(within(editor).getByLabelText(/display name/i), { target: { value: "Alex Drifty" } });
-    fireEvent.click(within(editor).getByRole("button", { name: /save profile/i }));
+    fireEvent.change(await screen.findByLabelText("Display name"), { target: { value: "Alex Drifty" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => {
       expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Alex Drifty" }));
