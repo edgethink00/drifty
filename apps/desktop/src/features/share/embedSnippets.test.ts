@@ -40,4 +40,8 @@ describe("buildEmbedSnippets", () => {
     expect(snippets.iframe).toContain(`src="${snippets.embedUrl}"`);
     expect(snippets.iframe).toContain(`title="Drifty focus"`);
   });
+
+  it("provides a raw-data JSON url on the badge endpoint", () => {
+    expect(snippets.dataUrl).toBe(`${snippets.badgeUrl}&format=json`);
+  });
 });

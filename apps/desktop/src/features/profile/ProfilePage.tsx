@@ -246,6 +246,20 @@ export function ProfilePage({
                     </button>
                   </div>
                 </div>
+                <div className="profile-embed-card profile-embed-card--link">
+                  <span className="label-mono">Data · JSON (30-day daily focus)</span>
+                  <div className="profile-embed-card__variant-row">
+                    <input
+                      className="settings-input profile-embed-card__code"
+                      readOnly
+                      value={snippets.dataUrl}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <button type="button" className="settings-btn" onClick={() => void copy("data", snippets.dataUrl)}>
+                      {copiedKey === "data" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
               </>
             ) : (
               <div>

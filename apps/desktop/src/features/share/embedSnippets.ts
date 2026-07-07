@@ -22,6 +22,8 @@ export interface EmbedSnippets {
   badgeUrl: string;
   embedUrl: string;
   profileUrl: string;
+  /** Raw aggregate JSON (GET), incl. the 30-day daily focus series — for custom widgets. */
+  dataUrl: string;
   /** GitHub README / Markdown: image badge linking to the hosted profile. */
   markdown: string;
   /** <iframe> rich focus card for blogs/sites. */
@@ -40,12 +42,18 @@ export function buildBadgeUrl(publicId: string, functionsBaseUrl: string): strin
   return `${base}/badge?id=${encodeURIComponent(publicId)}`;
 }
 
+/** GET endpoint returning the card's aggregate JSON (incl. the 30-day daily series). */
+export function buildDataUrl(publicId: string, functionsBaseUrl: string): string {
+  return `${buildBadgeUrl(publicId, functionsBaseUrl)}&format=json`;
+}
+
 export function buildEmbedSnippets(publicId: string, functionsBaseUrl: string): EmbedSnippets {
   const badgeUrl = buildBadgeUrl(publicId, functionsBaseUrl);
   const embedUrl = buildEmbedUrl(publicId);
   const profileUrl = buildProfileUrl(publicId);
+  const dataUrl = buildDataUrl(publicId, functionsBaseUrl);
   const markdown = `[![Drifty focus](${badgeUrl})](${profileUrl})`;
-  const iframe = `<iframe src="${embedUrl}" width="440" height="150" style="border:0;overflow:hidden" scrolling="no" title="Drifty focus"></iframe>`;
+  const iframe = `<iframe src="${embedUrl}" width="440" height="180" style="border:0;overflow:hidden" scrolling="no" title="Drifty focus"></iframe>`;
   const html = `<a href="${profileUrl}"><img src="${badgeUrl}" alt="Drifty focus" height="20"></a>`;
-  return { badgeUrl, embedUrl, profileUrl, markdown, iframe, html };
+  return { badgeUrl, embedUrl, profileUrl, dataUrl, markdown, iframe, html };
 }
