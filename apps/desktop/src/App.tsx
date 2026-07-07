@@ -5413,14 +5413,14 @@ export default function App() {
         {activeTab === "profile" ? (
           <ProfilePage
             isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
-            isSignedIn={isPolicySignedIn}
+            isSignedIn={isPolicySignedIn || leaderboardUsesPreviewProfile}
             displayName={leaderboardProfileDisplayName}
             avatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
             bio={leaderboardProfileBio}
             websiteUrl={leaderboardProfileWebsiteUrl}
             githubUrl={leaderboardProfileGithubUrl}
             linkedinUrl={leaderboardProfileLinkedinUrl}
-            publicId={profile?.public_id ?? null}
+            publicId={profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null)}
             focusSeconds7d={localRollingFocusSeconds}
             card={focusCard}
             isLeaderboardOptedIn={isLeaderboardOptedIn}
