@@ -275,8 +275,8 @@ export function ProfilePage({
             </div>
           </section>
 
-          {/* Public focus card control */}
-          <section className="leaderboard-profile-block profile-card-control" aria-label="Public focus card">
+          {/* Public focus card + embeds — one sharing block (switch → embeds → privacy note) */}
+          <section className="leaderboard-profile-block profile-share-block" aria-label="Public focus card">
             <div className="profile-card-control__row">
               <span className="label-mono">Public focus card</span>
               <span className={`profile-card-control__state${card.enabled === true ? " profile-card-control__state--on" : ""}`}>
@@ -288,7 +288,7 @@ export function ProfilePage({
                     ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus. Turning it off pauses these links — they resume when you turn it back on."
                     : card.enabled === null
                       ? "Checking…"
-                      : "One switch controls everything below — off means your card and badges show nothing."}
+                      : "One switch controls the embeds below — off means your card and badges show nothing."}
                 </p>
                 {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
               </div>
@@ -303,11 +303,8 @@ export function ProfilePage({
                 </button>
               )}
             </div>
-          </section>
 
-          {/* Embeds — collapsed by default */}
-          <section className="leaderboard-profile-block" aria-label="Embeds">
-            <div className="leaderboard-section-kicker">
+            <div className="profile-share-block__section leaderboard-section-kicker">
               <div>
                 <span className="label-mono">Embeds</span>
                 <p>
@@ -325,9 +322,6 @@ export function ProfilePage({
             </div>
             {!embedsOpen ? null : snippets ? (
               <>
-                {cardLocked ? (
-                  <p className="capture-recency">Private — these go live when you turn on the public focus card above.</p>
-                ) : null}
                 <div className={cardLocked ? "profile-embed-stack profile-embed-stack--locked" : "profile-embed-stack"}>
                   {embedGroups.map((group) => (
                     <div key={group.key} className="profile-embed-card">
@@ -390,11 +384,13 @@ export function ProfilePage({
                 <button type="button" className="settings-btn" onClick={onEditProfile}>Set up profile</button>
               </div>
             )}
+            <p className="capture-recency profile-share-block__privacy">
+              Only opt-in aggregates are shared (daily focus/drift totals, weekly split) — raw app, site, window, and session history stays on your device.
+            </p>
           </section>
 
           {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
           {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
-          <p className="capture-recency">Only opt-in aggregates are shared (daily focus/drift totals, weekly split). Raw app, site, window, and session history stays on your device.</p>
         </div>
       )}
 

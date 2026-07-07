@@ -87,7 +87,7 @@ describe("ProfilePage", () => {
     renderPage({ card: mockCard({ enabled: false }) });
     expandEmbeds();
 
-    expect(screen.getByText(/private — these go live/i)).toBeTruthy();
+    expect(document.querySelectorAll(".profile-embed-stack--locked").length).toBe(1);
     // Visuals stay visible…
     expect(screen.getAllByAltText(/focus badge preview/i).length).toBeGreaterThan(0);
     // …but the snippet inputs and copy buttons are disabled.

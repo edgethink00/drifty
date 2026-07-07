@@ -74,9 +74,17 @@
   margin-left: auto;
 }
 
-/* Focus-card control -------------------------------------------------------- */
-.profile-card-control {
-  padding-block: var(--space-2);
+/* Sharing block: switch → embeds → privacy note, one card ------------------- */
+.profile-share-block__section {
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  padding-top: var(--space-2);
+}
+
+.profile-share-block__privacy {
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  margin: 0;
+  opacity: 0.8;
+  padding-top: var(--space-2);
 }
 
 .profile-card-control__row {
