@@ -4,10 +4,6 @@ import type { PublicProfile } from "./profileService";
 import { formatCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
 import { MetricTile } from "../../components/MetricTile";
 import type { ChangeEvent } from "react";
-import { useEffect, useState } from "react";
-import { renderFocusBadgeSvg, formatFocusDuration, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
-import { buildEmbedSnippets, functionsBaseFromSupabaseUrl } from "../share/embedSnippets";
-import type { FocusCardControls } from "../share/useFocusCard";
 
 export type ProfileDraft = {
   displayName: string;
@@ -209,124 +205,6 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   } finally {
     document.body.removeChild(textarea);
   }
-}
-
-// Live "focus badge" embed panel: preview + copy-paste snippets. Reads only the opt-in
-// aggregate (this week's focus); the actual badge image is rendered by the public `badge`
-// Edge Function. Snippet building is dependency-light (see features/share/embedSnippets).
-export function EmbedModal({
-  publicId,
-  focusSeconds,
-  card,
-  onClose,
-}: {
-  publicId: string;
-  focusSeconds: number | null;
-  card: FocusCardControls;
-  onClose: () => void;
-}) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  const { refresh: refreshCard } = card;
-  useEffect(() => {
-    // Load the current opt-in state whenever the panel opens.
-    void refreshCard();
-  }, [refreshCard]);
-
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "";
-  const functionsBase = supabaseUrl ? functionsBaseFromSupabaseUrl(supabaseUrl) : "";
-  const snippets = buildEmbedSnippets(publicId, functionsBase);
-
-  const isLive = focusSeconds != null && focusSeconds > 0;
-  const value = isLive ? formatFocusDuration(focusSeconds) : "—";
-  const previewSvg = renderFocusBadgeSvg({ value, accent: isLive ? FOCUS_GREEN : AWAY_GREY });
-  const previewSrc = `data:image/svg+xml;utf8,${encodeURIComponent(previewSvg)}`;
-
-  const copy = async (key: string, text: string) => {
-    try {
-      await copyTextToClipboard(text);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1800);
-    } catch {
-      setCopiedKey(null);
-    }
-  };
-
-  const rows: Array<{ key: string; label: string; snippet: string }> = [
-    { key: "markdown", label: "GitHub README (Markdown)", snippet: snippets.markdown },
-    { key: "iframe", label: "Website card (iframe)", snippet: snippets.iframe },
-    { key: "html", label: "Website badge (HTML)", snippet: snippets.html },
-    { key: "link", label: "Profile link", snippet: snippets.profileUrl },
-  ];
-
-  return (
-    <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal profile-modal" aria-labelledby="embed-modal-title" onClick={(event) => event.stopPropagation()}>
-        <div className="profile-modal__header">
-          <div>
-            <span className="label-mono">Embed your focus</span>
-            <h2 id="embed-modal-title">Share a live badge</h2>
-          </div>
-        </div>
-        <p className="profile-modal__bio">Drop this badge on your site, GitHub README, or blog. It updates itself with your weekly focus.</p>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "4px 0 16px" }}>
-          <img src={previewSrc} alt="Drifty focus badge preview" height={20} style={{ display: "block" }} />
-          {!isLive ? <span className="capture-recency">Fills in once this week has tracked focus.</span> : null}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: "1px solid var(--border, #e2e2dc)", borderRadius: 10, padding: "12px 14px", margin: "0 0 16px" }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <span className="label-mono">Public focus card</span>
-            <p className="capture-recency" style={{ margin: "2px 0 0" }}>
-              {card.enabled === true
-                ? "On — anyone with your link can see this card."
-                : card.enabled === null
-                  ? "Checking…"
-                  : "Off — turn on to make these embeds show your focus."}
-            </p>
-            {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
-          </div>
-          {card.enabled === true ? (
-            <button type="button" className="ghost-button" disabled={card.busy} onClick={() => void card.disable()}>
-              {card.busy ? "Saving…" : "Make private"}
-            </button>
-          ) : (
-            <button type="button" className="settings-btn" disabled={card.busy || card.enabled === null} onClick={() => void card.enable()}>
-              {card.busy ? "Turning on…" : "Make public"}
-            </button>
-          )}
-        </div>
-
-        {!supabaseUrl ? (
-          <p className="capture-recency capture-recency--error">Cloud isn’t configured in this build, so the badge URL may not resolve yet.</p>
-        ) : null}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {rows.map((row) => (
-            <label key={row.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span className="label-mono">{row.label}</span>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  className="settings-input"
-                  style={{ flex: 1, fontFamily: "monospace", fontSize: "0.8rem" }}
-                  readOnly
-                  value={row.snippet}
-                  onFocus={(event) => event.currentTarget.select()}
-                />
-                <button type="button" className="settings-btn" onClick={() => void copy(row.key, row.snippet)}>
-                  {copiedKey === row.key ? "Copied" : "Copy"}
-                </button>
-              </div>
-            </label>
-          ))}
-        </div>
-
-        <p className="profile-modal__privacy">Only your opt-in aggregate focus is shared. Raw app, site, window, and session history stays on your device.</p>
-        <button type="button" className="settings-btn auth-modal__close" onClick={onClose}>Close</button>
-      </section>
-    </div>
-  );
 }
 
 // Profile photos are stored inline (base64) and surfaced at small sizes (38px leaderboard rows,

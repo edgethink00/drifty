@@ -19,6 +19,8 @@ export function NavIcon({ type }: { type: NavIconType }) {
       return (<svg {...props}><path d="M4 20h16" /><path d="M6 16l4-5 3 3 5-7" /></svg>);
     case "leaderboard":
       return (<svg {...props}><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" /><path d="M7 5H5a2 2 0 0 0 2 4" /><path d="M17 5h2a2 2 0 0 1-2 4" /></svg>);
+    case "profile":
+      return (<svg {...props}><circle cx="12" cy="8" r="3.4" /><path d="M5 20v-.6a5.5 5.5 0 0 1 5.5-5.5h3a5.5 5.5 0 0 1 5.5 5.5v.6" /></svg>);
     case "team":
       return (<svg {...props}><path d="M17 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" /><circle cx="9.5" cy="8" r="3.2" /><path d="M22 20v-1a4 4 0 0 0-3-3.87" /><path d="M15.5 4.8a3.2 3.2 0 0 1 0 6.2" /></svg>);
     case "settings":

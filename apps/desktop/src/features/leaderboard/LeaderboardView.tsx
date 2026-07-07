@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 import { LeaderboardBoard } from "./LeaderboardBoard";
-import { LeaderboardProfileCard } from "./LeaderboardProfileCard";
-import { StateBlock, type ProfileLink } from "./leaderboardViewHelpers";
+import { StateBlock, formatRank } from "./leaderboardViewHelpers";
 
+// The Leaderboard tab is just the ranking board plus a slim join/leave strip.
+// Everything about YOUR public presence (profile fields, focus card, embeds)
+// lives in the Profile tab.
 export type LeaderboardViewProps = {
   isSupabaseEnabled: boolean;
   isSignedIn: boolean;
@@ -13,16 +15,8 @@ export type LeaderboardViewProps = {
   ownRank?: number | null;
   activePeriod?: LeaderboardPeriod;
   leaderboard?: LeaderboardRow[];
-  focusSeconds7d?: number;
   totalFocusSeconds7d?: number;
-  windowStartDay?: string | null;
-  windowEndDay?: string | null;
   profileDisplayName?: string | null;
-  profileAvatarUrl?: string | null;
-  profileBio?: string | null;
-  profileWebsiteUrl?: string | null;
-  profileGithubUrl?: string | null;
-  profileLinkedinUrl?: string | null;
   email?: string | null;
   isActionLoading?: boolean;
   actionError?: string | null;
@@ -30,11 +24,8 @@ export type LeaderboardViewProps = {
   statusTone?: "error" | "neutral";
   onOptIn?: () => void;
   onSignIn?: () => void;
-  onEditProfile?: () => void;
-  onViewOwnProfile?: () => void;
-  onShareProfile?: () => void;
-  onEmbedProfile?: () => void;
   onOptOut?: () => void;
+  onOpenProfile?: () => void;
   onPeriodChange?: (period: LeaderboardPeriod) => void;
   onSelectProfile?: (row: LeaderboardRow) => void;
 };
@@ -48,16 +39,8 @@ export function LeaderboardView({
   ownRank = null,
   activePeriod = "weekly",
   leaderboard = [],
-  focusSeconds7d = 0,
   totalFocusSeconds7d = 0,
-  windowStartDay = null,
-  windowEndDay = null,
   profileDisplayName = null,
-  profileAvatarUrl = null,
-  profileBio = null,
-  profileWebsiteUrl = null,
-  profileGithubUrl = null,
-  profileLinkedinUrl = null,
   email = null,
   isActionLoading = false,
   actionError = null,
@@ -65,18 +48,13 @@ export function LeaderboardView({
   statusTone = "neutral",
   onOptIn,
   onSignIn,
-  onEditProfile,
-  onViewOwnProfile,
-  onShareProfile,
-  onEmbedProfile,
   onOptOut,
+  onOpenProfile,
   onPeriodChange,
   onSelectProfile,
 }: LeaderboardViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const previewName = resolvePublicNamePreview(profileDisplayName, email);
-  const profileLinks = useMemo(() => buildProfileLinks(profileWebsiteUrl, profileGithubUrl, profileLinkedinUrl), [profileGithubUrl, profileLinkedinUrl, profileWebsiteUrl]);
-  const trimmedProfileBio = profileBio?.trim() ?? "";
   const currentUserRank = ownRank ?? leaderboard.find((row) => row.display_name === previewName)?.rank ?? null;
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredLeaderboard = useMemo(() => {
@@ -106,28 +84,48 @@ export function LeaderboardView({
         />
       ) : (
         <div className="leaderboard-panel__stack">
-          <LeaderboardProfileCard
-            actionError={actionError}
-            activePeriod={activePeriod}
-            currentUserRank={currentUserRank}
-            focusSeconds7d={focusSeconds7d}
-            isActionLoading={isActionLoading}
-            isOptedIn={isOptedIn}
-            isSignedIn={isSignedIn}
-            previewName={previewName}
-            profileAvatarUrl={profileAvatarUrl}
-            profileLinks={profileLinks}
-            trimmedProfileBio={trimmedProfileBio}
-            windowEndDay={windowEndDay}
-            windowStartDay={windowStartDay}
-            onEditProfile={onEditProfile}
-            onOptIn={onOptIn}
-            onOptOut={onOptOut}
-            onShareProfile={onShareProfile}
-            onEmbedProfile={onEmbedProfile}
-            onSignIn={onSignIn}
-            onViewOwnProfile={onViewOwnProfile}
-          />
+          <section className="leaderboard-profile-block" aria-label="Leaderboard participation">
+            <section className="leaderboard-hero" aria-label="Your leaderboard participation">
+              <div className="leaderboard-hero__identity">
+                <div className="leaderboard-hero__main">
+                  <div className="leaderboard-hero__name-row">
+                    <h3>{previewName}</h3>
+                    <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`}>
+                      {isOptedIn
+                        ? currentUserRank !== null
+                          ? `On the board · ${formatRank(currentUserRank)}`
+                          : "On the board"
+                        : "Not on the board yet"}
+                    </span>
+                  </div>
+                  <p className="leaderboard-profile-bio">
+                    {isOptedIn
+                      ? "Only your aggregate focus total is published."
+                      : "Nothing is published until you join."}
+                    {" "}Your public card &amp; embeds live in the Profile tab.
+                  </p>
+                  <div className="leaderboard-hero__actions">
+                    {onOpenProfile ? (
+                      <button type="button" className="settings-btn" onClick={onOpenProfile}>Open Profile</button>
+                    ) : null}
+                    {isOptedIn ? (
+                      <button type="button" className="ghost-button leaderboard-hero__participation" onClick={() => onOptOut?.()} disabled={isActionLoading || !onOptOut}>{isActionLoading ? "Leaving…" : "Leave leaderboard"}</button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="settings-btn leaderboard-hero__participation"
+                        onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
+                        disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
+                      >
+                        {isActionLoading ? "Joining…" : "Join leaderboard"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+            {actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
+          </section>
 
           <LeaderboardBoard
             activePeriod={activePeriod}
@@ -156,19 +154,4 @@ function resolvePublicNamePreview(profileDisplayName?: string | null, email?: st
 
   const emailPrefix = email?.split("@")[0]?.trim();
   return emailPrefix || "drifty";
-}
-
-function buildProfileLinks(website?: string | null, github?: string | null, linkedin?: string | null): ProfileLink[] {
-  return [
-    { kind: "website", label: formatProfileLink(website) },
-    { kind: "github", label: formatProfileLink(github) },
-    { kind: "linkedin", label: formatProfileLink(linkedin) },
-  ].filter((link): link is { kind: string; label: string } => Boolean(link.label));
-}
-
-function formatProfileLink(value?: string | null) {
-  const trimmed = value?.trim();
-  if (!trimmed) return "";
-
-  return trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/i, "");
 }

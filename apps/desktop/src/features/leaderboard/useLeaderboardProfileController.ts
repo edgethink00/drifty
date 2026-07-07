@@ -99,10 +99,6 @@ type UseLeaderboardProfileControllerResult = {
   readonly handleShareLeaderboardProfile: () => Promise<void>;
   readonly handleViewOwnLeaderboardProfile: () => Promise<void>;
   readonly openProfileEditor: () => void;
-  readonly isEmbedOpen: boolean;
-  readonly embedFocusSeconds: number | null;
-  readonly openEmbed: () => void;
-  readonly closeEmbed: () => void;
   readonly refreshLeaderboardData: () => Promise<void>;
   readonly syncLeaderboardPublication: (reason: LeaderboardAutoPublishReason, options?: LeaderboardAutoPublishOptions) => Promise<void>;
   readonly removeProfilePhoto: () => void;
@@ -305,7 +301,6 @@ export function useLeaderboardProfileController({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileShareMessage, setProfileShareMessage] = useState<string | null>(null);
   const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
-  const [isEmbedOpen, setIsEmbedOpen] = useState(false);
   const [selectedLeaderboardRow, setSelectedLeaderboardRow] = useState<LeaderboardRow | null>(null);
   const [selectedPublicProfile, setSelectedPublicProfile] = useState<PublicProfile | null>(null);
   const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
@@ -756,8 +751,6 @@ export function useLeaderboardProfileController({
   }, []);
 
   const openProfileEditor = useCallback(() => setIsProfileEditorOpen(true), []);
-  const openEmbed = useCallback(() => setIsEmbedOpen(true), []);
-  const closeEmbed = useCallback(() => setIsEmbedOpen(false), []);
   const closeProfileEditor = useCallback(() => setIsProfileEditorOpen(false), []);
 
   const closeSelectedProfile = useCallback(() => {
@@ -1117,10 +1110,6 @@ export function useLeaderboardProfileController({
     handleShareLeaderboardProfile,
     handleViewOwnLeaderboardProfile,
     openProfileEditor,
-    isEmbedOpen,
-    embedFocusSeconds: scopedOwnLeaderboardEntry?.focus_seconds_7d ?? null,
-    openEmbed,
-    closeEmbed,
     refreshLeaderboardData,
     syncLeaderboardPublication,
     removeProfilePhoto,

@@ -41,6 +41,7 @@ import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHisto
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { useFocusCard } from "./features/share/useFocusCard";
+import { ProfilePage } from "./features/profile/ProfilePage";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
@@ -780,7 +781,6 @@ export default function App() {
     leaderboardSegments,
     leaderboardUsesPreviewProfile,
     leaderboardWindowEndDay,
-    leaderboardWindowStartDay,
     localRollingFocusSeconds,
     ownLeaderboardEntry,
     profile,
@@ -805,12 +805,7 @@ export default function App() {
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
     handleShareLeaderboardProfile,
-    handleViewOwnLeaderboardProfile,
     openProfileEditor,
-    isEmbedOpen,
-    embedFocusSeconds,
-    openEmbed,
-    closeEmbed,
     refreshLeaderboardData,
     syncLeaderboardPublication,
     removeProfilePhoto,
@@ -5111,6 +5106,14 @@ export default function App() {
           ))}
         </nav>
 
+        <div className="nav-label">Profile</div>
+        <nav className="sidebar-nav" aria-label="Profile navigation">
+          <button type="button" className={activeTab === "profile" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("profile")}>
+            <NavIcon type="profile" /><span>Profile</span>
+            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Profile</span> : null}
+          </button>
+        </nav>
+
         {canOpenTeamsBeta ? (
           <>
             <div className="nav-label">Team</div>
@@ -5406,6 +5409,32 @@ export default function App() {
           />
         ) : null}
 
+        {/* Profile — your public card & embeds */}
+        {activeTab === "profile" ? (
+          <ProfilePage
+            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
+            isSignedIn={isPolicySignedIn}
+            displayName={leaderboardProfileDisplayName}
+            avatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
+            bio={leaderboardProfileBio}
+            websiteUrl={leaderboardProfileWebsiteUrl}
+            githubUrl={leaderboardProfileGithubUrl}
+            linkedinUrl={leaderboardProfileLinkedinUrl}
+            publicId={profile?.public_id ?? null}
+            focusSeconds7d={localRollingFocusSeconds}
+            card={focusCard}
+            isLeaderboardOptedIn={isLeaderboardOptedIn}
+            leaderboardRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            shareMessage={profileShareMessage}
+            profileMessage={profileMessage}
+            profileError={profileError}
+            onEditProfile={openProfileEditor}
+            onCopyProfileLink={() => void handleShareLeaderboardProfile()}
+            onOpenLeaderboard={() => navigateToTab("leaderboard")}
+            onSignIn={requestLeaderboardAuth}
+          />
+        ) : null}
+
         {/* Leaderboard */}
         {activeTab === "leaderboard" ? (
           <LeaderboardPage
@@ -5413,7 +5442,6 @@ export default function App() {
             activePeriod={activeLeaderboardPeriod}
             email={user?.email ?? null}
             error={leaderboardError}
-            focusSeconds7d={localRollingFocusSeconds}
             isActionLoading={leaderboardActionLoading}
             isLoading={leaderboardLoading}
             isOptedIn={isLeaderboardOptedIn}
@@ -5421,29 +5449,16 @@ export default function App() {
             isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
             leaderboard={leaderboardRows}
             ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
-            profileAvatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
-            profileBio={leaderboardProfileBio}
             profileDisplayName={leaderboardProfileDisplayName}
-            profileError={profileError}
-            profileGithubUrl={leaderboardProfileGithubUrl}
-            profileLinkedinUrl={leaderboardProfileLinkedinUrl}
-            profileMessage={profileMessage}
-            profileShareMessage={profileShareMessage}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
-            profileWebsiteUrl={leaderboardProfileWebsiteUrl}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
-            windowEndDay={leaderboardWindowEndDay}
-            windowStartDay={leaderboardWindowStartDay}
-            onEditProfile={openProfileEditor}
             onOptIn={() => void handleLeaderboardOptIn()}
             onOptOut={() => void handleLeaderboardOptOut()}
+            onOpenProfile={() => navigateToTab("profile")}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
-            onShareProfile={() => void handleShareLeaderboardProfile()}
-            onEmbedProfile={openEmbed}
             onSignIn={() => void handleLeaderboardOptIn()}
-            onViewOwnProfile={() => void handleViewOwnLeaderboardProfile()}
           />
         ) : null}
 
@@ -5753,13 +5768,8 @@ export default function App() {
         selectedProfileError={selectedProfileError}
         selectedProfileLoading={selectedProfileLoading}
         selectedPublicProfile={selectedPublicProfile}
-        isEmbedOpen={isEmbedOpen}
-        embedPublicId={profile?.public_id ?? null}
-        embedFocusSeconds={embedFocusSeconds}
-        focusCard={focusCard}
         onCloseEditor={closeProfileEditor}
         onCloseSelectedProfile={closeSelectedProfile}
-        onCloseEmbed={closeEmbed}
         onDraftChange={updateProfileDraft}
         onPhotoSelected={(event) => void handleProfilePhotoSelected(event)}
         onRemovePhoto={removeProfilePhoto}
