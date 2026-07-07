@@ -30,6 +30,13 @@
   max-width: 56ch;
 }
 
+.profile-identity__link {
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  display: grid;
+  gap: 0.35rem;
+  padding-top: var(--space-2);
+}
+
 .profile-identity__board {
   align-items: center;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
@@ -55,17 +62,6 @@
   gap: var(--space-3);
 }
 
-.profile-card-control__badge {
-  align-items: center;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 55%, transparent), transparent 82%),
-    color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  padding: 0.7rem 0.85rem;
-}
-
 .profile-card-control__copy {
   flex: 1;
   min-width: 220px;
@@ -76,16 +72,10 @@
 }
 
 /* Embeds grid ---------------------------------------------------------------- */
-.profile-embed-grid {
+.profile-embed-stack {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (max-width: 980px) {
-  .profile-embed-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .profile-embed-card {

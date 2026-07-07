@@ -148,6 +148,22 @@ export function ProfilePage({
                 <ProfileSocialLinks profile={{ website_url: websiteUrl, github_url: githubUrl, linkedin_url: linkedinUrl }} />
               </div>
             </div>
+            {snippets ? (
+              <div className="profile-identity__link" aria-label="Public profile link">
+                <span className="label-mono">Public page</span>
+                <div className="profile-embed-card__variant-row">
+                  <input
+                    className="settings-input profile-embed-card__code"
+                    readOnly
+                    value={snippets.profileUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button type="button" className="settings-btn" aria-label="Copy profile link" onClick={onCopyProfileLink}>
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="profile-identity__board" aria-label="Leaderboard participation">
               <span className="label-mono">Leaderboard</span>
               <span className="profile-identity__board-status">
@@ -171,9 +187,6 @@ export function ProfilePage({
               <span className="leaderboard-privacy-badge">Aggregates only</span>
             </div>
             <div className="profile-card-control__row">
-              <span className="profile-card-control__badge">
-                <img src={previewSrc} alt="Drifty focus badge preview" height={20} style={{ display: "block" }} />
-              </span>
               <div className="profile-card-control__copy">
                 <p className="capture-recency">
                   {card.enabled === true
@@ -204,48 +217,32 @@ export function ProfilePage({
                 <p>Drop these on your site, GitHub README, or blog. They update themselves.</p>
               </div>
             </div>
-            {snippets ? (
-              <>
-                <div className="profile-embed-grid">
-                  {embedGroups.map((group) => (
-                    <div key={group.key} className="profile-embed-card">
-                      <div className="profile-embed-card__head">
-                        <span className="label-mono">{group.title}</span>
-                      </div>
-                      <div className="profile-embed-card__preview">{group.preview}</div>
-                      {group.variants.map((variant) => (
-                        <div key={variant.key} className="profile-embed-card__variant">
-                          <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
-                          <div className="profile-embed-card__variant-row">
-                            <input
-                              className="settings-input profile-embed-card__code"
-                              readOnly
-                              value={variant.snippet}
-                              onFocus={(event) => event.currentTarget.select()}
-                            />
-                            <button type="button" className="settings-btn" onClick={() => void copy(variant.key, variant.snippet)}>
-                              {copiedKey === variant.key ? "Copied" : "Copy"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+            {snippets && card.enabled === true ? (
+              <div className="profile-embed-stack">
+                {embedGroups.map((group) => (
+                  <div key={group.key} className="profile-embed-card">
+                    <div className="profile-embed-card__head">
+                      <span className="label-mono">{group.title}</span>
                     </div>
-                  ))}
-                </div>
-                <div className="profile-embed-card profile-embed-card--link">
-                  <span className="label-mono">Profile link</span>
-                  <div className="profile-embed-card__variant-row">
-                    <input
-                      className="settings-input profile-embed-card__code"
-                      readOnly
-                      value={snippets.profileUrl}
-                      onFocus={(event) => event.currentTarget.select()}
-                    />
-                    <button type="button" className="settings-btn" aria-label="Copy profile link" onClick={onCopyProfileLink}>
-                      Copy
-                    </button>
+                    <div className="profile-embed-card__preview">{group.preview}</div>
+                    {group.variants.map((variant) => (
+                      <div key={variant.key} className="profile-embed-card__variant">
+                        <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
+                        <div className="profile-embed-card__variant-row">
+                          <input
+                            className="settings-input profile-embed-card__code"
+                            readOnly
+                            value={variant.snippet}
+                            onFocus={(event) => event.currentTarget.select()}
+                          />
+                          <button type="button" className="settings-btn" onClick={() => void copy(variant.key, variant.snippet)}>
+                            {copiedKey === variant.key ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                ))}
                 <div className="profile-embed-card profile-embed-card--link">
                   <span className="label-mono">Data · JSON (30-day daily focus)</span>
                   <div className="profile-embed-card__variant-row">
@@ -260,7 +257,9 @@ export function ProfilePage({
                     </button>
                   </div>
                 </div>
-              </>
+              </div>
+            ) : snippets ? (
+              <p className="capture-recency">Your card is private. Turn on the public focus card above and your embeds will appear here.</p>
             ) : (
               <div>
                 <p className="capture-recency">Save your profile once to mint your public link, then your embeds appear here.</p>

@@ -56,8 +56,8 @@ describe("ProfilePage", () => {
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
   });
 
-  it("shows identity, loads card state on mount, and renders embed snippets", () => {
-    const card = mockCard();
+  it("shows identity, loads card state on mount, and renders embed snippets when the card is on", () => {
+    const card = mockCard({ enabled: true });
     renderPage({ card });
 
     expect(screen.getByRole("heading", { name: "Alex" })).toBeTruthy();
@@ -68,9 +68,20 @@ describe("ProfilePage", () => {
     expect(values.some((v) => v.includes(`badge?id=${PUBLIC_ID}`))).toBe(true);
     expect(values.some((v) => v.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(true);
     expect(values.some((v) => v.includes(`drifty.so/profile/?id=${PUBLIC_ID}`))).toBe(true);
+    expect(values.some((v) => v.includes("&format=json"))).toBe(true);
 
-    const preview = screen.getByAltText("Drifty focus badge preview") as HTMLImageElement;
+    const preview = screen.getByAltText("Focus badge preview") as HTMLImageElement;
     expect(preview.getAttribute("src")?.startsWith("data:image/svg+xml")).toBe(true);
+  });
+
+  it("hides embeds while the card is private but keeps the profile link", () => {
+    renderPage({ card: mockCard({ enabled: false }) });
+
+    expect(screen.getByText(/your card is private/i)).toBeTruthy();
+    const values = (screen.getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
+    expect(values.some((v) => v.includes(`drifty.so/profile/?id=${PUBLIC_ID}`))).toBe(true);
+    expect(values.some((v) => v.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(false);
+    expect(screen.queryByAltText("Focus badge preview")).toBeNull();
   });
 
   it("toggles the public focus card on and off", () => {
@@ -90,7 +101,7 @@ describe("ProfilePage", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
 
-    renderPage();
+    renderPage({ card: mockCard({ enabled: true }) });
     fireEvent.click(screen.getAllByRole("button", { name: /^copy$/i })[0]);
 
     expect(writeText).toHaveBeenCalledTimes(1);
