@@ -41,6 +41,12 @@ describe("buildEmbedSnippets", () => {
     expect(snippets.iframe).toContain(`title="Drifty focus"`);
   });
 
+  it("provides a chart iframe pointing at the chart view", () => {
+    expect(snippets.chartIframe).toContain("view=chart");
+    expect(snippets.chartIframe).toContain("<iframe");
+    expect(snippets.chartIframe).toContain(`title="Drifty focus chart"`);
+  });
+
   it("provides a raw-data JSON url on the badge endpoint", () => {
     expect(snippets.dataUrl).toBe(`${snippets.badgeUrl}&format=json`);
   });

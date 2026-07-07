@@ -31,6 +31,13 @@ export function buildEmbedUrl(publicId: string, options: EmbedSnippetOptions = {
   return url;
 }
 
+/** Hosted iframe 30-day focus/drift chart URL (drifty.so/embed, chart view). */
+export function buildChartEmbedUrl(publicId: string, options: EmbedSnippetOptions = {}): string {
+  let url = `https://drifty.so/embed/?id=${encodeURIComponent(publicId)}&view=chart`;
+  if (options.theme === "dark") url += "&theme=dark";
+  return url;
+}
+
 export interface EmbedSnippets {
   badgeUrl: string;
   embedUrl: string;
@@ -41,6 +48,8 @@ export interface EmbedSnippets {
   markdown: string;
   /** <iframe> rich focus card for blogs/sites. */
   iframe: string;
+  /** <iframe> 30-day focus/drift chart for blogs/sites. */
+  chartIframe: string;
   /** Raw HTML image badge for blogs/sites. */
   html: string;
 }
@@ -67,8 +76,10 @@ export function buildEmbedSnippets(publicId: string, functionsBaseUrl: string, o
   const embedUrl = buildEmbedUrl(publicId, options);
   const profileUrl = buildProfileUrl(publicId);
   const dataUrl = buildDataUrl(publicId, functionsBaseUrl);
+  const chartEmbedUrl = buildChartEmbedUrl(publicId, options);
   const markdown = `[![Drifty focus](${badgeUrl})](${profileUrl})`;
   const iframe = `<iframe src="${embedUrl}" width="440" height="${options.range === 30 ? 200 : 180}" style="border:0;overflow:hidden" scrolling="no" title="Drifty focus"></iframe>`;
+  const chartIframe = `<iframe src="${chartEmbedUrl}" width="560" height="260" style="border:0;overflow:hidden" scrolling="no" title="Drifty focus chart"></iframe>`;
   const html = `<a href="${profileUrl}"><img src="${badgeUrl}" alt="Drifty focus" height="20"></a>`;
-  return { badgeUrl, embedUrl, profileUrl, dataUrl, markdown, iframe, html };
+  return { badgeUrl, embedUrl, profileUrl, dataUrl, markdown, iframe, chartIframe, html };
 }

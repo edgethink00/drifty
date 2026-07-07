@@ -47,6 +47,11 @@ function renderPage(overrides: Partial<Parameters<typeof ProfilePage>[0]> = {}) 
   return { ...render(<ProfilePage {...props} />), props };
 }
 
+
+function expandEmbeds() {
+  fireEvent.click(screen.getByRole("button", { name: /^show$/i }));
+}
+
 describe("ProfilePage", () => {
   it("prompts sign-in when signed out", () => {
     const onSignIn = vi.fn();
@@ -60,6 +65,7 @@ describe("ProfilePage", () => {
   it("shows identity, loads card state on mount, and renders embed snippets when the card is on", () => {
     const card = mockCard({ enabled: true });
     renderPage({ card });
+    expandEmbeds();
 
     expect(screen.getByRole("heading", { name: "Alex" })).toBeTruthy();
     expect(screen.getByText("Building quiet tools.")).toBeTruthy();
@@ -70,6 +76,7 @@ describe("ProfilePage", () => {
     expect(values.some((v) => v.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(true);
     expect(values.some((v) => v.includes(`drifty.so/profile/?id=${PUBLIC_ID}`))).toBe(true);
     expect(values.some((v) => v.includes("&format=json"))).toBe(true);
+    expect(values.some((v) => v.includes("view=chart"))).toBe(true);
 
     const previews = screen.getAllByAltText(/focus badge preview/i) as HTMLImageElement[];
     expect(previews).toHaveLength(2); // light + dark, both live-rendered
@@ -78,6 +85,7 @@ describe("ProfilePage", () => {
 
   it("locks embeds while the card is private: previews visible, snippets unavailable", () => {
     renderPage({ card: mockCard({ enabled: false }) });
+    expandEmbeds();
 
     expect(screen.getByText(/private — these go live/i)).toBeTruthy();
     // Visuals stay visible…
@@ -111,6 +119,7 @@ describe("ProfilePage", () => {
     Object.assign(navigator, { clipboard: { writeText } });
 
     renderPage({ card: mockCard({ enabled: true }) });
+    expandEmbeds();
     fireEvent.click(screen.getAllByRole("button", { name: /^copy$/i })[0]);
 
     expect(writeText).toHaveBeenCalledTimes(1);
@@ -120,14 +129,26 @@ describe("ProfilePage", () => {
   it("guides profile setup when there is no public id yet", () => {
     const onEditProfile = vi.fn();
     renderPage({ publicId: null, onEditProfile });
+    expandEmbeds();
 
     expect(screen.getByText(/save your profile once to mint your public link/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /set up profile/i }));
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps embeds collapsed by default and expands on Show", () => {
+    renderPage({ card: mockCard({ enabled: true }) });
+
+    expect(document.querySelectorAll(".profile-embed-stack").length).toBe(0);
+    expandEmbeds();
+    expect(document.querySelectorAll(".profile-embed-stack").length).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: /^hide$/i }));
+    expect(document.querySelectorAll(".profile-embed-stack").length).toBe(0);
+  });
+
   it("updates snippets and preview together when theme/range options change", () => {
     renderPage({ card: mockCard({ enabled: true }) });
+    expandEmbeds();
 
     const values = () => (screen.getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
     expect(values().some((v) => v.includes("theme=dark"))).toBe(false);
@@ -148,9 +169,10 @@ describe("ProfilePage", () => {
       neutral: 300,
     }));
     renderPage({ dailyProductivity: series });
+    expandEmbeds();
 
     expect(screen.getByRole("img", { name: /daily focus and drift, last 30 days/i })).toBeTruthy();
-    expect(screen.getByText(/last 30 days · focus vs drift/i)).toBeTruthy();
+    expect(screen.getByText(/focus chart · last 30 days/i)).toBeTruthy();
     expect(screen.getByText("06-30 · 2h 0m")).toBeTruthy(); // best day chip
   });
 

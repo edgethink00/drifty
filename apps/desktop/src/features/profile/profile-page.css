@@ -157,6 +157,13 @@
   margin: 0;
 }
 
+/* Chart embed group: stats + chart fill the preview well. */
+.profile-chart-embed-preview {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
 /* Embeds grid ---------------------------------------------------------------- */
 .profile-embed-stack {
   display: grid;

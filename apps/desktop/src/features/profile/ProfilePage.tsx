@@ -65,6 +65,7 @@ export function ProfilePage({
   // One options state drives previews AND snippets in the same tick (YouTube/Cal.com pattern).
   const [embedTheme, setEmbedTheme] = useState<BadgeThemeOption>("light");
   const [cardRange, setCardRange] = useState<CardRangeOption>(7);
+  const [embedsOpen, setEmbedsOpen] = useState(false);
 
   const { refresh: refreshCard } = card;
   useEffect(() => {
@@ -182,6 +183,30 @@ export function ProfilePage({
             { key: "iframe", label: "Website · iframe", snippet: snippets.iframe },
           ],
         },
+        {
+          key: "chart",
+          title: "Focus chart · last 30 days",
+          preview: (
+            <div className="profile-chart-embed-preview">
+              {chartStats ? (
+                <div className="profile-chart__stats">
+                  <span><i className="profile-chart__dot profile-chart__dot--focus" />focus <strong>{formatFocusDuration(chartStats.focusTotal)}</strong></span>
+                  <span><i className="profile-chart__dot profile-chart__dot--drift" />drift <strong>{formatFocusDuration(chartStats.driftTotal)}</strong></span>
+                  <span>share <strong>{chartStats.sharePct}%</strong></span>
+                  <span>best <strong>{chartStats.bestDayLabel}</strong></span>
+                </div>
+              ) : null}
+              {dailyProductivity && dailyProductivity.length > 0 ? (
+                <FocusDriftChart series={dailyProductivity} />
+              ) : (
+                <p className="capture-recency">Loading local history…</p>
+              )}
+            </div>
+          ),
+          variants: [
+            { key: "chart-iframe", label: "Website · iframe", snippet: snippets.chartIframe },
+          ],
+        },
       ]
     : [];
 
@@ -280,36 +305,25 @@ export function ProfilePage({
             </div>
           </section>
 
-          {/* Last 30 days — local focus/drift chart */}
-          <section className="leaderboard-profile-block" aria-label="Last 30 days focus and drift">
-            <div className="profile-chart__head">
-              <span className="label-mono">Last 30 days · focus vs drift</span>
-              {chartStats ? (
-                <div className="profile-chart__stats">
-                  <span><i className="profile-chart__dot profile-chart__dot--focus" />focus <strong>{formatFocusDuration(chartStats.focusTotal)}</strong></span>
-                  <span><i className="profile-chart__dot profile-chart__dot--drift" />drift <strong>{formatFocusDuration(chartStats.driftTotal)}</strong></span>
-                  <span>share <strong>{chartStats.sharePct}%</strong></span>
-                  <span>best <strong>{chartStats.bestDayLabel}</strong></span>
-                </div>
-              ) : null}
-            </div>
-            {dailyProductivity && dailyProductivity.length > 0 ? (
-              <FocusDriftChart series={dailyProductivity} />
-            ) : (
-              <p className="capture-recency">Loading local history…</p>
-            )}
-            <p className="capture-recency profile-chart__note">Computed locally. Only daily focus is published when your card is on — drift stays on this device.</p>
-          </section>
-
-          {/* Embeds */}
+          {/* Embeds — collapsed by default */}
           <section className="leaderboard-profile-block" aria-label="Embeds">
             <div className="leaderboard-section-kicker">
               <div>
                 <span className="label-mono">Embeds</span>
-                <p>Drop these on your site, GitHub README, or blog. They update themselves.</p>
+                <p>
+                  Badge, card, 30-day chart, and raw JSON for your site, GitHub README, or blog. They update themselves.
+                </p>
               </div>
+              <button
+                type="button"
+                className="ghost-button"
+                aria-expanded={embedsOpen}
+                onClick={() => setEmbedsOpen((open) => !open)}
+              >
+                {embedsOpen ? "Hide" : "Show"}
+              </button>
             </div>
-            {snippets ? (
+            {!embedsOpen ? null : snippets ? (
               <>
                 {cardLocked ? (
                   <p className="capture-recency">Private — these go live when you turn on the public focus card above.</p>
@@ -380,7 +394,7 @@ export function ProfilePage({
 
           {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
           {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
-          <p className="capture-recency">Only your opt-in aggregate focus is shared. Raw app, site, window, and session history stays on your device.</p>
+          <p className="capture-recency">Only opt-in aggregates are shared (daily focus/drift totals, weekly split). Raw app, site, window, and session history stays on your device.</p>
         </div>
       )}
 

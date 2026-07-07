@@ -8,16 +8,18 @@ import {
   buildRollingFocusSeconds,
   isBrowserHistoryImportSegment,
   logicalDayStartMs,
-  shiftIsoDate,
 } from "@drifty/domain";
 import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
 import { getLeaderboardWindowStartDay } from "../leaderboard/leaderboardWindow";
+import { buildDailyProductivitySeries } from "./dailyProductivity";
 
 export interface DailyFocusPoint {
   readonly day: string;
   readonly focus: number;
+  /** Daily drift seconds — published so the chart embed can show focus vs drift. */
+  readonly drift: number;
 }
 
 export interface FocusCardPayload {
@@ -27,7 +29,7 @@ export interface FocusCardPayload {
   readonly neutral_seconds_7d: number;
   /** Focus as a share of classified time over the last 7 days, 0..1. */
   readonly focus_share: number;
-  /** Per-logical-day focus seconds across the 30-day window (30 entries, oldest first). */
+  /** Per-logical-day focus+drift seconds across the 30-day window (30 entries, oldest first). */
   readonly daily_focus: readonly DailyFocusPoint[];
   readonly window_start_date: string;
   readonly window_end_date: string;
@@ -69,10 +71,10 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
   const classified = focusBucket + driftSeconds + neutralSeconds;
   const focusShare = classified > 0 ? focusBucket / classified : 0;
 
-  const dailyFocus: DailyFocusPoint[] = [];
-  for (let day = monthStartDay; day <= input.windowEndDay; day = shiftIsoDate(day, 1)) {
-    dailyFocus.push({ day, focus: Math.round(buildRollingFocusSeconds(monthSegments, day, day, options, sod)) });
-  }
+  // Daily series via the same classify-and-split math as the local 30-day chart, so the
+  // published chart embed matches what the user saw in-app.
+  const dailyFocus: DailyFocusPoint[] = buildDailyProductivitySeries(monthSegments, monthStartDay, input.windowEndDay, options, sod)
+    .map((point) => ({ day: point.day, focus: point.focus, drift: point.drift }));
 
   return {
     focus_seconds_today: focusToday,
