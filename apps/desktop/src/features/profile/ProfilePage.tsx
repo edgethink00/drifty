@@ -64,6 +64,7 @@ export function ProfilePage({
   }, [isSignedIn, refreshCard]);
 
   const trimmedBio = bio.trim();
+  const cardLocked = card.enabled !== true;
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "";
   const functionsBase = supabaseUrl ? functionsBaseFromSupabaseUrl(supabaseUrl) : "";
   const snippets = publicId ? buildEmbedSnippets(publicId, functionsBase) : null;
@@ -217,49 +218,66 @@ export function ProfilePage({
                 <p>Drop these on your site, GitHub README, or blog. They update themselves.</p>
               </div>
             </div>
-            {snippets && card.enabled === true ? (
-              <div className="profile-embed-stack">
-                {embedGroups.map((group) => (
-                  <div key={group.key} className="profile-embed-card">
-                    <div className="profile-embed-card__head">
-                      <span className="label-mono">{group.title}</span>
-                    </div>
-                    <div className="profile-embed-card__preview">{group.preview}</div>
-                    {group.variants.map((variant) => (
-                      <div key={variant.key} className="profile-embed-card__variant">
-                        <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
-                        <div className="profile-embed-card__variant-row">
-                          <input
-                            className="settings-input profile-embed-card__code"
-                            readOnly
-                            value={variant.snippet}
-                            onFocus={(event) => event.currentTarget.select()}
-                          />
-                          <button type="button" className="settings-btn" onClick={() => void copy(variant.key, variant.snippet)}>
-                            {copiedKey === variant.key ? "Copied" : "Copy"}
-                          </button>
-                        </div>
+            {snippets ? (
+              <>
+                {cardLocked ? (
+                  <p className="capture-recency">Private — these go live when you turn on the public focus card above.</p>
+                ) : null}
+                <div className={cardLocked ? "profile-embed-stack profile-embed-stack--locked" : "profile-embed-stack"}>
+                  {embedGroups.map((group) => (
+                    <div key={group.key} className="profile-embed-card">
+                      <div className="profile-embed-card__head">
+                        <span className="label-mono">{group.title}</span>
                       </div>
-                    ))}
-                  </div>
-                ))}
-                <div className="profile-embed-card profile-embed-card--link">
-                  <span className="label-mono">Data · JSON (30-day daily focus)</span>
-                  <div className="profile-embed-card__variant-row">
-                    <input
-                      className="settings-input profile-embed-card__code"
-                      readOnly
-                      value={snippets.dataUrl}
-                      onFocus={(event) => event.currentTarget.select()}
-                    />
-                    <button type="button" className="settings-btn" onClick={() => void copy("data", snippets.dataUrl)}>
-                      {copiedKey === "data" ? "Copied" : "Copy"}
-                    </button>
+                      <div className="profile-embed-card__preview">{group.preview}</div>
+                      {group.variants.map((variant) => (
+                        <div key={variant.key} className="profile-embed-card__variant">
+                          <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
+                          <div className="profile-embed-card__variant-row">
+                            <input
+                              className="settings-input profile-embed-card__code"
+                              readOnly
+                              disabled={cardLocked}
+                              value={variant.snippet}
+                              onFocus={(event) => event.currentTarget.select()}
+                            />
+                            <button
+                              type="button"
+                              className="settings-btn"
+                              disabled={cardLocked}
+                              title={cardLocked ? "Turn on your public focus card first" : undefined}
+                              onClick={() => void copy(variant.key, variant.snippet)}
+                            >
+                              {copiedKey === variant.key ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <div className="profile-embed-card profile-embed-card--link">
+                    <span className="label-mono">Data · JSON (30-day daily focus)</span>
+                    <div className="profile-embed-card__variant-row">
+                      <input
+                        className="settings-input profile-embed-card__code"
+                        readOnly
+                        disabled={cardLocked}
+                        value={snippets.dataUrl}
+                        onFocus={(event) => event.currentTarget.select()}
+                      />
+                      <button
+                        type="button"
+                        className="settings-btn"
+                        disabled={cardLocked}
+                        title={cardLocked ? "Turn on your public focus card first" : undefined}
+                        onClick={() => void copy("data", snippets.dataUrl)}
+                      >
+                        {copiedKey === "data" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : snippets ? (
-              <p className="capture-recency">Your card is private. Turn on the public focus card above and your embeds will appear here.</p>
+              </>
             ) : (
               <div>
                 <p className="capture-recency">Save your profile once to mint your public link, then your embeds appear here.</p>

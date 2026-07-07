@@ -78,6 +78,17 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Private card: embeds stay visible as previews but read as unavailable;
+   hovering a card brings it back to full strength. */
+.profile-embed-stack--locked .profile-embed-card {
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+
+.profile-embed-stack--locked .profile-embed-card:hover {
+  opacity: 1;
+}
+
 .profile-embed-card {
   align-content: start;
   background: color-mix(in srgb, var(--surface) 94%, transparent);

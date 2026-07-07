@@ -74,14 +74,21 @@ describe("ProfilePage", () => {
     expect(preview.getAttribute("src")?.startsWith("data:image/svg+xml")).toBe(true);
   });
 
-  it("hides embeds while the card is private but keeps the profile link", () => {
+  it("locks embeds while the card is private: previews visible, snippets unavailable", () => {
     renderPage({ card: mockCard({ enabled: false }) });
 
-    expect(screen.getByText(/your card is private/i)).toBeTruthy();
-    const values = (screen.getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
-    expect(values.some((v) => v.includes(`drifty.so/profile/?id=${PUBLIC_ID}`))).toBe(true);
-    expect(values.some((v) => v.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(false);
-    expect(screen.queryByAltText("Focus badge preview")).toBeNull();
+    expect(screen.getByText(/private — these go live/i)).toBeTruthy();
+    // Visuals stay visible…
+    expect(screen.getByAltText("Focus badge preview")).toBeTruthy();
+    // …but the snippet inputs and copy buttons are disabled.
+    const inputs = document.querySelectorAll<HTMLInputElement>(".profile-embed-stack input");
+    expect(inputs.length).toBeGreaterThan(0);
+    inputs.forEach((input) => expect(input.disabled).toBe(true));
+    const copyButtons = document.querySelectorAll<HTMLButtonElement>(".profile-embed-stack button");
+    copyButtons.forEach((button) => expect(button.disabled).toBe(true));
+    // The identity-block profile link stays active.
+    const profileLinkInput = (screen.getAllByRole("textbox") as HTMLInputElement[]).find((input) => input.value.includes("drifty.so/profile/?id="));
+    expect(profileLinkInput?.disabled ?? true).toBe(false);
   });
 
   it("toggles the public focus card on and off", () => {
