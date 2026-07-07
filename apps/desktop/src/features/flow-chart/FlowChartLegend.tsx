@@ -3,6 +3,7 @@ import type { ActivityCategory, FlowBlock, ProductivityLabel } from "@drifty/dom
 import { PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { buildLegendActivityBreakdown, moveFlowHoverCardToPointer, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
+import type { ProjectLegendEntry } from "./projectFlowView";
 
 type FlowCategoryGroup = {
   readonly productivity: ProductivityLabel;
@@ -14,6 +15,7 @@ type FlowChartLegendProps = {
   readonly colorMode: FlowColorMode;
   readonly hoveredLegendCardRef: RefObject<HTMLDivElement | null>;
   readonly setHoveredLegend: Dispatch<SetStateAction<FlowLegendHoverState | null>>;
+  readonly projectLegend?: readonly ProjectLegendEntry[];
 };
 
 type FlowLegendToneStyle = CSSProperties & Record<"--flow-legend-tone", string>;
@@ -37,7 +39,25 @@ export function FlowChartLegend({
   colorMode,
   hoveredLegendCardRef,
   setHoveredLegend,
+  projectLegend,
 }: FlowChartLegendProps) {
+  if (colorMode === "project") {
+    return (
+      <div className="flow-chart-legend flow-chart-legend--project" aria-label="Flow chart projects">
+        {(projectLegend ?? []).map((entry) => {
+          const toneStyle: FlowLegendToneStyle = { "--flow-legend-tone": entry.color };
+          return (
+            <span className="flow-chart-legend__group flow-chart-legend__group--project" key={entry.projectId ?? "__none__"}>
+              <span className="flow-chart-legend__parent flow-chart-legend__parent--tone" title={entry.name}>
+                <span className="flow-chart-legend__tone-dot" style={toneStyle} />
+                {entry.name}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
   const showLegendHover = (
     event: MouseEvent<HTMLElement>,
     label: string,

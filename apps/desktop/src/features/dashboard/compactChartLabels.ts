@@ -7,7 +7,7 @@ type CompactChartLabelEntry = {
 
 export function formatCompactBarLabel<TEntry extends CompactChartLabelEntry>(
   title: string,
-  entries: TEntry[],
+  entries: readonly TEntry[],
   getLabel: (entry: TEntry) => string,
 ) {
   const parts = entries.map((entry) => `${getLabel(entry)} ${formatCompactDurationFromSeconds(entry.totalSeconds)} ${Math.round(entry.ratio * 100)}%`);

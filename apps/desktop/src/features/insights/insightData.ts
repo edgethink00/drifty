@@ -5,7 +5,7 @@ import { formatCompactDurationFromSeconds, formatDuration, getLocalDaysBetween, 
 import type { WeeklyChartMode } from "./weeklyChartView";
 
 export { buildWeeklyChartView, chooseChartStepHours, formatChartHourLabel } from "./weeklyChartView";
-export type { WeeklyChartColumn, WeeklyChartMode, WeeklyChartSegment, WeeklyChartView } from "./weeklyChartView";
+export type { WeeklyChartColumn, WeeklyChartMode, WeeklyChartProjectSeriesItem, WeeklyChartSegment, WeeklyChartView } from "./weeklyChartView";
 
 export type ProductivityAnalysisKind = Extract<ProductivityLabel, "focus" | "drift">;
 
@@ -53,6 +53,8 @@ export interface WeeklyBreakdownDay {
   neutralSeconds: number;
   driftSeconds: number;
   categorySeconds: Partial<Record<ActivityCategory, number>>;
+  /** Seconds per project id (averaged by occurrences like categorySeconds). Empty when no project map supplied. */
+  projectSeconds: Partial<Record<string, number>>;
 }
 
 export type InsightWeekVisibility = {
@@ -86,15 +88,21 @@ function hiddenWeekdayIndexes(visibility?: InsightWeekVisibility): ReadonlySet<n
   return hidden;
 }
 
+/** Stacked-bar key + label for classified time not assigned to any project. */
+export const NO_PROJECT_KEY = "__no_project__";
+export const NO_PROJECT_LABEL = "No project";
+
 export function buildWeeklyBreakdown(
   segments: ActivitySegment[],
   options?: ClassificationOptions,
   visibility?: InsightWeekVisibility,
+  projectBySegmentId?: ReadonlyMap<string, string>,
 ): WeeklyBreakdownDay[] {
   const focus = Array.from({ length: 7 }, () => 0);
   const neutral = Array.from({ length: 7 }, () => 0);
   const drift = Array.from({ length: 7 }, () => 0);
   const categories = Array.from({ length: 7 }, () => new Map<ActivityCategory, number>());
+  const projects = Array.from({ length: 7 }, () => new Map<string, number>());
   const dates = Array.from({ length: 7 }, () => new Set<string>());
   const hidden = hiddenWeekdayIndexes(visibility);
   const weekdayIndexes = orderedWeekdayIndexes(visibility?.startDay);
@@ -110,6 +118,14 @@ export function buildWeeklyBreakdown(
     else if (productivity === "drift") drift[index] += seconds;
     else if (category !== "unknown") neutral[index] += seconds;
     categories[index].set(category, (categories[index].get(category) ?? 0) + seconds);
+    const projectId = projectBySegmentId?.get(segment.id);
+    if (projectId) {
+      projects[index].set(projectId, (projects[index].get(projectId) ?? 0) + seconds);
+    } else if (projectBySegmentId && category !== "unknown") {
+      // Classified time with no project → the shared "No project" bucket, so the
+      // Project lens totals match Category/Productivity (all classified time).
+      projects[index].set(NO_PROJECT_KEY, (projects[index].get(NO_PROJECT_KEY) ?? 0) + seconds);
+    }
     dates[index].add(localDateKey(started));
   }
 
@@ -117,6 +133,8 @@ export function buildWeeklyBreakdown(
     const occurrences = Math.max(dates[index].size, 1);
     const categorySeconds: Partial<Record<ActivityCategory, number>> = {};
     for (const [category, seconds] of categories[index]) categorySeconds[category] = seconds / occurrences;
+    const projectSeconds: Partial<Record<string, number>> = {};
+    for (const [projectId, seconds] of projects[index]) projectSeconds[projectId] = seconds / occurrences;
     return {
       weekdayIndex: index,
       weekday: WEEKLY_BREAKDOWN_WEEKDAYS[index] ?? "",
@@ -125,6 +143,7 @@ export function buildWeeklyBreakdown(
       neutralSeconds: neutral[index] / occurrences,
       driftSeconds: drift[index] / occurrences,
       categorySeconds,
+      projectSeconds,
     };
   });
 }

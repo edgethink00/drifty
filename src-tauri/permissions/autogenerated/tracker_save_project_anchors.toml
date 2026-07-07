@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-save-project-anchors"
+description = "Enables the tracker_save_project_anchors command without any pre-configured scope."
+commands.allow = ["tracker_save_project_anchors"]
+
+[[permission]]
+identifier = "deny-tracker-save-project-anchors"
+description = "Denies the tracker_save_project_anchors command without any pre-configured scope."
+commands.deny = ["tracker_save_project_anchors"]

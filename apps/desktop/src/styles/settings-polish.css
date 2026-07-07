@@ -846,6 +846,11 @@
   gap: var(--space-2);
 }
 
+.settings-row__actions--wrap {
+  display: flex;
+  flex-wrap: wrap;
+}
+
 .settings-row--drift-copy {
   align-items: center;
 }
@@ -1297,14 +1302,23 @@
 }
 
 .settings-row--ai-preview .settings-mode-switch--quad {
-  flex: 1 1 28rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  min-width: min(100%, 28rem);
+  flex: 1 1 24rem;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  min-width: min(100%, 24rem);
 }
 
 .settings-row--ai-preview .settings-mode-option {
   min-height: 3.1rem;
   padding: var(--space-2) var(--space-3);
+  overflow: hidden;
+}
+
+.settings-row--ai-preview .settings-mode-option span,
+.settings-row--ai-preview .settings-mode-option small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-row--ai-preview .settings-mode-option small {

@@ -1,6 +1,6 @@
 import type { DashboardPeriod, DashboardPeriodOption } from "../features/dashboard/dashboardPeriods";
 
-export type TabId = "dashboard" | "classification" | "history" | "trends" | "leaderboard" | "team" | "settings";
+export type TabId = "dashboard" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "team" | "settings";
 
 export type NavigationSnapshot = {
   tabId: TabId;
@@ -15,13 +15,14 @@ export type NavigationHistoryState = {
 export const commandBarTabs = [
   { id: "dashboard", label: "Dashboard", sub: "Today at a glance" },
   { id: "classification", label: "Classification", sub: "Activity breakdown" },
+  { id: "projects", label: "Projects", sub: "Time grouped by project" },
   { id: "trends", label: "Trends", sub: "Patterns and trends" },
   { id: "history", label: "History", sub: "Local records" },
   { id: "leaderboard", label: "Leaderboard", sub: "Global focus ranking" },
   { id: "settings", label: "Settings", sub: "App preferences" },
 ] satisfies ReadonlyArray<{ id: TabId; label: string; sub: string }>;
 
-export type NavIconType = "home" | "calendar" | "classification" | "history" | "trends" | "leaderboard" | "team" | "settings";
+export type NavIconType = "home" | "calendar" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "team" | "settings";
 
 export type NavItem = {
   id: TabId;
@@ -36,6 +37,7 @@ export const dashboardPeriodOptions: DashboardPeriodOption[] = [
 
 export const activityNav: NavItem[] = [
   { id: "classification", label: "Classification", icon: "classification" },
+  { id: "projects", label: "Projects", icon: "projects" },
   { id: "trends", label: "Trends", icon: "trends" },
   { id: "history", label: "History", icon: "history" },
   { id: "leaderboard", label: "Leaderboard", icon: "leaderboard" },

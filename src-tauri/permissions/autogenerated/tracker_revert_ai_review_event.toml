@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-revert-ai-review-event"
+description = "Enables the tracker_revert_ai_review_event command without any pre-configured scope."
+commands.allow = ["tracker_revert_ai_review_event"]
+
+[[permission]]
+identifier = "deny-tracker-revert-ai-review-event"
+description = "Denies the tracker_revert_ai_review_event command without any pre-configured scope."
+commands.deny = ["tracker_revert_ai_review_event"]

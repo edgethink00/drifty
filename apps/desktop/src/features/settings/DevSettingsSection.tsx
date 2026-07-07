@@ -1,12 +1,15 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, ONBOARDING_V2_2_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, DRIFT_ALARM_PANEL_PREVIEWS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, ONBOARDING_V2_2_PREVIEW_ENABLED, PROJECT_CLASSIFICATION_PREVIEW_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "../../appFeatureSwitches";
+import { ProjectCorrectionsCard } from "../classification/ProjectCorrectionsCard";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
 import { DevPreviewControls, type DriftAlarmPreviewOption } from "./DevPreviewControls";
 import { WeekDashboardAxisScaleControl } from "./WeekDashboardAxisScaleControl";
+import { ProjectPassCostPanel } from "./ProjectPassCostPanel";
+import type { AiReviewEvent, ProjectPassRun } from "@drifty/domain";
 import type { DemoDashboardReplaySettings } from "./settingsStorage";
 
 type DevSettingsSectionProps = {
@@ -18,6 +21,10 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
+  readonly projectClassificationEnabled: boolean;
+  readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
+  readonly projectClassificationCorrectionsBusy: boolean;
+  readonly projectPassRuns: readonly ProjectPassRun[];
   readonly weekDashboardAxisScalePercent: number;
   readonly watcherMode: WatcherMode;
   readonly watcherPeekEnabled: boolean;
@@ -33,6 +40,8 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
+  readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
+  readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
   readonly teamsBetaEnabled: boolean;
@@ -59,6 +68,10 @@ export function DevSettingsSection({
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
+  projectClassificationEnabled,
+  projectClassificationAiReviewEvents,
+  projectClassificationCorrectionsBusy,
+  projectPassRuns,
   weekDashboardAxisScalePercent,
   watcherMode,
   watcherPeekEnabled,
@@ -74,6 +87,8 @@ export function DevSettingsSection({
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
+  onProjectClassificationEnabledChange,
+  onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
   teamsBetaEnabled,
@@ -131,7 +146,7 @@ export function DevSettingsSection({
       </div>
       <div className="settings-block">
         <h3>AX fallback diagnostics</h3>
-        <div className="settings-row settings-row--fallback">
+        <div className="settings-row">
           <div>
             <div className="lbl">Force Chromium AX site capture</div>
             <div className="desc">Skip Chromium tab AppleScript reads and capture the front URL through the Accessibility address bar path.</div>
@@ -140,7 +155,7 @@ export function DevSettingsSection({
             <Toggle checked={forceChromiumAxCaptureEnabled} onChange={onForceChromiumAxCaptureChange} ariaLabel="Force Chromium Accessibility site capture" />
           </div>
         </div>
-        <div className="settings-row settings-row--fallback">
+        <div className="settings-row">
           <div>
             <div className="lbl">Force frontmost fallback tracking</div>
             <div className="desc">Skip System Events frontmost app capture so tracker samples must identify the app through the lsappinfo fallback.</div>
@@ -149,7 +164,7 @@ export function DevSettingsSection({
             <Toggle checked={forceFrontmostFallbackCaptureEnabled} onChange={onForceFrontmostFallbackCaptureChange} ariaLabel="Force frontmost fallback tracking" />
           </div>
         </div>
-        <div className="settings-row settings-row--fallback">
+        <div className="settings-row">
           <div>
             <div className="lbl">Force browser history URL fallback</div>
             <div className="desc">Skip AppleScript and AX site capture so tracker samples test title-to-history URL matching only.</div>
@@ -158,7 +173,7 @@ export function DevSettingsSection({
             <Toggle checked={forceBrowserHistoryUrlFallbackEnabled} onChange={onForceBrowserHistoryUrlFallbackChange} ariaLabel="Force browser history URL fallback" />
           </div>
         </div>
-        <div className="settings-row settings-row--fallback">
+        <div className="settings-row">
           <div>
             <div className="lbl">Force Chromium AX extreme nudge</div>
             <div className="desc">Skip Chromium tab AppleScript close paths so Extreme nudge must use the Accessibility fallback.</div>
@@ -233,6 +248,41 @@ export function DevSettingsSection({
           </div>
         </div>
       ) : null}
+      {PROJECT_CLASSIFICATION_PREVIEW_ENABLED ? (
+        <div className="settings-block settings-block--dev-preview">
+          <h3>Project classification (preview)</h3>
+          <div className="settings-row">
+            <div>
+              <div className="lbl">Enable project classification</div>
+              <div className="desc">Show the Projects tab and the Intelligence analysis-model tab in AI setup. Developer preview — hidden in production builds.</div>
+            </div>
+            <div className="ctrl">
+              <Toggle
+                checked={projectClassificationEnabled}
+                onChange={onProjectClassificationEnabledChange}
+                ariaLabel="Toggle project classification preview"
+              />
+            </div>
+          </div>
+          {projectClassificationEnabled ? (
+            projectClassificationAiReviewEvents.some((event) => !event.revertedAt) ? (
+              <ProjectCorrectionsCard
+                events={projectClassificationAiReviewEvents}
+                onRevert={onRevertProjectClassificationCorrection}
+                busy={projectClassificationCorrectionsBusy}
+              />
+            ) : (
+              <div className="settings-row">
+                <div>
+                  <div className="lbl">Intelligence adjustments</div>
+                  <div className="desc">Day-context corrections the heavy pass applied to the selected day show here with a revert. None recorded for the selected day.</div>
+                </div>
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
+      <ProjectPassCostPanel runs={projectPassRuns} />
     </div>
   );
 }

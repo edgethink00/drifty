@@ -1,6 +1,6 @@
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildAttentionRhythm, buildWeeklyBreakdown, buildWeeklyChartView } from "./insightData";
+import { buildAttentionRhythm, buildWeeklyBreakdown, buildWeeklyChartView, NO_PROJECT_KEY } from "./insightData";
 
 function segmentOnDay(
   id: string,
@@ -135,6 +135,7 @@ describe("insight weekly builders", () => {
           entertainment: 7200,
           utility: 3600,
         },
+        projectSeconds: {},
       },
     ];
 
@@ -151,5 +152,57 @@ describe("insight weekly builders", () => {
       "workspace",
       "learning",
     ]);
+  });
+});
+
+describe("weekly project view", () => {
+  it("buckets project time by weekday, averaging, and pools unassigned classified time under No project", () => {
+    const segments = [
+      segmentOnDay("a", "2026-06-12", "workspace", "focus"), // Fri
+      segmentOnDay("b", "2026-06-05", "workspace", "focus"), // previous Fri
+      segmentOnDay("c", "2026-06-12", "entertainment", "drift"), // Fri, classified but unassigned
+    ];
+    const projectBySegmentId = new Map([["a", "p1"], ["b", "p1"]]);
+    const weekly = buildWeeklyBreakdown(segments, undefined, undefined, projectBySegmentId);
+    const friday = weekly.find((day) => day.weekday === "Fri");
+    // Friday bucket spans two dates → occurrences 2 → (3600 + 3600) / 2.
+    expect(friday?.projectSeconds.p1).toBeCloseTo(3600, 5);
+    // Segment c is classified but assigned to no project → the shared No-project bucket.
+    expect(friday?.projectSeconds[NO_PROJECT_KEY]).toBeCloseTo(1800, 5);
+  });
+
+  it("keeps unclassified time out of the No-project bucket", () => {
+    const segments = [
+      segmentOnDay("a", "2026-06-12", "workspace", "focus"), // assigned
+      segmentOnDay("u", "2026-06-12", "unknown", "neutral"), // unclassified, unassigned
+    ];
+    const projectBySegmentId = new Map([["a", "p1"]]);
+    const weekly = buildWeeklyBreakdown(segments, undefined, undefined, projectBySegmentId);
+    const friday = weekly.find((day) => day.weekday === "Fri");
+    expect(friday?.projectSeconds.p1).toBeCloseTo(3600, 5);
+    // Unclassified time is excluded from every lens, including No project.
+    expect(friday?.projectSeconds[NO_PROJECT_KEY]).toBeUndefined();
+  });
+
+  it("builds project-mode chart columns from projectSeconds + projectSeries, largest first", () => {
+    const weekly = [{
+      weekdayIndex: 0,
+      weekday: "Mon",
+      isActive: true,
+      focusSeconds: 0,
+      neutralSeconds: 0,
+      driftSeconds: 0,
+      categorySeconds: {},
+      projectSeconds: { p1: 5400, p2: 1800 },
+    }];
+    const chart = buildWeeklyChartView(weekly, "project", [], [
+      { key: "p1", color: "#111111" },
+      { key: "p2", color: "#222222" },
+    ]);
+    const column = chart.columns[0];
+    expect(column?.totalSeconds).toBe(7200);
+    expect(column?.segments.map((segment) => segment.key)).toEqual(["p1", "p2"]);
+    expect(column?.segments.map((segment) => segment.color)).toEqual(["#111111", "#222222"]);
+    expect(column?.segments[0]?.seconds).toBe(5400);
   });
 });

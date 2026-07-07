@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -67,7 +67,7 @@ import {
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
+import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, PROJECT_CLASSIFICATION_PREVIEW_ENABLED, TEAMS_BETA_ENABLED, WATCHER_PEEK_PROTOTYPE_ENABLED } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
@@ -82,6 +82,12 @@ import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSecti
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
+import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
+import { useProjectClassification } from "./features/classification/useProjectClassification";
+import { ProjectsPage } from "./features/projects/ProjectsPage";
+import { contextualProjectColorBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
+
+const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
 import { buildDebugLogPayload } from "./features/settings/debugLog";
 import {
   OnboardingModal,
@@ -179,12 +185,12 @@ import { buildSelectedDashboardReplayAnchor } from "./features/dashboard/dashboa
 import type { DemoDashboardReplayKind } from "./features/dashboard/demoDashboardReplay";
 import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUpdateDialogBlocking, resolveDashboardDemoReplayEffectiveData } from "./features/dashboard/dashboardDemoReplayEffectiveData";
 import { buildDashboardDemoReplaySidebarCard } from "./features/dashboard/dashboardDemoReplaySidebarCard";
-import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown } from "./features/insights/insightData";
+import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown, NO_PROJECT_KEY, NO_PROJECT_LABEL } from "./features/insights/insightData";
 import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
@@ -205,6 +211,7 @@ import type { ClassificationPanelStyle } from "./features/classification/Classif
 import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
 import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
@@ -337,6 +344,10 @@ export default function App() {
   const canOpenTeamsBeta = TEAMS_BETA_ENABLED && devModeEnabled && teamsBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
+  // Project classification is a developer preview: it only exists in non-production
+  // builds (PROJECT_CLASSIFICATION_PREVIEW_ENABLED) and can be toggled off in Dev.
+  const [devProjectClassificationEnabled, setDevProjectClassificationEnabled] = useState(resolveInitialProjectClassificationEnabled);
+  const projectClassificationFeatureEnabled = PROJECT_CLASSIFICATION_PREVIEW_ENABLED && devProjectClassificationEnabled;
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
   const [forceBrowserHistoryUrlFallbackEnabled, setForceBrowserHistoryUrlFallbackEnabled] = useState(resolveInitialForceBrowserHistoryUrlFallbackEnabled);
@@ -2315,6 +2326,16 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    window.localStorage.setItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, devProjectClassificationEnabled ? "1" : "0");
+  }, [devProjectClassificationEnabled]);
+
+  // Leaving the Projects tab visible after the preview is switched off would strand
+  // the user on a hidden surface — send them back to the dashboard.
+  useEffect(() => {
+    if (!projectClassificationFeatureEnabled && activeTab === "projects") navigateToTab("dashboard");
+  }, [projectClassificationFeatureEnabled, activeTab, navigateToTab]);
+
+  useEffect(() => {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
@@ -4005,10 +4026,8 @@ export default function App() {
   );
   const insightProductivityTotals = useMemo(() => buildProductivityDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightProductivityTotals = useMemo(() => insightProductivityTotals.filter((entry) => entry.totalSeconds > 0), [insightProductivityTotals]);
-  const weeklyBreakdown = useMemo(
-    () => buildWeeklyBreakdown(activeInsightSegments, insightClassificationOptions, insightWeekVisibility),
-    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility],
-  );
+  // weeklyBreakdown is declared below, after insightProjectBySegmentId, so the
+  // Project weekly buckets can read the segment→project map without a TDZ.
   const attentionRhythm = useMemo(
     () => buildAttentionRhythm(activeInsightSegments, insightClassificationOptions, insightRhythmVisibility),
     [activeInsightSegments, insightClassificationOptions, insightRhythmVisibility],
@@ -4031,7 +4050,158 @@ export default function App() {
   );
   const insightSiteSummary = insightTopSites.slice(0, 5);
   const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
-  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, flowIntervalMinutes, selectedDay, startOfDayMinutes]);
+  const selectedDayRange = useMemo(() => getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
+  const analysisModel = useAnalysisModelSetup(isSupabaseConfigured);
+  const projectClassification = useProjectClassification({
+    tracker: trackerClient,
+    selectedDayRange,
+    insightRange: { start: insightRange.start, end: insightRange.end },
+    analysisSetup: analysisModel.analysisSetup,
+    resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
+    analysisConnected: analysisModel.analysisConnected,
+    onClassificationChanged: () => { void refreshHistoryData(); },
+  });
+  // Segment→project map + ordered project series for the Trends weekly Project view,
+  // scoped to the whole insight window (not just the selected day).
+  const insightProjectBySegmentId = useMemo(
+    () => new Map(
+      projectClassification.insightAssignments
+        .filter((assignment) => assignment.projectId)
+        .map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
+    ),
+    [projectClassification.insightAssignments],
+  );
+  const weeklyProjectChart = useMemo(() => {
+    const NO_PROJECT_SERIES_COLOR = "#9ca3af";
+    const totals = new Map<string, number>();
+    for (const segment of activeInsightSegments) {
+      const projectId = insightProjectBySegmentId.get(segment.id);
+      if (!projectId) continue;
+      totals.set(projectId, (totals.get(projectId) ?? 0) + segment.durationSeconds);
+    }
+    const projectById = new Map(projectClassification.projects.map((project) => [project.id, project]));
+    const ordered = [...totals.entries()].filter(([, seconds]) => seconds > 0).sort((left, right) => right[1] - left[1]);
+    const realSeries = ordered.map(([id]) => ({ key: id, color: projectById.get(id)?.color ?? "#6366f1" }));
+    const available = realSeries.length > 0;
+    const meta = new Map(ordered.map(([id]) => [id, { label: projectById.get(id)?.name ?? "Project", color: projectById.get(id)?.color ?? "#6366f1" }]));
+    // Append a gray "No project" series so the Project lens covers all classified
+    // time (assigned + unassigned) and matches the Category/Productivity totals.
+    const series = available ? [...realSeries, { key: NO_PROJECT_KEY, color: NO_PROJECT_SERIES_COLOR }] : [];
+    if (available) meta.set(NO_PROJECT_KEY, { label: NO_PROJECT_LABEL, color: NO_PROJECT_SERIES_COLOR });
+    return { series, meta, available };
+  }, [activeInsightSegments, insightProjectBySegmentId, projectClassification.projects]);
+  const weeklyBreakdown = useMemo(
+    () => buildWeeklyBreakdown(activeInsightSegments, insightClassificationOptions, insightWeekVisibility, insightProjectBySegmentId),
+    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility, insightProjectBySegmentId],
+  );
+  const flowProjectColorBySegment = useMemo(
+    () => contextualProjectColorBySegment(effectiveSelectedDaySegments, projectClassification.assignments, projectColorMap(projectClassification.projects), effectiveSelectedDayClassificationOptions),
+    [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.projects, effectiveSelectedDayClassificationOptions],
+  );
+  // segment.id → projectId for the selected day (assigned only), for the Projects
+  // page charts + dashboard donut.
+  const selectedDayProjectBySegmentId = useMemo(
+    () => new Map(
+      projectClassification.assignments
+        .filter((assignment) => assignment.projectId)
+        .map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
+    ),
+    [projectClassification.assignments],
+  );
+  // The Projects tab isn't the Trends tab, so the rolling insight segments aren't
+  // loaded here. Load a dedicated last-14-days window (segments + assignments) for
+  // the project trend chart, refreshing whenever a pass finishes.
+  const [projectsTrend, setProjectsTrend] = useState<{ readonly segments: ActivitySegment[]; readonly assignments: ProjectAssignmentRecord[] }>({ segments: [], assignments: [] });
+  useEffect(() => {
+    if (activeTab !== "projects" || projectClassification.running) return;
+    let cancelled = false;
+    const range = getLogicalDayRange(shiftIsoDate(selectedDay, -13), selectedDay, startOfDayMinutes);
+    void (async () => {
+      try {
+        const [segments, assignments] = await Promise.all([
+          trackerClient.getTimeline(range),
+          trackerClient.getProjectAssignments?.(range) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
+        ]);
+        if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [] });
+      } catch {
+        if (!cancelled) setProjectsTrend({ segments: [], assignments: [] });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, selectedDay, startOfDayMinutes, projectClassification.running, trackerClient]); // eslint-disable-line react-hooks/exhaustive-deps
+  const projectsTrendProjectBySegmentId = useMemo(
+    () => new Map(
+      projectsTrend.assignments
+        .filter((assignment) => assignment.projectId)
+        .map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
+    ),
+    [projectsTrend.assignments],
+  );
+  // Per-project split of the selected day, for the dashboard donut's Project mode
+  // (the flow chart's Project toggle swaps the productivity donut to this).
+  const dashboardProjectRing = useMemo(() => {
+    const assignmentBySegment = new Map(
+      projectClassification.assignments.filter((assignment) => assignment.projectId).map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
+    );
+    const secondsByProject = new Map<string, number>();
+    for (const segment of effectiveSelectedDaySegments) {
+      const projectId = assignmentBySegment.get(segment.id);
+      if (projectId) secondsByProject.set(projectId, (secondsByProject.get(projectId) ?? 0) + segment.durationSeconds);
+    }
+    const projectById = new Map(projectClassification.projects.map((project) => [project.id, project]));
+    const total = [...secondsByProject.values()].reduce((sum, value) => sum + value, 0);
+    const entries: CompactRingEntry[] = [...secondsByProject.entries()]
+      .filter(([, seconds]) => seconds > 0)
+      .sort((left, right) => right[1] - left[1])
+      .map(([id, seconds]) => {
+        const color = projectById.get(id)?.color ?? "#9ca3af";
+        return {
+          key: id,
+          label: projectById.get(id)?.name ?? "Project",
+          color,
+          totalSeconds: seconds,
+          ratio: total > 0 ? seconds / total : 0,
+          matchesBlock: (block) => block.projectColor === color,
+        };
+      });
+    const centerPercent = total > 0 ? Math.round(((entries[0]?.totalSeconds ?? 0) / total) * 100) : 0;
+    return { entries, centerPercent };
+  }, [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.projects]);
+  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes, flowProjectColorBySegment), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment]);
+  const [projectPassConsented, setProjectPassConsented] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem(PROJECT_PASS_CONSENT_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [projectPassConsentOpen, setProjectPassConsentOpen] = useState(false);
+  const requestProjectPassRun = useCallback(() => {
+    if (projectPassConsented) {
+      void projectClassification.backfillLast7Days();
+      return;
+    }
+    setProjectPassConsentOpen(true);
+  }, [projectPassConsented, projectClassification]);
+  const confirmProjectPassConsent = useCallback(() => {
+    try {
+      window.localStorage.setItem(PROJECT_PASS_CONSENT_STORAGE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setProjectPassConsented(true);
+    setProjectPassConsentOpen(false);
+    void projectClassification.backfillLast7Days();
+  }, [projectClassification]);
+  const analysisProviderLabel = analysisModel.analysisSetup.provider === "cloud"
+    ? "Drifty Cloud"
+    : analysisModel.analysisSetup.provider === "openrouter"
+      ? `OpenRouter (${analysisModel.analysisSetup.openRouterModel})`
+      : analysisModel.analysisSetup.provider === "openai"
+        ? `OpenAI (${analysisModel.analysisSetup.openaiModel})`
+        : analysisModel.analysisSetup.provider === "anthropic"
+          ? `Anthropic (${analysisModel.analysisSetup.anthropicModel})`
+          : "your custom endpoint";
   const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   const classificationCategoryBreakdowns = useMemo(
     () => buildClassificationCategoryBreakdowns(classificationSegments, classificationOptions, classificationTotalSeconds),
@@ -4923,7 +5093,7 @@ export default function App() {
 
         <div className="nav-label">Activity</div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
-          {activityNav.map((item) => (
+          {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => (
             <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} onClick={() => navigateToTab(item.id)}>
               <NavIcon type={item.icon} /><span>{item.label}</span>
               {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
@@ -5050,6 +5220,10 @@ export default function App() {
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
             flowIntervalMinutes={flowIntervalMinutes}
+            projectModeAvailable={projectClassification.projectModeAvailable}
+            projectLegend={projectClassification.projectLegend}
+            flowProjectRingEntries={dashboardProjectRing.entries}
+            flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
@@ -5159,6 +5333,36 @@ export default function App() {
           </div>
         ) : null}
 
+        {/* Projects */}
+        {activeTab === "projects" && projectClassificationFeatureEnabled ? (
+          <ProjectsPage
+            projects={projectClassification.projects}
+            assignments={projectClassification.assignments}
+            selectedDay={selectedDay}
+            startOfDayMinutes={startOfDayMinutes}
+            daySegments={effectiveSelectedDaySegments}
+            dayProjectBySegmentId={selectedDayProjectBySegmentId}
+            trendSegments={projectsTrend.segments}
+            trendProjectBySegmentId={projectsTrendProjectBySegmentId}
+            projectsLoading={projectClassification.projectsLoading}
+            running={projectClassification.running}
+            progress={projectClassification.progress}
+            runError={projectClassification.runError}
+            analysisConnected={analysisModel.analysisConnected}
+            analysisSetup={analysisModel.analysisSetup}
+            consentOpen={projectPassConsentOpen}
+            consentProviderLabel={analysisProviderLabel}
+            onConfigureModel={() => { navigateToTab("settings"); setSettingsSection("aiSetup"); }}
+            onSaveProject={(input) => void projectClassification.saveProject(input)}
+            onDeleteProject={(id) => void projectClassification.deleteProject(id)}
+            onAddAnchor={(projectId, kind, value) => void projectClassification.addAnchor(projectId, kind, value)}
+            onDeleteAnchor={(projectId, kind, value) => void projectClassification.deleteAnchor(projectId, kind, value)}
+            onRunAnalysis={() => requestProjectPassRun()}
+            onConsentConfirm={confirmProjectPassConsent}
+            onConsentCancel={() => setProjectPassConsentOpen(false)}
+          />
+        ) : null}
+
         {/* Insights */}
         {activeTab === "trends" ? (
           <TrendsPage
@@ -5179,6 +5383,10 @@ export default function App() {
             productivityPersonaReport={productivityPersonaReport}
             trendsRange={trendsRange}
             weeklyBreakdown={weeklyBreakdown}
+            weeklyProjectSeries={weeklyProjectChart.series}
+            weeklyProjectMeta={weeklyProjectChart.meta}
+            weeklyProjectBySegmentId={insightProjectBySegmentId}
+            projectModeAvailable={weeklyProjectChart.available}
             onNextInsightRange={() => {
               if (canShiftInsightForward) selectDay((p) => shiftInsightPeriodDay(p, trendsRange, 1));
             }}
@@ -5370,6 +5578,10 @@ export default function App() {
                     shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
                     userEmail={user?.email ?? null}
                     workProfileUserId={user?.id ?? "local"}
+                    analysisSetup={analysisModel.analysisSetup}
+                    analysisOpenRouterConnected={analysisModel.openRouterConnected}
+                    showIntelligenceTab={projectClassificationFeatureEnabled}
+                    onAnalysisChange={analysisModel.setAnalysisSetup}
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}
@@ -5400,11 +5612,15 @@ export default function App() {
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
                     dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
                     demoDashboardReplaySettings={demoDashboardReplaySettings}
+                    projectPassRuns={projectClassification.passRuns}
                     endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
                     forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
+                    projectClassificationEnabled={devProjectClassificationEnabled}
+                    projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
+                    projectClassificationCorrectionsBusy={projectClassification.running}
                     weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
                     watcherMode={watcherMode}
                     watcherPeekEnabled={watcherPeekEnabled}
@@ -5419,6 +5635,8 @@ export default function App() {
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
+                    onProjectClassificationEnabledChange={setDevProjectClassificationEnabled}
+                    onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
                     onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
@@ -5475,7 +5693,7 @@ export default function App() {
               <span className="esc-key">esc</span>
             </div>
             <div className="cmd-section-label">Navigate</div>
-            {commandBarTabs.map((item) => (
+            {commandBarTabs.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => (
               <button key={item.id} className="cmd-item" onClick={() => handleCmdNav(item.id)}>
                 <span className="cmd-label">{item.label}</span>
                 <span className="cmd-sub">{item.sub}</span>

@@ -138,6 +138,10 @@
   gap: var(--space-3);
   justify-content: space-between;
   min-width: 0;
+  /* Keep the head the same height whether or not it carries an action button
+     (Classification has a Test-connection button, Intelligence does not) so the
+     two tabs line up pixel-for-pixel. */
+  min-height: 2rem;
 }
 
 .ai-setup-current-model__test {

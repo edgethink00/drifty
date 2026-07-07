@@ -6,6 +6,7 @@ import type { BreakRecoveryInsight } from "../companion/driftAlarmRecovery";
 import { INSIGHT_RANGE_OPTIONS, type InsightRange } from "../dashboard/dashboardPeriods";
 import { AttentionRhythmCard, InsightSourceGroup, ProductivityPersonaCard, WeeklyCategoryRow } from "./InsightCards";
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
+import type { WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 
 type TrendsPageProps = {
   readonly activeInsightCategoryTotals: CategoryDuration[];
@@ -25,6 +26,10 @@ type TrendsPageProps = {
   readonly productivityPersonaReport: ReturnType<typeof buildProductivityPersona>;
   readonly trendsRange: InsightRange;
   readonly weeklyBreakdown: WeeklyBreakdownDay[];
+  readonly weeklyProjectSeries?: readonly WeeklyChartProjectSeriesItem[];
+  readonly weeklyProjectMeta?: ReadonlyMap<string, { readonly label: string; readonly color: string }>;
+  readonly weeklyProjectBySegmentId?: ReadonlyMap<string, string>;
+  readonly projectModeAvailable?: boolean;
   readonly onNextInsightRange: () => void;
   readonly onPreviousInsightRange: () => void;
   readonly onTodayInsightRange: () => void;
@@ -49,6 +54,10 @@ export function TrendsPage({
   productivityPersonaReport,
   trendsRange,
   weeklyBreakdown,
+  weeklyProjectSeries,
+  weeklyProjectMeta,
+  weeklyProjectBySegmentId,
+  projectModeAvailable,
   onNextInsightRange,
   onPreviousInsightRange,
   onTodayInsightRange,
@@ -105,6 +114,10 @@ export function TrendsPage({
             classificationOptions={insightClassificationOptions}
             appIcons={appIcons}
             productivityTotals={productivityTotals}
+            projectSeries={weeklyProjectSeries}
+            projectMeta={weeklyProjectMeta}
+            projectBySegmentId={weeklyProjectBySegmentId}
+            projectModeAvailable={projectModeAvailable}
           />
 
           <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">

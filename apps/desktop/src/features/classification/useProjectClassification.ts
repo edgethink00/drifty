@@ -1,0 +1,308 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type AiReviewEvent,
+  type Project,
+  type ProjectAnchor,
+  type ProjectAssignmentRecord,
+  type ProjectInput,
+  type ProjectPassRun,
+  type TrackerApi,
+} from "@drifty/domain";
+import { NO_PROJECT_COLOR, projectColorBySegment as deriveColorBySegment, projectColorMap, projectFlowLegend, type ProjectLegendEntry } from "../flow-chart/projectFlowView";
+import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
+import { createProjectPassInference } from "./projectPassInference";
+import { resolveClassificationWorkProfileForPrompt } from "./aiClassificationService";
+import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
+
+export interface UseProjectClassificationArgs {
+  readonly tracker: TrackerApi;
+  readonly selectedDayRange: { readonly start: string; readonly end: string } | null;
+  readonly analysisSetup: AnalysisAiSetupState;
+  /** Resolve the OpenRouter provisioned key from the Keychain (null when none). */
+  readonly resolveOpenRouterKey: () => Promise<string | null>;
+  /** Whether the analysis model is configured enough to run the pass. */
+  readonly analysisConnected: boolean;
+  /** Called after a revert changes stored classifications, so the caller can refetch. */
+  readonly onClassificationChanged?: () => void;
+  readonly now?: () => string;
+  /**
+   * Trends insight window. When set, project assignments for the WHOLE window are
+   * loaded into `insightAssignments` (the weekly Project breakdown needs the full
+   * range, not just the selected day covered by `selectedDayRange`).
+   */
+  readonly insightRange?: { readonly start: string; readonly end: string } | null;
+}
+
+export interface UseProjectClassificationResult {
+  readonly projects: Project[];
+  readonly projectsLoading: boolean;
+  readonly assignments: ProjectAssignmentRecord[];
+  /** Project assignments across the whole Trends insight window (empty when no insightRange). */
+  readonly insightAssignments: ProjectAssignmentRecord[];
+  readonly projectColorBySegment: Map<string, string>;
+  readonly projectLegend: ProjectLegendEntry[];
+  readonly projectModeAvailable: boolean;
+  readonly passRuns: ProjectPassRun[];
+  readonly aiReviewEvents: AiReviewEvent[];
+  readonly running: boolean;
+  readonly progress: { readonly done: number; readonly total: number } | null;
+  readonly lastRunSummary: ProjectPassSummary | null;
+  readonly runError: string | null;
+  readonly revertReviewEvent: (id: number) => Promise<void>;
+  readonly saveProject: (input: ProjectInput) => Promise<void>;
+  readonly deleteProject: (id: string) => Promise<void>;
+  readonly addAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
+  readonly deleteAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
+  readonly runPassNow: (range?: { start: string; end: string }) => Promise<void>;
+  readonly backfillLast7Days: () => Promise<void>;
+  readonly reload: () => Promise<void>;
+}
+
+function last7DaysRange(now: string): { start: string; end: string } {
+  const end = now;
+  const start = new Date(Date.parse(now) - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return { start, end };
+}
+
+export function useProjectClassification(args: UseProjectClassificationArgs): UseProjectClassificationResult {
+  const { tracker, selectedDayRange, analysisSetup, resolveOpenRouterKey, analysisConnected } = args;
+  const now = args.now ?? (() => new Date().toISOString());
+
+  const insightRangeStart = args.insightRange?.start ?? null;
+  const insightRangeEnd = args.insightRange?.end ?? null;
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [assignments, setAssignments] = useState<ProjectAssignmentRecord[]>([]);
+  const [insightAssignments, setInsightAssignments] = useState<ProjectAssignmentRecord[]>([]);
+  const [passRuns, setPassRuns] = useState<ProjectPassRun[]>([]);
+  const [aiReviewEvents, setAiReviewEvents] = useState<AiReviewEvent[]>([]);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<{ readonly done: number; readonly total: number } | null>(null);
+  const [lastRunSummary, setLastRunSummary] = useState<ProjectPassSummary | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  const loadProjects = useCallback(async () => {
+    setProjectsLoading(true);
+    try {
+      setProjects((await tracker.getProjects?.()) ?? []);
+    } catch {
+      setProjects([]);
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, [tracker]);
+
+  const loadAssignments = useCallback(async () => {
+    if (!selectedDayRange) {
+      setAssignments([]);
+      return;
+    }
+    try {
+      setAssignments((await tracker.getProjectAssignments?.({ start: selectedDayRange.start, end: selectedDayRange.end })) ?? []);
+    } catch {
+      setAssignments([]);
+    }
+  }, [tracker, selectedDayRange]);
+
+  // Keyed on the primitive range bounds (not the object identity) so an inline
+  // `insightRange={{ start, end }}` from the caller does not re-fire every render.
+  const loadInsightAssignments = useCallback(async () => {
+    if (!insightRangeStart || !insightRangeEnd) {
+      setInsightAssignments([]);
+      return;
+    }
+    try {
+      setInsightAssignments((await tracker.getProjectAssignments?.({ start: insightRangeStart, end: insightRangeEnd })) ?? []);
+    } catch {
+      setInsightAssignments([]);
+    }
+  }, [tracker, insightRangeStart, insightRangeEnd]);
+
+  const loadPassRuns = useCallback(async () => {
+    try {
+      setPassRuns((await tracker.getProjectPassRuns?.({ start: last7DaysRange(now()).start, end: now() })) ?? []);
+    } catch {
+      setPassRuns([]);
+    }
+  }, [tracker]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadReviewEvents = useCallback(async () => {
+    if (!selectedDayRange) {
+      setAiReviewEvents([]);
+      return;
+    }
+    try {
+      setAiReviewEvents((await tracker.getAiReviewEvents?.({ start: selectedDayRange.start, end: selectedDayRange.end })) ?? []);
+    } catch {
+      setAiReviewEvents([]);
+    }
+  }, [tracker, selectedDayRange]);
+
+  const revertReviewEvent = useCallback(
+    async (id: number) => {
+      try {
+        await tracker.revertAiReviewEvent(id);
+        await loadReviewEvents();
+        args.onClassificationChanged?.();
+      } catch (error) {
+        setRunError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [tracker, loadReviewEvents, args],
+  );
+
+  useEffect(() => {
+    void loadProjects();
+    void loadPassRuns();
+  }, [loadProjects, loadPassRuns]);
+
+  useEffect(() => {
+    void loadAssignments();
+    void loadReviewEvents();
+  }, [loadAssignments, loadReviewEvents]);
+
+  useEffect(() => {
+    void loadInsightAssignments();
+  }, [loadInsightAssignments]);
+
+  const colors = useMemo(() => projectColorMap(projects), [projects]);
+  const projectColorBySegmentMap = useMemo(() => deriveColorBySegment(assignments, colors), [assignments, colors]);
+  const projectLegend = useMemo(() => projectFlowLegend(projects, assignments), [projects, assignments]);
+  const projectModeAvailable = useMemo(
+    () => projects.some((project) => project.status === "active") && assignments.length > 0,
+    [projects, assignments],
+  );
+
+  const buildInference = useCallback(async () => {
+    const setup = { ...analysisSetup };
+    if (setup.provider === "openrouter") {
+      setup.openRouterApiKey = (await resolveOpenRouterKey()) ?? "";
+    }
+    return createProjectPassInference(setup);
+  }, [analysisSetup, resolveOpenRouterKey]);
+
+  const runPassNow = useCallback(
+    async (range?: { start: string; end: string }) => {
+      const effectiveRange = range ?? selectedDayRange;
+      if (!effectiveRange || !analysisConnected) return;
+      setRunning(true);
+      setRunError(null);
+      setProgress(null);
+      try {
+        const inference = await buildInference();
+        // Privacy-gated; never let a work-profile read failure block the pass.
+        const workProfile = await resolveClassificationWorkProfileForPrompt(true).catch(() => null);
+        const summary = await runProjectPass({
+          range: effectiveRange,
+          trigger: range ? "backfill" : "manual",
+          tracker,
+          inference,
+          now,
+          workProfile,
+          onProgress: (done, total) => setProgress({ done, total }),
+        });
+        setLastRunSummary(summary);
+        // A pass can "succeed" with nothing to show — surface that instead of
+        // silently returning to the button so the user isn't left guessing.
+        if (!summary.ran) {
+          setRunError(summary.skippedReason ? `Nothing to analyze — ${summary.skippedReason}.` : "Nothing to analyze in this range.");
+        } else if (summary.assignments === 0 && summary.corrections === 0) {
+          setRunError("The analysis model returned no results. Check that your Intelligence model is set up (API key + model) under Configure in AI setup, then try again.");
+        }
+        await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+      } catch (error) {
+        setRunError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setRunning(false);
+        setProgress(null);
+      }
+    },
+    [selectedDayRange, analysisConnected, buildInference, tracker, now, loadAssignments, loadInsightAssignments, loadPassRuns],
+  );
+
+  // Mutations swallow their own errors (surfacing via runError) so a failed
+  // tracker call never escapes as an unhandled rejection — the app's global
+  // handler replaces the whole UI with an error screen on any such rejection.
+  const saveProject = useCallback(
+    async (input: ProjectInput) => {
+      try {
+        await tracker.saveProject(input);
+        await loadProjects();
+      } catch (error) {
+        setRunError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [tracker, loadProjects],
+  );
+
+  const deleteProject = useCallback(
+    async (id: string) => {
+      try {
+        await tracker.deleteProject(id);
+        await Promise.all([loadProjects(), loadAssignments(), loadInsightAssignments()]);
+      } catch (error) {
+        setRunError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [tracker, loadProjects, loadAssignments, loadInsightAssignments],
+  );
+
+  const addAnchor = useCallback(
+    async (projectId: string, kind: ProjectAnchor["kind"], value: string) => {
+      try {
+        await tracker.saveProjectAnchors(projectId, [{ kind, value, source: "manual" }]);
+        await loadProjects();
+      } catch (error) {
+        setRunError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [tracker, loadProjects],
+  );
+
+  const deleteAnchor = useCallback(
+    async (projectId: string, kind: ProjectAnchor["kind"], value: string) => {
+      try {
+        await tracker.deleteProjectAnchor(projectId, kind, value);
+        await loadProjects();
+      } catch (error) {
+        setRunError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [tracker, loadProjects],
+  );
+
+  const backfillLast7Days = useCallback(async () => {
+    await runPassNow(last7DaysRange(now()));
+  }, [runPassNow]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const reload = useCallback(async () => {
+    await Promise.all([loadProjects(), loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+  }, [loadProjects, loadAssignments, loadInsightAssignments, loadPassRuns]);
+
+  return {
+    projects,
+    projectsLoading,
+    assignments,
+    insightAssignments,
+    projectColorBySegment: projectColorBySegmentMap,
+    projectLegend,
+    projectModeAvailable,
+    passRuns,
+    aiReviewEvents,
+    running,
+    progress,
+    lastRunSummary,
+    runError,
+    revertReviewEvent,
+    saveProject,
+    deleteProject,
+    addAnchor,
+    deleteAnchor,
+    runPassNow,
+    backfillLast7Days,
+    reload,
+  };
+}
+
+export const PROJECT_NO_COLOR = NO_PROJECT_COLOR;

@@ -1,0 +1,225 @@
+/*
+ * Multi-day project trend chart: a SMOOTH stacked area over the last N days,
+ * styled to read as the same family as the Focus/Drift chart. It leans on the
+ * shared editorial-panel / insight-panel-head / chip / label-mono classes and
+ * adds .ptc-* only for the chart-specific plot, scale, axis, and tooltip.
+ */
+
+.ptc-panel {
+  min-width: 0;
+}
+
+/* Compact secondary chart: tighten the eyebrow→plot gap so the panel doesn't
+   frame the small curve in extra whitespace. */
+.ptc-panel .insight-panel-head {
+  margin-bottom: 0.55rem;
+}
+
+/* Legend pills: neutral rounded chip (like focus/drift) carrying a colored dot. */
+.ptc-chip {
+  background: var(--bg-2);
+  color: var(--text-soft);
+}
+
+.ptc-chip--none {
+  color: var(--text-muted);
+}
+
+.ptc-chart {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+/* Plot: full-width inset surface; the hour scale overlays its left edge (like
+   Focus/Drift) so the bands run edge-to-edge instead of starting after a gutter. */
+.ptc-plot {
+  position: relative;
+  border-radius: var(--radius-sm);
+  background: var(--dashboard-plot-surface);
+}
+
+.ptc-svg {
+  display: block;
+  width: 100%;
+  height: clamp(7.5rem, 17vw, 11rem);
+  overflow: visible;
+}
+
+/* Faint hour gridlines behind the bands. */
+.ptc-grid {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.26;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Soft translucent fill under each crisp line, largest project at the bottom. */
+.ptc-area {
+  fill-opacity: 0.34;
+  transition: fill-opacity var(--transition-fast, 0.16s ease);
+}
+
+/* Unassigned time is a faint background wash: the axis is scaled to project time,
+   so this band clamps to the top and just fills the frame for context. */
+.ptc-area--none {
+  fill-opacity: 0.1;
+}
+
+.ptc-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Gray "No project" band recedes: thinner, softer, dashed like the drift line. */
+.ptc-line--none {
+  stroke-width: 1.4;
+  stroke-opacity: 0.4;
+  stroke-dasharray: 5 4;
+}
+
+.ptc-hit {
+  fill: transparent;
+  pointer-events: all;
+  cursor: default;
+}
+
+/* Hour scale, mirroring focus/drift's muted left-hand y-scale column. */
+.ptc-scale {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ptc-scale span {
+  position: absolute;
+  top: var(--ptc-scale-y);
+  right: calc(100% - 4.5% + var(--space-1));
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  opacity: 0.76;
+  white-space: nowrap;
+}
+
+/* Day axis, mirroring focus/drift's muted time-tick row. */
+.ptc-axis {
+  position: relative;
+  height: 0.86rem;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1;
+  opacity: 0.82;
+}
+
+.ptc-axis span {
+  position: absolute;
+  left: var(--ptc-axis-x);
+  top: 0;
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ptc-axis span:first-child {
+  transform: none;
+}
+
+.ptc-axis span:last-child {
+  transform: translateX(-100%);
+}
+
+/* Empty state */
+.ptc-empty {
+  margin: 0;
+  padding: 1.4rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
+}
+
+/* Hover tooltip: a small card listing the day's projects + durations. */
+.ptc-tooltip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  min-width: 8.5rem;
+  max-width: min(18rem, 60vw);
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--text) 16%, transparent);
+  font-size: 0.68rem;
+}
+
+.ptc-tooltip__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.ptc-tooltip__day {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ptc-tooltip__total {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ptc-tooltip__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.ptc-tooltip__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ptc-tooltip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.ptc-tooltip__name {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptc-tooltip__dur {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptc-area {
+    transition: none;
+  }
+}

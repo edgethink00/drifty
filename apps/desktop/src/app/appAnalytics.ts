@@ -33,6 +33,7 @@ export function toAppSurfaceAnalytics(tabId: TabId): AppSurfaceAnalyticsValue {
   switch (tabId) {
     case "dashboard":
     case "classification":
+    case "projects":
     case "history":
     case "trends":
     case "leaderboard":

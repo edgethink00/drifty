@@ -19,6 +19,8 @@ import type { LocalAiSetupState } from "./localAiSetup";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
+import { IntelligenceSetupPanel } from "./IntelligenceSetupPanel";
+import type { AnalysisAiSetupState } from "./analysisModelSetup";
 import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
@@ -45,6 +47,11 @@ export type AiSetupPanelProps = {
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
   readonly workProfileUserId: string;
+  readonly analysisSetup: AnalysisAiSetupState;
+  readonly analysisOpenRouterConnected: boolean;
+  /** Show the Intelligence tab (project-classification preview). Dev-gated. */
+  readonly showIntelligenceTab: boolean;
+  readonly onAnalysisChange: (next: AnalysisAiSetupState) => void;
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
@@ -71,6 +78,10 @@ export function AiSetupPanel({
   shouldShowCloudCheckoutPlans,
   userEmail,
   workProfileUserId,
+  analysisSetup,
+  analysisOpenRouterConnected,
+  showIntelligenceTab,
+  onAnalysisChange,
   onDialogOpenChange,
   onLocalAiSetupChange,
   onManageCloudBilling,
@@ -103,6 +114,12 @@ export function AiSetupPanel({
     onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
+
+  // If the Intelligence preview is switched off while its tab is open, fall back
+  // to Classification so the panel never shows an orphaned tab.
+  useEffect(() => {
+    if (!showIntelligenceTab && activePanelTab === "intelligence") setActivePanelTab("providers");
+  }, [showIntelligenceTab, activePanelTab]);
 
   useEffect(() => {
     if (isCloudRouteSelected && connectionTestKind === "error") return;
@@ -153,7 +170,7 @@ export function AiSetupPanel({
         <h3>AI setup</h3>
       </div>
 
-      <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} />
+      <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} showIntelligenceTab={showIntelligenceTab} />
 
       {activePanelTab === "providers" ? (
         <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label="Providers">
@@ -228,6 +245,18 @@ export function AiSetupPanel({
               />
             </AiSetupSectionCard>
           </div>
+        </section>
+      ) : activePanelTab === "intelligence" && showIntelligenceTab ? (
+        <section id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label="Intelligence">
+          <IntelligenceSetupPanel
+            setup={analysisSetup}
+            onChange={onAnalysisChange}
+            onConnectOpenRouter={() => {
+              setActivePanelTab("providers");
+              setExpandedSection("openrouter");
+            }}
+            openRouterConnected={analysisOpenRouterConnected}
+          />
         </section>
       ) : (
         <section id="ai-setup-panel-tab-profile" className="ai-setup-tab-panel" role="tabpanel" aria-label="Profile and information">

@@ -161,6 +161,65 @@ pub struct AppIconsQuery {
     pub apps: Vec<AppIdentity>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSaveQuery {
+    pub input: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDeleteQuery {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAnchorsSaveQuery {
+    pub project_id: String,
+    pub anchors: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAnchorDeleteQuery {
+    pub project_id: String,
+    pub kind: String,
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectExemplarSaveQuery {
+    pub project_id: String,
+    pub run_summary: String,
+    pub source: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAssignmentsSaveQuery {
+    pub assignments: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPassRecordQuery {
+    pub input: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiReviewEventsSaveQuery {
+    pub events: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiReviewEventRevertQuery {
+    pub id: i64,
+}
+
 #[tauri::command]
 pub async fn tracker_get_status(
     app: AppHandle,
@@ -542,6 +601,213 @@ pub async fn tracker_delete_activity_segments(
     async_runtime::spawn_blocking(move || {
         controller
             .delete_activity_segments(&app, query.ids)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_projects(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_projects(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_project(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_project(&app, query.input)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_project(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectDeleteQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_project(&app, query.id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_project_anchors(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectAnchorsSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_project_anchors(&app, query.project_id, query.anchors)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_project_anchor(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectAnchorDeleteQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_project_anchor(&app, query.project_id, query.kind, query.value)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_project_exemplar(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectExemplarSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_project_exemplar(&app, query.project_id, query.run_summary, query.source)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_project_assignments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectAssignmentsSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_project_assignments(&app, query.assignments)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_project_assignments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_project_assignments(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_record_project_pass(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ProjectPassRecordQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .record_project_pass(&app, query.input)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_project_pass_runs(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_project_pass_runs(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_ai_review_events(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: AiReviewEventsSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_ai_review_events(&app, query.events)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_ai_review_events(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_ai_review_events(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_revert_ai_review_event(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: AiReviewEventRevertQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .revert_ai_review_event(&app, query.id)
             .map_err(|error| error.to_string())
     })
     .await

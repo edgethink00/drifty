@@ -5,6 +5,7 @@ import { vi } from "vitest";
 import { AiSetupPanel, type AiSetupPanelProps } from "./AiSetupPanel";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
+import { DEFAULT_ANALYSIS_AI_SETUP } from "./analysisModelSetup";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
 
@@ -181,6 +182,10 @@ export function renderPanel({
         shouldShowCloudCheckoutPlans={false}
         userEmail={userEmail}
         workProfileUserId={workProfileUserId}
+        analysisSetup={DEFAULT_ANALYSIS_AI_SETUP}
+        analysisOpenRouterConnected={false}
+        showIntelligenceTab
+        onAnalysisChange={vi.fn()}
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}

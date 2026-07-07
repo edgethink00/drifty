@@ -6,6 +6,7 @@ type WeeklyTrendChartProps = {
   readonly chart: WeeklyChartView;
   readonly hasData: boolean;
   readonly mode: WeeklyChartMode;
+  readonly projectModeAvailable?: boolean;
   readonly onHideSegmentHover: () => void;
   readonly onModeChange: (mode: WeeklyChartMode) => void;
   readonly onMoveSegmentHover: (x: number, y: number) => void;
@@ -22,6 +23,7 @@ export function WeeklyTrendChart({
   chart,
   hasData,
   mode,
+  projectModeAvailable = false,
   onHideSegmentHover,
   onModeChange,
   onMoveSegmentHover,
@@ -34,6 +36,9 @@ export function WeeklyTrendChart({
         <div className="wt-toggle" role="tablist">
           <button type="button" className={`wt-toggle-btn${mode === "productivity" ? " is-active" : ""}`} data-mode="productivity" onClick={() => onModeChange("productivity")}>Productivity</button>
           <button type="button" className={`wt-toggle-btn${mode === "category" ? " is-active" : ""}`} data-mode="category" onClick={() => onModeChange("category")}>Category</button>
+          {projectModeAvailable ? (
+            <button type="button" className={`wt-toggle-btn${mode === "project" ? " is-active" : ""}`} data-mode="project" onClick={() => onModeChange("project")}>Project</button>
+          ) : null}
         </div>
       </div>
       {hasData ? (

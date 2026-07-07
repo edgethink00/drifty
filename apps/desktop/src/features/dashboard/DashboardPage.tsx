@@ -1,11 +1,14 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, FlowBlock, FlowIntervalMinutes, ProductivityDuration } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
 import { FlowChartView } from "../flow-chart/FlowChartView";
+import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
+import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { EmptyState } from "../../components/EmptyState";
 import { FlowCompactSplitChart } from "./CompactCharts";
+import type { CompactRingEntry } from "./CompactRingChart";
 import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
@@ -42,6 +45,10 @@ type DashboardPageProps = {
   readonly dashPeriod: DashboardPeriod;
   readonly flowBlocks: FlowBlock[];
   readonly flowIntervalMinutes: FlowIntervalMinutes;
+  readonly projectModeAvailable?: boolean;
+  readonly projectLegend?: readonly ProjectLegendEntry[];
+  readonly flowProjectRingEntries?: readonly CompactRingEntry[];
+  readonly flowProjectCenterPercent?: number;
   readonly focusDriftSection: ReactNode;
   readonly hasTimelineData: boolean;
   readonly historyClassificationOptions: ClassificationOptions;
@@ -89,6 +96,10 @@ export function DashboardPage({
   dashPeriod,
   flowBlocks,
   flowIntervalMinutes,
+  projectModeAvailable,
+  projectLegend,
+  flowProjectRingEntries,
+  flowProjectCenterPercent,
   focusDriftSection,
   hasTimelineData,
   historyClassificationOptions,
@@ -116,6 +127,7 @@ export function DashboardPage({
   onSelectBillingPlan,
   onSelectDay,
 }: DashboardPageProps) {
+  const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
   const pageClassName = [
     "page",
     dashPeriod === "Week" ? "page--week-dashboard" : null,
@@ -208,6 +220,10 @@ export function DashboardPage({
                   startOfDayMinutes={startOfDayMinutes}
                   onIntervalChange={onFlowIntervalChange}
                   showEmptyGrid={isDashboardReplayActive}
+                  projectModeAvailable={projectModeAvailable}
+                  projectLegend={projectLegend}
+                  colorMode={flowColorMode}
+                  onColorModeChange={setFlowColorMode}
                 />
               </div>
               <FlowCompactSplitChart
@@ -216,6 +232,9 @@ export function DashboardPage({
                 totalSeconds={totalSeconds}
                 flowBlocks={flowBlocks}
                 appIcons={appIcons}
+                donutMode={flowColorMode === "project" ? "project" : "productivity"}
+                projectRingEntries={flowProjectRingEntries}
+                projectCenterPercent={flowProjectCenterPercent}
               />
             </div>
           ) : (

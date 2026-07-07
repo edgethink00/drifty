@@ -21,6 +21,7 @@ export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
+export const PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY = "drifty.dev.projectClassification";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 
@@ -288,6 +289,14 @@ export function resolveInitialAiClassificationVisibility(): boolean {
 export function resolveInitialDevModeEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+}
+
+// Defaults to ON in dev builds (only non-production builds ever read this — see
+// PROJECT_CLASSIFICATION_PREVIEW_ENABLED) so developers keep the feature visible
+// until they explicitly toggle it off.
+export function resolveInitialProjectClassificationEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY) !== "0";
 }
 
 export function resolveInitialTeamsBetaEnabled(): boolean {

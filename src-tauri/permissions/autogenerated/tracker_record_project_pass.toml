@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-record-project-pass"
+description = "Enables the tracker_record_project_pass command without any pre-configured scope."
+commands.allow = ["tracker_record_project_pass"]
+
+[[permission]]
+identifier = "deny-tracker-record-project-pass"
+description = "Denies the tracker_record_project_pass command without any pre-configured scope."
+commands.deny = ["tracker_record_project_pass"]

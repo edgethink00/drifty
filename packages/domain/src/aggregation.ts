@@ -490,6 +490,7 @@ function flowBlockDescriptorFromSegment(
   classification: ActivityClassificationDetail,
   effectiveProductivity: EffectiveProductivityResolution,
   colorKey: string,
+  projectColor: string | null = null,
 ) {
   return {
     appName: segment.appName,
@@ -522,11 +523,12 @@ function flowBlockDescriptorFromSegment(
     aiClassification: classification.source === "llm",
     aiCachedClassification: classification.aiCached ?? null,
     classificationReason: classification.reason,
+    projectColor,
     colorKey,
   } as const;
 }
 
-export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0): FlowBlock[] {
+export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0, projectColorBySegment?: ReadonlyMap<string, string>): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
   const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
@@ -543,7 +545,8 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
   forEachFlowBucketContribution(segments, day, intervalMinutes, boundaryMinutes, ({ segment, candidateKey, minuteOfDay, hour, quarter, colorKey, overlapSeconds }) => {
     const classification = classificationFor(segment);
     const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
-    const descriptor = flowBlockDescriptorFromSegment(segment, classification, effectiveProductivity, colorKey);
+    const projectColor = projectColorBySegment?.get(segment.id) ?? null;
+    const descriptor = flowBlockDescriptorFromSegment(segment, classification, effectiveProductivity, colorKey, projectColor);
     const existing = candidates.get(candidateKey);
 
     if (!existing) {
@@ -1342,6 +1345,73 @@ function buildEffectiveProductivityBySegmentId(segments: ActivitySegment[], opti
   }
 
   return productivities;
+}
+
+export type ProjectAttributionBasis = "direct" | "contextual";
+
+export interface EffectiveProjectResolution {
+  readonly projectId: string | null;
+  readonly basis: ProjectAttributionBasis;
+}
+
+/**
+ * Contextual project smoothing — the project analog of the neutral-adaptive
+ * productivity resolution. An unassigned segment inherits a project when that
+ * project dominates its surrounding window (same window/share thresholds the
+ * productivity smoothing uses, so both layers reach equally far). Only DIRECT
+ * (AI/manual) assignments seed the context, so contextual fills never cascade.
+ */
+export function buildContextualProjectBySegmentId(
+  segments: ActivitySegment[],
+  assignmentBySegmentId: ReadonlyMap<string, string | null>,
+  options?: ClassificationOptions,
+): Map<string, EffectiveProjectResolution> {
+  const classifiedSegments = classifiedSegmentsInTimeOrder(segments, options);
+  const result = new Map<string, EffectiveProjectResolution>();
+  for (const item of classifiedSegments) {
+    result.set(item.segment.id, { projectId: assignmentBySegmentId.get(item.segment.id) ?? null, basis: "direct" });
+  }
+  for (const item of classifiedSegments) {
+    if (result.get(item.segment.id)?.projectId) continue;
+    const dominant = dominantProjectInWindow(classifiedSegments, assignmentBySegmentId, item);
+    if (dominant) result.set(item.segment.id, { projectId: dominant, basis: "contextual" });
+  }
+  return result;
+}
+
+function dominantProjectInWindow(
+  classifiedSegments: readonly ClassifiedSegment[],
+  assignmentBySegmentId: ReadonlyMap<string, string | null>,
+  anchor: ClassifiedSegment,
+): string | null {
+  const maxWindowMs = PRODUCTIVITY_CONTEXT_MAX_WINDOW_SECONDS * 1000;
+  const windowStartMs = anchor.startMs - maxWindowMs;
+  const windowEndMs = anchor.endMs + maxWindowMs;
+  const secondsByProject = new Map<string, number>();
+  let trackedSeconds = 0;
+
+  for (const item of classifiedSegments) {
+    if (item.segment.id === anchor.segment.id) continue;
+    if (item.endMs <= windowStartMs) continue;
+    if (item.startMs >= windowEndMs) break;
+    const projectId = assignmentBySegmentId.get(item.segment.id) ?? null;
+    if (!projectId) continue;
+    const overlapSeconds = clippedOverlapSeconds(item, windowStartMs, windowEndMs);
+    if (overlapSeconds <= 0) continue;
+    secondsByProject.set(projectId, (secondsByProject.get(projectId) ?? 0) + overlapSeconds);
+    trackedSeconds += overlapSeconds;
+  }
+
+  if (trackedSeconds < MINIMUM_CONTEXT_WINDOW_TRACKED_SECONDS) return null;
+  let topProjectId: string | null = null;
+  let topSeconds = 0;
+  for (const [projectId, seconds] of secondsByProject) {
+    if (seconds > topSeconds) {
+      topSeconds = seconds;
+      topProjectId = projectId;
+    }
+  }
+  return topProjectId && topSeconds / trackedSeconds >= CONTEXT_WINDOW_STRONG_SHARE ? topProjectId : null;
 }
 
 function classifiedSegmentsInTimeOrder(segments: ActivitySegment[], options?: ClassificationOptions): ClassifiedSegment[] {

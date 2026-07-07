@@ -2161,6 +2161,228 @@ class TrackerDatabaseTests(unittest.TestCase):
         ])
         return segment_id
 
+    def _insert_segment_returning_id(self, started_at: str, ended_at: str | None = None) -> int:
+        self.database.insert_segment(
+            {
+                "started_at": started_at,
+                "ended_at": ended_at or started_at,
+                "duration_seconds": 300,
+                "app_name": "Code",
+            }
+        )
+        with self.database.connect() as conn:
+            return int(conn.execute("SELECT MAX(id) AS id FROM activity_segments").fetchone()["id"])
+
+    def test_project_crud_and_archived_status(self) -> None:
+        created = self.database.save_project({"name": "Drifty", "description": "Mac app work", "color": "#111111"})
+        project_id = created["id"]
+        self.assertTrue(project_id)
+        self.assertEqual(created["status"], "active")
+        self.assertEqual(created["anchors"], [])
+
+        updated = self.database.save_project(
+            {"id": project_id, "name": "Drifty Mac", "description": "Renamed", "status": "archived"}
+        )
+        self.assertEqual(updated["name"], "Drifty Mac")
+        self.assertEqual(updated["status"], "archived")
+        self.assertEqual(updated["createdAt"], created["createdAt"])
+
+        projects = self.database.get_projects()
+        self.assertEqual(len(projects), 1)
+        self.assertEqual(projects[0]["status"], "archived")
+
+        with self.assertRaises(ValueError):
+            self.database.save_project({"name": "Bad", "description": "x", "status": "nonsense"})
+        with self.assertRaises(ValueError):
+            self.database.save_project({"name": "", "description": "x"})
+
+    def test_project_anchor_merge_and_delete(self) -> None:
+        project_id = self.database.save_project({"name": "P", "description": "d"})["id"]
+        self.database.save_project_anchors(
+            project_id,
+            [
+                {"kind": "app", "value": "Code", "source": "harvested"},
+                {"kind": "domain", "value": "github.com", "source": "manual"},
+                {"kind": "bogus", "value": "x", "source": "manual"},
+            ],
+        )
+        # Duplicate app/Code must not create a second row (INSERT OR IGNORE).
+        anchors = self.database.save_project_anchors(
+            project_id, [{"kind": "app", "value": "Code", "source": "harvested"}]
+        )
+        self.assertEqual(len(anchors), 2)
+        kinds = {(a["kind"], a["value"]) for a in anchors}
+        self.assertEqual(kinds, {("app", "Code"), ("domain", "github.com")})
+
+        deleted = self.database.delete_project_anchor(project_id, "app", "Code")
+        self.assertEqual(deleted, 1)
+        self.assertEqual(len(self.database.get_projects()[0]["anchors"]), 1)
+
+    def test_project_exemplar_cap_at_20(self) -> None:
+        project_id = self.database.save_project({"name": "P", "description": "d"})["id"]
+        for index in range(25):
+            self.database.save_project_exemplar(project_id, f"run line {index}", "user_confirmed")
+        exemplars = self.database.get_project_exemplars(project_id)
+        self.assertEqual(len(exemplars), 20)
+        # Newest kept: run line 24 present, run line 0 evicted.
+        summaries = {item["runSummary"] for item in exemplars}
+        self.assertIn("run line 24", summaries)
+        self.assertNotIn("run line 0", summaries)
+        with self.assertRaises(ValueError):
+            self.database.save_project_exemplar(project_id, "x", "invalid_source")
+
+    def test_assignment_upsert_and_manual_guard(self) -> None:
+        project_a = self.database.save_project({"name": "A", "description": "a"})["id"]
+        project_b = self.database.save_project({"name": "B", "description": "b"})["id"]
+        seg1 = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        seg2 = self._insert_segment_returning_id("2026-04-06T10:00:00+00:00")
+
+        first = self.database.save_project_assignments(
+            [{"segmentId": seg1, "projectId": project_a, "source": "ai", "confidence": 0.8}]
+        )
+        self.assertEqual(first, {"saved": 1, "skippedManual": 0})
+
+        # Re-assign seg1 to another project (upsert, still one row).
+        self.database.save_project_assignments(
+            [{"segmentId": seg1, "projectId": project_b, "source": "ai", "confidence": 0.7}]
+        )
+        assignments = self.database.get_project_assignments("2026-04-06")
+        seg1_rows = [a for a in assignments if a["segmentId"] == str(seg1)]
+        self.assertEqual(len(seg1_rows), 1)
+        self.assertEqual(seg1_rows[0]["projectId"], project_b)
+
+        # Make seg2 a manual assignment, then AI must not overwrite it.
+        self.database.save_project_assignments(
+            [{"segmentId": seg2, "projectId": project_a, "source": "manual"}]
+        )
+        guarded = self.database.save_project_assignments(
+            [{"segmentId": seg2, "projectId": project_b, "source": "ai", "confidence": 0.9}]
+        )
+        self.assertEqual(guarded, {"saved": 0, "skippedManual": 1})
+        seg2_row = [a for a in self.database.get_project_assignments("2026-04-06") if a["segmentId"] == str(seg2)][0]
+        self.assertEqual(seg2_row["projectId"], project_a)
+        self.assertEqual(seg2_row["source"], "manual")
+
+        # Manual is allowed to overwrite an AI assignment.
+        promoted = self.database.save_project_assignments(
+            [{"segmentId": seg1, "projectId": project_a, "source": "manual"}]
+        )
+        self.assertEqual(promoted, {"saved": 1, "skippedManual": 0})
+
+    def test_get_project_assignments_range_filter(self) -> None:
+        project_id = self.database.save_project({"name": "P", "description": "d"})["id"]
+        seg_day1 = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        seg_day2 = self._insert_segment_returning_id("2026-04-07T09:00:00+00:00")
+        self.database.save_project_assignments(
+            [
+                {"segmentId": seg_day1, "projectId": project_id, "source": "ai"},
+                {"segmentId": seg_day2, "projectId": project_id, "source": "ai"},
+            ]
+        )
+        day1 = self.database.get_project_assignments("2026-04-06T00:00:00+00:00", "2026-04-06T23:59:59+00:00")
+        self.assertEqual([a["segmentId"] for a in day1], [str(seg_day1)])
+
+    def test_delete_project_nulls_assignments(self) -> None:
+        project_id = self.database.save_project({"name": "P", "description": "d"})["id"]
+        seg = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        self.database.save_project_assignments([{"segmentId": seg, "projectId": project_id, "source": "ai"}])
+        deleted = self.database.delete_project(project_id)
+        self.assertEqual(deleted, 1)
+        rows = self.database.get_project_assignments("2026-04-06")
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]["projectId"])
+
+    def test_record_project_pass(self) -> None:
+        result = self.database.record_project_pass(
+            {
+                "rangeStart": "2026-04-06T00:00:00+00:00",
+                "rangeEnd": "2026-04-06T23:59:59+00:00",
+                "trigger": "manual",
+                "model": "test-model",
+                "tokensIn": 1000,
+                "promptVersion": "pp-v1",
+            }
+        )
+        self.assertIsInstance(result["id"], int)
+        with self.database.connect() as conn:
+            row = conn.execute("SELECT trigger, model, tokens_in FROM project_pass_runs WHERE id = ?", (result["id"],)).fetchone()
+        self.assertEqual(row["trigger"], "manual")
+        self.assertEqual(row["model"], "test-model")
+        self.assertEqual(row["tokens_in"], 1000)
+
+        runs = self.database.get_project_pass_runs()
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["tokensIn"], 1000)
+        self.assertEqual(runs[0]["trigger"], "manual")
+
+    def test_ai_review_event_save_and_revert(self) -> None:
+        seg = self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00", "fp-review", category="workspace", productivity="focus", source="llm"
+        )
+        pass_id = self.database.record_project_pass(
+            {"rangeStart": "2026-04-06T00:00:00+00:00", "rangeEnd": "2026-04-06T23:59:59+00:00", "trigger": "manual", "promptVersion": "pp-v1"}
+        )["id"]
+        self.database.save_ai_review_events(
+            [
+                {
+                    "segmentId": seg,
+                    "passId": pass_id,
+                    "prevCategory": "workspace",
+                    "prevProductivity": "focus",
+                    "prevSource": "llm",
+                    "newCategory": "social_media",
+                    "newProductivity": "focus",
+                    "confidence": 0.9,
+                }
+            ]
+        )
+        # Apply the correction the way the service would.
+        self.database.save_classifications(
+            [{"segmentId": seg, "category": "social_media", "productivity": "focus", "source": "ai_review", "confidence": 0.9, "inputFingerprint": "fp-review"}]
+        )
+
+        events = self.database.get_ai_review_events("2026-04-06")
+        self.assertEqual(len(events), 1)
+        event_id = events[0]["id"]
+
+        result = self.database.revert_ai_review_event(event_id)
+        self.assertEqual(result, {"reverted": True, "restored": True})
+
+        with self.database.connect() as conn:
+            row = conn.execute("SELECT category, productivity, source FROM activity_classifications WHERE segment_id = ?", (seg,)).fetchone()
+        self.assertEqual((row["category"], row["productivity"], row["source"]), ("workspace", "focus", "llm"))
+
+        reverted_events = self.database.get_ai_review_events("2026-04-06")
+        self.assertIsNotNone(reverted_events[0]["revertedAt"])
+        self.assertEqual(self.database.get_reverted_ai_review_segment_ids([str(seg)]), [str(seg)])
+
+        # A second revert is a no-op.
+        self.assertEqual(self.database.revert_ai_review_event(event_id), {"reverted": False, "restored": False})
+
+    def test_revert_skips_restore_when_user_changed_classification(self) -> None:
+        seg = self._insert_classified_segment(
+            "2026-04-06T09:00:00+00:00", "fp-review2", category="workspace", productivity="focus", source="llm"
+        )
+        pass_id = self.database.record_project_pass(
+            {"rangeStart": "2026-04-06T00:00:00+00:00", "rangeEnd": "2026-04-06T23:59:59+00:00", "trigger": "manual", "promptVersion": "pp-v1"}
+        )["id"]
+        self.database.save_ai_review_events(
+            [{"segmentId": seg, "passId": pass_id, "prevCategory": "workspace", "prevProductivity": "focus", "prevSource": "llm", "newCategory": "social_media", "newProductivity": "focus", "confidence": 0.9}]
+        )
+        self.database.save_classifications(
+            [{"segmentId": seg, "category": "social_media", "productivity": "focus", "source": "ai_review", "inputFingerprint": "fp-review2"}]
+        )
+        # User manually overrides after the AI review.
+        self.database.save_classifications(
+            [{"segmentId": seg, "category": "communication", "productivity": "neutral", "source": "manual", "inputFingerprint": "fp-review2"}]
+        )
+        event_id = self.database.get_ai_review_events("2026-04-06")[0]["id"]
+        result = self.database.revert_ai_review_event(event_id)
+        self.assertEqual(result, {"reverted": True, "restored": False})
+
+        with self.database.connect() as conn:
+            row = conn.execute("SELECT category, source FROM activity_classifications WHERE segment_id = ?", (seg,)).fetchone()
+        self.assertEqual((row["category"], row["source"]), ("communication", "manual"))
 
 
 if __name__ == "__main__":

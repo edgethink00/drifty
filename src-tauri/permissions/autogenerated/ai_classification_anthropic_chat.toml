@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ai-classification-anthropic-chat"
+description = "Enables the ai_classification_anthropic_chat command without any pre-configured scope."
+commands.allow = ["ai_classification_anthropic_chat"]
+
+[[permission]]
+identifier = "deny-ai-classification-anthropic-chat"
+description = "Denies the ai_classification_anthropic_chat command without any pre-configured scope."
+commands.deny = ["ai_classification_anthropic_chat"]

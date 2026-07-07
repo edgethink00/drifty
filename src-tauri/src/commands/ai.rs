@@ -140,6 +140,110 @@ pub fn post_openai_chat(
     })
 }
 
+const ANTHROPIC_DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
+const ANTHROPIC_DEFAULT_VERSION: &str = "2023-06-01";
+const ANTHROPIC_DEFAULT_MAX_TOKENS: u32 = 4096;
+
+/// Anthropic's Messages API is not OpenAI-shaped: it authenticates with an
+/// `x-api-key` header + `anthropic-version`, and its body/response differ
+/// (`content[0].text`, `usage.input_tokens/output_tokens`). This command mirrors
+/// `ai_classification_openai_chat`'s structure/error handling but posts to
+/// `/messages`. The raw response `body` is returned as a JSON string (reqwest
+/// `text()`); the TS side maps Anthropic's shape onto the internal result.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiClassificationAnthropicChatRequest {
+    /// Overridable so tests can target a local server; defaults to Anthropic.
+    #[serde(default)]
+    pub base_url: Option<String>,
+    pub api_key: String,
+    pub model: String,
+    pub messages: Vec<serde_json::Value>,
+    pub max_tokens: Option<u32>,
+    pub timeout_ms: Option<u64>,
+    pub temperature: Option<f64>,
+    pub anthropic_version: Option<String>,
+}
+
+#[tauri::command]
+pub async fn ai_classification_anthropic_chat(
+    request: AiClassificationAnthropicChatRequest,
+) -> Result<AiClassificationChatResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || post_anthropic_chat(request))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+pub fn post_anthropic_chat(
+    request: AiClassificationAnthropicChatRequest,
+) -> Result<AiClassificationChatResponse, String> {
+    let api_key = request.api_key.trim();
+    if api_key.is_empty() {
+        return Err("Anthropic API key is required.".to_string());
+    }
+    let model = request.model.trim();
+    if model.is_empty() {
+        return Err("Anthropic model is required.".to_string());
+    }
+
+    let base_url = request
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(ANTHROPIC_DEFAULT_BASE_URL)
+        .trim_end_matches('/');
+    let url = format!("{base_url}/messages");
+
+    let timeout = request
+        .timeout_ms
+        .filter(|value| *value > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_CHAT_TIMEOUT);
+    let client = reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let anthropic_version = request
+        .anthropic_version
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(ANTHROPIC_DEFAULT_VERSION);
+    let max_tokens = request
+        .max_tokens
+        .filter(|value| *value > 0)
+        .unwrap_or(ANTHROPIC_DEFAULT_MAX_TOKENS);
+
+    let mut body = serde_json::Map::from_iter([
+        ("model".to_string(), json!(model)),
+        ("max_tokens".to_string(), json!(max_tokens)),
+        ("messages".to_string(), json!(request.messages)),
+    ]);
+    if let Some(temperature) = request.temperature {
+        body.insert("temperature".to_string(), json!(temperature));
+    }
+
+    let started_at = Instant::now();
+    let response = client
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", anthropic_version)
+        .json(&body)
+        .send()
+        .map_err(|error| error.to_string())?;
+    let status = response.status().as_u16();
+    let body = response.text().map_err(|error| error.to_string())?;
+
+    Ok(AiClassificationChatResponse {
+        status,
+        body,
+        latency_ms: started_at.elapsed().as_millis(),
+    })
+}
+
 fn normalize_models(model: Option<&str>, models: Option<&[String]>) -> Vec<String> {
     let source_models: Vec<&str> = if let Some(models) = models {
         models.iter().map(String::as_str).collect()

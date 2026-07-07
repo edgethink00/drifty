@@ -27,6 +27,19 @@ export type TrackerCommand =
   | "tracker_save_classifications"
   | "tracker_refresh_non_ai_classifications"
   | "tracker_get_classification_metrics"
+  | "tracker_get_projects"
+  | "tracker_save_project"
+  | "tracker_delete_project"
+  | "tracker_save_project_anchors"
+  | "tracker_delete_project_anchor"
+  | "tracker_save_project_exemplar"
+  | "tracker_save_project_assignments"
+  | "tracker_get_project_assignments"
+  | "tracker_record_project_pass"
+  | "tracker_get_project_pass_runs"
+  | "tracker_save_ai_review_events"
+  | "tracker_get_ai_review_events"
+  | "tracker_revert_ai_review_event"
   | "tracker_preview_browser_history_import"
   | "tracker_import_browser_history"
   | "tray_update_productivity_icon"
@@ -260,6 +273,135 @@ export interface TrackerLiveTail {
   segments: ActivitySegment[];
 }
 
+export type ProjectStatus = "active" | "archived";
+export type ProjectAnchorKind = "app" | "domain" | "keyword";
+export type ProjectAnchorSource = "harvested" | "manual";
+
+export interface ProjectAnchor {
+  kind: ProjectAnchorKind;
+  value: string;
+  source: ProjectAnchorSource;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  status: ProjectStatus;
+  anchors: ProjectAnchor[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectInput {
+  id?: string;
+  name: string;
+  description: string;
+  color?: string;
+  status?: ProjectStatus;
+}
+
+export type ProjectExemplarSource = "user_confirmed" | "user_corrected";
+
+export interface ProjectExemplar {
+  id: number;
+  projectId: string;
+  runSummary: string;
+  source: ProjectExemplarSource;
+  createdAt: string;
+}
+
+export type ProjectAssignmentSource = "ai" | "manual";
+
+export interface ProjectAssignmentRecord {
+  segmentId: string;
+  projectId: string | null;
+  source: ProjectAssignmentSource;
+  confidence?: number | null;
+  reason?: string | null;
+  passId?: number | null;
+  chunkFingerprint?: string | null;
+  assignedAt?: string | null;
+  stale?: boolean | null;
+}
+
+export interface ProjectAssignmentsSaveResult {
+  saved: number;
+  skippedManual: number;
+}
+
+export type ProjectPassTrigger = "schedule" | "open" | "eod" | "manual" | "backfill" | "discovery";
+
+export interface ProjectPassRunInput {
+  rangeStart: string;
+  rangeEnd: string;
+  trigger: ProjectPassTrigger;
+  model?: string | null;
+  provider?: string | null;
+  runsCount?: number | null;
+  tokensIn?: number | null;
+  tokensOut?: number | null;
+  latencyMs?: number | null;
+  assignmentsCount?: number | null;
+  correctionsCount?: number | null;
+  promptVersion: string;
+}
+
+export interface ProjectPassRunRecord {
+  id: number;
+  ranAt: string;
+}
+
+export interface ProjectPassRun {
+  id: number;
+  ranAt: string;
+  rangeStart: string;
+  rangeEnd: string;
+  trigger: ProjectPassTrigger;
+  model?: string | null;
+  provider?: string | null;
+  runsCount?: number | null;
+  tokensIn?: number | null;
+  tokensOut?: number | null;
+  latencyMs?: number | null;
+  assignmentsCount?: number | null;
+  correctionsCount?: number | null;
+  promptVersion: string;
+}
+
+export interface AiReviewEventInput {
+  segmentId: string;
+  passId: number;
+  prevCategory?: ActivityCategory | null;
+  prevProductivity?: ProductivityLabel | null;
+  prevSource?: StoredClassificationSource | null;
+  newCategory?: ActivityCategory | null;
+  newProductivity?: ProductivityLabel | null;
+  confidence?: number | null;
+  reason?: string | null;
+}
+
+export interface AiReviewEvent {
+  id: number;
+  segmentId: string;
+  passId: number;
+  prevCategory?: ActivityCategory | null;
+  prevProductivity?: ProductivityLabel | null;
+  prevSource?: StoredClassificationSource | null;
+  newCategory?: ActivityCategory | null;
+  newProductivity?: ProductivityLabel | null;
+  confidence?: number | null;
+  reason?: string | null;
+  createdAt: string;
+  revertedAt?: string | null;
+}
+
+export interface AiReviewEventRevertResult {
+  reverted: boolean;
+  restored: boolean;
+}
+
 export interface TrackerApi {
   getStatus(): Promise<TrackerStatus>;
   start(): Promise<TrackerStatus>;
@@ -287,6 +429,19 @@ export interface TrackerApi {
   saveClassifications(classifications: ActivityClassificationRecord[]): Promise<{ saved: number }>;
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
+  getProjects(): Promise<Project[]>;
+  saveProject(input: ProjectInput): Promise<Project>;
+  deleteProject(id: string): Promise<{ deleted: number }>;
+  saveProjectAnchors(projectId: string, anchors: ProjectAnchor[]): Promise<ProjectAnchor[]>;
+  deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string): Promise<{ deleted: number }>;
+  saveProjectExemplar(projectId: string, runSummary: string, source: ProjectExemplarSource): Promise<ProjectExemplar>;
+  saveProjectAssignments(assignments: ProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
+  getProjectAssignments(query: TimelineQuery): Promise<ProjectAssignmentRecord[]>;
+  recordProjectPass(input: ProjectPassRunInput): Promise<ProjectPassRunRecord>;
+  getProjectPassRuns(query: TimelineQuery): Promise<ProjectPassRun[]>;
+  saveAiReviewEvents(events: AiReviewEventInput[]): Promise<{ saved: number }>;
+  getAiReviewEvents(query: TimelineQuery): Promise<AiReviewEvent[]>;
+  revertAiReviewEvent(id: number): Promise<AiReviewEventRevertResult>;
   previewBrowserHistoryImport(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportPreview>;
   importBrowserHistory(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportResult>;
   getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment>;
