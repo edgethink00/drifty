@@ -15,8 +15,16 @@
   min-height: 0;
 }
 
+.content--classification .page:has(.classification-panel-view--empty-state) {
+  height: auto;
+}
+
 .content--classification {
   overflow-y: hidden;
+}
+
+.content--classification:has(.classification-panel-view--empty-state) {
+  overflow-y: auto;
 }
 
 .content--classification .clf-summary {

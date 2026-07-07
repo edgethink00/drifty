@@ -56,6 +56,10 @@
   min-height: 0;
 }
 
+.content--classification .classification-panel-view--empty-state {
+  flex: 0 0 auto;
+}
+
 .classification-panel-view__grid {
   display: grid;
   grid-template-columns: minmax(15rem, 0.95fr) minmax(18rem, 1.1fr) minmax(22rem, 1.45fr);
@@ -871,11 +875,15 @@
 }
 
 .classification-panel-view__empty--full {
-  min-height: 18rem;
+  min-height: 13.5rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 34%, transparent), transparent 9rem),
+    color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--shadow);
+  justify-items: center;
+  text-align: center;
 }
 
 .classification-panel-view__empty p {

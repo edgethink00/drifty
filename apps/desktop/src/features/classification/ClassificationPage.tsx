@@ -492,7 +492,7 @@ export function ClassificationPage({
           </div>
         </section>
       ) : (
-        <section className="classification-panel-view" aria-label="Classification panel view">
+        <section className="classification-panel-view classification-panel-view--empty-state" aria-label="Classification panel view">
           <div className="classification-panel-view__empty classification-panel-view__empty--full">
             <span className="label-mono">Classification</span>
             <strong>No category data yet</strong>

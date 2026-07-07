@@ -103,7 +103,7 @@ export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
-const SIGNED_OUT_TRIGGER_LABEL = "ㅕnknown";
+const SIGNED_OUT_TRIGGER_LABEL = "Unknown";
 const SIGNED_OUT_TRIGGER_ARIA_LABEL = "Unknown";
 
 type AccountMenuProps = {

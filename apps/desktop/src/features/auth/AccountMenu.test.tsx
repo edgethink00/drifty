@@ -53,7 +53,7 @@ describe("AccountMenu", () => {
     const chevrons = container.querySelector(".account-trigger__chevrons");
     const chevronMarks = container.querySelectorAll(".account-trigger__chevron-mark");
 
-    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("ㅕnknown");
+    expect(trigger.querySelector(".account-trigger__copy strong")?.textContent).toBe("Unknown");
     expect(trigger.querySelector(".account-avatar--placeholder svg")).toBeTruthy();
     expect(trigger.querySelector(".account-avatar img")).toBeNull();
     expect(trigger.querySelector(".account-trigger__settings-icon")).toBeNull();
