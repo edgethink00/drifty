@@ -29,9 +29,15 @@ export function useAnalysisModelSetup(supabaseConfigured: boolean): UseAnalysisM
     setOpenRouterKeyPresent(Boolean(await loadOpenRouterApiKey()));
   }, []);
 
+  // Only read the Keychain to compute the OpenRouter "connected" badge when the
+  // analysis slot actually targets OpenRouter. Reading it on every launch (even in
+  // local/cloud mode) makes macOS re-prompt for Keychain access after each app
+  // update, because the updated binary is not yet on the item's ACL. Switching the
+  // provider to "openrouter" re-runs this and refreshes the badge on demand.
   useEffect(() => {
+    if (analysisSetup.provider !== "openrouter") return;
     void refreshOpenRouterKey();
-  }, [refreshOpenRouterKey]);
+  }, [analysisSetup.provider, refreshOpenRouterKey]);
 
   const setAnalysisSetup = useCallback((next: AnalysisAiSetupState) => {
     setAnalysisSetupState(next);

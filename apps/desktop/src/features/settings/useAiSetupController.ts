@@ -135,7 +135,15 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedLocalAiSetup(localAiSetup)));
   }, [localAiSetup]);
 
+  // Only touch the Keychain when the OpenRouter key is actually needed: the BYOK
+  // provider is active (classification passes read the in-memory key) or the user
+  // has the AI setup dialog open (to prefill/show the saved key). Reading it
+  // unconditionally on every launch makes macOS re-prompt for Keychain access after
+  // each app update — even in local mode — because the updated binary's signature is
+  // not yet on the item's ACL. Gating the read keeps local-mode launches Keychain-free.
+  const shouldLoadOpenRouterKey = localAiSetup.provider === "openrouter_byok" || aiSetupDialogOpen;
   useEffect(() => {
+    if (!shouldLoadOpenRouterKey || openRouterKeyLoaded) return;
     let cancelled = false;
     void loadOpenRouterApiKey().then((savedApiKey) => {
       if (cancelled) return;
@@ -151,7 +159,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [shouldLoadOpenRouterKey, openRouterKeyLoaded]);
 
   useEffect(() => {
     if (!openRouterKeyLoaded) return;
