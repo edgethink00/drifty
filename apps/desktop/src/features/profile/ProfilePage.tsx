@@ -249,7 +249,32 @@ export function ProfilePage({
                 <ProfileSocialLinks profile={{ website_url: websiteUrl, github_url: githubUrl, linkedin_url: linkedinUrl }} />
               </div>
             </div>
-            {snippets ? (
+            <div className="profile-identity__control profile-card-control__row" aria-label="Public focus card">
+              <span className="label-mono">Public focus card</span>
+              <span className={`profile-card-control__state${card.enabled === true ? " profile-card-control__state--on" : ""}`}>
+                {card.enabled === true ? "On" : card.enabled === null ? "…" : "Off"}
+              </span>
+              <div className="profile-card-control__copy">
+                <p className="capture-recency">
+                  {card.enabled === true
+                    ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus. Turning it off pauses these links — they resume when you turn it back on."
+                    : card.enabled === null
+                      ? "Checking…"
+                      : "One switch controls your card, badges, and embeds — off means they show nothing."}
+                </p>
+                {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
+              </div>
+              {card.enabled === true ? (
+                <button type="button" className="ghost-button" disabled={card.busy} onClick={() => void card.disable()}>
+                  {card.busy ? "Saving…" : "Make private"}
+                </button>
+              ) : (
+                <button type="button" className="settings-btn" disabled={card.busy || card.enabled === null} onClick={() => void card.enable()}>
+                  {card.busy ? "Turning on…" : "Make public"}
+                </button>
+              )}
+            </div>
+            {card.enabled === true && snippets ? (
               <div className="profile-identity__link" aria-label="Public profile link">
                 <span className="label-mono">Public page</span>
                 <div className="profile-embed-card__variant-row">
@@ -275,32 +300,6 @@ export function ProfilePage({
                   : "Not on the board — joining is separate from your focus card."}
               </span>
               <button type="button" className="ghost-button" onClick={onOpenLeaderboard}>Open leaderboard</button>
-            </div>
-            <div className="profile-identity__control profile-card-control__row" aria-label="Public focus card">
-              <span className="label-mono">Public focus card</span>
-              <span className={`profile-card-control__state${card.enabled === true ? " profile-card-control__state--on" : ""}`}>
-                {card.enabled === true ? "On" : card.enabled === null ? "…" : "Off"}
-              </span>
-              <div className="profile-card-control__copy">
-                <p className="capture-recency">
-                  {card.enabled === true
-                    ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus. Turning it off pauses these links — they resume when you turn it back on."
-                    : card.enabled === null
-                      ? "Checking…"
-                      : "One switch controls your card, badges, and embeds — off means they show nothing."}
-                </p>
-                {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
-              </div>
-              <span className="leaderboard-privacy-badge">Aggregates only</span>
-              {card.enabled === true ? (
-                <button type="button" className="ghost-button" disabled={card.busy} onClick={() => void card.disable()}>
-                  {card.busy ? "Saving…" : "Make private"}
-                </button>
-              ) : (
-                <button type="button" className="settings-btn" disabled={card.busy || card.enabled === null} onClick={() => void card.enable()}>
-                  {card.busy ? "Turning on…" : "Make public"}
-                </button>
-              )}
             </div>
           </section>
 

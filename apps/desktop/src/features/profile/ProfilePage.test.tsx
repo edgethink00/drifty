@@ -96,9 +96,8 @@ describe("ProfilePage", () => {
     inputs.forEach((input) => expect(input.disabled).toBe(true));
     const copyButtons = document.querySelectorAll<HTMLButtonElement>(".profile-embed-stack button");
     copyButtons.forEach((button) => expect(button.disabled).toBe(true));
-    // The identity-block profile link stays active.
-    const profileLinkInput = (screen.getAllByRole("textbox") as HTMLInputElement[]).find((input) => input.value.includes("drifty.so/profile/?id="));
-    expect(profileLinkInput?.disabled ?? true).toBe(false);
+    // The public-page link row only exists while the card is on.
+    expect(document.querySelector('[aria-label="Public profile link"]')).toBeNull();
   });
 
   it("toggles the public focus card on and off", () => {

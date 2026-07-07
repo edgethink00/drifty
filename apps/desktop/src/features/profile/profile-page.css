@@ -87,6 +87,13 @@
   padding-top: 0.55rem;
 }
 
+/* Shared left label rail across the identity rows. */
+.profile-identity__control > .label-mono,
+.profile-identity__board > .label-mono {
+  flex: 0 0 158px;
+  line-height: 1.25;
+}
+
 .profile-card-control__row {
   align-items: center;
   display: flex;

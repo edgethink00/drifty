@@ -101,6 +101,12 @@ vi.mock("./lib/api/trackerClient", () => ({
   },
 }));
 
+vi.mock("./features/share/focusCardService", () => ({
+  fetchOwnFocusCard: vi.fn().mockResolvedValue({ success: true, error: null, data: { enabled: true, updatedAt: null } }),
+  publishFocusCard: vi.fn().mockResolvedValue({ success: true, error: null }),
+  setFocusCardEnabled: vi.fn().mockResolvedValue({ success: true, error: null }),
+}));
+
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
