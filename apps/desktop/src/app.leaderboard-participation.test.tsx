@@ -1092,9 +1092,8 @@ describe("App leaderboard participation", () => {
     fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
     expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
 
-    // Profile editing now lives in the Profile tab.
-    const profileNav = await screen.findByRole("navigation", { name: /profile navigation/i });
-    fireEvent.click(within(profileNav).getByRole("button", { name: /^profile$/i }));
+    // Profile editing now lives in the Profile tab (reached from the board's strip).
+    fireEvent.click(await screen.findByRole("button", { name: /open profile/i }));
     fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
     await screen.findByLabelText(/choose profile photo/i);
     const editor = document.querySelector(".profile-editor-modal");

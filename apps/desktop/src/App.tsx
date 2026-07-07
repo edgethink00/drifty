@@ -5106,14 +5106,6 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="nav-label">Profile</div>
-        <nav className="sidebar-nav" aria-label="Profile navigation">
-          <button type="button" className={activeTab === "profile" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("profile")}>
-            <NavIcon type="profile" /><span>Profile</span>
-            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Profile</span> : null}
-          </button>
-        </nav>
-
         {canOpenTeamsBeta ? (
           <>
             <div className="nav-label">Team</div>
@@ -5176,7 +5168,7 @@ export default function App() {
             isDarkMode={theme === "dark"}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             onProfile={() => {
-              openProfileEditor();
+              navigateToTab("profile");
               setAccountMenuOpen(false);
             }}
             onAiSetting={() => {
