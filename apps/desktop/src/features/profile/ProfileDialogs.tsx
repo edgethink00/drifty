@@ -2,6 +2,7 @@ import type { ChangeEvent } from "react";
 import type { LeaderboardRow } from "../leaderboard/leaderboardService";
 import { EditProfileModal, EmbedModal, ProfileModal, type ProfileDraft } from "./ProfileModals";
 import type { PublicProfile } from "./profileService";
+import type { FocusCardControls } from "../share/useFocusCard";
 
 export type ProfileDialogsProps = {
   avatarUrl: string;
@@ -19,6 +20,7 @@ export type ProfileDialogsProps = {
   isEmbedOpen: boolean;
   embedPublicId: string | null;
   embedFocusSeconds: number | null;
+  focusCard: FocusCardControls;
   onCloseEditor: () => void;
   onCloseSelectedProfile: () => void;
   onCloseEmbed: () => void;
@@ -44,6 +46,7 @@ export function ProfileDialogs({
   isEmbedOpen,
   embedPublicId,
   embedFocusSeconds,
+  focusCard,
   onCloseEditor,
   onCloseSelectedProfile,
   onCloseEmbed,
@@ -85,6 +88,7 @@ export function ProfileDialogs({
         <EmbedModal
           publicId={embedPublicId}
           focusSeconds={embedFocusSeconds}
+          card={focusCard}
           onClose={onCloseEmbed}
         />
       ) : null}
