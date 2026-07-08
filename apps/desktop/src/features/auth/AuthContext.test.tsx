@@ -586,6 +586,38 @@ describe("AuthContext", () => {
     window.removeEventListener("drifty:billing-success", billingSuccessListener);
   });
 
+  it("dispatches team invite events for Tauri team invite deep links without treating them as auth callbacks", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const teamInviteListener = vi.fn();
+    window.addEventListener("drifty:team-invite", teamInviteListener);
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={() => undefined} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(tauriMocks.onOpenUrl).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      tauriMocks.emitOpenUrl([
+        "drifty://team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=DRFT-ABCD-2345",
+      ]);
+    });
+
+    expect(teamInviteListener).toHaveBeenCalledTimes(1);
+    expect(teamInviteListener.mock.calls[0]?.[0]).toMatchObject({
+      detail: {
+        inviteKey: "https://drifty.so/team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=DRFT-ABCD-2345",
+        inviteCode: "DRFT-ABCD-2345",
+      },
+    });
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    window.removeEventListener("drifty:team-invite", teamInviteListener);
+  });
+
   it("applies pending Tauri auth code callback URLs that were cached before the web listener was ready", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();
@@ -604,6 +636,33 @@ describe("AuthContext", () => {
     await waitFor(() => {
       expect(exchangeCodeForSession).toHaveBeenCalledWith("pending-code");
     });
+  });
+
+  it("dispatches pending Tauri team invite URLs cached before the web listener was ready", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const teamInviteListener = vi.fn();
+    window.addEventListener("drifty:team-invite", teamInviteListener);
+    invoke.mockResolvedValueOnce([
+      "drifty://team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=DRFT-ABCD-2345",
+    ]);
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={() => undefined} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(teamInviteListener).toHaveBeenCalledTimes(1);
+    });
+    expect(teamInviteListener.mock.calls[0]?.[0]).toMatchObject({
+      detail: {
+        inviteKey: "https://drifty.so/team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=DRFT-ABCD-2345",
+        inviteCode: "DRFT-ABCD-2345",
+      },
+    });
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    window.removeEventListener("drifty:team-invite", teamInviteListener);
   });
 
   it("restores a desktop session saved outside WebView storage", async () => {

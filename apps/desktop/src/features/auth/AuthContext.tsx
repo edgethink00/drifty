@@ -32,6 +32,7 @@ import {
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
+import { dispatchTeamInviteDeepLink } from "../team/teamInviteDeepLinks";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -470,6 +471,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const handleAuthCallbackUrls = async (urls: string[]) => {
       for (const url of urls) {
+        if (dispatchTeamInviteDeepLink(url)) {
+          continue;
+        }
         if (isBillingSuccessDeepLink(url)) {
           window.dispatchEvent(new CustomEvent("drifty:billing-success"));
           continue;

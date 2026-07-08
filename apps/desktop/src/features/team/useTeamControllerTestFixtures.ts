@@ -2,7 +2,7 @@ import type { ActivitySegment } from "@drifty/domain";
 import { renderHook } from "@testing-library/react";
 import { vi } from "vitest";
 import type { AuthState } from "../auth/AuthContext";
-import type { OwnTeam, TeamFocusSummaryRow, TeamInvite, TeamResult } from "./teamService";
+import type { OwnTeam, TeamFocusSummaryRow, TeamInvite, TeamLiveStatusRow, TeamResult } from "./teamService";
 import { useTeamController } from "./useTeamController";
 
 export const signedInUser: NonNullable<AuthState["user"]> = {
@@ -20,6 +20,21 @@ export const ownSummaryRow: TeamFocusSummaryRow = {
 
 export const teammateSummaryRow: TeamFocusSummaryRow = {
   ...ownSummaryRow, member_display_name: "Sam", role_label: "Member", focus_seconds: 3600, focus_score: 50, private_rank: 2,
+};
+
+export const liveStatusRow: TeamLiveStatusRow = {
+  organization_id: "team-1",
+  organization_name: "Deep Work Crew",
+  member_display_name: "Alex",
+  profile_avatar_url: "",
+  role_label: "Owner",
+  focus_share_scope: "focus_only",
+  presence_state: "active_now",
+  focus_seconds: 7200,
+  focus_score: 75,
+  window_start_date: "2026-06-26",
+  window_end_date: "2026-07-02",
+  last_shared_at: "2026-07-02T08:00:00.000Z",
 };
 
 export const pendingInvite: TeamInvite = {

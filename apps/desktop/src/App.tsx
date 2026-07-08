@@ -44,6 +44,7 @@ import { useFocusCard } from "./features/share/useFocusCard";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
 import { ProfilePage } from "./features/profile/ProfilePage";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
+import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
@@ -346,6 +347,7 @@ export default function App() {
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
+  const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
   const canOpenTeamsBeta = devModeEnabled && teamsBetaEnabled;
@@ -516,6 +518,24 @@ export default function App() {
       return { ...current, entries };
     });
   }, [activeTab, canOpenTeamsBeta]);
+
+  useEffect(() => {
+    const handleTeamInvite = (event: Event) => {
+      const pendingInvite = readPendingTeamInviteFromEvent(event);
+      if (!pendingInvite) return;
+      setPendingTeamInvite(pendingInvite);
+      if (canOpenTeamsBeta) {
+        navigateToTab("team");
+      }
+    };
+    window.addEventListener(TEAM_INVITE_DEEP_LINK_EVENT, handleTeamInvite);
+    return () => window.removeEventListener(TEAM_INVITE_DEEP_LINK_EVENT, handleTeamInvite);
+  }, [canOpenTeamsBeta, navigateToTab]);
+
+  useEffect(() => {
+    if (!pendingTeamInvite || !canOpenTeamsBeta) return;
+    navigateToTab("team");
+  }, [canOpenTeamsBeta, navigateToTab, pendingTeamInvite]);
   const {
     replayState: dashboardDemoReplayState,
     restartReplay: restartDashboardDemoReplay,
@@ -5544,7 +5564,9 @@ export default function App() {
             showAiClassificationImpact={showAiClassificationImpact}
             startOfDayMinutes={startOfDayMinutes}
             user={user}
+            pendingInvite={pendingTeamInvite}
             onAuthRequired={requestTeamAuth}
+            onPendingInviteClear={() => setPendingTeamInvite(null)}
           />
         ) : null}
 

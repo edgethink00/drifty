@@ -5,7 +5,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
 import type { AuthState } from "../auth/AuthContext";
 import { buildTeamFocusAggregate, getTeamFocusWindow, type TeamFocusAggregate } from "./teamAggregate";
-import { DEFAULT_TEAM_PERIOD, fetchOwnTeams, fetchTeamFocusSummary, isTeamErrorMessage, messageFromTeamError, publishTeamFocusTotal, stopTeamFocusSharing, type OwnTeam, type TeamFocusSummaryRow, type TeamPeriod } from "./teamService";
+import { DEFAULT_TEAM_PERIOD, fetchOwnTeams, fetchTeamFocusSummary, fetchTeamLiveStatus, isTeamErrorMessage, messageFromTeamError, publishTeamFocusTotal, stopTeamFocusSharing, type OwnTeam, type TeamFocusSummaryRow, type TeamLiveStatusRow, type TeamPeriod, type TeamResult } from "./teamService";
 import { useTeamInviteActions } from "./useTeamInviteActions";
 
 type TeamInviteActions = ReturnType<typeof useTeamInviteActions>;
@@ -19,7 +19,7 @@ export type UseTeamControllerInput = {
 };
 
 export type UseTeamControllerResult = {
-  readonly activeTeamPeriod: TeamPeriod; readonly localAggregate: TeamFocusAggregate | null; readonly rows: readonly TeamFocusSummaryRow[];
+  readonly activeTeamPeriod: TeamPeriod; readonly liveRows: readonly TeamLiveStatusRow[]; readonly localAggregate: TeamFocusAggregate | null; readonly rows: readonly TeamFocusSummaryRow[];
   readonly selectedTeam: OwnTeam | null; readonly teamActionError: string | null; readonly teamActionLoading: boolean;
   readonly teamError: string | null; readonly teamLoading: boolean; readonly teamStatusMessage: string | null;
   readonly teamStatusTone: "error" | "neutral"; readonly teams: readonly OwnTeam[]; readonly invites: TeamInviteActions["invites"];
@@ -35,6 +35,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const [activeTeamPeriod, setActiveTeamPeriod] = useState<TeamPeriod>(DEFAULT_TEAM_PERIOD);
   const [teams, setTeams] = useState<OwnTeam[]>([]);
   const [rows, setRows] = useState<TeamFocusSummaryRow[]>([]);
+  const [liveRows, setLiveRows] = useState<TeamLiveStatusRow[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [localAggregate, setLocalAggregate] = useState<TeamFocusAggregate | null>(null);
   const [teamHasResolvedOnce, setTeamHasResolvedOnce] = useState(false);
@@ -55,7 +56,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const selectedTeam = useMemo(() => teams.find((team) => team.organization_id === selectedTeamId) ?? null, [selectedTeamId, teams]);
 
   const clearTeamState = useCallback(() => {
-    setTeams([]); setRows([]); setSelectedTeamId(null);
+    setTeams([]); setRows([]); setLiveRows([]); setSelectedTeamId(null);
     selectedTeamIdRef.current = null;
     setLocalAggregate(null); setTeamRefreshing(false); setTeamError(null);
     hasResolvedOnceRef.current = false;
@@ -81,7 +82,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
       if (!teamsResult.success) {
         if (!shouldPreserveState) {
-          setTeams([]); setRows([]); setSelectedTeamId(null);
+          setTeams([]); setRows([]); setLiveRows([]); setSelectedTeamId(null);
           selectedTeamIdRef.current = null;
         }
         hasResolvedOnceRef.current = true;
@@ -92,15 +93,20 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
       const nextTeams = [...(teamsResult.data ?? [])];
       const nextSelectedTeamId = chooseSelectedTeamId(nextTeams, preferredTeamId);
-      const summaryResult = nextSelectedTeamId
-        ? await fetchTeamFocusSummary({ organization_id: nextSelectedTeamId, period: activeTeamPeriod })
-        : { success: true, error: null, data: [] };
+      let summaryResult: TeamResult<readonly TeamFocusSummaryRow[]> = { success: true, error: null, data: [] };
+      let liveStatusResult: TeamResult<readonly TeamLiveStatusRow[]> = { success: true, error: null, data: [] };
+      if (nextSelectedTeamId) {
+        [summaryResult, liveStatusResult] = await Promise.all([
+          fetchTeamFocusSummary({ organization_id: nextSelectedTeamId, period: activeTeamPeriod }),
+          fetchTeamLiveStatus({ organization_id: nextSelectedTeamId, period: activeTeamPeriod }),
+        ]);
+      }
 
       if (refreshRequestRef.current !== requestId) return null;
 
       if (!summaryResult.success) {
         if (!shouldPreserveState) {
-          setTeams(nextTeams); setRows([]); setSelectedTeamId(nextSelectedTeamId);
+          setTeams(nextTeams); setRows([]); setLiveRows([]); setSelectedTeamId(nextSelectedTeamId);
           selectedTeamIdRef.current = nextSelectedTeamId;
         }
         hasResolvedOnceRef.current = true;
@@ -109,8 +115,20 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
         return null;
       }
 
+      if (!liveStatusResult.success) {
+        if (!shouldPreserveState) {
+          setTeams(nextTeams); setRows([...(summaryResult.data ?? [])]); setLiveRows([]); setSelectedTeamId(nextSelectedTeamId);
+          selectedTeamIdRef.current = nextSelectedTeamId;
+        }
+        hasResolvedOnceRef.current = true;
+        setTeamHasResolvedOnce(true);
+        setTeamError(liveStatusResult.error ?? "Unable to load team live status");
+        return null;
+      }
+
       setTeams(nextTeams);
       setRows([...(summaryResult.data ?? [])]);
+      setLiveRows([...(liveStatusResult.data ?? [])]);
       setSelectedTeamId(nextSelectedTeamId);
       selectedTeamIdRef.current = nextSelectedTeamId;
       hasResolvedOnceRef.current = true;
@@ -122,7 +140,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     } catch (error) {
       if (refreshRequestRef.current !== requestId) return null;
       if (!shouldPreserveState) {
-        setTeams([]); setRows([]); setSelectedTeamId(null);
+        setTeams([]); setRows([]); setLiveRows([]); setSelectedTeamId(null);
         selectedTeamIdRef.current = null;
       }
       hasResolvedOnceRef.current = true;
@@ -271,7 +289,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const teamStatusTone = teamBackgroundError ? "error" : "neutral";
 
   return {
-    activeTeamPeriod, localAggregate, rows, selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
+	    activeTeamPeriod, liveRows, localAggregate, rows, selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
     teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite,
     handlePublishTeamFocus, handleStopTeamFocusSharing, refreshTeamData, selectTeam, setActiveTeamPeriod,
   };

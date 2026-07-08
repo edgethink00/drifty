@@ -27,6 +27,26 @@ fn billing_deep_link_filter_accepts_only_drifty_success_links() {
 }
 
 #[test]
+fn team_invite_deep_link_filter_accepts_only_team_invite_links() {
+    assert!(is_team_invite_deep_link("drifty://team-invite"));
+    assert!(is_team_invite_deep_link(
+        "drifty://team-invite?token=abcdefghijklmnopqrstuvwxyzABCDEFG_1234567890&code=DRFT-ABCD-2345"
+    ));
+    assert!(is_team_invite_deep_link(
+        "drifty://team-invite/?code=DRFT-ABCD-2345"
+    ));
+    assert!(!is_team_invite_deep_link(
+        "https://drifty.so/team-invite?code=DRFT-ABCD-2345"
+    ));
+    assert!(!is_team_invite_deep_link(
+        "drifty://team-invite.evil.example?code=DRFT-ABCD-2345"
+    ));
+    assert!(!is_team_invite_deep_link(
+        "drifty://auth/callback?code=DRFT-ABCD-2345"
+    ));
+}
+
+#[test]
 fn main_window_close_policy_only_handles_main_label() {
     assert!(should_hide_instead_of_close("main"));
     assert!(!should_hide_instead_of_close("watcher-peek"));

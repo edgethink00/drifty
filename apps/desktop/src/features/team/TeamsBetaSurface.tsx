@@ -1,6 +1,8 @@
 import type { AuthState } from "../auth/AuthContext";
 import { copyTextToClipboard } from "../profile/ProfileModals";
 import { TeamPage } from "./TeamPage";
+import type { PendingTeamInvite } from "./teamInviteDeepLinks";
+import type { AcceptTeamInviteInput } from "./teamService";
 import { useTeamController } from "./useTeamController";
 
 export type TeamsBetaSurfaceProps = {
@@ -11,7 +13,9 @@ export type TeamsBetaSurfaceProps = {
   readonly showAiClassificationImpact: boolean;
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
+  readonly pendingInvite?: PendingTeamInvite | null;
   readonly onAuthRequired: () => void;
+  readonly onPendingInviteClear?: () => void;
 };
 
 export function TeamsBetaSurface({
@@ -22,11 +26,14 @@ export function TeamsBetaSurface({
   showAiClassificationImpact,
   startOfDayMinutes,
   user,
+  pendingInvite = null,
   onAuthRequired,
+  onPendingInviteClear,
 }: TeamsBetaSurfaceProps) {
   const {
     activeTeamPeriod,
     invites: teamInvites,
+    liveRows: teamLiveRows,
     rows: teamRows,
     selectedTeam,
     teamActionError,
@@ -56,6 +63,11 @@ export function TeamsBetaSurface({
     onAuthRequired,
   });
 
+  const handleAcceptPendingInvite = async (input: AcceptTeamInviteInput) => {
+    await handleAcceptInvite(input);
+    onPendingInviteClear?.();
+  };
+
   return (
     <TeamPage
       actionError={teamActionError}
@@ -67,12 +79,14 @@ export function TeamsBetaSurface({
       isSignedIn={isPolicySignedIn}
       isSupabaseEnabled={isSupabaseConfigured}
       invites={teamInvites}
+      liveRows={teamLiveRows}
+      pendingInvite={pendingInvite}
       rows={teamRows}
       selectedTeam={selectedTeam}
       statusMessage={teamStatusMessage}
       statusTone={teamStatusTone}
       teams={teams}
-      onAcceptInvite={handleAcceptInvite}
+      onAcceptInvite={pendingInvite ? handleAcceptPendingInvite : handleAcceptInvite}
       onCopyInvite={copyTextToClipboard}
       onCreateInvite={handleCreateInvite}
       onCreateTeam={handleCreateTeam}
@@ -82,6 +96,7 @@ export function TeamsBetaSurface({
       onRevokeInvite={handleRevokeInvite}
       onSelectTeam={selectTeam}
       onSignIn={onAuthRequired}
+      onPendingInviteClear={onPendingInviteClear}
       onStopTeamFocusSharing={handleStopTeamFocusSharing}
     />
   );

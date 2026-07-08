@@ -5,6 +5,7 @@ import {
   fetchOwnTeams,
   fetchTeamFocusSummary,
   fetchTeamInvites,
+  fetchTeamLiveStatus,
   stopTeamFocusSharing,
   type TeamClient,
 } from "./teamService";
@@ -86,6 +87,24 @@ describe("teamService RPC mapping", () => {
       }],
       error: null,
     });
+    client.setRpcResponse("get_organization_live_status", {
+      data: [{
+        organization_id: organizationId,
+        organization_name: "Deep Work Crew",
+        member_display_name: "Sam",
+        profile_avatar_url: "https://drifty.so/sam.png",
+        role_label: "Member",
+        focus_share_scope: "focus_only",
+        presence_state: "recent",
+        focus_seconds: 5400,
+        focus_score: 52.5,
+        window_start_date: "2026-07-01",
+        window_end_date: "2026-07-07",
+        last_shared_at: "2026-07-07T10:00:00.000Z",
+        app_user_id: "must-not-leak",
+      }],
+      error: null,
+    });
     client.setRpcResponse("get_organization_invites", {
       data: [{
         invite_id: inviteId,
@@ -106,6 +125,7 @@ describe("teamService RPC mapping", () => {
     const teams = await fetchOwnTeams("monthly", client);
     const created = await createTeam({ organizationName: "  Deep Work Crew  ", roleLabel: "  Owner  " }, client);
     const summary = await fetchTeamFocusSummary({ organization_id: organizationId, period: "daily" }, client);
+    const liveStatus = await fetchTeamLiveStatus({ organization_id: organizationId, period: "daily" }, client);
     const invites = await fetchTeamInvites({ organization_id: organizationId }, client);
 
     // Then
@@ -119,14 +139,20 @@ describe("teamService RPC mapping", () => {
         procedure: "get_organization_focus_summary",
         args: { input_organization_id: organizationId, period_name: "daily" },
       },
+      {
+        procedure: "get_organization_live_status",
+        args: { input_organization_id: organizationId, period_name: "daily" },
+      },
       { procedure: "get_organization_invites", args: { input_organization_id: organizationId } },
     ]);
     expect(teams).toMatchObject({ success: true, data: [{ focus_seconds: 7200, private_rank: 2 }] });
     expect(created).toMatchObject({ success: true });
     expect(summary).toMatchObject({ success: true, data: [{ focus_share_scope: "focus_only" }] });
+    expect(liveStatus).toMatchObject({ success: true, data: [{ presence_state: "recent", profile_avatar_url: "https://drifty.so/sam.png", last_shared_at: "2026-07-07T10:00:00.000Z" }] });
     expect(invites).toMatchObject({ success: true, data: [{ invite_id: inviteId, status: "pending" }] });
     expect(JSON.stringify(teams)).not.toContain("app_user_id");
     expect(JSON.stringify(summary)).not.toContain("app_user_id");
+    expect(JSON.stringify(liveStatus)).not.toContain("app_user_id");
   });
 
   it("stops sharing through the all-period stop RPC without client-side deletion semantics", async () => {
