@@ -134,6 +134,11 @@ export function ProjectsPage(props: ProjectsPageProps) {
               {props.running ? "Analyzing…" : "Analyze last 7 days"}
             </button>
           </div>
+          {activeProjects.length === 0 ? (
+            <p className="projects-model-status__reason">Create at least one active project before running analysis.</p>
+          ) : !props.analysisConnected ? (
+            <p className="projects-model-status__reason">Connect an analysis model before running analysis.</p>
+          ) : null}
         </div>
       </div>
 

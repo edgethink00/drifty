@@ -25,10 +25,14 @@ export function ManagedLocalAiPanel({
   onDeleteModel,
   onInstallModel,
 }: ManagedLocalAiPanelProps) {
+  const statusMessage = loading
+    ? "Checking managed runtime..."
+    : normalizeManagedLocalStatusMessage(status?.message) ?? "Choose a local model and Drifty will download it inside the app.";
+
   return (
     <div className="ai-setup-detail ai-setup-detail--local" role="group" aria-label="Local AI settings">
       <div className="ai-managed-status">
-        <p>{loading ? "Checking managed runtime..." : status?.message ?? "Choose a local model and Drifty will download it inside the app."}</p>
+        <p>{statusMessage}</p>
       </div>
 
       <div className="ai-managed-model-list" aria-label="Managed local model choices">
@@ -47,6 +51,15 @@ export function ManagedLocalAiPanel({
       </div>
     </div>
   );
+}
+
+function normalizeManagedLocalStatusMessage(message?: string | null): string | null {
+  const trimmed = message?.trim();
+  if (!trimmed) return null;
+  if (/cannot read properties of undefined/i.test(trimmed) || /invoke/i.test(trimmed)) {
+    return "Local model controls need the desktop runtime. Use the installed Mac app to download or run local models.";
+  }
+  return trimmed;
 }
 
 function ManagedLocalAiModelRow({

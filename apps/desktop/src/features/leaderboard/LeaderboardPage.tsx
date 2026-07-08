@@ -81,6 +81,7 @@ export function LeaderboardPage({
       <div className="pg-head">
         <div>
           <h1>Global focus ranking</h1>
+          <p className="page-subhead">Publish only your aggregate focus total and public profile fields.</p>
         </div>
       </div>
 

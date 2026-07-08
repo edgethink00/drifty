@@ -65,7 +65,7 @@ describe("LeaderboardView", () => {
     renderView({ isSignedIn: false, isOptedIn: false, onSignIn });
 
     expect(screen.getByText(/join in beta/i)).toBeTruthy();
-    expect(screen.getByText(/apps, sites, windows, and sessions are not published to the leaderboard/i)).toBeTruthy();
+    expect(screen.getByText(/apps, sites, windows, and sessions stay private/i)).toBeTruthy();
     expect(screen.queryByText(/publish only your public name/i)).toBeNull();
     expect(screen.queryByText(/rolling focus total/i)).toBeNull();
     const hero = screen.getByLabelText(/your leaderboard profile/i);
@@ -169,9 +169,9 @@ describe("LeaderboardView", () => {
     });
 
     const hero = screen.getByLabelText(/your leaderboard profile/i);
-    const addLinksButton = within(hero).getByRole("button", { name: /add public links/i });
+    const addLinksButton = within(hero).getByRole("button", { name: /add links/i });
 
-    expect(within(hero).getByText(/add a website, github, or linkedin/i)).toBeTruthy();
+    expect(within(hero).getByText(/add website, github, or linkedin links/i)).toBeTruthy();
 
     fireEvent.click(addLinksButton);
 
@@ -221,7 +221,7 @@ describe("LeaderboardView", () => {
     });
 
     expect(screen.getByText(/ready when you are/i)).toBeTruthy();
-    expect(screen.getByText(/apps, sites, windows, and sessions are not published to the leaderboard/i)).toBeTruthy();
+    expect(screen.getByText(/apps, sites, windows, and sessions stay private/i)).toBeTruthy();
     expect(screen.queryByText(/join to publish your profile/i)).toBeNull();
     expect(screen.queryByText(/rolling total/i)).toBeNull();
     expect(screen.getByLabelText(/profile ranking summary/i)).toBeTruthy();

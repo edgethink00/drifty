@@ -92,11 +92,12 @@ export function EditProfileModal({
   onSave: () => void;
 }) {
   const trimmedAvatarUrl = avatarUrl.trim();
-  const photoActionText = trimmedAvatarUrl ? "Change photo" : "Add photo";
+  const bioLength = profileDraft.bio.length;
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal profile-modal profile-editor-modal" aria-labelledby="edit-profile-title" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="profile-modal__x" aria-label="Close profile editor" onClick={onClose}>×</button>
         <div className="profile-modal__header">
           {trimmedAvatarUrl ? <img className="profile-modal__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
           <div>
@@ -113,7 +114,6 @@ export function EditProfileModal({
                 <span className="profile-photo-picker__badge" aria-hidden="true">
                   <span className="profile-photo-picker__camera" />
                 </span>
-                <span className="profile-photo-picker__action" aria-hidden="true">{photoActionText}</span>
                 <input type="file" accept="image/*" aria-label="Choose profile photo" onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
               </label>
               {trimmedAvatarUrl ? (
@@ -123,7 +123,10 @@ export function EditProfileModal({
               ) : null}
             </div>
             <div className="profile-editor-preview__copy">
-              <span className="label-mono">Public preview</span>
+              <div className="profile-editor-preview__heading">
+                <span className="label-mono">Public preview</span>
+                <span className="profile-editor-preview__privacy-badge">Aggregates only</span>
+              </div>
               <strong>{profileDraft.displayName.trim() || displayName}</strong>
               <p>{profileDraft.bio.trim() || "No public bio yet."}</p>
             </div>
@@ -133,10 +136,17 @@ export function EditProfileModal({
 
           <div className="leaderboard-profile-sidebar__form">
             <label><span>Display name</span><input className="settings-input" value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-            <label><span>Bio</span><textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} /></label>
-            <label><span>Website</span><input className="settings-input" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-            <label><span>GitHub</span><input className="settings-input" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-            <label><span>LinkedIn</span><input className="settings-input" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label>
+              <span>Bio</span>
+              <textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} />
+              <small>{bioLength}/160 characters</small>
+            </label>
+            <fieldset className="profile-editor-links">
+              <legend>Public links</legend>
+              <label><span>Website</span><input className="settings-input" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+              <label><span>GitHub</span><input className="settings-input" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+              <label><span>LinkedIn</span><input className="settings-input" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            </fieldset>
           </div>
         </div>
 
@@ -265,6 +275,7 @@ export function EmbedModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal profile-modal" aria-labelledby="embed-modal-title" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="profile-modal__x" aria-label="Close embed panel" onClick={onClose}>×</button>
         <div className="profile-modal__header">
           <div>
             <span className="label-mono">Embed your focus</span>
@@ -273,22 +284,22 @@ export function EmbedModal({
         </div>
         <p className="profile-modal__bio">Drop this badge on your site, GitHub README, or blog. It updates itself with your weekly focus.</p>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "4px 0 16px" }}>
-          <img src={previewSrc} alt="Drifty focus badge preview" height={20} style={{ display: "block" }} />
+        <div className="embed-preview-row">
+          <img src={previewSrc} alt="Drifty focus badge preview" height={20} />
           {!isLive ? <span className="capture-recency">Fills in once this week has tracked focus.</span> : null}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: "1px solid var(--border, #e2e2dc)", borderRadius: 10, padding: "12px 14px", margin: "0 0 16px" }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
+        <div className="embed-public-card-status">
+          <div>
             <span className="label-mono">Public focus card</span>
-            <p className="capture-recency" style={{ margin: "2px 0 0" }}>
+            <p className="capture-recency">
               {card.enabled === true
                 ? "On — anyone with your link can see this card."
                 : card.enabled === null
                   ? "Checking…"
                   : "Off — turn on to make these embeds show your focus."}
             </p>
-            {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
+            {card.error ? <p className="capture-recency capture-recency--error">{card.error}</p> : null}
           </div>
           {card.enabled === true ? (
             <button type="button" className="ghost-button" disabled={card.busy} onClick={() => void card.disable()}>
@@ -305,14 +316,13 @@ export function EmbedModal({
           <p className="capture-recency capture-recency--error">Cloud isn’t configured in this build, so the badge URL may not resolve yet.</p>
         ) : null}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="embed-snippet-list">
           {rows.map((row) => (
-            <label key={row.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label key={row.key} className="embed-snippet-row">
               <span className="label-mono">{row.label}</span>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div className="embed-snippet-row__control">
                 <input
                   className="settings-input"
-                  style={{ flex: 1, fontFamily: "monospace", fontSize: "0.8rem" }}
                   readOnly
                   value={row.snippet}
                   onFocus={(event) => event.currentTarget.select()}

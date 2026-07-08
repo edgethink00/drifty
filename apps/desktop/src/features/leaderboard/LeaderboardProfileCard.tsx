@@ -54,7 +54,6 @@ export function LeaderboardProfileCard({
           <span className="label-mono">My public profile</span>
           <p>Control what appears next to your aggregate focus total.</p>
         </div>
-        <span className="leaderboard-privacy-badge">Aggregates only</span>
       </div>
 
       <section className="leaderboard-hero" aria-label="Your leaderboard profile">
@@ -72,23 +71,25 @@ export function LeaderboardProfileCard({
               </span>
               <button type="button" className="settings-btn" onClick={() => onEditProfile?.()} disabled={!onEditProfile}>Edit profile</button>
             </div>
-            {trimmedProfileBio ? <p className="leaderboard-profile-bio">{trimmedProfileBio}</p> : <p className="leaderboard-profile-bio">Add a short bio so your public card feels complete.</p>}
-            {profileLinks.length > 0 ? (
-              <div className="leaderboard-profile-links" aria-label="Public profile links">
-                {profileLinks.map((link) => (
-                  <span key={`${link.kind}-${link.label}`}>{link.label}</span>
-                ))}
-              </div>
-            ) : (
-              <div className="leaderboard-profile-links leaderboard-profile-links--empty" aria-label="Public profile links">
-                <span>Add a website, GitHub, or LinkedIn so people can find your public work.</span>
-                {onEditProfile ? (
-                  <button type="button" className="ghost-button leaderboard-profile-links__empty-action" onClick={() => onEditProfile()}>
-                    Add public links
-                  </button>
-                ) : null}
-              </div>
-            )}
+            <div className="leaderboard-profile-completion">
+              <p className="leaderboard-profile-bio">{trimmedProfileBio || "Add a short bio so your public card feels complete."}</p>
+              {profileLinks.length > 0 ? (
+                <div className="leaderboard-profile-links" aria-label="Public profile links">
+                  {profileLinks.map((link) => (
+                    <span key={`${link.kind}-${link.label}`}>{link.label}</span>
+                  ))}
+                </div>
+              ) : (
+                <div className="leaderboard-profile-links leaderboard-profile-links--empty" aria-label="Public profile links">
+                  <span>Add website, GitHub, or LinkedIn links.</span>
+                  {onEditProfile ? (
+                    <button type="button" className="ghost-button leaderboard-profile-links__empty-action" onClick={() => onEditProfile()}>
+                      Add links
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
             <div className={`leaderboard-hero__actions${isOptedIn ? " leaderboard-hero__actions--live" : ""}`}>
               <div className="leaderboard-participation-summary" aria-label="Leaderboard publishing status">
                 <span className={`leaderboard-participation-summary__dot${isOptedIn ? " leaderboard-participation-summary__dot--live" : ""}`} aria-hidden="true" />
@@ -96,6 +97,7 @@ export function LeaderboardProfileCard({
                   <strong>{isOptedIn ? "Joined to leaderboard" : "Private until you join"}</strong>
                   <p>{isOptedIn ? "Your public profile card and aggregate focus total are visible." : "Nothing is published until you join."}</p>
                 </div>
+                <span className="leaderboard-privacy-badge">Aggregates only</span>
               </div>
               <div className="leaderboard-hero__button-group">
                 {isOptedIn ? (
@@ -142,7 +144,7 @@ export function LeaderboardProfileCard({
         <div className="leaderboard-preview" aria-label="Beta leaderboard participation">
           <span className="label-mono">Public board</span>
           <strong>Join in beta</strong>
-          <p>Apps, sites, windows, and sessions are not published to the leaderboard.</p>
+          <p>Only aggregate focus totals and public profile fields appear here. Apps, sites, windows, and sessions stay private.</p>
           <ParticipationWindow
             focusSeconds7d={focusSeconds7d}
             windowStartDay={windowStartDay}
@@ -153,7 +155,7 @@ export function LeaderboardProfileCard({
         <div className="leaderboard-preview" aria-label="Public name preview">
           <span className="label-mono">Ready when you are</span>
           <strong>{previewName}</strong>
-          <p>Apps, sites, windows, and sessions are not published to the leaderboard.</p>
+          <p>Only aggregate focus totals and public profile fields appear here. Apps, sites, windows, and sessions stay private.</p>
           <ParticipationWindow
             focusSeconds7d={focusSeconds7d}
             windowStartDay={windowStartDay}

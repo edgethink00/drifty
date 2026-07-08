@@ -140,13 +140,13 @@
 }
 
 .ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action {
-  background: var(--cloud-action);
-  border-color: var(--cloud-action);
+  background: color-mix(in srgb, var(--accent-soft) 82%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: var(--radius-pill);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);
-  color: var(--canvas);
+  box-shadow: none;
+  color: color-mix(in srgb, var(--accent) 62%, var(--text));
   font-size: 0.756rem;
-  font-weight: 520;
+  font-weight: 620;
   height: 2.25rem;
   max-width: 100%;
   min-height: 2.25rem;
@@ -154,9 +154,9 @@
 }
 
 .ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--cloud-action) 94%, black);
-  border-color: color-mix(in srgb, var(--cloud-action) 94%, black);
-  color: var(--canvas);
+  background: color-mix(in srgb, var(--accent-soft) 94%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
 }
 
 .ai-setup-cloud-devices {
@@ -320,12 +320,13 @@
 }
 
 .ai-managed-status {
-  background: transparent;
-  border: 0;
+  background: color-mix(in srgb, var(--surface-strong) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: var(--radius-sm);
   display: grid;
   gap: var(--space-2);
   min-width: 0;
-  padding: 0;
+  padding: var(--space-2) var(--space-3);
 }
 
 .ai-managed-status p,
@@ -447,7 +448,8 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   grid-area: actions;
-  justify-content: flex-start;
+  justify-content: flex-end;
+  justify-self: stretch;
 }
 
 .ai-managed-model__actions .settings-btn {
