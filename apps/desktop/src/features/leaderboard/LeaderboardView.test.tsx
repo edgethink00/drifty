@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LeaderboardRow } from "./leaderboardService";
 import { LeaderboardView } from "./LeaderboardView";
+import { EditProfileModal } from "../profile/ProfileModals";
 
 type TestProps = Parameters<typeof LeaderboardView>[0];
 
@@ -94,6 +95,36 @@ describe("LeaderboardView", () => {
     expect(screen.getByText(/your public card & embeds live in the profile tab/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /open profile/i }));
     expect(onOpenProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the profile editor avatar itself as the photo change control", () => {
+    render(
+      <EditProfileModal
+        displayName="Alex"
+        avatarUrl="data:image/png;base64,avatar"
+        profileDraft={{
+          displayName: "Alex",
+          bio: "Building quiet tools.",
+          avatarUrl: "data:image/png;base64,avatar",
+          websiteUrl: "",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        }}
+        profileLoading={false}
+        profileSaving={false}
+        profileMessage={null}
+        profileError={null}
+        onClose={vi.fn()}
+        onPhotoSelected={vi.fn()}
+        onRemovePhoto={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/choose profile photo/i).getAttribute("type")).toBe("file");
+    expect(screen.queryByText(/upload picture/i)).toBeNull();
   });
 
   it("renders a loading state while leaderboard data is being fetched", () => {

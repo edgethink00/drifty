@@ -164,7 +164,14 @@ export function ProjectsSettingsSection({
 
   return (
     <div className="projects-manager">
-      <div className="projects-list">
+      <div className="projects-manager__head">
+        <div>
+          <span className="projects-manager__eyebrow">Project library</span>
+          <strong className="projects-manager__title">{projects.length === 0 ? "Start with one project" : `${projects.length} projects`}</strong>
+        </div>
+        <span className="projects-manager__hint">Descriptions guide the analysis model; signals can be refined later.</span>
+      </div>
+      <div className={`projects-list${projects.length === 0 ? " projects-list--empty" : ""}`}>
         <ul className="projects-list__items" aria-label="Projects">
           {projects.map((project) => {
               const isOpen = Boolean(expanded[project.id]);
@@ -278,6 +285,13 @@ export function ProjectsSettingsSection({
             </button>
           </li>
         </ul>
+        {projects.length === 0 ? (
+          <div className="projects-list__empty-guidance" aria-label="Project setup guidance">
+            <span className="label-mono">No active projects yet</span>
+            <strong>Create a project, then run analysis.</strong>
+            <p>Projects work best when the description says what should count: client work, course study, launch prep, or a personal build.</p>
+          </div>
+        ) : null}
       </div>
 
       {editorOpen ? (

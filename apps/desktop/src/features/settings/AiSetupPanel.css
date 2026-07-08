@@ -118,8 +118,8 @@
 }
 
 .ai-setup-current-model.is-error {
-  background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));
-  border-color: var(--line);
+  background: color-mix(in srgb, var(--warn-soft) 24%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 16%, var(--line));
 }
 
 .ai-setup-current-model.is-success {

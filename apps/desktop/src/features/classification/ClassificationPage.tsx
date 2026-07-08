@@ -167,6 +167,9 @@ export function ClassificationPage({
       </div>
     );
   };
+  const firstSource = classificationSourceSummaries[0];
+  const firstSourceKey = firstSource ? classifySourceKey(firstSource) : null;
+  const alternateRange: ClassificationRange = classificationRange === "Day" ? "Week" : "Day";
 
   return (
     <div className="page">
@@ -324,7 +327,11 @@ export function ClassificationPage({
                   <div className="classification-panel-view__empty">
                     <span className="label-mono">Apps &amp; Sites</span>
                     <strong>No sources in this category yet</strong>
-                    <p>Tracked apps and browser surfaces will appear here once this category has activity.</p>
+                    <p>Tracked apps and browser surfaces will appear here once this category has activity in the selected range.</p>
+                    <div className="classification-panel-view__empty-actions">
+                      {!isCurrentClassificationRange ? <button type="button" className="settings-btn" onClick={onTodayClassificationRange}>Today</button> : null}
+                      <button type="button" className="settings-btn" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -474,17 +481,26 @@ export function ClassificationPage({
                   <span className="label-mono">Activity details</span>
                   <strong>Select an app or site to see activity details.</strong>
                   <p>Choose a source from the middle panel to inspect its titles, pages, and time distribution.</p>
+                  {firstSourceKey ? (
+                    <div className="classification-panel-view__empty-actions">
+                      <button type="button" className="settings-btn" onClick={() => onSourceSelect(firstSourceKey)}>Open first source</button>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </section>
           </div>
         </section>
       ) : (
-        <section className="classification-panel-view" aria-label="Classification panel view">
+        <section className="classification-panel-view classification-panel-view--empty-state" aria-label="Classification panel view">
           <div className="classification-panel-view__empty classification-panel-view__empty--full">
             <span className="label-mono">Classification</span>
             <strong>No category data yet</strong>
-            <p>Category, source, and activity details will appear here once tracking captures activity for the selected range.</p>
+            <p>Category, source, and activity details will appear here once tracking captures activity for this range.</p>
+            <div className="classification-panel-view__empty-actions">
+              {!isCurrentClassificationRange ? <button type="button" className="settings-btn" onClick={onTodayClassificationRange}>Today</button> : null}
+              <button type="button" className="settings-btn" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
+            </div>
           </div>
         </section>
       )}

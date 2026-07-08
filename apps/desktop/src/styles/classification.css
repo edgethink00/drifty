@@ -56,6 +56,10 @@
   min-height: 0;
 }
 
+.content--classification .classification-panel-view--empty-state {
+  flex: 0 0 auto;
+}
+
 .classification-panel-view__grid {
   display: grid;
   grid-template-columns: minmax(15rem, 0.95fr) minmax(18rem, 1.1fr) minmax(22rem, 1.45fr);
@@ -871,11 +875,15 @@
 }
 
 .classification-panel-view__empty--full {
-  min-height: 18rem;
+  min-height: 10.5rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 34%, transparent), transparent 9rem),
+    color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--shadow);
+  justify-items: center;
+  text-align: center;
 }
 
 .classification-panel-view__empty p {
@@ -883,6 +891,46 @@
   font-size: 0.74rem;
   line-height: 1.5;
   color: var(--text-soft);
+}
+
+.classification-panel-view__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.classification-panel-view--empty-state {
+  max-width: 100%;
+}
+
+.classification-panel-view--empty-state .classification-panel-view__empty-actions .settings-btn {
+  min-height: 1.85rem;
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.content--classification .page:has(.classification-panel-view--empty-state) .clf-stat {
+  box-shadow: none;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.content--classification .page:has(.classification-panel-view--empty-state) .clf-stat--with-icon .app-glyph {
+  background: color-mix(in srgb, var(--surface-strong) 68%, var(--surface));
+  color: transparent;
+  position: relative;
+}
+
+.content--classification .page:has(.classification-panel-view--empty-state) .clf-stat--with-icon .app-glyph::after {
+  content: "—";
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .classification-category-breakdowns {

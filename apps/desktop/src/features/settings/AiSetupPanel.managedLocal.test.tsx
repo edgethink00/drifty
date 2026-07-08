@@ -2,13 +2,34 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock } from "./AiSetupPanel.testHarness";
 
 describe("AiSetupPanel managed local model setup", () => {
   beforeEach(() => {
     invokeMock.mockClear();
     resetManagedStatusMock();
     revealItemInDirMock.mockClear();
+  });
+
+  it("normalizes missing desktop runtime errors into user-facing setup copy", async () => {
+    setManagedStatusMock({
+      state: "error",
+      selectedModelId: null,
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Cannot read properties of undefined (reading 'invoke')",
+      artifactDir: null,
+      progress: null,
+      errorKind: null,
+      memoryUsageBytes: null,
+    });
+
+    renderPanel();
+
+    const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
+    expect(within(localSettings).getByText(/local model controls need the desktop runtime/i)).toBeTruthy();
+    expect(within(localSettings).queryByText(/cannot read properties/i)).toBeNull();
   });
 
   it("keeps previously downloaded managed local models selectable after another model is installed", async () => {

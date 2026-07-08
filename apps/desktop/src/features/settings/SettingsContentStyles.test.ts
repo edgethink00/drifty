@@ -207,30 +207,31 @@ describe("Settings content styles", () => {
     expect(deleteActionRule).toContain("width: 2rem;");
   });
 
-  it("tints the full AI connection test panel on errors", () => {
+  it("keeps the AI connection error panel visible without heavy red fill", () => {
     const aiSetupStyles = readAiSetupStyles();
     const currentModelErrorRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error");
     const currentModelErrorStatusRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error .ai-setup-current-model__status");
 
-    expect(currentModelErrorRule).toContain("background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));");
-    expect(currentModelErrorRule).toContain("border-color: var(--line);");
+    expect(currentModelErrorRule).toContain("background: color-mix(in srgb, var(--warn-soft) 24%, var(--surface));");
+    expect(currentModelErrorRule).toContain("border-color: color-mix(in srgb, var(--warn) 16%, var(--line));");
     expect(currentModelErrorStatusRule).not.toContain("border-top");
     expect(currentModelErrorStatusRule).toContain("color: var(--warn);");
   });
 
-  it("flattens the managed local section so model cards are not boxed twice", () => {
+  it("keeps the managed local runtime status as a compact message strip", () => {
     const aiSetupStyles = readAiSetupStyles();
     const statusRule = cssRule(aiSetupStyles, ".ai-managed-status");
     const routeRule = cssRule(aiSetupStyles, ".ai-setup-route-option");
 
-    expect(statusRule).toContain("background: transparent;");
-    expect(statusRule).toContain("border: 0;");
+    expect(statusRule).toContain("background: color-mix(in srgb, var(--surface-strong) 42%, transparent);");
+    expect(statusRule).toContain("border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);");
+    expect(statusRule).toContain("padding: var(--space-2) var(--space-3);");
     expect(routeRule).toContain("background: transparent;");
     expect(routeRule).toContain("border: 0;");
     expect(aiSetupStyles).not.toContain(".ai-setup-route-option.is-selected");
   });
 
-  it("keeps the Cloud setup CTA compact and slightly brighter", () => {
+  it("keeps the Cloud setup CTA compact and visually quiet", () => {
     const aiSetupStyles = readAiSetupStyles();
     const cloudSource = readFileSync("src/features/settings/CloudSetupPanel.tsx", "utf8");
     const cloudRouteRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route");
@@ -243,13 +244,13 @@ describe("Settings content styles", () => {
     expect(cloudRouteDarkRule).toContain("--cloud-action: #5a7042;");
     expect(cloudRouteTitleRule).toContain("font-weight: 520;");
     expect(cloudActionRule).toContain("font-size: 0.756rem;");
-    expect(cloudActionRule).toContain("font-weight: 520;");
+    expect(cloudActionRule).toContain("font-weight: 620;");
     expect(cloudActionRule).toContain("height: 2.25rem;");
     expect(cloudActionRule).toContain("min-height: 2.25rem;");
     expect(cloudActionRule).toContain("border-radius: var(--radius-pill);");
-    expect(cloudActionRule).toContain("background: var(--cloud-action);");
-    expect(cloudActionRule).toContain("border-color: var(--cloud-action);");
-    expect(cloudActionRule).toContain("box-shadow: 0 8px 18px color-mix(in srgb, var(--cloud-action) 20%, transparent);");
+    expect(cloudActionRule).toContain("background: color-mix(in srgb, var(--accent-soft) 82%, var(--surface));");
+    expect(cloudActionRule).toContain("border-color: color-mix(in srgb, var(--accent) 24%, var(--line));");
+    expect(cloudActionRule).toContain("box-shadow: none;");
   });
 
   it("separates AI providers from shared prompt settings", () => {

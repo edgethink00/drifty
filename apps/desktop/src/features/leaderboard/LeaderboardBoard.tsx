@@ -121,8 +121,8 @@ function LeaderboardToolbar({
             {statusMessage}
           </span>
         ) : (
-          <span className="leaderboard-refresh-status leaderboard-refresh-status--placeholder" aria-hidden="true">
-            Refreshing leaderboard
+          <span className="leaderboard-refresh-status leaderboard-refresh-status--idle" aria-hidden="true">
+            Updated just now
           </span>
         )}
       </div>
@@ -192,6 +192,7 @@ function LeaderboardRankList({
                   <ProfileAvatar className="leaderboard-row__avatar" name={row.display_name} src={row.avatar_url} />
                   <div className="leaderboard-row__copy">
                     <strong>{row.display_name}</strong>
+                    {isCurrentUser ? <span className="leaderboard-row__you">You</span> : null}
                   </div>
                 </div>
 
@@ -205,6 +206,7 @@ function LeaderboardRankList({
                     </div>
                   ) : null}
                 </div>
+                <span className="leaderboard-row__chevron" aria-hidden="true">›</span>
               </button>
             </li>
           );

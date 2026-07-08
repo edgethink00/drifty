@@ -46,7 +46,7 @@ const AI_VISIBLE_FIELDS: readonly VisibleField[] = [
 
 const AI_EXCLUDED_FIELDS: readonly ExcludedField[] = [
   { label: "Raw timeline rows", detail: "No full activity row upload" },
-  { label: "Full session history", detail: "No replayable day history" },
+  { label: "Full session history", detail: "No replayable day or session history" },
   { label: "YouTube descriptions", detail: "Video descriptions and keywords stay local" },
   { label: "Provider API keys", detail: "Stored locally, never sent as samples" },
 ] as const;
@@ -79,7 +79,12 @@ export function AiPrivacyReview() {
 
   return (
     <section className="ai-privacy-review" aria-label="AI privacy review">
-      <p className="ai-privacy-review__intro">Manage what information Drifty can send for AI classification.</p>
+      <p className="ai-privacy-review__intro">Choose the minimized fields Drifty may include in AI classification requests.</p>
+      <div className="ai-privacy-review__chips" aria-label="AI privacy safeguards">
+        <span className="chip green">Raw tracking stays local</span>
+        <span className="chip gray">Provider keys stay local</span>
+        <span className="chip gray">Optional context is user controlled</span>
+      </div>
       <div className="ai-privacy-review__boundary">
         <div className="ai-privacy-review__column">
           <ColumnLabel label="Required for classification" meta="Locked on" />
@@ -174,7 +179,7 @@ function InfoTooltip({ label, text }: { readonly label: string; readonly text: s
   const tooltipId = `ai-privacy-${reactId.replace(/:/g, "")}-tooltip`;
   return (
     <span className="ai-privacy-review__help-wrap">
-      <button aria-describedby={tooltipId} aria-label={`${label} details`} className="ai-privacy-review__help" type="button">i</button>
+      <button aria-describedby={tooltipId} aria-label={`${label} details`} className="ai-privacy-review__help" type="button">Details</button>
       <span className="ai-privacy-review__tooltip" id={tooltipId} role="tooltip">{text}</span>
     </span>
   );

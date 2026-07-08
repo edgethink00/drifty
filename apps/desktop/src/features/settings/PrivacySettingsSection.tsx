@@ -37,16 +37,16 @@ export function PrivacySettingsSection({ onHistoryDeleted }: PrivacySettingsSect
         <div className="settings-row">
           <div>
             <div className="lbl">Raw tracking history is not published</div>
-            <div className="desc">Leaderboard and profile features publish aggregates only. AI classification may send minimized activity fields to configured providers for the request, but Drifty does not store raw tracking history for leaderboard or profile publishing.</div>
+            <div className="desc">Leaderboard and profile features publish aggregates only. AI classification may send minimized activity fields to your selected provider for a request, but raw app, site, window, and session history stays out of public surfaces.</div>
           </div>
-          <div className="ctrl"><span className="chip green">Privacy first</span></div>
+          <div className="ctrl"><span className="chip green">Raw history local</span></div>
         </div>
         <div className="settings-row">
           <div>
             <div className="lbl">Optional cloud features are explicit</div>
-            <div className="desc">If you configure Supabase and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total. Raw tracking history is not published there.</div>
+            <div className="desc">If you connect Drifty Cloud and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total. Raw tracking history is not published there.</div>
           </div>
-          <div className="ctrl"><span className="chip">Opt-in only</span></div>
+          <div className="ctrl"><span className="chip">Aggregates only</span></div>
         </div>
       </div>
       <SettingsCollapsibleCard
@@ -55,6 +55,7 @@ export function PrivacySettingsSection({ onHistoryDeleted }: PrivacySettingsSect
           <>
             <span className={`chip${optionalOnCount > 0 ? " green" : ""}`}>{optionalOnCount} of {optionalValues.length} optional on</span>
             <span className="chip gray">4 locked local</span>
+            <span className="chip gray">Keys stay local</span>
           </>
         }
         title="AI data sending"
