@@ -1,4 +1,4 @@
-import { DEFAULT_TEAM_PERIOD, TEAM_PERIODS, type TeamInviteStatus, type TeamPeriod, type TeamShareScope } from "./teamTypes";
+import { DEFAULT_TEAM_PERIOD, TEAM_PERIODS, type TeamInviteStatus, type TeamPeriod, type TeamPresenceState, type TeamShareScope } from "./teamTypes";
 
 export function readString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
@@ -25,6 +25,12 @@ export function readPeriod(record: Record<string, unknown>): TeamPeriod {
 
 export function readShareScope(record: Record<string, unknown>): TeamShareScope {
   return record.focus_share_scope === "focus_only" ? "focus_only" : "private";
+}
+
+export function readPresenceState(record: Record<string, unknown>): TeamPresenceState {
+  const value = record.presence_state;
+  if (value === "active_now" || value === "recent" || value === "shared") return value;
+  return "private";
 }
 
 export function readInviteStatus(record: Record<string, unknown>): TeamInviteStatus {

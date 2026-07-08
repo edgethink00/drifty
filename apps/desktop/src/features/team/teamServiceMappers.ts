@@ -1,9 +1,10 @@
-import type { OwnTeam, PublishedTeamFocusTotal, StoppedTeamFocusSharing, TeamFocusSummaryRow, TeamInvite } from "./teamTypes";
+import type { OwnTeam, PublishedTeamFocusTotal, StoppedTeamFocusSharing, TeamFocusSummaryRow, TeamInvite, TeamLiveStatusRow } from "./teamTypes";
 import {
   readInviteStatus,
   readNullableNumber,
   readNumber,
   readPeriod,
+  readPresenceState,
   readShareScope,
   readString,
   toRecord,
@@ -29,6 +30,24 @@ export function normalizeOwnTeam(row: unknown): OwnTeam {
 
 export function normalizeFocusSummaryRow(row: unknown): TeamFocusSummaryRow {
   return normalizeOwnTeam({ ...toRecord(row), member_count: 0 });
+}
+
+export function normalizeTeamLiveStatusRow(row: unknown): TeamLiveStatusRow {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    organization_name: readString(record, "organization_name"),
+    member_display_name: readString(record, "member_display_name"),
+    profile_avatar_url: readString(record, "profile_avatar_url"),
+    role_label: readString(record, "role_label"),
+    focus_share_scope: readShareScope(record),
+    presence_state: readPresenceState(record),
+    focus_seconds: readNumber(record, "focus_seconds"),
+    focus_score: readNumber(record, "focus_score"),
+    window_start_date: readString(record, "window_start_date"),
+    window_end_date: readString(record, "window_end_date"),
+    last_shared_at: readString(record, "last_shared_at"),
+  };
 }
 
 export function normalizeTeamInvite(row: unknown): TeamInvite {

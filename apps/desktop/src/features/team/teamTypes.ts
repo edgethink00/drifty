@@ -18,6 +18,7 @@ export type TeamResult<T = undefined> =
 
 export type TeamShareScope = "private" | "focus_only";
 export type TeamInviteStatus = "pending" | "accepted" | "revoked" | "expired";
+export type TeamPresenceState = "active_now" | "recent" | "shared" | "private";
 
 export type OwnTeam = {
   readonly organization_id: string;
@@ -35,6 +36,21 @@ export type OwnTeam = {
 };
 
 export type TeamFocusSummaryRow = Omit<OwnTeam, "member_count">;
+
+export type TeamLiveStatusRow = {
+  readonly organization_id: string;
+  readonly organization_name: string;
+  readonly member_display_name: string;
+  readonly profile_avatar_url: string;
+  readonly role_label: string;
+  readonly focus_share_scope: TeamShareScope;
+  readonly presence_state: TeamPresenceState;
+  readonly focus_seconds: number;
+  readonly focus_score: number;
+  readonly window_start_date: string;
+  readonly window_end_date: string;
+  readonly last_shared_at: string;
+};
 
 export type TeamInvite = {
   readonly invite_id: string;
@@ -90,6 +106,8 @@ export type FetchTeamFocusSummaryInput = {
   readonly period?: TeamPeriod | string | null;
 };
 
+export type FetchTeamLiveStatusInput = FetchTeamFocusSummaryInput;
+
 export type PublishTeamFocusTotalInput = {
   readonly organization_id: string;
   readonly period: TeamPeriod | string;
@@ -119,6 +137,7 @@ export type RpcProcedure =
   | "get_own_organization_teams"
   | "create_organization_team"
   | "get_organization_focus_summary"
+  | "get_organization_live_status"
   | "publish_organization_focus_total"
   | "stop_organization_focus_sharing"
   | "get_organization_invites";

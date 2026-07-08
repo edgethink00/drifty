@@ -117,7 +117,11 @@ fn remember_auth_deep_links<R: Runtime>(
 ) -> bool {
     let callback_urls: Vec<String> = urls
         .into_iter()
-        .filter(|url| is_auth_callback_deep_link(url) || is_billing_success_deep_link(url))
+        .filter(|url| {
+            is_auth_callback_deep_link(url)
+                || is_billing_success_deep_link(url)
+                || is_team_invite_deep_link(url)
+        })
         .collect();
 
     if callback_urls.is_empty() {
@@ -146,6 +150,12 @@ fn contains_auth_session_token(url: &str) -> bool {
 
 fn is_billing_success_deep_link(url: &str) -> bool {
     url == "drifty://billing/success" || url.starts_with("drifty://billing/success?")
+}
+
+fn is_team_invite_deep_link(url: &str) -> bool {
+    url == "drifty://team-invite"
+        || url.starts_with("drifty://team-invite?")
+        || url.starts_with("drifty://team-invite/")
 }
 
 fn should_hide_instead_of_close(label: &str) -> bool {

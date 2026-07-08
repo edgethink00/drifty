@@ -3,11 +3,12 @@
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fail, makeActivity, makeTeam, ok, ownSummaryRow, pendingInvite, privateTeam, renderController, sharedTeam, teammateSummaryRow } from "./useTeamControllerTestFixtures";
+import { fail, liveStatusRow, makeActivity, makeTeam, ok, ownSummaryRow, pendingInvite, privateTeam, renderController, sharedTeam, teammateSummaryRow } from "./useTeamControllerTestFixtures";
 
 const teamServiceMocks = vi.hoisted(() => ({
   fetchOwnTeams: vi.fn(),
   fetchTeamFocusSummary: vi.fn(),
+  fetchTeamLiveStatus: vi.fn(),
   fetchTeamInvites: vi.fn(),
   createTeam: vi.fn(),
   acceptTeamInvite: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("./teamService", () => ({
   TEAM_PERIODS: ["daily", "weekly", "monthly"],
   fetchOwnTeams: teamServiceMocks.fetchOwnTeams,
   fetchTeamFocusSummary: teamServiceMocks.fetchTeamFocusSummary,
+  fetchTeamLiveStatus: teamServiceMocks.fetchTeamLiveStatus,
   fetchTeamInvites: teamServiceMocks.fetchTeamInvites,
   createTeam: teamServiceMocks.createTeam,
   acceptTeamInvite: teamServiceMocks.acceptTeamInvite,
@@ -45,6 +47,7 @@ describe("useTeamController", () => {
   beforeEach(() => {
     teamServiceMocks.fetchOwnTeams.mockReset();
     teamServiceMocks.fetchTeamFocusSummary.mockReset();
+    teamServiceMocks.fetchTeamLiveStatus.mockReset();
     teamServiceMocks.fetchTeamInvites.mockReset();
     teamServiceMocks.createTeam.mockReset();
     teamServiceMocks.acceptTeamInvite.mockReset();
@@ -53,6 +56,7 @@ describe("useTeamController", () => {
     teamServiceMocks.publishTeamFocusTotal.mockReset();
     teamServiceMocks.stopTeamFocusSharing.mockReset();
     trackerMocks.getTimeline.mockReset();
+    teamServiceMocks.fetchTeamLiveStatus.mockResolvedValue(ok([]));
     teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([]));
   });
 
@@ -60,6 +64,7 @@ describe("useTeamController", () => {
     // Given
     teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
     teamServiceMocks.fetchTeamFocusSummary.mockResolvedValue(ok([]));
+    teamServiceMocks.fetchTeamLiveStatus.mockResolvedValue(ok([liveStatusRow]));
 
     // When
     const { hook, initialProps } = renderController({ activeTab: "dashboard" });
@@ -67,6 +72,7 @@ describe("useTeamController", () => {
     // Then
     expect(teamServiceMocks.fetchOwnTeams).not.toHaveBeenCalled();
     expect(teamServiceMocks.fetchTeamFocusSummary).not.toHaveBeenCalled();
+    expect(teamServiceMocks.fetchTeamLiveStatus).not.toHaveBeenCalled();
 
     // When
     hook.rerender({
@@ -81,6 +87,11 @@ describe("useTeamController", () => {
       organization_id: "team-1",
       period: "weekly",
     });
+    expect(teamServiceMocks.fetchTeamLiveStatus).toHaveBeenCalledWith({
+      organization_id: "team-1",
+      period: "weekly",
+    });
+    await waitFor(() => expect(hook.result.current.liveRows).toEqual([liveStatusRow]));
     await waitFor(() => expect(teamServiceMocks.fetchTeamInvites).toHaveBeenCalledWith({ organization_id: "team-1" }));
   });
 
@@ -98,6 +109,7 @@ describe("useTeamController", () => {
     // Then
     expect(teamServiceMocks.fetchOwnTeams).not.toHaveBeenCalled();
     expect(teamServiceMocks.fetchTeamFocusSummary).not.toHaveBeenCalled();
+    expect(teamServiceMocks.fetchTeamLiveStatus).not.toHaveBeenCalled();
     expect(teamServiceMocks.fetchTeamInvites).not.toHaveBeenCalled();
   });
 
@@ -324,6 +336,7 @@ describe("useTeamController", () => {
     // Then
     expect(teamServiceMocks.fetchOwnTeams).not.toHaveBeenCalled();
     expect(teamServiceMocks.fetchTeamFocusSummary).not.toHaveBeenCalled();
+    expect(teamServiceMocks.fetchTeamLiveStatus).not.toHaveBeenCalled();
     expect(teamServiceMocks.fetchTeamInvites).not.toHaveBeenCalled();
     expect(teamServiceMocks.createTeam).not.toHaveBeenCalled();
     expect(teamServiceMocks.acceptTeamInvite).not.toHaveBeenCalled();
