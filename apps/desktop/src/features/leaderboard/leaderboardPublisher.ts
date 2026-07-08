@@ -1,7 +1,7 @@
 import { buildRollingFocusSeconds, isBrowserHistoryImportSegment } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { getLogicalDayRange } from "../../lib/formatting";
+import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildLeaderboardAutoPublishPayloadKey } from "./leaderboardAutoPublishState";
 import { getLeaderboardWindowStartDay } from "./leaderboardWindow";
 import {
@@ -40,10 +40,11 @@ export type PublishLeaderboardPeriodsInput = {
 export type PublishLeaderboardPeriodsResult = LeaderboardResult<LeaderboardPublishPayloads>;
 
 export async function buildLeaderboardPublishPayloads(input: Omit<PublishLeaderboardPeriodsInput, "mode">): Promise<LeaderboardPublishPayloads> {
-  const allPeriodWindowStartDay = getLeaderboardWindowStartDay(input.leaderboardWindowEndDay, "monthly");
+  const leaderboardWindowEndDay = logicalTodayIsoDate(input.startOfDayMinutes);
+  const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
   const fetchedSegments = await trackerClient.getTimeline(getLogicalDayRange(
     allPeriodWindowStartDay,
-    input.leaderboardWindowEndDay,
+    leaderboardWindowEndDay,
     input.startOfDayMinutes,
   ));
   // Imported (estimated) browser-history segments stay local-only; never publish them
@@ -52,7 +53,10 @@ export async function buildLeaderboardPublishPayloads(input: Omit<PublishLeaderb
 
   return {
     segmentCount: allPeriodSegments.length,
-    payloads: LEADERBOARD_PERIODS.map((period) => buildLeaderboardPublishPayload(period, allPeriodSegments, input)),
+    payloads: LEADERBOARD_PERIODS.map((period) => buildLeaderboardPublishPayload(period, allPeriodSegments, {
+      ...input,
+      leaderboardWindowEndDay,
+    })),
   };
 }
 

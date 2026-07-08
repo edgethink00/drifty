@@ -130,4 +130,29 @@ describe("leaderboardPublisher", () => {
     expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "weekly" }), undefined, { updateProfile: false });
     expect(publishOwnFocusTotal).toHaveBeenCalledWith(expect.objectContaining({ period: "monthly" }), undefined, { updateProfile: false });
   });
+
+  it("rebuilds stale publish windows against the current logical day before publishing", async () => {
+    vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
+    const today = todayIsoDate();
+    const staleDay = shiftIsoDate(today, -2);
+    getTimeline.mockResolvedValue([makeSegment(today, 3600)]);
+    publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+
+    const result = await publishLeaderboardPeriods({
+      mode: "auto",
+      profileDisplayName: "Alex",
+      leaderboardWindowEndDay: staleDay,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.payloads.map((payload) => payload.windowEndDay)).toEqual([today, today, today]);
+    expect(publishOwnFocusTotal).toHaveBeenCalledWith(
+      expect.objectContaining({ period: "daily", window_end_date: today }),
+      undefined,
+      { updateProfile: false },
+    );
+  });
 });
