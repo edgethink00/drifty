@@ -69,7 +69,6 @@ export function WeekDashboard({
   const focusSeconds = productivityEntries.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const driftSeconds = productivityEntries.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0;
   const productivePercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
-  const refreshStatusLabel = refreshStatus === "loading" ? "Updating" : refreshStatus === "error" ? "Update failed" : "Up to date";
   const activeCategories = categoryEntries
     .filter((entry) => entry.totalSeconds > 0)
     .slice()
@@ -176,8 +175,6 @@ export function WeekDashboard({
               })}
             </div>
             <div className="week-v2-summary__meta">
-              <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
-              <span>{focusDeltaPercent !== null ? `${focusDeltaPercent >= 0 ? "▲" : "▼"} ${Math.abs(focusDeltaPercent)}% vs last week` : "No prior week"}</span>
               <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
               <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
             </div>
