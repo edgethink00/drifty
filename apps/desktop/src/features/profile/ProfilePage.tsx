@@ -2,6 +2,11 @@
 // public profile fields, the opt-in public focus card, and the copy-paste embeds.
 // Deliberately separate from the Leaderboard tab (which is just the ranking board);
 // a user can publish a focus card without ever joining the leaderboard.
+//
+// The `redesign` prop is a Dev-mode A/B gate: off (default) renders the shipped
+// "classic" layout unchanged; on renders the redesigned layout (root gets
+// `profile-page--v2`, which scopes every restyle in profile-page.css). All shared
+// logic (embed snippets, chart, card state) is computed once and used by both.
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
@@ -34,6 +39,8 @@ export type ProfilePageProps = {
   shareMessage: string | null;
   profileMessage: string | null;
   profileError: string | null;
+  /** Dev-mode flag: render the redesigned layout instead of the classic one. */
+  redesign?: boolean;
   onEditProfile: () => void;
   onCopyProfileLink: () => void;
   onOpenLeaderboard: () => void;
@@ -58,6 +65,7 @@ export function ProfilePage({
   shareMessage,
   profileMessage,
   profileError,
+  redesign = false,
   onEditProfile,
   onCopyProfileLink,
   onOpenLeaderboard,
@@ -119,7 +127,7 @@ export function ProfilePage({
 
   // Embeds are grouped by what they LOOK like (badge vs card), with the paste formats
   // listed under each visual — the badge is one artifact whether it lands in a README
-  // or a website, so it gets one preview and two code variants.
+  // or a website, so it gets one preview and two code variants. Shared by both layouts.
   type EmbedVariant = { key: string; label: string; snippet: string };
   type EmbedGroup = { key: string; title: string; preview: ReactNode; controls?: ReactNode; variants: EmbedVariant[] };
   const embedGroups: EmbedGroup[] = snippets
@@ -211,15 +219,449 @@ export function ProfilePage({
       ]
     : [];
 
+  // ── Classic layout (shipped default) ──────────────────────────────────────
+  const classicStack = (
+    <div className="leaderboard-panel__stack">
+      {/* Identity + leaderboard status */}
+      <section className="leaderboard-profile-block" aria-label="Your public identity">
+        <div className="profile-identity__main">
+          <ProfileAvatar className="leaderboard-hero__avatar" name={draft.displayName || displayName} src={avatarUrl || null} />
+          <div className="profile-identity__form">
+            <div className="profile-identity__name-row">
+              <input
+                className="settings-input profile-identity__name-input"
+                aria-label="Display name"
+                placeholder="Display name"
+                value={draft.displayName}
+                onChange={(event) => onDraftChange({ displayName: event.target.value })}
+              />
+              <button type="button" className="ghost-button" onClick={onEditProfile}>Change photo</button>
+              <button type="button" className="settings-btn" disabled={isSavingProfile} onClick={onSaveProfile}>
+                {isSavingProfile ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <textarea
+              className="settings-input profile-identity__bio-input"
+              aria-label="Bio"
+              placeholder="Short bio — shows on your public card."
+              rows={2}
+              value={draft.bio}
+              onChange={(event) => onDraftChange({ bio: event.target.value })}
+            />
+            <div className="profile-identity__links">
+              <input
+                className="settings-input"
+                aria-label="Website"
+                placeholder="Website (https://…)"
+                value={draft.websiteUrl}
+                onChange={(event) => onDraftChange({ websiteUrl: event.target.value })}
+              />
+              <input
+                className="settings-input"
+                aria-label="GitHub"
+                placeholder="GitHub"
+                value={draft.githubUrl}
+                onChange={(event) => onDraftChange({ githubUrl: event.target.value })}
+              />
+              <input
+                className="settings-input"
+                aria-label="LinkedIn"
+                placeholder="LinkedIn"
+                value={draft.linkedinUrl}
+                onChange={(event) => onDraftChange({ linkedinUrl: event.target.value })}
+              />
+            </div>
+            {profileError ? <p className="capture-recency capture-recency--error" style={{ margin: 0 }}>{profileError}</p> : null}
+            {profileMessage ? <p className="capture-recency" style={{ margin: 0 }}>{profileMessage}</p> : null}
+          </div>
+        </div>
+        <div className="profile-identity__control profile-card-control__row" aria-label="Public focus card">
+          <span className="label-mono">Public focus card</span>
+          <span className={`profile-card-control__state${card.enabled === true ? " profile-card-control__state--on" : ""}`}>
+            {card.enabled === true ? "On" : card.enabled === null ? "…" : "Off"}
+          </span>
+          <div className="profile-card-control__copy">
+            <p className="capture-recency">
+              {card.enabled === true
+                ? "Anyone with your link sees weekly focus, drift/neutral split, and daily focus. Turning it off pauses these links — they resume when you turn it back on."
+                : card.enabled === null
+                  ? "Checking…"
+                  : "One switch controls your card, badges, and embeds — off means they show nothing."}
+            </p>
+            {card.error ? <p className="capture-recency capture-recency--error" style={{ margin: "4px 0 0" }}>{card.error}</p> : null}
+          </div>
+          {card.enabled === true ? (
+            <button type="button" className="ghost-button" disabled={card.busy} onClick={() => void card.disable()}>
+              {card.busy ? "Saving…" : "Make private"}
+            </button>
+          ) : (
+            <button type="button" className="settings-btn" disabled={card.busy || card.enabled === null} onClick={() => void card.enable()}>
+              {card.busy ? "Turning on…" : "Make public"}
+            </button>
+          )}
+        </div>
+        {card.enabled === true && snippets ? (
+          <div className="profile-identity__link" aria-label="Public profile link">
+            <span className="label-mono">Public page</span>
+            <div className="profile-embed-card__variant-row">
+              <input
+                className="settings-input profile-embed-card__code"
+                readOnly
+                value={snippets.profileUrl}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <button type="button" className="settings-btn" aria-label="Copy profile link" onClick={onCopyProfileLink}>
+                Copy
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className="profile-identity__board" aria-label="Leaderboard participation">
+          <span className="label-mono">Leaderboard</span>
+          <span className="profile-identity__board-status">
+            {isLeaderboardOptedIn
+              ? leaderboardRank !== null
+                ? `On the board · #${leaderboardRank}`
+                : "On the board"
+              : "Not on the board — joining is separate from your focus card."}
+          </span>
+          <button type="button" className="ghost-button" onClick={onOpenLeaderboard}>Open leaderboard</button>
+        </div>
+      </section>
+
+      {/* Embeds — collapsed by default */}
+      <section className="leaderboard-profile-block" aria-label="Embeds">
+        <div className="leaderboard-section-kicker">
+          <div>
+            <span className="label-mono">Embeds</span>
+            <p>
+              Badge, card, 30-day chart, and raw JSON for your site, GitHub README, or blog. They update themselves.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="ghost-button"
+            aria-expanded={embedsOpen}
+            onClick={() => setEmbedsOpen((open) => !open)}
+          >
+            {embedsOpen ? "Hide" : "Show"}
+          </button>
+        </div>
+        {!embedsOpen ? null : snippets ? (
+          <>
+            <div className={cardLocked ? "profile-embed-stack profile-embed-stack--locked" : "profile-embed-stack"}>
+              {embedGroups.map((group) => (
+                <div key={group.key} className="profile-embed-card">
+                  <div className="profile-embed-card__head">
+                    <span className="label-mono">{group.title}</span>
+                    {group.controls ?? null}
+                  </div>
+                  <div className="profile-embed-card__preview">{group.preview}</div>
+                  {group.variants.map((variant) => (
+                    <div key={variant.key} className="profile-embed-card__variant">
+                      <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
+                      <div className="profile-embed-card__variant-row">
+                        <input
+                          className="settings-input profile-embed-card__code"
+                          readOnly
+                          disabled={cardLocked}
+                          value={variant.snippet}
+                          onFocus={(event) => event.currentTarget.select()}
+                        />
+                        <button
+                          type="button"
+                          className="settings-btn"
+                          disabled={cardLocked}
+                          title={cardLocked ? "Turn on your public focus card first" : undefined}
+                          onClick={() => void copy(variant.key, variant.snippet)}
+                        >
+                          {copiedKey === variant.key ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div className="profile-embed-card profile-embed-card--link">
+                <span className="label-mono">Data · JSON (30-day daily focus)</span>
+                <div className="profile-embed-card__variant-row">
+                  <input
+                    className="settings-input profile-embed-card__code"
+                    readOnly
+                    disabled={cardLocked}
+                    value={snippets.dataUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button
+                    type="button"
+                    className="settings-btn"
+                    disabled={cardLocked}
+                    title={cardLocked ? "Turn on your public focus card first" : undefined}
+                    onClick={() => void copy("data", snippets.dataUrl)}
+                  >
+                    {copiedKey === "data" ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div>
+            <p className="capture-recency">Save your profile once to mint your public link, then your embeds appear here.</p>
+            <button type="button" className="settings-btn" onClick={onEditProfile}>Set up profile</button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+
+  // ── Redesigned layout (Dev-gated) ─────────────────────────────────────────
+  const redesignStack = (
+    <div className="leaderboard-panel__stack profile-stack">
+      {/* Zone 1 — who you are · Zone 2 — what's public */}
+      <section className="leaderboard-profile-block profile-card" aria-label="Your public identity">
+        <div className="profile-identity">
+          <ProfileAvatar className="profile-identity__avatar" name={draft.displayName || displayName} src={avatarUrl || null} />
+          <div className="profile-identity__fields">
+            <input
+              className="profile-field profile-field--name"
+              aria-label="Display name"
+              placeholder="Your name"
+              value={draft.displayName}
+              onChange={(event) => onDraftChange({ displayName: event.target.value })}
+            />
+            <textarea
+              className="profile-field profile-field--bio"
+              aria-label="Bio"
+              placeholder="Short bio — shows on your public card."
+              rows={2}
+              value={draft.bio}
+              onChange={(event) => onDraftChange({ bio: event.target.value })}
+            />
+            <div className="profile-identity__links">
+              <label className="profile-field-wrap">
+                <span className="profile-field-wrap__label">Website</span>
+                <input
+                  className="profile-field"
+                  aria-label="Website"
+                  placeholder="yoursite.com"
+                  value={draft.websiteUrl}
+                  onChange={(event) => onDraftChange({ websiteUrl: event.target.value })}
+                />
+              </label>
+              <label className="profile-field-wrap">
+                <span className="profile-field-wrap__label">GitHub</span>
+                <input
+                  className="profile-field"
+                  aria-label="GitHub"
+                  placeholder="github.com/you"
+                  value={draft.githubUrl}
+                  onChange={(event) => onDraftChange({ githubUrl: event.target.value })}
+                />
+              </label>
+              <label className="profile-field-wrap">
+                <span className="profile-field-wrap__label">LinkedIn</span>
+                <input
+                  className="profile-field"
+                  aria-label="LinkedIn"
+                  placeholder="linkedin.com/in/you"
+                  value={draft.linkedinUrl}
+                  onChange={(event) => onDraftChange({ linkedinUrl: event.target.value })}
+                />
+              </label>
+            </div>
+            {profileError ? <p className="profile-note profile-note--error">{profileError}</p> : null}
+            {profileMessage ? <p className="profile-note">{profileMessage}</p> : null}
+          </div>
+          <div className="profile-identity__actions">
+            <button type="button" className="ghost-button profile-btn" onClick={onEditProfile}>Change photo</button>
+            <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={isSavingProfile} onClick={onSaveProfile}>
+              {isSavingProfile ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+
+        <div className="profile-share">
+          <div className="profile-share__publish" aria-label="Public focus card">
+            <div className="profile-share__publish-copy">
+              <div className="profile-share__publish-head">
+                <span className={`profile-status-dot${card.enabled === true ? " profile-status-dot--on" : ""}`} aria-hidden="true" />
+                <span className="profile-share__title">Public focus card</span>
+                <span
+                  className={`profile-state-pill${
+                    card.enabled === true ? " profile-state-pill--on" : card.enabled === null ? " profile-state-pill--pending" : ""
+                  }`}
+                >
+                  {card.enabled === true ? "Live" : card.enabled === null ? "…" : "Off"}
+                </span>
+              </div>
+              <p>
+                {card.enabled === true
+                  ? "Anyone with your link sees weekly focus, the drift/neutral split, and daily focus. Make it private to pause every link — they resume when you turn it back on."
+                  : card.enabled === null
+                    ? "Checking…"
+                    : "Your card, badges, and embeds stay blank until you publish."}
+              </p>
+              {card.error ? <p className="profile-note profile-note--error">{card.error}</p> : null}
+            </div>
+            {card.enabled === true ? (
+              <button type="button" className="ghost-button profile-btn" disabled={card.busy} onClick={() => void card.disable()}>
+                {card.busy ? "Saving…" : "Make private"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="settings-btn settings-btn--primary profile-btn"
+                disabled={card.busy || card.enabled === null}
+                onClick={() => void card.enable()}
+              >
+                {card.busy ? "Turning on…" : "Make public"}
+              </button>
+            )}
+          </div>
+
+          {card.enabled === true && snippets ? (
+            <div className="profile-share__row" aria-label="Public profile link">
+              <span className="label-mono profile-share__rail">Public page</span>
+              <div className="profile-copy-row">
+                <input
+                  className="profile-field profile-field--code"
+                  readOnly
+                  value={snippets.profileUrl}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  className="settings-btn settings-btn--primary profile-btn"
+                  aria-label="Copy profile link"
+                  onClick={onCopyProfileLink}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="profile-share__row profile-share__row--inline" aria-label="Leaderboard participation">
+            <span className="label-mono profile-share__rail">Leaderboard</span>
+            <span className="profile-share__status">
+              {isLeaderboardOptedIn
+                ? leaderboardRank !== null
+                  ? `On the board · #${leaderboardRank}`
+                  : "On the board"
+                : "Not on the board — joining is separate from your focus card."}
+            </span>
+            <button type="button" className="ghost-button profile-btn" onClick={onOpenLeaderboard}>Open leaderboard</button>
+          </div>
+        </div>
+      </section>
+
+      {/* Embeds — collapsed by default */}
+      <section className="leaderboard-profile-block profile-card profile-embeds" aria-label="Embeds">
+        <div className="leaderboard-section-kicker profile-embeds__head">
+          <div>
+            <span className="label-mono">Embeds</span>
+            <p>
+              Badge, card, 30-day chart, and raw JSON for your site, GitHub README, or blog. They update themselves.
+            </p>
+          </div>
+          <div className="profile-embeds__head-actions">
+            {cardLocked ? <span className="profile-state-pill">Publish to activate</span> : null}
+            <button
+              type="button"
+              className="ghost-button profile-btn"
+              aria-expanded={embedsOpen}
+              onClick={() => setEmbedsOpen((open) => !open)}
+            >
+              {embedsOpen ? "Hide" : "Show"}
+            </button>
+          </div>
+        </div>
+        {!embedsOpen ? null : snippets ? (
+          <>
+            <div className={cardLocked ? "profile-embed-stack profile-embed-stack--locked" : "profile-embed-stack"}>
+              {embedGroups.map((group) => (
+                <div key={group.key} className="profile-embed-card">
+                  <div className="profile-embed-card__head">
+                    <span className="label-mono">{group.title}</span>
+                    {group.controls ?? null}
+                  </div>
+                  <div className="profile-embed-card__preview">{group.preview}</div>
+                  {group.variants.map((variant) => (
+                    <div key={variant.key} className="profile-embed-card__variant">
+                      <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
+                      <div className="profile-copy-row">
+                        <input
+                          className="profile-field profile-field--code"
+                          readOnly
+                          disabled={cardLocked}
+                          value={variant.snippet}
+                          onFocus={(event) => event.currentTarget.select()}
+                        />
+                        <button
+                          type="button"
+                          className="settings-btn profile-btn"
+                          disabled={cardLocked}
+                          title={cardLocked ? "Turn on your public focus card first" : undefined}
+                          onClick={() => void copy(variant.key, variant.snippet)}
+                        >
+                          {copiedKey === variant.key ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div className="profile-embed-card profile-embed-card--link">
+                <div className="profile-embed-card__variant">
+                  <span className="label-mono profile-embed-card__variant-label">Data · JSON · 30-day</span>
+                  <div className="profile-copy-row">
+                    <input
+                      className="profile-field profile-field--code"
+                      readOnly
+                      disabled={cardLocked}
+                      value={snippets.dataUrl}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <button
+                      type="button"
+                      className="settings-btn profile-btn"
+                      disabled={cardLocked}
+                      title={cardLocked ? "Turn on your public focus card first" : undefined}
+                      onClick={() => void copy("data", snippets.dataUrl)}
+                    >
+                      {copiedKey === "data" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="profile-embeds__setup">
+            <p className="profile-note">Save your profile once to mint your public link, then your embeds appear here.</p>
+            <button type="button" className="settings-btn settings-btn--primary profile-btn" onClick={onEditProfile}>Set up profile</button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+
   return (
-    <div className="page profile-page">
+    <div className={`page profile-page${redesign ? " profile-page--v2" : ""}`}>
       <div className="pg-head">
         <div>
           <h1>Your public profile</h1>
-          <p className="profile-page__privacy">
-            <span className="profile-page__privacy-tag">Opt-in only</span>
-            Just the totals leave your device — daily focus &amp; drift, weekly split. Raw app, site, and window history stays local.
-          </p>
+          {redesign ? (
+            <p className="profile-page__privacy">
+              <span className="profile-page__privacy-tag">Opt-in only</span>
+              Just the totals leave your device — daily focus &amp; drift, weekly split. Raw app, site, and window history stays local.
+            </p>
+          ) : (
+            <p className="capture-recency profile-page__privacy">
+              Only opt-in aggregates are shared (daily focus/drift totals, weekly split) — raw app, site, window, and session history stays on your device.
+            </p>
+          )}
         </div>
       </div>
 
@@ -237,235 +679,7 @@ export function ProfilePage({
           </div>
         </section>
       ) : (
-        <div className="leaderboard-panel__stack profile-stack">
-          {/* Zone 1 — who you are · Zone 2 — what's public */}
-          <section className="leaderboard-profile-block profile-card" aria-label="Your public identity">
-            <div className="profile-identity">
-              <ProfileAvatar className="profile-identity__avatar" name={draft.displayName || displayName} src={avatarUrl || null} />
-              <div className="profile-identity__fields">
-                <input
-                  className="profile-field profile-field--name"
-                  aria-label="Display name"
-                  placeholder="Your name"
-                  value={draft.displayName}
-                  onChange={(event) => onDraftChange({ displayName: event.target.value })}
-                />
-                <textarea
-                  className="profile-field profile-field--bio"
-                  aria-label="Bio"
-                  placeholder="Short bio — shows on your public card."
-                  rows={2}
-                  value={draft.bio}
-                  onChange={(event) => onDraftChange({ bio: event.target.value })}
-                />
-                <div className="profile-identity__links">
-                  <label className="profile-field-wrap">
-                    <span className="profile-field-wrap__label">Website</span>
-                    <input
-                      className="profile-field"
-                      aria-label="Website"
-                      placeholder="yoursite.com"
-                      value={draft.websiteUrl}
-                      onChange={(event) => onDraftChange({ websiteUrl: event.target.value })}
-                    />
-                  </label>
-                  <label className="profile-field-wrap">
-                    <span className="profile-field-wrap__label">GitHub</span>
-                    <input
-                      className="profile-field"
-                      aria-label="GitHub"
-                      placeholder="github.com/you"
-                      value={draft.githubUrl}
-                      onChange={(event) => onDraftChange({ githubUrl: event.target.value })}
-                    />
-                  </label>
-                  <label className="profile-field-wrap">
-                    <span className="profile-field-wrap__label">LinkedIn</span>
-                    <input
-                      className="profile-field"
-                      aria-label="LinkedIn"
-                      placeholder="linkedin.com/in/you"
-                      value={draft.linkedinUrl}
-                      onChange={(event) => onDraftChange({ linkedinUrl: event.target.value })}
-                    />
-                  </label>
-                </div>
-                {profileError ? <p className="profile-note profile-note--error">{profileError}</p> : null}
-                {profileMessage ? <p className="profile-note">{profileMessage}</p> : null}
-              </div>
-              <div className="profile-identity__actions">
-                <button type="button" className="ghost-button profile-btn" onClick={onEditProfile}>Change photo</button>
-                <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={isSavingProfile} onClick={onSaveProfile}>
-                  {isSavingProfile ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </div>
-
-            <div className="profile-share">
-              <div className="profile-share__publish" aria-label="Public focus card">
-                <div className="profile-share__publish-copy">
-                  <div className="profile-share__publish-head">
-                    <span className={`profile-status-dot${card.enabled === true ? " profile-status-dot--on" : ""}`} aria-hidden="true" />
-                    <span className="profile-share__title">Public focus card</span>
-                    <span
-                      className={`profile-state-pill${
-                        card.enabled === true ? " profile-state-pill--on" : card.enabled === null ? " profile-state-pill--pending" : ""
-                      }`}
-                    >
-                      {card.enabled === true ? "Live" : card.enabled === null ? "…" : "Off"}
-                    </span>
-                  </div>
-                  <p>
-                    {card.enabled === true
-                      ? "Anyone with your link sees weekly focus, the drift/neutral split, and daily focus. Make it private to pause every link — they resume when you turn it back on."
-                      : card.enabled === null
-                        ? "Checking…"
-                        : "Your card, badges, and embeds stay blank until you publish."}
-                  </p>
-                  {card.error ? <p className="profile-note profile-note--error">{card.error}</p> : null}
-                </div>
-                {card.enabled === true ? (
-                  <button type="button" className="ghost-button profile-btn" disabled={card.busy} onClick={() => void card.disable()}>
-                    {card.busy ? "Saving…" : "Make private"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="settings-btn settings-btn--primary profile-btn"
-                    disabled={card.busy || card.enabled === null}
-                    onClick={() => void card.enable()}
-                  >
-                    {card.busy ? "Turning on…" : "Make public"}
-                  </button>
-                )}
-              </div>
-
-              {card.enabled === true && snippets ? (
-                <div className="profile-share__row" aria-label="Public profile link">
-                  <span className="label-mono profile-share__rail">Public page</span>
-                  <div className="profile-copy-row">
-                    <input
-                      className="profile-field profile-field--code"
-                      readOnly
-                      value={snippets.profileUrl}
-                      onFocus={(event) => event.currentTarget.select()}
-                    />
-                    <button
-                      type="button"
-                      className="settings-btn settings-btn--primary profile-btn"
-                      aria-label="Copy profile link"
-                      onClick={onCopyProfileLink}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="profile-share__row profile-share__row--inline" aria-label="Leaderboard participation">
-                <span className="label-mono profile-share__rail">Leaderboard</span>
-                <span className="profile-share__status">
-                  {isLeaderboardOptedIn
-                    ? leaderboardRank !== null
-                      ? `On the board · #${leaderboardRank}`
-                      : "On the board"
-                    : "Not on the board — joining is separate from your focus card."}
-                </span>
-                <button type="button" className="ghost-button profile-btn" onClick={onOpenLeaderboard}>Open leaderboard</button>
-              </div>
-            </div>
-          </section>
-
-          {/* Embeds — collapsed by default */}
-          <section className="leaderboard-profile-block profile-card profile-embeds" aria-label="Embeds">
-            <div className="leaderboard-section-kicker profile-embeds__head">
-              <div>
-                <span className="label-mono">Embeds</span>
-                <p>
-                  Badge, card, 30-day chart, and raw JSON for your site, GitHub README, or blog. They update themselves.
-                </p>
-              </div>
-              <div className="profile-embeds__head-actions">
-                {cardLocked ? <span className="profile-state-pill">Publish to activate</span> : null}
-                <button
-                  type="button"
-                  className="ghost-button profile-btn"
-                  aria-expanded={embedsOpen}
-                  onClick={() => setEmbedsOpen((open) => !open)}
-                >
-                  {embedsOpen ? "Hide" : "Show"}
-                </button>
-              </div>
-            </div>
-            {!embedsOpen ? null : snippets ? (
-              <>
-                <div className={cardLocked ? "profile-embed-stack profile-embed-stack--locked" : "profile-embed-stack"}>
-                  {embedGroups.map((group) => (
-                    <div key={group.key} className="profile-embed-card">
-                      <div className="profile-embed-card__head">
-                        <span className="label-mono">{group.title}</span>
-                        {group.controls ?? null}
-                      </div>
-                      <div className="profile-embed-card__preview">{group.preview}</div>
-                      {group.variants.map((variant) => (
-                        <div key={variant.key} className="profile-embed-card__variant">
-                          <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
-                          <div className="profile-copy-row">
-                            <input
-                              className="profile-field profile-field--code"
-                              readOnly
-                              disabled={cardLocked}
-                              value={variant.snippet}
-                              onFocus={(event) => event.currentTarget.select()}
-                            />
-                            <button
-                              type="button"
-                              className="settings-btn profile-btn"
-                              disabled={cardLocked}
-                              title={cardLocked ? "Turn on your public focus card first" : undefined}
-                              onClick={() => void copy(variant.key, variant.snippet)}
-                            >
-                              {copiedKey === variant.key ? "Copied" : "Copy"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  <div className="profile-embed-card profile-embed-card--link">
-                    <div className="profile-embed-card__variant">
-                      <span className="label-mono profile-embed-card__variant-label">Data · JSON · 30-day</span>
-                      <div className="profile-copy-row">
-                        <input
-                          className="profile-field profile-field--code"
-                          readOnly
-                          disabled={cardLocked}
-                          value={snippets.dataUrl}
-                          onFocus={(event) => event.currentTarget.select()}
-                        />
-                        <button
-                          type="button"
-                          className="settings-btn profile-btn"
-                          disabled={cardLocked}
-                          title={cardLocked ? "Turn on your public focus card first" : undefined}
-                          onClick={() => void copy("data", snippets.dataUrl)}
-                        >
-                          {copiedKey === "data" ? "Copied" : "Copy"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="profile-embeds__setup">
-                <p className="profile-note">Save your profile once to mint your public link, then your embeds appear here.</p>
-                <button type="button" className="settings-btn settings-btn--primary profile-btn" onClick={onEditProfile}>Set up profile</button>
-              </div>
-            )}
-          </section>
-
-        </div>
+        redesign ? redesignStack : classicStack
       )}
 
       {shareMessage ? <div className="leaderboard-share-toast" role="status">{shareMessage}</div> : null}
@@ -474,6 +688,8 @@ export function ProfilePage({
 }
 
 // Stacked per-day bars: focus (green) with drift (red) on top. Pure SVG, local data only.
+// Fills are class-driven so the classic layout keeps its original colors while the
+// redesign (.profile-page--v2 scope) maps them to the --productivity-* tokens.
 function FocusDriftChart({ series }: { series: readonly DailyProductivityPoint[] }) {
   const H = 96;
   const n = series.length;
@@ -493,11 +709,11 @@ function FocusDriftChart({ series }: { series: readonly DailyProductivityPoint[]
             <g key={point.day}>
               <title>{`${point.day} · focus ${formatFocusDuration(point.focus)} · drift ${formatFocusDuration(point.drift)}`}</title>
               {isEmpty ? (
-                <rect x={x} y={H - 2} width={barW} height={2} rx={1} fill="var(--line-strong)" />
+                <rect className="profile-chart__bar profile-chart__bar--empty" x={x} y={H - 2} width={barW} height={2} rx={1} />
               ) : (
                 <>
-                  <rect x={x} y={H - focusH} width={barW} height={Math.max(focusH, point.focus > 0 ? 2 : 0)} rx={1.5} fill="var(--productivity-focus)" />
-                  <rect x={x} y={H - focusH - driftH} width={barW} height={Math.max(driftH, point.drift > 0 ? 2 : 0)} rx={1.5} fill="var(--productivity-drift)" opacity={0.9} />
+                  <rect className="profile-chart__bar profile-chart__bar--focus" x={x} y={H - focusH} width={barW} height={Math.max(focusH, point.focus > 0 ? 2 : 0)} rx={1.5} />
+                  <rect className="profile-chart__bar profile-chart__bar--drift" x={x} y={H - focusH - driftH} width={barW} height={Math.max(driftH, point.drift > 0 ? 2 : 0)} rx={1.5} />
                 </>
               )}
             </g>

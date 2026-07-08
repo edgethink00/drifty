@@ -22,6 +22,7 @@ export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassi
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 export const PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY = "drifty.dev.projectClassification";
+export const PROFILE_REDESIGN_ENABLED_STORAGE_KEY = "drifty.dev.profileRedesign";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 
@@ -297,6 +298,14 @@ export function resolveInitialDevModeEnabled(): boolean {
 export function resolveInitialProjectClassificationEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY) === "1";
+}
+
+// Off by default (opt-in): the Dev-settings toggle is the sole gate for the Profile
+// tab redesign, so every build renders the shipped classic layout until a developer
+// explicitly turns the redesign on in Dev mode.
+export function resolveInitialProfileRedesignEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(PROFILE_REDESIGN_ENABLED_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialTeamsBetaEnabled(): boolean {

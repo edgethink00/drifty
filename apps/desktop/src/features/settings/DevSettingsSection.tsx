@@ -21,6 +21,7 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
+  readonly profileRedesignEnabled: boolean;
   readonly projectClassificationEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
   readonly projectClassificationCorrectionsBusy: boolean;
@@ -40,6 +41,7 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
+  readonly onProfileRedesignEnabledChange: (enabled: boolean) => void;
   readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
@@ -68,6 +70,7 @@ export function DevSettingsSection({
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
+  profileRedesignEnabled,
   projectClassificationEnabled,
   projectClassificationAiReviewEvents,
   projectClassificationCorrectionsBusy,
@@ -87,6 +90,7 @@ export function DevSettingsSection({
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
+  onProfileRedesignEnabledChange,
   onProjectClassificationEnabledChange,
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
@@ -239,6 +243,22 @@ export function DevSettingsSection({
           </div>
         </div>
       ) : null}
+      <div className="settings-block settings-block--dev-preview">
+        <h3>Profile redesign (preview)</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Enable profile redesign</div>
+            <div className="desc">Render the redesigned Profile tab (two-zone identity card, cleaner fields, unified buttons). Off by default — the shipped layout stays unchanged until you turn this on.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle
+              checked={profileRedesignEnabled}
+              onChange={onProfileRedesignEnabledChange}
+              ariaLabel="Toggle profile redesign preview"
+            />
+          </div>
+        </div>
+      </div>
       <div className="settings-block settings-block--dev-preview">
         <h3>Project classification (preview)</h3>
         <div className="settings-row">

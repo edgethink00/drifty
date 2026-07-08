@@ -19,48 +19,51 @@ function mockCard(overrides: Partial<FocusCardControls> = {}): FocusCardControls
   };
 }
 
-function renderPage(overrides: Partial<Parameters<typeof ProfilePage>[0]> = {}) {
-  const props: Parameters<typeof ProfilePage>[0] = {
-    isSupabaseEnabled: true,
-    isSignedIn: true,
-    displayName: "Alex",
-    avatarUrl: "",
-    draft: {
-      displayName: "Alex",
-      bio: "Building quiet tools.",
-      avatarUrl: "",
-      websiteUrl: "https://drifty.so",
-      githubUrl: "",
-      linkedinUrl: "",
-      isPublic: true,
-    },
-    onDraftChange: vi.fn(),
-    onSaveProfile: vi.fn(),
-    isSavingProfile: false,
-    publicId: PUBLIC_ID,
-    focusSeconds7d: 20 * 3600 + 59 * 60,
-    dailyProductivity: null,
-    card: mockCard(),
-    isLeaderboardOptedIn: true,
-    leaderboardRank: 3,
-    shareMessage: null,
-    profileMessage: null,
-    profileError: null,
-    onEditProfile: vi.fn(),
-    onCopyProfileLink: vi.fn(),
-    onOpenLeaderboard: vi.fn(),
-    onSignIn: vi.fn(),
-    ...overrides,
-  };
-  return { ...render(<ProfilePage {...props} />), props };
-}
-
-
 function expandEmbeds() {
   fireEvent.click(screen.getByRole("button", { name: /^show$/i }));
 }
 
-describe("ProfilePage", () => {
+// The Dev-gated redesign preserves every test hook of the classic layout, so the
+// whole suite runs against both branches — proving toggle-off (classic) and
+// toggle-on (redesign) stay behaviourally identical.
+describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=$redesign)", ({ redesign }) => {
+  function renderPage(overrides: Partial<Parameters<typeof ProfilePage>[0]> = {}) {
+    const props: Parameters<typeof ProfilePage>[0] = {
+      isSupabaseEnabled: true,
+      isSignedIn: true,
+      displayName: "Alex",
+      avatarUrl: "",
+      draft: {
+        displayName: "Alex",
+        bio: "Building quiet tools.",
+        avatarUrl: "",
+        websiteUrl: "https://drifty.so",
+        githubUrl: "",
+        linkedinUrl: "",
+        isPublic: true,
+      },
+      onDraftChange: vi.fn(),
+      onSaveProfile: vi.fn(),
+      isSavingProfile: false,
+      publicId: PUBLIC_ID,
+      focusSeconds7d: 20 * 3600 + 59 * 60,
+      dailyProductivity: null,
+      card: mockCard(),
+      isLeaderboardOptedIn: true,
+      leaderboardRank: 3,
+      shareMessage: null,
+      profileMessage: null,
+      profileError: null,
+      redesign,
+      onEditProfile: vi.fn(),
+      onCopyProfileLink: vi.fn(),
+      onOpenLeaderboard: vi.fn(),
+      onSignIn: vi.fn(),
+      ...overrides,
+    };
+    return { ...render(<ProfilePage {...props} />), props };
+  }
+
   it("prompts sign-in when signed out", () => {
     const onSignIn = vi.fn();
     renderPage({ isSignedIn: false, onSignIn });
@@ -203,5 +206,45 @@ describe("ProfilePage", () => {
     expect(screen.getByText(/on the board · #3/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /open leaderboard/i }));
     expect(onOpenLeaderboard).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The redesign root class is applied only when the flag is on, so the classic CSS
+// (base) governs the default and the --v2 overrides never leak into it.
+describe("ProfilePage redesign gating", () => {
+  const base: Parameters<typeof ProfilePage>[0] = {
+    isSupabaseEnabled: true,
+    isSignedIn: true,
+    displayName: "Alex",
+    avatarUrl: "",
+    draft: { displayName: "Alex", bio: "", avatarUrl: "", websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: false },
+    onDraftChange: vi.fn(),
+    onSaveProfile: vi.fn(),
+    isSavingProfile: false,
+    publicId: PUBLIC_ID,
+    focusSeconds7d: 3600,
+    dailyProductivity: null,
+    card: mockCard(),
+    isLeaderboardOptedIn: false,
+    leaderboardRank: null,
+    shareMessage: null,
+    profileMessage: null,
+    profileError: null,
+    onEditProfile: vi.fn(),
+    onCopyProfileLink: vi.fn(),
+    onOpenLeaderboard: vi.fn(),
+    onSignIn: vi.fn(),
+  };
+
+  it("adds the --v2 root class only when redesign is on", () => {
+    const { container, rerender } = render(<ProfilePage {...base} redesign={false} />);
+    expect(container.querySelector(".profile-page")).not.toBeNull();
+    expect(container.querySelector(".profile-page--v2")).toBeNull();
+    expect(container.querySelector(".profile-identity__main")).not.toBeNull(); // classic markup
+
+    rerender(<ProfilePage {...base} redesign />);
+    expect(container.querySelector(".profile-page--v2")).not.toBeNull();
+    expect(container.querySelector(".profile-share")).not.toBeNull(); // redesign markup
+    expect(container.querySelector(".profile-identity__main")).toBeNull();
   });
 });
