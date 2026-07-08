@@ -710,6 +710,9 @@ export function useLeaderboardProfileController({
   ]);
 
   useEffect(() => {
+    // Preview/demo surfaces never publish (syncLeaderboardPublication already
+    // no-ops there); skip mounting the recurring timer and listeners entirely.
+    if (shouldUsePreviewData()) return undefined;
     void syncLeaderboardPublication("startup");
     const intervalId = window.setInterval(() => {
       void syncLeaderboardPublication("interval");
