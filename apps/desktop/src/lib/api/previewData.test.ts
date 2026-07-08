@@ -49,31 +49,40 @@ describe("previewData", () => {
     expect(weekdayPlans.size).toBeGreaterThan(12);
   });
 
-  it("keeps today preview sessions broken up and fully classified", () => {
+  it("shapes today preview as a human day: long focus streaks, varied blocks, real breaks", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-08T20:30:00"));
 
     const day = previewTimeline({ day: "2026-05-08" });
+    const durationsMinutes = day.map((segment) => segment.durationSeconds / 60);
     const sessionGaps = day.slice(1).filter((segment, index) =>
       Date.parse(segment.startedAt) - Date.parse(day[index]?.endedAt ?? segment.startedAt) >= 5 * 60 * 1000
     );
-    const longSessions = day.filter((segment) => segment.durationSeconds > 30 * 60);
+    const longBreak = day.slice(1).some((segment, index) =>
+      Date.parse(segment.startedAt) - Date.parse(day[index]?.endedAt ?? segment.startedAt) >= 90 * 60 * 1000
+    );
+    const longFocusStreaks = day.filter((segment) =>
+      classifyActivity(segment).productivity === "focus" && segment.durationSeconds > 30 * 60
+    );
     const driftSegments = day.filter((segment) => classifyActivity(segment).productivity === "drift");
     const shortDrifts = driftSegments.filter((segment) => segment.durationSeconds <= 9 * 60);
     const mediumDrifts = driftSegments.filter((segment) => segment.durationSeconds >= 12 * 60 && segment.durationSeconds <= 20 * 60);
     const futureSegments = day.filter((segment) => segment.startedAt > "2026-05-08T20:30:00");
-    const eveningBreak = day.some((segment, index) =>
-      segment.startedAt >= "2026-05-08T18:39:00"
-      && Date.parse(segment.startedAt) - Date.parse(day[index - 1]?.endedAt ?? segment.startedAt) >= 90 * 60 * 1000
-    );
     const unknownClassifications = day.filter((segment) => classifyActivity(segment).category === "unknown");
 
-    expect(day.length).toBeGreaterThan(30);
-    expect(sessionGaps.length).toBeGreaterThan(4);
-    expect(eveningBreak).toBe(true);
+    // Chunky, not a wall of 3-minute fragments.
+    expect(day.length).toBeGreaterThanOrEqual(14);
+    expect(day.length).toBeLessThanOrEqual(28);
+    // Real deep-work streaks alongside quick context switches -> a wide duration spread.
+    expect(longFocusStreaks.length).toBeGreaterThanOrEqual(4);
+    expect(Math.max(...durationsMinutes)).toBeGreaterThanOrEqual(40);
+    expect(Math.min(...durationsMinutes)).toBeLessThanOrEqual(10);
+    // Natural breaks: several short gaps plus one long (meal) break.
+    expect(sessionGaps.length).toBeGreaterThan(3);
+    expect(longBreak).toBe(true);
+    // Varied drift, fully classified, nothing in the future.
     expect(shortDrifts.length).toBeGreaterThanOrEqual(2);
     expect(mediumDrifts.length).toBeGreaterThanOrEqual(2);
-    expect(longSessions).toEqual([]);
     expect(futureSegments).toEqual([]);
     expect(unknownClassifications).toEqual([]);
   });
