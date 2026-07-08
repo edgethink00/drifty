@@ -29,7 +29,7 @@ describe("ProjectPassConsentModal", () => {
 
     expect(screen.getByRole("dialog", { name: /Turn on project analysis/i })).toBeTruthy();
     expect(screen.getByText("OpenRouter (GPT-5 mini)")).toBeTruthy();
-    expect(screen.getByText(/compacted summary of each day/i)).toBeTruthy();
+    expect(screen.getByText(/compacted 3-minute activity-window summary/i)).toBeTruthy();
     expect(screen.getByText(/work profile/i)).toBeTruthy();
     expect(screen.getByText(/never sends your raw history/i)).toBeTruthy();
   });

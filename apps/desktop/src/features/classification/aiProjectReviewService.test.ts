@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { compactActivityRuns, type ActivityCategory, type ActivitySegment, type Project, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
+import { buildProjectPassAnalysisWindows, type ActivityCategory, type ActivitySegment, type Project, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
 import {
-  chunkProjectRuns,
+  chunkProjectPassWindows,
   parseProjectPassOutput,
   projectPassChunkFingerprint,
   resolveProjectPassApply,
@@ -38,38 +38,46 @@ function classified(
 describe("parseProjectPassOutput", () => {
   it("parses clean and fenced JSON", () => {
     expect(parseProjectPassOutput('{"assignments":[],"corrections":[]}')).toEqual({ assignments: [], corrections: [] });
-    expect(parseProjectPassOutput('noise ```json\n{"assignments":[{"id":"r0","projectId":"p1","confidence":0.9}],"corrections":[]}\n``` tail')).toEqual({
-      assignments: [{ id: "r0", projectId: "p1", confidence: 0.9 }],
+    expect(parseProjectPassOutput('noise ```json\n{"assignments":[{"id":"w0","projectId":"p1","confidence":0.9}],"corrections":[]}\n``` tail')).toEqual({
+      assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }],
       corrections: [],
     });
   });
+
+  it("ignores earlier non-json braces and parses the first valid object", () => {
+    expect(parseProjectPassOutput('diagnostic {not json} then {"assignments":[{"id":"w0","projectId":null,"confidence":0.7}],"corrections":[]}')).toEqual({
+      assignments: [{ id: "w0", projectId: null, confidence: 0.7 }],
+      corrections: [],
+    });
+  });
+
   it("returns null on garbage", () => {
     expect(parseProjectPassOutput("not json at all")).toBeNull();
     expect(parseProjectPassOutput('{"assignments": oops}')).toBeNull();
   });
 });
 
-describe("chunkProjectRuns", () => {
-  it("splits runs over the cap", () => {
-    const runs = compactActivityRuns(
+describe("chunkProjectPassWindows", () => {
+  it("splits windows over the cap", () => {
+    const windows = buildProjectPassAnalysisWindows(
       Array.from({ length: 5 }, (_, i) =>
         seg({ id: `${i}`, startedAt: `2026-04-06T${String(9 + i).padStart(2, "0")}:00:00+00:00`, endedAt: `2026-04-06T${String(9 + i).padStart(2, "0")}:30:00+00:00`, durationSeconds: 1800, appName: `App${i}` }),
       ),
     );
-    expect(chunkProjectRuns(runs, 2)).toHaveLength(3);
-    expect(chunkProjectRuns(runs, 100)).toHaveLength(1);
-    expect(chunkProjectRuns([], 2)).toHaveLength(0);
+    expect(chunkProjectPassWindows(windows, 2)).toHaveLength(3);
+    expect(chunkProjectPassWindows(windows, 100)).toHaveLength(1);
+    expect(chunkProjectPassWindows([], 2)).toHaveLength(0);
   });
 });
 
 describe("projectPassChunkFingerprint", () => {
-  const runs = compactActivityRuns([seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:30:00+00:00", durationSeconds: 1800, appName: "Code" })]);
+  const windows = buildProjectPassAnalysisWindows([seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:30:00+00:00", durationSeconds: 1800, appName: "Code" })]);
   const project = { id: "p1", name: "P", description: "d", anchors: [], exemplars: [] };
 
   it("is stable for identical inputs and changes with project definition", async () => {
-    const a = await projectPassChunkFingerprint(runs, [project]);
-    const b = await projectPassChunkFingerprint(runs, [project]);
-    const c = await projectPassChunkFingerprint(runs, [{ ...project, description: "changed" }]);
+    const a = await projectPassChunkFingerprint(windows, [project]);
+    const b = await projectPassChunkFingerprint(windows, [project]);
+    const c = await projectPassChunkFingerprint(windows, [{ ...project, description: "changed" }]);
     expect(a).toBe(b);
     expect(a).not.toBe(c);
     expect(a.startsWith("pp-")).toBe(true);
@@ -81,10 +89,10 @@ describe("resolveProjectPassApply — trust invariants", () => {
     classified("1", "2026-04-06T09:00:00+00:00", "2026-04-06T09:30:00+00:00", "Chrome", "social_media", "drift"),
     classified("2", "2026-04-06T10:00:00+00:00", "2026-04-06T10:30:00+00:00", "Code", "workspace", "focus", "manual"),
   ];
-  const runs = compactActivityRuns(segments);
+  const windows = buildProjectPassAnalysisWindows(segments);
   const segmentsById = new Map(segments.map((s) => [s.id, s]));
   const base = {
-    runs,
+    windows,
     segmentsById,
     validProjectIds: new Set(["p1"]),
     revertedSegmentIds: new Set<string>(),
@@ -95,8 +103,8 @@ describe("resolveProjectPassApply — trust invariants", () => {
   it("assigns confident, valid projects and collapses the rest to null", () => {
     const output: ProjectPassOutput = {
       assignments: [
-        { id: "r0", projectId: "p1", confidence: 0.9 },
-        { id: "r1", projectId: "p1", confidence: 0.5 },
+        { id: "w0", projectId: "p1", confidence: 0.9 },
+        { id: "w1", projectId: "p1", confidence: 0.5 },
       ],
       corrections: [],
     };
@@ -107,34 +115,34 @@ describe("resolveProjectPassApply — trust invariants", () => {
   });
 
   it("drops hallucinated project ids to null", () => {
-    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [{ id: "r0", projectId: "ghost", confidence: 0.99 }], corrections: [] } });
+    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [{ id: "w0", projectId: "ghost", confidence: 0.99 }], corrections: [] } });
     expect(resolved.assignments[0].projectId).toBeNull();
   });
 
   it("applies a high-confidence correction and records the prior state", () => {
-    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "r0", category: "social_media", productivity: "focus", confidence: 0.9 }] } });
+    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "w0", category: "social_media", productivity: "focus", confidence: 0.9 }] } });
     expect(resolved.correctionClassifications).toHaveLength(1);
     expect(resolved.correctionClassifications[0]).toMatchObject({ segmentId: "1", productivity: "focus", source: "ai_review" });
     expect(resolved.correctionEvents[0]).toMatchObject({ segmentId: "1", prevProductivity: "drift", newProductivity: "focus", prevSource: "llm" });
   });
 
   it("ignores corrections below the confidence gate", () => {
-    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "r0", category: null, productivity: "focus", confidence: 0.79 }] } });
+    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "w0", category: null, productivity: "focus", confidence: 0.79 }] } });
     expect(resolved.correctionClassifications).toHaveLength(0);
   });
 
   it("never overwrites a manual classification", () => {
-    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "r1", category: "entertainment", productivity: "drift", confidence: 0.99 }] } });
+    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "w1", category: "entertainment", productivity: "drift", confidence: 0.99 }] } });
     expect(resolved.correctionClassifications).toHaveLength(0);
   });
 
   it("skips no-op corrections", () => {
-    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "r0", category: "social_media", productivity: "drift", confidence: 0.95 }] } });
+    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "w0", category: "social_media", productivity: "drift", confidence: 0.95 }] } });
     expect(resolved.correctionClassifications).toHaveLength(0);
   });
 
   it("skips corrections with an invalid category", () => {
-    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "r0", category: "nonsense", productivity: "focus", confidence: 0.95 }] } });
+    const resolved = resolveProjectPassApply({ ...base, output: { assignments: [], corrections: [{ id: "w0", category: "nonsense", productivity: "focus", confidence: 0.95 }] } });
     expect(resolved.correctionClassifications).toHaveLength(0);
   });
 
@@ -142,7 +150,7 @@ describe("resolveProjectPassApply — trust invariants", () => {
     const resolved = resolveProjectPassApply({
       ...base,
       revertedSegmentIds: new Set(["1"]),
-      output: { assignments: [], corrections: [{ id: "r0", category: "social_media", productivity: "focus", confidence: 0.95 }] },
+      output: { assignments: [], corrections: [{ id: "w0", category: "social_media", productivity: "focus", confidence: 0.95 }] },
     });
     expect(resolved.correctionClassifications).toHaveLength(0);
   });
@@ -169,7 +177,7 @@ describe("runProjectPass orchestration", () => {
   it("applies assignments + corrections and records one pass with the id used for events", async () => {
     const { tracker, spies } = mockTracker();
     const inference: ProjectPassInference = vi.fn(async () => ({
-      output: { assignments: [{ id: "r0", projectId: "p1", confidence: 0.9 }], corrections: [{ id: "r0", category: "social_media", productivity: "focus", confidence: 0.95 }] },
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [{ id: "w0", category: "social_media", productivity: "focus", confidence: 0.95 }] },
       usage: { model: "test-model", tokensIn: 100, tokensOut: 20 },
     }));
 
@@ -222,7 +230,6 @@ describe("runProjectPass orchestration", () => {
   it("carries the previous chunk's tail into the next chunk's prompt", async () => {
     const isoAt = (minute: number) =>
       `2026-04-06T${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}:00+00:00`;
-    // 81 distinct-app runs → two chunks (80 + 1), forcing a carry-forward summary.
     const manySegments = Array.from({ length: 81 }, (_, i) =>
       classified(`${i}`, isoAt(i * 6), isoAt(i * 6 + 5), `App${i}`, "social_media", "drift"),
     );
@@ -242,10 +249,9 @@ describe("runProjectPass orchestration", () => {
     });
 
     expect(prompts).toHaveLength(2);
-    // First chunk has no prior context; the second gets the first chunk's tail runs.
     expect(prompts[0]).toContain("Previous chunk summary (context only): none");
     expect(prompts[1]).not.toContain("Previous chunk summary (context only): none");
-    expect(prompts[1]).toContain("App79"); // a tail run of the first (80-run) chunk
+    expect(prompts[1]).toContain("App79");
     expect(prompts[1]).toContain("-> no project");
   });
 });

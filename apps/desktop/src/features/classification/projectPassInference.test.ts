@@ -25,6 +25,26 @@ describe("createProjectPassInference", () => {
     expect(request).toMatchObject({ baseUrl: "https://openrouter.ai/api/v1", apiKey: "sk-or-x", provider: { zdr: true } });
   });
 
+  it("repairs a malformed OpenRouter JSON response once and aggregates retry usage", async () => {
+    const invokeChat = vi
+      .fn()
+      .mockResolvedValueOnce(chatBody('{"assignments":[', 90, 10))
+      .mockResolvedValueOnce(chatBody(OUTPUT_JSON, 30, 20));
+    const inference = createProjectPassInference({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter", openRouterApiKey: "sk-or-x", openRouterModel: "openai/gpt-5-mini" }, { invokeChat });
+
+    const result = await inference("prompt");
+
+    expect(result.output?.assignments[0]).toMatchObject({ id: "r0", projectId: "p1" });
+    expect(result.usage).toMatchObject({ provider: "openrouter", tokensIn: 120, tokensOut: 30, latencyMs: 1000 });
+    expect(invokeChat).toHaveBeenCalledTimes(2);
+    const retryRequest = invokeChat.mock.calls[1][0];
+    expect(retryRequest.messages).toEqual([
+      { role: "user", content: "prompt" },
+      { role: "assistant", content: '{"assignments":[' },
+      { role: "user", content: expect.stringContaining("valid JSON") },
+    ]);
+  });
+
   it("dispatches OpenAI direct chat through the OpenAI-compatible path", async () => {
     const invokeChat = vi.fn(async (_request: Record<string, unknown>) => chatBody(OUTPUT_JSON));
     const inference = createProjectPassInference({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openai", openaiApiKey: "sk-openai", openaiModel: "gpt-5-mini" }, { invokeChat });

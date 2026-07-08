@@ -1,9 +1,8 @@
 import type { ProjectAnchor } from "./commands";
-import { formatProjectRunLine, type ProjectRun } from "./projectRun";
+import { formatProjectPassAnalysisWindowLine, type ProjectPassAnalysisWindow } from "./projectPassWindow";
 
-export const PROJECT_PASS_PROMPT_VERSION = "pp-v1";
+export const PROJECT_PASS_PROMPT_VERSION = "pp-v2";
 
-/** Minimum confidence below which the model is told to prefer no-project over a guess. */
 export const PROJECT_ASSIGNMENT_MIN_CONFIDENCE = 0.6;
 
 export interface ProjectPassPromptProject {
@@ -11,12 +10,11 @@ export interface ProjectPassPromptProject {
   readonly name: string;
   readonly description: string;
   readonly anchors: readonly ProjectAnchor[];
-  /** Confirmed/corrected run lines used as few-shot grounding. */
   readonly exemplars: readonly string[];
 }
 
 export interface ProjectPassPromptInput {
-  readonly runs: readonly ProjectRun[];
+  readonly windows: readonly ProjectPassAnalysisWindow[];
   readonly workProfile: string | null;
   readonly projects: readonly ProjectPassPromptProject[];
   readonly previousChunkSummary?: string | null;
@@ -49,21 +47,16 @@ function projectBlock(project: ProjectPassPromptProject): string {
   return lines.join("\n");
 }
 
-/**
- * Build the single-message prompt for the heavy project pass. Emits two
- * independent output sections — project assignments and classification
- * corrections — from one inference over the whole chunk.
- */
 export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
   const projectList = input.projects.length
     ? input.projects.map(projectBlock).join("\n")
     : "(none defined — return an empty assignments array and focus on corrections)";
 
-  const runLines = input.runs.map(formatProjectRunLine).join("\n");
+  const windowLines = input.windows.map(formatProjectPassAnalysisWindowLine).join("\n");
 
   return [
     "You are reviewing one user's day of computer activity to (1) attribute activity",
-    "runs to the user's projects and (2) correct earlier per-segment classifications",
+    "analysis windows to the user's projects and (2) correct earlier per-segment classifications",
     "that are wrong in day-level context.",
     "",
     `User work profile: ${input.workProfile?.trim() ? input.workProfile.trim() : "(not provided)"}`,
@@ -71,18 +64,18 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
     "Projects (the only valid project ids):",
     projectList,
     "",
-    "Activity runs (chronological):",
-    runLines,
+    "Activity analysis windows (chronological, merged from 3-minute cells):",
+    windowLines,
     "",
     `Previous chunk summary (context only): ${input.previousChunkSummary?.trim() ? input.previousChunkSummary.trim() : "none"}`,
     "",
     "Rules:",
-    "- Assign each run to at most one project id, or null when it belongs to none",
+    "- Assign each window to at most one project id, or null when it belongs to none",
     "  (personal, generic browsing, entertainment unrelated to any project). Use",
-    "  surrounding runs as context, not just the run in isolation.",
+    "  surrounding windows as context, not just the window in isolation.",
     `- Prefer null over guessing below ${PROJECT_ASSIGNMENT_MIN_CONFIDENCE} confidence.`,
     "- Only assign to a project id listed above; never invent ids.",
-    "- Independently, emit a correction when a run's current category or productivity",
+    "- Independently, emit a correction when a window's current category or productivity",
     "  is wrong given day-level context (for example, social-media activity that is",
     "  actually part of a project's work). Only correct when clearly justified; never",
     "  restate labels that are already correct, and never correct manual or rule labels.",
@@ -93,27 +86,20 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
   ].join("\n");
 }
 
-/** How many trailing runs to carry into the next chunk's summary. */
-export const PROJECT_PASS_SUMMARY_TAIL_RUNS = 6;
+export const PROJECT_PASS_SUMMARY_TAIL_WINDOWS = 6;
 
-/**
- * Compact carry-forward summary of a just-processed chunk: its trailing runs
- * paired with the project the model assigned them. Passed as `previousChunkSummary`
- * to the next chunk so day continuity survives the 80-run chunk boundary. Kept to
- * the last few runs so prompt size stays bounded regardless of day length.
- */
 export function summarizeProjectPassChunk(
-  runs: readonly ProjectRun[],
+  windows: readonly ProjectPassAnalysisWindow[],
   assignedProjectById: ReadonlyMap<string, string | null>,
   projectNameById: ReadonlyMap<string, string>,
 ): string {
-  const tail = runs.slice(-PROJECT_PASS_SUMMARY_TAIL_RUNS);
+  const tail = windows.slice(-PROJECT_PASS_SUMMARY_TAIL_WINDOWS);
   if (tail.length === 0) return "none";
   return tail
-    .map((run) => {
-      const projectId = assignedProjectById.get(run.id) ?? null;
+    .map((window) => {
+      const projectId = assignedProjectById.get(window.id) ?? null;
       const label = projectId ? projectNameById.get(projectId) ?? projectId : "no project";
-      return `${formatProjectRunLine(run)} -> ${label}`;
+      return `${formatProjectPassAnalysisWindowLine(window)} -> ${label}`;
     })
     .join("\n");
 }

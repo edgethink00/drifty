@@ -4129,6 +4129,7 @@ export default function App() {
   const projectClassification = useProjectClassification({
     tracker: trackerClient,
     selectedDayRange,
+    startOfDayMinutes,
     insightRange: { start: insightRange.start, end: insightRange.end },
     analysisSetup: analysisModel.analysisSetup,
     resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,

@@ -145,7 +145,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
       <ProjectPassConsentModal
         open={props.consentOpen}
         providerLabel={props.consentProviderLabel}
-        includesTitles
+        includesTitles={false}
         onConfirm={props.onConsentConfirm}
         onCancel={props.onConsentCancel}
       />

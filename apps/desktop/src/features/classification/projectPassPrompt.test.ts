@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProjectPassAnalysisWindows,
   buildProjectPassPrompt,
-  compactActivityRuns,
   PROJECT_PASS_PROMPT_VERSION,
   summarizeProjectPassChunk,
   type ActivitySegment,
@@ -15,7 +15,7 @@ function seg(
   return { platform: "macos", source: "accessibility", ...fields };
 }
 
-const runs = compactActivityRuns([
+const windows = buildProjectPassAnalysisWindows([
   seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:40:00+00:00", durationSeconds: 2400, appName: "Code", classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 } }),
   seg({ id: "2", startedAt: "2026-04-06T10:00:00+00:00", endedAt: "2026-04-06T10:15:00+00:00", durationSeconds: 900, appName: "Chrome", siteDomain: "youtube.com", youtubeIsShorts: true, classification: { category: "entertainment", productivity: "drift", source: "llm", confidence: 0.8 } }),
 ]);
@@ -28,20 +28,22 @@ const project: ProjectPassPromptProject = {
     { kind: "app", value: "Code", source: "harvested" },
     { kind: "domain", value: "github.com", source: "manual" },
   ],
-  exemplars: ["r7 | 11:00–11:30 (30m) | Code · github.com | current: workspace/focus (manual)"],
+  exemplars: ["w7 | 11:00-11:30 (30m active, 10x3m) | dominant: Code · github.com (30m) | current: workspace/focus (manual)"],
 };
 
 describe("buildProjectPassPrompt", () => {
   it("has a stable version tag", () => {
-    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v1");
+    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v2");
   });
 
-  it("lists projects with signals and exemplars, and renders run lines", () => {
-    const prompt = buildProjectPassPrompt({ runs, workProfile: "iOS developer", projects: [project] });
+  it("lists projects with signals and exemplars, and renders analysis window lines", () => {
+    const prompt = buildProjectPassPrompt({ windows, workProfile: "iOS developer", projects: [project] });
     expect(prompt).toContain('p1 "Drifty": Mac app development');
     expect(prompt).toContain("Known signals: apps [Code]; domains [github.com]");
     expect(prompt).toContain("Confirmed examples:");
-    expect(prompt).toContain("r0 | 09:00–09:40 (40m) | Code | current: workspace/focus (llm)");
+    expect(prompt).toContain("Activity analysis windows (chronological, merged from 3-minute cells):");
+    expect(prompt).toContain("w0 |");
+    expect(prompt).toContain("dominant: Code (40m)");
     expect(prompt).toContain("User work profile: iOS developer");
     expect(prompt).toContain('Return JSON only');
     expect(prompt).toContain('"assignments"');
@@ -49,33 +51,34 @@ describe("buildProjectPassPrompt", () => {
   });
 
   it("degrades gracefully with no projects defined", () => {
-    const prompt = buildProjectPassPrompt({ runs, workProfile: null, projects: [] });
+    const prompt = buildProjectPassPrompt({ windows, workProfile: null, projects: [] });
     expect(prompt).toContain("(none defined");
     expect(prompt).toContain("User work profile: (not provided)");
   });
 
   it("includes the previous chunk summary when present", () => {
-    const prompt = buildProjectPassPrompt({ runs, workProfile: null, projects: [project], previousChunkSummary: "Morning was all coding." });
+    const prompt = buildProjectPassPrompt({ windows, workProfile: null, projects: [project], previousChunkSummary: "Morning was all coding." });
     expect(prompt).toContain("Previous chunk summary (context only): Morning was all coding.");
   });
 
   it("says none when no previous chunk summary", () => {
-    const prompt = buildProjectPassPrompt({ runs, workProfile: null, projects: [project] });
+    const prompt = buildProjectPassPrompt({ windows, workProfile: null, projects: [project] });
     expect(prompt).toContain("Previous chunk summary (context only): none");
   });
 });
 
 describe("summarizeProjectPassChunk", () => {
-  it("pairs tail runs with their assigned project name, or 'no project'", () => {
+  it("pairs tail windows with their assigned project name, or 'no project'", () => {
     const summary = summarizeProjectPassChunk(
-      runs,
+      windows,
       new Map([
-        ["r0", "p1"],
-        ["r1", null],
+        ["w0", "p1"],
+        ["w1", null],
       ]),
       new Map([["p1", "Drifty"]]),
     );
-    expect(summary).toContain("Code | current: workspace/focus (llm) -> Drifty");
+    expect(summary).toContain("dominant: Code (40m)");
+    expect(summary).toContain("-> Drifty");
     expect(summary).toContain("-> no project");
   });
 

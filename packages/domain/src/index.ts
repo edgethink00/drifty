@@ -3,6 +3,7 @@ export * from "./aggregation";
 export * from "./classificationRuleUrl";
 export * from "./commands";
 export * from "./productivityRubric";
+export * from "./projectPassWindow";
 export * from "./projectRun";
 export * from "./projectPassPrompt";
 export * from "./youtubeClassification";

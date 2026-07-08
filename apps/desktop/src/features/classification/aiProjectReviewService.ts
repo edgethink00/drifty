@@ -1,8 +1,8 @@
 import {
   buildProjectPassPrompt,
   summarizeProjectPassChunk,
-  compactActivityRuns,
-  formatProjectRunLine,
+  buildProjectPassAnalysisWindows,
+  formatProjectPassAnalysisWindowLine,
   CATEGORY_ORDER,
   PRODUCTIVITY_ORDER,
   PROJECT_ASSIGNMENT_MIN_CONFIDENCE,
@@ -13,20 +13,17 @@ import {
   type AiReviewEventInput,
   type Project,
   type ProjectAssignmentRecord,
+  type ProjectPassAnalysisWindow,
   type ProjectPassPromptProject,
   type ProjectPassTrigger,
   type ProductivityLabel,
-  type ProjectRun,
   type TrackerApi,
 } from "@drifty/domain";
 
-/** Auto-apply a correction only at or above this confidence (trust gate). */
+export { parseProjectPassOutput } from "./projectPassOutputParser";
+
 export const PROJECT_CORRECTION_MIN_CONFIDENCE = 0.8;
-/** Cap on run lines per inference chunk; longer spans split across calls. Kept
- *  modest so the JSON output (one assignment + optional correction per run)
- *  fits comfortably within the model's output-token budget. */
-export const PROJECT_PASS_MAX_CHUNK_RUNS = 80;
-/** A scheduled pass is "stale" (re-runnable on open) after this many ms. */
+export const PROJECT_PASS_MAX_CHUNK_WINDOWS = 80;
 export const PROJECT_PASS_STALE_MS = 3 * 60 * 60 * 1000;
 
 const VALID_CATEGORIES = new Set<string>(CATEGORY_ORDER);
@@ -68,27 +65,11 @@ export interface ProjectPassInferenceResult {
 /** Provider-agnostic inference. Concrete wiring (OpenRouter / Cloud) is injected. */
 export type ProjectPassInference = (prompt: string) => Promise<ProjectPassInferenceResult>;
 
-export function parseProjectPassOutput(content: string): ProjectPassOutput | null {
-  const start = content.indexOf("{");
-  const end = content.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) return null;
-  try {
-    const parsed = JSON.parse(content.slice(start, end + 1)) as Partial<ProjectPassOutput>;
-    return {
-      assignments: Array.isArray(parsed.assignments) ? parsed.assignments : [],
-      corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** Split runs into contiguous chunks no larger than the per-call cap. */
-export function chunkProjectRuns(runs: ProjectRun[], maxRuns = PROJECT_PASS_MAX_CHUNK_RUNS): ProjectRun[][] {
-  if (runs.length <= maxRuns) return runs.length ? [runs] : [];
-  const chunks: ProjectRun[][] = [];
-  for (let index = 0; index < runs.length; index += maxRuns) {
-    chunks.push(runs.slice(index, index + maxRuns));
+export function chunkProjectPassWindows(windows: ProjectPassAnalysisWindow[], maxWindows = PROJECT_PASS_MAX_CHUNK_WINDOWS): ProjectPassAnalysisWindow[][] {
+  if (windows.length <= maxWindows) return windows.length ? [windows] : [];
+  const chunks: ProjectPassAnalysisWindow[][] = [];
+  for (let index = 0; index < windows.length; index += maxWindows) {
+    chunks.push(windows.slice(index, index + maxWindows));
   }
   return chunks;
 }
@@ -103,15 +84,14 @@ function toPromptProject(project: Project, exemplarsByProject: Map<string, strin
   };
 }
 
-/** SHA-256 over the run lines + active project definitions + prompt version. */
 export async function projectPassChunkFingerprint(
-  runs: ProjectRun[],
+  windows: ProjectPassAnalysisWindow[],
   projects: ProjectPassPromptProject[],
 ): Promise<string> {
   const projectSignature = projects
     .map((project) => `${project.id}:${project.name}:${project.description}:${project.anchors.map((a) => `${a.kind}=${a.value}`).join(",")}`)
     .join("|");
-  const canonical = `${PROJECT_PASS_PROMPT_VERSION}\n${projectSignature}\n${runs.map(formatProjectRunLine).join("\n")}`;
+  const canonical = `${PROJECT_PASS_PROMPT_VERSION}\n${projectSignature}\n${windows.map(formatProjectPassAnalysisWindowLine).join("\n")}`;
   const bytes = new TextEncoder().encode(canonical);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(digest))
@@ -128,7 +108,7 @@ export interface ResolvedProjectApply {
 
 export interface ResolveProjectApplyArgs {
   readonly output: ProjectPassOutput;
-  readonly runs: ProjectRun[];
+  readonly windows: ProjectPassAnalysisWindow[];
   readonly segmentsById: Map<string, ActivitySegment>;
   readonly validProjectIds: Set<string>;
   readonly revertedSegmentIds: Set<string>;
@@ -140,6 +120,23 @@ export interface ResolveProjectApplyArgs {
 
 const UNTOUCHABLE_SOURCES = new Set(["manual", "rule"]);
 
+interface AssignmentCandidate {
+  readonly assignment: ProjectAssignmentRecord;
+  readonly overlapSeconds: number;
+}
+
+function chooseAssignmentCandidate(
+  existing: AssignmentCandidate | undefined,
+  candidate: AssignmentCandidate,
+): AssignmentCandidate {
+  if (!existing) return candidate;
+  if (candidate.overlapSeconds > existing.overlapSeconds) return candidate;
+  const candidateConfidence = candidate.assignment.confidence ?? 0;
+  const existingConfidence = existing.assignment.confidence ?? 0;
+  if (candidate.overlapSeconds === existing.overlapSeconds && candidateConfidence > existingConfidence) return candidate;
+  return existing;
+}
+
 /**
  * Pure resolution of a model's chunk output into DB writes. Enforces the trust
  * invariants: assignments below threshold collapse to null, corrections require
@@ -149,36 +146,41 @@ const UNTOUCHABLE_SOURCES = new Set(["manual", "rule"]);
 export function resolveProjectPassApply(args: ResolveProjectApplyArgs): ResolvedProjectApply {
   const assignMin = args.assignMinConfidence ?? PROJECT_ASSIGNMENT_MIN_CONFIDENCE;
   const correctMin = args.correctMinConfidence ?? PROJECT_CORRECTION_MIN_CONFIDENCE;
-  const runsById = new Map(args.runs.map((run) => [run.id, run]));
+  const windowsById = new Map(args.windows.map((window) => [window.id, window]));
 
-  const assignments: ProjectAssignmentRecord[] = [];
+  const assignmentsBySegmentId = new Map<string, AssignmentCandidate>();
   for (const assignment of args.output.assignments) {
-    const run = runsById.get(assignment.id);
-    if (!run || run.minor) continue;
+    const window = windowsById.get(assignment.id);
+    if (!window) continue;
     const confident = typeof assignment.confidence === "number" && assignment.confidence >= assignMin;
     const projectId =
       confident && assignment.projectId && args.validProjectIds.has(assignment.projectId) ? assignment.projectId : null;
-    for (const segmentId of run.segmentIds) {
-      assignments.push({
-        segmentId,
-        projectId,
-        source: "ai",
-        confidence: typeof assignment.confidence === "number" ? assignment.confidence : null,
-        reason: assignment.reason ?? null,
-        chunkFingerprint: args.chunkFingerprint,
-        assignedAt: args.now,
-      });
+    for (const overlap of window.segmentOverlaps) {
+      const candidate: AssignmentCandidate = {
+        assignment: {
+          segmentId: overlap.segmentId,
+          projectId,
+          source: "ai",
+          confidence: typeof assignment.confidence === "number" ? assignment.confidence : null,
+          reason: assignment.reason ?? null,
+          chunkFingerprint: args.chunkFingerprint,
+          assignedAt: args.now,
+        },
+        overlapSeconds: overlap.durationSeconds,
+      };
+      assignmentsBySegmentId.set(overlap.segmentId, chooseAssignmentCandidate(assignmentsBySegmentId.get(overlap.segmentId), candidate));
     }
   }
+  const assignments = Array.from(assignmentsBySegmentId.values()).map((candidate) => candidate.assignment);
 
   const correctionClassifications: ActivityClassificationRecord[] = [];
   const correctionEvents: Array<Omit<AiReviewEventInput, "passId">> = [];
   for (const correction of args.output.corrections) {
-    const run = runsById.get(correction.id);
-    if (!run || run.minor) continue;
+    const window = windowsById.get(correction.id);
+    if (!window) continue;
     if (typeof correction.confidence !== "number" || correction.confidence < correctMin) continue;
 
-    for (const segmentId of run.segmentIds) {
+    for (const segmentId of window.correctionSegmentIds) {
       if (args.revertedSegmentIds.has(segmentId)) continue;
       const segment = args.segmentsById.get(segmentId);
       const current = segment?.classification;
@@ -222,6 +224,7 @@ export interface RunProjectPassOptions {
   readonly tracker: TrackerApi;
   readonly inference: ProjectPassInference;
   readonly now: () => string;
+  readonly startOfDayMinutes?: number;
   readonly includeTitleContext?: boolean;
   /** User work profile for prompt grounding (privacy-gated by the caller). Null when opted out. */
   readonly workProfile?: string | null;
@@ -264,8 +267,12 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   const projectNameById = new Map(activeProjects.map((project) => [project.id, project.name]));
 
   const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
-  const runs = compactActivityRuns(segments, { includeTitleContext: options.includeTitleContext ?? true });
-  if (runs.length === 0) {
+  const windows = buildProjectPassAnalysisWindows(segments, {
+    range,
+    startOfDayMinutes: options.startOfDayMinutes ?? 0,
+    includeTitleContext: options.includeTitleContext ?? false,
+  });
+  if (windows.length === 0) {
     return { ran: false, skippedReason: "no activity in range", chunks: 0, assignments: 0, corrections: 0, tokensIn: 0, tokensOut: 0 };
   }
 
@@ -276,7 +283,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       .catch(() => []),
   );
 
-  const chunks = chunkProjectRuns(runs);
+  const chunks = chunkProjectPassWindows(windows);
   options.onProgress?.(0, chunks.length);
   const bufferedAssignments: ProjectAssignmentRecord[] = [];
   const bufferedClassifications: ActivityClassificationRecord[] = [];
@@ -288,10 +295,11 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
 
   let previousChunkSummary: string | null = null;
   for (let index = 0; index < chunks.length; index += 1) {
-    const chunkRuns = chunks[index];
-    const fingerprint = await projectPassChunkFingerprint(chunkRuns, promptProjects);
+    const chunkWindows = chunks[index];
+    if (!chunkWindows) continue;
+    const fingerprint = await projectPassChunkFingerprint(chunkWindows, promptProjects);
     const prompt = buildProjectPassPrompt({
-      runs: chunkRuns,
+      windows: chunkWindows,
       workProfile: options.workProfile ?? null,
       projects: promptProjects,
       previousChunkSummary,
@@ -306,7 +314,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
 
     const resolved = resolveProjectPassApply({
       output,
-      runs: chunkRuns,
+      windows: chunkWindows,
       segmentsById,
       validProjectIds,
       revertedSegmentIds,
@@ -317,22 +325,19 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     bufferedClassifications.push(...resolved.correctionClassifications);
     bufferedEvents.push(...resolved.correctionEvents);
 
-    // Carry this chunk's tail (runs + the project the model assigned them) into
-    // the next chunk so day continuity survives the 80-run boundary.
     if (index + 1 < chunks.length) {
       const assignedProjectById = new Map(output.assignments.map((assignment) => [assignment.id, assignment.projectId]));
-      previousChunkSummary = summarizeProjectPassChunk(chunkRuns, assignedProjectById, projectNameById);
+      previousChunkSummary = summarizeProjectPassChunk(chunkWindows, assignedProjectById, projectNameById);
     }
   }
 
-  // Record the pass once with full stats, then flush all writes against its id.
   const passRecord = await tracker.recordProjectPass({
     rangeStart: range.start,
     rangeEnd: range.end,
     trigger,
     model,
     provider,
-    runsCount: runs.length,
+    runsCount: windows.length,
     tokensIn,
     tokensOut,
     assignmentsCount: bufferedAssignments.length,

@@ -11,14 +11,6 @@ export interface ProjectPassConsentModalProps {
 const TITLE_ID = "project-pass-consent-title";
 const DESCRIPTION_ID = "project-pass-consent-description";
 
-/**
- * One-time consent gate shown before the heavy "project pass" runs for the
- * first time. Unlike per-segment classification, the pass sends a compacted
- * whole-day summary (merged activity runs plus project definitions and work
- * profile) to the selected analysis model, so we disclose that wider scope
- * explicitly. It honors the existing content-context privacy toggle: when page
- * and video titles are excluded upstream, we say so here.
- */
 export function ProjectPassConsentModal({
   open,
   providerLabel,
@@ -60,8 +52,8 @@ export function ProjectPassConsentModal({
           style={{ margin: "0 0 var(--space-5)", paddingLeft: "1.15rem", display: "grid", gap: "var(--space-2)" }}
         >
           <li>
-            A compacted summary of each day&apos;s activity — the app, site, time, and duration of each
-            run, plus your project descriptions and work profile — is sent to <strong>{providerLabel}</strong>.
+            A compacted 3-minute activity-window summary — app, site, time, duration, plus your
+            project descriptions and work profile — is sent to <strong>{providerLabel}</strong>.
           </li>
           <li>
             It never sends your raw history beyond that summary. Full timeline rows and session history

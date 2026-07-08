@@ -17,6 +17,7 @@ import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewServic
 export interface UseProjectClassificationArgs {
   readonly tracker: TrackerApi;
   readonly selectedDayRange: { readonly start: string; readonly end: string } | null;
+  readonly startOfDayMinutes: number;
   readonly analysisSetup: AnalysisAiSetupState;
   /** Resolve the OpenRouter provisioned key from the Keychain (null when none). */
   readonly resolveOpenRouterKey: () => Promise<string | null>;
@@ -200,6 +201,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
           inference,
           now,
           workProfile,
+          startOfDayMinutes: args.startOfDayMinutes,
           onProgress: (done, total) => setProgress({ done, total }),
         });
         setLastRunSummary(summary);
@@ -218,7 +220,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         setProgress(null);
       }
     },
-    [selectedDayRange, analysisConnected, buildInference, tracker, now, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [selectedDayRange, analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
   // Mutations swallow their own errors (surfacing via runError) so a failed
