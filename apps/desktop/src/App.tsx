@@ -2262,6 +2262,11 @@ export default function App() {
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
+    // Preview/demo surfaces (browser embeds with driftyPreview=1) render fixture
+    // data on a fixed preview clock. Re-polling rebuilds the full dashboard
+    // payload on every tick and leaks memory in long-lived website embeds, so
+    // the recurring refresh is app-only; preview keeps the initial load only.
+    if (isPreviewSurface) return undefined;
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
       if (rendererFocusedRef.current) {
@@ -2271,10 +2276,14 @@ export default function App() {
       void refresh(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [activeTab, classificationRange, dashPeriod, refreshFocusedLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
+  }, [activeTab, classificationRange, dashPeriod, isPreviewSurface, refreshFocusedLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
+    // Drift alarms are a desktop companion feature; preview/demo surfaces have
+    // no tracker to watch (previewStatus() reports running=true), so skip the
+    // recurring snapshot poll there.
+    if (isPreviewSurface) return undefined;
     if (!driftAlertsEnabled) return undefined;
     if (status?.running !== true) return undefined;
 
@@ -2285,7 +2294,7 @@ export default function App() {
       void refreshLiveDriftAlarmActivity(currentDriftAlarmDay());
     }, DRIFT_ALARM_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [driftAlertsEnabled, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
+  }, [driftAlertsEnabled, isPreviewSurface, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -4515,12 +4524,16 @@ export default function App() {
   }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, preparingFirstDay, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
 
   useEffect(() => {
+    // Preview/demo fixtures ship pre-classified segments and seed a cloud-
+    // connected session; auto-classification would churn (and could reach the
+    // cloud) from public website embeds, so it stays app-only.
+    if (isPreviewSurface) return undefined;
     void runAutoAiClassificationBatch();
     const intervalId = setInterval(() => {
       void runAutoAiClassificationBatch();
     }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [runAutoAiClassificationBatch]);
+  }, [isPreviewSurface, runAutoAiClassificationBatch]);
 
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
