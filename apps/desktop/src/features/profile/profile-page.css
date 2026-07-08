@@ -852,6 +852,7 @@
 
 .profile-page--v2 .profile-embed-card__variant-label {
   flex: 0 0 var(--profile-rail);
+  opacity: 1;
 }
 
 .profile-page--v2 .profile-embed-card--link {
