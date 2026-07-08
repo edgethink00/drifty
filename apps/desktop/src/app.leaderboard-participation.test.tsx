@@ -101,6 +101,12 @@ vi.mock("./lib/api/trackerClient", () => ({
   },
 }));
 
+vi.mock("./features/share/focusCardService", () => ({
+  fetchOwnFocusCard: vi.fn().mockResolvedValue({ success: true, error: null, data: { enabled: true, updatedAt: null } }),
+  publishFocusCard: vi.fn().mockResolvedValue({ success: true, error: null }),
+  setFocusCardEnabled: vi.fn().mockResolvedValue({ success: true, error: null }),
+}));
+
 vi.mock("./features/billing/billingService", () => ({
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
   createIndividualCheckout: billingMocks.createIndividualCheckout,
@@ -657,8 +663,7 @@ describe("App leaderboard participation", () => {
     expect(screen.queryByText(/loading leaderboard/i)).toBeNull();
     expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
     expect(await screen.findByRole("button", { name: /leave leaderboard/i })).toBeTruthy();
-    expect(await screen.findByRole("button", { name: /view profile/i })).toBeTruthy();
-    expect(await screen.findByRole("button", { name: /^share$/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /open profile/i })).toBeTruthy();
     expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ timezone, is_public: true }));
   });
 
@@ -949,17 +954,6 @@ describe("App leaderboard participation", () => {
       });
     });
 
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(window.navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith("https://drifty.so/profile/?id=profile-1");
-    });
-
     const leaveButton = await screen.findByRole("button", { name: /leave leaderboard/i });
     fireEvent.click(leaveButton);
 
@@ -971,6 +965,19 @@ describe("App leaderboard participation", () => {
     });
 
     expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
+
+    // Sharing the profile link now lives in the Profile tab (works even off the board).
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /open profile/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /copy profile link/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("https://drifty.so/profile/?id=profile-1");
+    });
   });
 
   it("keeps rendered leaderboard content mounted during a deferred refresh after initial load", async () => {
@@ -1089,21 +1096,26 @@ describe("App leaderboard participation", () => {
 
     const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
     fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
-    await screen.findByLabelText(/choose profile photo/i);
-    const editor = document.querySelector(".profile-editor-modal");
-    if (!(editor instanceof HTMLElement)) throw new Error("Profile editor modal did not open");
-    fireEvent.change(within(editor).getByLabelText(/display name/i), { target: { value: "Alex Drifty" } });
-    fireEvent.click(within(editor).getByRole("button", { name: /save profile/i }));
+    // Profile editing now lives inline on the Profile tab (reached from the board's strip).
+    fireEvent.click(await screen.findByRole("button", { name: /open profile/i }));
+    fireEvent.change(await screen.findByLabelText("Display name"), { target: { value: "Alex Drifty" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => {
       expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Alex Drifty" }));
+    });
+    await screen.findByText(/profile saved/i);
+
+    // Returning to the board triggers the deferred refresh without blocking the mounted content.
+    fireEvent.click(await screen.findByRole("button", { name: /open leaderboard/i }));
+    await waitFor(() => {
       expect(fetchGlobalLeaderboard).toHaveBeenCalledTimes(2);
     });
     const blockingLoading = screen.queryByText(/loading leaderboard/i);
     deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("weekly")] });
-    await screen.findByText(/profile saved/i);
+    await screen.findByRole("button", { name: /view alex profile/i });
 
     expect(blockingLoading).toBeNull();
   });

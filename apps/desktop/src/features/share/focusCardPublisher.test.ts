@@ -30,32 +30,34 @@ describe("buildFocusCardPayload", () => {
     vi.useRealTimers();
   });
 
-  it("builds a 7-day window with per-day focus and consistent aggregates", () => {
+  it("builds a 30-day daily series with week-scoped headline aggregates", () => {
     const today = todayIsoDate();
-    const start = shiftIsoDate(today, -6);
+    const monthStart = shiftIsoDate(today, -29);
     const midWeek = shiftIsoDate(today, -3);
+    const outsideWeek = shiftIsoDate(today, -20);
 
-    const payload = buildFocusCardPayload([makeSegment(today, 3600), makeSegment(midWeek, 1800)], {
-      windowEndDay: today,
-      startOfDayMinutes: 0,
-      includeAiClassifications: false,
-    });
+    const payload = buildFocusCardPayload(
+      [makeSegment(today, 3600), makeSegment(midWeek, 1800), makeSegment(outsideWeek, 900)],
+      { windowEndDay: today, startOfDayMinutes: 0, includeAiClassifications: false },
+    );
 
-    expect(payload.window_start_date).toBe(start);
+    expect(payload.window_start_date).toBe(monthStart);
     expect(payload.window_end_date).toBe(today);
-    expect(payload.daily_focus).toHaveLength(7);
+    expect(payload.daily_focus).toHaveLength(30);
 
+    // Headline aggregates stay week-scoped: the 20-days-ago hour is excluded.
     expect(payload.focus_seconds_today).toBe(3600);
     expect(payload.focus_seconds_7d).toBe(5400);
-    // all focus segments → no drift/neutral, share is 1
     expect(payload.drift_seconds_7d).toBe(0);
     expect(payload.neutral_seconds_7d).toBe(0);
     expect(payload.focus_share).toBe(1);
 
+    // ...but the daily series carries the full month.
     const byDay = Object.fromEntries(payload.daily_focus.map((point) => [point.day, point.focus]));
     expect(byDay[today]).toBe(3600);
     expect(byDay[midWeek]).toBe(1800);
-    expect(byDay[start]).toBe(0);
+    expect(byDay[outsideWeek]).toBe(900);
+    expect(byDay[monthStart]).toBe(0);
   });
 
   it("returns a zeroed but well-formed payload for an empty window", () => {
@@ -67,7 +69,7 @@ describe("buildFocusCardPayload", () => {
     expect(payload.drift_seconds_7d).toBe(0);
     expect(payload.neutral_seconds_7d).toBe(0);
     expect(payload.focus_share).toBe(0);
-    expect(payload.daily_focus).toHaveLength(7);
+    expect(payload.daily_focus).toHaveLength(30);
     expect(payload.daily_focus.every((point) => point.focus === 0)).toBe(true);
   });
 

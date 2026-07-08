@@ -41,6 +41,8 @@ import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHisto
 import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
 import { useFocusCard } from "./features/share/useFocusCard";
+import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
+import { ProfilePage } from "./features/profile/ProfilePage";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
@@ -191,7 +193,7 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, PROFILE_REDESIGN_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialProfileRedesignEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
@@ -350,6 +352,8 @@ export default function App() {
   // including public/prerelease binaries — only after the user turns it on.
   const [devProjectClassificationEnabled, setDevProjectClassificationEnabled] = useState(resolveInitialProjectClassificationEnabled);
   const projectClassificationFeatureEnabled = devProjectClassificationEnabled;
+  // Dev-only A/B gate for the Profile tab redesign (off → shipped classic layout).
+  const [devProfileRedesignEnabled, setDevProfileRedesignEnabled] = useState(resolveInitialProfileRedesignEnabled);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
   const [forceFrontmostFallbackCaptureEnabled, setForceFrontmostFallbackCaptureEnabled] = useState(resolveInitialForceFrontmostFallbackCaptureEnabled);
   const [forceBrowserHistoryUrlFallbackEnabled, setForceBrowserHistoryUrlFallbackEnabled] = useState(resolveInitialForceBrowserHistoryUrlFallbackEnabled);
@@ -780,7 +784,6 @@ export default function App() {
     leaderboardSegments,
     leaderboardUsesPreviewProfile,
     leaderboardWindowEndDay,
-    leaderboardWindowStartDay,
     localRollingFocusSeconds,
     ownLeaderboardEntry,
     profile,
@@ -802,15 +805,11 @@ export default function App() {
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
+    handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
     handleShareLeaderboardProfile,
-    handleViewOwnLeaderboardProfile,
     openProfileEditor,
-    isEmbedOpen,
-    embedFocusSeconds,
-    openEmbed,
-    closeEmbed,
     refreshLeaderboardData,
     syncLeaderboardPublication,
     removeProfilePhoto,
@@ -833,6 +832,12 @@ export default function App() {
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
+  });
+  const profileDailyProductivity = useDailyProductivitySeries({
+    windowEndDay: leaderboardWindowEndDay,
+    startOfDayMinutes,
+    includeAiClassifications: showAiClassificationImpact,
+    enabled: activeTab === "profile",
   });
   const aiClassificationProviderKey = localAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
@@ -2339,6 +2344,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, devProjectClassificationEnabled ? "1" : "0");
   }, [devProjectClassificationEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PROFILE_REDESIGN_ENABLED_STORAGE_KEY, devProfileRedesignEnabled ? "1" : "0");
+  }, [devProfileRedesignEnabled]);
 
   // Leaving the Projects tab visible after the preview is switched off would strand
   // the user on a hidden surface — send them back to the dashboard.
@@ -5173,7 +5182,7 @@ export default function App() {
             isDarkMode={theme === "dark"}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             onProfile={() => {
-              openProfileEditor();
+              navigateToTab("profile");
               setAccountMenuOpen(false);
             }}
             onAiSetting={() => {
@@ -5406,6 +5415,34 @@ export default function App() {
           />
         ) : null}
 
+        {/* Profile — your public card & embeds */}
+        {activeTab === "profile" ? (
+          <ProfilePage
+            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
+            isSignedIn={isPolicySignedIn || leaderboardUsesPreviewProfile}
+            displayName={leaderboardProfileDisplayName}
+            avatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
+            draft={profileDraft}
+            onDraftChange={updateProfileDraft}
+            onSaveProfile={() => void handleSaveProfile()}
+            isSavingProfile={profileSaving}
+            publicId={profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null)}
+            focusSeconds7d={localRollingFocusSeconds}
+            dailyProductivity={profileDailyProductivity}
+            card={focusCard}
+            isLeaderboardOptedIn={isLeaderboardOptedIn}
+            leaderboardRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            shareMessage={profileShareMessage}
+            profileMessage={profileMessage}
+            profileError={profileError}
+            redesign={devProfileRedesignEnabled}
+            onEditProfile={openProfileEditor}
+            onCopyProfileLink={() => void handleShareLeaderboardProfile()}
+            onOpenLeaderboard={() => navigateToTab("leaderboard")}
+            onSignIn={requestLeaderboardAuth}
+          />
+        ) : null}
+
         {/* Leaderboard */}
         {activeTab === "leaderboard" ? (
           <LeaderboardPage
@@ -5413,7 +5450,6 @@ export default function App() {
             activePeriod={activeLeaderboardPeriod}
             email={user?.email ?? null}
             error={leaderboardError}
-            focusSeconds7d={localRollingFocusSeconds}
             isActionLoading={leaderboardActionLoading}
             isLoading={leaderboardLoading}
             isOptedIn={isLeaderboardOptedIn}
@@ -5421,29 +5457,16 @@ export default function App() {
             isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
             leaderboard={leaderboardRows}
             ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
-            profileAvatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
-            profileBio={leaderboardProfileBio}
             profileDisplayName={leaderboardProfileDisplayName}
-            profileError={profileError}
-            profileGithubUrl={leaderboardProfileGithubUrl}
-            profileLinkedinUrl={leaderboardProfileLinkedinUrl}
-            profileMessage={profileMessage}
-            profileShareMessage={profileShareMessage}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
-            profileWebsiteUrl={leaderboardProfileWebsiteUrl}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
-            windowEndDay={leaderboardWindowEndDay}
-            windowStartDay={leaderboardWindowStartDay}
-            onEditProfile={openProfileEditor}
             onOptIn={() => void handleLeaderboardOptIn()}
             onOptOut={() => void handleLeaderboardOptOut()}
+            onOpenProfile={() => navigateToTab("profile")}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
-            onShareProfile={() => void handleShareLeaderboardProfile()}
-            onEmbedProfile={openEmbed}
             onSignIn={() => void handleLeaderboardOptIn()}
-            onViewOwnProfile={() => void handleViewOwnLeaderboardProfile()}
           />
         ) : null}
 
@@ -5639,6 +5662,7 @@ export default function App() {
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
+                    profileRedesignEnabled={devProfileRedesignEnabled}
                     projectClassificationEnabled={devProjectClassificationEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
@@ -5656,6 +5680,7 @@ export default function App() {
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
+                    onProfileRedesignEnabledChange={setDevProfileRedesignEnabled}
                     onProjectClassificationEnabledChange={setDevProjectClassificationEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
@@ -5753,13 +5778,8 @@ export default function App() {
         selectedProfileError={selectedProfileError}
         selectedProfileLoading={selectedProfileLoading}
         selectedPublicProfile={selectedPublicProfile}
-        isEmbedOpen={isEmbedOpen}
-        embedPublicId={profile?.public_id ?? null}
-        embedFocusSeconds={embedFocusSeconds}
-        focusCard={focusCard}
         onCloseEditor={closeProfileEditor}
         onCloseSelectedProfile={closeSelectedProfile}
-        onCloseEmbed={closeEmbed}
         onDraftChange={updateProfileDraft}
         onPhotoSelected={(event) => void handleProfilePhotoSelected(event)}
         onRemovePhoto={removeProfilePhoto}

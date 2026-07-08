@@ -17,9 +17,6 @@ function renderView(overrides: Partial<TestProps> = {}) {
     isOptedIn: true,
     activePeriod: "weekly",
     leaderboard: [],
-    focusSeconds7d: 0,
-    windowStartDay: "2026-04-01",
-    windowEndDay: "2026-04-07",
     profileDisplayName: null,
     email: null,
     isActionLoading: false,
@@ -60,15 +57,12 @@ describe("LeaderboardView", () => {
     expect(screen.getByText(/supabase is not configured for this workspace/i)).toBeTruthy();
   });
 
-  it("renders a signed-out beta join state", () => {
+  it("renders a signed-out join state", () => {
     const onSignIn = vi.fn();
     renderView({ isSignedIn: false, isOptedIn: false, onSignIn });
 
-    expect(screen.getByText(/join in beta/i)).toBeTruthy();
-    expect(screen.getByText(/apps, sites, windows, and sessions stay private/i)).toBeTruthy();
-    expect(screen.queryByText(/publish only your public name/i)).toBeNull();
-    expect(screen.queryByText(/rolling focus total/i)).toBeNull();
-    const hero = screen.getByLabelText(/your leaderboard profile/i);
+    expect(screen.getByText(/nothing is published until you join/i)).toBeTruthy();
+    const hero = screen.getByLabelText(/your leaderboard participation/i);
     const heroJoin = within(hero).getByRole("button", { name: /join leaderboard/i });
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
 
@@ -77,54 +71,30 @@ describe("LeaderboardView", () => {
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the profile label accessible while flattening profile and board blocks", () => {
+  it("keeps the participation strip and board as sibling blocks", () => {
     renderView({
       leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
       profileDisplayName: "Alex",
       ownRank: 1,
     });
 
-    expect(screen.queryByText("Your profile")).toBeNull();
-
-    const profileBlock = screen.getByLabelText(/leaderboard profile controls/i);
+    const participationBlock = screen.getByLabelText(/^leaderboard participation$/i);
     const boardBlock = screen.getByLabelText(/^global leaderboard$/i);
 
-    expect(profileBlock.contains(boardBlock)).toBe(false);
-    expect(boardBlock.contains(profileBlock)).toBe(false);
-    const profileSummary = within(profileBlock).getByLabelText(/profile ranking summary/i);
-    expect(within(profileBlock).getByLabelText(/your leaderboard profile/i)).toBeTruthy();
-    expect(profileSummary.classList.contains("leaderboard-row__meta--compact")).toBe(true);
-    expect(profileSummary.querySelectorAll(".leaderboard-stat")).toHaveLength(3);
+    expect(participationBlock.contains(boardBlock)).toBe(false);
+    expect(boardBlock.contains(participationBlock)).toBe(false);
+    expect(within(participationBlock).getByText(/on the board · #1/i)).toBeTruthy();
     expect(within(boardBlock).getByRole("group", { name: /leaderboard period/i })).toBeTruthy();
     expect(within(boardBlock).getByRole("list", { name: /global focus leaderboard rankings/i })).toBeTruthy();
   });
 
-  it("shows profile details and keeps edit profile beside the name", () => {
-    const onEditProfile = vi.fn();
-    renderView({
-      profileDisplayName: "Alex",
-      profileBio: "Building quiet tools for deeper work.",
-      profileWebsiteUrl: "https://drifty.so/drifty",
-      profileGithubUrl: "github.com/edgethink00",
-      profileLinkedinUrl: "https://www.linkedin.com/in/drifty/",
-      email: "alex@example.com",
-      onEditProfile,
-    });
+  it("points to the Profile tab for public card management", () => {
+    const onOpenProfile = vi.fn();
+    renderView({ profileDisplayName: "Alex", onOpenProfile });
 
-    const hero = screen.getByLabelText(/your leaderboard profile/i);
-    const heading = within(hero).getByRole("heading", { name: "Alex" });
-    const nameRow = heading.closest(".leaderboard-hero__name-row") as HTMLElement;
-
-    expect(within(nameRow).getByRole("button", { name: /edit profile/i })).toBeTruthy();
-    expect(within(hero).getByText("Building quiet tools for deeper work.")).toBeTruthy();
-    expect(within(hero).getByText("drifty.so/drifty")).toBeTruthy();
-    expect(within(hero).getByText("github.com/edgethink00")).toBeTruthy();
-    expect(within(hero).getByText("linkedin.com/in/drifty")).toBeTruthy();
-    expect(screen.queryByText("alex@example.com")).toBeNull();
-
-    fireEvent.click(within(nameRow).getByRole("button", { name: /edit profile/i }));
-
-    expect(onEditProfile).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/your public card & embeds live in the profile tab/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /open profile/i }));
+    expect(onOpenProfile).toHaveBeenCalledTimes(1);
   });
 
   it("uses the profile editor avatar itself as the photo change control", () => {
@@ -155,27 +125,6 @@ describe("LeaderboardView", () => {
 
     expect(screen.getByLabelText(/choose profile photo/i).getAttribute("type")).toBe("file");
     expect(screen.queryByText(/upload picture/i)).toBeNull();
-  });
-
-  it("turns an empty public link preview into an edit affordance", () => {
-    const onEditProfile = vi.fn();
-    renderView({
-      profileDisplayName: "Alex",
-      profileBio: "Building quiet tools for deeper work.",
-      profileWebsiteUrl: "",
-      profileGithubUrl: "",
-      profileLinkedinUrl: "",
-      onEditProfile,
-    });
-
-    const hero = screen.getByLabelText(/your leaderboard profile/i);
-    const addLinksButton = within(hero).getByRole("button", { name: /add links/i });
-
-    expect(within(hero).getByText(/add website, github, or linkedin links/i)).toBeTruthy();
-
-    fireEvent.click(addLinksButton);
-
-    expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
   it("renders a loading state while leaderboard data is being fetched", () => {
@@ -220,15 +169,9 @@ describe("LeaderboardView", () => {
       email: "alex@example.com",
     });
 
-    expect(screen.getByText(/ready when you are/i)).toBeTruthy();
-    expect(screen.getByText(/apps, sites, windows, and sessions stay private/i)).toBeTruthy();
-    expect(screen.queryByText(/join to publish your profile/i)).toBeNull();
-    expect(screen.queryByText(/rolling total/i)).toBeNull();
-    expect(screen.getByLabelText(/profile ranking summary/i)).toBeTruthy();
-    expect(within(screen.getByLabelText(/your leaderboard profile/i)).getByRole("button", { name: /join leaderboard/i })).toBeTruthy();
+    expect(screen.getByText(/not on the board yet/i)).toBeTruthy();
+    expect(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /join leaderboard/i })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
-    expect(screen.getByText("—")).toBeTruthy();
-    expect(screen.getByText(/your focus window/i)).toBeTruthy();
     expect(screen.getAllByText(/^Alex Kim$/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("alex@example.com")).toBeNull();
   });
@@ -239,11 +182,9 @@ describe("LeaderboardView", () => {
       profileDisplayName: "Alex",
       email: "alex@example.com",
       onOptOut: vi.fn(),
-      onViewOwnProfile: vi.fn(),
-      onShareProfile: vi.fn(),
     });
 
-    const optedOutHero = screen.getByLabelText(/your leaderboard profile/i);
+    const optedOutHero = screen.getByLabelText(/your leaderboard participation/i);
     const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
     const joinActions = joinButton.closest(".leaderboard-hero__actions");
 
@@ -259,21 +200,16 @@ describe("LeaderboardView", () => {
         isOptedIn
         activePeriod="weekly"
         leaderboard={[]}
-        focusSeconds7d={0}
-        windowStartDay="2026-04-01"
-        windowEndDay="2026-04-07"
         profileDisplayName="Alex"
         email="alex@example.com"
         isActionLoading={false}
         actionError={null}
         onOptIn={vi.fn()}
         onOptOut={vi.fn()}
-        onViewOwnProfile={vi.fn()}
-        onShareProfile={vi.fn()}
       />,
     );
 
-    const optedInHero = screen.getByLabelText(/your leaderboard profile/i);
+    const optedInHero = screen.getByLabelText(/your leaderboard participation/i);
     const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
     const leaveActions = leaveButton.closest(".leaderboard-hero__actions");
 
@@ -297,8 +233,6 @@ describe("LeaderboardView", () => {
 
     expect(screen.getByText(/no ranked participants yet/i)).toBeTruthy();
     expect(screen.getByText(/once someone opts in, rankings will appear here/i)).toBeTruthy();
-    expect(screen.getByText(/not ranked yet/i)).toBeTruthy();
-    expect(screen.getByText(/focus time/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /leave leaderboard/i })).toBeTruthy();
   });
 
@@ -347,18 +281,16 @@ describe("LeaderboardView", () => {
   it("shows a simple daily average for weekly and monthly periods", () => {
     renderView({
       activePeriod: "monthly",
-      focusSeconds7d: 108000,
       leaderboard: [makeLeaderboardRow({ period: "monthly", focus_seconds: 108000, focus_seconds_7d: 108000 })],
     });
 
-    expect(screen.getAllByText(/daily avg/i).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText("1h").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/daily avg/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1h").length).toBeGreaterThanOrEqual(1);
   });
 
   it("does not show daily average for daily periods", () => {
     renderView({
       activePeriod: "daily",
-      focusSeconds7d: 3600,
       leaderboard: [makeLeaderboardRow({ period: "daily", focus_seconds: 3600, focus_seconds_7d: 3600 })],
     });
 
@@ -408,7 +340,7 @@ describe("LeaderboardView", () => {
     expect(within(rows[1]).queryByText(/your published period total/i)).toBeNull();
     expect(within(rows[1]).getByText("1h")).toBeTruthy();
     expect(within(rows[1]).queryByText(/5m ago/i)).toBeNull();
-    expect(screen.getAllByText("#2").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("#2").length).toBeGreaterThanOrEqual(1);
 
     expect(screen.queryByText("2026-04-01")).toBeNull();
     expect(screen.queryByText("2026-04-07")).toBeNull();

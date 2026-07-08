@@ -223,12 +223,10 @@ export function AccountMenu({
         </span>
       </button>
       <div className="account-menu-separator" role="separator" />
-      {isSignedIn ? (
-        <button type="button" className="account-menu-item" onClick={onProfile} role="menuitem">
-          <span className="account-menu-icon"><ProfileIcon /></span>
-          <span>My profile</span>
-        </button>
-      ) : null}
+      <button type="button" className="account-menu-item" onClick={onProfile} role="menuitem">
+        <span className="account-menu-icon"><ProfileIcon /></span>
+        <span>My profile</span>
+      </button>
       <button type="button" className="account-menu-item" onClick={onCheckForUpdates} role="menuitem">
         <span className="account-menu-icon"><UpdateIcon /></span>
         <span>Check for updates</span>

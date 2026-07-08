@@ -11,6 +11,7 @@ import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
 import "./features/loading/loading-skeletons.css";
 import "./features/leaderboard/leaderboard.css";
+import "./features/profile/profile-page.css";
 import "./styles/chartHoverMotion.css";
 
 type BootstrapSurface = "app" | "watcher" | "drift-alarm";
