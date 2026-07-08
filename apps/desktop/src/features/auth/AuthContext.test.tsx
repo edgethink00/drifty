@@ -136,6 +136,13 @@ function createSession({ isAnonymous = false }: { isAnonymous?: boolean } = {}):
   } as Session;
 }
 
+function requireCapturedAuth(auth: ReturnType<typeof useAuth> | null): ReturnType<typeof useAuth> {
+  if (!auth) {
+    throw new Error("Auth state was not captured.");
+  }
+  return auth;
+}
+
 describe("AuthContext", () => {
   beforeEach(() => {
     getSession.mockResolvedValue({ data: { session: null } });
@@ -246,10 +253,11 @@ describe("AuthContext", () => {
     await waitFor(() => {
       expect(authApi).not.toBeNull();
     });
+    const auth = requireCapturedAuth(authApi);
 
     let googleError: Error | null | undefined;
     await act(async () => {
-      googleError = (await authApi!.signInWithGoogle()).error;
+      googleError = (await auth.signInWithGoogle()).error;
     });
 
     expect(googleError).toBeNull();
@@ -268,8 +276,39 @@ describe("AuthContext", () => {
     expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://accounts.google.com/oauth");
     expect(tauriMocks.openUrl).not.toHaveBeenCalledWith("https://drifty.so/auth/login/");
     await waitFor(() => {
-      expect(authApi?.callbackStatus?.message).toBe("Browser opened.");
+      expect(authApi?.callbackStatus?.message).toBe("Browser opened. Waiting for sign-in to return to Drifty.");
     });
+  });
+
+  it("returns explicit fallback guidance when the Google browser handoff fails", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    tauriMocks.openUrl.mockRejectedValueOnce(new Error("opener denied"));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    const auth = requireCapturedAuth(authApi);
+
+    let googleError: Error | null | undefined;
+    await act(async () => {
+      googleError = (await auth.signInWithGoogle()).error;
+    });
+
+    expect(googleError?.message).toBe("Unable to open Google sign-in. Try again, or continue with email.");
+    expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://accounts.google.com/oauth");
+    await waitFor(() => {
+      expect(authApi?.callbackStatus?.phase).toBe("failed");
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus?.message).toBe("Unable to open Google sign-in. Try again, or continue with email.");
   });
 
   it("rejects short signup passwords before calling Supabase", async () => {

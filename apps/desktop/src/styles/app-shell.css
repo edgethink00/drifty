@@ -1195,3 +1195,28 @@
   background: transparent;
   color: var(--text-soft);
 }
+
+.app-status-notice {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-inline: var(--space-4);
+}
+
+.app-status-notice strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.app-status-notice span {
+  color: var(--text-soft);
+  flex: 1 1 16rem;
+  font-size: var(--type-setting-desc-size);
+  letter-spacing: 0;
+  line-height: 1.4;
+  min-width: min(100%, 12rem);
+}

@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { TrackerStatus } from "@drifty/domain";
 import type { ReactNode } from "react";
+import type { OAuthCallbackStatus } from "./features/auth/AuthContext";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -26,7 +27,7 @@ const {
     user: null as { readonly id: string; readonly email: string } | null,
     session: null,
     status: "unauthenticated" as "loading" | "authenticated" | "unauthenticated",
-    callbackStatus: null,
+    callbackStatus: null as OAuthCallbackStatus | null,
     isEnabled: true,
     authMode: "optional" as "optional" | "required",
     isAuthRequired: false,
@@ -209,6 +210,7 @@ describe("App onboarding cloud login", () => {
     window.localStorage.clear();
     authState.user = null;
     authState.status = "unauthenticated";
+    authState.callbackStatus = null;
     authState.hasRequiredAccountAuth = false;
     authState.signInWithWebsite.mockResolvedValue({ error: null });
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
@@ -263,4 +265,30 @@ describe("App onboarding cloud login", () => {
 
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
   }, 15_000);
+
+  it("shows Google browser handoff status on the account onboarding step", async () => {
+    authState.callbackStatus = {
+      phase: "waiting",
+      message: "Browser opened. Waiting for sign-in to return to Drifty.",
+    };
+
+    render(<App />);
+
+    await advanceToAccountStep();
+
+    expect(screen.getByRole("status").textContent).toContain("Browser opened. Waiting for sign-in to return to Drifty.");
+  });
+
+  it("shows Google browser handoff failures on the account onboarding step", async () => {
+    authState.callbackStatus = {
+      phase: "failed",
+      message: "Unable to open Google sign-in. Try again, or continue with email.",
+    };
+
+    render(<App />);
+
+    await advanceToAccountStep();
+
+    expect(screen.getByRole("alert").textContent).toContain("Unable to open Google sign-in. Try again, or continue with email.");
+  });
 });

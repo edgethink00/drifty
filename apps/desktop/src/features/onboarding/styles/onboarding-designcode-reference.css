@@ -312,6 +312,24 @@
   border-color: rgba(28, 28, 25, 0.34);
 }
 
+.dc-onb-account__callback {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 11px;
+  background: var(--dc-onb-inset);
+  color: var(--dc-onb-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.dc-onb-account__callback--failed {
+  border-color: color-mix(in srgb, var(--dc-onb-warn) 28%, transparent);
+  background: var(--dc-onb-warn-soft);
+  color: var(--dc-onb-warn);
+}
+
 .dc-onb-divider {
   display: flex;
   align-items: center;

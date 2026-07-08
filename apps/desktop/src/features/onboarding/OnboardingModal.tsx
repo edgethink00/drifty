@@ -1,6 +1,7 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthog";
+import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { OnboardingDesignCodeContent } from "./OnboardingDesignCodeContent";
@@ -32,6 +33,7 @@ export function OnboardingModal({
   localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
+  authCallbackStatus,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithEmail,
   onAcknowledgeCloudTrialStartedNotice,
@@ -51,6 +53,7 @@ export function OnboardingModal({
   localAiSetup: LocalAiSetupState;
   onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
+  authCallbackStatus: OAuthCallbackStatus | null;
   onStartCloudTrialWithGoogle: () => void;
   onStartCloudTrialWithEmail: () => void;
   onAcknowledgeCloudTrialStartedNotice: () => void;
@@ -96,6 +99,7 @@ export function OnboardingModal({
       <div className="onboarding-content-area">
         <OnboardingDesignCodeContent
           flow={flow}
+          authCallbackStatus={authCallbackStatus}
           onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
           onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
         />

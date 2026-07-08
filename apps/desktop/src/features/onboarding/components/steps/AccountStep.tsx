@@ -1,15 +1,25 @@
+import type { OAuthCallbackStatus } from "../../../auth/AuthContext";
 import { GoogleMark } from "../GoogleMark";
 import { SuccessIcon } from "./shared";
 
 export function AccountStep({
   accountConnected,
+  authCallbackStatus,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
 }: {
   readonly accountConnected: boolean;
+  readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
 }) {
+  const isGoogleHandoffBusy = authCallbackStatus ? authCallbackStatus.phase !== "failed" : false;
+  const callbackNoticeRole = authCallbackStatus?.phase === "failed" ? "alert" : "status";
+  const callbackNoticeClassName = [
+    "dc-onb-account__callback",
+    authCallbackStatus?.phase === "failed" ? "dc-onb-account__callback--failed" : "",
+  ].filter(Boolean).join(" ");
+
   return (
     <div className="dc-onb-account">
       <h2 className="dc-onb-account__title">Connect your account</h2>
@@ -27,6 +37,7 @@ export function AccountStep({
             type="button"
             className="dc-onb-account__google"
             onClick={onStartCloudTrialWithGoogle}
+            disabled={isGoogleHandoffBusy}
           >
             <GoogleMark />
             <span>Continue with Google</span>
@@ -45,6 +56,11 @@ export function AccountStep({
           </button>
         </div>
       )}
+      {!accountConnected && authCallbackStatus ? (
+        <div className={callbackNoticeClassName} role={callbackNoticeRole}>
+          {authCallbackStatus.message}
+        </div>
+      ) : null}
       <p className="dc-onb-account__helper">
         Drifty never shares your activity data with teammates unless you choose to join a team or share a report.
       </p>

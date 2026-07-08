@@ -36,6 +36,8 @@ import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
 const DESKTOP_GOOGLE_AUTH_BRIDGE_URL = "https://drifty.so/auth/desktop-google-callback/";
+const GOOGLE_BROWSER_OPENED_MESSAGE = "Browser opened. Waiting for sign-in to return to Drifty.";
+const GOOGLE_BROWSER_OPEN_FAILED_MESSAGE = "Unable to open Google sign-in. Try again, or continue with email.";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -87,8 +89,11 @@ function isBillingSuccessDeepLink(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === "drifty:" && url.hostname === "billing" && ["/success", "/success/"].includes(url.pathname);
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof TypeError) {
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -789,9 +794,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setCallbackStatus({
       phase: "waiting",
-      message: isDesktop
-        ? "Opening Google sign-in in your browser. Choose your account, then return to Drifty."
-        : "Opening Google sign-in.",
+      message: "Opening Google sign-in...",
     });
 
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -842,7 +845,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await openUrl(data.url);
         setCallbackStatus({
           phase: "waiting",
-          message: "Browser opened.",
+          message: GOOGLE_BROWSER_OPENED_MESSAGE,
         });
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_started",
@@ -850,9 +853,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           result: "success",
         });
       } catch (error) {
-        const openError = error instanceof Error
-          ? error
-          : new Error("Unable to open Google sign-in");
+        const analyticsError = error instanceof Error ? error : String(error ?? "");
+        const openError = new Error(GOOGLE_BROWSER_OPEN_FAILED_MESSAGE);
         setCallbackStatus({
           phase: "failed",
           message: openError.message,
@@ -861,7 +863,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           action: "sign_in_started",
           method: "oauth",
           result: "error",
-          error_kind: toAnalyticsErrorKind(openError),
+          error_kind: toAnalyticsErrorKind(analyticsError),
         });
         return { error: openError };
       }

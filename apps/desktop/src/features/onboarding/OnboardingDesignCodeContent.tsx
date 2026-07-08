@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
 import type { OnboardingFlow } from "./useOnboardingFlow";
 import { WelcomeStep } from "./components/steps/WelcomeStep";
@@ -22,12 +23,14 @@ import { ReadyStep } from "./components/steps/ReadyStep";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
+  readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
 };
 
 export function OnboardingDesignCodeContent({
   flow,
+  authCallbackStatus,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
 }: OnboardingDesignCodeContentProps) {
@@ -204,6 +207,7 @@ export function OnboardingDesignCodeContent({
               {flow.step === "account" ? (
                 <AccountStep
                   accountConnected={flow.accountConnected}
+                  authCallbackStatus={authCallbackStatus}
                   onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
                   onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
                 />

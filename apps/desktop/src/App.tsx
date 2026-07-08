@@ -61,6 +61,7 @@ import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
 import { useUpdateController } from "./features/updates/useUpdateController";
 import { consumePostUpdateRelaunchFocusPending, fallbackUpdatePolicy } from "./features/updates/updatePolicy";
 import { useDeveloperPreReleaseUpdateController } from "./features/updates/useDeveloperPreReleaseUpdateController";
+import { AppStatusNotice, buildLatestBuildStatusNotice, buildManualUpdateStatusNotice } from "./features/updates/AppUpdateStatusNotice";
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
@@ -230,6 +231,7 @@ import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
+const MANUAL_UPDATE_STATUS_NOTICE_MS = 6_000;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const FOCUSED_LIVE_TAIL_LIMIT = 8;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
@@ -340,6 +342,8 @@ export default function App() {
     updaterMessage,
   } = useUpdateController();
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
+  const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
+  const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
@@ -589,6 +593,7 @@ export default function App() {
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
   const handleTrayCheckForUpdates = useCallback(() => {
+    setManualUpdateNoticeVisible(true);
     setSettingsSection("general");
     navigateToTab("settings");
     setAccountMenuOpen(false);
@@ -596,8 +601,14 @@ export default function App() {
   }, [handleCheckForUpdates, navigateToTab]);
 
   const handleAppMenuCheckLatestBuild = useCallback(() => {
+    setLatestBuildNoticeVisible(true);
+    if (DEV_SETTINGS_ENABLED && devModeEnabled) {
+      setSettingsSection("dev");
+      navigateToTab("settings");
+      setAccountMenuOpen(false);
+    }
     void developerPreReleaseUpdateController.checkLatestBuild();
-  }, [developerPreReleaseUpdateController.checkLatestBuild]);
+  }, [developerPreReleaseUpdateController.checkLatestBuild, devModeEnabled, navigateToTab]);
 
   const handleAppMenuToggleDevMode = useCallback(() => {
     setDevModeEnabled((enabled) => !enabled);
@@ -718,6 +729,7 @@ export default function App() {
     user,
     status: authStatus,
     cloudConnectionStatus: reportedCloudConnectionStatus,
+    callbackStatus,
     signInWithWebsite,
     signInWithGoogle,
     signInAnonymously,
@@ -2569,6 +2581,29 @@ export default function App() {
       cleanupTauriEventListener(unlisten);
     };
   }, [handleAppMenuCheckLatestBuild]);
+
+  useEffect(() => {
+    if (!manualUpdateNoticeVisible) return undefined;
+    if (updaterChecking) return undefined;
+    if (!updaterMessage && !updaterError) return undefined;
+
+    const timeoutId = window.setTimeout(() => setManualUpdateNoticeVisible(false), MANUAL_UPDATE_STATUS_NOTICE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [manualUpdateNoticeVisible, updaterChecking, updaterError, updaterMessage]);
+
+  useEffect(() => {
+    if (!latestBuildNoticeVisible) return undefined;
+    if (developerPreReleaseUpdateController.busy) return undefined;
+    if (!developerPreReleaseUpdateController.message && !developerPreReleaseUpdateController.error) return undefined;
+
+    const timeoutId = window.setTimeout(() => setLatestBuildNoticeVisible(false), MANUAL_UPDATE_STATUS_NOTICE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    developerPreReleaseUpdateController.busy,
+    developerPreReleaseUpdateController.error,
+    developerPreReleaseUpdateController.message,
+    latestBuildNoticeVisible,
+  ]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -4888,13 +4923,37 @@ export default function App() {
     }
   }, [debugLogPreview]);
 
+  const manualUpdateStatusNotice = manualUpdateNoticeVisible
+    ? buildManualUpdateStatusNotice(updaterChecking, updaterMessage, updaterError)
+    : null;
+  const latestBuildStatusNotice = latestBuildNoticeVisible
+    ? buildLatestBuildStatusNotice(
+      developerPreReleaseUpdateController.status,
+      developerPreReleaseUpdateController.message,
+      developerPreReleaseUpdateController.error,
+    )
+    : null;
+  const manualUpdateStatusRenderedInSettings = activeTab === "settings" && settingsSection === "general";
+  const latestBuildStatusRenderedInSettings =
+    activeTab === "settings" && settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled;
+  const appStatusNotice = latestBuildStatusNotice ?? manualUpdateStatusNotice;
+  const shellStatusNotice =
+    (latestBuildStatusNotice && !latestBuildStatusRenderedInSettings ? latestBuildStatusNotice : null)
+    ?? (manualUpdateStatusNotice && !manualUpdateStatusRenderedInSettings ? manualUpdateStatusNotice : null);
+
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
-    return <AuthConfigurationGate />;
+    return (
+      <>
+        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
+        <AuthConfigurationGate />
+      </>
+    );
   }
 
   if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {
     return (
       <>
+        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
         <AuthRequiredGate onSignIn={() => setAuthModalOpen(true)} />
         {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
       </>
@@ -4988,6 +5047,7 @@ export default function App() {
       localAiSetup={localAiSetup}
       onLocalAiSetupChange={setLocalAiSetup}
       cloudTrialStartedNotice={cloudTrialStartedNotice}
+      authCallbackStatus={callbackStatus}
       onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
       onStartCloudTrialWithEmail={() => void signInWithWebsite()}
       onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
@@ -5003,6 +5063,7 @@ export default function App() {
   if (onboardingOpen) {
     return (
       <>
+        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
         {onboardingModal}
         {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
       </>
@@ -5011,11 +5072,14 @@ export default function App() {
 
   if (preparingFirstDay) {
     return (
-      <FirstDayPreparationScreen
-        phase={firstDayPreparationPhase}
-        progress={firstDayPreparationProgress}
-        workActivityLabel={firstDayWorkLabel}
-      />
+      <>
+        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
+        <FirstDayPreparationScreen
+          phase={firstDayPreparationPhase}
+          progress={firstDayPreparationProgress}
+          workActivityLabel={firstDayWorkLabel}
+        />
+      </>
     );
   }
 
@@ -5064,6 +5128,7 @@ export default function App() {
           onOpenAiSetup={openCloudTrialStartedNoticeAiSetup}
         />
       ) : null}
+      {shellStatusNotice ? <AppStatusNotice notice={shellStatusNotice} /> : null}
       {/* ── Sidebar ── */}
       {activeTab === "settings" ? (
         <SettingsSidebar
@@ -5671,6 +5736,11 @@ export default function App() {
                     watcherPeekEnabled={watcherPeekEnabled}
                     watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
                     watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
+                    preReleaseUpdateStatus={developerPreReleaseUpdateController.status}
+                    preReleaseUpdateMessage={developerPreReleaseUpdateController.message}
+                    preReleaseUpdateError={developerPreReleaseUpdateController.error}
+                    preReleaseUpdateBusy={developerPreReleaseUpdateController.busy}
+                    canInstallPreReleaseUpdate={developerPreReleaseUpdateController.canInstallPreReleaseUpdate}
                     onClearDashboardAiUnavailablePreview={clearDashboardAiUnavailablePreview}
                     onDashboardAiUnavailablePreviewCaseChange={setDashboardAiUnavailablePreviewCase}
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
@@ -5685,6 +5755,8 @@ export default function App() {
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
                     onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
+                    onCheckLatestBuild={() => void developerPreReleaseUpdateController.checkLatestBuild()}
+                    onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     teamsBetaEnabled={teamsBetaEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}

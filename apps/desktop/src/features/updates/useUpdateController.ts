@@ -93,7 +93,7 @@ export function useUpdateController(): UseUpdateControllerResult {
     updaterCheckingRef.current = true;
     if (isManualCheck) {
       setUpdaterChecking(true);
-      setUpdaterMessage(null);
+      setUpdaterMessage("Checking for updates...");
       setUpdaterError(null);
     }
 
@@ -111,6 +111,9 @@ export function useUpdateController(): UseUpdateControllerResult {
         setAvailableUpdatePolicy(nextPolicy);
         setAvailableUpdateSource(mode);
         setUpdatePromptNowMs(nowMs);
+        if (isManualCheck) {
+          setUpdaterMessage(`Drifty ${nextUpdate.version} is available.`);
+        }
         if (!isManualCheck && shouldAutoInstallUpdate({
           autoInstallFutureUpdates,
           policy: nextPolicy,

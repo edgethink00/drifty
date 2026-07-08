@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DevSettingsSection } from "./DevSettingsSection";
 import {
   DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS,
   DEMO_DASHBOARD_REPLAY_DURATION_MIN_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
 } from "./settingsStorage";
+import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
@@ -24,64 +23,6 @@ vi.mock("../../appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
 }));
-
-function renderProductionDevSettings(weekDashboardAxisScalePercent = 75) {
-  const props = {
-    dashboardAiUnavailablePreview: null,
-    dashboardAiUnavailablePreviewCase: "connect-ai" as const,
-    demoDashboardReplaySettings: {
-      preRollSeconds: 5,
-      durationSeconds: 45,
-    },
-    endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
-    forceBrowserHistoryUrlFallbackEnabled: false,
-    forceChromiumAxCaptureEnabled: false,
-    forceChromiumAxExtremeNudgeEnabled: false,
-    forceFrontmostFallbackCaptureEnabled: false,
-    projectPassRuns: [],
-    profileRedesignEnabled: false,
-    projectClassificationEnabled: false,
-    projectClassificationAiReviewEvents: [],
-    projectClassificationCorrectionsBusy: false,
-    onProfileRedesignEnabledChange: vi.fn(),
-    onProjectClassificationEnabledChange: vi.fn(),
-    onRevertProjectClassificationCorrection: vi.fn(),
-    weekDashboardAxisScalePercent,
-    watcherMode: "periodic" as const,
-    watcherPeekEnabled: false,
-    watcherPeriodicMaxMinutes: 20,
-    watcherPeriodicMinMinutes: 5,
-    onClearDashboardAiUnavailablePreview: vi.fn(),
-    onDashboardAiUnavailablePreviewCaseChange: vi.fn(),
-    onDemoDashboardReplayDurationSecondsChange: vi.fn(),
-    onDemoDashboardReplayPreRollSecondsChange: vi.fn(),
-    onEndOfDayReviewPreview: vi.fn(),
-    onForceBrowserHistoryUrlFallbackChange: vi.fn(),
-    onForceChromiumAxCaptureChange: vi.fn(),
-    onForceChromiumAxExtremeNudgeChange: vi.fn(),
-    onForceFrontmostFallbackCaptureChange: vi.fn(),
-    onOpenDebugLogs: vi.fn(),
-    onOpenOnboardingV22Preview: vi.fn(),
-    onOpenReplayOnboarding: vi.fn(),
-    teamsBetaEnabled: false,
-    onTeamsBetaChange: vi.fn(),
-    onPreviewDashboardAiUnavailableCase: vi.fn(),
-    onPreviewDriftAlarm: vi.fn(),
-    onReplayDashboardDemo: vi.fn(),
-    onResetDemoDashboardReplaySettings: vi.fn(),
-    onResetWeekDashboardAxisScalePercent: vi.fn(),
-    onShowWatcherPeek: vi.fn(),
-    onWeekDashboardAxisScalePercentChange: vi.fn(),
-    onWatcherModeChange: vi.fn(),
-    onWatcherPeekEnabledChange: vi.fn(),
-    onWatcherPeriodicMaxChange: vi.fn(),
-    onWatcherPeriodicMinChange: vi.fn(),
-  };
-
-  render(<DevSettingsSection {...props} />);
-
-  return props;
-}
 
 describe("DevSettingsSection", () => {
   afterEach(() => {
@@ -114,111 +55,38 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("heading", { name: /^Debug logs$/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^AX fallback diagnostics$/ })).toBeTruthy();
     expect(screen.getByText("Force browser history URL fallback")).toBeTruthy();
+    expect(screen.getByRole("group", { name: /^Pre-release updates$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Check Latest Build$/i })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Dev$/ })).toBeTruthy();
     expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
     expect(screen.getByText("Teams beta")).toBeTruthy();
-    expect(screen.queryByRole("group", { name: /^Pre-release update$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
   });
 
-  it("calls the browser history fallback handler when toggled", () => {
-    const props = {
-      dashboardAiUnavailablePreview: null,
-      dashboardAiUnavailablePreviewCase: "connect-ai" as const,
-      endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
-      forceBrowserHistoryUrlFallbackEnabled: false,
-      forceChromiumAxCaptureEnabled: false,
-      forceChromiumAxExtremeNudgeEnabled: false,
-      forceFrontmostFallbackCaptureEnabled: false,
-    projectPassRuns: [],
-    profileRedesignEnabled: false,
-    projectClassificationEnabled: false,
-    projectClassificationAiReviewEvents: [],
-    projectClassificationCorrectionsBusy: false,
-    onProfileRedesignEnabledChange: vi.fn(),
-    onProjectClassificationEnabledChange: vi.fn(),
-    onRevertProjectClassificationCorrection: vi.fn(),
-      weekDashboardAxisScalePercent: 80,
-      watcherMode: "periodic" as const,
-      watcherPeekEnabled: false,
-      watcherPeriodicMaxMinutes: 20,
-      watcherPeriodicMinMinutes: 5,
-      onClearDashboardAiUnavailablePreview: vi.fn(),
-      onDashboardAiUnavailablePreviewCaseChange: vi.fn(),
-      onEndOfDayReviewPreview: vi.fn(),
-      onForceBrowserHistoryUrlFallbackChange: vi.fn(),
-      onForceChromiumAxCaptureChange: vi.fn(),
-      onForceChromiumAxExtremeNudgeChange: vi.fn(),
-      onForceFrontmostFallbackCaptureChange: vi.fn(),
-      onOpenDebugLogs: vi.fn(),
-      onOpenOnboardingV22Preview: vi.fn(),
-      onOpenReplayOnboarding: vi.fn(),
-      teamsBetaEnabled: false,
-      onTeamsBetaChange: vi.fn(),
-      onPreviewDashboardAiUnavailableCase: vi.fn(),
-      onPreviewDriftAlarm: vi.fn(),
-      onResetWeekDashboardAxisScalePercent: vi.fn(),
-      onShowWatcherPeek: vi.fn(),
-      onWeekDashboardAxisScalePercentChange: vi.fn(),
-      onWatcherModeChange: vi.fn(),
-      onWatcherPeekEnabledChange: vi.fn(),
-      onWatcherPeriodicMaxChange: vi.fn(),
-      onWatcherPeriodicMinChange: vi.fn(),
-    };
+  it("shows pre-release update status and disables the check while busy", () => {
+    renderProductionDevSettings(75, {
+      preReleaseUpdateStatus: "checking" as const,
+      preReleaseUpdateMessage: "Checking latest build...",
+      preReleaseUpdateBusy: true,
+    });
 
-    render(<DevSettingsSection {...props} />);
+    const checkButton = screen.getByRole("button", { name: /^Checking...$/i });
+    if (!(checkButton instanceof HTMLButtonElement)) throw new Error("Expected a button element.");
+    expect(checkButton.disabled).toBe(true);
+    expect(screen.getByRole("status").textContent).toMatch(/checking latest build/i);
+    expect(screen.queryByRole("button", { name: /^Install Latest Build$/i })).toBeNull();
+  });
+
+  it("calls the browser history fallback handler when toggled", () => {
+    const props = renderProductionDevSettings(80);
     fireEvent.click(screen.getByRole("switch", { name: "Force browser history URL fallback" }));
 
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
   });
 
   it("does not expose the isolated onboarding v2.1 preview", () => {
-    const props = {
-      dashboardAiUnavailablePreview: null,
-      dashboardAiUnavailablePreviewCase: "connect-ai" as const,
-      endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
-      forceBrowserHistoryUrlFallbackEnabled: false,
-      forceChromiumAxCaptureEnabled: false,
-      forceChromiumAxExtremeNudgeEnabled: false,
-      forceFrontmostFallbackCaptureEnabled: false,
-    projectPassRuns: [],
-    profileRedesignEnabled: false,
-    projectClassificationEnabled: false,
-    projectClassificationAiReviewEvents: [],
-    projectClassificationCorrectionsBusy: false,
-    onProfileRedesignEnabledChange: vi.fn(),
-    onProjectClassificationEnabledChange: vi.fn(),
-    onRevertProjectClassificationCorrection: vi.fn(),
-      weekDashboardAxisScalePercent: 80,
-      watcherMode: "periodic" as const,
-      watcherPeekEnabled: false,
-      watcherPeriodicMaxMinutes: 20,
-      watcherPeriodicMinMinutes: 5,
-      onClearDashboardAiUnavailablePreview: vi.fn(),
-      onDashboardAiUnavailablePreviewCaseChange: vi.fn(),
-      onEndOfDayReviewPreview: vi.fn(),
-      onForceBrowserHistoryUrlFallbackChange: vi.fn(),
-      onForceChromiumAxCaptureChange: vi.fn(),
-      onForceChromiumAxExtremeNudgeChange: vi.fn(),
-      onForceFrontmostFallbackCaptureChange: vi.fn(),
-      onOpenDebugLogs: vi.fn(),
-      onOpenOnboardingV22Preview: vi.fn(),
-      onOpenReplayOnboarding: vi.fn(),
-      teamsBetaEnabled: false,
-      onTeamsBetaChange: vi.fn(),
-      onPreviewDashboardAiUnavailableCase: vi.fn(),
-      onPreviewDriftAlarm: vi.fn(),
-      onResetWeekDashboardAxisScalePercent: vi.fn(),
-      onShowWatcherPeek: vi.fn(),
-      onWeekDashboardAxisScalePercentChange: vi.fn(),
-      onWatcherModeChange: vi.fn(),
-      onWatcherPeekEnabledChange: vi.fn(),
-      onWatcherPeriodicMaxChange: vi.fn(),
-      onWatcherPeriodicMinChange: vi.fn(),
-    };
-
-    render(<DevSettingsSection {...props} />);
+    renderProductionDevSettings(80);
 
     expect(screen.queryByText(/^Onboarding v2\.1 preview$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
