@@ -135,7 +135,7 @@ export function DashboardPage({
   ].filter(Boolean).join(" ");
   const isDashboardReplayActive = dashboardReplay !== null;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
-    ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused. Use the sidebar control or move to a day with recorded activity.");
+    ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused or unavailable. Start the tracker, then activity will appear here.");
 
   return (
     <div className={pageClassName}>

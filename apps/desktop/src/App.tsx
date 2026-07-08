@@ -4025,8 +4025,8 @@ export default function App() {
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
   const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable ? "unavailable" : "idle");
   const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused");
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? `${trackerStateLabel} · ${formatDuration(dayTotalSeconds)}`;
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? liveAppLabel;
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? "Tracker setup needed" : `${trackerStateLabel} · ${formatDuration(dayTotalSeconds)}`);
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? "Start tracker to collect activity" : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? `Last capture: ${lastCaptureDistanceLabel}`;
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;

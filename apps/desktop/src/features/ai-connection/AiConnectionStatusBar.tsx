@@ -106,8 +106,8 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
 
   return {
     tone: "error",
-    label: "Disconnected",
-    providerLabel: "Setup needed",
+    label: "AI setup needed",
+    providerLabel: "Open settings",
     memoryLabel: null,
   };
 }

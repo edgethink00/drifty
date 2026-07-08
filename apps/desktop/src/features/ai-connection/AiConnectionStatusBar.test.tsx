@@ -127,8 +127,8 @@ describe("resolveAiConnectionStatus", () => {
 
     expect(status).toMatchObject({
       tone: "error",
-      label: "Disconnected",
-      providerLabel: "Setup needed",
+      label: "AI setup needed",
+      providerLabel: "Open settings",
       memoryLabel: null,
     });
   });

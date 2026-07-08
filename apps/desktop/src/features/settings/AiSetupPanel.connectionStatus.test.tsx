@@ -59,8 +59,8 @@ describe("AiSetupPanel connection status", () => {
     const { setConnectionStatus } = renderPanel({
       connectionStatus: {
         tone: "error",
-        label: "Disconnected",
-        providerLabel: "Setup needed",
+        label: "AI setup needed",
+        providerLabel: "Open settings",
         memoryLabel: null,
       },
     });
