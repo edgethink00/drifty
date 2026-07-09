@@ -12,9 +12,11 @@ function mockCard(overrides: Partial<FocusCardControls> = {}): FocusCardControls
     enabled: false,
     busy: false,
     error: null,
+    detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
     refresh: vi.fn().mockResolvedValue(undefined),
     enable: vi.fn().mockResolvedValue(true),
     disable: vi.fn().mockResolvedValue(undefined),
+    setDetailFlag: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -206,6 +208,80 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
     expect(screen.getByText(/on the board · #3/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /open leaderboard/i }));
     expect(onOpenLeaderboard).toHaveBeenCalledTimes(1);
+  });
+
+  // The detail-share toggles are Dev-gated behind the web account preview flag, so these
+  // tests opt in explicitly; the gate itself is covered by the dedicated suite below.
+  it("renders the three detail opt-ins off by default with per-toggle privacy copy", () => {
+    renderPage({ card: mockCard({ enabled: true }), webAccountPreview: true });
+
+    const categoryToggle = screen.getByRole("switch", { name: "Category breakdown" }) as HTMLInputElement;
+    const hourlyToggle = screen.getByRole("switch", { name: "Hourly focus rhythm" }) as HTMLInputElement;
+    const topAppsToggle = screen.getByRole("switch", { name: "Top apps" }) as HTMLInputElement;
+    expect(categoryToggle.checked).toBe(false);
+    expect(hourlyToggle.checked).toBe(false);
+    expect(topAppsToggle.checked).toBe(false);
+
+    // Per-toggle privacy copy; top apps carries the explicit app-name warning.
+    expect(screen.getByText(/no app names, titles, or urls/i)).toBeTruthy();
+    expect(screen.getByText(/not a timeline of your sessions/i)).toBeTruthy();
+    expect(screen.getByText(/makes those app names public/i)).toBeTruthy();
+  });
+
+  it("flips a detail opt-in through the card controls", () => {
+    const card = mockCard({ enabled: true });
+    renderPage({ card, webAccountPreview: true });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Top apps" }));
+    expect(card.setDetailFlag).toHaveBeenCalledWith("shareTopApps", true);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Category breakdown" }));
+    expect(card.setDetailFlag).toHaveBeenCalledWith("shareCategoryBreakdown", true);
+  });
+
+  it("reflects server-side detail flags and disables the toggles until they load", () => {
+    const { unmount } = renderPage({
+      card: mockCard({
+        enabled: true,
+        detailFlags: { shareCategoryBreakdown: true, shareHourlyPattern: false, shareTopApps: true },
+      }),
+      webAccountPreview: true,
+    });
+    expect((screen.getByRole("switch", { name: "Category breakdown" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("switch", { name: "Hourly focus rhythm" }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("switch", { name: "Top apps" }) as HTMLInputElement).checked).toBe(true);
+    unmount();
+
+    renderPage({ card: mockCard({ detailFlags: null }), webAccountPreview: true });
+    expect((screen.getByRole("switch", { name: "Category breakdown" }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("switch", { name: "Top apps" }) as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("hides the detail-share toggles unless the web account preview flag is on", () => {
+    const card = mockCard({ enabled: true });
+    const { unmount } = renderPage({ card }); // default: webAccountPreview off
+    expect(screen.queryByRole("switch", { name: "Category breakdown" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Hourly focus rhythm" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Top apps" })).toBeNull();
+    expect(document.querySelector(".profile-detail-shares")).toBeNull();
+    // The already-shipped Embeds section stays visible regardless of the flag.
+    expect(document.querySelector('[aria-label="Embeds"]')).not.toBeNull();
+    unmount();
+
+    renderPage({ card: mockCard({ enabled: true }), webAccountPreview: true });
+    expect(screen.getByRole("switch", { name: "Category breakdown" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Hourly focus rhythm" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Top apps" })).toBeTruthy();
+  });
+
+  it("edits the public profile visibility through the draft", () => {
+    const onDraftChange = vi.fn();
+    renderPage({ onDraftChange });
+
+    const toggle = screen.getByRole("switch", { name: "Public profile" }) as HTMLInputElement;
+    expect(toggle.checked).toBe(true); // draft.isPublic
+    fireEvent.click(toggle);
+    expect(onDraftChange).toHaveBeenCalledWith({ isPublic: false });
   });
 });
 

@@ -144,13 +144,15 @@ describe("leaderboardService", () => {
 
     const [profilePayload, profileOptions] = client.__mocks.upsert.mock.calls[0] as [UpsertPayload, { onConflict: string }];
     expect(profileOptions).toEqual({ onConflict: "user_id" });
+    // is_public is intentionally absent: publishing a score must not flip a private profile
+    // back to public (existing rows keep their value; first insert uses the schema default).
     expect(profilePayload).toEqual({
       user_id: "user-1",
       display_name: "Alex Kim",
       timezone: "Asia/Seoul",
-      is_public: true,
       updated_at: profilePayload.updated_at,
     });
+    expect(profilePayload).not.toHaveProperty("is_public");
 
     const [payload, options] = client.__mocks.upsert.mock.calls[1] as [UpsertPayload, { onConflict: string }];
     expect(options).toEqual({ onConflict: "user_id,period" });

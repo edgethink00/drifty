@@ -1,10 +1,21 @@
 import { useCallback, useState } from "react";
 import { buildFocusCardPayloadFromTracker } from "./focusCardPublisher";
-import { fetchOwnFocusCard, publishFocusCard, setFocusCardEnabled } from "./focusCardService";
+import {
+  DEFAULT_FOCUS_CARD_DETAIL_FLAGS,
+  fetchOwnFocusCard,
+  publishFocusCard,
+  setFocusCardDetailFlags,
+  setFocusCardEnabled,
+} from "./focusCardService";
+import type { FocusCardDetailFlags } from "./focusCardService";
 
 // Drives the public focus card's opt-in from the Embed panel. Kept off the leaderboard
 // auto-publish hot path: the card is (re)published when the user enables it and refreshed
 // when the panel opens. `enabled` is null until the first status load.
+//
+// Detail opt-ins (category breakdown / hourly rhythm / top apps) live on the SERVER row —
+// it is the single source of truth, so the get_focus_card gate and the publisher can never
+// disagree about what the user consented to. `detailFlags` is null until the first load.
 export interface UseFocusCardInput {
   readonly windowEndDay: string;
   readonly startOfDayMinutes: number;
@@ -15,28 +26,41 @@ export interface FocusCardControls {
   readonly enabled: boolean | null;
   readonly busy: boolean;
   readonly error: string | null;
+  readonly detailFlags: FocusCardDetailFlags | null;
   readonly refresh: () => Promise<void>;
   readonly enable: () => Promise<boolean>;
   readonly disable: () => Promise<void>;
+  readonly setDetailFlag: (flag: keyof FocusCardDetailFlags, value: boolean) => Promise<void>;
 }
 
 export function useFocusCard(input: UseFocusCardInput): FocusCardControls {
   const { windowEndDay, startOfDayMinutes, includeAiClassifications } = input;
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [detailFlags, setDetailFlags] = useState<FocusCardDetailFlags | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const result = await fetchOwnFocusCard();
     setEnabled(result.success ? (result.data?.enabled ?? false) : false);
+    setDetailFlags(result.success ? (result.data?.detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS) : DEFAULT_FOCUS_CARD_DETAIL_FLAGS);
   }, []);
+
+  const publishWithFlags = useCallback(async (flags: FocusCardDetailFlags) => {
+    const payload = await buildFocusCardPayloadFromTracker({
+      windowEndDay,
+      startOfDayMinutes,
+      includeAiClassifications,
+      ...flags,
+    });
+    return publishFocusCard(payload, true);
+  }, [windowEndDay, startOfDayMinutes, includeAiClassifications]);
 
   const enable = useCallback(async (): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
-      const payload = await buildFocusCardPayloadFromTracker({ windowEndDay, startOfDayMinutes, includeAiClassifications });
-      const result = await publishFocusCard(payload, true);
+      const result = await publishWithFlags(detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS);
       if (!result.success) {
         setError(result.error ?? "Couldn't publish your focus card.");
         return false;
@@ -49,7 +73,7 @@ export function useFocusCard(input: UseFocusCardInput): FocusCardControls {
     } finally {
       setBusy(false);
     }
-  }, [windowEndDay, startOfDayMinutes, includeAiClassifications]);
+  }, [detailFlags, publishWithFlags]);
 
   const disable = useCallback(async () => {
     setBusy(true);
@@ -60,5 +84,27 @@ export function useFocusCard(input: UseFocusCardInput): FocusCardControls {
     setBusy(false);
   }, []);
 
-  return { enabled, busy, error, refresh, enable, disable };
+  const setDetailFlag = useCallback(async (flag: keyof FocusCardDetailFlags, value: boolean) => {
+    const nextFlags: FocusCardDetailFlags = { ...(detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS), [flag]: value };
+    setBusy(true);
+    setError(null);
+    try {
+      // Card live → republish so the flag and its (computed or cleared) data land together.
+      // Card off → persist the flag only; enable() will compute the data under these flags.
+      const result = enabled === true
+        ? await publishWithFlags(nextFlags)
+        : await setFocusCardDetailFlags(nextFlags);
+      if (!result.success) {
+        setError(result.error ?? "Couldn't update your focus card.");
+        return;
+      }
+      setDetailFlags(nextFlags);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [detailFlags, enabled, publishWithFlags]);
+
+  return { enabled, busy, error, detailFlags, refresh, enable, disable, setDetailFlag };
 }

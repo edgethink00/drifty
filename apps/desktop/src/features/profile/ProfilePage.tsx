@@ -10,8 +10,9 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
-import { copyTextToClipboard } from "./ProfileModals";
+import { copyTextToClipboard, PublicProfileToggle } from "./ProfileModals";
 import type { ProfileDraft } from "./ProfileModals";
+import type { FocusCardDetailFlags } from "../share/focusCardService";
 import { renderFocusBadgeSvg, formatFocusDuration, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets, functionsBaseFromSupabaseUrl } from "../share/embedSnippets";
 import type { BadgeThemeOption, CardRangeOption } from "../share/embedSnippets";
@@ -41,6 +42,8 @@ export type ProfilePageProps = {
   profileError: string | null;
   /** Dev-mode flag: render the redesigned layout instead of the classic one. */
   redesign?: boolean;
+  /** Dev-mode flag (web account & embed detail preview): show the per-detail share toggles. */
+  webAccountPreview?: boolean;
   onEditProfile: () => void;
   onCopyProfileLink: () => void;
   onOpenLeaderboard: () => void;
@@ -66,6 +69,7 @@ export function ProfilePage({
   profileMessage,
   profileError,
   redesign = false,
+  webAccountPreview = false,
   onEditProfile,
   onCopyProfileLink,
   onOpenLeaderboard,
@@ -124,6 +128,65 @@ export function ProfilePage({
       setCopiedKey(null);
     }
   };
+
+  // Per-detail opt-ins for the public card. Each one publishes MORE than the base card, so
+  // every toggle carries its own privacy copy; top apps gets an explicit warning because it
+  // is the only one that makes app names public. All default off; server row is the truth.
+  const detailToggleDefs: ReadonlyArray<{
+    key: keyof FocusCardDetailFlags;
+    label: string;
+    description: string;
+    warning: string | null;
+  }> = [
+    {
+      key: "shareCategoryBreakdown",
+      label: "Category breakdown",
+      description: "Adds 7-day totals per category (workspace, learning, …). Categories only — no app names, titles, or URLs.",
+      warning: null,
+    },
+    {
+      key: "shareHourlyPattern",
+      label: "Hourly focus rhythm",
+      description: "Adds your average focus per hour of day over the last 7 days — 24 averages, not a timeline of your sessions.",
+      warning: null,
+    },
+    {
+      key: "shareTopApps",
+      label: "Top apps",
+      description: "Adds your top 5 apps by time this week (15 min or more each).",
+      warning: "This makes those app names public to anyone with your link.",
+    },
+  ];
+  // Dev-gated (web account & embed detail preview): the detail-share toggles render only
+  // while the Dev flag is on; off keeps the shipped pre-detail Profile page unchanged.
+  const detailShares = !webAccountPreview ? null : (
+    <div className="profile-detail-shares" aria-label="Optional card details">
+      <span className="label-mono">Card details</span>
+      <p className="capture-recency profile-detail-shares__intro">
+        Optional extras for your public card — each is off by default and shown only while your card is public.
+      </p>
+      {detailToggleDefs.map((def) => (
+        <label key={def.key} className="profile-detail-shares__row">
+          <input
+            className="drifty-checkbox"
+            type="checkbox"
+            role="switch"
+            aria-label={def.label}
+            checked={card.detailFlags?.[def.key] === true}
+            disabled={card.busy || card.detailFlags === null}
+            onChange={(event) => void card.setDetailFlag(def.key, event.target.checked)}
+          />
+          <span className="profile-detail-shares__copy">
+            <strong>{def.label}</strong>
+            <small>
+              {def.description}
+              {def.warning ? <em className="profile-detail-shares__warning"> {def.warning}</em> : null}
+            </small>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
 
   // Embeds are grouped by what they LOOK like (badge vs card), with the paste formats
   // listed under each visual — the badge is one artifact whether it lands in a README
@@ -271,6 +334,11 @@ export function ProfilePage({
                 onChange={(event) => onDraftChange({ linkedinUrl: event.target.value })}
               />
             </div>
+            <PublicProfileToggle
+              checked={draft.isPublic}
+              disabled={isSavingProfile}
+              onChange={(isPublic) => onDraftChange({ isPublic })}
+            />
             {profileError ? <p className="capture-recency capture-recency--error" style={{ margin: 0 }}>{profileError}</p> : null}
             {profileMessage ? <p className="capture-recency" style={{ margin: 0 }}>{profileMessage}</p> : null}
           </div>
@@ -300,6 +368,7 @@ export function ProfilePage({
             </button>
           )}
         </div>
+        {detailShares}
         {card.enabled === true && snippets ? (
           <div className="profile-identity__link" aria-label="Public profile link">
             <span className="label-mono">Public page</span>
@@ -470,6 +539,11 @@ export function ProfilePage({
                 />
               </label>
             </div>
+            <PublicProfileToggle
+              checked={draft.isPublic}
+              disabled={isSavingProfile}
+              onChange={(isPublic) => onDraftChange({ isPublic })}
+            />
             {profileError ? <p className="profile-note profile-note--error">{profileError}</p> : null}
             {profileMessage ? <p className="profile-note">{profileMessage}</p> : null}
           </div>
@@ -519,6 +593,8 @@ export function ProfilePage({
               </button>
             )}
           </div>
+
+          {detailShares}
 
           {card.enabled === true && snippets ? (
             <div className="profile-share__row" aria-label="Public profile link">

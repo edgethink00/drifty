@@ -14,6 +14,7 @@ import { DevSettingsDiagnosticsBlock } from "./DevSettingsDiagnosticsBlock";
 import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
 import { DevSettingsProfileRedesignBlock } from "./DevSettingsProfileRedesignBlock";
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
+import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 
 type DevSettingsSectionProps = {
@@ -27,6 +28,7 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
   readonly profileRedesignEnabled: boolean;
+  readonly webAccountPreviewEnabled: boolean;
   readonly projectClassificationEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
   readonly projectClassificationCorrectionsBusy: boolean;
@@ -57,6 +59,7 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onProfileRedesignEnabledChange: (enabled: boolean) => void;
+  readonly onWebAccountPreviewEnabledChange: (enabled: boolean) => void;
   readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
@@ -89,6 +92,7 @@ export function DevSettingsSection({
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
   profileRedesignEnabled,
+  webAccountPreviewEnabled,
   projectClassificationEnabled,
   projectClassificationAiReviewEvents,
   projectClassificationCorrectionsBusy,
@@ -119,6 +123,7 @@ export function DevSettingsSection({
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
   onProfileRedesignEnabledChange,
+  onWebAccountPreviewEnabledChange,
   onProjectClassificationEnabledChange,
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
@@ -238,6 +243,10 @@ export function DevSettingsSection({
       <DevSettingsProfileRedesignBlock
         profileRedesignEnabled={profileRedesignEnabled}
         onProfileRedesignEnabledChange={onProfileRedesignEnabledChange}
+      />
+      <DevSettingsWebAccountBlock
+        webAccountPreviewEnabled={webAccountPreviewEnabled}
+        onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}
       />
       <DevSettingsProjectClassificationBlock
         projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
