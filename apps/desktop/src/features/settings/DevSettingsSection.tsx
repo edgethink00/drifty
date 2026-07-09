@@ -249,15 +249,13 @@ export function DevSettingsSection({
         profileRedesignEnabled={profileRedesignEnabled}
         onProfileRedesignEnabledChange={onProfileRedesignEnabledChange}
       />
-<<<<<<< HEAD
       <DevSettingsDeviceSyncBlock
         deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
         onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
-=======
+      />
       <DevSettingsWebAccountBlock
         webAccountPreviewEnabled={webAccountPreviewEnabled}
         onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}
->>>>>>> origin/main
       />
       <DevSettingsProjectClassificationBlock
         projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
