@@ -1,4 +1,5 @@
 import type { ChangeEvent, RefObject } from "react";
+import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
@@ -9,9 +10,10 @@ import type { AiReviewEvent, ProjectPassRun } from "@drifty/domain";
 import type { DemoDashboardReplaySettings } from "./settingsStorage";
 import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUpdateController";
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
+import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { DevSettingsDashboardLayoutBlock } from "./DevSettingsDashboardLayoutBlock";
 import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
-import { DevSettingsDiagnosticsBlock } from "./DevSettingsDiagnosticsBlock";
+import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock } from "./DevSettingsDiagnosticsBlock";
 import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
 import { DevSettingsProfileRedesignBlock } from "./DevSettingsProfileRedesignBlock";
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
@@ -153,18 +155,7 @@ export function DevSettingsSection({
 
   return (
     <div className="settings-section">
-      <DevSettingsDiagnosticsBlock
-        forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
-        forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
-        forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
-        forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
-        onForceBrowserHistoryUrlFallbackChange={onForceBrowserHistoryUrlFallbackChange}
-        onForceChromiumAxCaptureChange={onForceChromiumAxCaptureChange}
-        onForceChromiumAxExtremeNudgeChange={onForceChromiumAxExtremeNudgeChange}
-        onForceFrontmostFallbackCaptureChange={onForceFrontmostFallbackCaptureChange}
-        onOpenDebugLogs={onOpenDebugLogs}
-      />
-      <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onCaptureLocalChange={onEnhancedContextCaptureLocalChange} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onEnabledChange={onEnhancedContextEnabledChange} onRetryLowConfidenceChange={onEnhancedContextRetryLowConfidenceChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
+      <DevSettingsDebugLogsBlock onOpenDebugLogs={onOpenDebugLogs} />
       <div className="settings-block settings-block--dev-preview">
         <h3>Pre-release updates</h3>
         <PreReleaseUpdatesSettingsRow
@@ -177,33 +168,63 @@ export function DevSettingsSection({
           onInstallLatestBuild={onInstallLatestBuild}
         />
       </div>
+
+      {/* Preview feature toggles, grouped in one block */}
+      <div className="settings-block settings-block--dev-preview">
+        <h3>Preview</h3>
+        <DevSettingsProfileRedesignBlock
+          profileRedesignEnabled={profileRedesignEnabled}
+          onProfileRedesignEnabledChange={onProfileRedesignEnabledChange}
+        />
+        <DevSettingsDeviceSyncBlock
+          deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
+          onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
+        />
+        <DevSettingsWebAccountBlock
+          webAccountPreviewEnabled={webAccountPreviewEnabled}
+          onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}
+        />
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Team preview (beta)</div>
+            <div className="desc">Show the Team section in the sidebar for the internal aggregate team focus surface. Dev-mode opt-in.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
+          </div>
+        </div>
+      </div>
+      <SettingsCollapsibleCard title="Enhanced context (Dev)">
+        <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onCaptureLocalChange={onEnhancedContextCaptureLocalChange} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onEnabledChange={onEnhancedContextEnabledChange} onRetryLowConfidenceChange={onEnhancedContextRetryLowConfidenceChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
+      </SettingsCollapsibleCard>
+      <DevSettingsProjectClassificationBlock
+        projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
+        projectClassificationCorrectionsBusy={projectClassificationCorrectionsBusy}
+        projectClassificationEnabled={projectClassificationEnabled}
+        projectPassRuns={projectPassRuns}
+        onProjectClassificationEnabledChange={onProjectClassificationEnabledChange}
+        onRevertProjectClassificationCorrection={onRevertProjectClassificationCorrection}
+      />
+
+      {/* Dev-only tools and previews, all merged under one Dev block at the end */}
       <DevSettingsDashboardLayoutBlock
         weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
         onResetWeekDashboardAxisScalePercent={onResetWeekDashboardAxisScalePercent}
         onWeekDashboardAxisScalePercentChange={onWeekDashboardAxisScalePercentChange}
       />
-      <DevPreviewControls
-        endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
-        showWatcherPeekSettings={showWatcherPeekSettings}
-        watcherMode={watcherMode}
-        watcherPeekEnabled={watcherPeekEnabled}
-        watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
-        watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
-        onEndOfDayReviewPreview={onEndOfDayReviewPreview}
-        onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
-        onOpenReplayOnboarding={onOpenReplayOnboarding}
-        teamsBetaEnabled={teamsBetaEnabled}
-        onTeamsBetaChange={onTeamsBetaChange}
-        onPreviewDriftAlarm={onPreviewDriftAlarm}
-        onShowWatcherPeek={onShowWatcherPeek}
-        onWatcherModeChange={onWatcherModeChange}
-        onWatcherPeekEnabledChange={onWatcherPeekEnabledChange}
-        onWatcherPeriodicMaxChange={onWatcherPeriodicMaxChange}
-        onWatcherPeriodicMinChange={onWatcherPeriodicMinChange}
+      <DevSettingsAxFallbackCard
+        forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
+        forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
+        forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
+        forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
+        onForceBrowserHistoryUrlFallbackChange={onForceBrowserHistoryUrlFallbackChange}
+        onForceChromiumAxCaptureChange={onForceChromiumAxCaptureChange}
+        onForceChromiumAxExtremeNudgeChange={onForceChromiumAxExtremeNudgeChange}
+        onForceFrontmostFallbackCaptureChange={onForceFrontmostFallbackCaptureChange}
       />
-      {DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED ? (
-        <div className="settings-block settings-block--dev-preview">
-          <h3>Dashboard replay</h3>
+      <div className="settings-block settings-block--dev-preview">
+        <h3>Dev</h3>
+        {DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED ? (
           <DashboardDemoReplayControls
             settings={demoDashboardReplaySettings}
             onDurationSecondsChange={onDemoDashboardReplayDurationSecondsChange}
@@ -211,11 +232,8 @@ export function DevSettingsSection({
             onReplay={onReplayDashboardDemo}
             onReset={onResetDemoDashboardReplaySettings}
           />
-        </div>
-      ) : null}
-      {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
-        <div className="settings-block settings-block--dev-preview">
-          <h3>AI unavailable preview</h3>
+        ) : null}
+        {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
           <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="AI unavailable preview case">
             <div>
               <div className="lbl">AI unavailable preview</div>
@@ -243,28 +261,25 @@ export function DevSettingsSection({
               {dashboardAiUnavailablePreview ? <button type="button" className="settings-btn" onClick={onClearDashboardAiUnavailablePreview}>Clear preview</button> : null}
             </div>
           </div>
-        </div>
-      ) : null}
-      <DevSettingsProfileRedesignBlock
-        profileRedesignEnabled={profileRedesignEnabled}
-        onProfileRedesignEnabledChange={onProfileRedesignEnabledChange}
-      />
-      <DevSettingsDeviceSyncBlock
-        deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
-        onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
-      />
-      <DevSettingsWebAccountBlock
-        webAccountPreviewEnabled={webAccountPreviewEnabled}
-        onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}
-      />
-      <DevSettingsProjectClassificationBlock
-        projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
-        projectClassificationCorrectionsBusy={projectClassificationCorrectionsBusy}
-        projectClassificationEnabled={projectClassificationEnabled}
-        projectPassRuns={projectPassRuns}
-        onProjectClassificationEnabledChange={onProjectClassificationEnabledChange}
-        onRevertProjectClassificationCorrection={onRevertProjectClassificationCorrection}
-      />
+        ) : null}
+        <DevPreviewControls
+          endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
+          showWatcherPeekSettings={showWatcherPeekSettings}
+          watcherMode={watcherMode}
+          watcherPeekEnabled={watcherPeekEnabled}
+          watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
+          watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
+          onEndOfDayReviewPreview={onEndOfDayReviewPreview}
+          onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
+          onOpenReplayOnboarding={onOpenReplayOnboarding}
+          onPreviewDriftAlarm={onPreviewDriftAlarm}
+          onShowWatcherPeek={onShowWatcherPeek}
+          onWatcherModeChange={onWatcherModeChange}
+          onWatcherPeekEnabledChange={onWatcherPeekEnabledChange}
+          onWatcherPeriodicMaxChange={onWatcherPeriodicMaxChange}
+          onWatcherPeriodicMinChange={onWatcherPeriodicMinChange}
+        />
+      </div>
     </div>
   );
 }

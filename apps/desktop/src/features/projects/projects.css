@@ -940,3 +940,12 @@
     align-items: flex-start;
   }
 }
+
+.settings-row--project-pass-cost > div:first-child {
+  width: 100%;
+  min-width: 0;
+}
+
+.project-pass-cost__heading {
+  margin: 0 0 0.7rem;
+}

@@ -1,8 +1,11 @@
 import type { ProjectPassRun, ProjectPassTrigger } from "@drifty/domain";
 import { estimateProjectPassSpend, summarizeProjectPassCost } from "../classification/projectPassCostModel";
+import "../projects/projects.css";
 
 export interface ProjectPassCostPanelProps {
   readonly runs: readonly ProjectPassRun[];
+  /** Set when a non-row element (e.g. corrections card) sits between this row and the ones above, so the row card reopens with a top edge. */
+  readonly startsGroup?: boolean;
 }
 
 const TRIGGER_ORDER: readonly ProjectPassTrigger[] = ["schedule", "open", "eod", "manual", "backfill", "discovery"];
@@ -20,18 +23,19 @@ function shortModel(model: string): string {
 }
 
 export function ProjectPassCostPanel(props: ProjectPassCostPanelProps): JSX.Element {
-  const { runs } = props;
+  const { runs, startsGroup = false } = props;
   const summary = summarizeProjectPassCost(runs);
   const spend = estimateProjectPassSpend(runs);
   const modelLabel = spend.models.length > 0 ? spend.models.map(shortModel).join(", ") : "—";
 
   return (
-    <div className="settings-block settings-block--dev-preview settings-block--project-pass-cost">
-      <h3>Project pass cost</h3>
-      {runs.length === 0 ? (
-        <p className="desc">No project passes yet.</p>
-      ) : (
-        <>
+    <div className={`settings-row settings-row--fallback settings-row--project-pass-cost${startsGroup ? " settings-row--group-start" : ""}`}>
+      <div>
+        <h4 className="lbl project-pass-cost__heading">Project pass cost</h4>
+        {runs.length === 0 ? (
+          <p className="desc">No project passes yet.</p>
+        ) : (
+          <>
           <div className="project-pass-cost__stats" role="group" aria-label="Project pass spend">
             <div className="project-pass-cost__stat">
               <span className="project-pass-cost__stat-label">Model</span>
@@ -88,7 +92,8 @@ export function ProjectPassCostPanel(props: ProjectPassCostPanelProps): JSX.Elem
             </span>
           </div>
         </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

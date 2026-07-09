@@ -49,10 +49,10 @@ describe("DevSettingsSection", () => {
     expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles Teams beta from the Dev preview block", () => {
+  it("toggles Team preview from the Preview block", () => {
     const props = renderProductionDevSettings();
 
-    expect(screen.getByText("Teams beta")).toBeTruthy();
+    expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
@@ -61,13 +61,15 @@ describe("DevSettingsSection", () => {
     renderProductionDevSettings();
 
     expect(screen.getByRole("heading", { name: /^Debug logs$/ })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /^AX fallback diagnostics$/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^AX fallback diagnostics/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^AX fallback diagnostics/ }));
     expect(screen.getByText("Force browser history URL fallback")).toBeTruthy();
     expect(screen.getByRole("group", { name: /^Pre-release updates$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Check Latest Build$/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Preview$/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Dev$/ })).toBeTruthy();
     expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
-    expect(screen.getByText("Teams beta")).toBeTruthy();
+    expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
   });
@@ -88,6 +90,7 @@ describe("DevSettingsSection", () => {
 
   it("calls the browser history fallback handler when toggled", () => {
     const props = renderProductionDevSettings(80);
+    fireEvent.click(screen.getByRole("button", { name: /^AX fallback diagnostics/ }));
     fireEvent.click(screen.getByRole("switch", { name: "Force browser history URL fallback" }));
 
     expect(props.onForceBrowserHistoryUrlFallbackChange).toHaveBeenCalledWith(true);
@@ -112,7 +115,7 @@ describe("DevSettingsSection", () => {
     fireEvent.change(durationInput, { target: { value: "60" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
 
-    expect(screen.getByRole("heading", { name: "Dashboard replay" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Preview" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Dashboard demo replay" })).toBeTruthy();
     expect(preRollInput.getAttribute("min")).toBe(String(DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS));
     expect(preRollInput.getAttribute("max")).toBe(String(DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS));
@@ -191,10 +194,12 @@ describe("DevSettingsSection", () => {
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY)).toBe("1");
   });
 
-  it("renders enhanced context controls as off-by-default Dev toggles", () => {
+  it("renders enhanced context controls as off-by-default Dev toggles, collapsed behind a local accordion", () => {
     const props = renderProductionDevSettings();
 
-    expect(screen.getByRole("heading", { name: "Enhanced context (Dev)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Enhanced context \(Dev\)/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Enhanced context \(Dev\)/ }));
+
     expect(screen.getByText(/Separate from current Content context title and YouTube metadata/i)).toBeTruthy();
     expect(screen.getByText(/No raw bodies or screenshots/i)).toBeTruthy();
     expect(screen.getByText(/Keep the first AI request unchanged/i)).toBeTruthy();
