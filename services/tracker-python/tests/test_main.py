@@ -29,6 +29,25 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(start, "2026-04-01T00:00:00")
         self.assertEqual(end, "2026-04-07T23:59:59")
 
+    def test_database_reuses_instance_for_same_db_path(self) -> None:
+        with TemporaryDirectory() as tmp:
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+                first = tracker_main.database()
+                second = tracker_main.database()
+
+        self.assertIs(first, second)
+
+    def test_database_rebuilds_instance_when_db_path_changes(self) -> None:
+        with TemporaryDirectory() as tmp:
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "first.sqlite3"):
+                first = tracker_main.database()
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "second.sqlite3"):
+                second = tracker_main.database()
+
+        self.assertIsNot(first, second)
+        self.assertEqual(first.db_path.name, "first.sqlite3")
+        self.assertEqual(second.db_path.name, "second.sqlite3")
+
     def test_start_tracking_forwards_db_path_to_daemon(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -834,6 +853,125 @@ class TrackerMainTests(unittest.TestCase):
                     tracker_main.daemon()
 
         mock_db.set_meta.assert_any_call(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY, "runtime-fp")
+
+    def test_daemon_survives_tick_exception_and_keeps_sampling(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            snapshot = Snapshot(
+                observed_at="2026-04-06T09:00:05+00:00",
+                app_name="cmux",
+                bundle_id="dev.cmux",
+                window_title="workspace",
+                source="accessibility",
+            )
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+                should_capture=True,
+                reason="ok",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "current_power_state", return_value=power_state
+            ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                tracker_main, "_apply_developer_diagnostics_env"
+            ), patch.object(
+                tracker_main,
+                "current_snapshot",
+                side_effect=[RuntimeError("apple event failed"), snapshot],
+            ), patch.object(
+                tracker_main, "enqueue_youtube_metadata_fetch"
+            ), patch.object(
+                tracker_main, "backfill_browser_history_context"
+            ), patch.object(
+                tracker_main.sys, "stderr", MagicMock()
+            ), patch.object(
+                tracker_main.time, "sleep", side_effect=[None, KeyboardInterrupt]
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        # The first tick raised, the daemon kept looping, and the second tick recorded.
+        mock_db.record_snapshot.assert_called_once()
+        self.assertIs(mock_db.record_snapshot.call_args.args[0], snapshot)
+        mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
+
+    def test_daemon_resets_capture_tick_after_failed_tick(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            snapshot = Snapshot(
+                observed_at="2026-04-06T09:00:05+00:00",
+                app_name="cmux",
+                bundle_id="dev.cmux",
+                window_title="workspace",
+                source="accessibility",
+            )
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+                should_capture=True,
+                reason="ok",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "current_power_state", return_value=power_state
+            ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                tracker_main, "_apply_developer_diagnostics_env"
+            ), patch.object(
+                tracker_main,
+                "current_snapshot",
+                side_effect=[snapshot, RuntimeError("database is locked"), snapshot],
+            ), patch.object(
+                tracker_main.time, "monotonic", side_effect=[100.0, 190.0]
+            ), patch.object(
+                tracker_main, "enqueue_youtube_metadata_fetch"
+            ), patch.object(
+                tracker_main, "backfill_browser_history_context"
+            ), patch.object(
+                tracker_main.sys, "stderr", MagicMock()
+            ), patch.object(
+                tracker_main.time, "sleep", side_effect=[None, None, KeyboardInterrupt]
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        # A failed tick is a capture gap: the capture after the failure must use
+        # the default sample length instead of the 90s elapsed since the last
+        # successful capture.
+        self.assertEqual(mock_db.record_snapshot.call_count, 2)
+        self.assertEqual(
+            mock_db.record_snapshot.call_args_list[1].args[1],
+            tracker_main.SAMPLE_SECONDS,
+        )
+
+    def test_daemon_tick_records_snapshot_and_returns_capture_tick(self) -> None:
+        mock_db = MagicMock()
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:00:05+00:00",
+            app_name="cmux",
+            bundle_id="dev.cmux",
+            window_title="workspace",
+            source="accessibility",
+        )
+        power_state = PowerStateSample(
+            observed_at=datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc),
+            should_capture=True,
+            reason="ok",
+        )
+        with patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+            tracker_main, "seconds_since_last_input", return_value=0.0
+        ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+            tracker_main, "current_snapshot", return_value=snapshot
+        ), patch.object(
+            tracker_main.time, "monotonic", return_value=42.0
+        ), patch.object(
+            tracker_main, "enqueue_youtube_metadata_fetch"
+        ), patch.object(
+            tracker_main, "backfill_browser_history_context"
+        ):
+            next_tick = tracker_main._daemon_tick(mock_db, None)
+
+        self.assertEqual(next_tick, 42.0)
+        mock_db.record_snapshot.assert_called_once()
+        mock_db.set_meta.assert_any_call("last_event_at", snapshot.observed_at)
 
     def test_enqueue_youtube_metadata_fetch_skips_cached_video(self) -> None:
         with TemporaryDirectory() as tmp:

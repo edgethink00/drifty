@@ -971,6 +971,28 @@ fn serve_request_with_lock_mode(
     Err(last_err)
 }
 
+const EXIT_STOP_TRACKING_WAIT: Duration = Duration::from_secs(3);
+
+/// Best-effort stop of the detached sampling daemon on app exit so activity
+/// recording does not keep running after the user quits. Runs the sidecar
+/// `stop_tracking` command on a helper thread and bounds the wait so a wedged
+/// sidecar can never hang shutdown.
+pub fn stop_tracking_daemon_for_app_exit(app: &AppHandle) {
+    let app = app.clone();
+    stop_tracking_daemon_for_app_exit_with(move || {
+        let _ = TrackerController.stop(&app);
+    });
+}
+
+fn stop_tracking_daemon_for_app_exit_with(stop: impl FnOnce() + Send + 'static) -> bool {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        stop();
+        let _ = sender.send(());
+    });
+    receiver.recv_timeout(EXIT_STOP_TRACKING_WAIT).is_ok()
+}
+
 /// Terminate the long-lived serve process (called on app exit). The process also
 /// exits on its own when its stdin reaches EOF, so this is a best-effort cleanup.
 /// The wait for the serve mutex is bounded so a hung round trip can never block
@@ -1335,6 +1357,21 @@ fn resolve_db_path(app: &AppHandle) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stop_daemon_for_app_exit_reports_completed_fast_stop() {
+        assert!(stop_tracking_daemon_for_app_exit_with(|| {}));
+    }
+
+    #[test]
+    fn stop_daemon_for_app_exit_bounds_the_wait_when_stop_hangs() {
+        let started = Instant::now();
+        let completed = stop_tracking_daemon_for_app_exit_with(|| {
+            thread::sleep(EXIT_STOP_TRACKING_WAIT + Duration::from_secs(5));
+        });
+        assert!(!completed);
+        assert!(started.elapsed() < EXIT_STOP_TRACKING_WAIT + Duration::from_secs(2));
+    }
 
     #[test]
     fn tracker_status_serializes_to_camel_case() {

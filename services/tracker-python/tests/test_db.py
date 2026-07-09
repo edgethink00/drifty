@@ -39,7 +39,7 @@ class TrackerDatabaseTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def test_database_context_closes_connection_without_resource_warning(self) -> None:
+    def test_database_context_does_not_leak_connections_or_resource_warnings(self) -> None:
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always", ResourceWarning)
             with self.database.connect() as conn:
@@ -50,6 +50,28 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         resource_warnings = [str(warning.message) for warning in captured if warning.category is ResourceWarning]
         self.assertEqual([], resource_warnings)
+
+    def test_connect_reuses_one_connection_and_commits_without_closing(self) -> None:
+        first = self.database.connect()
+        second = self.database.connect()
+        self.assertIs(first, second)
+
+        with self.database.connect() as conn:
+            conn.execute("INSERT INTO tracker_meta (key, value) VALUES ('commit-key', 'commit-value')")
+
+        # The with-block committed (visible to a separate connection) and the
+        # shared connection stays open and usable afterwards.
+        other = TrackerDatabase(self.db_path)
+        self.assertEqual(other.get_meta("commit-key"), "commit-value")
+        self.assertEqual(self.database.connect().execute("SELECT 1").fetchone()[0], 1)
+
+    def test_connection_context_rolls_back_on_exception(self) -> None:
+        with self.assertRaises(RuntimeError):
+            with self.database.connect() as conn:
+                conn.execute("INSERT INTO tracker_meta (key, value) VALUES ('rollback-key', 'rollback-value')")
+                raise RuntimeError("boom")
+
+        self.assertIsNone(self.database.get_meta("rollback-key"))
 
     def _insert_activity_segment(
         self,
@@ -432,6 +454,66 @@ class TrackerDatabaseTests(unittest.TestCase):
             resolver_calls,
             [("Google Chrome", "Lecture - YouTube - Google Chrome", "2026-04-06T09:00:00+00:00")],
         )
+
+    def test_backfill_recent_browser_history_context_skips_segments_older_than_max_age(self) -> None:
+        for observed_at in ("2026-04-06T08:00:00+00:00", "2026-04-06T09:00:00+00:00"):
+            self.database.record_snapshot(
+                Snapshot(
+                    observed_at=observed_at,
+                    app_name="Google Chrome",
+                    bundle_id="com.google.Chrome",
+                    window_title="Lecture - YouTube - Google Chrome",
+                    source="accessibility",
+                    browser_name="Google Chrome",
+                    browser_automation_status="unavailable",
+                    browser_history_status="no_match",
+                    browser_history_reason="outside_time_window",
+                    browser_history_database_found=True,
+                    browser_history_profile_count=1,
+                    browser_history_candidate_count=0,
+                    browser_history_error_count=0,
+                ),
+                5,
+                max_merge_gap_seconds=180,
+            )
+
+        resolver_calls: list[tuple[str | None, str | None, str | None]] = []
+
+        def resolve_browser_history(app_name: str | None, window_title: str | None, observed_at: str | None) -> BrowserMetadata:
+            resolver_calls.append((app_name, window_title, observed_at))
+            return BrowserMetadata(
+                browser_name="Google Chrome",
+                site_domain="youtube.com",
+                site_title="Lecture - YouTube",
+                site_url="https://www.youtube.com/watch?v=lecture",
+                youtube_video_id="lecture",
+                match_state="browser-history-title",
+                browser_automation_status="granted",
+                browser_history_status="matched",
+                browser_history_reason="matched",
+                browser_history_database_found=True,
+                browser_history_profile_count=1,
+                browser_history_candidate_count=1,
+                browser_history_error_count=0,
+            )
+
+        results = self.database.backfill_recent_browser_history_context(
+            resolve_browser_history,
+            lambda title: True,
+            BrowserHistoryBackfillConfig(
+                observed_at="2026-04-06T09:00:30+00:00",
+                max_age_seconds=180,
+            ),
+        )
+
+        # Only the 09:00 segment falls inside the 180s window; the 08:00
+        # segment is excluded by the SQL cutoff and never reaches the resolver.
+        self.assertEqual(len(results), 1)
+        self.assertEqual(len(resolver_calls), 1)
+        self.assertEqual(resolver_calls[0][2], "2026-04-06T09:00:00+00:00")
+        events = self.database.fetch_timeline("2026-04-06")
+        old_event = next(event for event in events if event["startedAt"] == "2026-04-06T08:00:00+00:00")
+        self.assertIsNone(old_event["siteDomain"])
 
     def test_record_snapshot_does_not_overwrite_existing_site_context_with_browser_history(self) -> None:
         self.database.record_snapshot(

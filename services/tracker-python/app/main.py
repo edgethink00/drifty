@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -69,8 +70,22 @@ def ensure_state_dir() -> None:
     state_dir().mkdir(parents=True, exist_ok=True)
 
 
+_DATABASE_CACHE: TrackerDatabase | None = None
+
+
 def database() -> TrackerDatabase:
-    return TrackerDatabase(DB_PATH)
+    """Return the TrackerDatabase for DB_PATH, reusing one instance per path.
+
+    Constructing a TrackerDatabase runs the full schema/migration pass, and
+    nearly every command handler calls database(); caching keeps that cost to
+    one pass per process instead of one per IPC request. Keyed by the current
+    DB_PATH value so tests (and --db overrides) that repoint DB_PATH get a
+    fresh instance.
+    """
+    global _DATABASE_CACHE
+    if _DATABASE_CACHE is None or _DATABASE_CACHE.db_path != DB_PATH:
+        _DATABASE_CACHE = TrackerDatabase(DB_PATH)
+    return _DATABASE_CACHE
 
 
 def accessibility_granted() -> bool:
@@ -908,6 +923,31 @@ COMMANDS = {
 }
 
 
+def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float | None:
+    """Run one sampling tick and return the next ``last_capture_tick`` value.
+
+    Returns ``None`` when no snapshot was captured (power-suppressed or idle),
+    mirroring a capture gap so the next capture uses the default sample length.
+    """
+    if handle_power_state_sample(db, current_power_state()):
+        return None
+
+    idle_seconds = seconds_since_last_input()
+    if handle_idle_sample(db, idle_seconds):
+        return None
+
+    _apply_developer_diagnostics_env(db)
+    snapshot = current_snapshot(include_system_transient=False)
+    capture_tick = time.monotonic()
+    sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
+    db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
+    enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
+    backfill_browser_history_context(db, snapshot.observed_at)
+    db.set_meta("last_event_at", snapshot.observed_at)
+    db.set_meta("tracker_mode", "tracking")
+    return capture_tick
+
+
 def daemon():
     ensure_state_dir()
     pid_path().write_text(str(os.getpid()))
@@ -918,27 +958,18 @@ def daemon():
 
     try:
         while True:
-            if handle_power_state_sample(db, current_power_state()):
+            try:
+                last_capture_tick = _daemon_tick(db, last_capture_tick)
+            except Exception:
+                # One failed tick (Apple Event failure, a locked database,
+                # an unexpected snapshot shape, ...) must not kill tracking
+                # until the next app relaunch; log it and keep sampling.
+                # KeyboardInterrupt/SystemExit still propagate and stop the loop.
+                print("tracker daemon tick failed:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                # A failed tick means a capture gap, so the next successful
+                # capture starts from the default sample length again.
                 last_capture_tick = None
-                time.sleep(SAMPLE_SECONDS)
-                continue
-
-            idle_seconds = seconds_since_last_input()
-            if handle_idle_sample(db, idle_seconds):
-                last_capture_tick = None
-                time.sleep(SAMPLE_SECONDS)
-                continue
-
-            _apply_developer_diagnostics_env(db)
-            snapshot = current_snapshot(include_system_transient=False)
-            capture_tick = time.monotonic()
-            sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
-            last_capture_tick = capture_tick
-            db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
-            enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
-            backfill_browser_history_context(db, snapshot.observed_at)
-            db.set_meta("last_event_at", snapshot.observed_at)
-            db.set_meta("tracker_mode", "tracking")
             time.sleep(SAMPLE_SECONDS)
     finally:
         pid_path().unlink(missing_ok=True)
