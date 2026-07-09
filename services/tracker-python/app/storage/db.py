@@ -7,7 +7,6 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
@@ -52,19 +51,6 @@ TIMELINE_SEARCH_FIELDS = (
 
 BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]], Any]
 BrowserHistoryTitlePolicy = Callable[[Optional[str]], bool]
-
-
-class ClosingConnection(sqlite3.Connection):
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool:
-        try:
-            return super().__exit__(exc_type, exc_value, traceback)
-        finally:
-            self.close()
 
 
 @dataclass(frozen=True)
@@ -114,10 +100,21 @@ class TrackerDatabase:
         self.db_path = db_path
         self.path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._connection: sqlite3.Connection | None = None
         self._init_db()
 
     def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path, factory=ClosingConnection)
+        """Return this instance's long-lived connection, opening it on first use.
+
+        The returned connection is used as a context manager exactly like the
+        previous per-call connections: ``with self.connect() as conn`` commits
+        on success and rolls back on exception (plain sqlite3.Connection
+        semantics). It just no longer closes on exit, so call sites keep the
+        same commit behavior while skipping a fresh open per operation.
+        """
+        if self._connection is not None:
+            return self._connection
+        connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         # The daemon and the serve process write this database concurrently
@@ -126,7 +123,19 @@ class TrackerDatabase:
         connection.execute("PRAGMA busy_timeout = 5000")
         # WAL mode only needs NORMAL durability; avoids an fsync per commit.
         connection.execute("PRAGMA synchronous = NORMAL")
+        self._connection = connection
         return connection
+
+    def close(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _init_db(self) -> None:
         with self.connect() as conn:
@@ -1290,11 +1299,10 @@ class TrackerDatabase:
                     )
 
         if not dry_run and activity_segments >= 1000:
-            vacuum_connection = self.connect()
-            try:
-                vacuum_connection.execute("VACUUM")
-            finally:
-                vacuum_connection.close()
+            # VACUUM cannot run inside a transaction; the deleting with-block
+            # above has already committed, so the shared connection is back in
+            # autocommit mode here.
+            self.connect().execute("VACUUM")
 
         return {
             "activitySegments": activity_segments,

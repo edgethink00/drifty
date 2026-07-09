@@ -39,7 +39,7 @@ class TrackerDatabaseTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def test_database_context_closes_connection_without_resource_warning(self) -> None:
+    def test_database_context_does_not_leak_connections_or_resource_warnings(self) -> None:
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always", ResourceWarning)
             with self.database.connect() as conn:
@@ -50,6 +50,28 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         resource_warnings = [str(warning.message) for warning in captured if warning.category is ResourceWarning]
         self.assertEqual([], resource_warnings)
+
+    def test_connect_reuses_one_connection_and_commits_without_closing(self) -> None:
+        first = self.database.connect()
+        second = self.database.connect()
+        self.assertIs(first, second)
+
+        with self.database.connect() as conn:
+            conn.execute("INSERT INTO tracker_meta (key, value) VALUES ('commit-key', 'commit-value')")
+
+        # The with-block committed (visible to a separate connection) and the
+        # shared connection stays open and usable afterwards.
+        other = TrackerDatabase(self.db_path)
+        self.assertEqual(other.get_meta("commit-key"), "commit-value")
+        self.assertEqual(self.database.connect().execute("SELECT 1").fetchone()[0], 1)
+
+    def test_connection_context_rolls_back_on_exception(self) -> None:
+        with self.assertRaises(RuntimeError):
+            with self.database.connect() as conn:
+                conn.execute("INSERT INTO tracker_meta (key, value) VALUES ('rollback-key', 'rollback-value')")
+                raise RuntimeError("boom")
+
+        self.assertIsNone(self.database.get_meta("rollback-key"))
 
     def _insert_activity_segment(
         self,
