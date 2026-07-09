@@ -1,4 +1,5 @@
 export * from "./activity";
+export * from "./adaptiveContentContext";
 export * from "./aggregation";
 export * from "./classificationRuleUrl";
 export * from "./commands";

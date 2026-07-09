@@ -258,6 +258,33 @@ fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
     }
 }
 
+/// Equality key over everything that feeds the tray icon rasterizer. The 60s
+/// refresh thread calls update_tray_icon unconditionally; when the key matches
+/// the last applied render, the icon is already correct and the re-rasterize +
+/// set_icon can be skipped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TrayIconRenderKey {
+    focus_bits: u64,
+    drift_bits: u64,
+    neutral_bits: u64,
+    is_dark: bool,
+    style: TrayIconStyle,
+}
+
+impl TrayIconRenderKey {
+    fn new(focus: f64, drift: f64, neutral: f64, is_dark: bool, style: TrayIconStyle) -> Self {
+        Self {
+            focus_bits: focus.to_bits(),
+            drift_bits: drift.to_bits(),
+            neutral_bits: neutral.to_bits(),
+            is_dark,
+            style,
+        }
+    }
+}
+
+static LAST_TRAY_ICON_RENDER_KEY: Mutex<Option<TrayIconRenderKey>> = Mutex::new(None);
+
 fn update_tray_icon(app: &AppHandle) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
@@ -272,14 +299,27 @@ fn update_tray_icon(app: &AppHandle) {
         None => (0.0, 0.0, 0.0),
     };
     let dark = is_dark_mode();
+    let style = latest_tray_icon_style(app);
+
+    let key = TrayIconRenderKey::new(focus, drift, neutral, dark, style);
+    let mut last_key = match LAST_TRAY_ICON_RENDER_KEY.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if *last_key == Some(key) {
+        return;
+    }
+
     let (rgba, w, h) = donut_icon::render(DonutIconRenderInput {
         focus,
         drift,
         neutral,
         is_dark: dark,
-        style: latest_tray_icon_style(app),
+        style,
     });
-    let _ = tray.set_icon(Some(Image::new_owned(rgba, w, h)));
+    if tray.set_icon(Some(Image::new_owned(rgba, w, h))).is_ok() {
+        *last_key = Some(key);
+    }
 }
 
 fn latest_tray_icon_style(app: &AppHandle) -> TrayIconStyle {

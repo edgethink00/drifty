@@ -94,7 +94,7 @@ import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { contextualProjectColorBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
-import { buildDebugLogPayload } from "./features/settings/debugLog";
+import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
@@ -197,7 +197,8 @@ import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, PROFILE_REDESIGN_ENABLED_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialProfileRedesignEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
-import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
+import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
+import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
@@ -219,15 +220,15 @@ import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
-import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
+import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
 import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
 import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
 import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, type ClassificationCorrectionDraft, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
-import { compactHistoryRangeContains, compactHistoryRangeKey, findFreshCompactHistoryLoad, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
-import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
+import { compactHistoryRangeContains, compactHistoryRangeKey, findFreshCompactHistoryLoad, pruneStaleCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
+import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
 import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 
@@ -235,7 +236,7 @@ const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const MANUAL_UPDATE_STATUS_NOTICE_MS = 6_000;
 const APP_REFRESH_INTERVAL_MS = 30_000;
-const FOCUSED_LIVE_TAIL_LIMIT = 8;
+const LIVE_TAIL_LIMIT = 8;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
@@ -351,6 +352,8 @@ export default function App() {
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
+  const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = devModeEnabled && teamsBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
@@ -919,6 +922,7 @@ export default function App() {
   const isSettingsTab = activeTab === "settings";
   const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
   const refreshRequestRef = useRef(0);
+  const lastFullDayRefreshAtRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
   const historySearchRequestRef = useRef(0);
   const dashboardRefreshInputsRef = useRef<DashboardRefreshInputs | null>(null);
@@ -977,6 +981,7 @@ export default function App() {
         materialized: materializeBuiltInHeuristicTimeline(archiveTimelines),
       };
       if (compactHistoryCacheGenerationRef.current === generation) {
+        pruneStaleCompactHistoryLoads(compactHistoryCacheRef.current);
         compactHistoryCacheRef.current.set(key, nextLoad);
         setCompactHistoryCacheRevision((revision) => revision + 1);
       }
@@ -1112,8 +1117,9 @@ export default function App() {
   const driftAlarmDayRef = useRef(logicalTodayIsoDate(startOfDayMinutes));
   const driftAlarmBaseSegmentsRef = useRef<ActivitySegment[]>([]);
   const driftAlarmHistorySegmentsRef = useRef<ActivitySegment[]>([]);
-  const focusedLiveTailRefreshInFlightRef = useRef(false);
+  const liveTailRefreshInFlightRef = useRef(false);
   const rendererFocusedRef = useRef(rendererFocused);
+  const previousRendererFocusedRef = useRef(rendererFocused);
   const selectedDayRef = useRef(selectedDay);
   const lastRendererInteractionAtRef = useRef(Date.now());
   const aiClassificationInFlightRef = useRef(false);
@@ -1671,6 +1677,7 @@ export default function App() {
       ]);
 
       if (refreshRequestRef.current !== requestId) return false;
+      lastFullDayRefreshAtRef.current = Date.now();
 
       const materializedTimeline = materializeBuiltInHeuristicTimeline(timeline);
       const materializedArchiveTimelines = archiveTimelineLoad?.materialized ?? null;
@@ -2155,19 +2162,19 @@ export default function App() {
     }
   }, [shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
 
-  const refreshFocusedLiveTail = useCallback(async (day: string): Promise<boolean> => {
-    if (focusedLiveTailRefreshInFlightRef.current) return false;
+  const refreshLiveTail = useCallback(async (day: string): Promise<boolean> => {
+    if (liveTailRefreshInFlightRef.current) return false;
     if (shouldBlockLocalTrackerAccess) return false;
     if (selectedDayRef.current !== day) return false;
 
-    focusedLiveTailRefreshInFlightRef.current = true;
+    liveTailRefreshInFlightRef.current = true;
     try {
       const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
       const cursor = latestActivitySegmentCursor(segmentsRef.current);
       const liveTail = await trackerClient.getLiveTail({
         ...selectedDayRange,
         ...cursor,
-        limit: FOCUSED_LIVE_TAIL_LIMIT,
+        limit: LIVE_TAIL_LIMIT,
       });
 
       if (selectedDayRef.current !== day) return false;
@@ -2196,7 +2203,7 @@ export default function App() {
       console.warn("Failed to refresh focused live tracker tail", message);
       return false;
     } finally {
-      focusedLiveTailRefreshInFlightRef.current = false;
+      liveTailRefreshInFlightRef.current = false;
     }
   }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
@@ -2283,14 +2290,24 @@ export default function App() {
     if (isPreviewSurface) return undefined;
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRollover()) return;
-      if (rendererFocusedRef.current) {
-        void refreshFocusedLiveTail(selectedDay);
+      // Unfocused ticks use the same cursor live-tail merge as focused ones;
+      // the full-day rebuild runs only as a low-cadence background reconcile
+      // (see resolveAppRefreshTickAction) because rebuilding the whole
+      // dashboard payload every 30s while unfocused is what grew the
+      // main-window WKWebView to multi-GB footprints.
+      const tickAction = resolveAppRefreshTickAction({
+        rendererFocused: rendererFocusedRef.current,
+        nowMs: Date.now(),
+        lastFullDayRefreshAtMs: lastFullDayRefreshAtRef.current,
+      });
+      if (tickAction === "reconcile") {
+        void refresh(selectedDay, { foreground: false });
         return;
       }
-      void refresh(selectedDay);
+      void refreshLiveTail(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [activeTab, classificationRange, dashPeriod, isPreviewSurface, refreshFocusedLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
+  }, [activeTab, classificationRange, dashPeriod, isPreviewSurface, refreshLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -2309,6 +2326,22 @@ export default function App() {
     }, DRIFT_ALARM_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [driftAlertsEnabled, isPreviewSurface, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
+
+  useEffect(() => {
+    if (shouldBlockLocalTrackerAccess) return undefined;
+    if (isPreviewSurface) return undefined;
+    const wasFocused = previousRendererFocusedRef.current;
+    previousRendererFocusedRef.current = rendererFocused;
+    if (wasFocused || !rendererFocused) return undefined;
+    if (!hasLoadedOnce) return undefined;
+    // Background ticks only merge the append-only live tail, so a renderer
+    // regaining focus after a background stretch may hold stale snapshot,
+    // metrics, or reclassified categories — reconcile once, unless a full
+    // refresh already ran within the normal tick interval.
+    if (Date.now() - lastFullDayRefreshAtRef.current < APP_REFRESH_INTERVAL_MS) return undefined;
+    void refresh(selectedDayRef.current);
+    return undefined;
+  }, [hasLoadedOnce, isPreviewSurface, rendererFocused, shouldBlockLocalTrackerAccess]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -2445,18 +2478,36 @@ export default function App() {
     const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
     const forceFrontmostFallbackCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled;
     const forceBrowserHistoryUrlFallback = DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled;
+    const enhancedContextSourceFamilies = ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS
+      .filter((option) => effectiveEnhancedContextSettings.sourceFamilies[option.family])
+      .map((option) => option.family);
+    const developerDiagnosticsSettings = {
+      forceChromiumAxCapture,
+      forceFrontmostFallbackCapture,
+      forceBrowserHistoryUrlFallback,
+      enhancedContextEnabled: effectiveEnhancedContextSettings.enabled,
+      enhancedContextCaptureLocal: effectiveEnhancedContextSettings.captureLocal,
+      enhancedContextSourceFamilies,
+    };
     window.localStorage.setItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, forceChromiumAxCapture ? "1" : "0");
     window.localStorage.setItem(FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, forceFrontmostFallbackCapture ? "1" : "0");
     window.localStorage.setItem(FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, forceBrowserHistoryUrlFallback ? "1" : "0");
-    void trackerClient.setDeveloperDiagnostics?.({ forceChromiumAxCapture, forceFrontmostFallbackCapture, forceBrowserHistoryUrlFallback }).catch((nextError) => {
+    void trackerClient.setDeveloperDiagnostics?.(developerDiagnosticsSettings).catch((nextError) => {
       console.warn("Failed to persist tracker developer diagnostics", nextError);
     });
-  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceFrontmostFallbackCaptureEnabled]);
+  }, [devModeEnabled, effectiveEnhancedContextSettings, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceFrontmostFallbackCaptureEnabled]);
 
   useEffect(() => {
     const forceChromiumAxExtremeNudge = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled;
     window.localStorage.setItem(FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, forceChromiumAxExtremeNudge ? "1" : "0");
   }, [devModeEnabled, forceChromiumAxExtremeNudgeEnabled]);
+
+  useEffect(() => {
+    persistEnhancedContextSettings(enhancedContextSettings, isDevModeActive);
+    if (!isDevModeActive && hasEnabledEnhancedContextSetting(enhancedContextSettings)) {
+      setEnhancedContextSettings(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+    }
+  }, [enhancedContextSettings, isDevModeActive]);
 
   useEffect(() => {
     driftAlarmSnoozeRef.current = driftAlarmSnooze;
@@ -2918,6 +2969,7 @@ export default function App() {
                   range: "current_day",
                 });
                 if (result.classification.category === "unknown") {
+                  pruneExpiredDriftAlarmAiRetries(liveDriftAlarmAiRetryAfterRef.current, Date.now());
                   liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS);
                 } else {
                   liveDriftAlarmAiRetryAfterRef.current.delete(liveAiCandidate.key);
@@ -2934,6 +2986,7 @@ export default function App() {
                   range: "current_day",
                   error_kind: toAnalyticsErrorKind(result.reason),
                 });
+                pruneExpiredDriftAlarmAiRetries(liveDriftAlarmAiRetryAfterRef.current, Date.now());
                 liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
                 publishEvaluationDriftAlarmTrayStatus({
                   kind: "suppressed",
@@ -2950,6 +3003,7 @@ export default function App() {
           }).catch((error) => {
             if (liveDriftAlarmAiRequestInFlightRef.current !== liveAiCandidate.key) return;
             liveDriftAlarmAiRequestInFlightRef.current = null;
+            pruneExpiredDriftAlarmAiRetries(liveDriftAlarmAiRetryAfterRef.current, Date.now());
             liveDriftAlarmAiRetryAfterRef.current.set(liveAiCandidate.key, Date.now() + LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS);
             recordDriftAlarmDebugEvent({
               kind: "live_ai_error",
@@ -4516,7 +4570,11 @@ export default function App() {
           setAiClassificationUsage(nextUsage);
           setAiClassificationUsageDay(today);
         }
-        if (summary.savedRecords > 0 && selectedDayRef.current === today) await refresh(today);
+        // While unfocused, take the lite path: the reclassified categories only
+        // need the day timeline rebuilt, not the status/snapshot/history loads,
+        // and the foreground-grade rebuild every batch is a background heap-churn
+        // driver on par with the removed 30s full refresh.
+        if (summary.savedRecords > 0 && selectedDayRef.current === today) await refresh(today, { foreground: rendererFocusedRef.current });
       }
       captureAiClassificationRun(trigger, providerKind, "current_day", summary);
       if (summary.savedRecords > 0) {
@@ -4898,6 +4956,29 @@ export default function App() {
       return next;
     });
   }, []);
+  const handleEnhancedContextEnabledChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings(enabled
+      ? { ...DEFAULT_ENHANCED_CONTEXT_SETTINGS, enabled: true }
+      : DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+  }, []);
+  const handleEnhancedContextCaptureLocalChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({ ...current, captureLocal: enabled }));
+  }, []);
+  const handleEnhancedContextRetryLowConfidenceChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({ ...current, retryLowConfidence: enabled }));
+  }, []);
+  const handleEnhancedContextDebugLoggingChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({ ...current, debugLogging: enabled }));
+  }, []);
+  const handleEnhancedContextSourceFamilyChange = useCallback((family: EnhancedContextSourceFamily, enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({
+      ...current,
+      sourceFamilies: {
+        ...current.sourceFamilies,
+        [family]: enabled,
+      },
+    }));
+  }, []);
   const handleOpenDebugLogs = useCallback(async () => {
     const snapshotForDebug = status?.running === true
       ? await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
@@ -4918,6 +4999,10 @@ export default function App() {
         forceFrontmostFallbackCapture: DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled,
         forceBrowserHistoryUrlFallback: DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled,
         forceChromiumAxExtremeNudge: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+      },
+      enhancedContext: {
+        settings: effectiveEnhancedContextSettings,
+        events: readRecentEnhancedContextDebugEvents(),
       },
       status,
       accessibilityGranted,
@@ -4955,7 +5040,7 @@ export default function App() {
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -5778,6 +5863,7 @@ export default function App() {
                     demoDashboardReplaySettings={demoDashboardReplaySettings}
                     projectPassRuns={projectClassification.passRuns}
                     endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
+                    enhancedContextSettings={effectiveEnhancedContextSettings}
                     forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
@@ -5802,6 +5888,11 @@ export default function App() {
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
                     onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
                     onEndOfDayReviewPreview={handleEndOfDayReviewPreview}
+                    onEnhancedContextCaptureLocalChange={handleEnhancedContextCaptureLocalChange}
+                    onEnhancedContextDebugLoggingChange={handleEnhancedContextDebugLoggingChange}
+                    onEnhancedContextEnabledChange={handleEnhancedContextEnabledChange}
+                    onEnhancedContextRetryLowConfidenceChange={handleEnhancedContextRetryLowConfidenceChange}
+                    onEnhancedContextSourceFamilyChange={handleEnhancedContextSourceFamilyChange}
                     onForceBrowserHistoryUrlFallbackChange={setForceBrowserHistoryUrlFallbackEnabled}
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}

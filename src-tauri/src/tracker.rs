@@ -35,6 +35,17 @@ pub struct AppIdentity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeveloperDiagnosticsSettings {
+    pub force_chromium_ax_capture: bool,
+    pub force_frontmost_fallback_capture: bool,
+    pub force_browser_history_url_fallback: bool,
+    pub enhanced_context_enabled: bool,
+    pub enhanced_context_capture_local: bool,
+    pub enhanced_context_source_families: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TrackerStatus {
     pub running: bool,
     pub accessibility_granted: bool,
@@ -175,18 +186,12 @@ impl TrackerController {
     pub fn set_developer_diagnostics(
         &self,
         app: &AppHandle,
-        force_chromium_ax_capture: bool,
-        force_frontmost_fallback_capture: bool,
-        force_browser_history_url_fallback: bool,
+        settings: DeveloperDiagnosticsSettings,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "set_developer_diagnostics",
-            build_developer_diagnostics_payload(
-                force_chromium_ax_capture,
-                force_frontmost_fallback_capture,
-                force_browser_history_url_fallback,
-            ),
+            build_developer_diagnostics_payload(&settings),
         )
     }
 
@@ -966,6 +971,28 @@ fn serve_request_with_lock_mode(
     Err(last_err)
 }
 
+const EXIT_STOP_TRACKING_WAIT: Duration = Duration::from_secs(3);
+
+/// Best-effort stop of the detached sampling daemon on app exit so activity
+/// recording does not keep running after the user quits. Runs the sidecar
+/// `stop_tracking` command on a helper thread and bounds the wait so a wedged
+/// sidecar can never hang shutdown.
+pub fn stop_tracking_daemon_for_app_exit(app: &AppHandle) {
+    let app = app.clone();
+    stop_tracking_daemon_for_app_exit_with(move || {
+        let _ = TrackerController.stop(&app);
+    });
+}
+
+fn stop_tracking_daemon_for_app_exit_with(stop: impl FnOnce() + Send + 'static) -> bool {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        stop();
+        let _ = sender.send(());
+    });
+    receiver.recv_timeout(EXIT_STOP_TRACKING_WAIT).is_ok()
+}
+
 /// Terminate the long-lived serve process (called on app exit). The process also
 /// exits on its own when its stdin reaches EOF, so this is a best-effort cleanup.
 /// The wait for the serve mutex is bounded so a hung round trip can never block
@@ -1116,16 +1143,8 @@ fn build_delete_history_range_payload(
     payload
 }
 
-fn build_developer_diagnostics_payload(
-    force_chromium_ax_capture: bool,
-    force_frontmost_fallback_capture: bool,
-    force_browser_history_url_fallback: bool,
-) -> Value {
-    json!({
-        "forceChromiumAxCapture": force_chromium_ax_capture,
-        "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
-        "forceBrowserHistoryUrlFallback": force_browser_history_url_fallback,
-    })
+fn build_developer_diagnostics_payload(settings: &DeveloperDiagnosticsSettings) -> Value {
+    json!(settings)
 }
 
 fn build_browser_history_import_payload(lookback_days: Option<u32>) -> Value {
@@ -1340,6 +1359,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stop_daemon_for_app_exit_reports_completed_fast_stop() {
+        assert!(stop_tracking_daemon_for_app_exit_with(|| {}));
+    }
+
+    #[test]
+    fn stop_daemon_for_app_exit_bounds_the_wait_when_stop_hangs() {
+        let started = Instant::now();
+        let completed = stop_tracking_daemon_for_app_exit_with(|| {
+            thread::sleep(EXIT_STOP_TRACKING_WAIT + Duration::from_secs(5));
+        });
+        assert!(!completed);
+        assert!(started.elapsed() < EXIT_STOP_TRACKING_WAIT + Duration::from_secs(2));
+    }
+
+    #[test]
     fn tracker_status_serializes_to_camel_case() {
         let status = TrackerStatus {
             running: true,
@@ -1412,7 +1446,17 @@ mod tests {
 
     #[test]
     fn developer_diagnostics_payload_preserves_browser_history_fallback_flag() {
-        let payload = build_developer_diagnostics_payload(true, false, true);
+        let payload = build_developer_diagnostics_payload(&DeveloperDiagnosticsSettings {
+            force_chromium_ax_capture: true,
+            force_frontmost_fallback_capture: false,
+            force_browser_history_url_fallback: true,
+            enhanced_context_enabled: true,
+            enhanced_context_capture_local: false,
+            enhanced_context_source_families: vec![
+                "document_knowledge".to_owned(),
+                "calendar_meeting".to_owned(),
+            ],
+        });
 
         assert_eq!(
             payload,
@@ -1420,6 +1464,9 @@ mod tests {
                 "forceChromiumAxCapture": true,
                 "forceFrontmostFallbackCapture": false,
                 "forceBrowserHistoryUrlFallback": true,
+                "enhancedContextEnabled": true,
+                "enhancedContextCaptureLocal": false,
+                "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],
             })
         );
     }

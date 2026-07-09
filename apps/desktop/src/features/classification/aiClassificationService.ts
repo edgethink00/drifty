@@ -1,5 +1,6 @@
 import { classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import type {
+  AdaptiveContentContext,
   ActivityCategory,
   ActivityClassificationRecord,
   ActivitySegment,
@@ -17,9 +18,16 @@ import {
   invokeOpenAiChatWithManagedLocalRetry,
   type NativeOpenAiChatResponse,
 } from "./managedLocalAiChat";
-import { toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
+import {
+  buildProviderSafeEnhancedContext,
+  enhancedContextRetryEligibility,
+  type ContentContextEgressSummary,
+} from "./contentContextEgressPolicy";
+import { toLocalProviderEnhancedRetryRequest, toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
+import { resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
+import { recordEnhancedContextDebugEvent, type EnhancedContextDebugReason, type EnhancedContextDebugStatus } from "../settings/debugLog";
 import { withClassificationActivity } from "./classificationActivity";
 
 const EDGE_MAX_BATCH_SIZE = 20;
@@ -36,6 +44,8 @@ const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
 const AI_CLASSIFICATION_PROMPT_VERSION = "v6-productivity-rubric";
+const ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD = 0.55;
+const MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS = 512;
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
 const YOUTUBE_BROWSE_INHERITANCE_MAX_CONFIDENCE = 0.85;
 const REDDIT_COMMUNITY_PATTERN = /\br\/([A-Za-z0-9_]{2,32})\b/i;
@@ -67,6 +77,8 @@ const ACTIVITY_CATEGORIES = new Set<ActivityCategory>([
 ]);
 
 const PRODUCTIVITY_LABELS = new Set<ProductivityLabel>(["focus", "neutral", "drift"]);
+const enhancedContextRetriedFingerprints = new Set<string>();
+const enhancedContextRetriedFingerprintOrder: string[] = [];
 
 type EdgeClassification = {
   id?: unknown;
@@ -353,7 +365,7 @@ async function runAiClassificationImpl(query: ClassificationQuery, batchSize = D
   const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(reusableResult.misses, options.level ?? "fine");
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, representatives, membersByRepSegmentId, options.localProvider, workProfile);
+    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, representatives, membersByRepSegmentId, options.localProvider, workProfile, adaptiveContextBySegmentId(segments));
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -470,7 +482,7 @@ async function runAiClassificationForUnknownThresholdImpl(query: ClassificationQ
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, null, options.localProvider, workProfile);
+    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, null, options.localProvider, workProfile, adaptiveContextBySegmentId(segments));
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -725,6 +737,14 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     youtubeIsShorts: null,
     ...(redditCommunity ? { redditCommunity } : {}),
   };
+}
+
+function adaptiveContextBySegmentId(segments: readonly ActivitySegment[]): ReadonlyMap<string, AdaptiveContentContext> {
+  const contexts = new Map<string, AdaptiveContentContext>();
+  for (const segment of segments) {
+    if (segment.adaptiveContentContext) contexts.set(segment.id, segment.adaptiveContentContext);
+  }
+  return contexts;
 }
 
 function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): Array<{
@@ -1280,6 +1300,7 @@ async function runLocalAiClassification(
   membersByRepSegmentId: Map<string, MinimizedActivityPayload[]> | null,
   provider: LocalAiProviderConfig,
   workProfile: string | null,
+  adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>,
 ): Promise<AiClassificationSummary> {
   const providerRequest = toLocalProviderRequest(provider, representatives, workProfile);
   if (!providerRequest) {
@@ -1301,7 +1322,14 @@ async function runLocalAiClassification(
   }
 
   const data = toLocalClassificationResponse(response, providerRequest.model);
-  const aiRecords = expandClusterRecords(toClassificationRecords(data, representatives), membersByRepSegmentId);
+  const representativeRecords = await selectLocalAiClassificationRecords({
+    firstPassRecords: toClassificationRecords(data, representatives),
+    representatives,
+    provider,
+    workProfile,
+    adaptiveContextBySegmentId,
+  });
+  const aiRecords = expandClusterRecords(representativeRecords, membersByRepSegmentId);
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
@@ -1323,6 +1351,254 @@ async function runLocalAiClassification(
     message: `Saved ${aiSaveResult.saved} AI and ${deterministicSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
   };
+}
+
+async function selectLocalAiClassificationRecords(input: {
+  readonly firstPassRecords: ActivityClassificationRecord[];
+  readonly representatives: MinimizedActivityPayload[];
+  readonly provider: LocalAiProviderConfig;
+  readonly workProfile: string | null;
+  readonly adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>;
+}): Promise<ActivityClassificationRecord[]> {
+  const firstPassBySegmentId = new Map(input.firstPassRecords.map((record) => [record.segmentId, record]));
+  const selectedRecords: ActivityClassificationRecord[] = [];
+  for (const payload of input.representatives) {
+    const firstPassRecord = firstPassBySegmentId.get(payload.segmentId);
+    if (!firstPassRecord) continue;
+    const enhancedRetryRecord = await classifyLocalEnhancedRetry({
+      payload,
+      firstPassRecord,
+      provider: input.provider,
+      workProfile: input.workProfile,
+      adaptiveContextBySegmentId: input.adaptiveContextBySegmentId,
+    });
+    selectedRecords.push(selectPreferredAiRecord(firstPassRecord, enhancedRetryRecord));
+  }
+  return selectedRecords;
+}
+
+async function classifyLocalEnhancedRetry(input: {
+  readonly payload: MinimizedActivityPayload;
+  readonly firstPassRecord: ActivityClassificationRecord;
+  readonly provider: LocalAiProviderConfig;
+  readonly workProfile: string | null;
+  readonly adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>;
+}): Promise<ActivityClassificationRecord | null> {
+  const settings = resolveInitialEnhancedContextSettings();
+  const devModeEnabled = resolveInitialDevModeEnabled();
+  const egress = buildProviderSafeEnhancedContext({
+    mode: "enhanced_retry",
+    devModeEnabled,
+    settings,
+    context: input.adaptiveContextBySegmentId.get(input.payload.segmentId) ?? null,
+  });
+  const debugLoggingEnabled = settings.debugLogging;
+  if (debugLoggingEnabled) {
+    recordEnhancedContextDebugEvent({
+      kind: "egress_decision",
+      status: egressDebugStatus(egress.summary),
+      reason: egressDebugReason(egress.summary),
+      egress: egress.summary,
+    });
+  }
+  const firstPassConfidence = finiteConfidence(input.firstPassRecord.confidence);
+  const alreadyRetried = enhancedContextRetriedFingerprints.has(input.payload.inputFingerprint);
+  const eligibility = enhancedContextRetryEligibility({
+    devModeEnabled,
+    settings,
+    alreadyRetried,
+    category: input.firstPassRecord.category,
+    confidence: firstPassConfidence,
+    evidence: retryEvidenceForRecord(input.firstPassRecord),
+    threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+    providerContext: egress.providerContext,
+  });
+  if (eligibility.kind !== "eligible" || !egress.providerContext) {
+    if (debugLoggingEnabled) {
+      recordRetryDebugEvent({
+        status: "retry_skipped",
+        reason: eligibility.reason,
+        threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+        firstPassConfidence,
+        firstPassCategory: input.firstPassRecord.category,
+        providerSafeItemCount: egress.summary.providerSafeItemCount,
+      });
+    }
+    return null;
+  }
+
+  const enhancedPayload = await toEnhancedRetryPayload(input.payload, egress.providerContext);
+  const providerRequest = toLocalProviderEnhancedRetryRequest({
+    provider: input.provider,
+    payload: [enhancedPayload],
+    workProfile: input.workProfile,
+    enhancedRetryContext: egress.providerContext,
+  });
+  if (!providerRequest) {
+    if (debugLoggingEnabled) {
+      recordRetryDebugEvent({
+        status: "retry_skipped",
+        reason: "provider_error",
+        threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+        firstPassConfidence,
+        firstPassCategory: input.firstPassRecord.category,
+        providerSafeItemCount: egress.summary.providerSafeItemCount,
+      });
+    }
+    return null;
+  }
+
+  markEnhancedContextRetryFingerprint(input.payload.inputFingerprint);
+  if (debugLoggingEnabled) {
+    recordRetryDebugEvent({
+      status: "retry_sent",
+      reason: eligibility.reason,
+      threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+      firstPassConfidence,
+      firstPassCategory: input.firstPassRecord.category,
+      providerSafeItemCount: egress.summary.providerSafeItemCount,
+    });
+  }
+  try {
+    const response = await invokeOpenAiChatWithManagedLocalRetry(
+      providerRequest.request,
+      input.provider.provider === "managed_local" ? input.provider : null,
+    );
+    const status = typeof response.status === "number" ? response.status : 0;
+    if (status < 200 || status >= 300) {
+      if (debugLoggingEnabled) {
+        recordRetryDebugEvent({
+          status: "error",
+          reason: "provider_error",
+          threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+          firstPassConfidence,
+          firstPassCategory: input.firstPassRecord.category,
+          providerSafeItemCount: egress.summary.providerSafeItemCount,
+        });
+      }
+      return null;
+    }
+
+    const data = toLocalClassificationResponse(response, providerRequest.model);
+    const enhancedRetryRecord = toClassificationRecords(data, [enhancedPayload])[0] ?? null;
+    if (debugLoggingEnabled && enhancedRetryRecord) {
+      recordRetryDebugEvent({
+        status: "selected",
+        reason: eligibility.reason,
+        threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+        firstPassConfidence,
+        firstPassCategory: input.firstPassRecord.category,
+        providerSafeItemCount: egress.summary.providerSafeItemCount,
+        selectedResult: enhancedRetryImproves(input.firstPassRecord, enhancedRetryRecord) ? "enhanced_retry" : "first_pass",
+      });
+    }
+    return enhancedRetryRecord;
+  } catch (error) {
+    if (debugLoggingEnabled) {
+      recordRetryDebugEvent({
+        status: "error",
+        reason: "provider_error",
+        threshold: ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD,
+        firstPassConfidence,
+        firstPassCategory: input.firstPassRecord.category,
+        providerSafeItemCount: egress.summary.providerSafeItemCount,
+      });
+    }
+    if (error instanceof Error) return null;
+    return null;
+  }
+}
+
+function markEnhancedContextRetryFingerprint(fingerprintValue: string): void {
+  if (enhancedContextRetriedFingerprints.has(fingerprintValue)) return;
+  enhancedContextRetriedFingerprints.add(fingerprintValue);
+  enhancedContextRetriedFingerprintOrder.push(fingerprintValue);
+  if (enhancedContextRetriedFingerprintOrder.length <= MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS) return;
+  const expired = enhancedContextRetriedFingerprintOrder.shift();
+  if (expired) enhancedContextRetriedFingerprints.delete(expired);
+}
+
+function egressDebugStatus(summary: ContentContextEgressSummary): EnhancedContextDebugStatus {
+  if (summary.providerSafeItemCount > 0) return "allowed";
+  if (summary.decisionCounts.blocked > 0) return "blocked";
+  if (summary.decisionCounts.local_only > 0) return "local_only";
+  return "dropped";
+}
+
+function egressDebugReason(summary: ContentContextEgressSummary): EnhancedContextDebugReason {
+  if ((summary.dropReasonCounts.sensitive_surface ?? 0) > 0) return "sensitive_surface";
+  if (summary.providerSafeItemCount === 0) return "no_provider_safe_context";
+  if (summary.decisionCounts.local_only > 0) return "local_only_policy";
+  return "egress_filtered";
+}
+
+function recordRetryDebugEvent(input: {
+  readonly status: EnhancedContextDebugStatus;
+  readonly reason: EnhancedContextDebugReason;
+  readonly threshold: number;
+  readonly firstPassConfidence: number;
+  readonly firstPassCategory: ActivityCategory;
+  readonly providerSafeItemCount: number;
+  readonly selectedResult?: "first_pass" | "enhanced_retry";
+}): void {
+  recordEnhancedContextDebugEvent({
+    kind: "retry_decision",
+    status: input.status,
+    reason: input.reason,
+    retry: {
+      threshold: input.threshold,
+      firstPassConfidence: input.firstPassConfidence,
+      firstPassCategory: input.firstPassCategory,
+      providerSafeItemCount: input.providerSafeItemCount,
+      ...(input.selectedResult ? { selectedResult: input.selectedResult } : {}),
+    },
+  });
+}
+
+async function toEnhancedRetryPayload(
+  payload: MinimizedActivityPayload,
+  enhancedRetryContext: NonNullable<ReturnType<typeof buildProviderSafeEnhancedContext>["providerContext"]>,
+): Promise<MinimizedActivityPayload> {
+  const fingerprintInput = {
+    fingerprintVersion: AI_CLASSIFICATION_PROMPT_VERSION,
+    pass: "enhanced_retry",
+    firstPassFingerprint: payload.inputFingerprint,
+    enhancedRetryContext,
+  };
+  return {
+    ...payload,
+    inputFingerprint: await fingerprint(JSON.stringify(fingerprintInput)),
+  };
+}
+
+function selectPreferredAiRecord(
+  firstPassRecord: ActivityClassificationRecord,
+  enhancedRetryRecord: ActivityClassificationRecord | null,
+): ActivityClassificationRecord {
+  if (!enhancedRetryRecord) return firstPassRecord;
+  if (enhancedRetryImproves(firstPassRecord, enhancedRetryRecord)) return enhancedRetryRecord;
+  return firstPassRecord;
+}
+
+function enhancedRetryImproves(
+  firstPassRecord: ActivityClassificationRecord,
+  enhancedRetryRecord: ActivityClassificationRecord,
+): boolean {
+  if (enhancedRetryRecord.category === "unknown") return false;
+  if (firstPassRecord.category === "unknown") return true;
+  const firstPassConfidence = finiteConfidence(firstPassRecord.confidence);
+  const enhancedConfidence = finiteConfidence(enhancedRetryRecord.confidence);
+  if (retryEvidenceForRecord(firstPassRecord) === "insufficient") {
+    return enhancedConfidence >= firstPassConfidence;
+  }
+  return firstPassConfidence <= ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD
+    && enhancedConfidence > firstPassConfidence;
+}
+
+function retryEvidenceForRecord(record: ActivityClassificationRecord): "normal" | "insufficient" {
+  return /\binsufficient\b|\bnot enough evidence\b|\bunclear evidence\b/i.test(record.reason ?? "")
+    ? "insufficient"
+    : "normal";
 }
 
 function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model: string): EdgeClassificationResponse {
