@@ -11,9 +11,10 @@ import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
+  readonly deviceSyncEnabled?: boolean;
 };
 
-export function PrivacySettingsSection({ onHistoryDeleted }: PrivacySettingsSectionProps = {}) {
+export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = false }: PrivacySettingsSectionProps = {}) {
   const [aiSettings, setAiSettings] = useState<AiPrivacyRequestSettings>(() => readAiPrivacyRequestSettings());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -79,6 +80,7 @@ export function PrivacySettingsSection({ onHistoryDeleted }: PrivacySettingsSect
       {deleteModalOpen ? (
         <DeleteHistoryModal
           onClose={() => setDeleteModalOpen(false)}
+          deviceSyncEnabled={deviceSyncEnabled}
           onDeleted={async () => {
             await onHistoryDeleted?.();
           }}

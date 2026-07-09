@@ -102,11 +102,34 @@ export interface ActivitySegment {
   platform: "macos" | "windows" | "android" | "ios";
   source: TrackerSource;
   confidence?: number | null;
+  /** cloud_devices.id of the originating Mac; null/absent = recorded on this Mac. */
+  deviceId?: string | null;
   classification?: StoredActivityClassification | null;
 }
 
 export function isBrowserHistoryImportSegment(segment: Pick<ActivitySegment, "siteSource" | "source">): boolean {
   return segment.source === "browser-history-import" || segment.siteSource === "browser-history-import";
+}
+
+/**
+ * Segments pulled from another synced Mac. They render in the merged timeline
+ * but stay out of anything this device publishes (leaderboard, focus card) —
+ * the originating device publishes its own segments.
+ */
+export function isRemoteDeviceSegment(segment: Pick<ActivitySegment, "deviceId">): boolean {
+  return segment.deviceId != null && segment.deviceId !== "";
+}
+
+/** "all" = merged timeline, "local" = this Mac only, otherwise a cloud device id. */
+export type DeviceTimelineFilter = "all" | "local" | (string & {});
+
+export function filterSegmentsByDevice<T extends Pick<ActivitySegment, "deviceId">>(
+  segments: readonly T[],
+  filter: DeviceTimelineFilter,
+): T[] {
+  if (filter === "all") return segments.slice();
+  if (filter === "local") return segments.filter((segment) => !isRemoteDeviceSegment(segment));
+  return segments.filter((segment) => segment.deviceId === filter);
 }
 
 export interface CurrentActivitySnapshot {
@@ -215,6 +238,8 @@ export interface FlowBlock {
   classificationReason?: string | null;
   projectId?: string | null;
   projectColor?: string | null;
+  /** Originating cloud device id when the winning segment came from another synced Mac. */
+  deviceId?: string | null;
   colorKey: string;
   durationSeconds: number;
 }

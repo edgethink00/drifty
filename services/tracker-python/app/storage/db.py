@@ -312,9 +312,32 @@ class TrackerDatabase:
 
                 CREATE INDEX IF NOT EXISTS idx_ai_review_events_segment
                 ON ai_review_events(segment_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS sync_counter (
+                  id INTEGER PRIMARY KEY CHECK (id = 1),
+                  seq INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS sync_deletions (
+                  deletion_uid TEXT PRIMARY KEY,
+                  kind TEXT NOT NULL CHECK (kind IN ('range', 'uids')),
+                  range_start TEXT,
+                  range_end TEXT,
+                  segment_uids_json TEXT,
+                  created_at TEXT NOT NULL,
+                  pushed INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS applied_sync_deletions (
+                  deletion_uid TEXT PRIMARY KEY,
+                  applied_at TEXT NOT NULL
+                );
+
+                INSERT OR IGNORE INTO sync_counter(id, seq) VALUES (1, 0);
                 """
             )
             self._ensure_columns(conn)
+            self._ensure_sync_schema(conn)
 
     def _ensure_columns(self, conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(activity_segments)")}
@@ -327,6 +350,9 @@ class TrackerDatabase:
             "youtube_is_shorts": "INTEGER",
             "browser_name": "TEXT",
             "site_source": "TEXT",
+            "segment_uid": "TEXT",
+            "origin_device_id": "TEXT",
+            "sync_seq": "INTEGER NOT NULL DEFAULT 0",
         }
         for column, column_type in optional_columns.items():
             if column not in existing:
@@ -392,6 +418,119 @@ class TrackerDatabase:
             """
             CREATE INDEX IF NOT EXISTS idx_classification_rules_enabled
             ON classification_rules(enabled, match_scope, target_kind, normalized_target_value)
+            """
+        )
+
+    def _ensure_sync_schema(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_segments_segment_uid
+            ON activity_segments(segment_uid) WHERE segment_uid IS NOT NULL
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_activity_segments_sync_seq
+            ON activity_segments(sync_seq)
+            """
+        )
+
+        # One-time backfill: give pre-sync rows a stable uid and seed sync_seq from the
+        # rowid so the initial push walks history oldest-first. Runs before the triggers
+        # are created so the seeding UPDATEs cannot race the counter.
+        migrated = conn.execute(
+            "SELECT value FROM tracker_meta WHERE key = 'sync_schema_v1'"
+        ).fetchone()
+        if not migrated:
+            missing_uid_ids = [
+                row["id"]
+                for row in conn.execute(
+                    "SELECT id FROM activity_segments WHERE segment_uid IS NULL"
+                )
+            ]
+            for segment_id in missing_uid_ids:
+                conn.execute(
+                    "UPDATE activity_segments SET segment_uid = ? WHERE id = ?",
+                    (str(uuid.uuid4()), segment_id),
+                )
+            conn.execute("UPDATE activity_segments SET sync_seq = id WHERE sync_seq = 0")
+            conn.execute(
+                """
+                UPDATE sync_counter
+                SET seq = MAX(seq, COALESCE((SELECT MAX(id) FROM activity_segments), 0))
+                WHERE id = 1
+                """
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO tracker_meta(key, value) VALUES ('sync_schema_v1', 'done')"
+            )
+
+        # Change tracking for device sync: every content mutation stamps the segment with
+        # a fresh monotonic sync_seq so the push outbox can resume from a cursor. The uid
+        # COALESCE is a safety net for insert paths that predate uid generation; sync_seq
+        # is deliberately absent from the UPDATE OF list so the trigger cannot re-fire
+        # (recursive_triggers is also off by default).
+        conn.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_activity_segments_sync_insert
+            AFTER INSERT ON activity_segments
+            BEGIN
+              UPDATE sync_counter SET seq = seq + 1 WHERE id = 1;
+              UPDATE activity_segments
+                 SET sync_seq = (SELECT seq FROM sync_counter WHERE id = 1),
+                     segment_uid = COALESCE(
+                       segment_uid,
+                       lower(
+                         hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' ||
+                         substr(hex(randomblob(2)), 2) || '-' ||
+                         substr('89ab', (abs(random()) % 4) + 1, 1) ||
+                         substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))
+                       )
+                     )
+               WHERE id = NEW.id;
+            END
+            """
+        )
+        conn.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_activity_segments_sync_update
+            AFTER UPDATE OF started_at, ended_at, duration_seconds, app_name, bundle_id,
+              window_title, site_domain, site_title, site_url, youtube_video_id,
+              youtube_playlist_id, youtube_is_shorts, browser_name, site_source, source,
+              confidence
+            ON activity_segments
+            BEGIN
+              UPDATE sync_counter SET seq = seq + 1 WHERE id = 1;
+              UPDATE activity_segments
+                 SET sync_seq = (SELECT seq FROM sync_counter WHERE id = 1)
+               WHERE id = NEW.id;
+            END
+            """
+        )
+        # Classification changes re-push the owning segment so remote devices render
+        # category/productivity colors without re-running the LLM.
+        conn.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_activity_classifications_sync_insert
+            AFTER INSERT ON activity_classifications
+            BEGIN
+              UPDATE sync_counter SET seq = seq + 1 WHERE id = 1;
+              UPDATE activity_segments
+                 SET sync_seq = (SELECT seq FROM sync_counter WHERE id = 1)
+               WHERE id = NEW.segment_id;
+            END
+            """
+        )
+        conn.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS trg_activity_classifications_sync_update
+            AFTER UPDATE ON activity_classifications
+            BEGIN
+              UPDATE sync_counter SET seq = seq + 1 WHERE id = 1;
+              UPDATE activity_segments
+                 SET sync_seq = (SELECT seq FROM sync_counter WHERE id = 1)
+               WHERE id = NEW.segment_id;
+            END
             """
         )
 
@@ -518,9 +657,13 @@ class TrackerDatabase:
 
     def record_snapshot(self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None) -> None:
         with self.connect() as conn:
+            # Only coalesce against locally-originated segments. Segments pulled from
+            # another synced device (origin_device_id IS NOT NULL) describe that device's
+            # timeline; extending or trimming them here would corrupt the merge.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
+                WHERE origin_device_id IS NULL
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
                 """
@@ -601,6 +744,7 @@ class TrackerDatabase:
             conn.execute(
                 """
                 INSERT INTO activity_segments (
+                    segment_uid,
                     started_at,
                     ended_at,
                     duration_seconds,
@@ -619,9 +763,10 @@ class TrackerDatabase:
                     source,
                     confidence,
                     raw_context_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    str(uuid.uuid4()),
                     snapshot.observed_at,
                     snapshot.observed_at,
                     sample_seconds,
@@ -729,12 +874,14 @@ class TrackerDatabase:
 
     def trim_latest_segment(self, ended_at: str) -> None:
         with self.connect() as conn:
-            # Imported history segments describe the past, not the live session;
-            # idle/power trims must never truncate or delete them.
+            # Imported history segments describe the past, not the live session, and
+            # segments pulled from another synced device describe that device's timeline;
+            # idle/power trims must never truncate or delete either.
             last = conn.execute(
                 """
                 SELECT * FROM activity_segments
                 WHERE source != ?
+                  AND origin_device_id IS NULL
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
                 """,
@@ -768,6 +915,7 @@ class TrackerDatabase:
             conn.execute(
                 """
                 INSERT INTO activity_segments (
+                    segment_uid,
                     started_at,
                     ended_at,
                     duration_seconds,
@@ -786,9 +934,10 @@ class TrackerDatabase:
                     source,
                     confidence,
                     raw_context_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    segment.get("segment_uid") or str(uuid.uuid4()),
                     segment["started_at"],
                     segment["ended_at"],
                     segment["duration_seconds"],
@@ -823,12 +972,15 @@ class TrackerDatabase:
                 # (e.g. the session gained a visit), and imports can cover time the
                 # live tracker already recorded. Skip any segment whose
                 # [started_at, ended_at) range overlaps an existing segment so
-                # imported time is never double-counted.
+                # imported time is never double-counted. Remote-device segments are
+                # exempt: another Mac being active at the same time does not make this
+                # Mac's imported browsing a duplicate.
                 overlapping = conn.execute(
                     """
                     SELECT 1 FROM activity_segments
                     WHERE datetime(started_at) < datetime(?)
                       AND datetime(ended_at) > datetime(?)
+                      AND origin_device_id IS NULL
                     LIMIT 1
                     """,
                     (
@@ -857,6 +1009,7 @@ class TrackerDatabase:
                 segment_cursor = conn.execute(
                     """
                     INSERT INTO activity_segments (
+                        segment_uid,
                         started_at,
                         ended_at,
                         duration_seconds,
@@ -875,9 +1028,10 @@ class TrackerDatabase:
                         source,
                         confidence,
                         raw_context_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
+                        str(uuid.uuid4()),
                         segment.started_at,
                         segment.ended_at,
                         segment.duration_seconds,
@@ -1007,6 +1161,7 @@ class TrackerDatabase:
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
             WHERE activity_classifications.segment_id IS NULL
+              AND activity_segments.origin_device_id IS NULL
         """
         params: list[Any] = []
         query = self._append_overlap_filters(query, params, start, end)
@@ -1165,7 +1320,31 @@ class TrackerDatabase:
             cursor = conn.execute("DELETE FROM classification_rules WHERE id = ?", (rule_id,))
             return cursor.rowcount
 
-    def delete_activity_segments(self, segment_ids: list[str]) -> int:
+    @staticmethod
+    def _record_sync_deletion(
+        conn: sqlite3.Connection,
+        kind: str,
+        range_start: str | None = None,
+        range_end: str | None = None,
+        segment_uids: list[str] | None = None,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO sync_deletions (
+                deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                kind,
+                range_start,
+                range_end,
+                json.dumps(segment_uids) if segment_uids is not None else None,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+
+    def delete_activity_segments(self, segment_ids: list[str], record_tombstone: bool = True) -> int:
         normalized_ids = sorted({
             int(segment_id)
             for segment_id in segment_ids
@@ -1176,10 +1355,19 @@ class TrackerDatabase:
 
         placeholders = ",".join("?" for _ in normalized_ids)
         with self.connect() as conn:
+            deleted_uids = [
+                row["segment_uid"]
+                for row in conn.execute(
+                    f"SELECT segment_uid FROM activity_segments WHERE id IN ({placeholders}) AND segment_uid IS NOT NULL",
+                    tuple(normalized_ids),
+                )
+            ]
             cursor = conn.execute(
                 f"DELETE FROM activity_segments WHERE id IN ({placeholders})",
                 tuple(normalized_ids),
             )
+            if record_tombstone and deleted_uids:
+                self._record_sync_deletion(conn, "uids", segment_uids=deleted_uids)
             return cursor.rowcount
 
     @staticmethod
@@ -1197,6 +1385,7 @@ class TrackerDatabase:
         end: str | None = None,
         scopes: dict[str, Any] | None = None,
         dry_run: bool = False,
+        record_tombstone: bool = True,
     ) -> dict[str, Any]:
         scopes = scopes or {}
         delete_activity = bool(scopes.get("activity"))
@@ -1281,6 +1470,16 @@ class TrackerDatabase:
                         f"DELETE FROM activity_segments WHERE id IN ({segment_subquery})",
                         tuple(segment_params),
                     )
+                    if record_tombstone and activity_segments > 0:
+                        # Store the same UTC-normalized bounds the overlap filter matched
+                        # on, so a synced device in another timezone deletes the exact
+                        # same absolute window. Open bounds stay None.
+                        self._record_sync_deletion(
+                            conn,
+                            "range",
+                            range_start=self._normalize_range_bound(start_bound) if start_bound else None,
+                            range_end=self._normalize_range_bound(end_bound) if end_bound else None,
+                        )
 
         if not dry_run and activity_segments >= 1000:
             vacuum_connection = self.connect()
@@ -1295,6 +1494,358 @@ class TrackerDatabase:
             "youtubeMetadata": youtube_metadata,
             "dryRun": bool(dry_run),
         }
+
+    # --- Device sync -----------------------------------------------------------------
+
+    SYNC_META_PREFIX = "sync_"
+    SYNC_HOT_GRACE_SECONDS = 180
+
+    @staticmethod
+    def _serialize_sync_outbox_row(row: sqlite3.Row) -> dict[str, Any]:
+        classification = None
+        if row["cls_category"]:
+            classification = {
+                "category": row["cls_category"],
+                "productivity": row["cls_productivity"],
+                "source": row["cls_source"] or "unknown",
+                "confidence": row["cls_confidence"],
+                "reason": row["cls_reason"],
+                "classifiedAt": row["cls_classified_at"],
+            }
+        return {
+            "segmentUid": row["segment_uid"],
+            "startedAt": row["started_at"],
+            "endedAt": row["ended_at"],
+            "durationSeconds": row["duration_seconds"],
+            "appName": row["app_name"],
+            "bundleId": row["bundle_id"],
+            "windowTitle": row["window_title"],
+            "siteDomain": row["site_domain"],
+            "siteTitle": row["site_title"],
+            "siteUrl": row["site_url"],
+            "youtubeVideoId": row["youtube_video_id"],
+            "youtubePlaylistId": row["youtube_playlist_id"],
+            "youtubeIsShorts": bool(row["youtube_is_shorts"]) if row["youtube_is_shorts"] is not None else None,
+            "browserName": row["browser_name"],
+            "siteSource": row["site_source"],
+            "platform": row["platform"],
+            "source": row["source"],
+            "confidence": row["confidence"],
+            "syncSeq": row["sync_seq"],
+            "classification": classification,
+        }
+
+    def get_sync_outbox(self, after_seq: int, limit: int = 500, hot_grace_seconds: int | None = None) -> dict[str, Any]:
+        grace = self.SYNC_HOT_GRACE_SECONDS if hot_grace_seconds is None else hot_grace_seconds
+        limit = max(1, min(int(limit), 1000))
+        with self.connect() as conn:
+            # The most recent live segment is still being extended by record_snapshot;
+            # pushing it every few seconds would thrash the server. It becomes eligible
+            # once its ended_at is older than the idle threshold (it can only be trimmed
+            # after that, and trims bump sync_seq so a re-push self-heals).
+            hot_id: int | None = None
+            hot = conn.execute(
+                """
+                SELECT id, ended_at FROM activity_segments
+                WHERE origin_device_id IS NULL AND source != ?
+                ORDER BY datetime(ended_at) DESC, id DESC
+                LIMIT 1
+                """,
+                (BROWSER_HISTORY_IMPORT_SOURCE,),
+            ).fetchone()
+            if hot is not None:
+                ended = parse_iso_datetime(hot["ended_at"])
+                if ended.tzinfo is None:
+                    ended = ended.astimezone()
+                age_seconds = (datetime.now(timezone.utc) - ended.astimezone(timezone.utc)).total_seconds()
+                if age_seconds < grace:
+                    hot_id = int(hot["id"])
+
+            base_where = "s.origin_device_id IS NULL AND s.segment_uid IS NOT NULL AND s.sync_seq > ?"
+            params: list[Any] = [int(after_seq)]
+            if hot_id is not None:
+                base_where += " AND s.id != ?"
+                params.append(hot_id)
+
+            rows = conn.execute(
+                f"""
+                SELECT
+                    s.*,
+                    c.category AS cls_category,
+                    c.productivity AS cls_productivity,
+                    c.source AS cls_source,
+                    c.confidence AS cls_confidence,
+                    c.reason AS cls_reason,
+                    c.classified_at AS cls_classified_at
+                FROM activity_segments s
+                LEFT JOIN activity_classifications c ON c.segment_id = s.id
+                WHERE {base_where}
+                ORDER BY s.sync_seq ASC
+                LIMIT ?
+                """,
+                tuple(params) + (limit,),
+            ).fetchall()
+
+            pending_count = int(
+                conn.execute(
+                    f"SELECT COUNT(*) AS count FROM activity_segments s WHERE {base_where}",
+                    tuple(params),
+                ).fetchone()["count"]
+            )
+            counter_seq = int(conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()["seq"])
+
+        items = [self._serialize_sync_outbox_row(row) for row in rows]
+        return {
+            "items": items,
+            # The push cursor must advance only past what was actually returned; the hot
+            # segment keeps a higher seq until it goes cold and gets picked up later.
+            "batchMaxSeq": max((item["syncSeq"] for item in items), default=int(after_seq)),
+            "counterSeq": counter_seq,
+            "pendingCount": pending_count,
+        }
+
+    def get_sync_state(self) -> dict[str, Any]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT key, value FROM tracker_meta WHERE key LIKE ?",
+                (f"{self.SYNC_META_PREFIX}%",),
+            ).fetchall()
+            counter_seq = int(conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()["seq"])
+            pending_deletions = int(
+                conn.execute("SELECT COUNT(*) AS count FROM sync_deletions WHERE pushed = 0").fetchone()["count"]
+            )
+        return {
+            "state": {row["key"]: row["value"] for row in rows},
+            "counterSeq": counter_seq,
+            "pendingDeletions": pending_deletions,
+        }
+
+    def set_sync_state(self, entries: dict[str, Any]) -> int:
+        written = 0
+        with self.connect() as conn:
+            for key, value in entries.items():
+                if not isinstance(key, str) or not key.startswith(self.SYNC_META_PREFIX):
+                    continue
+                if value is None:
+                    conn.execute("DELETE FROM tracker_meta WHERE key = ?", (key,))
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO tracker_meta(key, value) VALUES (?, ?)
+                        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                        """,
+                        (key, str(value)),
+                    )
+                written += 1
+        return written
+
+    def apply_synced_segments(self, segments: list[dict[str, Any]]) -> dict[str, int]:
+        inserted = 0
+        updated = 0
+        skipped = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        local_device_id = self.get_meta("sync_device_id")
+        with self.connect() as conn:
+            for item in segments:
+                segment_uid = item.get("segmentUid")
+                origin_device_id = item.get("originDeviceId")
+                if not segment_uid or not origin_device_id:
+                    skipped += 1
+                    continue
+                # Echo protection: never re-apply rows this device originated, even if
+                # the pull filter missed them.
+                if local_device_id and origin_device_id == local_device_id:
+                    skipped += 1
+                    continue
+
+                values = (
+                    item.get("startedAt"),
+                    item.get("endedAt"),
+                    int(item.get("durationSeconds") or 0),
+                    item.get("appName") or "",
+                    item.get("bundleId"),
+                    item.get("windowTitle"),
+                    item.get("siteDomain"),
+                    item.get("siteTitle"),
+                    item.get("siteUrl"),
+                    item.get("youtubeVideoId"),
+                    item.get("youtubePlaylistId"),
+                    1 if item.get("youtubeIsShorts") else (0 if item.get("youtubeIsShorts") is False else None),
+                    item.get("browserName"),
+                    item.get("siteSource"),
+                    item.get("platform") or "macos",
+                    item.get("source") or "unknown",
+                    item.get("confidence"),
+                    origin_device_id,
+                )
+                existing = conn.execute(
+                    "SELECT id, origin_device_id FROM activity_segments WHERE segment_uid = ?",
+                    (segment_uid,),
+                ).fetchone()
+                if existing is not None and existing["origin_device_id"] is None:
+                    # A pulled row claiming a uid that exists here as a LOCAL
+                    # segment is an echo of this device's own upload; updating it
+                    # would flip local history to remote and break coalescing,
+                    # publishing, and the push outbox.
+                    skipped += 1
+                    continue
+                if existing is not None:
+                    segment_id = int(existing["id"])
+                    conn.execute(
+                        """
+                        UPDATE activity_segments SET
+                            started_at = ?, ended_at = ?, duration_seconds = ?, app_name = ?,
+                            bundle_id = ?, window_title = ?, site_domain = ?, site_title = ?,
+                            site_url = ?, youtube_video_id = ?, youtube_playlist_id = ?,
+                            youtube_is_shorts = ?, browser_name = ?, site_source = ?,
+                            platform = ?, source = ?, confidence = ?, origin_device_id = ?
+                        WHERE id = ?
+                        """,
+                        values + (segment_id,),
+                    )
+                    updated += 1
+                else:
+                    cursor = conn.execute(
+                        """
+                        INSERT INTO activity_segments (
+                            started_at, ended_at, duration_seconds, app_name, bundle_id,
+                            window_title, site_domain, site_title, site_url, youtube_video_id,
+                            youtube_playlist_id, youtube_is_shorts, browser_name, site_source,
+                            platform, source, confidence, origin_device_id, segment_uid
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        values + (segment_uid,),
+                    )
+                    segment_id = int(cursor.lastrowid)
+                    inserted += 1
+
+                classification = item.get("classification")
+                if isinstance(classification, dict) and classification.get("category"):
+                    source = str(classification.get("source") or "llm")
+                    conn.execute(
+                        """
+                        INSERT INTO activity_classifications (
+                            segment_id, input_fingerprint, category, productivity, source,
+                            confidence, reason, classified_at, refreshed_at, ai_result, stale
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        ON CONFLICT(segment_id) DO UPDATE SET
+                            input_fingerprint = excluded.input_fingerprint,
+                            category = excluded.category,
+                            productivity = excluded.productivity,
+                            source = excluded.source,
+                            confidence = excluded.confidence,
+                            reason = excluded.reason,
+                            classified_at = excluded.classified_at,
+                            refreshed_at = excluded.refreshed_at,
+                            ai_result = excluded.ai_result,
+                            stale = 0
+                        """,
+                        (
+                            segment_id,
+                            f"sync:{segment_uid}",
+                            classification.get("category"),
+                            classification.get("productivity") or "neutral",
+                            source,
+                            float(classification.get("confidence") or 0),
+                            classification.get("reason"),
+                            classification.get("classifiedAt") or timestamp,
+                            timestamp,
+                            1 if source == "llm" else 0,
+                        ),
+                    )
+        return {"inserted": inserted, "updated": updated, "skipped": skipped}
+
+    def get_pending_sync_deletions(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
+                FROM sync_deletions
+                WHERE pushed = 0
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (max(1, min(int(limit), 500)),),
+            ).fetchall()
+        return [
+            {
+                "deletionUid": row["deletion_uid"],
+                "kind": row["kind"],
+                "rangeStart": row["range_start"],
+                "rangeEnd": row["range_end"],
+                "segmentUids": json.loads(row["segment_uids_json"]) if row["segment_uids_json"] else None,
+                "createdAt": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def mark_sync_deletions_pushed(self, deletion_uids: list[str]) -> int:
+        uids = [uid for uid in deletion_uids if isinstance(uid, str) and uid]
+        if not uids:
+            return 0
+        placeholders = ",".join("?" for _ in uids)
+        with self.connect() as conn:
+            cursor = conn.execute(
+                f"UPDATE sync_deletions SET pushed = 1 WHERE deletion_uid IN ({placeholders})",
+                tuple(uids),
+            )
+            return cursor.rowcount
+
+    def apply_synced_deletions(self, deletions: list[dict[str, Any]]) -> dict[str, int]:
+        applied = 0
+        skipped = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        for deletion in deletions:
+            deletion_uid = deletion.get("deletionUid")
+            kind = deletion.get("kind")
+            if not deletion_uid or kind not in ("range", "uids"):
+                skipped += 1
+                continue
+            with self.connect() as conn:
+                already = conn.execute(
+                    "SELECT 1 FROM applied_sync_deletions WHERE deletion_uid = ?",
+                    (deletion_uid,),
+                ).fetchone()
+            if already is not None:
+                skipped += 1
+                continue
+
+            if kind == "range":
+                # Replaying a remote deletion must not record a fresh tombstone, or two
+                # synced devices would ping-pong the same deletion forever.
+                self.delete_history_range(
+                    start=deletion.get("rangeStart"),
+                    end=deletion.get("rangeEnd"),
+                    scopes={"activity": True},
+                    record_tombstone=False,
+                )
+            else:
+                segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
+                if segment_uids:
+                    placeholders = ",".join("?" for _ in segment_uids)
+                    with self.connect() as conn:
+                        ids = [
+                            str(row["id"])
+                            for row in conn.execute(
+                                f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})",
+                                tuple(segment_uids),
+                            )
+                        ]
+                    if ids:
+                        self.delete_activity_segments(ids, record_tombstone=False)
+
+            with self.connect() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO applied_sync_deletions (deletion_uid, applied_at) VALUES (?, ?)",
+                    (deletion_uid, timestamp),
+                )
+            applied += 1
+        return {"applied": applied, "skipped": skipped}
+
+    def purge_remote_segments(self) -> int:
+        with self.connect() as conn:
+            cursor = conn.execute("DELETE FROM activity_segments WHERE origin_device_id IS NOT NULL")
+            return cursor.rowcount
 
     def search_classification_rule_candidates(self, query: str, target_kind: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         needle = query.strip().lower()
@@ -2400,6 +2951,7 @@ class TrackerDatabase:
                 activity_segments.platform,
                 activity_segments.source,
                 activity_segments.confidence,
+                activity_segments.origin_device_id,
                 youtube_video_metadata.category AS youtube_category,
                 youtube_video_metadata.channel_name AS youtube_channel_name,
                 youtube_video_metadata.title AS youtube_title,

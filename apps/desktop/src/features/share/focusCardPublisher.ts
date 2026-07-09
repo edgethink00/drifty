@@ -7,6 +7,7 @@ import {
   buildProductivityDurations,
   buildRollingFocusSeconds,
   isBrowserHistoryImportSegment,
+  isRemoteDeviceSegment,
   logicalDayStartMs,
 } from "@drifty/domain";
 import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
@@ -92,6 +93,10 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
 export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): Promise<FocusCardPayload> {
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
-  const monthSegments = fetched.filter((segment) => !isBrowserHistoryImportSegment(segment));
+  // Same publish boundary as the leaderboard: imported estimates and segments
+  // synced from other Macs never feed this device's published card.
+  const monthSegments = fetched.filter(
+    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+  );
   return buildFocusCardPayload(monthSegments, input);
 }

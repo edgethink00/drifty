@@ -38,6 +38,13 @@ import type {
   ProductivityShareMix,
   RawEventsQuery,
   SiteDuration,
+  SyncApplyResult,
+  SyncDeletionRecord,
+  SyncDeletionsApplyResult,
+  SyncedSegmentInput,
+  SyncOutboxPage,
+  SyncOutboxQuery,
+  SyncStateSnapshot,
   TimelinePage,
   TimelinePageQuery,
   TimelineSearchQuery,
@@ -408,6 +415,50 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return fallback;
     const result = await safeInvoke<BrowserHistoryEnvironment>("tracker_get_browser_history_environment");
     return result ?? fallback;
+  },
+  async getSyncOutbox(query: SyncOutboxQuery): Promise<SyncOutboxPage> {
+    const fallback: SyncOutboxPage = { items: [], batchMaxSeq: query.afterSeq, counterSeq: query.afterSeq, pendingCount: 0 };
+    if (shouldUsePreviewData()) return fallback;
+    const result = await safeInvoke<SyncOutboxPage>("tracker_get_sync_outbox", { query });
+    return result ?? fallback;
+  },
+  async getSyncState(): Promise<SyncStateSnapshot> {
+    const fallback: SyncStateSnapshot = { state: {}, counterSeq: 0, pendingDeletions: 0 };
+    if (shouldUsePreviewData()) return fallback;
+    const result = await safeInvoke<SyncStateSnapshot>("tracker_get_sync_state");
+    return result ?? fallback;
+  },
+  async setSyncState(entries: Record<string, string | null>) {
+    if (shouldUsePreviewData()) return { written: 0 };
+    const result = await safeInvoke<{ written: number }>("tracker_set_sync_state", { query: { entries } });
+    return result ?? { written: 0 };
+  },
+  async applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult> {
+    const fallback: SyncApplyResult = { inserted: 0, updated: 0, skipped: segments.length };
+    if (shouldUsePreviewData()) return fallback;
+    const result = await safeInvoke<SyncApplyResult>("tracker_apply_synced_segments", { query: { segments } });
+    return result ?? fallback;
+  },
+  async getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]> {
+    if (shouldUsePreviewData()) return [];
+    const result = await safeInvoke<SyncDeletionRecord[]>("tracker_get_pending_sync_deletions", { query: { limit } });
+    return result ?? [];
+  },
+  async markSyncDeletionsPushed(deletionUids: readonly string[]) {
+    if (shouldUsePreviewData()) return { marked: 0 };
+    const result = await safeInvoke<{ marked: number }>("tracker_mark_sync_deletions_pushed", { query: { deletionUids } });
+    return result ?? { marked: 0 };
+  },
+  async applySyncedDeletions(deletions: SyncDeletionRecord[]): Promise<SyncDeletionsApplyResult> {
+    const fallback: SyncDeletionsApplyResult = { applied: 0, skipped: deletions.length };
+    if (shouldUsePreviewData()) return fallback;
+    const result = await safeInvoke<SyncDeletionsApplyResult>("tracker_apply_synced_deletions", { query: { deletions } });
+    return result ?? fallback;
+  },
+  async purgeRemoteSegments() {
+    if (shouldUsePreviewData()) return { purged: 0 };
+    const result = await safeInvoke<{ purged: number }>("tracker_purge_remote_segments");
+    return result ?? { purged: 0 };
   },
   async updateTrayProductivityIcon(mix: ProductivityShareMix) {
     if (shouldUsePreviewData()) return;

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, FlowBlock, FlowIntervalMinutes, ProductivityDuration } from "@drifty/domain";
+import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, FlowIntervalMinutes, ProductivityDuration } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
@@ -47,6 +47,9 @@ type DashboardPageProps = {
   readonly flowIntervalMinutes: FlowIntervalMinutes;
   readonly projectModeAvailable?: boolean;
   readonly projectLegend?: readonly ProjectLegendEntry[];
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
+  readonly deviceTimelineFilter?: DeviceTimelineFilter;
+  readonly onDeviceTimelineFilterChange?: (filter: DeviceTimelineFilter) => void;
   readonly flowProjectRingEntries?: readonly CompactRingEntry[];
   readonly flowProjectCenterPercent?: number;
   readonly focusDriftSection: ReactNode;
@@ -98,6 +101,9 @@ export function DashboardPage({
   flowIntervalMinutes,
   projectModeAvailable,
   projectLegend,
+  deviceLabelById,
+  deviceTimelineFilter = "all",
+  onDeviceTimelineFilterChange,
   flowProjectRingEntries,
   flowProjectCenterPercent,
   focusDriftSection,
@@ -178,6 +184,35 @@ export function DashboardPage({
 
       <DashboardDemoReplayBanner replay={dashboardReplay} />
 
+      {onDeviceTimelineFilterChange && deviceLabelById && deviceLabelById.size > 0 ? (
+        <div className="dashboard-device-filter" role="group" aria-label="Device filter">
+          <button
+            type="button"
+            className={`dashboard-device-filter__option${deviceTimelineFilter === "all" ? " dashboard-device-filter__option--active" : ""}`}
+            onClick={() => onDeviceTimelineFilterChange("all")}
+          >
+            All devices
+          </button>
+          <button
+            type="button"
+            className={`dashboard-device-filter__option${deviceTimelineFilter === "local" ? " dashboard-device-filter__option--active" : ""}`}
+            onClick={() => onDeviceTimelineFilterChange("local")}
+          >
+            This Mac
+          </button>
+          {[...deviceLabelById.entries()].map(([deviceId, label]) => (
+            <button
+              key={deviceId}
+              type="button"
+              className={`dashboard-device-filter__option${deviceTimelineFilter === deviceId ? " dashboard-device-filter__option--active" : ""}`}
+              onClick={() => onDeviceTimelineFilterChange(deviceId)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {initialDataLoading ? (
         <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={dashboardDateNavigator} />
       ) : dashPeriod === "Week" ? (
@@ -224,6 +259,7 @@ export function DashboardPage({
                   projectLegend={projectLegend}
                   colorMode={flowColorMode}
                   onColorModeChange={setFlowColorMode}
+                  deviceLabelById={deviceLabelById}
                 />
               </div>
               <FlowCompactSplitChart

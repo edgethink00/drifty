@@ -106,13 +106,14 @@ export function FlowChartGrid({
                 const colorClass = isProjectMode
                   ? "flow-cell--project"
                   : `flow-cell--${colorMode === "productivity" ? block.productivity : block.category}`;
+                const remoteDeviceClass = block.deviceId ? " flow-cell--remote-device" : "";
                 const cellStyle: FlowProjectCellStyle | undefined = isProjectMode
                   ? { "--flow-project-color": block.projectColor ?? NO_PROJECT_COLOR }
                   : undefined;
 
                 return (
                   <button
-                    className={`flow-cell ${colorClass}${unclassifiedClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
+                    className={`flow-cell ${colorClass}${unclassifiedClass}${remoteDeviceClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}

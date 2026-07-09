@@ -1,5 +1,6 @@
 mod accessibility;
 mod ai;
+mod cloud_sync;
 mod developer_updates;
 mod drift_alarm;
 mod extreme_nudge;
@@ -14,6 +15,7 @@ mod window_chrome;
 
 pub use accessibility::*;
 pub use ai::*;
+pub use cloud_sync::*;
 pub use developer_updates::*;
 pub use drift_alarm::*;
 pub use extreme_nudge::*;

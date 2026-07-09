@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
+  filterSegmentsByDevice,
   buildRollingFocusSeconds,
   buildCategoryDurations,
   buildProductivityDurations,
@@ -147,6 +148,8 @@ import {
   CloudTrialStartedNotice,
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
+import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
+import { purgeCloudSyncData } from "./features/device-sync/deviceSyncApi";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
@@ -195,7 +198,7 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, PROFILE_REDESIGN_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialProfileRedesignEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, PROFILE_REDESIGN_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialProjectClassificationEnabled, resolveInitialProfileRedesignEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
@@ -358,6 +361,9 @@ export default function App() {
   // including public/prerelease binaries — only after the user turns it on.
   const [devProjectClassificationEnabled, setDevProjectClassificationEnabled] = useState(resolveInitialProjectClassificationEnabled);
   const projectClassificationFeatureEnabled = devProjectClassificationEnabled;
+  const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(resolveInitialDeviceSyncEnabled);
+  const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
+  const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
   // Dev-only A/B gate for the Profile tab redesign (off → shipped classic layout).
   const [devProfileRedesignEnabled, setDevProfileRedesignEnabled] = useState(resolveInitialProfileRedesignEnabled);
   const [forceChromiumAxCaptureEnabled, setForceChromiumAxCaptureEnabled] = useState(resolveInitialForceChromiumAxCaptureEnabled);
@@ -796,6 +802,72 @@ export default function App() {
     onOpenAiSetup: openAiSetupSettings,
   });
   const canUseCloudAiClassification = isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  // Paid device sync: same entitlement gate as cloud AI, plus the per-device
+  // explicit opt-in toggle (raw activity leaves the device only when both hold).
+  // While the feature is in preview it is additionally gated behind a dedicated
+  // Dev-settings toggle (project-classification pattern), so a mistake cannot
+  // upload raw activity for regular users. Turning the toggle (or Dev mode) off
+  // pauses a previously enabled sync rather than just hiding the section.
+  const deviceSyncFeatureVisible = isDevModeActive && devDeviceSyncPreviewEnabled;
+  const deviceSyncActive =
+    deviceSyncFeatureVisible &&
+    deviceSyncEnabled && isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const deviceSyncUserScopeKey = user?.id ?? "anonymous";
+  // `refresh` is re-created every render (function declaration below); the ref
+  // keeps the sync controller's callback pointed at the current one instead of
+  // a stale first-render closure.
+  const deviceSyncRefreshRef = useRef<(() => void) | null>(null);
+  deviceSyncRefreshRef.current = () => {
+    void refresh(undefined, { foreground: false });
+  };
+  const handleRemoteSegmentsApplied = useCallback(() => {
+    deviceSyncRefreshRef.current?.();
+  }, []);
+  const {
+    status: deviceSyncStatus,
+    deviceLabelById: syncDeviceLabelById,
+    syncNow: deviceSyncNow,
+  } = useDeviceSyncController({
+    syncActive: deviceSyncActive,
+    userScopeKey: deviceSyncUserScopeKey,
+    onRemoteSegmentsApplied: handleRemoteSegmentsApplied,
+  });
+  // The filter row lists other Macs only ("This Mac" covers the current one).
+  const remoteDeviceLabelById = useMemo(() => {
+    if (syncDeviceLabelById.size === 0) return syncDeviceLabelById;
+    const next = new Map(syncDeviceLabelById);
+    if (deviceSyncStatus.deviceId) next.delete(deviceSyncStatus.deviceId);
+    return next;
+  }, [deviceSyncStatus.deviceId, syncDeviceLabelById]);
+  useEffect(() => {
+    // Leaving sync (or losing the gate) drops any device-scoped filter so the
+    // timeline never silently hides local history.
+    if (!deviceSyncActive) setDeviceTimelineFilter("all");
+  }, [deviceSyncActive]);
+  const [deviceSyncPurging, setDeviceSyncPurging] = useState(false);
+  const handlePurgeDeviceSyncData = useCallback(async () => {
+    const confirmed = window.confirm(
+      "Delete the cloud copy of your synced activity? Segments already merged on other Macs stay there, but nothing new will download until you sync again.",
+    );
+    if (!confirmed) return;
+    setDeviceSyncPurging(true);
+    try {
+      await purgeCloudSyncData();
+      await trackerClient.purgeRemoteSegments();
+      // Reset the cursors so re-enabling sync re-uploads this Mac's full
+      // history (the cloud copy was just deleted) and re-pulls from scratch.
+      await trackerClient.setSyncState({
+        sync_push_seq: "0",
+        sync_pull_cursor: null,
+        sync_deletion_pull_cursor: null,
+      });
+      deviceSyncRefreshRef.current?.();
+    } catch (error) {
+      console.warn("Failed to purge device sync data", error);
+    } finally {
+      setDeviceSyncPurging(false);
+    }
+  }, []);
   const requestLeaderboardAuth = useCallback(() => setAuthModalOpen(true), []);
   const requestTeamAuth = useCallback(() => setAuthModalOpen(true), []);
   const {
@@ -2387,6 +2459,14 @@ export default function App() {
   }, [devProjectClassificationEnabled]);
 
   useEffect(() => {
+    window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, deviceSyncEnabled ? "1" : "0");
+  }, [deviceSyncEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY, devDeviceSyncPreviewEnabled ? "1" : "0");
+  }, [devDeviceSyncPreviewEnabled]);
+
+  useEffect(() => {
     window.localStorage.setItem(PROFILE_REDESIGN_ENABLED_STORAGE_KEY, devProfileRedesignEnabled ? "1" : "0");
   }, [devProfileRedesignEnabled]);
 
@@ -3591,8 +3671,8 @@ export default function App() {
     });
   }, [dashPeriod, dashboardHistorySource, dashboardRange, dashboardWeekCompactSource, dashboardWeekHistoryRange, segments]);
   const {
-    effectiveSelectedDaySegments,
-    effectiveDashboardSegments,
+    effectiveSelectedDaySegments: unfilteredEffectiveSelectedDaySegments,
+    effectiveDashboardSegments: unfilteredEffectiveDashboardSegments,
     effectiveCurrentMinuteOfDay,
     effectiveDashboardRange,
     effectiveTodayDayForWeekModel,
@@ -3605,6 +3685,16 @@ export default function App() {
     selectedDaySegments: segments,
     todayDayForWeekModel: todayDay,
   }), [currentMinuteOfDay, dashboardDemoReplayState, dashboardRange, dashboardSegments, segments, todayDay]);
+  // Device filter choke point: every dashboard view model (day flow, week,
+  // stats) derives from these two arrays, so filtering here covers them all.
+  const effectiveSelectedDaySegments = useMemo(
+    () => filterSegmentsByDevice(unfilteredEffectiveSelectedDaySegments, deviceTimelineFilter),
+    [deviceTimelineFilter, unfilteredEffectiveSelectedDaySegments],
+  );
+  const effectiveDashboardSegments = useMemo(
+    () => filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter),
+    [deviceTimelineFilter, unfilteredEffectiveDashboardSegments],
+  );
   const handleStartDashboardDemoReplay = useCallback((replayKind: DemoDashboardReplayKind) => {
     switch (replayKind) {
       case "day": {
@@ -5338,6 +5428,9 @@ export default function App() {
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
             flowIntervalMinutes={flowIntervalMinutes}
+            deviceLabelById={remoteDeviceLabelById}
+            deviceTimelineFilter={deviceTimelineFilter}
+            onDeviceTimelineFilterChange={setDeviceTimelineFilter}
             projectModeAvailable={projectClassification.projectModeAvailable}
             projectLegend={projectClassification.projectLegend}
             flowProjectRingEntries={dashboardProjectRing.entries}
@@ -5614,6 +5707,13 @@ export default function App() {
 	                    }
 	                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
 	                    userEmail={user?.email ?? null}
+	                    deviceSyncEnabled={deviceSyncEnabled}
+	                    deviceSyncGateActive={deviceSyncActive}
+	                    deviceSyncStatus={deviceSyncStatus}
+	                    deviceSyncPurging={deviceSyncPurging}
+	                    onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? setDeviceSyncEnabled : undefined}
+	                    onDeviceSyncNow={deviceSyncNow}
+	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
 	                    onEditPublicProfile={openProfileEditor}
 	                    onManageCloudBilling={handleManageCloudBilling}
 	                    onOpenLeaderboard={() => navigateToTab("leaderboard")}
@@ -5747,7 +5847,7 @@ export default function App() {
                   />
                 )}
                 {settingsSection === "privacy" && (
-                  <PrivacySettingsSection onHistoryDeleted={handleHistoryRangeDeleted} />
+                  <PrivacySettingsSection onHistoryDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} />
                 )}
                 {settingsSection === "data" && (
                   <DataExportSettingsSection databasePath={status?.databasePath} todaySessionCount={segments.length} />
@@ -5763,6 +5863,7 @@ export default function App() {
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
+                    deviceSyncPreviewEnabled={devDeviceSyncPreviewEnabled}
                     profileRedesignEnabled={devProfileRedesignEnabled}
                     projectClassificationEnabled={devProjectClassificationEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
@@ -5786,6 +5887,7 @@ export default function App() {
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
+                    onDeviceSyncPreviewEnabledChange={setDevDeviceSyncPreviewEnabled}
                     onProfileRedesignEnabledChange={setDevProfileRedesignEnabled}
                     onProjectClassificationEnabledChange={setDevProjectClassificationEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
@@ -5860,7 +5962,7 @@ export default function App() {
       {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
 
       {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
-      {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} /> : null}
+      {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}
 
       {debugLogPreview ? (
         <DebugLogModal

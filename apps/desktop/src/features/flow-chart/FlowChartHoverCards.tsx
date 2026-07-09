@@ -95,19 +95,27 @@ export function FlowLegendHoverCard({ hover, appIcons, cardRef }: { readonly hov
   );
 }
 
+export function flowDeviceBadgeLabel(deviceId: string | null | undefined, deviceLabelById?: ReadonlyMap<string, string>): string | null {
+  if (!deviceId) return null;
+  return deviceLabelById?.get(deviceId) ?? "Synced Mac";
+}
+
 export function FlowHoverCard({
   hover,
   appIcons,
   cardRef,
+  deviceLabelById,
 }: {
   readonly hover: FlowHoverState;
   readonly appIcons: Record<string, string | null>;
   readonly cardRef?: Ref<HTMLDivElement>;
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
 }) {
   const { block } = hover.group;
   const iconSrc = appIcons[block.bundleId ?? block.appName] ?? null;
   const displayName = blockDisplayName(block);
   const detailLabel = blockDetailLabel(block);
+  const deviceLabel = flowDeviceBadgeLabel(block.deviceId, deviceLabelById);
 
   return (
     <div ref={cardRef} className="flow-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
@@ -121,6 +129,7 @@ export function FlowHoverCard({
       <div className="flow-hover-card__identity-row">
         <FlowIdentityPill color={CATEGORY_COLORS[block.category]} label={categoryLabel(block.category)} />
         <FlowIdentityPill color={PRODUCTIVITY_COLORS[block.productivity]} label={productivityLabel(block.productivity)} />
+        {deviceLabel ? <span className="flow-hover-card__device-pill">{deviceLabel}</span> : null}
       </div>
       {detailLabel ? <p className="flow-hover-card__detail">{detailLabel}</p> : null}
       <ClassificationSourcePill source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} />

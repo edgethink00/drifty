@@ -23,6 +23,8 @@ export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassi
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 export const PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY = "drifty.dev.projectClassification";
 export const PROFILE_REDESIGN_ENABLED_STORAGE_KEY = "drifty.dev.profileRedesign";
+export const DEVICE_SYNC_ENABLED_STORAGE_KEY = "drifty.deviceSync.enabled";
+export const DEVICE_SYNC_PREVIEW_STORAGE_KEY = "drifty.dev.deviceSyncPreview";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 
@@ -298,6 +300,22 @@ export function resolveInitialDevModeEnabled(): boolean {
 export function resolveInitialProjectClassificationEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY) === "1";
+}
+
+// Off by default (explicit opt-in): device sync uploads raw activity segments to the
+// user's private cloud space, so each Mac must be enabled deliberately — never by a
+// build default or a remote flag.
+export function resolveInitialDeviceSyncEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DEVICE_SYNC_ENABLED_STORAGE_KEY) === "1";
+}
+
+// Off by default (opt-in): the Dev-settings toggle is the sole gate for the device-sync
+// preview surface — without it the Account-settings section is hidden and sync stays
+// inert even if a per-Mac opt-in was flipped earlier.
+export function resolveInitialDeviceSyncPreviewEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY) === "1";
 }
 
 // Off by default (opt-in): the Dev-settings toggle is the sole gate for the Profile

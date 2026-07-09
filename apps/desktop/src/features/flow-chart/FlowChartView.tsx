@@ -25,6 +25,7 @@ export function FlowChartView({
   projectLegend,
   colorMode: controlledColorMode,
   onColorModeChange,
+  deviceLabelById,
 }: {
   blocks: FlowBlock[];
   appIcons: Record<string, string | null>;
@@ -37,6 +38,7 @@ export function FlowChartView({
   projectLegend?: readonly ProjectLegendEntry[];
   colorMode?: FlowColorMode;
   onColorModeChange?: (mode: FlowColorMode) => void;
+  deviceLabelById?: ReadonlyMap<string, string>;
 }) {
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
@@ -103,7 +105,7 @@ export function FlowChartView({
         setFlowGridElement={setFlowGridElement}
       />
 
-      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={hoveredBlockCardRef} /> : null}
+      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={hoveredBlockCardRef} deviceLabelById={deviceLabelById} /> : null}
       {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
     </section>
   );

@@ -218,6 +218,75 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_browser_history_environment", json!({}))
     }
 
+    pub fn get_sync_outbox(
+        &self,
+        app: &AppHandle,
+        after_seq: i64,
+        limit: Option<i64>,
+        hot_grace_seconds: Option<i64>,
+    ) -> Result<Value, TrackerError> {
+        let mut payload = json!({ "afterSeq": after_seq });
+        if let Some(limit) = limit {
+            payload["limit"] = json!(limit);
+        }
+        if let Some(grace) = hot_grace_seconds {
+            payload["hotGraceSeconds"] = json!(grace);
+        }
+        self.invoke::<Value>(app, "get_sync_outbox", payload)
+    }
+
+    pub fn get_sync_state(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_sync_state", json!({}))
+    }
+
+    pub fn set_sync_state(&self, app: &AppHandle, entries: Value) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "set_sync_state", json!({ "entries": entries }))
+    }
+
+    pub fn apply_synced_segments(
+        &self,
+        app: &AppHandle,
+        segments: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "apply_synced_segments", json!({ "segments": segments }))
+    }
+
+    pub fn get_pending_sync_deletions(
+        &self,
+        app: &AppHandle,
+        limit: Option<i64>,
+    ) -> Result<Value, TrackerError> {
+        let mut payload = json!({});
+        if let Some(limit) = limit {
+            payload["limit"] = json!(limit);
+        }
+        self.invoke::<Value>(app, "get_pending_sync_deletions", payload)
+    }
+
+    pub fn mark_sync_deletions_pushed(
+        &self,
+        app: &AppHandle,
+        deletion_uids: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "mark_sync_deletions_pushed",
+            json!({ "deletionUids": deletion_uids }),
+        )
+    }
+
+    pub fn apply_synced_deletions(
+        &self,
+        app: &AppHandle,
+        deletions: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "apply_synced_deletions", json!({ "deletions": deletions }))
+    }
+
+    pub fn purge_remote_segments(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "purge_remote_segments", json!({}))
+    }
+
     pub fn get_hourly_summary(
         &self,
         app: &AppHandle,

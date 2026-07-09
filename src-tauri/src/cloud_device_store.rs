@@ -24,6 +24,16 @@ fn keychain_entry() -> Result<Entry, String> {
 }
 
 pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
+    // Two-instance QA on one machine: the Keychain item is machine-global, so a
+    // second dev instance would otherwise register as the same cloud device.
+    // Debug builds only — release binaries always use the Keychain identity.
+    #[cfg(debug_assertions)]
+    if let Ok(override_id) = std::env::var("DRIFTY_CLOUD_DEVICE_INSTALL_ID") {
+        if let Some(install_id) = normalized_install_id(&override_id) {
+            return Ok(install_id);
+        }
+    }
+
     let backup_path = install_id_file_path(app)?;
     let entry = match keychain_entry() {
         Ok(entry) => entry,

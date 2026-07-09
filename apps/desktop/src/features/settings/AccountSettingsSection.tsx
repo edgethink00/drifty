@@ -1,6 +1,8 @@
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
+import { Toggle } from "../../components/Toggle";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
+import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import "./AccountSettingsSection.css";
 
 export type AccountSettingsSectionProps = {
@@ -21,6 +23,13 @@ export type AccountSettingsSectionProps = {
   readonly publicProfileStatus?: string | null;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly userEmail: string | null;
+  readonly deviceSyncEnabled?: boolean;
+  readonly deviceSyncGateActive?: boolean;
+  readonly deviceSyncStatus?: DeviceSyncStatus;
+  readonly deviceSyncPurging?: boolean;
+  readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
+  readonly onDeviceSyncNow?: () => void | Promise<void>;
+  readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
   readonly onEditPublicProfile?: () => void;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onOpenLeaderboard?: () => void;
@@ -54,6 +63,13 @@ export function AccountSettingsSection({
   publicProfileStatus,
   shouldShowCloudCheckoutPlans,
   userEmail,
+  deviceSyncEnabled = false,
+  deviceSyncGateActive = false,
+  deviceSyncStatus,
+  deviceSyncPurging = false,
+  onDeviceSyncEnabledChange,
+  onDeviceSyncNow,
+  onPurgeDeviceSyncData,
   onEditPublicProfile,
   onManageCloudBilling,
   onOpenLeaderboard,
@@ -158,8 +174,82 @@ export function AccountSettingsSection({
           </div>
         ) : null}
       </div>
+
+      {onDeviceSyncEnabledChange ? (
+        <div className="settings-block">
+          <h3>Device sync (preview)</h3>
+          <div className="settings-row">
+            <div>
+              <div className="lbl">Sync activity between your Macs</div>
+              <div className="desc">
+                Uploads this Mac&apos;s raw activity (app, window title, site) to your private Drifty
+                cloud space so your other Mac can show one merged timeline. Visible only to your
+                account; never shared with the leaderboard, teams, or public profiles. Turn it on
+                on both Macs. Included with the Individual plan (trial too).
+              </div>
+              {!deviceSyncGateActive && deviceSyncEnabled ? (
+                <p className="capture-recency capture-recency--error" role="status">
+                  Sync is paused: sign in with an active trial or subscription to resume.
+                </p>
+              ) : null}
+              {deviceSyncStatus?.lastError ? (
+                <p className="capture-recency capture-recency--error" role="status">{deviceSyncStatus.lastError}</p>
+              ) : null}
+            </div>
+            <div className="ctrl">
+              <Toggle
+                checked={deviceSyncEnabled}
+                onChange={onDeviceSyncEnabledChange}
+                ariaLabel="Toggle device sync"
+              />
+            </div>
+          </div>
+          {deviceSyncEnabled ? (
+            <div className="settings-row settings-row--stacked-action">
+              <div>
+                <div className="lbl">Sync status</div>
+                <div className="desc">{describeDeviceSyncStatus(deviceSyncStatus)}</div>
+              </div>
+              <div className="ctrl account-public-profile-actions">
+                <button type="button" className="settings-btn" onClick={() => void onDeviceSyncNow?.()} disabled={!onDeviceSyncNow || !deviceSyncGateActive}>
+                  Sync now
+                </button>
+                <button
+                  type="button"
+                  className="settings-btn danger"
+                  onClick={() => void onPurgeDeviceSyncData?.()}
+                  disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
+                >
+                  {deviceSyncPurging ? "Deleting..." : "Delete cloud copy"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function describeDeviceSyncStatus(status: DeviceSyncStatus | undefined): string {
+  if (!status || !status.enabled) return "Waiting for the first sync cycle.";
+  const parts: string[] = [];
+  if (status.backfill && status.backfill.pushedSeq < status.backfill.totalSeq) {
+    const percent = status.backfill.totalSeq > 0
+      ? Math.min(100, Math.floor((status.backfill.pushedSeq / status.backfill.totalSeq) * 100))
+      : 0;
+    parts.push(`Uploading history (${percent}%)`);
+  }
+  if (status.lastPushedAt) parts.push(`Last upload ${formatSyncTimestamp(status.lastPushedAt)}`);
+  if (status.lastPulledAt) parts.push(`Last download ${formatSyncTimestamp(status.lastPulledAt)}`);
+  if (parts.length === 0) return "Waiting for the first sync cycle.";
+  return parts.join(" · ");
+}
+
+function formatSyncTimestamp(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function resolveCloudAccountAction({

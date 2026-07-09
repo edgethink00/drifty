@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-sync-outbox"
+description = "Enables the tracker_get_sync_outbox command without any pre-configured scope."
+commands.allow = ["tracker_get_sync_outbox"]
+
+[[permission]]
+identifier = "deny-tracker-get-sync-outbox"
+description = "Denies the tracker_get_sync_outbox command without any pre-configured scope."
+commands.deny = ["tracker_get_sync_outbox"]

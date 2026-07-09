@@ -60,6 +60,7 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "platform": row.get("platform", "macos"),
         "source": row.get("source", "unknown"),
         "confidence": row.get("confidence"),
+        "deviceId": row.get("origin_device_id"),
     }
     if classification is not None:
         serialized["classification"] = classification
@@ -79,6 +80,7 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
         "source": row.get("source", "unknown"),
     }
     optional_fields: dict[str, RowValue] = {
+        "deviceId": row.get("origin_device_id"),
         "bundleId": row.get("bundle_id"),
         "browserName": row.get("browser_name"),
         "siteDomain": None if hide_site_context else row.get("site_domain"),
