@@ -195,6 +195,10 @@ pub fn run() {
                     }
                     tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
                         managed_ai_stop_runtime_for_app_exit(app);
+                        // Quitting the app must also stop the detached sampling
+                        // daemon; leaving it recording after quit would violate
+                        // the user's expectation that tracking has stopped.
+                        tracker::stop_tracking_daemon_for_app_exit(app);
                         tracker::shutdown_serve_process();
                     }
                     tauri::RunEvent::WindowEvent {
