@@ -403,6 +403,82 @@ export interface AiReviewEventRevertResult {
   restored: boolean;
 }
 
+export interface SyncOutboxClassification {
+  category: string;
+  productivity: string;
+  source: string;
+  confidence?: number | null;
+  reason?: string | null;
+  classifiedAt?: string | null;
+}
+
+export interface SyncOutboxSegment {
+  segmentUid: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  appName: string;
+  bundleId?: string | null;
+  windowTitle?: string | null;
+  siteDomain?: string | null;
+  siteTitle?: string | null;
+  siteUrl?: string | null;
+  youtubeVideoId?: string | null;
+  youtubePlaylistId?: string | null;
+  youtubeIsShorts?: boolean | null;
+  browserName?: string | null;
+  siteSource?: string | null;
+  platform: string;
+  source: string;
+  confidence?: number | null;
+  syncSeq: number;
+  classification?: SyncOutboxClassification | null;
+}
+
+export interface SyncOutboxPage {
+  items: SyncOutboxSegment[];
+  /** Highest syncSeq actually returned; the push cursor advances to this, not counterSeq. */
+  batchMaxSeq: number;
+  counterSeq: number;
+  pendingCount: number;
+}
+
+export interface SyncStateSnapshot {
+  state: Record<string, string>;
+  counterSeq: number;
+  pendingDeletions: number;
+}
+
+export interface SyncedSegmentInput extends Omit<SyncOutboxSegment, "syncSeq"> {
+  originDeviceId: string;
+}
+
+export interface SyncApplyResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface SyncDeletionRecord {
+  deletionUid: string;
+  kind: "range" | "uids";
+  rangeStart?: string | null;
+  rangeEnd?: string | null;
+  segmentUids?: string[] | null;
+  createdAt: string;
+}
+
+export interface SyncDeletionsApplyResult {
+  applied: number;
+  skipped: number;
+}
+
+export interface SyncOutboxQuery {
+  afterSeq: number;
+  limit?: number;
+  hotGraceSeconds?: number;
+}
+
 export interface TrackerApi {
   getStatus(): Promise<TrackerStatus>;
   start(): Promise<TrackerStatus>;
@@ -446,6 +522,14 @@ export interface TrackerApi {
   previewBrowserHistoryImport(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportPreview>;
   importBrowserHistory(query?: BrowserHistoryImportQuery): Promise<BrowserHistoryImportResult>;
   getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment>;
+  getSyncOutbox(query: SyncOutboxQuery): Promise<SyncOutboxPage>;
+  getSyncState(): Promise<SyncStateSnapshot>;
+  setSyncState(entries: Record<string, string | null>): Promise<{ written: number }>;
+  applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult>;
+  getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]>;
+  markSyncDeletionsPushed(deletionUids: readonly string[]): Promise<{ marked: number }>;
+  applySyncedDeletions(deletions: SyncDeletionRecord[]): Promise<SyncDeletionsApplyResult>;
+  purgeRemoteSegments(): Promise<{ purged: number }>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
   updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;

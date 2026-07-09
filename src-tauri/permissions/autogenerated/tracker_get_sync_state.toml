@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-sync-state"
+description = "Enables the tracker_get_sync_state command without any pre-configured scope."
+commands.allow = ["tracker_get_sync_state"]
+
+[[permission]]
+identifier = "deny-tracker-get-sync-state"
+description = "Denies the tracker_get_sync_state command without any pre-configured scope."
+commands.deny = ["tracker_get_sync_state"]

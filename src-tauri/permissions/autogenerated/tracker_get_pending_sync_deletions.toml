@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-pending-sync-deletions"
+description = "Enables the tracker_get_pending_sync_deletions command without any pre-configured scope."
+commands.allow = ["tracker_get_pending_sync_deletions"]
+
+[[permission]]
+identifier = "deny-tracker-get-pending-sync-deletions"
+description = "Denies the tracker_get_pending_sync_deletions command without any pre-configured scope."
+commands.deny = ["tracker_get_pending_sync_deletions"]

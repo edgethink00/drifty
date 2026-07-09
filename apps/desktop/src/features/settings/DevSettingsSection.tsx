@@ -10,6 +10,7 @@ import type { DemoDashboardReplaySettings } from "./settingsStorage";
 import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUpdateController";
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
 import { DevSettingsDashboardLayoutBlock } from "./DevSettingsDashboardLayoutBlock";
+import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
 import { DevSettingsDiagnosticsBlock } from "./DevSettingsDiagnosticsBlock";
 import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
 import { DevSettingsProfileRedesignBlock } from "./DevSettingsProfileRedesignBlock";
@@ -27,6 +28,7 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
+  readonly deviceSyncPreviewEnabled: boolean;
   readonly profileRedesignEnabled: boolean;
   readonly webAccountPreviewEnabled: boolean;
   readonly projectClassificationEnabled: boolean;
@@ -58,6 +60,7 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
+  readonly onDeviceSyncPreviewEnabledChange: (enabled: boolean) => void;
   readonly onProfileRedesignEnabledChange: (enabled: boolean) => void;
   readonly onWebAccountPreviewEnabledChange: (enabled: boolean) => void;
   readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
@@ -91,6 +94,7 @@ export function DevSettingsSection({
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
+  deviceSyncPreviewEnabled,
   profileRedesignEnabled,
   webAccountPreviewEnabled,
   projectClassificationEnabled,
@@ -122,6 +126,7 @@ export function DevSettingsSection({
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
+  onDeviceSyncPreviewEnabledChange,
   onProfileRedesignEnabledChange,
   onWebAccountPreviewEnabledChange,
   onProjectClassificationEnabledChange,
@@ -243,6 +248,10 @@ export function DevSettingsSection({
       <DevSettingsProfileRedesignBlock
         profileRedesignEnabled={profileRedesignEnabled}
         onProfileRedesignEnabledChange={onProfileRedesignEnabledChange}
+      />
+      <DevSettingsDeviceSyncBlock
+        deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
+        onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
       />
       <DevSettingsWebAccountBlock
         webAccountPreviewEnabled={webAccountPreviewEnabled}

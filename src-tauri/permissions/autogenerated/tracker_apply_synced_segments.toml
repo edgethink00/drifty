@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-apply-synced-segments"
+description = "Enables the tracker_apply_synced_segments command without any pre-configured scope."
+commands.allow = ["tracker_apply_synced_segments"]
+
+[[permission]]
+identifier = "deny-tracker-apply-synced-segments"
+description = "Denies the tracker_apply_synced_segments command without any pre-configured scope."
+commands.deny = ["tracker_apply_synced_segments"]

@@ -918,3 +918,167 @@ pub async fn tracker_get_classification_metrics(
     .await
     .map_err(|error| error.to_string())?
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncOutboxQuery {
+    pub after_seq: i64,
+    pub limit: Option<i64>,
+    pub hot_grace_seconds: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStateEntriesQuery {
+    pub entries: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncedSegmentsQuery {
+    pub segments: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncDeletionLimitQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncDeletionUidsQuery {
+    pub deletion_uids: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncedDeletionsQuery {
+    pub deletions: serde_json::Value,
+}
+
+#[tauri::command]
+pub async fn tracker_get_sync_outbox(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncOutboxQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_sync_outbox(&app, query.after_seq, query.limit, query.hot_grace_seconds)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_sync_state(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_sync_state(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_set_sync_state(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncStateEntriesQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .set_sync_state(&app, query.entries)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_apply_synced_segments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncedSegmentsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .apply_synced_segments(&app, query.segments)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_pending_sync_deletions(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncDeletionLimitQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_pending_sync_deletions(&app, query.limit)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_mark_sync_deletions_pushed(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncDeletionUidsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .mark_sync_deletions_pushed(&app, query.deletion_uids)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_apply_synced_deletions(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncedDeletionsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .apply_synced_deletions(&app, query.deletions)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_purge_remote_segments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .purge_remote_segments(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}

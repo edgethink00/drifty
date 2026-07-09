@@ -878,6 +878,68 @@ def _fetch_youtube_metadata_background(db_path: Path, video_id: str, site_url: s
             _YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)
 
 
+def get_sync_outbox(payload: dict):
+    after_seq = payload.get("afterSeq", 0)
+    if not isinstance(after_seq, int) or after_seq < 0:
+        return response(False, error="afterSeq must be a non-negative integer")
+    limit = payload.get("limit", 500)
+    if not isinstance(limit, int) or limit <= 0:
+        return response(False, error="limit must be a positive integer")
+    hot_grace = payload.get("hotGraceSeconds")
+    if hot_grace is not None and (not isinstance(hot_grace, int) or hot_grace < 0):
+        return response(False, error="hotGraceSeconds must be a non-negative integer")
+    return response(True, database().get_sync_outbox(after_seq, limit, hot_grace))
+
+
+def get_sync_state(payload: dict):
+    return response(True, database().get_sync_state())
+
+
+def set_sync_state(payload: dict):
+    entries = payload.get("entries")
+    if not isinstance(entries, dict):
+        return response(False, error="entries must be an object")
+    written = database().set_sync_state(entries)
+    return response(True, {"written": written})
+
+
+def apply_synced_segments(payload: dict):
+    segments = payload.get("segments")
+    if not isinstance(segments, list):
+        return response(False, error="segments must be a list")
+    items = [item for item in segments if isinstance(item, dict)]
+    return response(True, database().apply_synced_segments(items))
+
+
+def get_pending_sync_deletions(payload: dict):
+    limit = payload.get("limit", 100)
+    if not isinstance(limit, int) or limit <= 0:
+        return response(False, error="limit must be a positive integer")
+    return response(True, database().get_pending_sync_deletions(limit))
+
+
+def mark_sync_deletions_pushed(payload: dict):
+    raw_uids = payload.get("deletionUids")
+    if not isinstance(raw_uids, list):
+        return response(False, error="deletionUids must be a list")
+    uids = [uid for uid in raw_uids if isinstance(uid, str) and uid]
+    marked = database().mark_sync_deletions_pushed(uids)
+    return response(True, {"marked": marked})
+
+
+def apply_synced_deletions(payload: dict):
+    deletions = payload.get("deletions")
+    if not isinstance(deletions, list):
+        return response(False, error="deletions must be a list")
+    items = [item for item in deletions if isinstance(item, dict)]
+    return response(True, database().apply_synced_deletions(items))
+
+
+def purge_remote_segments(payload: dict):
+    purged = database().purge_remote_segments()
+    return response(True, {"purged": purged})
+
+
 COMMANDS = {
     "get_status": lambda payload: get_status(),
     "start_tracking": lambda payload: start_tracking(),
@@ -920,6 +982,14 @@ COMMANDS = {
     "import_browser_history": import_browser_history,
     "get_browser_history_environment": get_browser_history_environment,
     "set_developer_diagnostics": set_developer_diagnostics,
+    "get_sync_outbox": get_sync_outbox,
+    "get_sync_state": get_sync_state,
+    "set_sync_state": set_sync_state,
+    "apply_synced_segments": apply_synced_segments,
+    "get_pending_sync_deletions": get_pending_sync_deletions,
+    "mark_sync_deletions_pushed": mark_sync_deletions_pushed,
+    "apply_synced_deletions": apply_synced_deletions,
+    "purge_remote_segments": purge_remote_segments,
 }
 
 

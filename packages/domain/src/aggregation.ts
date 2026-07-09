@@ -524,6 +524,7 @@ function flowBlockDescriptorFromSegment(
     aiCachedClassification: classification.aiCached ?? null,
     classificationReason: classification.reason,
     projectColor,
+    deviceId: segment.deviceId ?? null,
     colorKey,
   } as const;
 }

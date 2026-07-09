@@ -223,6 +223,7 @@ function segmentSignature(segment: ActivitySegment): string {
   const classification = segment.classification;
   return [
     segment.id,
+    segment.deviceId,
     segment.startedAt,
     segment.endedAt,
     segment.durationSeconds,

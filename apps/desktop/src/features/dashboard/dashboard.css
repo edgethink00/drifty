@@ -848,6 +848,67 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
+.dashboard-device-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+  padding: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 52%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
+  width: fit-content;
+}
+
+.dashboard-device-filter__option {
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  padding: 0.3rem 0.72rem;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dashboard-device-filter__option:hover {
+  color: var(--text);
+}
+
+.dashboard-device-filter__option--active {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line-strong) 62%, transparent);
+}
+
+.flow-hover-card__device-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  padding: 0.19rem 0.44rem;
+  border: 1px dashed color-mix(in srgb, var(--line-strong) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 48%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.flow-hover-card__device-pill::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
 .flow-hover-card__detail {
   margin: 0;
 }

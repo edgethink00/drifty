@@ -32,9 +32,10 @@ const DELETE_SCOPES: DeleteHistoryRangeScopes = {
 type DeleteHistoryModalProps = {
   readonly onClose: () => void;
   readonly onDeleted: () => Promise<void> | void;
+  readonly deviceSyncEnabled?: boolean;
 };
 
-export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalProps) {
+export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = false }: DeleteHistoryModalProps) {
   const [preset, setPreset] = useState<RangePreset>("today");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -104,7 +105,10 @@ export function DeleteHistoryModal({ onClose, onDeleted }: DeleteHistoryModalPro
       >
         <div className="auth-modal__header">
           <h2 id="delete-history-modal-title">Delete history</h2>
-          <p>Removes tracked activity for the selected range, including its AI labels and cached YouTube metadata. Classification rules and settings are kept. This cannot be undone.</p>
+          <p>
+            Removes tracked activity for the selected range, including its AI labels and cached YouTube metadata. Classification rules and settings are kept. This cannot be undone.
+            {deviceSyncEnabled ? " Device sync is on, so this range is also removed from your synced Macs and your cloud copy." : ""}
+          </p>
         </div>
 
         {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}

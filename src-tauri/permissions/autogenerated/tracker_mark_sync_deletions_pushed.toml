@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-mark-sync-deletions-pushed"
+description = "Enables the tracker_mark_sync_deletions_pushed command without any pre-configured scope."
+commands.allow = ["tracker_mark_sync_deletions_pushed"]
+
+[[permission]]
+identifier = "deny-tracker-mark-sync-deletions-pushed"
+description = "Denies the tracker_mark_sync_deletions_pushed command without any pre-configured scope."
+commands.deny = ["tracker_mark_sync_deletions_pushed"]
