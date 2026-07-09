@@ -29,6 +29,25 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(start, "2026-04-01T00:00:00")
         self.assertEqual(end, "2026-04-07T23:59:59")
 
+    def test_database_reuses_instance_for_same_db_path(self) -> None:
+        with TemporaryDirectory() as tmp:
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+                first = tracker_main.database()
+                second = tracker_main.database()
+
+        self.assertIs(first, second)
+
+    def test_database_rebuilds_instance_when_db_path_changes(self) -> None:
+        with TemporaryDirectory() as tmp:
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "first.sqlite3"):
+                first = tracker_main.database()
+            with patch.object(tracker_main, "DB_PATH", Path(tmp) / "second.sqlite3"):
+                second = tracker_main.database()
+
+        self.assertIsNot(first, second)
+        self.assertEqual(first.db_path.name, "first.sqlite3")
+        self.assertEqual(second.db_path.name, "second.sqlite3")
+
     def test_start_tracking_forwards_db_path_to_daemon(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"

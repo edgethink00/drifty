@@ -70,8 +70,22 @@ def ensure_state_dir() -> None:
     state_dir().mkdir(parents=True, exist_ok=True)
 
 
+_DATABASE_CACHE: TrackerDatabase | None = None
+
+
 def database() -> TrackerDatabase:
-    return TrackerDatabase(DB_PATH)
+    """Return the TrackerDatabase for DB_PATH, reusing one instance per path.
+
+    Constructing a TrackerDatabase runs the full schema/migration pass, and
+    nearly every command handler calls database(); caching keeps that cost to
+    one pass per process instead of one per IPC request. Keyed by the current
+    DB_PATH value so tests (and --db overrides) that repoint DB_PATH get a
+    fresh instance.
+    """
+    global _DATABASE_CACHE
+    if _DATABASE_CACHE is None or _DATABASE_CACHE.db_path != DB_PATH:
+        _DATABASE_CACHE = TrackerDatabase(DB_PATH)
+    return _DATABASE_CACHE
 
 
 def accessibility_granted() -> bool:
