@@ -147,7 +147,8 @@ function profileDraftFromProfile(profile: UserProfile | null, email: string | nu
     websiteUrl: profile?.website_url ?? "",
     githubUrl: profile?.github_url ?? "",
     linkedinUrl: profile?.linkedin_url ?? "",
-    isPublic: true,
+    // Real server value — the user's visibility choice must survive edits and saves.
+    isPublic: profile?.is_public ?? true,
   };
 }
 
@@ -159,6 +160,7 @@ function emptyProfileDraft(email: string | null | undefined, authMetadataAvatarU
     websiteUrl: "",
     githubUrl: "",
     linkedinUrl: "",
+    // First-time profiles default to public (matches the profiles.is_public column default).
     isPublic: true,
   };
 }
@@ -747,11 +749,11 @@ export function useLeaderboardProfileController({
   }, [leaderboardWindowEndDay, syncLeaderboardPublication]);
 
   const updateProfileDraft = useCallback((updater: Partial<ProfileDraft>) => {
-    setProfileDraft((draft) => ({ ...draft, ...updater, isPublic: true }));
+    setProfileDraft((draft) => ({ ...draft, ...updater }));
   }, []);
 
   const removeProfilePhoto = useCallback(() => {
-    setProfileDraft((draft) => ({ ...draft, avatarUrl: "", isPublic: true }));
+    setProfileDraft((draft) => ({ ...draft, avatarUrl: "" }));
   }, []);
 
   const openProfileEditor = useCallback(() => setIsProfileEditorOpen(true), []);
@@ -818,7 +820,7 @@ export function useLeaderboardProfileController({
         github_url: profileDraft.githubUrl,
         linkedin_url: profileDraft.linkedinUrl,
         timezone: leaderboardTimezone,
-        is_public: true,
+        is_public: profileDraft.isPublic,
       });
 
       if (!profileResult.success || !profileResult.data) {
@@ -946,7 +948,7 @@ export function useLeaderboardProfileController({
         github_url: profileDraft.githubUrl,
         linkedin_url: profileDraft.linkedinUrl,
         timezone: leaderboardTimezone,
-        is_public: true,
+        is_public: profileDraft.isPublic,
       });
 
       if (!result.success || !result.data) {
@@ -991,7 +993,7 @@ export function useLeaderboardProfileController({
       const avatarUrl = await readImageFileAsDataUrl(file);
       setProfileError(null);
       setProfileMessage(null);
-      setProfileDraft((draft) => ({ ...draft, avatarUrl, isPublic: true }));
+      setProfileDraft((draft) => ({ ...draft, avatarUrl }));
     } catch (nextError) {
       setProfileError(toErrorMessage(nextError));
     }

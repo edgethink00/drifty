@@ -106,7 +106,8 @@ function normalizeProfile(row: ProfileRow, email?: string | null): UserProfile {
     github_url: row.github_url ?? "",
     linkedin_url: row.linkedin_url ?? "",
     timezone: row.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    is_public: true,
+    // Reflect the row's real visibility; only a missing column (legacy row) defaults to public.
+    is_public: row.is_public ?? true,
     updated_at: row.updated_at ?? "",
   };
 }
@@ -175,7 +176,11 @@ export async function saveOwnProfile(input: ProfileInput, client?: ProfileClient
         github_url: input.github_url?.trim() ?? "",
         linkedin_url: input.linkedin_url?.trim() ?? "",
         timezone,
-        is_public: true,
+        // Never force visibility: pass the caller's choice through, and when the caller has no
+        // opinion OMIT the column — an upsert then preserves the row's existing value, and a
+        // first-time insert falls back to the schema default (true), so freshly created
+        // profiles stay public and already-published cards keep working.
+        ...(input.is_public === undefined ? {} : { is_public: input.is_public }),
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" })
       .select("public_id, display_name, bio, avatar_url, website_url, github_url, linkedin_url, timezone, is_public, updated_at")

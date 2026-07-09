@@ -23,6 +23,7 @@ export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassi
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 export const PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY = "drifty.dev.projectClassification";
 export const PROFILE_REDESIGN_ENABLED_STORAGE_KEY = "drifty.dev.profileRedesign";
+export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 
@@ -306,6 +307,15 @@ export function resolveInitialProjectClassificationEnabled(): boolean {
 export function resolveInitialProfileRedesignEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(PROFILE_REDESIGN_ENABLED_STORAGE_KEY) === "1";
+}
+
+// Off by default (opt-in): the Dev-settings toggle is the sole gate for the web account
+// preview — it gates both the Profile tab's embed detail-share toggles and the background
+// publisher that mirrors an aggregate-only activity summary to the drifty.so account
+// dashboard. Nothing extra is published until a developer turns this on in Dev mode.
+export function resolveInitialWebAccountPreviewEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(WEB_ACCOUNT_PREVIEW_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialTeamsBetaEnabled(): boolean {

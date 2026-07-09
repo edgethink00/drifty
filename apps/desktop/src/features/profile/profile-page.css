@@ -902,6 +902,87 @@
   font-size: 0.62rem;
 }
 
+/* ── Detail opt-ins + public-profile switch ────────────────────────────────*/
+/* Per-detail consent rows under the focus-card switch: checkbox rail + copy.
+   Shared by the classic layout, the redesign, and the profile editor modal. */
+.profile-detail-shares {
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.55rem;
+}
+
+.profile-detail-shares__intro {
+  margin: 0;
+}
+
+.profile-detail-shares__row {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.profile-detail-shares__row .drifty-checkbox {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.profile-detail-shares__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.profile-detail-shares__copy strong {
+  font-size: 0.82rem;
+}
+
+.profile-detail-shares__copy small {
+  color: var(--text-soft, inherit);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.profile-detail-shares__warning {
+  color: #b4552f;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.profile-visibility-toggle {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.profile-visibility-toggle .drifty-checkbox {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.profile-visibility-toggle__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.profile-visibility-toggle__copy strong {
+  font-size: 0.82rem;
+}
+
+.profile-visibility-toggle__copy small {
+  color: var(--text-soft, inherit);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────*/
 @media (max-width: 760px) {
   .profile-page--v2 .profile-identity {

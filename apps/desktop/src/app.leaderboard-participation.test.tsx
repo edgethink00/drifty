@@ -102,9 +102,19 @@ vi.mock("./lib/api/trackerClient", () => ({
 }));
 
 vi.mock("./features/share/focusCardService", () => ({
-  fetchOwnFocusCard: vi.fn().mockResolvedValue({ success: true, error: null, data: { enabled: true, updatedAt: null } }),
+  DEFAULT_FOCUS_CARD_DETAIL_FLAGS: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
+  fetchOwnFocusCard: vi.fn().mockResolvedValue({
+    success: true,
+    error: null,
+    data: {
+      enabled: true,
+      detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
+      updatedAt: null,
+    },
+  }),
   publishFocusCard: vi.fn().mockResolvedValue({ success: true, error: null }),
   setFocusCardEnabled: vi.fn().mockResolvedValue({ success: true, error: null }),
+  setFocusCardDetailFlags: vi.fn().mockResolvedValue({ success: true, error: null }),
 }));
 
 vi.mock("./features/billing/billingService", () => ({
