@@ -21,6 +21,16 @@ export function rememberDriftAlarmSourceSegment(
   }
 }
 
+// Live-AI retry cooldowns are keyed by candidate key (which embeds the segment
+// endedAt, so keys never repeat). An expired cooldown reads the same as a
+// missing one, so sweeping expired entries whenever a new cooldown is recorded
+// keeps the map bounded over a long-running session.
+export function pruneExpiredDriftAlarmAiRetries(retryAfterByKey: Map<string, number>, nowMs: number): void {
+  for (const [key, retryAfterMs] of retryAfterByKey) {
+    if (retryAfterMs <= nowMs) retryAfterByKey.delete(key);
+  }
+}
+
 export function extremeNudgeErrorDiagnostic(error: unknown): string | null {
   const message = toErrorMessage(error);
   const separatorIndex = message.lastIndexOf(": ");
