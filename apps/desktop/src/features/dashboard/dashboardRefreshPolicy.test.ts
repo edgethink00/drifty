@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BACKGROUND_RECONCILE_INTERVAL_MS,
+  resolveAppRefreshTickAction,
   resolveDashboardRefreshMode,
   shouldRefreshHistoryData,
   type DashboardRefreshInputs,
@@ -60,5 +62,39 @@ describe("resolveDashboardRefreshMode", () => {
       nextInputs: { ...loadedMondayInput, startOfWeek: "sunday" },
       previousInputs: loadedMondayInput,
     })).toBe("foreground");
+  });
+});
+
+describe("resolveAppRefreshTickAction", () => {
+  const nowMs = 1_800_000_000_000;
+
+  it("always live-tails while the renderer is focused", () => {
+    expect(resolveAppRefreshTickAction({
+      rendererFocused: true,
+      nowMs,
+      lastFullDayRefreshAtMs: 0,
+    })).toBe("live-tail");
+  });
+
+  it("live-tails unfocused ticks while the last full refresh is recent", () => {
+    expect(resolveAppRefreshTickAction({
+      rendererFocused: false,
+      nowMs,
+      lastFullDayRefreshAtMs: nowMs - BACKGROUND_RECONCILE_INTERVAL_MS + 1,
+    })).toBe("live-tail");
+  });
+
+  it("reconciles an unfocused renderer once the last full refresh ages past the interval", () => {
+    expect(resolveAppRefreshTickAction({
+      rendererFocused: false,
+      nowMs,
+      lastFullDayRefreshAtMs: nowMs - BACKGROUND_RECONCILE_INTERVAL_MS,
+    })).toBe("reconcile");
+
+    expect(resolveAppRefreshTickAction({
+      rendererFocused: false,
+      nowMs,
+      lastFullDayRefreshAtMs: 0,
+    })).toBe("reconcile");
   });
 });
