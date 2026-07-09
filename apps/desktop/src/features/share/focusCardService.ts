@@ -57,6 +57,14 @@ function resolveClient(client?: FocusCardClient | null): FocusCardClient | null 
   return supabase as unknown as FocusCardClient;
 }
 
+function resolvePublisherTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 async function currentUserId(client: FocusCardClient): Promise<string | null> {
   const { data } = await client.auth.getUser();
   return data.user?.id ?? null;
@@ -114,6 +122,10 @@ export async function publishFocusCard(payload: FocusCardPayload, enabled: boole
       daily_focus: payload.daily_focus,
       window_start_date: payload.window_start_date,
       window_end_date: payload.window_end_date,
+      // daily_focus day labels are the publisher's LOCAL logical days; without the
+      // timezone a web viewer cannot label the chart's date axis correctly (the
+      // column otherwise stays at its 'UTC' default).
+      timezone: resolvePublisherTimezone(),
       // Detail opt-ins: the flags land with the data in one write. A flag that is off has
       // no payload field, and its stored column is actively cleared (not left stale) so a
       // withdrawn consent also removes the data at rest, not just at the RPC gate.

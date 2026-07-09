@@ -267,6 +267,45 @@ class SyncOutboxTests(DeviceSyncTestCase):
         released = self.database.get_sync_outbox(0, limit=10, hot_grace_seconds=0)
         self.assertEqual(len(released["items"]), 2)
 
+    def test_cursor_never_advances_past_a_held_hot_segment(self) -> None:
+        # Cold segment first, then the hot one; a classification write then bumps
+        # the COLD segment's sync_seq above the hot segment's. Without the clamp
+        # the cursor would advance past the hot seq while it is excluded, and once
+        # cold (nothing re-bumps an unclassified segment) it would be stranded
+        # below the cursor forever.
+        cold_end = datetime.now(timezone.utc) - timedelta(hours=1)
+        self._insert_local_segment(
+            0,
+            started_at=_iso(cold_end - timedelta(minutes=5)),
+            ended_at=_iso(cold_end),
+        )
+        hot_end = datetime.now(timezone.utc)
+        self._insert_local_segment(
+            1,
+            started_at=_iso(hot_end - timedelta(minutes=2)),
+            ended_at=_iso(hot_end),
+        )
+        with self.database.connect() as conn:
+            cold_id = conn.execute(
+                "SELECT id FROM activity_segments WHERE window_title = 'Window 0'"
+            ).fetchone()["id"]
+            hot_seq = conn.execute(
+                "SELECT sync_seq FROM activity_segments WHERE window_title = 'Window 1'"
+            ).fetchone()["sync_seq"]
+        self.database.save_classifications([
+            {"segmentId": cold_id, "category": "Coding", "productivity": "focus", "source": "llm", "confidence": 0.9}
+        ])
+
+        held = self.database.get_sync_outbox(0, limit=10)
+
+        # The cold segment (now with a higher seq) is returned, but the cursor
+        # stays below the held hot segment's seq so it is picked up once cold.
+        self.assertEqual([item["windowTitle"] for item in held["items"]], ["Window 0"])
+        self.assertLess(held["batchMaxSeq"], hot_seq)
+
+        released = self.database.get_sync_outbox(held["batchMaxSeq"], limit=10, hot_grace_seconds=0)
+        self.assertIn("Window 1", [item["windowTitle"] for item in released["items"]])
+
 
 class ApplySyncedSegmentsTests(DeviceSyncTestCase):
     def test_apply_inserts_then_updates_in_place_by_uid(self) -> None:
@@ -303,6 +342,37 @@ class ApplySyncedSegmentsTests(DeviceSyncTestCase):
         self.assertEqual(timeline[0]["deviceId"], REMOTE_DEVICE_ID)
         self.assertEqual(timeline[0]["classification"]["category"], "Browsing")
         self.assertEqual(timeline[0]["classification"]["productivity"], "neutral")
+
+    def test_apply_preserves_local_manual_or_rule_classification(self) -> None:
+        uid = "99999999-0000-0000-0000-00000000000a"
+        self.database.apply_synced_segments([
+            self._remote_segment(uid, started_at="2026-07-06T09:00:00+00:00", ended_at="2026-07-06T09:01:00+00:00")
+        ])
+        with self.database.connect() as conn:
+            segment_id = conn.execute(
+                "SELECT id FROM activity_segments WHERE segment_uid = ?", (uid,)
+            ).fetchone()["id"]
+        # The user re-classifies the remote segment locally (rule/manual override).
+        self.database.save_classifications([
+            {"segmentId": segment_id, "category": "Work", "productivity": "focus", "source": "manual", "confidence": 1.0}
+        ])
+
+        # The originating device re-pushes with a longer duration AND its own
+        # LLM classification; the segment fields update but the user's local
+        # override must survive.
+        self.database.apply_synced_segments([
+            self._remote_segment(
+                uid,
+                started_at="2026-07-06T09:00:00+00:00",
+                ended_at="2026-07-06T09:05:00+00:00",
+                durationSeconds=300,
+            )
+        ])
+
+        timeline = self.database.fetch_timeline("2026-07-06")
+        self.assertEqual(timeline[0]["durationSeconds"], 300)
+        self.assertEqual(timeline[0]["classification"]["category"], "Work")
+        self.assertEqual(timeline[0]["classification"]["source"], "manual")
 
     def test_apply_never_converts_a_local_segment_to_remote(self) -> None:
         self._insert_local_segment(0, started_at="2026-07-06T09:00:00+00:00", ended_at="2026-07-06T09:01:00+00:00")

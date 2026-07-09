@@ -1568,9 +1568,10 @@ class TrackerDatabase:
             # once its ended_at is older than the idle threshold (it can only be trimmed
             # after that, and trims bump sync_seq so a re-push self-heals).
             hot_id: int | None = None
+            hot_seq: int | None = None
             hot = conn.execute(
                 """
-                SELECT id, ended_at FROM activity_segments
+                SELECT id, ended_at, sync_seq FROM activity_segments
                 WHERE origin_device_id IS NULL AND source != ?
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 1
@@ -1584,6 +1585,7 @@ class TrackerDatabase:
                 age_seconds = (datetime.now(timezone.utc) - ended.astimezone(timezone.utc)).total_seconds()
                 if age_seconds < grace:
                     hot_id = int(hot["id"])
+                    hot_seq = int(hot["sync_seq"])
 
             base_where = "s.origin_device_id IS NULL AND s.segment_uid IS NOT NULL AND s.sync_seq > ?"
             params: list[Any] = [int(after_seq)]
@@ -1619,11 +1621,21 @@ class TrackerDatabase:
             counter_seq = int(conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()["seq"])
 
         items = [self._serialize_sync_outbox_row(row) for row in rows]
+        # The push cursor must advance only past what was actually returned. While the
+        # hot segment is held back it must also never advance past the hot segment's
+        # own seq: a classification bump on ANOTHER segment can produce a higher seq in
+        # this batch, and if the cursor passed the hot seq the segment would be
+        # stranded below the cursor once it goes cold (nothing re-bumps an
+        # unclassified segment). Clamping keeps it in reach; re-pushing the few rows
+        # above the clamp next cycle is harmless because the server upsert is
+        # idempotent.
+        batch_max_seq = max((item["syncSeq"] for item in items), default=int(after_seq))
+        if hot_seq is not None:
+            batch_max_seq = min(batch_max_seq, hot_seq - 1)
+        batch_max_seq = max(batch_max_seq, int(after_seq))
         return {
             "items": items,
-            # The push cursor must advance only past what was actually returned; the hot
-            # segment keeps a higher seq until it goes cold and gets picked up later.
-            "batchMaxSeq": max((item["syncSeq"] for item in items), default=int(after_seq)),
+            "batchMaxSeq": batch_max_seq,
             "counterSeq": counter_seq,
             "pendingCount": pending_count,
         }
@@ -1745,6 +1757,15 @@ class TrackerDatabase:
 
                 classification = item.get("classification")
                 if isinstance(classification, dict) and classification.get("category"):
+                    # A user-authored local override (rule/manual) or an approved
+                    # AI-review correction on a remote segment must survive the
+                    # originating device re-pushing its own classification.
+                    existing_classification = conn.execute(
+                        "SELECT source FROM activity_classifications WHERE segment_id = ?",
+                        (segment_id,),
+                    ).fetchone()
+                    if existing_classification is not None and existing_classification["source"] in ("rule", "manual", "ai_review"):
+                        continue
                     source = str(classification.get("source") or "llm")
                     conn.execute(
                         """
