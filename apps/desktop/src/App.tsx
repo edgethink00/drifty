@@ -44,7 +44,6 @@ import { useLeaderboardProfileController } from "./features/leaderboard/useLeade
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
-import { ProfilePage } from "./features/profile/ProfilePage";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HistoryView } from "./features/history/HistoryView";
@@ -277,7 +276,8 @@ export default function App() {
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
-  const activeTab = activeSnapshot.tabId;
+  const rawActiveTab = activeSnapshot.tabId;
+  const activeTab = rawActiveTab === "profile" ? "leaderboard" : rawActiveTab;
   const dashPeriod = activeSnapshot.dashPeriod;
   const isDeferredTabBodyReady = useDeferredTabBodyReady(activeTab);
   const canNavigateBack = navigationHistory.index > 0;
@@ -531,6 +531,18 @@ export default function App() {
       return { ...current, entries };
     });
   }, [activeTab, canOpenTeamsBeta]);
+
+  useEffect(() => {
+    if (rawActiveTab !== "profile") return;
+
+    setNavigationHistory((current) => {
+      const safeEntry: NavigationHistoryState["entries"][number] = { tabId: "leaderboard", dashPeriod: "Today" };
+      if (current.entries.length === 0) return { entries: [safeEntry], index: 0 };
+      const entries = current.entries.slice();
+      entries[current.index] = safeEntry;
+      return { ...current, entries };
+    });
+  }, [rawActiveTab]);
 
   useEffect(() => {
     const handleTeamInvite = (event: Event) => {
@@ -958,7 +970,7 @@ export default function App() {
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
-    enabled: activeTab === "profile",
+    enabled: activeTab === "leaderboard",
   });
   const aiClassificationProviderKey = localAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
@@ -5474,7 +5486,8 @@ export default function App() {
             isDarkMode={theme === "dark"}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             onProfile={() => {
-              navigateToTab("profile");
+              navigateToTab("leaderboard");
+              if (isPolicySignedIn) void focusCard.refresh();
               setAccountMenuOpen(false);
             }}
             onAiSetting={() => {
@@ -5710,35 +5723,6 @@ export default function App() {
           />
         ) : null}
 
-        {/* Profile — your public card & embeds */}
-        {activeTab === "profile" ? (
-          <ProfilePage
-            isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
-            isSignedIn={isPolicySignedIn || leaderboardUsesPreviewProfile}
-            displayName={leaderboardProfileDisplayName}
-            avatarUrl={profile?.avatar_url ?? profileDraft.avatarUrl}
-            draft={profileDraft}
-            onDraftChange={updateProfileDraft}
-            onSaveProfile={() => void handleSaveProfile()}
-            isSavingProfile={profileSaving}
-            publicId={profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null)}
-            focusSeconds7d={localRollingFocusSeconds}
-            dailyProductivity={profileDailyProductivity}
-            card={focusCard}
-            isLeaderboardOptedIn={isLeaderboardOptedIn}
-            leaderboardRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
-            shareMessage={profileShareMessage}
-            profileMessage={profileMessage}
-            profileError={profileError}
-            redesign={devProfileRedesignEnabled}
-            webAccountPreview={devWebAccountPreviewEnabled}
-            onEditProfile={openProfileEditor}
-            onCopyProfileLink={() => void handleShareLeaderboardProfile()}
-            onOpenLeaderboard={() => navigateToTab("leaderboard")}
-            onSignIn={requestLeaderboardAuth}
-          />
-        ) : null}
-
         {/* Leaderboard */}
         {activeTab === "leaderboard" ? (
           <LeaderboardPage
@@ -5754,12 +5738,26 @@ export default function App() {
             leaderboard={leaderboardRows}
             ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
             profileDisplayName={leaderboardProfileDisplayName}
+            publicProfile={{
+              card: focusCard,
+              dailyProductivity: profileDailyProductivity,
+              draft: profileDraft,
+              focusSeconds7d: localRollingFocusSeconds,
+              profileError: isProfileEditorOpen ? null : profileError,
+              profileMessage: isProfileEditorOpen ? null : profileMessage,
+              publicId: profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null),
+              redesign: devProfileRedesignEnabled,
+              shareMessage: profileShareMessage,
+              webAccountPreview: devWebAccountPreviewEnabled,
+              onCopyProfileLink: () => void handleShareLeaderboardProfile(),
+              onEditProfile: openProfileEditor,
+            }}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
             onOptIn={() => void handleLeaderboardOptIn()}
             onOptOut={() => void handleLeaderboardOptOut()}
-            onOpenProfile={() => navigateToTab("profile")}
+            onOpenProfile={openProfileEditor}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
             onSignIn={() => void handleLeaderboardOptIn()}

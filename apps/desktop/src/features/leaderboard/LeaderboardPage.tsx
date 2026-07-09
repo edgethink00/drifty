@@ -1,4 +1,5 @@
 import { LeaderboardView } from "./LeaderboardView";
+import type { LeaderboardPublicProfileControls } from "./LeaderboardView";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 
 export type LeaderboardPageProps = {
@@ -14,6 +15,7 @@ export type LeaderboardPageProps = {
   leaderboard: LeaderboardRow[];
   ownRank?: number | null;
   profileDisplayName?: string | null;
+  publicProfile?: LeaderboardPublicProfileControls;
   statusMessage?: string | null;
   statusTone?: "error" | "neutral";
   totalFocusSeconds7d: number;
@@ -38,6 +40,7 @@ export function LeaderboardPage({
   leaderboard,
   ownRank,
   profileDisplayName,
+  publicProfile,
   statusMessage,
   statusTone,
   totalFocusSeconds7d,
@@ -72,6 +75,7 @@ export function LeaderboardPage({
           email={email}
           isActionLoading={isActionLoading}
           actionError={actionError}
+          publicProfile={publicProfile}
           statusMessage={statusMessage}
           statusTone={statusTone}
           onOptIn={onOptIn}

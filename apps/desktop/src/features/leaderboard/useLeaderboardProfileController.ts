@@ -7,7 +7,8 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { capturePostHogEvent, toAnalyticsErrorKind, toCountBucket } from "../../lib/analytics/posthog";
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
 import type { AuthState } from "../auth/AuthContext";
-import { buildPublicProfileUrl, copyTextToClipboard, readImageFileAsDataUrl, type ProfileDraft } from "../profile/ProfileModals";
+import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";
+import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import {
@@ -953,13 +954,14 @@ export function useLeaderboardProfileController({
 
       if (!result.success || !result.data) {
         setProfileError(result.error ?? "Unable to save profile");
+        if (result.error === "Not authenticated") onAuthRequired();
         return false;
       }
 
       setProfile(result.data);
       setProfileDraft(profileDraftFromProfile(result.data, user?.email, authMetadataAvatarUrl));
       setProfileMessage("Profile saved.");
-      if (activeTab === "leaderboard") await refreshLeaderboardData();
+      if (activeTab === "leaderboard") void refreshLeaderboardData();
       return true;
     } catch (nextError) {
       setProfileError(toErrorMessage(nextError));
@@ -967,7 +969,7 @@ export function useLeaderboardProfileController({
     } finally {
       setProfileSaving(false);
     }
-  }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, profileDraft, refreshLeaderboardData, user?.email]);
+  }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, onAuthRequired, profileDraft, refreshLeaderboardData, user?.email]);
 
   const handleSaveProfileFromModal = useCallback(async () => {
     const saved = await handleSaveProfile();

@@ -19,7 +19,6 @@ export const commandBarTabs = [
   { id: "trends", label: "Trends", sub: "Patterns and trends" },
   { id: "history", label: "History", sub: "Local records" },
   { id: "leaderboard", label: "Leaderboard", sub: "Global focus ranking" },
-  { id: "profile", label: "Profile", sub: "Your public card & embeds" },
   { id: "settings", label: "Settings", sub: "App preferences" },
 ] satisfies ReadonlyArray<{ id: TabId; label: string; sub: string }>;
 

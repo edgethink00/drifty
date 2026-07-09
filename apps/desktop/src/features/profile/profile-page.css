@@ -1,153 +1,248 @@
-/* Profile tab — public presence hub. Leans on the shared tokens (leaderboard.css palette).
- *
- * This file has two layers:
- *   1. BASE — the shipped "classic" layout (root .profile-page). Unchanged.
- *   2. REDESIGN — every restyle scoped under .profile-page--v2, so it only takes
- *      effect when the Dev-mode "Profile redesign" toggle is on. With the toggle
- *      off the root lacks --v2, so none of the redesign rules match and the page
- *      renders exactly as before.
- */
-
 .profile-page .leaderboard-panel__stack {
   gap: var(--space-2);
 }
 
-/* Denser blocks on this page than the leaderboard defaults. */
 .profile-page .leaderboard-profile-block {
   gap: var(--space-2);
 }
 
-.profile-page .profile-identity__board,
-.profile-page .profile-identity__link {
-  padding-top: 0.55rem;
-}
-
-/* Identity card ------------------------------------------------------------- */
-.profile-identity__main {
-  align-items: flex-start;
-  display: flex;
-  gap: var(--space-3);
-}
-
-.profile-identity__form {
-  display: grid;
-  flex: 1;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.profile-identity__name-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.profile-identity__name-input {
-  flex: 1;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  min-width: 200px;
-}
-
-.profile-identity__bio-input {
-  resize: vertical;
-  width: 100%;
-}
-
-.profile-identity__links {
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.profile-identity__link {
-  align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem var(--space-2);
-  padding-top: var(--space-2);
-}
-
-.profile-identity__link > .label-mono {
-  flex: 0 0 158px;
-}
-
-.profile-identity__link .profile-embed-card__variant-row {
-  flex: 1 1 320px;
-}
-
-.profile-identity__board {
-  align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
-}
-
-.profile-identity__board-status {
-  font-weight: 600;
-}
-
-.profile-identity__board .ghost-button {
-  margin-left: auto;
-}
-
-/* Page-head privacy subtitle. */
 .profile-page__privacy {
   margin: 0.35rem 0 0;
   max-width: 78ch;
   opacity: 0.85;
 }
 
-/* Focus-card switch row inside the identity card. */
-.profile-identity__control {
-  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  padding-top: 0.55rem;
+.profile-page .profile-btn {
+  align-items: center;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 620;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  min-height: 1.9rem;
+  padding: 0.36rem 0.82rem;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-/* Shared left label rail across the identity rows. */
-.profile-identity__control > .label-mono,
-.profile-identity__board > .label-mono {
-  flex: 0 0 158px;
-  line-height: 1.25;
+.profile-page .settings-btn.profile-btn,
+.profile-page .ghost-button.profile-btn {
+  background: color-mix(in srgb, var(--surface-strong) 64%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--line-strong) 66%, var(--line));
+  color: var(--text-muted);
 }
 
-.profile-card-control__row {
+.profile-page .settings-btn.profile-btn:hover:not(:disabled),
+.profile-page .ghost-button.profile-btn:hover:not(:disabled) {
+  background: var(--surface-strong);
+  border-color: var(--line-strong);
+  color: var(--text);
+  transform: none;
+}
+
+.profile-page .settings-btn--primary.profile-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--on-accent);
+}
+
+.profile-page .settings-btn--primary.profile-btn:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--on-accent);
+  transform: none;
+}
+
+.profile-window-entry {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.profile-window-entry__copy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.profile-window-entry__copy p {
+  margin: 0;
+}
+
+.profile-window-entry__actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.profile-window-stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.profile-share {
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
+  display: grid;
+  padding: var(--space-3);
+}
+
+.profile-share > * + * {
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.profile-share__publish {
+  align-items: start;
+  display: grid;
+  gap: var(--space-2) var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.profile-share__publish-copy {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.profile-share__publish-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.profile-share__title {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 620;
+}
+
+.profile-share__publish-copy p {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 56ch;
+}
+
+.profile-status-dot {
+  background: var(--text-soft);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-soft) 14%, transparent);
+  flex: 0 0 auto;
+  height: 0.5rem;
+  width: 0.5rem;
+}
+
+.profile-status-dot--on {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.profile-state-pill {
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  font-weight: 640;
+  letter-spacing: 0.1em;
+  padding: 0.16rem 0.5rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.profile-state-pill--on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-strong);
+}
+
+.profile-state-pill--pending {
+  color: var(--text-soft);
+}
+
+.profile-share__row {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.profile-card-control__state {
-  background: color-mix(in srgb, var(--line) 45%, transparent);
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.15rem 0.6rem;
-  text-transform: uppercase;
+.profile-share__rail {
+  flex: 0 0 9.5rem;
+  line-height: 1.25;
 }
 
-.profile-card-control__state--on {
-  background: color-mix(in srgb, #2e9e4f 16%, transparent);
-  color: #1c7e3c;
+.profile-share__status {
+  color: var(--text-muted);
+  flex: 1 1 auto;
+  font-size: 0.8rem;
+  font-weight: 540;
 }
 
-.profile-card-control__copy {
+.profile-share__row--inline .ghost-button {
+  margin-left: auto;
+}
+
+.profile-copy-row {
+  align-items: center;
+  display: flex;
+  flex: 1 1 320px;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.profile-copy-row .settings-input,
+.profile-copy-row .profile-field {
   flex: 1;
-  min-width: 220px;
+  min-width: 0;
 }
 
-.profile-card-control__copy p {
-  margin: 0;
+.profile-field--code {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
-/* 30-day chart ---------------------------------------------------------------- */
+.profile-embeds__head {
+  align-items: center;
+}
+
+.profile-embeds__head-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+.profile-embeds__toggle {
+  aspect-ratio: 1;
+  min-height: 2.05rem;
+  padding: 0;
+  width: 2.05rem;
+}
+
+.profile-embeds__chevron {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform var(--transition-fast);
+}
+
+.profile-embeds__toggle[aria-expanded="true"] .profile-embeds__chevron {
+  transform: rotate(90deg);
+}
+
 .profile-chart__head {
   align-items: baseline;
   display: flex;
@@ -510,58 +605,12 @@
   opacity: 0.62;
 }
 
-/* Name reads as a heading but reveals its edit affordance on hover/focus. */
-.profile-page--v2 .profile-field--name {
-  background: transparent;
-  border-color: transparent;
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-  font-weight: 640;
-  letter-spacing: -0.015em;
-  margin-left: -0.4rem;
-  padding: 0.16rem 0.4rem;
-  width: 100%;
-}
-
-.profile-page--v2 .profile-field--name:hover {
-  background: color-mix(in srgb, var(--surface-strong) 44%, transparent);
-  border-color: color-mix(in srgb, var(--line) 90%, transparent);
-}
-
-.profile-page--v2 .profile-field--name:focus {
-  background: var(--surface);
-  border-color: var(--accent);
-}
-
-.profile-page--v2 .profile-field--bio {
-  line-height: 1.5;
-  min-height: 2.7rem;
-  resize: vertical;
-}
-
 .profile-page--v2 .profile-field--code {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   white-space: nowrap;
 }
 
-/* Link field: tiny mono caption above a compact input, aligned in a grid. */
-.profile-page--v2 .profile-field-wrap {
-  display: grid;
-  gap: 0.22rem;
-  min-width: 0;
-}
-
-.profile-page--v2 .profile-field-wrap__label {
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  letter-spacing: 0.12em;
-  padding-left: 0.1rem;
-  text-transform: uppercase;
-}
-
-/* Inline save/validation feedback. */
 .profile-page--v2 .profile-note {
   color: var(--text-soft);
   font-size: 0.74rem;
@@ -572,56 +621,6 @@
   color: var(--warn);
 }
 
-/* ── Zone 1 · identity ─────────────────────────────────────────────────────*/
-.profile-page--v2 .profile-identity {
-  align-items: start;
-  column-gap: var(--space-4);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  row-gap: var(--space-3);
-}
-
-.profile-page--v2 .profile-identity__avatar {
-  align-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--accent-soft) 60%, transparent), transparent 64%),
-    color-mix(in srgb, var(--surface-strong) 70%, var(--surface));
-  color: color-mix(in srgb, var(--accent) 78%, var(--text-muted));
-  display: inline-flex;
-  flex: 0 0 auto;
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 640;
-  height: 64px;
-  justify-content: center;
-  object-fit: cover;
-  width: 64px;
-}
-
-.profile-page--v2 .profile-identity__fields {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.profile-page--v2 .profile-identity__links {
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-}
-
-.profile-page--v2 .profile-identity__actions {
-  align-items: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-/* ── Zone 2 · what's public ────────────────────────────────────────────────
-   A distinct inset panel so "controlling what's shared" reads apart from
-   "editing your profile", with uniform hairline dividers between rows. */
 .profile-page--v2 .profile-share {
   border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
   border-radius: var(--radius-md);
@@ -985,17 +984,6 @@
 
 /* ── Responsive ────────────────────────────────────────────────────────────*/
 @media (max-width: 760px) {
-  .profile-page--v2 .profile-identity {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .profile-page--v2 .profile-identity__actions {
-    align-items: center;
-    flex-direction: row;
-    grid-column: 1 / -1;
-    justify-content: flex-end;
-  }
-
   .profile-page--v2 .profile-share__publish {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1006,8 +994,17 @@
 }
 
 @media (max-width: 560px) {
-  .profile-page--v2 .profile-identity {
-    grid-template-columns: 1fr;
+  .profile-window-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-window-entry__actions {
+    justify-content: flex-start;
+  }
+
+  .profile-window-entry__actions .profile-btn {
+    width: 100%;
   }
 
   .profile-page--v2 .profile-share__rail {

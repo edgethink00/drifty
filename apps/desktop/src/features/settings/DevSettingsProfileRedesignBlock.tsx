@@ -15,7 +15,7 @@ export function DevSettingsProfileRedesignBlock({
       <div className="settings-row">
         <div>
           <div className="lbl">Enable profile redesign</div>
-          <div className="desc">Render the redesigned Profile tab (two-zone identity card, cleaner fields, unified buttons). Off by default -- the shipped layout stays unchanged until you turn this on.</div>
+          <div className="desc">Render the redesigned public profile controls inside Leaderboard. Off by default -- the shipped layout stays unchanged until you turn this on.</div>
         </div>
         <div className="ctrl">
           <Toggle

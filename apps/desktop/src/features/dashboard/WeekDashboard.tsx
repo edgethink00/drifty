@@ -181,6 +181,11 @@ export function WeekDashboard({
               ) : null}
               <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
               <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
+              {refreshStatus !== "idle" ? (
+                <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">
+                  {refreshStatus === "loading" ? "Updating" : "Update failed"}
+                </span>
+              ) : null}
             </div>
             <div className="week-v2-summary__actions">
               {dateNavigator}

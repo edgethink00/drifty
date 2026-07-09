@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LeaderboardRow } from "./leaderboardService";
 import { LeaderboardView } from "./LeaderboardView";
-import { EditProfileModal } from "../profile/ProfileModals";
+import { EditProfileModal, ProfileModal } from "../profile/ProfileModals";
+import type { FocusCardControls } from "../share/useFocusCard";
 
 type TestProps = Parameters<typeof LeaderboardView>[0];
+const PUBLIC_ID = "9f3a1b2c-0000-4d5e-8f6a-1b2c3d4e5f60";
 
 function renderView(overrides: Partial<TestProps> = {}) {
   const props: TestProps = {
@@ -45,6 +47,45 @@ function makeLeaderboardRow(overrides: Partial<LeaderboardRow>): LeaderboardRow 
   };
 }
 
+function mockCard(overrides: Partial<FocusCardControls> = {}): FocusCardControls {
+  return {
+    enabled: false,
+    busy: false,
+    error: null,
+    detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
+    refresh: vi.fn().mockResolvedValue(undefined),
+    enable: vi.fn().mockResolvedValue(true),
+    disable: vi.fn().mockResolvedValue(undefined),
+    setDetailFlag: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function makePublicProfile(overrides: Partial<NonNullable<TestProps["publicProfile"]>> = {}): NonNullable<TestProps["publicProfile"]> {
+  return {
+    card: mockCard(),
+    dailyProductivity: null,
+    draft: {
+      displayName: "Alex",
+      bio: "Building quiet tools.",
+      avatarUrl: "",
+      websiteUrl: "https://drifty.so",
+      githubUrl: "",
+      linkedinUrl: "",
+      isPublic: true,
+    },
+    focusSeconds7d: 20 * 3600 + 59 * 60,
+    profileError: null,
+    profileMessage: null,
+    publicId: PUBLIC_ID,
+    redesign: false,
+    shareMessage: null,
+    onCopyProfileLink: vi.fn(),
+    onEditProfile: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe("LeaderboardView", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -61,7 +102,7 @@ describe("LeaderboardView", () => {
     const onSignIn = vi.fn();
     renderView({ isSignedIn: false, isOptedIn: false, onSignIn });
 
-    expect(screen.getByText(/nothing is published until you join/i)).toBeTruthy();
+    expect(screen.queryByText(/nothing is published until you join/i)).toBeNull();
     const hero = screen.getByLabelText(/your leaderboard participation/i);
     const heroJoin = within(hero).getByRole("button", { name: /join leaderboard/i });
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
@@ -88,13 +129,56 @@ describe("LeaderboardView", () => {
     expect(within(boardBlock).getByRole("list", { name: /global focus leaderboard rankings/i })).toBeTruthy();
   });
 
-  it("points to the Profile tab for public card management", () => {
-    const onOpenProfile = vi.fn();
-    renderView({ profileDisplayName: "Alex", onOpenProfile });
+  it("shows the saved profile summary and opens editing from the pencil action", () => {
+    const onEditProfile = vi.fn();
+    renderView({
+      profileDisplayName: "Alex",
+      publicProfile: makePublicProfile({
+        draft: {
+          displayName: "Alex",
+          bio: "Building quiet tools.",
+          avatarUrl: "data:image/png;base64,avatar",
+          websiteUrl: "https://drifty.so",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        },
+        onEditProfile,
+      }),
+    });
 
-    expect(screen.getByText(/your public card & embeds live in the profile tab/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /open profile/i }));
-    expect(onOpenProfile).toHaveBeenCalledTimes(1);
+    const hero = screen.getByLabelText(/your leaderboard participation/i);
+    const profileButton = within(hero).getByRole("button", { name: /edit public profile/i });
+    expect(within(hero).getByText("Building quiet tools.")).toBeTruthy();
+    expect(within(hero).getByRole("link", { name: "drifty.so" })).toBeTruthy();
+    expect(hero.querySelector("img.leaderboard-hero__avatar")).not.toBeNull();
+    expect(screen.queryByText(/public card and embeds stay with this leaderboard profile/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /open profile/i })).toBeNull();
+    fireEvent.click(profileButton);
+    expect(onEditProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders public card controls inside the expanded embeds area", () => {
+    const card = mockCard({ enabled: true });
+    renderView({ profileDisplayName: "Alex", publicProfile: makePublicProfile({ card }) });
+
+    const participationBlock = screen.getByLabelText(/^leaderboard participation$/i);
+    const embeds = screen.getByLabelText(/^embeds$/i);
+
+    expect(participationBlock.contains(embeds)).toBe(false);
+    expect(screen.queryByText(/profile tab/i)).toBeNull();
+    expect(within(embeds).queryByRole("button", { name: /^show$/i })).toBeNull();
+    expect(within(embeds).getByRole("button", { name: /expand embeds/i }).textContent).toContain(">");
+    expect(card.refresh).not.toHaveBeenCalled();
+
+    fireEvent.click(within(embeds).getByRole("button", { name: /expand embeds/i }));
+    expect(within(embeds).getByText(/public focus card/i)).toBeTruthy();
+    expect(within(embeds).getByRole("button", { name: /make private/i })).toBeTruthy();
+    expect(within(embeds).getByRole("button", { name: /copy profile link/i })).toBeTruthy();
+    const values = (within(embeds).getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
+    expect(values.some((value) => value.includes(`profile/?id=${PUBLIC_ID}`))).toBe(true);
+    expect(values.some((value) => value.includes(`badge?id=${PUBLIC_ID}`))).toBe(true);
+    expect(values.some((value) => value.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(true);
   });
 
   it("uses the profile editor avatar itself as the photo change control", () => {
@@ -123,8 +207,23 @@ describe("LeaderboardView", () => {
       />,
     );
 
+    expect(screen.getByRole("dialog", { name: /edit profile/i }).getAttribute("aria-modal")).toBe("true");
     expect(screen.getByLabelText(/choose profile photo/i).getAttribute("type")).toBe("file");
     expect(screen.queryByText(/upload picture/i)).toBeNull();
+  });
+
+  it("marks the public leaderboard profile popup as a modal dialog", () => {
+    render(
+      <ProfileModal
+        row={makeLeaderboardRow({ display_name: "Alex", focus_seconds: 3600, rank: 2, period: "weekly" })}
+        profile={null}
+        isLoading={false}
+        error={null}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: /alex/i }).getAttribute("aria-modal")).toBe("true");
   });
 
   it("renders a loading state while leaderboard data is being fetched", () => {
@@ -188,8 +287,8 @@ describe("LeaderboardView", () => {
     const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
     const joinActions = joinButton.closest(".leaderboard-hero__actions");
 
-    expect(joinButton.classList.contains("leaderboard-hero__participation")).toBe(true);
     expect(joinActions).not.toBeNull();
+    expect(joinActions?.contains(joinButton)).toBe(true);
 
     rerender(
       <LeaderboardView
@@ -213,8 +312,8 @@ describe("LeaderboardView", () => {
     const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
     const leaveActions = leaveButton.closest(".leaderboard-hero__actions");
 
-    expect(leaveButton.classList.contains("leaderboard-hero__participation")).toBe(true);
     expect(leaveActions).not.toBeNull();
+    expect(leaveActions?.contains(leaveButton)).toBe(true);
     expect(joinActions?.className).toBe(leaveActions?.className);
   });
 

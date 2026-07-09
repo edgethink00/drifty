@@ -673,7 +673,7 @@ describe("App leaderboard participation", () => {
     expect(screen.queryByText(/loading leaderboard/i)).toBeNull();
     expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
     expect(await screen.findByRole("button", { name: /leave leaderboard/i })).toBeTruthy();
-    expect(await screen.findByRole("button", { name: /open profile/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /edit public profile/i })).toBeTruthy();
     expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ timezone, is_public: true }));
   });
 
@@ -976,14 +976,15 @@ describe("App leaderboard participation", () => {
 
     expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
 
-    // Sharing the profile link now lives in the Profile tab (works even off the board).
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, "clipboard", {
       value: { writeText },
       configurable: true,
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /open profile/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /my profile/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /expand embeds/i }));
     fireEvent.click(await screen.findByRole("button", { name: /copy profile link/i }));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("https://drifty.so/profile/?id=profile-1");
@@ -1108,18 +1109,17 @@ describe("App leaderboard participation", () => {
     fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
     expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
 
-    // Profile editing now lives inline on the Profile tab (reached from the board's strip).
-    fireEvent.click(await screen.findByRole("button", { name: /open profile/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /edit public profile/i }));
+    expect(await screen.findByText(/^edit profile$/i)).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Display name"), { target: { value: "Alex Drifty" } });
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
 
     await waitFor(() => {
       expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Alex Drifty" }));
     });
-    await screen.findByText(/profile saved/i);
-
-    // Returning to the board triggers the deferred refresh without blocking the mounted content.
-    fireEvent.click(await screen.findByRole("button", { name: /open leaderboard/i }));
+    await waitFor(() => {
+      expect(screen.queryByText(/^edit profile$/i)).toBeNull();
+    });
     await waitFor(() => {
       expect(fetchGlobalLeaderboard).toHaveBeenCalledTimes(2);
     });
@@ -1140,9 +1140,14 @@ describe("App leaderboard participation", () => {
 
     const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
     fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /edit public profile/i }));
+    expect(await screen.findByText(/^edit profile$/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
 
-    expect((await screen.findByRole("status")).textContent).toMatch(/not authenticated/i);
+    await waitFor(() => {
+      expect(saveOwnProfile).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText(/not authenticated/i)).toBeTruthy();
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
   });
 });

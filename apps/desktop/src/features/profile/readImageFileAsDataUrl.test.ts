@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AVATAR_MAX_OUTPUT_BYTES, readImageFileAsDataUrl } from "./ProfileModals";
+import { AVATAR_MAX_OUTPUT_BYTES, readImageFileAsDataUrl } from "./profileImage";
 
 // The vitest environment is "node", so the DOM APIs the resizer relies on are stubbed here.
 type CanvasStub = {

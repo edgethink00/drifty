@@ -22,12 +22,10 @@ function mockCard(overrides: Partial<FocusCardControls> = {}): FocusCardControls
 }
 
 function expandEmbeds() {
-  fireEvent.click(screen.getByRole("button", { name: /^show$/i }));
+  fireEvent.click(screen.getByRole("button", { name: /expand embeds/i }));
 }
 
-// The Dev-gated redesign preserves every test hook of the classic layout, so the
-// whole suite runs against both branches — proving toggle-off (classic) and
-// toggle-on (redesign) stay behaviourally identical.
+// Run the shared profile stack with and without the Dev visual class.
 describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=$redesign)", ({ redesign }) => {
   function renderPage(overrides: Partial<Parameters<typeof ProfilePage>[0]> = {}) {
     const props: Parameters<typeof ProfilePage>[0] = {
@@ -44,9 +42,6 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
         linkedinUrl: "",
         isPublic: true,
       },
-      onDraftChange: vi.fn(),
-      onSaveProfile: vi.fn(),
-      isSavingProfile: false,
       publicId: PUBLIC_ID,
       focusSeconds7d: 20 * 3600 + 59 * 60,
       dailyProductivity: null,
@@ -75,26 +70,28 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
   });
 
-  it("edits profile fields inline and saves", () => {
-    const onDraftChange = vi.fn();
-    const onSaveProfile = vi.fn();
-    renderPage({ onDraftChange, onSaveProfile });
+  it("opens the profile editor from the profile window entry instead of duplicating the profile card", () => {
+    const onEditProfile = vi.fn();
+    renderPage({ onEditProfile });
+    const profileWindow = screen.getByLabelText("Profile window");
 
-    fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Alex D" } });
-    expect(onDraftChange).toHaveBeenCalledWith({ displayName: "Alex D" });
-    fireEvent.change(screen.getByLabelText("Website"), { target: { value: "https://ex.io" } });
-    expect(onDraftChange).toHaveBeenCalledWith({ websiteUrl: "https://ex.io" });
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(onSaveProfile).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Display name")).toBeNull();
+    expect(screen.queryByLabelText("Bio")).toBeNull();
+    expect(profileWindow.querySelector(".profile-window-entry")).not.toBeNull();
+    expect(profileWindow.querySelector(".profile-overview")).toBeNull();
+    expect(profileWindow.querySelector(".profile-window-card")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /open profile/i }));
+    expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("shows identity, loads card state on mount, and renders embed snippets when the card is on", () => {
+  it("loads card state on mount and renders embed snippets when the card is on", () => {
     const card = mockCard({ enabled: true });
     renderPage({ card });
     expandEmbeds();
 
-    expect((screen.getByLabelText("Display name") as HTMLInputElement).value).toBe("Alex");
-    expect((screen.getByLabelText("Bio") as HTMLTextAreaElement).value).toBe("Building quiet tools.");
+    expect(screen.getByLabelText("Profile window").querySelector(".profile-window-entry")).not.toBeNull();
+    expect(screen.queryByText(/bio saved/i)).toBeNull();
     expect(card.refresh).toHaveBeenCalled();
 
     const values = (screen.getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
@@ -119,9 +116,13 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
     // …but the snippet inputs and copy buttons are disabled.
     const inputs = document.querySelectorAll<HTMLInputElement>(".profile-embed-stack input");
     expect(inputs.length).toBeGreaterThan(0);
-    inputs.forEach((input) => expect(input.disabled).toBe(true));
-    const copyButtons = document.querySelectorAll<HTMLButtonElement>(".profile-embed-stack button");
+    const snippetInputs = document.querySelectorAll<HTMLInputElement>(".profile-embed-card:not(.profile-embed-card--publish) input");
+    snippetInputs.forEach((input) => expect(input.disabled).toBe(true));
+    const copyButtons = document.querySelectorAll<HTMLButtonElement>(".profile-embed-card:not(.profile-embed-card--publish) button");
     copyButtons.forEach((button) => expect(button.disabled).toBe(true));
+    const makePublicButton = screen.getByRole("button", { name: /make public/i });
+    if (!(makePublicButton instanceof HTMLButtonElement)) throw new Error("Expected make public button");
+    expect(makePublicButton.disabled).toBe(false);
     // The public-page link row only exists while the card is on.
     expect(document.querySelector('[aria-label="Public profile link"]')).toBeNull();
   });
@@ -129,12 +130,14 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
   it("toggles the public focus card on and off", () => {
     const offCard = mockCard({ enabled: false });
     const { unmount } = renderPage({ card: offCard });
+    expandEmbeds();
     fireEvent.click(screen.getByRole("button", { name: /make public/i }));
     expect(offCard.enable).toHaveBeenCalledTimes(1);
     unmount();
 
     const onCard = mockCard({ enabled: true });
     renderPage({ card: onCard });
+    expandEmbeds();
     fireEvent.click(screen.getByRole("button", { name: /make private/i }));
     expect(onCard.disable).toHaveBeenCalledTimes(1);
   });
@@ -161,13 +164,26 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps embeds collapsed by default and expands on Show", () => {
+  it("keeps embeds collapsed by default and expands from a chevron disclosure", () => {
     renderPage({ card: mockCard({ enabled: true }) });
 
     expect(document.querySelectorAll(".profile-embed-stack").length).toBe(0);
-    expandEmbeds();
+    expect(screen.queryByRole("button", { name: /^show$/i })).toBeNull();
+    const expandButton = screen.getByRole("button", { name: /expand embeds/i });
+    expect(expandButton.textContent).toContain(">");
+    const controlledPanelId = expandButton.getAttribute("aria-controls");
+    expect(controlledPanelId).toBeTruthy();
+    const controlledPanel = document.getElementById(controlledPanelId ?? "");
+    expect(controlledPanel).not.toBeNull();
+    expect(controlledPanel?.hidden).toBe(true);
+
+    fireEvent.click(expandButton);
+    expect(expandButton.getAttribute("aria-expanded")).toBe("true");
+    expect(controlledPanel?.hidden).toBe(false);
     expect(document.querySelectorAll(".profile-embed-stack").length).toBe(1);
-    fireEvent.click(screen.getByRole("button", { name: /^hide$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /collapse embeds/i }));
+    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(controlledPanel?.hidden).toBe(true);
     expect(document.querySelectorAll(".profile-embed-stack").length).toBe(0);
   });
 
@@ -214,6 +230,7 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
   // tests opt in explicitly; the gate itself is covered by the dedicated suite below.
   it("renders the three detail opt-ins off by default with per-toggle privacy copy", () => {
     renderPage({ card: mockCard({ enabled: true }), webAccountPreview: true });
+    expandEmbeds();
 
     const categoryToggle = screen.getByRole("switch", { name: "Category breakdown" }) as HTMLInputElement;
     const hourlyToggle = screen.getByRole("switch", { name: "Hourly focus rhythm" }) as HTMLInputElement;
@@ -231,6 +248,7 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
   it("flips a detail opt-in through the card controls", () => {
     const card = mockCard({ enabled: true });
     renderPage({ card, webAccountPreview: true });
+    expandEmbeds();
 
     fireEvent.click(screen.getByRole("switch", { name: "Top apps" }));
     expect(card.setDetailFlag).toHaveBeenCalledWith("shareTopApps", true);
@@ -247,12 +265,14 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
       }),
       webAccountPreview: true,
     });
+    expandEmbeds();
     expect((screen.getByRole("switch", { name: "Category breakdown" }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole("switch", { name: "Hourly focus rhythm" }) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole("switch", { name: "Top apps" }) as HTMLInputElement).checked).toBe(true);
     unmount();
 
     renderPage({ card: mockCard({ detailFlags: null }), webAccountPreview: true });
+    expandEmbeds();
     expect((screen.getByRole("switch", { name: "Category breakdown" }) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("switch", { name: "Top apps" }) as HTMLInputElement).disabled).toBe(true);
   });
@@ -269,6 +289,7 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
     unmount();
 
     renderPage({ card: mockCard({ enabled: true }), webAccountPreview: true });
+    expandEmbeds();
     expect(screen.getByRole("switch", { name: "Category breakdown" })).toBeTruthy();
     expect(screen.getByRole("switch", { name: "Hourly focus rhythm" })).toBeTruthy();
     expect(screen.getByRole("switch", { name: "Top apps" })).toBeTruthy();
@@ -285,8 +306,7 @@ describe.each([{ redesign: false }, { redesign: true }])("ProfilePage (redesign=
   });
 });
 
-// The redesign root class is applied only when the flag is on, so the classic CSS
-// (base) governs the default and the --v2 overrides never leak into it.
+// The redesign root class is applied only when the flag is on.
 describe("ProfilePage redesign gating", () => {
   const base: Parameters<typeof ProfilePage>[0] = {
     isSupabaseEnabled: true,
@@ -294,9 +314,6 @@ describe("ProfilePage redesign gating", () => {
     displayName: "Alex",
     avatarUrl: "",
     draft: { displayName: "Alex", bio: "", avatarUrl: "", websiteUrl: "", githubUrl: "", linkedinUrl: "", isPublic: false },
-    onDraftChange: vi.fn(),
-    onSaveProfile: vi.fn(),
-    isSavingProfile: false,
     publicId: PUBLIC_ID,
     focusSeconds7d: 3600,
     dailyProductivity: null,
@@ -316,11 +333,15 @@ describe("ProfilePage redesign gating", () => {
     const { container, rerender } = render(<ProfilePage {...base} redesign={false} />);
     expect(container.querySelector(".profile-page")).not.toBeNull();
     expect(container.querySelector(".profile-page--v2")).toBeNull();
-    expect(container.querySelector(".profile-identity__main")).not.toBeNull(); // classic markup
+    expect(container.querySelector(".profile-window-entry")).not.toBeNull();
+    expect(container.querySelector(".profile-overview")).toBeNull();
+    expect(container.querySelector(".profile-window-card")).toBeNull();
 
     rerender(<ProfilePage {...base} redesign />);
     expect(container.querySelector(".profile-page--v2")).not.toBeNull();
-    expect(container.querySelector(".profile-share")).not.toBeNull(); // redesign markup
+    expect(container.querySelector(".profile-window-entry")).not.toBeNull();
+    expect(container.querySelector(".profile-overview")).toBeNull();
+    expect(container.querySelector(".profile-window-card")).toBeNull();
     expect(container.querySelector(".profile-identity__main")).toBeNull();
   });
 });

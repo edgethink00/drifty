@@ -36,7 +36,7 @@ export function ProfileModal({
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal profile-modal" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
+      <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
         <div className="profile-modal__header">
           {profile?.avatar_url ? <img className="profile-modal__avatar" src={profile.avatar_url} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
           <div>
@@ -92,13 +92,13 @@ export function EditProfileModal({
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal profile-modal profile-editor-modal" aria-labelledby="edit-profile-title" onClick={(event) => event.stopPropagation()}>
+      <section className="auth-modal profile-modal profile-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" onClick={(event) => event.stopPropagation()}>
         <button type="button" className="profile-modal__x" aria-label="Close profile editor" onClick={onClose}>×</button>
         <div className="profile-modal__header">
           {trimmedAvatarUrl ? <img className="profile-modal__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
           <div>
-            <span className="label-mono">Edit profile</span>
-            <h2 id="edit-profile-title">{displayName}</h2>
+            <span id="edit-profile-dialog-title" className="label-mono">Edit profile</span>
+            <h2>{displayName}</h2>
           </div>
         </div>
 
@@ -259,84 +259,4 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   } finally {
     document.body.removeChild(textarea);
   }
-}
-
-// Profile photos are stored inline (base64) and surfaced at small sizes (38px leaderboard rows,
-// the profile modal avatar). Downscale + recompress before encoding so a multi-megabyte original
-// never ends up inflating the leaderboard payload. Kept well under the server-side size guard.
-export const AVATAR_MAX_DIMENSION = 256;
-export const AVATAR_JPEG_QUALITY = 0.82;
-export const AVATAR_MAX_OUTPUT_BYTES = 100_000;
-
-export async function readImageFileAsDataUrl(file: File): Promise<string> {
-  const source = await decodeImageFile(file);
-  try {
-    let dataUrl = renderAvatarDataUrl(source, AVATAR_MAX_DIMENSION, AVATAR_JPEG_QUALITY);
-    if (dataUrl.length > AVATAR_MAX_OUTPUT_BYTES) {
-      // Highly detailed images can still be large at full quality; try once more, smaller.
-      dataUrl = renderAvatarDataUrl(source, 192, 0.7);
-    }
-    if (dataUrl.length > AVATAR_MAX_OUTPUT_BYTES) {
-      throw new Error("Profile photo is too detailed to compress. Try a simpler image.");
-    }
-    return dataUrl;
-  } finally {
-    if (typeof (source as ImageBitmap).close === "function") {
-      (source as ImageBitmap).close();
-    }
-  }
-}
-
-async function decodeImageFile(file: File): Promise<ImageBitmap | HTMLImageElement> {
-  if (typeof createImageBitmap === "function") {
-    try {
-      return await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
-    } catch {
-      // Fall back to the <img> decode path below.
-    }
-  }
-  return loadImageElement(file);
-}
-
-function loadImageElement(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
-    image.addEventListener("load", () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(image);
-    });
-    image.addEventListener("error", () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Unable to read profile photo"));
-    });
-    image.src = objectUrl;
-  });
-}
-
-function renderAvatarDataUrl(source: ImageBitmap | HTMLImageElement, size: number, quality: number): string {
-  const sourceWidth = "naturalWidth" in source && source.naturalWidth ? source.naturalWidth : source.width;
-  const sourceHeight = "naturalHeight" in source && source.naturalHeight ? source.naturalHeight : source.height;
-  if (!sourceWidth || !sourceHeight) {
-    throw new Error("Unable to read profile photo");
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to process profile photo");
-  }
-
-  // Center square-crop so the circular avatar isn't distorted, then scale into the canvas.
-  const cropSize = Math.min(sourceWidth, sourceHeight);
-  const cropX = (sourceWidth - cropSize) / 2;
-  const cropY = (sourceHeight - cropSize) / 2;
-
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, size, size);
-  context.drawImage(source, cropX, cropY, cropSize, cropSize, 0, 0, size, size);
-
-  return canvas.toDataURL("image/jpeg", quality);
 }
