@@ -666,6 +666,13 @@ class TrackerDatabase:
         config: BrowserHistoryBackfillConfig,
     ) -> list[BrowserHistoryBackfillResult]:
         observed_at_seconds = self._timestamp_seconds(config.observed_at)
+        # Bound the scan in SQL so the per-tick daemon query only touches rows
+        # inside the backfill window (the expression index on datetime(ended_at)
+        # applies) instead of scanning the 100 most recent context-less rows of
+        # all time and discarding the stale ones in Python.
+        backfill_cutoff = datetime.fromtimestamp(
+            observed_at_seconds - config.max_age_seconds, tz=timezone.utc
+        ).isoformat()
         results: list[BrowserHistoryBackfillResult] = []
         with self.connect() as conn:
             rows = conn.execute(
@@ -679,9 +686,11 @@ class TrackerDatabase:
                   AND youtube_playlist_id IS NULL
                   AND youtube_is_shorts IS NULL
                   AND window_title IS NOT NULL
+                  AND datetime(ended_at) >= datetime(?)
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 100
-                """
+                """,
+                (backfill_cutoff,),
             ).fetchall()
 
             for row in rows:

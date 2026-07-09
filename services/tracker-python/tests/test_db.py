@@ -455,6 +455,66 @@ class TrackerDatabaseTests(unittest.TestCase):
             [("Google Chrome", "Lecture - YouTube - Google Chrome", "2026-04-06T09:00:00+00:00")],
         )
 
+    def test_backfill_recent_browser_history_context_skips_segments_older_than_max_age(self) -> None:
+        for observed_at in ("2026-04-06T08:00:00+00:00", "2026-04-06T09:00:00+00:00"):
+            self.database.record_snapshot(
+                Snapshot(
+                    observed_at=observed_at,
+                    app_name="Google Chrome",
+                    bundle_id="com.google.Chrome",
+                    window_title="Lecture - YouTube - Google Chrome",
+                    source="accessibility",
+                    browser_name="Google Chrome",
+                    browser_automation_status="unavailable",
+                    browser_history_status="no_match",
+                    browser_history_reason="outside_time_window",
+                    browser_history_database_found=True,
+                    browser_history_profile_count=1,
+                    browser_history_candidate_count=0,
+                    browser_history_error_count=0,
+                ),
+                5,
+                max_merge_gap_seconds=180,
+            )
+
+        resolver_calls: list[tuple[str | None, str | None, str | None]] = []
+
+        def resolve_browser_history(app_name: str | None, window_title: str | None, observed_at: str | None) -> BrowserMetadata:
+            resolver_calls.append((app_name, window_title, observed_at))
+            return BrowserMetadata(
+                browser_name="Google Chrome",
+                site_domain="youtube.com",
+                site_title="Lecture - YouTube",
+                site_url="https://www.youtube.com/watch?v=lecture",
+                youtube_video_id="lecture",
+                match_state="browser-history-title",
+                browser_automation_status="granted",
+                browser_history_status="matched",
+                browser_history_reason="matched",
+                browser_history_database_found=True,
+                browser_history_profile_count=1,
+                browser_history_candidate_count=1,
+                browser_history_error_count=0,
+            )
+
+        results = self.database.backfill_recent_browser_history_context(
+            resolve_browser_history,
+            lambda title: True,
+            BrowserHistoryBackfillConfig(
+                observed_at="2026-04-06T09:00:30+00:00",
+                max_age_seconds=180,
+            ),
+        )
+
+        # Only the 09:00 segment falls inside the 180s window; the 08:00
+        # segment is excluded by the SQL cutoff and never reaches the resolver.
+        self.assertEqual(len(results), 1)
+        self.assertEqual(len(resolver_calls), 1)
+        self.assertEqual(resolver_calls[0][2], "2026-04-06T09:00:00+00:00")
+        events = self.database.fetch_timeline("2026-04-06")
+        old_event = next(event for event in events if event["startedAt"] == "2026-04-06T08:00:00+00:00")
+        self.assertIsNone(old_event["siteDomain"])
+
     def test_record_snapshot_does_not_overwrite_existing_site_context_with_browser_history(self) -> None:
         self.database.record_snapshot(
             Snapshot(
