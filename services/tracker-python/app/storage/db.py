@@ -120,6 +120,12 @@ class TrackerDatabase:
         connection = sqlite3.connect(self.db_path, factory=ClosingConnection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # The daemon and the serve process write this database concurrently
+        # (and delete_history_range runs VACUUM); wait for a contended lock
+        # instead of raising "database is locked" immediately.
+        connection.execute("PRAGMA busy_timeout = 5000")
+        # WAL mode only needs NORMAL durability; avoids an fsync per commit.
+        connection.execute("PRAGMA synchronous = NORMAL")
         return connection
 
     def _init_db(self) -> None:
