@@ -25,8 +25,6 @@ type DevPreviewControlsProps = {
   readonly onEndOfDayReviewPreview: () => void;
   readonly onOpenOnboardingV22Preview: () => void;
   readonly onOpenReplayOnboarding: () => void;
-  readonly teamsBetaEnabled: boolean;
-  readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onShowWatcherPeek: (force?: boolean) => void;
   readonly onWatcherModeChange: (mode: WatcherMode) => void;
@@ -45,8 +43,6 @@ export function DevPreviewControls({
   onEndOfDayReviewPreview,
   onOpenOnboardingV22Preview,
   onOpenReplayOnboarding,
-  teamsBetaEnabled,
-  onTeamsBetaChange,
   onPreviewDriftAlarm,
   onShowWatcherPeek,
   onWatcherModeChange,
@@ -55,8 +51,7 @@ export function DevPreviewControls({
   onWatcherPeriodicMinChange,
 }: DevPreviewControlsProps) {
   return (
-    <div className="settings-block settings-block--dev-preview">
-      <h3>Dev</h3>
+    <>
       {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
         <div className="settings-row">
           <div>
@@ -75,15 +70,6 @@ export function DevPreviewControls({
         </div>
         <div className="ctrl">
           <button type="button" className="settings-btn" onClick={onOpenOnboardingV22Preview}>Open preview</button>
-        </div>
-      </div>
-      <div className="settings-row">
-        <div>
-          <div className="lbl">Teams beta</div>
-          <div className="desc">Show the Team section in the sidebar for the internal aggregate team focus surface. Dev-mode opt-in.</div>
-        </div>
-        <div className="ctrl">
-          <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
         </div>
       </div>
       {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
@@ -162,6 +148,6 @@ export function DevPreviewControls({
           )}
         </>
       ) : null}
-    </div>
+    </>
   );
 }

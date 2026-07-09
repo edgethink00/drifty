@@ -23,8 +23,7 @@ export function DevSettingsEnhancedContextBlock({
   onSourceFamilyChange,
 }: DevSettingsEnhancedContextBlockProps) {
   return (
-    <div className="settings-block settings-block--dev-preview">
-      <h3>Enhanced context (Dev)</h3>
+    <>
       <div className="settings-row">
         <div>
           <div className="lbl">Enable enhanced context</div>
@@ -80,6 +79,6 @@ export function DevSettingsEnhancedContextBlock({
           </div>
         </div>
       ))}
-    </div>
+    </>
   );
 }

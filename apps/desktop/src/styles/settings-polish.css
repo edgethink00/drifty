@@ -300,7 +300,8 @@
   background: var(--line);
 }
 
-.content--settings .settings-block:has(> h3) > h3 + .settings-row {
+.content--settings .settings-block:has(> h3) > h3 + .settings-row,
+.content--settings .settings-block:has(> h3) > .settings-row--group-start {
   border-top: 1px solid var(--line);
   border-top-left-radius: 14px;
   border-top-right-radius: 14px;

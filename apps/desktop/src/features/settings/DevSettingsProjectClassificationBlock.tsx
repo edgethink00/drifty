@@ -20,10 +20,15 @@ export function DevSettingsProjectClassificationBlock({
   onProjectClassificationEnabledChange,
   onRevertProjectClassificationCorrection,
 }: DevSettingsProjectClassificationBlockProps) {
+  const hasActiveCorrections = projectClassificationAiReviewEvents.some((event) => !event.revertedAt);
+  // The row-card visual chain closes on `:last-child` or `--group-end`; the row
+  // right before non-row content (corrections card / cost panel) must carry it.
+  const enableRowEndsGroup = projectClassificationEnabled && hasActiveCorrections;
+
   return (
     <div className="settings-block settings-block--dev-preview">
       <h3>Project classification (preview)</h3>
-      <div className="settings-row">
+      <div className={`settings-row${enableRowEndsGroup ? " settings-row--group-end" : ""}`}>
         <div>
           <div className="lbl">Enable project classification</div>
           <div className="desc">Show the Projects tab and the Intelligence analysis-model tab in AI setup. Off by default — a Dev-mode preview available in any build.</div>
@@ -38,7 +43,7 @@ export function DevSettingsProjectClassificationBlock({
       </div>
       {projectClassificationEnabled ? (
         <>
-          {projectClassificationAiReviewEvents.some((event) => !event.revertedAt) ? (
+          {hasActiveCorrections ? (
             <ProjectCorrectionsCard
               events={projectClassificationAiReviewEvents}
               onRevert={onRevertProjectClassificationCorrection}
@@ -52,7 +57,7 @@ export function DevSettingsProjectClassificationBlock({
               </div>
             </div>
           )}
-          <ProjectPassCostPanel runs={projectPassRuns} />
+          <ProjectPassCostPanel runs={projectPassRuns} startsGroup={hasActiveCorrections} />
         </>
       ) : null}
     </div>
