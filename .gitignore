@@ -44,3 +44,4 @@ qa-/*.png
 services/tracker-python/app/*.sqlite3
 services/tracker-python/app/*.sqlite3-*
 docs/symphony-evidence/
+.build-venv/
