@@ -165,4 +165,22 @@ describe("buildAccountStatsPayloadFromTracker", () => {
     expect(payload.topApps7d.map((entry) => entry.appName)).toEqual(["Safari"]);
     expect(payload.dailySeries30d.find((point) => point.day === today)?.focus).toBe(3600);
   });
+
+  it("excludes segments synced in from another Mac from every aggregate", async () => {
+    const today = todayIsoDate();
+    const remote: ActivitySegment = {
+      ...makeSegment(today, 7200, "Arc"),
+      deviceId: "11111111-2222-3333-4444-555555555555",
+    };
+    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), remote]);
+
+    const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
+
+    // Otherwise every synced device would publish an inflated total that
+    // double-counts the other device's activity.
+    expect(payload.focusSecondsToday).toBe(3600);
+    expect(payload.focusSeconds7d).toBe(3600);
+    expect(payload.topApps7d.map((entry) => entry.appName)).toEqual(["Safari"]);
+    expect(payload.dailySeries30d.find((point) => point.day === today)?.focus).toBe(3600);
+  });
 });

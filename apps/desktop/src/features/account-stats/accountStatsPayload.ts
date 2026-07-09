@@ -5,11 +5,15 @@
 // aggregate-only by design: bucketed second totals, category totals, an hour-of-day
 // rhythm, top-app totals, and a per-day series. Raw app/site/window/session history
 // never leaves the device. Imported (estimated) browser-history segments are excluded,
-// matching the leaderboard and focus-card boundary.
+// matching the leaderboard and focus-card boundary. Segments synced in from another
+// Mac are excluded too — each Mac publishes only its own local time, otherwise two
+// synced devices would each publish an inflated total that double-counts the other's
+// activity.
 import {
   buildProductivityDurations,
   buildRollingFocusSeconds,
   isBrowserHistoryImportSegment,
+  isRemoteDeviceSegment,
   logicalDayStartMs,
 } from "@drifty/domain";
 import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
@@ -122,6 +126,8 @@ export function buildAccountStatsPayload(monthSegments: ActivitySegment[], input
 export async function buildAccountStatsPayloadFromTracker(input: AccountStatsInput): Promise<AccountStatsPayload> {
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
-  const monthSegments = fetched.filter((segment) => !isBrowserHistoryImportSegment(segment));
+  const monthSegments = fetched.filter(
+    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+  );
   return buildAccountStatsPayload(monthSegments, input);
 }
