@@ -1,3 +1,5 @@
+import type { AdaptiveContentContext } from "./adaptiveContentContext";
+
 export type TrackerSource = "nsworkspace" | "accessibility" | "manual" | "browser-history-import" | "unknown";
 export type SiteSource = "applescript" | "applescript-front-window" | "accessibility-address-bar" | "browser-history-title" | "browser-history-import" | "window-title" | "unknown" | null;
 export type BrowserAutomationStatus = "granted" | "denied" | "unavailable" | "stale" | "empty_result" | "not_applicable";
@@ -96,6 +98,7 @@ export interface ActivitySegment {
   browserHistoryProfileCount?: number | null;
   browserHistoryCandidateCount?: number | null;
   browserHistoryErrorCount?: number | null;
+  adaptiveContentContext?: AdaptiveContentContext | null;
   frontmostCaptureSource?: FrontmostCaptureSource | null;
   frontmostCaptureError?: string | null;
   frontmostFallbackError?: string | null;

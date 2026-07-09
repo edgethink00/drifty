@@ -1,4 +1,5 @@
 import type { ActivityCategory, ActivitySegment, CurrentActivitySnapshot, HourBucket, ProductivityLabel, SiteDuration, StoredClassificationSource, TrackerStatus } from "./activity";
+import type { AdaptiveContextSourceFamily } from "./adaptiveContentContext";
 
 export type TrackerCommand =
   | "tracker_get_status"
@@ -538,4 +539,7 @@ export interface DeveloperDiagnosticsSettings {
   forceChromiumAxCapture: boolean;
   forceFrontmostFallbackCapture: boolean;
   forceBrowserHistoryUrlFallback: boolean;
+  readonly enhancedContextEnabled: boolean;
+  readonly enhancedContextCaptureLocal: boolean;
+  readonly enhancedContextSourceFamilies: readonly AdaptiveContextSourceFamily[];
 }

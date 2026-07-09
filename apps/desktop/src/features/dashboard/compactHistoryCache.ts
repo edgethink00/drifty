@@ -32,6 +32,15 @@ export function compactHistoryRangeContains(outer: CompactHistoryRange, inner: C
     && new Date(outer.end).getTime() >= new Date(inner.end).getTime();
 }
 
+// Entries past the TTL can never satisfy findFreshCompactHistoryLoad again, so
+// dropping them on insert keeps the cache bounded across long-lived sessions
+// (one stale entry per browsed range would otherwise accumulate for hours).
+export function pruneStaleCompactHistoryLoads(cache: Map<string, CompactHistoryLoad>): void {
+  for (const [key, load] of cache) {
+    if (!isFreshCompactHistoryLoad(load)) cache.delete(key);
+  }
+}
+
 export function findFreshCompactHistoryLoad(cache: ReadonlyMap<string, CompactHistoryLoad>, range: CompactHistoryRange): CompactHistoryLoad | null {
   const exact = cache.get(compactHistoryRangeKey(range));
   if (exact && isFreshCompactHistoryLoad(exact) && compactHistoryRangeContains(exact, range)) return exact;

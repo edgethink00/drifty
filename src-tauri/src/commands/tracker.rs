@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::async_runtime;
 use tauri::{AppHandle, State};
 
-use crate::tracker::{AppIdentity, TrackerController, TrackerStatus};
+use crate::tracker::{AppIdentity, DeveloperDiagnosticsSettings, TrackerController, TrackerStatus};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,14 +60,6 @@ pub struct TopSitesQuery {
     pub start: Option<String>,
     pub end: Option<String>,
     pub limit: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeveloperDiagnosticsQuery {
-    pub force_chromium_ax_capture: bool,
-    pub force_frontmost_fallback_capture: bool,
-    pub force_browser_history_url_fallback: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -378,17 +370,12 @@ pub async fn tracker_get_current_snapshot(
 pub async fn tracker_set_developer_diagnostics(
     app: AppHandle,
     controller: State<'_, TrackerController>,
-    query: DeveloperDiagnosticsQuery,
+    query: DeveloperDiagnosticsSettings,
 ) -> Result<serde_json::Value, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .set_developer_diagnostics(
-                &app,
-                query.force_chromium_ax_capture,
-                query.force_frontmost_fallback_capture,
-                query.force_browser_history_url_fallback,
-            )
+            .set_developer_diagnostics(&app, query)
             .map_err(|error| error.to_string())
     })
     .await

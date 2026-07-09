@@ -143,6 +143,11 @@ export function EditProfileModal({
               <label><span>GitHub</span><input className="settings-input" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
               <label><span>LinkedIn</span><input className="settings-input" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             </fieldset>
+            <PublicProfileToggle
+              checked={profileDraft.isPublic}
+              disabled={profileLoading || profileSaving}
+              onChange={(isPublic) => onChange({ isPublic })}
+            />
           </div>
         </div>
 
@@ -155,6 +160,42 @@ export function EditProfileModal({
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Master visibility switch for everything public. `profiles.is_public` gates every public
+ * read server-side (public profile page, focus badge, embeds, leaderboard RPCs), so this one
+ * toggle hides all of them at once without deleting anything.
+ */
+export function PublicProfileToggle({
+  checked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="profile-visibility-toggle">
+      <input
+        className="drifty-checkbox"
+        type="checkbox"
+        role="switch"
+        aria-label="Public profile"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="profile-visibility-toggle__copy">
+        <strong>Public profile</strong>
+        <small>
+          Gates your public profile page, focus badge, embeds, and leaderboard visibility. Off hides
+          all of them at once — nothing is deleted, and they return when you switch it back on.
+        </small>
+      </span>
+    </label>
   );
 }
 

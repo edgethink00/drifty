@@ -1,9 +1,19 @@
 import type { ActivitySegment, CurrentActivitySnapshot, DriftAlarmTrayStatus, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, AdaptiveProviderPolicyDecision } from "@drifty/domain";
 import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "../classification/aiClassificationService";
+import type { ContentContextDropReason } from "../classification/contentContextEgressPolicy";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
-import type { AppThemeColorOverrides, CategoryColorOverrides, StartOfWeek, ThemeMode } from "./settingsStorage";
+import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS } from "./settingsStorage";
+import type {
+  AppThemeColorOverrides,
+  CategoryColorOverrides,
+  EnhancedContextSettings,
+  EnhancedContextSourceFamily,
+  StartOfWeek,
+  ThemeMode,
+} from "./settingsStorage";
 
 type BrowserCaptureDiagnosticsSource = "today" | "history" | "leaderboard";
 
@@ -65,6 +75,124 @@ export type FrontmostCaptureDiagnostics = {
   readonly fallbackErrorCounts: Readonly<Record<string, number>>;
 };
 
+export type EnhancedContextDebugEventKind =
+  | "capture_attempt"
+  | "local_storage"
+  | "egress_decision"
+  | "retry_decision"
+  | "blocked_sensitive_surface";
+
+export type EnhancedContextDebugStatus =
+  | "attempted"
+  | "stored"
+  | "dropped"
+  | "disabled"
+  | "allowed"
+  | "metadata_only"
+  | "local_only"
+  | "blocked"
+  | "retry_sent"
+  | "retry_skipped"
+  | "selected"
+  | "error";
+
+export type EnhancedContextDebugReason =
+  | "structured_capture"
+  | "capture_disabled"
+  | "source_family_disabled"
+  | "storage_disabled"
+  | "stored_local"
+  | "dropped_by_policy"
+  | "egress_filtered"
+  | "sensitive_surface"
+  | "local_only_policy"
+  | "retry_disabled"
+  | "no_provider_safe_context"
+  | "unknown_category"
+  | "low_confidence"
+  | "insufficient_evidence"
+  | "high_confidence"
+  | "already_retried"
+  | "provider_error";
+
+type EnhancedContextDebugEventBase = {
+  readonly kind: EnhancedContextDebugEventKind;
+  readonly status: EnhancedContextDebugStatus;
+  readonly reason: EnhancedContextDebugReason;
+  readonly sourceFamily?: EnhancedContextSourceFamily;
+};
+
+export type EnhancedContextEgressDebugDetails = {
+  readonly decisionCounts: Readonly<Record<AdaptiveProviderPolicyDecision, number>>;
+  readonly dropReasonCounts: Readonly<Partial<Record<ContentContextDropReason, number>>>;
+  readonly providerSafeItemCount: number;
+  readonly redactionCount: number;
+  readonly maxDepthSent: 1 | 2 | 3 | null;
+};
+
+export type EnhancedContextRetryDebugDetails = {
+  readonly threshold: number;
+  readonly firstPassConfidence: number;
+  readonly firstPassCategory: ActivityCategory;
+  readonly providerSafeItemCount: number;
+  readonly selectedResult?: "first_pass" | "enhanced_retry";
+};
+
+export type EnhancedContextDebugEvent =
+  | (EnhancedContextDebugEventBase & {
+      readonly kind: "egress_decision";
+      readonly egress: EnhancedContextEgressDebugDetails;
+    })
+  | (EnhancedContextDebugEventBase & {
+      readonly kind: "retry_decision";
+      readonly retry: EnhancedContextRetryDebugDetails;
+    })
+  | (EnhancedContextDebugEventBase & {
+      readonly kind: "capture_attempt" | "local_storage" | "blocked_sensitive_surface";
+    });
+
+type EnhancedContextSettingsSummary = {
+  readonly enabled: boolean;
+  readonly captureLocal: boolean;
+  readonly retryLowConfidence: boolean;
+  readonly debugLogging: boolean;
+  readonly sourceFamilies: {
+    readonly enabledCount: number;
+    readonly enabledFamilies: readonly EnhancedContextSourceFamily[];
+  };
+};
+
+type EnhancedContextDiagnosticCounts = {
+  readonly count: number;
+  readonly statuses: Readonly<Partial<Record<EnhancedContextDebugStatus, number>>>;
+  readonly reasons: Readonly<Partial<Record<EnhancedContextDebugReason, number>>>;
+  readonly sourceFamilies: Readonly<Partial<Record<EnhancedContextSourceFamily, number>>>;
+};
+
+type EnhancedContextDiagnosticAccumulator = {
+  count: number;
+  statuses: Partial<Record<EnhancedContextDebugStatus, number>>;
+  reasons: Partial<Record<EnhancedContextDebugReason, number>>;
+  sourceFamilies: Partial<Record<EnhancedContextSourceFamily, number>>;
+};
+
+export type EnhancedContextDebugSummary = {
+  readonly settings: EnhancedContextSettingsSummary;
+  readonly recentEvents: readonly EnhancedContextDebugEvent[];
+  readonly diagnostics: {
+    readonly capture: EnhancedContextDiagnosticCounts;
+    readonly storage: EnhancedContextDiagnosticCounts;
+    readonly egress: EnhancedContextDiagnosticCounts;
+    readonly retry: EnhancedContextDiagnosticCounts;
+    readonly blockedSensitiveSurfaces: EnhancedContextDiagnosticCounts;
+  };
+};
+
+export type EnhancedContextDebugInput = {
+  readonly settings?: EnhancedContextSettings;
+  readonly events?: readonly EnhancedContextDebugEvent[];
+};
+
 type BrowserCaptureAccumulator = {
   browserName: string;
   totalSegments: number;
@@ -98,6 +226,7 @@ type BuildDebugLogPayloadInput = {
     readonly forceBrowserHistoryUrlFallback: boolean;
     readonly forceChromiumAxExtremeNudge: boolean;
   };
+  readonly enhancedContext?: EnhancedContextDebugInput;
   readonly status: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
   readonly currentSnapshot: CurrentActivitySnapshot | null;
@@ -150,9 +279,27 @@ const SUPPORTED_BROWSER_NAMES = [
 const SUPPORTED_BROWSER_NAME_SET: ReadonlySet<string> = new Set(SUPPORTED_BROWSER_NAMES);
 const MISSING_DIAGNOSTIC_VALUE = "missing";
 const MAX_BROWSER_AUTOMATION_ERROR_LENGTH = 240;
+const MAX_ENHANCED_CONTEXT_DEBUG_EVENTS = 100;
+const enhancedContextDebugEvents: EnhancedContextDebugEvent[] = [];
+
+export function recordEnhancedContextDebugEvent(event: EnhancedContextDebugEvent): void {
+  enhancedContextDebugEvents.push(sanitizeEnhancedContextDebugEvent(event));
+  if (enhancedContextDebugEvents.length > MAX_ENHANCED_CONTEXT_DEBUG_EVENTS) {
+    enhancedContextDebugEvents.splice(0, enhancedContextDebugEvents.length - MAX_ENHANCED_CONTEXT_DEBUG_EVENTS);
+  }
+}
+
+export function readRecentEnhancedContextDebugEvents(): readonly EnhancedContextDebugEvent[] {
+  return enhancedContextDebugEvents.map(sanitizeEnhancedContextDebugEvent);
+}
+
+export function clearEnhancedContextDebugEventsForTests(): void {
+  enhancedContextDebugEvents.length = 0;
+}
 
 export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
   const currentSnapshot = buildCurrentSnapshotSummary(input.currentSnapshot);
+  const enhancedContext = buildEnhancedContextDebugSummary(input.enhancedContext);
 
   return {
     exportedAt: new Date().toISOString(),
@@ -207,6 +354,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
       ...input.driftAlarm,
       recentDebugEvents: input.driftAlarmDebugEvents,
     },
+    enhancedContext,
     ai: buildAiDebugSummary(input.ai),
     counts: {
       todaySegments: input.segments.length,
@@ -215,6 +363,140 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
     },
     error: input.error,
   };
+}
+
+export function buildEnhancedContextDebugSummary(input: EnhancedContextDebugInput | null | undefined): EnhancedContextDebugSummary {
+  const settings = buildEnhancedContextSettingsSummary(input?.settings ?? DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+  const recentEvents = (input?.events ?? []).map(sanitizeEnhancedContextDebugEvent);
+  const diagnostics = buildEnhancedContextDiagnostics(recentEvents);
+  return { settings, recentEvents, diagnostics };
+}
+
+function sanitizeEnhancedContextDebugEvent(event: EnhancedContextDebugEvent): EnhancedContextDebugEvent {
+  switch (event.kind) {
+    case "egress_decision":
+      return {
+        kind: event.kind,
+        status: event.status,
+        reason: event.reason,
+        ...(event.sourceFamily ? { sourceFamily: event.sourceFamily } : {}),
+        egress: {
+          decisionCounts: event.egress.decisionCounts,
+          dropReasonCounts: event.egress.dropReasonCounts,
+          providerSafeItemCount: event.egress.providerSafeItemCount,
+          redactionCount: event.egress.redactionCount,
+          maxDepthSent: event.egress.maxDepthSent,
+        },
+      };
+    case "retry_decision":
+      return {
+        kind: event.kind,
+        status: event.status,
+        reason: event.reason,
+        ...(event.sourceFamily ? { sourceFamily: event.sourceFamily } : {}),
+        retry: {
+          threshold: event.retry.threshold,
+          firstPassConfidence: event.retry.firstPassConfidence,
+          firstPassCategory: event.retry.firstPassCategory,
+          providerSafeItemCount: event.retry.providerSafeItemCount,
+          ...(event.retry.selectedResult ? { selectedResult: event.retry.selectedResult } : {}),
+        },
+      };
+    case "capture_attempt":
+    case "local_storage":
+    case "blocked_sensitive_surface":
+      return {
+        kind: event.kind,
+        status: event.status,
+        reason: event.reason,
+        ...(event.sourceFamily ? { sourceFamily: event.sourceFamily } : {}),
+      };
+    default:
+      return assertNeverEnhancedContextDebugEvent(event);
+  }
+}
+
+class EnhancedContextDebugEventError extends Error {
+  constructor(readonly event: never) {
+    super(`Unhandled enhanced context debug event: ${event}`);
+    this.name = "EnhancedContextDebugEventError";
+  }
+}
+
+function assertNeverEnhancedContextDebugEvent(event: never): never {
+  throw new EnhancedContextDebugEventError(event);
+}
+
+function buildEnhancedContextSettingsSummary(settings: EnhancedContextSettings): EnhancedContextSettingsSummary {
+  const enabledFamilies = ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS
+    .filter((option) => settings.sourceFamilies[option.family])
+    .map((option) => option.family);
+
+  return {
+    enabled: settings.enabled,
+    captureLocal: settings.captureLocal,
+    retryLowConfidence: settings.retryLowConfidence,
+    debugLogging: settings.debugLogging,
+    sourceFamilies: {
+      enabledCount: enabledFamilies.length,
+      enabledFamilies,
+    },
+  };
+}
+
+function buildEnhancedContextDiagnostics(events: readonly EnhancedContextDebugEvent[]): EnhancedContextDebugSummary["diagnostics"] {
+  const capture = emptyEnhancedContextDiagnosticCounts();
+  const storage = emptyEnhancedContextDiagnosticCounts();
+  const egress = emptyEnhancedContextDiagnosticCounts();
+  const retry = emptyEnhancedContextDiagnosticCounts();
+  const blockedSensitiveSurfaces = emptyEnhancedContextDiagnosticCounts();
+
+  for (const event of events) {
+    switch (event.kind) {
+      case "capture_attempt":
+        recordEnhancedContextEvent(capture, event);
+        break;
+      case "local_storage":
+        recordEnhancedContextEvent(storage, event);
+        break;
+      case "egress_decision":
+        recordEnhancedContextEvent(egress, event);
+        break;
+      case "retry_decision":
+        recordEnhancedContextEvent(retry, event);
+        break;
+      case "blocked_sensitive_surface":
+        recordEnhancedContextEvent(blockedSensitiveSurfaces, event);
+        break;
+      default:
+        assertNeverEnhancedContextDebugEvent(event);
+    }
+
+    if (event.kind !== "blocked_sensitive_surface" && event.reason === "sensitive_surface") {
+      recordEnhancedContextEvent(blockedSensitiveSurfaces, event);
+    }
+  }
+
+  return { capture, storage, egress, retry, blockedSensitiveSurfaces };
+}
+
+function emptyEnhancedContextDiagnosticCounts(): EnhancedContextDiagnosticAccumulator {
+  const statuses: Partial<Record<EnhancedContextDebugStatus, number>> = {};
+  const reasons: Partial<Record<EnhancedContextDebugReason, number>> = {};
+  const sourceFamilies: Partial<Record<EnhancedContextSourceFamily, number>> = {};
+  return { count: 0, statuses, reasons, sourceFamilies };
+}
+
+function recordEnhancedContextEvent(
+  summary: EnhancedContextDiagnosticAccumulator,
+  event: EnhancedContextDebugEvent,
+): void {
+  summary.count += 1;
+  incrementTypedCount(summary.statuses, event.status);
+  incrementTypedCount(summary.reasons, event.reason);
+  if (event.sourceFamily) {
+    incrementTypedCount(summary.sourceFamilies, event.sourceFamily);
+  }
 }
 
 function buildAiDebugSummary(input: AiDebugLogInput) {
@@ -539,6 +821,10 @@ function diagnosticError(value: string | null | undefined): string | null {
 }
 
 function incrementCount(counts: Record<string, number>, key: string): void {
+  counts[key] = (counts[key] ?? 0) + 1;
+}
+
+function incrementTypedCount<Key extends string>(counts: Partial<Record<Key, number>>, key: Key): void {
   counts[key] = (counts[key] ?? 0) + 1;
 }
 

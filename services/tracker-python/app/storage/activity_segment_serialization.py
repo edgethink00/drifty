@@ -4,8 +4,13 @@ import json
 from collections.abc import Mapping
 from typing import Final, Union
 
+from app.storage.adaptive_context_serialization import (
+    adaptive_content_context_from_mapping,
+    sanitized_raw_context_json,
+)
+
 RowValue = Union[str, int, float, None]
-SerializedValue = Union[str, int, float, bool, None, list[str], dict[str, "SerializedValue"]]
+SerializedValue = Union[str, int, float, bool, None, list["SerializedValue"], dict[str, "SerializedValue"]]
 
 BROWSER_AUTOMATION_STATUSES: Final[frozenset[str]] = frozenset(
     {"granted", "denied", "unavailable", "stale", "empty_result", "not_applicable"}
@@ -64,6 +69,11 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
     }
     if classification is not None:
         serialized["classification"] = classification
+    raw_context = raw_context_mapping(row)
+    if raw_context is not None:
+        adaptive_context = adaptive_content_context_from_mapping(raw_context)
+        if adaptive_context is not None:
+            serialized["adaptiveContentContext"] = adaptive_context
     return serialized
 
 

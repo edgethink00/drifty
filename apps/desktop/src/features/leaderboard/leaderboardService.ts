@@ -316,11 +316,13 @@ export async function publishOwnFocusTotal(
   try {
     const payload = buildAggregatePayload(user, input, true);
     if (options.updateProfile !== false) {
+      // is_public is deliberately OMITTED: publishing a score must not flip a user's profile
+      // back to public. Existing rows keep their value; a first-time insert uses the schema
+      // default (true).
       const { error: profileError } = await resolvedClient.from("profiles").upsert({
         user_id: user.id,
         display_name: payload.display_name,
         timezone: input.timezone,
-        is_public: true,
         updated_at: payload.updated_at,
       }, { onConflict: "user_id" });
 

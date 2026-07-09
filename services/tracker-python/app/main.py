@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -19,6 +20,24 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.tracker.adaptive_context.developer_diagnostics import (
+    ADAPTIVE_CONTEXT_SOURCE_FAMILIES_ENV,
+    ENABLE_ADAPTIVE_CONTEXT_CAPTURE_ENV,
+    ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY,
+    ENHANCED_CONTEXT_ENABLED_META_KEY,
+    ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY,
+    FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV,
+    FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY,
+    FORCE_CHROMIUM_AX_CAPTURE_ENV,
+    FORCE_CHROMIUM_AX_CAPTURE_META_KEY,
+    FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV,
+    FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
+    JsonObject,
+    JsonValue,
+    apply_developer_diagnostics_defaults as _apply_developer_diagnostics_defaults,
+    apply_developer_diagnostics_env as _apply_developer_diagnostics_env,
+    save_developer_diagnostics,
+)
 
 if TYPE_CHECKING:
     from app.tracker.macos_workspace import Snapshot
@@ -29,12 +48,6 @@ DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
 IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "180"))
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
-FORCE_CHROMIUM_AX_CAPTURE_META_KEY = "developer_diagnostics_force_chromium_ax_capture"
-FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
-FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY = "developer_diagnostics_force_frontmost_fallback_capture"
-FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
-FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY = "developer_diagnostics_force_browser_history_url_fallback"
-FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
@@ -57,8 +70,22 @@ def ensure_state_dir() -> None:
     state_dir().mkdir(parents=True, exist_ok=True)
 
 
+_DATABASE_CACHE: TrackerDatabase | None = None
+
+
 def database() -> TrackerDatabase:
-    return TrackerDatabase(DB_PATH)
+    """Return the TrackerDatabase for DB_PATH, reusing one instance per path.
+
+    Constructing a TrackerDatabase runs the full schema/migration pass, and
+    nearly every command handler calls database(); caching keeps that cost to
+    one pass per process instead of one per IPC request. Keyed by the current
+    DB_PATH value so tests (and --db overrides) that repoint DB_PATH get a
+    fresh instance.
+    """
+    global _DATABASE_CACHE
+    if _DATABASE_CACHE is None or _DATABASE_CACHE.db_path != DB_PATH:
+        _DATABASE_CACHE = TrackerDatabase(DB_PATH)
+    return _DATABASE_CACHE
 
 
 def accessibility_granted() -> bool:
@@ -98,7 +125,7 @@ def fetch_live_tail(
     after_segment_id: str | None,
     after_ended_at: str | None,
     limit: int | str | None = 8,
-) -> list[dict[str, object]]:
+) -> list[JsonObject]:
     from app.storage.live_tail import fetch_live_tail as read_fetch_live_tail
 
     return read_fetch_live_tail(db, start, end, after_segment_id, after_ended_at, limit)
@@ -123,21 +150,6 @@ def backfill_browser_history_context(db: TrackerDatabase, observed_at: str) -> N
         enqueue_youtube_metadata_fetch(DB_PATH, result.youtube_video_id, result.site_url)
 
 
-def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
-    force_chromium_ax_capture = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
-    force_frontmost_fallback_capture = db.get_meta(FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY) == "true"
-    force_browser_history_url_fallback = db.get_meta(FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY) == "true"
-    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if force_chromium_ax_capture else "0"
-    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if force_frontmost_fallback_capture else "0"
-    os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "1" if force_browser_history_url_fallback else "0"
-
-
-def _apply_developer_diagnostics_defaults() -> None:
-    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "0"
-    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "0"
-    os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "0"
-
-
 def _bool_meta(value: str | None) -> bool | None:
     if value == "true":
         return True
@@ -146,11 +158,11 @@ def _bool_meta(value: str | None) -> bool | None:
     return None
 
 
-def _bool_payload(value: object) -> bool:
+def _bool_payload(value: JsonValue) -> bool:
     return value is True
 
 
-def _int_payload(value: object, *, default: int, min_value: int, max_value: int, name: str) -> int:
+def _int_payload(value: JsonValue, *, default: int, min_value: int, max_value: int, name: str) -> int:
     if value is None:
         return default
     if isinstance(value, bool) or not isinstance(value, int):
@@ -174,7 +186,7 @@ def day_bounds(payload: dict) -> tuple[str | None, str | None]:
     return payload.get("start"), payload.get("end")
 
 
-def _datetime_payload(value: object, *, name: str) -> datetime:
+def _datetime_payload(value: JsonValue, *, name: str) -> datetime:
     if value is None:
         return datetime.now(timezone.utc)
     if not isinstance(value, str):
@@ -188,7 +200,7 @@ def _datetime_payload(value: object, *, name: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _browser_history_profile_roots_payload(value: object) -> dict[str, Path] | None:
+def _browser_history_profile_roots_payload(value: JsonValue) -> dict[str, Path] | None:
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -749,29 +761,8 @@ def import_browser_history(payload: dict):
     return response(True, run_import(database(), request).to_payload())
 
 
-def set_developer_diagnostics(payload: dict):
-    force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
-    force_frontmost_fallback_capture = _bool_payload(payload.get("forceFrontmostFallbackCapture"))
-    force_browser_history_url_fallback = _bool_payload(payload.get("forceBrowserHistoryUrlFallback"))
-    db = database()
-    db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true" if force_chromium_ax_capture else "false")
-    db.set_meta(
-        FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
-        "true" if force_frontmost_fallback_capture else "false",
-    )
-    db.set_meta(
-        FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY,
-        "true" if force_browser_history_url_fallback else "false",
-    )
-    _apply_developer_diagnostics_env(db)
-    return response(
-        True,
-        {
-            "forceChromiumAxCapture": force_chromium_ax_capture,
-            "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
-            "forceBrowserHistoryUrlFallback": force_browser_history_url_fallback,
-        },
-    )
+def set_developer_diagnostics(payload: JsonObject):
+    return response(True, save_developer_diagnostics(database(), payload))
 
 
 def get_current_snapshot():
@@ -1002,6 +993,31 @@ COMMANDS = {
 }
 
 
+def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float | None:
+    """Run one sampling tick and return the next ``last_capture_tick`` value.
+
+    Returns ``None`` when no snapshot was captured (power-suppressed or idle),
+    mirroring a capture gap so the next capture uses the default sample length.
+    """
+    if handle_power_state_sample(db, current_power_state()):
+        return None
+
+    idle_seconds = seconds_since_last_input()
+    if handle_idle_sample(db, idle_seconds):
+        return None
+
+    _apply_developer_diagnostics_env(db)
+    snapshot = current_snapshot(include_system_transient=False)
+    capture_tick = time.monotonic()
+    sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
+    db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
+    enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
+    backfill_browser_history_context(db, snapshot.observed_at)
+    db.set_meta("last_event_at", snapshot.observed_at)
+    db.set_meta("tracker_mode", "tracking")
+    return capture_tick
+
+
 def daemon():
     ensure_state_dir()
     pid_path().write_text(str(os.getpid()))
@@ -1012,27 +1028,18 @@ def daemon():
 
     try:
         while True:
-            if handle_power_state_sample(db, current_power_state()):
+            try:
+                last_capture_tick = _daemon_tick(db, last_capture_tick)
+            except Exception:
+                # One failed tick (Apple Event failure, a locked database,
+                # an unexpected snapshot shape, ...) must not kill tracking
+                # until the next app relaunch; log it and keep sampling.
+                # KeyboardInterrupt/SystemExit still propagate and stop the loop.
+                print("tracker daemon tick failed:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                # A failed tick means a capture gap, so the next successful
+                # capture starts from the default sample length again.
                 last_capture_tick = None
-                time.sleep(SAMPLE_SECONDS)
-                continue
-
-            idle_seconds = seconds_since_last_input()
-            if handle_idle_sample(db, idle_seconds):
-                last_capture_tick = None
-                time.sleep(SAMPLE_SECONDS)
-                continue
-
-            _apply_developer_diagnostics_env(db)
-            snapshot = current_snapshot(include_system_transient=False)
-            capture_tick = time.monotonic()
-            sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
-            last_capture_tick = capture_tick
-            db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
-            enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
-            backfill_browser_history_context(db, snapshot.observed_at)
-            db.set_meta("last_event_at", snapshot.observed_at)
-            db.set_meta("tracker_mode", "tracking")
             time.sleep(SAMPLE_SECONDS)
     finally:
         pid_path().unlink(missing_ok=True)

@@ -45,6 +45,29 @@ export function resolveDashboardRefreshMode({
   return "background";
 }
 
+// An unfocused renderer keeps the selected day fresh with the cheap cursor
+// live-tail. Rebuilding the whole day timeline on every 30s tick instead is
+// what churned the main-window WKWebView heap into multi-GB footprints during
+// long unfocused stretches, so the full (lite) rebuild runs at most at this
+// cadence to bound staleness from reclassifications and edits that the
+// append-only live-tail merge cannot pick up.
+export const BACKGROUND_RECONCILE_INTERVAL_MS = 10 * 60_000;
+
+export type AppRefreshTickAction = "live-tail" | "reconcile";
+
+export function resolveAppRefreshTickAction({
+  rendererFocused,
+  nowMs,
+  lastFullDayRefreshAtMs,
+}: {
+  readonly rendererFocused: boolean;
+  readonly nowMs: number;
+  readonly lastFullDayRefreshAtMs: number;
+}): AppRefreshTickAction {
+  if (rendererFocused) return "live-tail";
+  return nowMs - lastFullDayRefreshAtMs >= BACKGROUND_RECONCILE_INTERVAL_MS ? "reconcile" : "live-tail";
+}
+
 export type DashboardPreviousWeekFocusLoad = {
   readonly key: string;
   readonly focusSeconds: number;

@@ -3,6 +3,7 @@ import {
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
 } from "../settings/localAiSetup";
+import type { EnhancedContextProviderPayload } from "./contentContextEgressPolicy";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 4096;
@@ -39,6 +40,13 @@ export type LocalAiProviderRequest = {
   readonly request: Record<string, unknown>;
 };
 
+export type LocalAiProviderEnhancedRetryRequestInput = {
+  readonly provider: LocalAiProviderConfig;
+  readonly payload: readonly MinimizedActivityPayload[];
+  readonly workProfile: string | null;
+  readonly enhancedRetryContext: EnhancedContextProviderPayload;
+};
+
 type OpenAiCompatibleRequestOptions = {
   readonly maxTokens?: number;
   readonly timeoutMs?: number;
@@ -53,20 +61,45 @@ export function toLocalProviderRequest(
   payload: readonly MinimizedActivityPayload[],
   workProfile: string | null,
 ): LocalAiProviderRequest | null {
+  return buildLocalProviderRequest({ provider, payload, workProfile, enhancedRetryContext: null });
+}
+
+export function toLocalProviderEnhancedRetryRequest(
+  input: LocalAiProviderEnhancedRetryRequestInput,
+): LocalAiProviderRequest | null {
+  return buildLocalProviderRequest(input);
+}
+
+function buildLocalProviderRequest(input: {
+  readonly provider: LocalAiProviderConfig;
+  readonly payload: readonly MinimizedActivityPayload[];
+  readonly workProfile: string | null;
+  readonly enhancedRetryContext: EnhancedContextProviderPayload | null;
+}): LocalAiProviderRequest | null {
+  const provider = input.provider;
   switch (provider.provider) {
     case "managed_local":
       return openAiCompatibleProviderRequest(
-        provider.baseUrl,
-        provider.model,
-        payload,
-        workProfile,
+        {
+          baseUrl: provider.baseUrl,
+          model: provider.model,
+          payload: input.payload,
+          workProfile: input.workProfile,
+          enhancedRetryContext: input.enhancedRetryContext,
+        },
         managedLocalRuntimeRequestOptions(
           MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS,
           MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS,
         ),
       );
     case "self_hosted":
-      return openAiCompatibleProviderRequest(provider.baseUrl, provider.model, payload, workProfile);
+      return openAiCompatibleProviderRequest({
+        baseUrl: provider.baseUrl,
+        model: provider.model,
+        payload: input.payload,
+        workProfile: input.workProfile,
+        enhancedRetryContext: input.enhancedRetryContext,
+      });
     case "openrouter_byok": {
       const apiKey = provider.apiKey.trim();
       const models = normalizeOpenRouterModels(provider.model, provider.fallbackModels);
@@ -84,7 +117,10 @@ export function toLocalProviderRequest(
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
           },
-          messages: [{ role: "user", content: buildClassificationPrompt(payload, workProfile) }],
+          messages: [{
+            role: "user",
+            content: buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext),
+          }],
         },
       };
     }
@@ -103,14 +139,17 @@ export function managedLocalRuntimeRequestOptions(maxTokens: number, timeoutMs?:
 }
 
 function openAiCompatibleProviderRequest(
-  baseUrlValue: string,
-  modelValue: string,
-  payload: readonly MinimizedActivityPayload[],
-  workProfile: string | null,
+  input: {
+    readonly baseUrl: string;
+    readonly model: string;
+    readonly payload: readonly MinimizedActivityPayload[];
+    readonly workProfile: string | null;
+    readonly enhancedRetryContext: EnhancedContextProviderPayload | null;
+  },
   options: OpenAiCompatibleRequestOptions = {},
 ): LocalAiProviderRequest | null {
-  const baseUrl = baseUrlValue.trim();
-  const model = modelValue.trim();
+  const baseUrl = input.baseUrl.trim();
+  const model = input.model.trim();
   if (!baseUrl || !model) return null;
   return {
     model,
@@ -118,7 +157,10 @@ function openAiCompatibleProviderRequest(
       baseUrl,
       model,
       ...options,
-      messages: [{ role: "user", content: buildClassificationPrompt(payload, workProfile) }],
+      messages: [{
+        role: "user",
+        content: buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext),
+      }],
     },
   };
 }
@@ -128,7 +170,11 @@ function normalizeOpenRouterModels(primaryModel: string, fallbackModels: readonl
   return [model, ...normalizeOpenRouterFallbackModels(model, fallbackModels ?? [])];
 }
 
-function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[], workProfile: string | null): string {
+function buildClassificationPrompt(
+  payload: readonly MinimizedActivityPayload[],
+  workProfile: string | null,
+  enhancedRetryContext: EnhancedContextProviderPayload | null,
+): string {
   return [
     "Classify each activity into activity category, productivity label, confidence, and short reason.",
     ...(workProfile
@@ -138,12 +184,13 @@ function buildClassificationPrompt(payload: readonly MinimizedActivityPayload[],
         ]
       : []),
     primaryEvidenceGuidance(payload),
+    ...enhancedRetryGuidance(enhancedRetryContext),
     ...redditPromptGuidance(payload),
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
     "Use neutral only for genuinely in-between activities, such as background music while working or brief communication with unclear purpose. Do not use neutral as an uncertainty fallback: if your reason says the activity is professional or work-related, the label must be focus, even for supporting tools, consoles, account setup, or work-relevant research. If the evidence is insufficient to decide, use category unknown with confidence 0.5 or lower instead of guessing.",
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
-    JSON.stringify(payload.map(promptItem)),
+    JSON.stringify(payload.map((item) => promptItem(item, enhancedRetryContext))),
   ].join("\n");
 }
 
@@ -163,8 +210,21 @@ function redditPromptGuidance(payload: readonly MinimizedActivityPayload[]): rea
   ];
 }
 
-function promptItem(item: MinimizedActivityPayload): Record<string, unknown> {
+function enhancedRetryGuidance(enhancedRetryContext: EnhancedContextProviderPayload | null): readonly string[] {
+  if (!enhancedRetryContext) return [];
+  return [
+    "Enhanced retry context is provider-safe derived context supplied only because the first pass had insufficient evidence. Use it as secondary evidence and do not quote it in the reason.",
+  ];
+}
+
+function promptItem(
+  item: MinimizedActivityPayload,
+  enhancedRetryContext: EnhancedContextProviderPayload | null,
+): Record<string, unknown> {
   const title = item.siteTitle ?? item.youtubeTitle;
+  const enhancedContext = enhancedRetryContext?.segmentId === item.segmentId
+    ? enhancedPromptItems(enhancedRetryContext)
+    : null;
   return {
     id: item.segmentId,
     appName: item.appName,
@@ -176,8 +236,21 @@ function promptItem(item: MinimizedActivityPayload): Record<string, unknown> {
     ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
     ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
     ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
+    ...(enhancedContext ? { enhancedContext } : {}),
     durationSeconds: item.durationSeconds,
   };
+}
+
+function enhancedPromptItems(
+  enhancedRetryContext: EnhancedContextProviderPayload,
+): readonly Record<string, unknown>[] {
+  return enhancedRetryContext.items.map((item) => ({
+    sourceFamily: item.sourceFamily,
+    depth: item.depth,
+    kind: item.kind,
+    decision: item.decision,
+    values: item.values,
+  }));
 }
 
 class LocalAiProviderRequestError extends Error {

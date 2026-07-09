@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { createRef, type ComponentProps } from "react";
 import { vi } from "vitest";
 import { DevSettingsSection } from "./DevSettingsSection";
+import { DEFAULT_ENHANCED_CONTEXT_SETTINGS } from "./settingsStorage";
 
 type DevSettingsSectionTestProps = ComponentProps<typeof DevSettingsSection>;
 
@@ -17,6 +18,7 @@ export function renderProductionDevSettings(
       durationSeconds: 45,
     },
     endOfDayReviewSettingsRowRef: createRef<HTMLDivElement>(),
+    enhancedContextSettings: DEFAULT_ENHANCED_CONTEXT_SETTINGS,
     forceBrowserHistoryUrlFallbackEnabled: false,
     forceChromiumAxCaptureEnabled: false,
     forceChromiumAxExtremeNudgeEnabled: false,
@@ -24,11 +26,13 @@ export function renderProductionDevSettings(
     projectPassRuns: [],
     deviceSyncPreviewEnabled: false,
     profileRedesignEnabled: false,
+    webAccountPreviewEnabled: false,
     projectClassificationEnabled: false,
     projectClassificationAiReviewEvents: [],
     projectClassificationCorrectionsBusy: false,
     onDeviceSyncPreviewEnabledChange: vi.fn(),
     onProfileRedesignEnabledChange: vi.fn(),
+    onWebAccountPreviewEnabledChange: vi.fn(),
     onProjectClassificationEnabledChange: vi.fn(),
     onRevertProjectClassificationCorrection: vi.fn(),
     weekDashboardAxisScalePercent,
@@ -46,6 +50,11 @@ export function renderProductionDevSettings(
     onDemoDashboardReplayDurationSecondsChange: vi.fn(),
     onDemoDashboardReplayPreRollSecondsChange: vi.fn(),
     onEndOfDayReviewPreview: vi.fn(),
+    onEnhancedContextCaptureLocalChange: vi.fn(),
+    onEnhancedContextDebugLoggingChange: vi.fn(),
+    onEnhancedContextEnabledChange: vi.fn(),
+    onEnhancedContextRetryLowConfidenceChange: vi.fn(),
+    onEnhancedContextSourceFamilyChange: vi.fn(),
     onForceBrowserHistoryUrlFallbackChange: vi.fn(),
     onForceChromiumAxCaptureChange: vi.fn(),
     onForceChromiumAxExtremeNudgeChange: vi.fn(),

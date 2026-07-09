@@ -7,13 +7,13 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.storage.activity_segment_serialization import (
     json_list,
+    sanitized_raw_context_json,
     serialize_activity_row,
     serialize_dashboard_week_activity_row,
 )
@@ -51,19 +51,6 @@ TIMELINE_SEARCH_FIELDS = (
 
 BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]], Any]
 BrowserHistoryTitlePolicy = Callable[[Optional[str]], bool]
-
-
-class ClosingConnection(sqlite3.Connection):
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool:
-        try:
-            return super().__exit__(exc_type, exc_value, traceback)
-        finally:
-            self.close()
 
 
 @dataclass(frozen=True)
@@ -113,13 +100,42 @@ class TrackerDatabase:
         self.db_path = db_path
         self.path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._connection: sqlite3.Connection | None = None
         self._init_db()
 
     def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path, factory=ClosingConnection)
+        """Return this instance's long-lived connection, opening it on first use.
+
+        The returned connection is used as a context manager exactly like the
+        previous per-call connections: ``with self.connect() as conn`` commits
+        on success and rolls back on exception (plain sqlite3.Connection
+        semantics). It just no longer closes on exit, so call sites keep the
+        same commit behavior while skipping a fresh open per operation.
+        """
+        if self._connection is not None:
+            return self._connection
+        connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # The daemon and the serve process write this database concurrently
+        # (and delete_history_range runs VACUUM); wait for a contended lock
+        # instead of raising "database is locked" immediately.
+        connection.execute("PRAGMA busy_timeout = 5000")
+        # WAL mode only needs NORMAL durability; avoids an fsync per commit.
+        connection.execute("PRAGMA synchronous = NORMAL")
+        self._connection = connection
         return connection
+
+    def close(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _init_db(self) -> None:
         with self.connect() as conn:
@@ -735,7 +751,7 @@ class TrackerDatabase:
                         snapshot.site_source,
                         snapshot.source,
                         getattr(snapshot, "capture_confidence", 1.0),
-                        json.dumps(asdict(snapshot)),
+                        self._snapshot_raw_context_json(snapshot),
                         last["id"],
                     ),
                 )
@@ -784,7 +800,7 @@ class TrackerDatabase:
                     "macos",
                     snapshot.source,
                     getattr(snapshot, "capture_confidence", 1.0),
-                    json.dumps(asdict(snapshot)),
+                    self._snapshot_raw_context_json(snapshot),
                 ),
             )
 
@@ -795,6 +811,13 @@ class TrackerDatabase:
         config: BrowserHistoryBackfillConfig,
     ) -> list[BrowserHistoryBackfillResult]:
         observed_at_seconds = self._timestamp_seconds(config.observed_at)
+        # Bound the scan in SQL so the per-tick daemon query only touches rows
+        # inside the backfill window (the expression index on datetime(ended_at)
+        # applies) instead of scanning the 100 most recent context-less rows of
+        # all time and discarding the stale ones in Python.
+        backfill_cutoff = datetime.fromtimestamp(
+            observed_at_seconds - config.max_age_seconds, tz=timezone.utc
+        ).isoformat()
         results: list[BrowserHistoryBackfillResult] = []
         with self.connect() as conn:
             rows = conn.execute(
@@ -808,9 +831,11 @@ class TrackerDatabase:
                   AND youtube_playlist_id IS NULL
                   AND youtube_is_shorts IS NULL
                   AND window_title IS NOT NULL
+                  AND datetime(ended_at) >= datetime(?)
                 ORDER BY datetime(ended_at) DESC, id DESC
                 LIMIT 100
-                """
+                """,
+                (backfill_cutoff,),
             ).fetchall()
 
             for row in rows:
@@ -955,7 +980,7 @@ class TrackerDatabase:
                     segment.get("platform", "macos"),
                     segment.get("source", "unknown"),
                     segment.get("confidence"),
-                    segment.get("raw_context_json"),
+                    sanitized_raw_context_json(segment.get("raw_context_json")),
                 ),
             )
 
@@ -1049,7 +1074,7 @@ class TrackerDatabase:
                         segment.platform,
                         segment.source,
                         segment.confidence,
-                        segment.raw_context_json,
+                        sanitized_raw_context_json(segment.raw_context_json),
                     ),
                 )
                 conn.execute(
@@ -1482,11 +1507,10 @@ class TrackerDatabase:
                         )
 
         if not dry_run and activity_segments >= 1000:
-            vacuum_connection = self.connect()
-            try:
-                vacuum_connection.execute("VACUUM")
-            finally:
-                vacuum_connection.close()
+            # VACUUM cannot run inside a transaction; the deleting with-block
+            # above has already committed, so the shared connection is back in
+            # autocommit mode here.
+            self.connect().execute("VACUUM")
 
         return {
             "activitySegments": activity_segments,
@@ -3300,7 +3324,15 @@ class TrackerDatabase:
             "browser_history_backfilled": True,
             "browser_history_backfilled_at": backfilled_at,
         }
-        return json.dumps(updated_context)
+        return sanitized_raw_context_json(json.dumps(updated_context)) or "{}"
+
+    @staticmethod
+    def _snapshot_raw_context_json(snapshot: Snapshot) -> str:
+        raw_context = asdict(snapshot)
+        adaptive_context = raw_context.pop("adaptive_content_context", None)
+        if adaptive_context is not None:
+            raw_context["adaptive_content_context"] = adaptive_context
+        return sanitized_raw_context_json(json.dumps(raw_context)) or "{}"
 
     @staticmethod
     def _raw_context_dict(raw_context_json: str | None) -> dict[str, Any]:
