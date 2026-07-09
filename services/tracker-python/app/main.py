@@ -19,6 +19,24 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.tracker.adaptive_context.developer_diagnostics import (
+    ADAPTIVE_CONTEXT_SOURCE_FAMILIES_ENV,
+    ENABLE_ADAPTIVE_CONTEXT_CAPTURE_ENV,
+    ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY,
+    ENHANCED_CONTEXT_ENABLED_META_KEY,
+    ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY,
+    FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV,
+    FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY,
+    FORCE_CHROMIUM_AX_CAPTURE_ENV,
+    FORCE_CHROMIUM_AX_CAPTURE_META_KEY,
+    FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV,
+    FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
+    JsonObject,
+    JsonValue,
+    apply_developer_diagnostics_defaults as _apply_developer_diagnostics_defaults,
+    apply_developer_diagnostics_env as _apply_developer_diagnostics_env,
+    save_developer_diagnostics,
+)
 
 if TYPE_CHECKING:
     from app.tracker.macos_workspace import Snapshot
@@ -29,12 +47,6 @@ DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
 IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "180"))
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
-FORCE_CHROMIUM_AX_CAPTURE_META_KEY = "developer_diagnostics_force_chromium_ax_capture"
-FORCE_CHROMIUM_AX_CAPTURE_ENV = "DRIFTY_FORCE_CHROMIUM_AX_CAPTURE"
-FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY = "developer_diagnostics_force_frontmost_fallback_capture"
-FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
-FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY = "developer_diagnostics_force_browser_history_url_fallback"
-FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
@@ -98,7 +110,7 @@ def fetch_live_tail(
     after_segment_id: str | None,
     after_ended_at: str | None,
     limit: int | str | None = 8,
-) -> list[dict[str, object]]:
+) -> list[JsonObject]:
     from app.storage.live_tail import fetch_live_tail as read_fetch_live_tail
 
     return read_fetch_live_tail(db, start, end, after_segment_id, after_ended_at, limit)
@@ -123,21 +135,6 @@ def backfill_browser_history_context(db: TrackerDatabase, observed_at: str) -> N
         enqueue_youtube_metadata_fetch(DB_PATH, result.youtube_video_id, result.site_url)
 
 
-def _apply_developer_diagnostics_env(db: TrackerDatabase) -> None:
-    force_chromium_ax_capture = db.get_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY) == "true"
-    force_frontmost_fallback_capture = db.get_meta(FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY) == "true"
-    force_browser_history_url_fallback = db.get_meta(FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY) == "true"
-    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "1" if force_chromium_ax_capture else "0"
-    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "1" if force_frontmost_fallback_capture else "0"
-    os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "1" if force_browser_history_url_fallback else "0"
-
-
-def _apply_developer_diagnostics_defaults() -> None:
-    os.environ[FORCE_CHROMIUM_AX_CAPTURE_ENV] = "0"
-    os.environ[FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV] = "0"
-    os.environ[FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV] = "0"
-
-
 def _bool_meta(value: str | None) -> bool | None:
     if value == "true":
         return True
@@ -146,11 +143,11 @@ def _bool_meta(value: str | None) -> bool | None:
     return None
 
 
-def _bool_payload(value: object) -> bool:
+def _bool_payload(value: JsonValue) -> bool:
     return value is True
 
 
-def _int_payload(value: object, *, default: int, min_value: int, max_value: int, name: str) -> int:
+def _int_payload(value: JsonValue, *, default: int, min_value: int, max_value: int, name: str) -> int:
     if value is None:
         return default
     if isinstance(value, bool) or not isinstance(value, int):
@@ -174,7 +171,7 @@ def day_bounds(payload: dict) -> tuple[str | None, str | None]:
     return payload.get("start"), payload.get("end")
 
 
-def _datetime_payload(value: object, *, name: str) -> datetime:
+def _datetime_payload(value: JsonValue, *, name: str) -> datetime:
     if value is None:
         return datetime.now(timezone.utc)
     if not isinstance(value, str):
@@ -188,7 +185,7 @@ def _datetime_payload(value: object, *, name: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _browser_history_profile_roots_payload(value: object) -> dict[str, Path] | None:
+def _browser_history_profile_roots_payload(value: JsonValue) -> dict[str, Path] | None:
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -749,29 +746,8 @@ def import_browser_history(payload: dict):
     return response(True, run_import(database(), request).to_payload())
 
 
-def set_developer_diagnostics(payload: dict):
-    force_chromium_ax_capture = _bool_payload(payload.get("forceChromiumAxCapture"))
-    force_frontmost_fallback_capture = _bool_payload(payload.get("forceFrontmostFallbackCapture"))
-    force_browser_history_url_fallback = _bool_payload(payload.get("forceBrowserHistoryUrlFallback"))
-    db = database()
-    db.set_meta(FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true" if force_chromium_ax_capture else "false")
-    db.set_meta(
-        FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY,
-        "true" if force_frontmost_fallback_capture else "false",
-    )
-    db.set_meta(
-        FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY,
-        "true" if force_browser_history_url_fallback else "false",
-    )
-    _apply_developer_diagnostics_env(db)
-    return response(
-        True,
-        {
-            "forceChromiumAxCapture": force_chromium_ax_capture,
-            "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
-            "forceBrowserHistoryUrlFallback": force_browser_history_url_fallback,
-        },
-    )
+def set_developer_diagnostics(payload: JsonObject):
+    return response(True, save_developer_diagnostics(database(), payload))
 
 
 def get_current_snapshot():

@@ -1,5 +1,5 @@
 import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
-import type { ActivityCategory, ProductivityLabel, TrayIconStyle } from "@drifty/domain";
+import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel, TrayIconStyle } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 export * from "./weekDashboardAxisScaleSettings";
@@ -25,6 +25,11 @@ export const PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY = "drifty.dev.projectCla
 export const PROFILE_REDESIGN_ENABLED_STORAGE_KEY = "drifty.dev.profileRedesign";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
+
+export const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
+export const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
+export const ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY = "drifty.dev.enhancedContext.retryLowConfidence";
+export const ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY = "drifty.dev.enhancedContext.debugLogging";
 
 export const FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY = "drifty.dev.forceChromiumAxCapture";
 
@@ -67,6 +72,83 @@ export const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 export type DemoDashboardReplaySettings = {
   readonly preRollSeconds: number;
   readonly durationSeconds: number;
+};
+
+export type EnhancedContextSourceFamily = Exclude<AdaptiveContextSourceFamily, "surface_metadata">;
+
+export type EnhancedContextSourceFamilyOption = {
+  readonly family: EnhancedContextSourceFamily;
+  readonly label: string;
+  readonly description: string;
+};
+
+export type EnhancedContextSourceFamilySettings = Readonly<Record<EnhancedContextSourceFamily, boolean>>;
+
+export type EnhancedContextSettings = {
+  readonly enabled: boolean;
+  readonly captureLocal: boolean;
+  readonly retryLowConfidence: boolean;
+  readonly debugLogging: boolean;
+  readonly sourceFamilies: EnhancedContextSourceFamilySettings;
+};
+
+export const ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS = [
+  {
+    family: "document_knowledge",
+    label: "Document / knowledge",
+    description: "Notion, Confluence, Google Docs, Coda-style page metadata.",
+  },
+  {
+    family: "local_notes_markdown",
+    label: "Local notes / markdown",
+    description: "Obsidian, Markdown, and exposed local note structure.",
+  },
+  {
+    family: "work_tracker_dev_platform",
+    label: "Work trackers / dev platforms",
+    description: "Linear, Jira, GitHub, GitLab, Sentry-style issue metadata.",
+  },
+  {
+    family: "design_dev_tool",
+    label: "Design / dev tools",
+    description: "Figma, IDE, editor, repo, project, and selected-page metadata.",
+  },
+  {
+    family: "calendar_meeting",
+    label: "Calendar / meeting metadata",
+    description: "Meeting type, calendar workspace, and non-identifying counts.",
+  },
+  {
+    family: "communication_metadata",
+    label: "Communication metadata",
+    description: "Workspace, channel, and thread metadata only; no message bodies.",
+  },
+] satisfies readonly EnhancedContextSourceFamilyOption[];
+
+export const ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS: Readonly<Record<EnhancedContextSourceFamily, string>> = {
+  document_knowledge: "drifty.dev.enhancedContext.source.documentKnowledge",
+  local_notes_markdown: "drifty.dev.enhancedContext.source.localNotesMarkdown",
+  work_tracker_dev_platform: "drifty.dev.enhancedContext.source.workTrackerDevPlatform",
+  design_dev_tool: "drifty.dev.enhancedContext.source.designDevTool",
+  calendar_meeting: "drifty.dev.enhancedContext.source.calendarMeeting",
+  communication_metadata: "drifty.dev.enhancedContext.source.communicationMetadata",
+};
+
+export const DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFamilySettings = {
+  document_knowledge: false,
+  local_notes_markdown: false,
+  work_tracker_dev_platform: false,
+  design_dev_tool: false,
+  calendar_meeting: false,
+  communication_metadata: false,
+};
+
+export const DEFAULT_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
+  enabled: false,
+  captureLocal: false,
+  retryLowConfidence: false,
+  debugLogging: false,
+  sourceFamilies: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES,
 };
 
 type DemoDashboardReplaySettingsInput = {
@@ -313,6 +395,59 @@ export function resolveInitialTeamsBetaEnabled(): boolean {
   return window.localStorage.getItem(TEAMS_BETA_STORAGE_KEY) === "1";
 }
 
+export function resolveInitialEnhancedContextSettings(): EnhancedContextSettings {
+  if (typeof window === "undefined") return DEFAULT_ENHANCED_CONTEXT_SETTINGS;
+  return {
+    enabled: readStoredBoolean(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY),
+    captureLocal: readStoredBoolean(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY),
+    retryLowConfidence: readStoredBoolean(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY),
+    debugLogging: readStoredBoolean(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY),
+    sourceFamilies: {
+      document_knowledge: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.document_knowledge),
+      local_notes_markdown: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.local_notes_markdown),
+      work_tracker_dev_platform: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.work_tracker_dev_platform),
+      design_dev_tool: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.design_dev_tool),
+      calendar_meeting: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.calendar_meeting),
+      communication_metadata: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.communication_metadata),
+    },
+  };
+}
+
+export function resolveEffectiveEnhancedContextSettings(
+  devModeEnabled: boolean,
+  settings: EnhancedContextSettings,
+): EnhancedContextSettings {
+  if (!devModeEnabled || !settings.enabled) return DEFAULT_ENHANCED_CONTEXT_SETTINGS;
+  return settings;
+}
+
+export function persistEnhancedContextSettings(
+  settings: EnhancedContextSettings,
+  devModeEnabled: boolean,
+): EnhancedContextSettings {
+  const effectiveSettings = resolveEffectiveEnhancedContextSettings(devModeEnabled, settings);
+  if (typeof window === "undefined") return effectiveSettings;
+  writeStoredBoolean(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY, effectiveSettings.enabled);
+  writeStoredBoolean(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY, effectiveSettings.captureLocal);
+  writeStoredBoolean(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY, effectiveSettings.retryLowConfidence);
+  writeStoredBoolean(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY, effectiveSettings.debugLogging);
+  for (const option of ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS) {
+    writeStoredBoolean(
+      ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS[option.family],
+      effectiveSettings.sourceFamilies[option.family],
+    );
+  }
+  return effectiveSettings;
+}
+
+export function hasEnabledEnhancedContextSetting(settings: EnhancedContextSettings): boolean {
+  return settings.enabled
+    || settings.captureLocal
+    || settings.retryLowConfidence
+    || settings.debugLogging
+    || ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS.some((option) => settings.sourceFamilies[option.family]);
+}
+
 export function resolveInitialForceChromiumAxCaptureEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY) === "1";
@@ -337,4 +472,14 @@ export function applyThemeToDocument(theme: ThemeMode) {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
+}
+
+function readStoredBoolean(storageKey: string): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(storageKey) === "1";
+}
+
+function writeStoredBoolean(storageKey: string, enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(storageKey, enabled ? "1" : "0");
 }

@@ -127,12 +127,18 @@ describe("trackerClient", () => {
       forceChromiumAxCapture: true,
       forceFrontmostFallbackCapture: true,
       forceBrowserHistoryUrlFallback: true,
+      enhancedContextEnabled: true,
+      enhancedContextCaptureLocal: false,
+      enhancedContextSourceFamilies: ["document_knowledge", "calendar_meeting"],
     });
 
     await trackerClient.setDeveloperDiagnostics({
       forceChromiumAxCapture: true,
       forceFrontmostFallbackCapture: true,
       forceBrowserHistoryUrlFallback: true,
+      enhancedContextEnabled: true,
+      enhancedContextCaptureLocal: false,
+      enhancedContextSourceFamilies: ["document_knowledge", "calendar_meeting"],
     });
 
     expect(invoke).toHaveBeenCalledWith("tracker_set_developer_diagnostics", {
@@ -140,6 +146,9 @@ describe("trackerClient", () => {
         forceChromiumAxCapture: true,
         forceFrontmostFallbackCapture: true,
         forceBrowserHistoryUrlFallback: true,
+        enhancedContextEnabled: true,
+        enhancedContextCaptureLocal: false,
+        enhancedContextSourceFamilies: ["document_knowledge", "calendar_meeting"],
       },
     });
   });

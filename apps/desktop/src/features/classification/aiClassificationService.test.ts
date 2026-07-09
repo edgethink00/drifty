@@ -1,9 +1,16 @@
-import type { ActivityClassificationRecord, ActivitySegment, ClassificationMetrics } from "@drifty/domain";
+import type { ActivityClassificationRecord, ActivitySegment, AdaptiveContentContext, ClassificationMetrics } from "@drifty/domain";
 import { describe, expect, it, vi } from "vitest";
 import { CLOUD_API_CLIENT_VERSION, CLOUD_API_CONTRACT_VERSION } from "../../lib/cloudContract";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, estimateAiClassificationCostUsd, projectAiClassificationCost, type AiClassificationUsageSummary } from "./aiClassificationService";
 
 const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
+const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
+const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
+const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
+const ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY = "drifty.dev.enhancedContext.retryLowConfidence";
+const ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY = "drifty.dev.enhancedContext.debugLogging";
+const ENHANCED_CONTEXT_DOCUMENT_KNOWLEDGE_STORAGE_KEY = "drifty.dev.enhancedContext.source.documentKnowledge";
+const ENHANCED_CONTEXT_COMMUNICATION_METADATA_STORAGE_KEY = "drifty.dev.enhancedContext.source.communicationMetadata";
 
 const baseUsage: AiClassificationUsageSummary = {
   requests: 1,
@@ -233,7 +240,8 @@ describe("runAiClassification cloud contract", () => {
     }));
 
     const service = await import("./aiClassificationService");
-    return { ...service, invoke, nativeInvoke, getSession, getUnclassifiedSegments, getTimeline, getReusableAiClassifications, saveClassifications, getClassificationMetrics };
+    const debugLog = await import("../settings/debugLog");
+    return { ...service, ...debugLog, invoke, nativeInvoke, getSession, getUnclassifiedSegments, getTimeline, getReusableAiClassifications, saveClassifications, getClassificationMetrics };
   }
 
   function createYouTubeBrowseSegment(index: number, siteUrl: string): ActivitySegment {
@@ -284,6 +292,108 @@ describe("runAiClassification cloud contract", () => {
       classifiedAt: "2026-05-20T12:00:00.000Z",
       ...overrides,
     };
+  }
+
+  function createNotionAdaptiveContext(segmentId: string): AdaptiveContentContext {
+    return {
+      version: 1,
+      segmentId,
+      collectedAt: "2026-07-08T09:00:00.000Z",
+      localStorage: "stored_local",
+      items: [
+        {
+          id: "notion-parent",
+          depth: 1,
+          kind: "parentPage",
+          sourceFamily: "document_knowledge",
+          values: ["Product research"],
+          extractionConfidence: "high",
+          localStorage: "stored_local",
+          providerPolicy: "metadata_only",
+          sensitivity: [],
+        },
+        {
+          id: "notion-heading",
+          depth: 2,
+          kind: "heading",
+          sourceFamily: "document_knowledge",
+          values: ["Moderator outreach"],
+          extractionConfidence: "high",
+          localStorage: "stored_local",
+          providerPolicy: "metadata_only",
+          sensitivity: [],
+        },
+        {
+          id: "blocked-body",
+          depth: 3,
+          kind: "messageBody",
+          sourceFamily: "communication_metadata",
+          values: ["blocked raw body password=hunter2"],
+          extractionConfidence: "high",
+          localStorage: "stored_local",
+          providerPolicy: "blocked",
+          sensitivity: ["message_body", "secret_like"],
+        },
+      ],
+    };
+  }
+
+  function createBlockedAdaptiveContext(segmentId: string): AdaptiveContentContext {
+    return {
+      version: 1,
+      segmentId,
+      collectedAt: "2026-07-08T09:00:00.000Z",
+      localStorage: "stored_local",
+      items: [
+        {
+          id: "blocked-body",
+          depth: 3,
+          kind: "messageBody",
+          sourceFamily: "communication_metadata",
+          values: ["blocked raw body password=hunter2"],
+          extractionConfidence: "high",
+          localStorage: "stored_local",
+          providerPolicy: "blocked",
+          sensitivity: ["message_body", "secret_like"],
+        },
+      ],
+    };
+  }
+
+  function enableEnhancedContextRetry() {
+    ensureTestWindow();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY, "1");
+    window.localStorage.setItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY, "1");
+    window.localStorage.setItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY, "1");
+    window.localStorage.setItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY, "1");
+    window.localStorage.setItem(ENHANCED_CONTEXT_DOCUMENT_KNOWLEDGE_STORAGE_KEY, "1");
+  }
+
+  function localAiResponse(segmentId: string, result: {
+    readonly category: string;
+    readonly productivity: string;
+    readonly confidence: number;
+    readonly reason: string;
+  }) {
+    return {
+      status: 200,
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({ results: [{ id: segmentId, ...result }] }),
+          },
+        }],
+        usage: { prompt_tokens: 120, completion_tokens: 24 },
+      }),
+      latencyMs: 321,
+    };
+  }
+
+  function promptFromNativeCall(nativeInvoke: ReturnType<typeof vi.fn>, callIndex: number): string {
+    const request = nativeInvoke.mock.calls[callIndex]?.[1]?.request as { messages?: Array<{ content?: unknown }> } | undefined;
+    const content = request?.messages?.[0]?.content;
+    return typeof content === "string" ? content : "";
   }
 
   function writeOnboardingState(userId: string, overrides: Record<string, unknown> = {}) {
@@ -1606,6 +1716,330 @@ describe("runAiClassification cloud contract", () => {
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v6-productivity-rubric" })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("keeps first-pass local provider payload free of enhanced context and preserves old behavior when Dev retry toggles are off", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Notion",
+      siteDomain: "notion.so",
+      siteTitle: "Reddit",
+      adaptiveContentContext: createNotionAdaptiveContext("segment-1"),
+    });
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
+        category: "unknown",
+        productivity: "neutral",
+        confidence: 0.5,
+        reason: "Insufficient evidence",
+      }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledTimes(1);
+      const prompt = promptFromNativeCall(nativeInvoke, 0);
+      expect(prompt).not.toContain("Enhanced retry context");
+      expect(prompt).not.toContain("Product research");
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "unknown",
+        confidence: 0.5,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("runs exactly one enhanced retry for a low-confidence local result and saves the improved safe-context result", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Notion",
+      siteDomain: "notion.so",
+      siteTitle: "Reddit",
+      adaptiveContentContext: createNotionAdaptiveContext("segment-1"),
+    });
+    enableEnhancedContextRetry();
+    window.localStorage.setItem(ENHANCED_CONTEXT_COMMUNICATION_METADATA_STORAGE_KEY, "1");
+
+    try {
+      const { runAiClassification, nativeInvoke, getReusableAiClassifications, saveClassifications, readRecentEnhancedContextDebugEvents } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "unknown",
+          productivity: "neutral",
+          confidence: 0.5,
+          reason: "Insufficient evidence from title only",
+        }))
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "workspace",
+          productivity: "focus",
+          confidence: 0.82,
+          reason: "Work research context",
+        }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledTimes(2);
+      expect(promptFromNativeCall(nativeInvoke, 0)).not.toContain("Enhanced retry context");
+      const retryPrompt = promptFromNativeCall(nativeInvoke, 1);
+      expect(retryPrompt).toContain("Enhanced retry context");
+      expect(retryPrompt).toContain("Product research");
+      expect(retryPrompt).toContain("Moderator outreach");
+      expect(retryPrompt).not.toContain("blocked raw body");
+      expect(retryPrompt).not.toContain("hunter2");
+
+      const firstPassFingerprint = getReusableAiClassifications.mock.calls[0]?.[0]?.[0];
+      const savedRecord = saveClassifications.mock.calls[0]?.[0]?.[0] as ActivityClassificationRecord;
+      expect(savedRecord).toEqual(expect.objectContaining({
+        segmentId: "segment-1",
+        category: "workspace",
+        confidence: 0.82,
+      }));
+      expect(savedRecord.inputFingerprint).toMatch(/^drifty-v3-/);
+      expect(savedRecord.inputFingerprint).not.toBe(firstPassFingerprint);
+
+      const events = readRecentEnhancedContextDebugEvents();
+      expect(events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: "egress_decision",
+          status: "allowed",
+          reason: "sensitive_surface",
+          egress: expect.objectContaining({
+            providerSafeItemCount: 2,
+            decisionCounts: expect.objectContaining({ metadata_only: 2, blocked: 1 }),
+            dropReasonCounts: expect.objectContaining({ raw_collector_output: 1 }),
+          }),
+        }),
+        expect.objectContaining({
+          kind: "retry_decision",
+          status: "retry_sent",
+          reason: "unknown_category",
+          retry: {
+            threshold: 0.55,
+            firstPassConfidence: 0.5,
+            firstPassCategory: "unknown",
+            providerSafeItemCount: 2,
+          },
+        }),
+        expect.objectContaining({
+          kind: "retry_decision",
+          status: "selected",
+          reason: "unknown_category",
+          retry: {
+            threshold: 0.55,
+            firstPassConfidence: 0.5,
+            firstPassCategory: "unknown",
+            providerSafeItemCount: 2,
+            selectedResult: "enhanced_retry",
+          },
+        }),
+      ]));
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("skips enhanced retry for high-confidence local results even when safe context exists", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Notion",
+      siteDomain: "notion.so",
+      siteTitle: "Reddit",
+      adaptiveContentContext: createNotionAdaptiveContext("segment-1"),
+    });
+    enableEnhancedContextRetry();
+
+    try {
+      const { runAiClassification, nativeInvoke, readRecentEnhancedContextDebugEvents } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
+        category: "workspace",
+        productivity: "focus",
+        confidence: 0.86,
+        reason: "Clear work context from primary evidence",
+      }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledTimes(1);
+      expect(readRecentEnhancedContextDebugEvents()).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: "retry_decision",
+          status: "retry_skipped",
+          reason: "high_confidence",
+          retry: {
+            threshold: 0.55,
+            firstPassConfidence: 0.86,
+            firstPassCategory: "workspace",
+            providerSafeItemCount: 2,
+          },
+        }),
+      ]));
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("skips enhanced retry when policy leaves no provider-safe context and records the decision", async () => {
+    const segment = createUnknownSegment(1, {
+      adaptiveContentContext: createBlockedAdaptiveContext("segment-1"),
+    });
+    enableEnhancedContextRetry();
+
+    try {
+      const { runAiClassification, nativeInvoke, readRecentEnhancedContextDebugEvents } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
+        category: "unknown",
+        productivity: "neutral",
+        confidence: 0.42,
+        reason: "Insufficient evidence from title only",
+      }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledTimes(1);
+      expect(readRecentEnhancedContextDebugEvents()).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: "egress_decision",
+          egress: expect.objectContaining({
+            providerSafeItemCount: 0,
+            decisionCounts: expect.objectContaining({ local_only: 1 }),
+            dropReasonCounts: expect.objectContaining({ raw_collector_output: 1 }),
+          }),
+        }),
+        expect.objectContaining({
+          kind: "retry_decision",
+          status: "retry_skipped",
+          reason: "no_provider_safe_context",
+          retry: {
+            threshold: 0.55,
+            firstPassConfidence: 0.42,
+            firstPassCategory: "unknown",
+            providerSafeItemCount: 0,
+          },
+        }),
+      ]));
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not retry the same first-pass fingerprint more than once", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Notion",
+      siteDomain: "notion.so",
+      siteTitle: "Reddit",
+      adaptiveContentContext: createNotionAdaptiveContext("segment-1"),
+    });
+    enableEnhancedContextRetry();
+
+    try {
+      const { runAiClassification, nativeInvoke, readRecentEnhancedContextDebugEvents } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "unknown",
+          productivity: "neutral",
+          confidence: 0.5,
+          reason: "Insufficient evidence from title only",
+        }))
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "workspace",
+          productivity: "focus",
+          confidence: 0.82,
+          reason: "Work research context",
+        }))
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "unknown",
+          productivity: "neutral",
+          confidence: 0.5,
+          reason: "Insufficient evidence from title only",
+        }));
+
+      await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+      await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(nativeInvoke).toHaveBeenCalledTimes(3);
+      const prompts = nativeInvoke.mock.calls.map((_, index) => promptFromNativeCall(nativeInvoke, index));
+      expect(prompts.filter((prompt) => prompt.includes("Enhanced retry context"))).toHaveLength(1);
+      expect(readRecentEnhancedContextDebugEvents()).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: "retry_decision",
+          status: "retry_skipped",
+          reason: "already_retried",
+          retry: {
+            threshold: 0.55,
+            firstPassConfidence: 0.5,
+            firstPassCategory: "unknown",
+            providerSafeItemCount: 2,
+          },
+        }),
+      ]));
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("keeps the first-pass result when enhanced retry does not improve a low-confidence classification", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Notion",
+      siteDomain: "notion.so",
+      siteTitle: "Reddit",
+      adaptiveContentContext: createNotionAdaptiveContext("segment-1"),
+    });
+    enableEnhancedContextRetry();
+
+    try {
+      const { runAiClassification, nativeInvoke, getReusableAiClassifications, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "utility",
+          productivity: "neutral",
+          confidence: 0.54,
+          reason: "Possibly account setup",
+        }))
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "unknown",
+          productivity: "neutral",
+          confidence: 0.9,
+          reason: "Still insufficient evidence",
+        }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(nativeInvoke).toHaveBeenCalledTimes(2);
+      const firstPassFingerprint = getReusableAiClassifications.mock.calls[0]?.[0]?.[0];
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        inputFingerprint: firstPassFingerprint,
+        category: "utility",
+        confidence: 0.54,
+      })]);
     } finally {
       cleanupServiceMocks();
     }

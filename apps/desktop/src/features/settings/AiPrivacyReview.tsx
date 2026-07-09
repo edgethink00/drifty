@@ -39,7 +39,7 @@ const AI_VISIBLE_FIELDS: readonly VisibleField[] = [
     detail: "Content context",
     scope: "content",
     settingKey: "contentContext",
-    helpText: "Includes page/video titles, YouTube channel name, and YouTube video category. Video descriptions and keywords stay local.",
+    helpText: "Current Content context means page/video titles, YouTube channel name, YouTube video category, and normalized Reddit community when available. It is separate from Dev-gated Enhanced context and does not include raw page text, document bodies, note bodies, or message bodies.",
   },
   { label: "Work profile", detail: "Your saved work profile", scope: "profile", settingKey: "workProfile" },
 ] as const;
@@ -47,6 +47,7 @@ const AI_VISIBLE_FIELDS: readonly VisibleField[] = [
 const AI_EXCLUDED_FIELDS: readonly ExcludedField[] = [
   { label: "Raw timeline rows", detail: "No full activity row upload" },
   { label: "Full session history", detail: "No replayable day or session history" },
+  { label: "Raw document and message bodies", detail: "No full Notion, Docs, Obsidian, chat, or email body upload" },
   { label: "YouTube descriptions", detail: "Video descriptions and keywords stay local" },
   { label: "Provider API keys", detail: "Stored locally, never sent as samples" },
 ] as const;

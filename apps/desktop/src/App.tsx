@@ -93,7 +93,7 @@ import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { contextualProjectColorBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
-import { buildDebugLogPayload } from "./features/settings/debugLog";
+import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
@@ -196,7 +196,8 @@ import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, PROFILE_REDESIGN_ENABLED_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialProjectClassificationEnabled, resolveInitialProfileRedesignEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
-import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
+import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
+import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
@@ -350,6 +351,8 @@ export default function App() {
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
+  const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = devModeEnabled && teamsBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
@@ -2427,18 +2430,36 @@ export default function App() {
     const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
     const forceFrontmostFallbackCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled;
     const forceBrowserHistoryUrlFallback = DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled;
+    const enhancedContextSourceFamilies = ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS
+      .filter((option) => effectiveEnhancedContextSettings.sourceFamilies[option.family])
+      .map((option) => option.family);
+    const developerDiagnosticsSettings = {
+      forceChromiumAxCapture,
+      forceFrontmostFallbackCapture,
+      forceBrowserHistoryUrlFallback,
+      enhancedContextEnabled: effectiveEnhancedContextSettings.enabled,
+      enhancedContextCaptureLocal: effectiveEnhancedContextSettings.captureLocal,
+      enhancedContextSourceFamilies,
+    };
     window.localStorage.setItem(FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, forceChromiumAxCapture ? "1" : "0");
     window.localStorage.setItem(FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, forceFrontmostFallbackCapture ? "1" : "0");
     window.localStorage.setItem(FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, forceBrowserHistoryUrlFallback ? "1" : "0");
-    void trackerClient.setDeveloperDiagnostics?.({ forceChromiumAxCapture, forceFrontmostFallbackCapture, forceBrowserHistoryUrlFallback }).catch((nextError) => {
+    void trackerClient.setDeveloperDiagnostics?.(developerDiagnosticsSettings).catch((nextError) => {
       console.warn("Failed to persist tracker developer diagnostics", nextError);
     });
-  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceFrontmostFallbackCaptureEnabled]);
+  }, [devModeEnabled, effectiveEnhancedContextSettings, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceFrontmostFallbackCaptureEnabled]);
 
   useEffect(() => {
     const forceChromiumAxExtremeNudge = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled;
     window.localStorage.setItem(FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, forceChromiumAxExtremeNudge ? "1" : "0");
   }, [devModeEnabled, forceChromiumAxExtremeNudgeEnabled]);
+
+  useEffect(() => {
+    persistEnhancedContextSettings(enhancedContextSettings, isDevModeActive);
+    if (!isDevModeActive && hasEnabledEnhancedContextSetting(enhancedContextSettings)) {
+      setEnhancedContextSettings(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+    }
+  }, [enhancedContextSettings, isDevModeActive]);
 
   useEffect(() => {
     driftAlarmSnoozeRef.current = driftAlarmSnooze;
@@ -4880,6 +4901,29 @@ export default function App() {
       return next;
     });
   }, []);
+  const handleEnhancedContextEnabledChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings(enabled
+      ? { ...DEFAULT_ENHANCED_CONTEXT_SETTINGS, enabled: true }
+      : DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+  }, []);
+  const handleEnhancedContextCaptureLocalChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({ ...current, captureLocal: enabled }));
+  }, []);
+  const handleEnhancedContextRetryLowConfidenceChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({ ...current, retryLowConfidence: enabled }));
+  }, []);
+  const handleEnhancedContextDebugLoggingChange = useCallback((enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({ ...current, debugLogging: enabled }));
+  }, []);
+  const handleEnhancedContextSourceFamilyChange = useCallback((family: EnhancedContextSourceFamily, enabled: boolean) => {
+    setEnhancedContextSettings((current) => ({
+      ...current,
+      sourceFamilies: {
+        ...current.sourceFamilies,
+        [family]: enabled,
+      },
+    }));
+  }, []);
   const handleOpenDebugLogs = useCallback(async () => {
     const snapshotForDebug = status?.running === true
       ? await trackerClient.getCurrentSnapshot().catch((snapshotError: unknown) => {
@@ -4900,6 +4944,10 @@ export default function App() {
         forceFrontmostFallbackCapture: DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled,
         forceBrowserHistoryUrlFallback: DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled,
         forceChromiumAxExtremeNudge: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+      },
+      enhancedContext: {
+        settings: effectiveEnhancedContextSettings,
+        events: readRecentEnhancedContextDebugEvents(),
       },
       status,
       accessibilityGranted,
@@ -4937,7 +4985,7 @@ export default function App() {
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -5759,6 +5807,7 @@ export default function App() {
                     demoDashboardReplaySettings={demoDashboardReplaySettings}
                     projectPassRuns={projectClassification.passRuns}
                     endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
+                    enhancedContextSettings={effectiveEnhancedContextSettings}
                     forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
@@ -5782,6 +5831,11 @@ export default function App() {
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
                     onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
                     onEndOfDayReviewPreview={handleEndOfDayReviewPreview}
+                    onEnhancedContextCaptureLocalChange={handleEnhancedContextCaptureLocalChange}
+                    onEnhancedContextDebugLoggingChange={handleEnhancedContextDebugLoggingChange}
+                    onEnhancedContextEnabledChange={handleEnhancedContextEnabledChange}
+                    onEnhancedContextRetryLowConfidenceChange={handleEnhancedContextRetryLowConfidenceChange}
+                    onEnhancedContextSourceFamilyChange={handleEnhancedContextSourceFamilyChange}
                     onForceBrowserHistoryUrlFallbackChange={setForceBrowserHistoryUrlFallbackEnabled}
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}

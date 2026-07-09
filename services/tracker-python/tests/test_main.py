@@ -13,6 +13,7 @@ if str(SERVICE_ROOT) not in sys.path:
 from app import main as tracker_main
 from app.storage.db import TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
+from app.tracker.adaptive_context import developer_diagnostics
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.power_state import PowerStateSample
 
@@ -579,12 +580,15 @@ class TrackerMainTests(unittest.TestCase):
         mock_db = MagicMock()
 
         with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
-            tracker_main, "_apply_developer_diagnostics_env"
+            developer_diagnostics, "apply_developer_diagnostics_env"
         ) as apply_env:
             result = tracker_main.set_developer_diagnostics({
                 "forceChromiumAxCapture": True,
                 "forceFrontmostFallbackCapture": True,
                 "forceBrowserHistoryUrlFallback": True,
+                "enhancedContextEnabled": True,
+                "enhancedContextCaptureLocal": False,
+                "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],
             })
 
         self.assertTrue(result["ok"])
@@ -594,11 +598,20 @@ class TrackerMainTests(unittest.TestCase):
                 "forceChromiumAxCapture": True,
                 "forceFrontmostFallbackCapture": True,
                 "forceBrowserHistoryUrlFallback": True,
+                "enhancedContextEnabled": True,
+                "enhancedContextCaptureLocal": False,
+                "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],
             },
         )
         mock_db.set_meta.assert_any_call(tracker_main.FORCE_CHROMIUM_AX_CAPTURE_META_KEY, "true")
         mock_db.set_meta.assert_any_call(tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_META_KEY, "true")
         mock_db.set_meta.assert_any_call(tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_META_KEY, "true")
+        mock_db.set_meta.assert_any_call(tracker_main.ENHANCED_CONTEXT_ENABLED_META_KEY, "true")
+        mock_db.set_meta.assert_any_call(tracker_main.ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY, "false")
+        mock_db.set_meta.assert_any_call(
+            tracker_main.ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY,
+            "document_knowledge,calendar_meeting",
+        )
         apply_env.assert_called_once_with(mock_db)
 
     def test_apply_developer_diagnostics_env_sets_frontmost_fallback_capture_env(self) -> None:
@@ -615,6 +628,25 @@ class TrackerMainTests(unittest.TestCase):
             self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_CHROMIUM_AX_CAPTURE_ENV], "0")
             self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV], "1")
             self.assertEqual(tracker_main.os.environ[tracker_main.FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV], "1")
+            self.assertEqual(tracker_main.os.environ[tracker_main.ENABLE_ADAPTIVE_CONTEXT_CAPTURE_ENV], "0")
+            self.assertEqual(tracker_main.os.environ[tracker_main.ADAPTIVE_CONTEXT_SOURCE_FAMILIES_ENV], "")
+
+    def test_apply_developer_diagnostics_env_sets_enhanced_context_capture_env(self) -> None:
+        mock_db = MagicMock()
+        mock_db.get_meta.side_effect = lambda key, default=None: {
+            tracker_main.ENHANCED_CONTEXT_ENABLED_META_KEY: "true",
+            tracker_main.ENHANCED_CONTEXT_CAPTURE_LOCAL_META_KEY: "true",
+            tracker_main.ENHANCED_CONTEXT_SOURCE_FAMILIES_META_KEY: "document_knowledge,unknown,calendar_meeting",
+        }.get(key, default)
+
+        with patch.dict(tracker_main.os.environ, {}, clear=True):
+            tracker_main._apply_developer_diagnostics_env(mock_db)
+
+            self.assertEqual(tracker_main.os.environ[tracker_main.ENABLE_ADAPTIVE_CONTEXT_CAPTURE_ENV], "1")
+            self.assertEqual(
+                tracker_main.os.environ[tracker_main.ADAPTIVE_CONTEXT_SOURCE_FAMILIES_ENV],
+                "document_knowledge,calendar_meeting",
+            )
 
     def test_delete_activity_segments_forwards_string_ids_to_database(self) -> None:
         mock_db = MagicMock()

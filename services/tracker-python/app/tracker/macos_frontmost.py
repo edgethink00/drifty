@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+
+
+CommandRunner = Callable[[list[str]], str]
+OsascriptRunner = Callable[[str], str]
+
+
+def optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned or cleaned == "missing value":
+        return None
+    return cleaned
+
+
+def lsappinfo_text(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith('"'):
+        return optional_text(cleaned)
+
+    chars: list[str] = []
+    escaped = False
+    for char in cleaned[1:]:
+        if escaped:
+            chars.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            return optional_text("".join(chars))
+        chars.append(char)
+    return None
+
+
+def lsappinfo_assignment(line: str, key: str) -> str | None:
+    for prefix in (f'"{key}"=', f"{key}="):
+        if line.startswith(prefix):
+            return lsappinfo_text(line.split("=", 1)[1])
+    return None
+
+
+def lsappinfo_header_app_name(line: str) -> str | None:
+    if not line.startswith('"') or line.startswith('"name"=') or line.startswith('"bundleID"='):
+        return None
+    return lsappinfo_text(line)
+
+
+def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | None, str | None, str | None]:
+    result = run_osascript(
+        '''
+        tell application "System Events"
+          set frontApp to first application process whose frontmost is true
+          set appName to name of frontApp
+          set bundleId to bundle identifier of frontApp
+          if bundleId is missing value then set bundleId to ""
+          set windowTitle to ""
+          tell frontApp
+            if exists front window then
+              set windowTitle to name of front window
+            end if
+          end tell
+          return appName & linefeed & bundleId & linefeed & windowTitle
+        end tell
+        '''
+    )
+    parts = result.splitlines()
+    app_name = optional_text(parts[0] if len(parts) > 0 else None)
+    bundle_id = optional_text(parts[1] if len(parts) > 1 else None)
+    window_title = optional_text(parts[2] if len(parts) > 2 else None)
+    return app_name, bundle_id, window_title
+
+
+def frontmost_via_lsappinfo(run_command: CommandRunner) -> tuple[str | None, str | None, str | None]:
+    front = run_command(["lsappinfo", "front"])
+    if "NULL" in front:
+        return None, None, "lsappinfo front returned NULL."
+
+    asn = front.strip().strip("[]").strip()
+    info = run_command(["lsappinfo", "info", asn])
+    app_name = None
+    bundle_id = None
+    for line in info.splitlines():
+        line = line.strip()
+        if app_name is None:
+            app_name = lsappinfo_header_app_name(line)
+        parsed_name = lsappinfo_assignment(line, "name")
+        if parsed_name is not None:
+            app_name = parsed_name
+        parsed_bundle_id = lsappinfo_assignment(line, "bundleID")
+        if parsed_bundle_id is not None:
+            bundle_id = parsed_bundle_id
+
+    fallback_error = None
+    if app_name is None:
+        fallback_error = "lsappinfo info returned no parseable app name."
+    return app_name, bundle_id, fallback_error

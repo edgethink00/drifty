@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.storage.activity_segment_serialization import (
     json_list,
+    sanitized_raw_context_json,
     serialize_activity_row,
     serialize_dashboard_week_activity_row,
 )
@@ -592,7 +593,7 @@ class TrackerDatabase:
                         snapshot.site_source,
                         snapshot.source,
                         getattr(snapshot, "capture_confidence", 1.0),
-                        json.dumps(asdict(snapshot)),
+                        self._snapshot_raw_context_json(snapshot),
                         last["id"],
                     ),
                 )
@@ -639,7 +640,7 @@ class TrackerDatabase:
                     "macos",
                     snapshot.source,
                     getattr(snapshot, "capture_confidence", 1.0),
-                    json.dumps(asdict(snapshot)),
+                    self._snapshot_raw_context_json(snapshot),
                 ),
             )
 
@@ -806,7 +807,7 @@ class TrackerDatabase:
                     segment.get("platform", "macos"),
                     segment.get("source", "unknown"),
                     segment.get("confidence"),
-                    segment.get("raw_context_json"),
+                    sanitized_raw_context_json(segment.get("raw_context_json")),
                 ),
             )
 
@@ -895,7 +896,7 @@ class TrackerDatabase:
                         segment.platform,
                         segment.source,
                         segment.confidence,
-                        segment.raw_context_json,
+                        sanitized_raw_context_json(segment.raw_context_json),
                     ),
                 )
                 conn.execute(
@@ -2748,7 +2749,15 @@ class TrackerDatabase:
             "browser_history_backfilled": True,
             "browser_history_backfilled_at": backfilled_at,
         }
-        return json.dumps(updated_context)
+        return sanitized_raw_context_json(json.dumps(updated_context)) or "{}"
+
+    @staticmethod
+    def _snapshot_raw_context_json(snapshot: Snapshot) -> str:
+        raw_context = asdict(snapshot)
+        adaptive_context = raw_context.pop("adaptive_content_context", None)
+        if adaptive_context is not None:
+            raw_context["adaptive_content_context"] = adaptive_context
+        return sanitized_raw_context_json(json.dumps(raw_context)) or "{}"
 
     @staticmethod
     def _raw_context_dict(raw_context_json: str | None) -> dict[str, Any]:

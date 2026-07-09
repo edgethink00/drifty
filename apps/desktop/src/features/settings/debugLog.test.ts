@@ -1,7 +1,7 @@
 import type { ActivitySegment, DriftAlarmTrayStatus } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
-import type { AiDebugLogInput } from "./debugLog";
+import type { AiDebugLogInput, EnhancedContextDebugEvent } from "./debugLog";
 import { buildDebugLogPayload } from "./debugLog";
 
 const driftAlarm: DriftAlarmTrayStatus = {
@@ -553,5 +553,142 @@ describe("buildDebugLogPayload", () => {
     });
 
     expect(payload.driftAlarm.recentDebugEvents).toEqual([driftAlarmDebugEvent]);
+  });
+
+  it("exports enhanced context diagnostics without raw context values", () => {
+    const rawDocumentBody = "Raw Notion body says acquisition roadmap password sk-live-secret";
+    const rawShortHint = "Short hint copied from a confidential document";
+    const rawBlockedValue = "Blocked Slack message body with one-time code 123456";
+    const eventWithUnexpectedRawFields = Object.assign(
+      {
+        kind: "egress_decision",
+        status: "blocked",
+        reason: "sensitive_surface",
+        sourceFamily: "communication_metadata",
+        egress: {
+          decisionCounts: { send: 0, metadata_only: 0, local_only: 0, blocked: 1 },
+          dropReasonCounts: { sensitive_surface: 1 },
+          providerSafeItemCount: 0,
+          redactionCount: 0,
+          maxDepthSent: null,
+        },
+      } satisfies EnhancedContextDebugEvent,
+      {
+        values: [rawDocumentBody],
+        blockedValues: [rawBlockedValue],
+        body: rawShortHint,
+      },
+    );
+    const events: readonly EnhancedContextDebugEvent[] = [
+      {
+        kind: "capture_attempt",
+        status: "attempted",
+        reason: "structured_capture",
+        sourceFamily: "document_knowledge",
+      },
+      eventWithUnexpectedRawFields,
+      {
+        kind: "retry_decision",
+        status: "retry_skipped",
+        reason: "retry_disabled",
+        sourceFamily: "document_knowledge",
+        retry: {
+          threshold: 0.55,
+          firstPassConfidence: 0.86,
+          firstPassCategory: "workspace",
+          providerSafeItemCount: 0,
+        },
+      },
+    ];
+
+    const payload = buildDebugLogPayload({
+      selectedDay: "2026-06-13",
+      startOfDayMinutes: 240,
+      startOfWeek: "monday",
+      theme: "light",
+      categoryColorOverrides: {},
+      appThemeColorOverrides: {},
+      developerDiagnostics: {
+        devModeEnabled: true,
+        forceChromiumAxCapture: false,
+        forceFrontmostFallbackCapture: false,
+        forceBrowserHistoryUrlFallback: false,
+        forceChromiumAxExtremeNudge: false,
+      },
+      enhancedContext: {
+        settings: {
+          enabled: true,
+          captureLocal: true,
+          retryLowConfidence: false,
+          debugLogging: true,
+          sourceFamilies: {
+            document_knowledge: true,
+            local_notes_markdown: false,
+            work_tracker_dev_platform: false,
+            design_dev_tool: false,
+            calendar_meeting: false,
+            communication_metadata: true,
+          },
+        },
+        events,
+      },
+      status: null,
+      accessibilityGranted: true,
+      currentSnapshot: null,
+      driftAlarm,
+      driftAlarmDebugEvents: [],
+      segments: [],
+      historySegments: [],
+      leaderboardSegments: [],
+      ai: baseAiDebug,
+      error: null,
+    });
+
+    expect(payload.enhancedContext).toMatchObject({
+      settings: {
+        enabled: true,
+        captureLocal: true,
+        retryLowConfidence: false,
+        debugLogging: true,
+        sourceFamilies: {
+          enabledCount: 2,
+          enabledFamilies: ["document_knowledge", "communication_metadata"],
+        },
+      },
+      diagnostics: {
+        capture: {
+          count: 1,
+          statuses: { attempted: 1 },
+          reasons: { structured_capture: 1 },
+        },
+        egress: {
+          count: 1,
+          statuses: { blocked: 1 },
+          reasons: { sensitive_surface: 1 },
+        },
+        retry: {
+          count: 1,
+          statuses: { retry_skipped: 1 },
+          reasons: { retry_disabled: 1 },
+        },
+        blockedSensitiveSurfaces: {
+          count: 1,
+          statuses: { blocked: 1 },
+          reasons: { sensitive_surface: 1 },
+        },
+      },
+    });
+    expect(payload.enhancedContext.recentEvents).toHaveLength(3);
+    expect(payload.enhancedContext.recentEvents[1]).not.toHaveProperty("values");
+    expect(payload.enhancedContext.recentEvents[1]).not.toHaveProperty("blockedValues");
+    expect(payload.enhancedContext.recentEvents[1]).not.toHaveProperty("body");
+
+    const exportedJson = JSON.stringify(payload);
+    expect(exportedJson).not.toContain(rawDocumentBody);
+    expect(exportedJson).not.toContain(rawShortHint);
+    expect(exportedJson).not.toContain(rawBlockedValue);
+    expect(exportedJson).not.toContain("password");
+    expect(exportedJson).not.toContain("sk-live-secret");
+    expect(exportedJson).not.toContain("123456");
   });
 });

@@ -35,6 +35,17 @@ pub struct AppIdentity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeveloperDiagnosticsSettings {
+    pub force_chromium_ax_capture: bool,
+    pub force_frontmost_fallback_capture: bool,
+    pub force_browser_history_url_fallback: bool,
+    pub enhanced_context_enabled: bool,
+    pub enhanced_context_capture_local: bool,
+    pub enhanced_context_source_families: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TrackerStatus {
     pub running: bool,
     pub accessibility_granted: bool,
@@ -175,18 +186,12 @@ impl TrackerController {
     pub fn set_developer_diagnostics(
         &self,
         app: &AppHandle,
-        force_chromium_ax_capture: bool,
-        force_frontmost_fallback_capture: bool,
-        force_browser_history_url_fallback: bool,
+        settings: DeveloperDiagnosticsSettings,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "set_developer_diagnostics",
-            build_developer_diagnostics_payload(
-                force_chromium_ax_capture,
-                force_frontmost_fallback_capture,
-                force_browser_history_url_fallback,
-            ),
+            build_developer_diagnostics_payload(&settings),
         )
     }
 
@@ -1116,16 +1121,8 @@ fn build_delete_history_range_payload(
     payload
 }
 
-fn build_developer_diagnostics_payload(
-    force_chromium_ax_capture: bool,
-    force_frontmost_fallback_capture: bool,
-    force_browser_history_url_fallback: bool,
-) -> Value {
-    json!({
-        "forceChromiumAxCapture": force_chromium_ax_capture,
-        "forceFrontmostFallbackCapture": force_frontmost_fallback_capture,
-        "forceBrowserHistoryUrlFallback": force_browser_history_url_fallback,
-    })
+fn build_developer_diagnostics_payload(settings: &DeveloperDiagnosticsSettings) -> Value {
+    json!(settings)
 }
 
 fn build_browser_history_import_payload(lookback_days: Option<u32>) -> Value {
@@ -1412,7 +1409,17 @@ mod tests {
 
     #[test]
     fn developer_diagnostics_payload_preserves_browser_history_fallback_flag() {
-        let payload = build_developer_diagnostics_payload(true, false, true);
+        let payload = build_developer_diagnostics_payload(&DeveloperDiagnosticsSettings {
+            force_chromium_ax_capture: true,
+            force_frontmost_fallback_capture: false,
+            force_browser_history_url_fallback: true,
+            enhanced_context_enabled: true,
+            enhanced_context_capture_local: false,
+            enhanced_context_source_families: vec![
+                "document_knowledge".to_owned(),
+                "calendar_meeting".to_owned(),
+            ],
+        });
 
         assert_eq!(
             payload,
@@ -1420,6 +1427,9 @@ mod tests {
                 "forceChromiumAxCapture": true,
                 "forceFrontmostFallbackCapture": false,
                 "forceBrowserHistoryUrlFallback": true,
+                "enhancedContextEnabled": true,
+                "enhancedContextCaptureLocal": false,
+                "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],
             })
         );
     }

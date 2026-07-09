@@ -11,14 +11,17 @@ import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUp
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
 import { DevSettingsDashboardLayoutBlock } from "./DevSettingsDashboardLayoutBlock";
 import { DevSettingsDiagnosticsBlock } from "./DevSettingsDiagnosticsBlock";
+import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
 import { DevSettingsProfileRedesignBlock } from "./DevSettingsProfileRedesignBlock";
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
+import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 
 type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
   readonly demoDashboardReplaySettings?: DemoDashboardReplaySettings;
   readonly endOfDayReviewSettingsRowRef: RefObject<HTMLDivElement>;
+  readonly enhancedContextSettings: EnhancedContextSettings;
   readonly forceBrowserHistoryUrlFallbackEnabled: boolean;
   readonly forceChromiumAxCaptureEnabled: boolean;
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
@@ -43,6 +46,11 @@ type DevSettingsSectionProps = {
   readonly onDemoDashboardReplayDurationSecondsChange?: (value: number) => void;
   readonly onDemoDashboardReplayPreRollSecondsChange?: (value: number) => void;
   readonly onEndOfDayReviewPreview: () => void;
+  readonly onEnhancedContextCaptureLocalChange: (enabled: boolean) => void;
+  readonly onEnhancedContextDebugLoggingChange: (enabled: boolean) => void;
+  readonly onEnhancedContextEnabledChange: (enabled: boolean) => void;
+  readonly onEnhancedContextRetryLowConfidenceChange: (enabled: boolean) => void;
+  readonly onEnhancedContextSourceFamilyChange: (family: EnhancedContextSourceFamily, enabled: boolean) => void;
   readonly onOpenOnboardingV22Preview: () => void;
   readonly onForceBrowserHistoryUrlFallbackChange: (enabled: boolean) => void;
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
@@ -75,6 +83,7 @@ export function DevSettingsSection({
   dashboardAiUnavailablePreviewCase,
   demoDashboardReplaySettings,
   endOfDayReviewSettingsRowRef,
+  enhancedContextSettings,
   forceBrowserHistoryUrlFallbackEnabled,
   forceChromiumAxCaptureEnabled,
   forceChromiumAxExtremeNudgeEnabled,
@@ -99,6 +108,11 @@ export function DevSettingsSection({
   onDemoDashboardReplayDurationSecondsChange,
   onDemoDashboardReplayPreRollSecondsChange,
   onEndOfDayReviewPreview,
+  onEnhancedContextCaptureLocalChange,
+  onEnhancedContextDebugLoggingChange,
+  onEnhancedContextEnabledChange,
+  onEnhancedContextRetryLowConfidenceChange,
+  onEnhancedContextSourceFamilyChange,
   onOpenOnboardingV22Preview,
   onForceBrowserHistoryUrlFallbackChange,
   onForceChromiumAxCaptureChange,
@@ -140,6 +154,7 @@ export function DevSettingsSection({
         onForceFrontmostFallbackCaptureChange={onForceFrontmostFallbackCaptureChange}
         onOpenDebugLogs={onOpenDebugLogs}
       />
+      <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onCaptureLocalChange={onEnhancedContextCaptureLocalChange} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onEnabledChange={onEnhancedContextEnabledChange} onRetryLowConfidenceChange={onEnhancedContextRetryLowConfidenceChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
       <div className="settings-block settings-block--dev-preview">
         <h3>Pre-release updates</h3>
         <PreReleaseUpdatesSettingsRow
