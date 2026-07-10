@@ -55,6 +55,12 @@ export interface UseProjectClassificationResult {
   readonly addAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
   readonly deleteAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
   readonly runPassNow: (range?: { start: string; end: string }) => Promise<void>;
+  /**
+   * Quiet background pass for the scheduler (Item 1). Unlike runPassNow it never
+   * touches the manual-run UI state (running/progress/runError) and swallows
+   * errors, so a periodic/on-open tick can never disrupt the user or pop a modal.
+   */
+  readonly runScheduledPass: (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }) => Promise<void>;
   readonly backfillLast7Days: () => Promise<void>;
   readonly reload: () => Promise<void>;
 }
@@ -223,6 +229,32 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     [selectedDayRange, analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
+  const runScheduledPass = useCallback(
+    async (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }) => {
+      if (!range || !analysisConnected) return;
+      try {
+        const inference = await buildInference();
+        const workProfile = await resolveClassificationWorkProfileForPrompt(true).catch(() => null);
+        const summary = await runProjectPass({
+          range,
+          trigger,
+          tracker,
+          inference,
+          now,
+          workProfile,
+          startOfDayMinutes: args.startOfDayMinutes,
+        });
+        // Only refresh views when the pass actually did work; the chunk-fingerprint
+        // skip makes a no-op tick cheap and silent. The service inFlight lock
+        // coalesces this with any concurrent manual run.
+        if (summary.ran) await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+      } catch {
+        // Background tick: never surface an error or disturb the manual-run UI.
+      }
+    },
+    [analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+  );
+
   // Mutations swallow their own errors (surfacing via runError) so a failed
   // tracker call never escapes as an unhandled rejection — the app's global
   // handler replaces the whole UI with an error screen on any such rejection.
@@ -302,6 +334,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     addAnchor,
     deleteAnchor,
     runPassNow,
+    runScheduledPass,
     backfillLast7Days,
     reload,
   };

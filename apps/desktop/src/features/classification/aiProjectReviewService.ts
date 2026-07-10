@@ -13,6 +13,7 @@ import {
   type Project,
   type ProjectAssignmentRecord,
   type ProjectPassAnalysisWindow,
+  type ProjectPassPromptInput,
   type ProjectPassPromptProject,
   type ProjectPassTrigger,
   type ProductivityLabel,
@@ -63,8 +64,13 @@ export interface ProjectPassInferenceResult {
   readonly usage: ProjectPassInferenceUsage;
 }
 
-/** Provider-agnostic inference. Concrete wiring (OpenRouter / Cloud) is injected. */
-export type ProjectPassInference = (prompt: string) => Promise<ProjectPassInferenceResult>;
+/**
+ * Provider-agnostic inference. Concrete wiring (OpenRouter / Cloud) is injected.
+ * `promptInput` carries the structured chunk so the Drifty Cloud path can send
+ * structure and let the edge build the prompt server-side (Option D); local /
+ * BYO-key providers ignore it and use the pre-built `prompt`.
+ */
+export type ProjectPassInference = (prompt: string, promptInput?: ProjectPassPromptInput) => Promise<ProjectPassInferenceResult>;
 
 export function chunkProjectPassWindows(windows: ProjectPassAnalysisWindow[], maxWindows = PROJECT_PASS_MAX_CHUNK_WINDOWS): ProjectPassAnalysisWindow[][] {
   if (windows.length <= maxWindows) return windows.length ? [windows] : [];
@@ -337,14 +343,15 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       // Identical prompt already analyzed; reuse the stored assignments untouched.
       return { usage: {}, assignments: [], correctionClassifications: [], correctionEvents: [] };
     }
-    const prompt = buildProjectPassPrompt({
+    const promptInput: ProjectPassPromptInput = {
       beforeContextWindows: chunk.beforeContextWindows,
       coreWindows: chunk.coreWindows,
       afterContextWindows: chunk.afterContextWindows,
       workProfile: options.workProfile ?? null,
       projects: promptProjects,
-    });
-    const { output, usage } = await inference(prompt);
+    };
+    const prompt = buildProjectPassPrompt(promptInput);
+    const { output, usage } = await inference(prompt, promptInput);
     if (!output) return { usage, assignments: [], correctionClassifications: [], correctionEvents: [] };
     const resolved = resolveProjectPassApply({
       output,

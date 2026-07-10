@@ -242,6 +242,11 @@ const LIVE_TAIL_LIMIT = 8;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+// Heavy project pass cadence: hourly keeps "today" fresh without the cost/churn
+// of finer cadences. Eval-cadence experiment (2026-07-10): 15m ≈ 3.7× the cost
+// and ~13× the mid-day assignment revisions of 60m for no end-of-day accuracy
+// gain, so 60m is the efficient pick.
+const PROJECT_PASS_SCHEDULE_INTERVAL_MS = 60 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 function isLastCaptureJustNow(value: string, nowMs = Date.now()): boolean {
@@ -4706,6 +4711,39 @@ export default function App() {
     }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [isPreviewSurface, runAutoAiClassificationBatch]);
+
+  // Heavy project pass scheduler (Item 1). Keeps TODAY's project attributions
+  // fresh with an on-open tick + an hourly tick. Dev-preview + consent gated;
+  // ticks are SILENT (runScheduledPass never pops the consent modal and never
+  // disturbs the manual-run UI). runScheduledPass gets a fresh identity each
+  // render (its `now` closure), so we call it through a ref and keep the effect's
+  // deps stable — otherwise the interval would reset every render and never fire.
+  const runScheduledProjectPassRef = useRef(projectClassification.runScheduledPass);
+  useEffect(() => {
+    runScheduledProjectPassRef.current = projectClassification.runScheduledPass;
+  });
+  const projectPassOpenTickedRef = useRef(false);
+  useEffect(() => {
+    if (isPreviewSurface) return undefined;
+    if (!projectClassificationFeatureEnabled || !projectPassConsented) {
+      projectPassOpenTickedRef.current = false; // re-enabling should re-tick on open
+      return undefined;
+    }
+    const tick = (trigger: "schedule" | "open") => {
+      const day = logicalTodayIsoDate(startOfDayMinutes);
+      void runScheduledProjectPassRef.current(trigger, getLogicalDayRange(day, day, startOfDayMinutes));
+    };
+    // Only fire the on-open tick once the analysis model is connected, else a
+    // slow cold start would burn the one-shot guard on a no-op and defer today's
+    // first pass to the hourly tick. analysisConnected is a dep so a late connect
+    // re-runs this effect and ticks then.
+    if (analysisModel.analysisConnected && !projectPassOpenTickedRef.current) {
+      projectPassOpenTickedRef.current = true;
+      tick("open");
+    }
+    const intervalId = setInterval(() => tick("schedule"), PROJECT_PASS_SCHEDULE_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [isPreviewSurface, projectClassificationFeatureEnabled, projectPassConsented, startOfDayMinutes, analysisModel.analysisConnected]);
 
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {

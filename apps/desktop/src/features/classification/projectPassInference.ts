@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ProjectPassAnalysisWindow, ProjectPassPromptInput } from "@drifty/domain";
 import { OPENROUTER_PRIVACY_PROVIDER, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel } from "../settings/localAiSetup";
 import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { supabase } from "../../lib/supabase/client";
@@ -64,17 +65,61 @@ function buildAnthropicRequest(apiKey: string, model: string, prompt: string): R
   };
 }
 
-function buildCloudReviewRequest(supabaseUrl: string, accessToken: string, anonKey: string, prompt: string): Record<string, unknown> {
+function buildCloudReviewRequest(supabaseUrl: string, accessToken: string, anonKey: string, content: string): Record<string, unknown> {
   return {
     baseUrl: `${supabaseUrl}/functions/v1/${REVIEW_EDGE_FUNCTION}`,
     apiKey: accessToken,
     model: "drifty-cloud",
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "user", content }],
     maxTokens: PROJECT_PASS_MAX_TOKENS,
     temperature: 0,
     timeoutMs: PROJECT_PASS_TIMEOUT_MS,
     headers: { apikey: anonKey },
   };
+}
+
+// Protocol sentinel — must match REVIEW_CHUNK_SENTINEL in the edge
+// (supabase/functions/review-activity/reviewChunk.ts). The Drifty Cloud path
+// sends the STRUCTURED chunk and the edge builds the prompt server-side + captures
+// a minimized sample (Option D). Only fields the prompt/capture use are sent — no
+// segment ids, overlaps, or classification maps — so egress stays minimal.
+const REVIEW_CHUNK_SENTINEL = "driftyReviewChunk";
+
+function minimalReviewWindow(window: ProjectPassAnalysisWindow): Record<string, unknown> {
+  return {
+    id: window.id,
+    startedAt: window.startedAt,
+    endedAt: window.endedAt,
+    durationSeconds: window.durationSeconds,
+    intervalMinutes: window.intervalMinutes,
+    bucketCount: window.bucketCount,
+    isShorts: window.isShorts,
+    category: window.category,
+    productivity: window.productivity,
+    source: window.source,
+    // Only the top-3 contributors — exactly what the server-built prompt renders
+    // (dominant + two secondary via formatProjectPassAnalysisWindowLine). Sending
+    // all contributors would egress minor apps/domains the prompt never carried.
+    contributors: window.contributors.slice(0, 3).map((contributor) => ({
+      appName: contributor.appName,
+      domain: contributor.domain,
+      durationSeconds: contributor.durationSeconds,
+      context: contributor.context,
+      isShorts: contributor.isShorts,
+    })),
+  };
+}
+
+export function buildReviewChunkContent(input: ProjectPassPromptInput): string {
+  return JSON.stringify({
+    [REVIEW_CHUNK_SENTINEL]: {
+      beforeContextWindows: input.beforeContextWindows.map(minimalReviewWindow),
+      coreWindows: input.coreWindows.map(minimalReviewWindow),
+      afterContextWindows: input.afterContextWindows.map(minimalReviewWindow),
+      workProfile: input.workProfile,
+      projects: input.projects,
+    },
+  });
 }
 
 function cloudResultFromInjected(result: ProjectPassCloudResponse): ProjectPassInferenceResult {
@@ -103,7 +148,7 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
   const invokeAnthropicChat =
     deps.invokeAnthropicChat ?? ((request) => invoke<NativeOpenAiChatResponse>("ai_classification_anthropic_chat", { request }));
 
-  return async (prompt: string): Promise<ProjectPassInferenceResult> => {
+  return async (prompt: string, promptInput?: ProjectPassPromptInput): Promise<ProjectPassInferenceResult> => {
     if (setup.provider === "cloud") {
       if (deps.invokeCloud) {
         const result = await deps.invokeCloud(prompt);
@@ -115,12 +160,15 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
       if (!accessToken) throw new Error("Sign in to use Drifty Cloud analysis.");
       // WKWebView fetch aborts long response-less waits (the LLM streams nothing
       // until it finishes), so the cloud call rides the same native Rust HTTP
-      // command as every other provider. The edge function accepts the OpenAI
-      // chat shape on this path and picks the model server-side.
+      // command as every other provider. The edge builds the prompt server-side
+      // from the structured chunk (Option D) and returns the OpenAI chat shape.
       const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
       const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
+      // Structured chunk when available (Option D); a bare prompt still works as
+      // a legacy passthrough for any caller that does not thread the structure.
+      const cloudContent = promptInput ? buildReviewChunkContent(promptInput) : prompt;
       return dispatchProjectPassChat(invokeChat, {
-        request: buildCloudReviewRequest(supabaseUrl, accessToken, anonKey, prompt),
+        request: buildCloudReviewRequest(supabaseUrl, accessToken, anonKey, cloudContent),
         fallbackModel: "drifty-cloud",
         provider: "cloud",
         shape: "openai",
