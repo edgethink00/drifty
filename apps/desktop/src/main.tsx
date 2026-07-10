@@ -3,6 +3,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { captureSentryException } from "./lib/observability/sentry";
+import {
+  applyRejectionAction,
+  resolveRejectionAction,
+  resolveRejectionPhase,
+  type ResolvedBootstrapSurface,
+} from "./lib/bootstrap/rejectionAction";
 import "./styles.css";
 import "./features/history/history.css";
 import "./features/dashboard/dashboard.css";
@@ -15,9 +21,6 @@ import "./features/loading/loading-skeletons.css";
 import "./features/leaderboard/leaderboard.css";
 import "./features/profile/profile-page.css";
 import "./styles/chartHoverMotion.css";
-
-type BootstrapSurface = "app" | "watcher" | "drift-alarm";
-type ResolvedBootstrapSurface = BootstrapSurface | "privacy-review-concepts";
 
 declare global {
   interface Window {
@@ -232,22 +235,23 @@ function upsertLateBootstrapDiagnostic(message: string) {
 }
 
 window.addEventListener("unhandledrejection", (event) => {
-  const root = document.getElementById("root");
-  if (!root) return;
   const message = toSafeErrorMessage(event.reason);
   const surface = resolveCurrentSurface();
+  const bootstrapped = Boolean(window.__DRIFTY_BOOTSTRAPPED__);
+  const phase = resolveRejectionPhase(bootstrapped);
 
+  // Every rejection is captured for observability regardless of phase/surface.
   captureSentryException(event.reason, {
-    tags: { surface, phase: window.__DRIFTY_BOOTSTRAPPED__ ? "runtime_rejection" : "startup_rejection" },
+    tags: { surface, phase: `${phase}_rejection` },
   });
 
-  if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
-    event.preventDefault();
-    upsertLateBootstrapDiagnostic(message);
-    return;
-  }
-
-  root.replaceChildren(createBootstrapErrorElement("Drifty startup error", message));
+  // Keep action selection centralized so runtime app rejections cannot replace
+  // the live React tree with the startup error surface.
+  applyRejectionAction(resolveRejectionAction({ bootstrapped, surface }), event, message, {
+    getRoot: () => document.getElementById("root"),
+    createErrorElement: createBootstrapErrorElement,
+    showLateDiagnostic: upsertLateBootstrapDiagnostic,
+  });
 });
 
 function waitForFirstFrameOrFallback(): Promise<void> {

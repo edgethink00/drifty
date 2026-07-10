@@ -131,9 +131,8 @@ export function ProfileEmbedsModal({
       setCopiedKey(key);
       window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1600);
     } catch {
-      // Clipboard failures are non-fatal: rethrowing from this fire-and-forget
-      // handler would hit the global unhandledrejection handler, which replaces
-      // the whole app with the bootstrap error screen.
+      // Clipboard failures are non-fatal and handled locally so this
+      // fire-and-forget path does not emit a noisy global rejection.
       setCopiedKey(null);
     }
   };
