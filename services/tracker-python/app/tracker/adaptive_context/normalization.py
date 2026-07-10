@@ -19,6 +19,7 @@ BODY_LIKE_STRUCTURED_KEYS: Final = frozenset(
     }
 )
 DOCUMENT_DOMAINS: Final = ("notion.so", "atlassian.net", "confluence", "coda.io")
+DOCUMENT_APPS: Final = frozenset({"Notion"})
 ISSUE_DOMAINS: Final = ("github.com", "gitlab.com", "sentry.io", "atlassian.net", "jira")
 DESIGN_DOMAINS: Final = ("figma.com",)
 CALENDAR_DOMAINS: Final = ("calendar.google.com", "outlook.office.com")
@@ -46,6 +47,7 @@ COMMON_TITLE_SUFFIXES: Final = frozenset(
         "microsoft edge",
         "microsoft teams",
         "notion",
+        "obsidian",
         "slack",
     }
 )
@@ -67,6 +69,10 @@ def domain_matches(domain: str | None, candidates: Sequence[str]) -> bool:
         return False
     normalized = domain.lower()
     return any(candidate in normalized for candidate in candidates)
+
+
+def document_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
+    return capture.app_name in DOCUMENT_APPS or domain_matches(capture.site_domain, DOCUMENT_DOMAINS)
 
 
 def url_path_parts(site_url: str | None) -> list[str]:
@@ -152,6 +158,16 @@ def document_structured_fields(capture: AdaptiveContextCaptureInput) -> Adaptive
     url_parts = url_path_parts(capture.site_url)
     if url_parts:
         add_structured_values(fields, "workspace", [humanized_url_part(url_parts[0])])
+    elif capture.app_name in DOCUMENT_APPS and len(parts) >= 2:
+        add_structured_values(fields, "workspace", [parts[-1]])
+    if parts:
+        add_structured_values(fields, "headings", [parts[0]])
+    if capture.app_name in DOCUMENT_APPS and not url_parts:
+        if len(parts) >= 3:
+            add_structured_values(fields, "parent_page", [parts[1]])
+        if len(parts) >= 4:
+            add_structured_values(fields, "database", [parts[2]])
+        return fields
     if len(parts) >= 2:
         add_structured_values(fields, "parent_page", [parts[1]])
     if len(parts) >= 3:
