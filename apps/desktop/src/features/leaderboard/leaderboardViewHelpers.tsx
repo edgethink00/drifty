@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { formatRoundedDuration } from "../../lib/formatting";
 import type { LeaderboardPeriod } from "./leaderboardService";
 
@@ -6,10 +7,10 @@ export type ProfileLink = {
   readonly label: string;
 };
 
-export function ProfileAvatar({ className, name, src }: { readonly className: string; readonly name: string; readonly src?: string | null }) {
+export function ProfileAvatar({ className, name, src, style }: { readonly className: string; readonly name: string; readonly src?: string | null; readonly style?: CSSProperties }) {
   const trimmedSrc = src?.trim();
-  if (trimmedSrc) return <img className={className} src={trimmedSrc} alt="" aria-hidden="true" />;
-  return <span className={className} aria-hidden="true">{name.charAt(0).toUpperCase()}</span>;
+  if (trimmedSrc) return <img className={className} src={trimmedSrc} alt="" aria-hidden="true" style={style} />;
+  return <span className={className} aria-hidden="true" style={style}>{name.charAt(0).toUpperCase()}</span>;
 }
 
 export function ParticipationWindow({

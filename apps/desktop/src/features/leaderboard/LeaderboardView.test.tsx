@@ -78,7 +78,6 @@ function makePublicProfile(overrides: Partial<NonNullable<TestProps["publicProfi
     profileError: null,
     profileMessage: null,
     publicId: PUBLIC_ID,
-    redesign: false,
     shareMessage: null,
     onCopyProfileLink: vi.fn(),
     onEditProfile: vi.fn(),
@@ -149,8 +148,9 @@ describe("LeaderboardView", () => {
 
     const hero = screen.getByLabelText(/your leaderboard participation/i);
     const profileButton = within(hero).getByRole("button", { name: /edit public profile/i });
-    expect(within(hero).getByText("Building quiet tools.")).toBeTruthy();
-    expect(within(hero).getByRole("link", { name: "drifty.so" })).toBeTruthy();
+    // Public links render as pill actions in the hero action bar.
+    const websitePill = within(hero).getByRole("link", { name: /website/i });
+    expect(websitePill.getAttribute("href")).toBe("https://drifty.so");
     expect(hero.querySelector("img.leaderboard-hero__avatar")).not.toBeNull();
     expect(screen.queryByText(/public card and embeds stay with this leaderboard profile/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /open profile/i })).toBeNull();
@@ -158,27 +158,32 @@ describe("LeaderboardView", () => {
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("renders public card controls inside the expanded embeds area", () => {
+  it("opens the embeds modal from the hero and surfaces per-format snippets", () => {
     const card = mockCard({ enabled: true });
     renderView({ profileDisplayName: "Alex", publicProfile: makePublicProfile({ card }) });
 
-    const participationBlock = screen.getByLabelText(/^leaderboard participation$/i);
-    const embeds = screen.getByLabelText(/^embeds$/i);
-
-    expect(participationBlock.contains(embeds)).toBe(false);
-    expect(screen.queryByText(/profile tab/i)).toBeNull();
-    expect(within(embeds).queryByRole("button", { name: /^show$/i })).toBeNull();
-    expect(within(embeds).getByRole("button", { name: /expand embeds/i }).textContent).toContain(">");
+    // Embeds now live in a modal opened from the hero, not an inline accordion.
+    expect(screen.queryByLabelText(/^embeds$/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /expand embeds/i })).toBeNull();
     expect(card.refresh).not.toHaveBeenCalled();
 
-    fireEvent.click(within(embeds).getByRole("button", { name: /expand embeds/i }));
-    expect(within(embeds).getByText(/public focus card/i)).toBeTruthy();
-    expect(within(embeds).getByRole("button", { name: /make private/i })).toBeTruthy();
-    expect(within(embeds).getByRole("button", { name: /copy profile link/i })).toBeTruthy();
-    const values = (within(embeds).getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
-    expect(values.some((value) => value.includes(`profile/?id=${PUBLIC_ID}`))).toBe(true);
-    expect(values.some((value) => value.includes(`badge?id=${PUBLIC_ID}`))).toBe(true);
-    expect(values.some((value) => value.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(true);
+    const hero = screen.getByLabelText(/your leaderboard participation/i);
+    fireEvent.click(within(hero).getByRole("button", { name: /^embed$/i }));
+
+    const modal = screen.getByRole("dialog", { name: /embeds/i });
+    // Opening the modal loads the real publish state (enabled is null until the first refresh).
+    expect(card.refresh).toHaveBeenCalled();
+    expect(within(modal).getByRole("button", { name: /copy profile link/i })).toBeTruthy();
+
+    // Topbar carries the public profile URL; the default badge format carries the badge endpoint.
+    const badgeValues = (within(modal).getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
+    expect(badgeValues.some((value) => value.includes(`profile/?id=${PUBLIC_ID}`))).toBe(true);
+    expect(badgeValues.some((value) => value.includes(`badge?id=${PUBLIC_ID}`))).toBe(true);
+
+    // Switching to the Card format surfaces the hosted iframe embed.
+    fireEvent.click(within(modal).getByRole("radio", { name: /card/i }));
+    const cardValues = (within(modal).getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
+    expect(cardValues.some((value) => value.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(true);
   });
 
   it("uses the profile editor avatar itself as the photo change control", () => {
@@ -285,7 +290,7 @@ describe("LeaderboardView", () => {
 
     const optedOutHero = screen.getByLabelText(/your leaderboard participation/i);
     const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
-    const joinActions = joinButton.closest(".leaderboard-hero__actions");
+    const joinActions = joinButton.closest(".leaderboard-hero__participation-slot");
 
     expect(joinActions).not.toBeNull();
     expect(joinActions?.contains(joinButton)).toBe(true);
@@ -310,7 +315,7 @@ describe("LeaderboardView", () => {
 
     const optedInHero = screen.getByLabelText(/your leaderboard participation/i);
     const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
-    const leaveActions = leaveButton.closest(".leaderboard-hero__actions");
+    const leaveActions = leaveButton.closest(".leaderboard-hero__participation-slot");
 
     expect(leaveActions).not.toBeNull();
     expect(leaveActions?.contains(leaveButton)).toBe(true);

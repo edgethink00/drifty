@@ -147,48 +147,6 @@ function buildChartGroup({ chartStats, dailyProductivity, snippets }: EmbedGroup
   };
 }
 
-export function EmbedCard({
-  cardLocked,
-  copiedKey,
-  copyInputClassName,
-  copyRowClassName,
-  group,
-  primaryButtonClassName,
-  onCopy,
-}: {
-  readonly cardLocked: boolean;
-  readonly copiedKey: string | null;
-  readonly copyInputClassName: string;
-  readonly copyRowClassName: string;
-  readonly group: EmbedGroup;
-  readonly primaryButtonClassName: string;
-  readonly onCopy: (key: string, text: string) => Promise<void>;
-}) {
-  return (
-    <div className="profile-embed-card">
-      <div className="profile-embed-card__head">
-        <span className="label-mono">{group.title}</span>
-        {group.controls ?? null}
-      </div>
-      <div className="profile-embed-card__preview">{group.preview}</div>
-      {group.variants.map((variant) => (
-        <div key={variant.key} className="profile-embed-card__variant">
-          <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
-          <SnippetCopyRow
-            buttonClassName={primaryButtonClassName}
-            cardLocked={cardLocked}
-            copied={copiedKey === variant.key}
-            inputClassName={copyInputClassName}
-            rowClassName={copyRowClassName}
-            snippet={variant.snippet}
-            onCopy={() => void onCopy(variant.key, variant.snippet)}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function SnippetCopyRow({
   buttonClassName,
   cardLocked,

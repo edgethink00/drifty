@@ -1,16 +1,22 @@
 // Builds the copy-paste embed snippets shown in the in-app "Embed" panel (Phase 1).
 // Pure and dependency-light so it can be unit-tested and reused by the live preview.
 //
-// Phase 1 ships four working formats: a README image badge (served by the public `badge`
-// Edge Function), an <iframe> rich card (drifty.so/embed), a raw HTML badge, and the hosted
-// profile link. All point at surfaces that exist.
+// Every public surface is served under the same branded origin, drifty.so:
+//   - profile page   → drifty.so/profile/?id=…
+//   - card / chart    → drifty.so/embed/?id=… (hosted iframe page)
+//   - focus badge     → drifty.so/embed/badge?id=… (Cloudflare Pages Function that
+//                       proxies the public Supabase `badge` Edge Function)
+//   - raw JSON        → drifty.so/embed/badge?id=…&format=json
 //
-// The profile URL is built here rather than imported from ProfileModals so this module stays
-// dependency-free (no React) and avoids an import cycle; it mirrors buildPublicProfileUrl.
+// Keeping the badge under drifty.so (rather than the raw *.supabase.co functions URL)
+// means README badges never break if the backend project/ref changes — the public URL
+// is a stable, ownable namespace. No Supabase URL leaks into the generated snippets.
 
-/** Hosted public profile URL (mirrors ProfileModals.buildPublicProfileUrl). */
+const EMBED_ORIGIN = "https://drifty.so";
+
+/** Hosted public profile URL. */
 export function buildProfileUrl(publicId: string): string {
-  return `https://drifty.so/profile/?id=${encodeURIComponent(publicId)}`;
+  return `${EMBED_ORIGIN}/profile/?id=${encodeURIComponent(publicId)}`;
 }
 
 export type BadgeThemeOption = "light" | "dark";
@@ -25,7 +31,7 @@ export interface EmbedSnippetOptions {
 
 /** Hosted iframe focus-card URL (drifty.so/embed). */
 export function buildEmbedUrl(publicId: string, options: EmbedSnippetOptions = {}): string {
-  let url = `https://drifty.so/embed/?id=${encodeURIComponent(publicId)}`;
+  let url = `${EMBED_ORIGIN}/embed/?id=${encodeURIComponent(publicId)}`;
   if (options.theme === "dark") url += "&theme=dark";
   if (options.range === 30) url += "&range=30";
   return url;
@@ -33,7 +39,7 @@ export function buildEmbedUrl(publicId: string, options: EmbedSnippetOptions = {
 
 /** Hosted iframe 30-day focus/drift chart URL (drifty.so/embed, chart view). */
 export function buildChartEmbedUrl(publicId: string, options: EmbedSnippetOptions = {}): string {
-  let url = `https://drifty.so/embed/?id=${encodeURIComponent(publicId)}&view=chart`;
+  let url = `${EMBED_ORIGIN}/embed/?id=${encodeURIComponent(publicId)}&view=chart`;
   if (options.theme === "dark") url += "&theme=dark";
   return url;
 }
@@ -54,28 +60,23 @@ export interface EmbedSnippets {
   html: string;
 }
 
-/** `https://<ref>.supabase.co` → `https://<ref>.supabase.co/functions/v1`. */
-export function functionsBaseFromSupabaseUrl(supabaseUrl: string): string {
-  return `${supabaseUrl.replace(/\/+$/, "")}/functions/v1`;
-}
-
-export function buildBadgeUrl(publicId: string, functionsBaseUrl: string, options: EmbedSnippetOptions = {}): string {
-  const base = functionsBaseUrl.replace(/\/+$/, "");
-  let url = `${base}/badge?id=${encodeURIComponent(publicId)}`;
+/** Public focus badge image, served under the drifty.so /embed namespace. */
+export function buildBadgeUrl(publicId: string, options: EmbedSnippetOptions = {}): string {
+  let url = `${EMBED_ORIGIN}/embed/badge?id=${encodeURIComponent(publicId)}`;
   if (options.theme === "dark") url += "&theme=dark";
   return url;
 }
 
 /** GET endpoint returning the card's aggregate JSON (incl. the 30-day daily series). */
-export function buildDataUrl(publicId: string, functionsBaseUrl: string): string {
-  return `${buildBadgeUrl(publicId, functionsBaseUrl)}&format=json`;
+export function buildDataUrl(publicId: string): string {
+  return `${buildBadgeUrl(publicId)}&format=json`;
 }
 
-export function buildEmbedSnippets(publicId: string, functionsBaseUrl: string, options: EmbedSnippetOptions = {}): EmbedSnippets {
-  const badgeUrl = buildBadgeUrl(publicId, functionsBaseUrl, options);
+export function buildEmbedSnippets(publicId: string, options: EmbedSnippetOptions = {}): EmbedSnippets {
+  const badgeUrl = buildBadgeUrl(publicId, options);
   const embedUrl = buildEmbedUrl(publicId, options);
   const profileUrl = buildProfileUrl(publicId);
-  const dataUrl = buildDataUrl(publicId, functionsBaseUrl);
+  const dataUrl = buildDataUrl(publicId);
   const chartEmbedUrl = buildChartEmbedUrl(publicId, options);
   const markdown = `[![Drifty focus](${badgeUrl})](${profileUrl})`;
   const iframe = `<iframe src="${embedUrl}" width="440" height="${options.range === 30 ? 200 : 180}" style="border:0;overflow:hidden" scrolling="no" title="Drifty focus"></iframe>`;

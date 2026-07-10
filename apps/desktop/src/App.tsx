@@ -198,7 +198,7 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, PROFILE_REDESIGN_ENABLED_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialProjectClassificationEnabled, resolveInitialProfileRedesignEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialProjectClassificationEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
@@ -368,8 +368,6 @@ export default function App() {
   const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(resolveInitialDeviceSyncEnabled);
   const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
-  // Dev-only A/B gate for the Profile tab redesign (off → shipped classic layout).
-  const [devProfileRedesignEnabled, setDevProfileRedesignEnabled] = useState(resolveInitialProfileRedesignEnabled);
   // Dev-only gate for the web account preview: embed detail-share toggles on the Profile
   // tab + background publishing of the aggregate account summary for drifty.so.
   const [devWebAccountPreviewEnabled, setDevWebAccountPreviewEnabled] = useState(resolveInitialWebAccountPreviewEnabled);
@@ -2524,10 +2522,6 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY, devDeviceSyncPreviewEnabled ? "1" : "0");
   }, [devDeviceSyncPreviewEnabled]);
-
-  useEffect(() => {
-    window.localStorage.setItem(PROFILE_REDESIGN_ENABLED_STORAGE_KEY, devProfileRedesignEnabled ? "1" : "0");
-  }, [devProfileRedesignEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(WEB_ACCOUNT_PREVIEW_STORAGE_KEY, devWebAccountPreviewEnabled ? "1" : "0");
@@ -5746,7 +5740,6 @@ export default function App() {
               profileError: isProfileEditorOpen ? null : profileError,
               profileMessage: isProfileEditorOpen ? null : profileMessage,
               publicId: profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null),
-              redesign: devProfileRedesignEnabled,
               shareMessage: profileShareMessage,
               webAccountPreview: devWebAccountPreviewEnabled,
               onCopyProfileLink: () => void handleShareLeaderboardProfile(),
@@ -5967,7 +5960,6 @@ export default function App() {
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
                     deviceSyncPreviewEnabled={devDeviceSyncPreviewEnabled}
-                    profileRedesignEnabled={devProfileRedesignEnabled}
                     webAccountPreviewEnabled={devWebAccountPreviewEnabled}
                     projectClassificationEnabled={devProjectClassificationEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
@@ -5997,7 +5989,6 @@ export default function App() {
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onDeviceSyncPreviewEnabledChange={setDevDeviceSyncPreviewEnabled}
-                    onProfileRedesignEnabledChange={setDevProfileRedesignEnabled}
                     onWebAccountPreviewEnabledChange={setDevWebAccountPreviewEnabled}
                     onProjectClassificationEnabledChange={setDevProjectClassificationEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}

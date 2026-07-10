@@ -15,7 +15,6 @@ import { DevSettingsDashboardLayoutBlock } from "./DevSettingsDashboardLayoutBlo
 import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
 import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock } from "./DevSettingsDiagnosticsBlock";
 import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
-import { DevSettingsProfileRedesignBlock } from "./DevSettingsProfileRedesignBlock";
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
 import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
@@ -31,7 +30,6 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
   readonly deviceSyncPreviewEnabled: boolean;
-  readonly profileRedesignEnabled: boolean;
   readonly webAccountPreviewEnabled: boolean;
   readonly projectClassificationEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
@@ -63,7 +61,6 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onDeviceSyncPreviewEnabledChange: (enabled: boolean) => void;
-  readonly onProfileRedesignEnabledChange: (enabled: boolean) => void;
   readonly onWebAccountPreviewEnabledChange: (enabled: boolean) => void;
   readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
@@ -97,7 +94,6 @@ export function DevSettingsSection({
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
   deviceSyncPreviewEnabled,
-  profileRedesignEnabled,
   webAccountPreviewEnabled,
   projectClassificationEnabled,
   projectClassificationAiReviewEvents,
@@ -129,7 +125,6 @@ export function DevSettingsSection({
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
   onDeviceSyncPreviewEnabledChange,
-  onProfileRedesignEnabledChange,
   onWebAccountPreviewEnabledChange,
   onProjectClassificationEnabledChange,
   onRevertProjectClassificationCorrection,
@@ -172,10 +167,6 @@ export function DevSettingsSection({
       {/* Preview feature toggles, grouped in one block */}
       <div className="settings-block settings-block--dev-preview">
         <h3>Preview</h3>
-        <DevSettingsProfileRedesignBlock
-          profileRedesignEnabled={profileRedesignEnabled}
-          onProfileRedesignEnabledChange={onProfileRedesignEnabledChange}
-        />
         <DevSettingsDeviceSyncBlock
           deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
           onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
