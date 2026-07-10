@@ -984,7 +984,7 @@ describe("App leaderboard participation", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /my profile/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /expand embeds/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^embed$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /copy profile link/i }));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("https://drifty.so/profile/?id=profile-1");
@@ -1058,6 +1058,9 @@ describe("App leaderboard participation", () => {
     expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /leave leaderboard/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /view profile/i })).toBeNull();
+    // Embed (public-card control) persists after opting out, but Share is hidden —
+    // there is no public profile link to copy until you're on the board.
+    expect(screen.getByRole("button", { name: /^embed$/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
     expect(JSON.parse(window.localStorage.getItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY) ?? "[]")).toEqual([]);
     expect((await screen.findByRole("status")).textContent).toMatch(/network unavailable/i);

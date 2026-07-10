@@ -1,27 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { buildBadgeUrl, buildEmbedSnippets, functionsBaseFromSupabaseUrl } from "./embedSnippets";
+import { buildBadgeUrl, buildEmbedSnippets } from "./embedSnippets";
 
 const PUBLIC_ID = "9f3a1b2c-0000-4d5e-8f6a-1b2c3d4e5f60";
-const FUNCTIONS_BASE = "https://ompsisrgynefqstqmkrg.supabase.co/functions/v1";
-
-describe("functionsBaseFromSupabaseUrl", () => {
-  it("appends the functions path and trims trailing slashes", () => {
-    expect(functionsBaseFromSupabaseUrl("https://x.supabase.co/")).toBe("https://x.supabase.co/functions/v1");
-    expect(functionsBaseFromSupabaseUrl("https://x.supabase.co")).toBe("https://x.supabase.co/functions/v1");
-  });
-});
 
 describe("buildBadgeUrl", () => {
-  it("points at the badge function with an encoded id", () => {
-    expect(buildBadgeUrl(PUBLIC_ID, FUNCTIONS_BASE)).toBe(`${FUNCTIONS_BASE}/badge?id=${PUBLIC_ID}`);
+  it("serves the badge under the drifty.so /embed namespace with an encoded id", () => {
+    expect(buildBadgeUrl(PUBLIC_ID)).toBe(`https://drifty.so/embed/badge?id=${PUBLIC_ID}`);
   });
-  it("tolerates a trailing slash on the base", () => {
-    expect(buildBadgeUrl(PUBLIC_ID, `${FUNCTIONS_BASE}/`)).toBe(`${FUNCTIONS_BASE}/badge?id=${PUBLIC_ID}`);
+  it("threads the dark theme, omitting the light default", () => {
+    expect(buildBadgeUrl(PUBLIC_ID, { theme: "dark" })).toBe(`https://drifty.so/embed/badge?id=${PUBLIC_ID}&theme=dark`);
+    expect(buildBadgeUrl(PUBLIC_ID)).not.toContain("theme=");
   });
 });
 
 describe("buildEmbedSnippets", () => {
-  const snippets = buildEmbedSnippets(PUBLIC_ID, FUNCTIONS_BASE);
+  const snippets = buildEmbedSnippets(PUBLIC_ID);
+
+  it("keeps every public surface on drifty.so (no supabase.co leaks)", () => {
+    for (const url of [snippets.badgeUrl, snippets.embedUrl, snippets.profileUrl, snippets.dataUrl]) {
+      expect(url.startsWith("https://drifty.so/")).toBe(true);
+      expect(url).not.toContain("supabase.co");
+    }
+  });
 
   it("links the badge image to the hosted profile in markdown", () => {
     expect(snippets.markdown).toBe(`[![Drifty focus](${snippets.badgeUrl})](${snippets.profileUrl})`);
@@ -49,10 +49,11 @@ describe("buildEmbedSnippets", () => {
 
   it("provides a raw-data JSON url on the badge endpoint", () => {
     expect(snippets.dataUrl).toBe(`${snippets.badgeUrl}&format=json`);
+    expect(snippets.dataUrl).toBe(`https://drifty.so/embed/badge?id=${PUBLIC_ID}&format=json`);
   });
 
   it("threads theme and range options into the urls, omitting defaults", () => {
-    const dark30 = buildEmbedSnippets(PUBLIC_ID, FUNCTIONS_BASE, { theme: "dark", range: 30 });
+    const dark30 = buildEmbedSnippets(PUBLIC_ID, { theme: "dark", range: 30 });
     expect(dark30.badgeUrl).toContain("&theme=dark");
     expect(dark30.embedUrl).toContain("&theme=dark");
     expect(dark30.embedUrl).toContain("&range=30");
