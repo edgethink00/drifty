@@ -13,16 +13,17 @@ from app.tracker.adaptive_context.normalization import (
     CALENDAR_DOMAINS,
     COMMUNICATION_DOMAINS,
     DESIGN_DOMAINS,
-    DOCUMENT_DOMAINS,
     ISSUE_DOMAINS,
     calendar_structured_fields,
     clean_context_values,
     communication_structured_fields,
     design_structured_fields,
+    document_surface_matches,
     document_structured_fields,
     domain_matches,
     issue_structured_fields,
     path_markdown_file_from_title,
+    title_parts,
     url_path_parts,
 )
 from app.tracker.adaptive_context.settings import (
@@ -53,7 +54,7 @@ def merge_structured_fields(
 
 def derived_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
     fields: AdaptiveStructuredFields = {}
-    if domain_matches(capture.site_domain, DOCUMENT_DOMAINS):
+    if document_surface_matches(capture):
         fields = merge_structured_fields(fields, document_structured_fields(capture)) or fields
     if domain_matches(capture.site_domain, ISSUE_DOMAINS):
         fields = merge_structured_fields(fields, issue_structured_fields(capture)) or fields
@@ -148,7 +149,7 @@ def append_field_item(
 
 
 def document_knowledge_items(capture: AdaptiveContextCaptureInput) -> list[AdaptiveContextItemPayload]:
-    if not domain_matches(capture.site_domain, DOCUMENT_DOMAINS):
+    if not document_surface_matches(capture):
         return []
 
     fields = capture.structured_fields
@@ -177,16 +178,18 @@ def local_markdown_items(capture: AdaptiveContextCaptureInput) -> list[AdaptiveC
         return []
 
     markdown_text = bounded_markdown_text(path)
+    title_context = title_parts(capture) if path is None else []
     source_family = "local_notes_markdown"
     items: list[AdaptiveContextItemPayload] = []
     parents = list(path.parents) if path is not None else []
-    project_values = [parents[1].name] if len(parents) > 1 else []
-    folder_values = [parents[0].name] if parents else []
+    project_values = [parents[1].name] if len(parents) > 1 else title_context[2:3]
+    folder_values = [parents[0].name] if parents else title_context[1:2]
+    heading_values = markdown_headings(markdown_text) if path is not None else title_context[:1]
     for item_id, depth, kind, values in (
         ("local_notes_markdown:project", 1, "project", project_values),
         ("local_notes_markdown:folder", 1, "folder", folder_values),
         ("local_notes_markdown:tag", 2, "tag", markdown_frontmatter_tags(markdown_text)),
-        ("local_notes_markdown:heading", 2, "heading", markdown_headings(markdown_text)),
+        ("local_notes_markdown:heading", 2, "heading", heading_values),
     ):
         append_adaptive_item(items, adaptive_item(item_id, depth, kind, source_family, values, "metadata_only"))
     return items
