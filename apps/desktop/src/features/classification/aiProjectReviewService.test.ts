@@ -168,11 +168,15 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
     getProjects: vi.fn(async (): Promise<Project[]> => [
       { id: "p1", name: "SNS", description: "social work", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" },
     ]),
+    getProjectAssignments: vi.fn(async () => []),
     getAiReviewEvents: vi.fn(async () => []),
     recordProjectPass: vi.fn(async () => ({ id: 7, ranAt: "2026-04-06T23:00:00+00:00" })),
     saveProjectAssignments: vi.fn(async () => ({ saved: 0, skippedManual: 0 })),
     saveClassifications: vi.fn(async () => ({ saved: 0 })),
     saveAiReviewEvents: vi.fn(async () => ({ saved: 0 })),
+    getTeamProjects: vi.fn(async () => []),
+    getTeamProjectAssignments: vi.fn(async () => []),
+    saveTeamProjectAssignments: vi.fn(async () => ({ saved: 0, skippedManual: 0 })),
   };
   return { tracker: { ...spies, ...overrides } as unknown as TrackerApi, spies };
 }
@@ -200,6 +204,59 @@ describe("runProjectPass orchestration", () => {
     expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 1 }));
     expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: "p1", passId: 7 })]);
     expect(spies.saveAiReviewEvents).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", passId: 7, newProductivity: "focus" })]);
+  });
+
+  it("routes team-project assignments to the local team mirror, not the personal table", async () => {
+    const { tracker, spies } = mockTracker({
+      getProjects: vi.fn(async () => []) as TrackerApi["getProjects"],
+      getTeamProjects: vi.fn(async () => [
+        { id: "t1", organizationId: "org-1", name: "Product", description: "product work", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" },
+      ]) as TrackerApi["getTeamProjects"],
+    });
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "t1", confidence: 0.9 }], corrections: [] },
+      usage: { model: "test-model", tokensIn: 10, tokensOut: 5 },
+    }));
+
+    await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "manual",
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+    });
+
+    expect(spies.saveTeamProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", teamProjectId: "t1", passId: 7 })]);
+    // the personal table gets a null-projectId clearing row for the same segment
+    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: null, passId: 7 })]);
+  });
+
+  it("clears the team row when a segment is reclassified from a team to a personal project", async () => {
+    const { tracker, spies } = mockTracker({
+      getProjects: vi.fn(async () => [
+        { id: "p1", name: "SNS", description: "", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" },
+      ]) as TrackerApi["getProjects"],
+      getTeamProjects: vi.fn(async () => [
+        { id: "t1", organizationId: "org-1", name: "Product", description: "", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" },
+      ]) as TrackerApi["getTeamProjects"],
+    });
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: { model: "test-model", tokensIn: 10, tokensOut: 5 },
+    }));
+
+    await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "manual",
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+    });
+
+    // Segment routes to personal p1; a null team row is written so any prior team
+    // assignment for the segment is cleared and can't keep inflating team totals.
+    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: "p1" })]);
+    expect(spies.saveTeamProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", teamProjectId: null })]);
   });
 
   it("skips a chunk whose fingerprint already has fresh stored assignments", async () => {

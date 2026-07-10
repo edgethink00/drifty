@@ -278,6 +278,47 @@ class TrackerDatabase:
                 CREATE INDEX IF NOT EXISTS idx_activity_project_assignments_project
                 ON activity_project_assignments(project_id);
 
+                CREATE TABLE IF NOT EXISTS team_projects (
+                  id TEXT PRIMARY KEY,
+                  organization_id TEXT NOT NULL,
+                  name TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  color TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'active',
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_team_projects_org
+                ON team_projects(organization_id);
+
+                CREATE TABLE IF NOT EXISTS team_project_anchors (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  team_project_id TEXT NOT NULL REFERENCES team_projects(id) ON DELETE CASCADE,
+                  kind TEXT NOT NULL,
+                  value TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  UNIQUE(team_project_id, kind, value)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_team_project_anchors_project
+                ON team_project_anchors(team_project_id);
+
+                CREATE TABLE IF NOT EXISTS team_project_assignments (
+                  segment_id INTEGER PRIMARY KEY REFERENCES activity_segments(id) ON DELETE CASCADE,
+                  team_project_id TEXT REFERENCES team_projects(id) ON DELETE SET NULL,
+                  source TEXT NOT NULL,
+                  confidence REAL,
+                  pass_id INTEGER,
+                  chunk_fingerprint TEXT,
+                  assigned_at TEXT NOT NULL,
+                  stale INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_team_project_assignments_project
+                ON team_project_assignments(team_project_id);
+
                 CREATE TABLE IF NOT EXISTS project_pass_runs (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   ran_at TEXT NOT NULL,
@@ -2293,6 +2334,222 @@ class TrackerDatabase:
                 "source": row["source"],
                 "confidence": row["confidence"],
                 "reason": row["reason"],
+                "passId": row["pass_id"],
+                "chunkFingerprint": row["chunk_fingerprint"],
+                "assignedAt": row["assigned_at"],
+                "stale": bool(row["stale"]),
+            }
+            for row in rows
+        ]
+
+    def get_team_projects(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            project_rows = conn.execute(
+                """
+                SELECT id, organization_id, name, description, color, status, created_at, updated_at
+                FROM team_projects
+                ORDER BY organization_id ASC, datetime(updated_at) DESC, id ASC
+                """
+            ).fetchall()
+            anchor_rows = conn.execute(
+                "SELECT team_project_id, kind, value, source FROM team_project_anchors ORDER BY id ASC"
+            ).fetchall()
+        anchors_by_project: dict[str, list[dict[str, Any]]] = {}
+        for row in anchor_rows:
+            anchors_by_project.setdefault(row["team_project_id"], []).append(
+                {"kind": row["kind"], "value": row["value"], "source": row["source"]}
+            )
+        return [
+            {
+                "id": row["id"],
+                "organizationId": row["organization_id"],
+                "name": row["name"],
+                "description": row["description"],
+                "color": row["color"],
+                "status": row["status"],
+                "anchors": anchors_by_project.get(row["id"], []),
+                "createdAt": row["created_at"],
+                "updatedAt": row["updated_at"],
+            }
+            for row in project_rows
+        ]
+
+    def upsert_team_projects(
+        self, organization_id: str, projects: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        org_id = str(organization_id or "").strip()
+        if not org_id:
+            raise ValueError("organizationId is required")
+
+        prepared: list[dict[str, Any]] = []
+        for project_input in projects:
+            project_id = str(project_input.get("id") or "").strip()
+            if not project_id:
+                raise ValueError("team project id is required")
+            name = str(project_input.get("name", "")).strip()
+            if not name:
+                raise ValueError("name is required")
+            description = str(project_input.get("description", "")).strip()
+            color = str(project_input.get("color", "")).strip() or DEFAULT_PROJECT_COLOR
+            status = str(project_input.get("status", "active")).strip() or "active"
+            if status not in VALID_PROJECT_STATUSES:
+                raise ValueError("status must be 'active' or 'archived'")
+            prepared.append(
+                {
+                    "id": project_id,
+                    "name": name,
+                    "description": description,
+                    "color": color,
+                    "status": status,
+                    "anchors": project_input.get("anchors") or [],
+                }
+            )
+
+        incoming_ids = [project["id"] for project in prepared]
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            if incoming_ids:
+                placeholders = ", ".join("?" for _ in incoming_ids)
+                conn.execute(
+                    f"DELETE FROM team_projects WHERE organization_id = ? AND id NOT IN ({placeholders})",
+                    [org_id, *incoming_ids],
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM team_projects WHERE organization_id = ?",
+                    (org_id,),
+                )
+
+            for project in prepared:
+                existing = conn.execute(
+                    "SELECT created_at FROM team_projects WHERE id = ?", (project["id"],)
+                ).fetchone()
+                created_at = existing["created_at"] if existing else timestamp
+                conn.execute(
+                    """
+                    INSERT INTO team_projects (
+                        id, organization_id, name, description, color, status, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        organization_id = excluded.organization_id,
+                        name = excluded.name,
+                        description = excluded.description,
+                        color = excluded.color,
+                        status = excluded.status,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        project["id"],
+                        org_id,
+                        project["name"],
+                        project["description"],
+                        project["color"],
+                        project["status"],
+                        created_at,
+                        timestamp,
+                    ),
+                )
+
+                conn.execute(
+                    "DELETE FROM team_project_anchors WHERE team_project_id = ?",
+                    (project["id"],),
+                )
+                for anchor in project["anchors"]:
+                    kind = str(anchor.get("kind", "")).strip()
+                    value = str(anchor.get("value", "")).strip()
+                    source = str(anchor.get("source", "harvested")).strip() or "harvested"
+                    if kind not in VALID_PROJECT_ANCHOR_KINDS or not value:
+                        continue
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO team_project_anchors (
+                            team_project_id, kind, value, source, created_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (project["id"], kind, value, source, timestamp),
+                    )
+        return self.get_team_projects()
+
+    def save_team_project_assignments(self, assignments: list[dict[str, Any]]) -> dict[str, int]:
+        saved = 0
+        skipped_manual = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            for item in assignments:
+                raw_segment_id = item.get("segmentId", item.get("segment_id"))
+                if raw_segment_id is None:
+                    continue
+                try:
+                    segment_id = int(raw_segment_id)
+                except (TypeError, ValueError):
+                    continue
+
+                source = str(item.get("source") or "ai")
+                existing = conn.execute(
+                    "SELECT source FROM team_project_assignments WHERE segment_id = ?",
+                    (segment_id,),
+                ).fetchone()
+                if existing is not None and existing["source"] == "manual" and source != "manual":
+                    skipped_manual += 1
+                    continue
+
+                confidence = item.get("confidence")
+                conn.execute(
+                    """
+                    INSERT INTO team_project_assignments (
+                        segment_id, team_project_id, source, confidence, pass_id, chunk_fingerprint, assigned_at, stale
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(segment_id) DO UPDATE SET
+                        team_project_id = excluded.team_project_id,
+                        source = excluded.source,
+                        confidence = excluded.confidence,
+                        pass_id = excluded.pass_id,
+                        chunk_fingerprint = excluded.chunk_fingerprint,
+                        assigned_at = excluded.assigned_at,
+                        stale = excluded.stale
+                    """,
+                    (
+                        segment_id,
+                        item.get("teamProjectId", item.get("team_project_id")),
+                        source,
+                        float(confidence) if confidence is not None else None,
+                        item.get("passId", item.get("pass_id")),
+                        item.get("chunkFingerprint", item.get("chunk_fingerprint")),
+                        item.get("assignedAt") or item.get("assigned_at") or timestamp,
+                        1 if item.get("stale") else 0,
+                    ),
+                )
+                saved += 1
+        return {"saved": saved, "skippedManual": skipped_manual}
+
+    def get_team_project_assignments(
+        self, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT
+                a.segment_id,
+                a.team_project_id,
+                a.source,
+                a.confidence,
+                a.pass_id,
+                a.chunk_fingerprint,
+                a.assigned_at,
+                a.stale
+            FROM team_project_assignments a
+            JOIN activity_segments s ON s.id = a.segment_id
+            WHERE 1 = 1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end, table_name="s")
+        query += " ORDER BY datetime(s.started_at) ASC, a.segment_id ASC"
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {
+                "segmentId": str(row["segment_id"]),
+                "teamProjectId": row["team_project_id"],
+                "source": row["source"],
+                "confidence": row["confidence"],
                 "passId": row["pass_id"],
                 "chunkFingerprint": row["chunk_fingerprint"],
                 "assignedAt": row["assigned_at"],

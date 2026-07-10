@@ -1,12 +1,19 @@
-import type { OwnTeam, PublishedTeamFocusTotal, StoppedTeamFocusSharing, TeamFocusSummaryRow, TeamInvite, TeamLiveStatusRow } from "./teamTypes";
+import type {
+  OwnTeam,
+  PublishedTeamProjectTotals,
+  StoppedTeamProjectSharing,
+  TeamInvite,
+  TeamProject,
+  TeamProjectMemberRow,
+  TeamProjectMixRow,
+} from "./teamTypes";
 import {
+  readBoolean,
   readInviteStatus,
-  readNullableNumber,
   readNumber,
-  readPeriod,
-  readPresenceState,
-  readShareScope,
+  readProjectStatus,
   readString,
+  readTeamProjectAnchors,
   toRecord,
 } from "./teamServiceRecords";
 
@@ -17,36 +24,8 @@ export function normalizeOwnTeam(row: unknown): OwnTeam {
     organization_name: readString(record, "organization_name"),
     member_display_name: readString(record, "member_display_name"),
     role_label: readString(record, "role_label"),
-    focus_share_scope: readShareScope(record),
     member_count: readNumber(record, "member_count"),
-    focus_seconds: readNumber(record, "focus_seconds"),
-    focus_score: readNumber(record, "focus_score"),
-    private_rank: readNullableNumber(record, "private_rank"),
-    window_start_date: readString(record, "window_start_date"),
-    window_end_date: readString(record, "window_end_date"),
     updated_at: readString(record, "updated_at"),
-  };
-}
-
-export function normalizeFocusSummaryRow(row: unknown): TeamFocusSummaryRow {
-  return normalizeOwnTeam({ ...toRecord(row), member_count: 0 });
-}
-
-export function normalizeTeamLiveStatusRow(row: unknown): TeamLiveStatusRow {
-  const record = toRecord(row);
-  return {
-    organization_id: readString(record, "organization_id"),
-    organization_name: readString(record, "organization_name"),
-    member_display_name: readString(record, "member_display_name"),
-    profile_avatar_url: readString(record, "profile_avatar_url"),
-    role_label: readString(record, "role_label"),
-    focus_share_scope: readShareScope(record),
-    presence_state: readPresenceState(record),
-    focus_seconds: readNumber(record, "focus_seconds"),
-    focus_score: readNumber(record, "focus_score"),
-    window_start_date: readString(record, "window_start_date"),
-    window_end_date: readString(record, "window_end_date"),
-    last_shared_at: readString(record, "last_shared_at"),
   };
 }
 
@@ -66,26 +45,62 @@ export function normalizeTeamInvite(row: unknown): TeamInvite {
   };
 }
 
-export function normalizePublishedFocusTotal(row: unknown): PublishedTeamFocusTotal {
+export function normalizeTeamProject(row: unknown): TeamProject {
   const record = toRecord(row);
   return {
+    id: readString(record, "id"),
     organization_id: readString(record, "organization_id"),
-    period: readPeriod(record),
-    focus_share_scope: readShareScope(record),
-    focus_seconds: readNumber(record, "focus_seconds"),
-    focus_score: readNumber(record, "focus_score"),
-    window_start_date: readString(record, "window_start_date"),
-    window_end_date: readString(record, "window_end_date"),
+    name: readString(record, "name"),
+    description: readString(record, "description"),
+    color: readString(record, "color"),
+    status: readProjectStatus(record),
+    anchors: readTeamProjectAnchors(record.anchors),
+    can_manage: readBoolean(record, "can_manage"),
+    created_at: readString(record, "created_at"),
     updated_at: readString(record, "updated_at"),
   };
 }
 
-export function normalizeStoppedSharing(row: unknown): StoppedTeamFocusSharing {
+export function normalizeTeamProjectMixRow(row: unknown): TeamProjectMixRow {
   const record = toRecord(row);
   return {
     organization_id: readString(record, "organization_id"),
-    focus_share_scope: readShareScope(record),
-    deleted_focus_total_count: readNumber(record, "deleted_focus_total_count"),
+    organization_project_id: readString(record, "organization_project_id"),
+    project_name: readString(record, "project_name"),
+    project_color: readString(record, "project_color"),
+    project_status: readProjectStatus({ status: record.project_status }),
+    activity_date: readString(record, "activity_date"),
+    seconds: readNumber(record, "seconds"),
+  };
+}
+
+export function normalizeTeamProjectMemberRow(row: unknown): TeamProjectMemberRow {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    organization_project_id: readString(record, "organization_project_id"),
+    project_name: readString(record, "project_name"),
+    member_display_name: readString(record, "member_display_name"),
+    seconds: readNumber(record, "seconds"),
+  };
+}
+
+export function normalizePublishedTeamProjectTotals(row: unknown): PublishedTeamProjectTotals {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    window_start_date: readString(record, "window_start_date"),
+    window_end_date: readString(record, "window_end_date"),
+    published_row_count: readNumber(record, "published_row_count"),
+    updated_at: readString(record, "updated_at"),
+  };
+}
+
+export function normalizeStoppedTeamProjectSharing(row: unknown): StoppedTeamProjectSharing {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    deleted_row_count: readNumber(record, "deleted_row_count"),
     updated_at: readString(record, "updated_at"),
   };
 }

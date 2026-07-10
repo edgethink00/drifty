@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-team-projects"
+description = "Enables the tracker_get_team_projects command without any pre-configured scope."
+commands.allow = ["tracker_get_team_projects"]
+
+[[permission]]
+identifier = "deny-tracker-get-team-projects"
+description = "Denies the tracker_get_team_projects command without any pre-configured scope."
+commands.deny = ["tracker_get_team_projects"]

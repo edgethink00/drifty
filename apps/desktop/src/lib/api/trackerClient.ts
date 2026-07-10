@@ -47,6 +47,9 @@ import type {
   TimelinePageQuery,
   TimelineSearchQuery,
   TimelineQuery,
+  TeamProject,
+  TeamProjectInput,
+  TeamProjectAssignmentRecord,
   TrackerApi,
   TrackerLiveTail,
   TrackerStatus,
@@ -372,6 +375,22 @@ export const trackerClient: TrackerApi = {
   },
   async getProjectAssignments(query: TimelineQuery) {
     const result = await safeInvoke<ProjectAssignmentRecord[]>("tracker_get_project_assignments", { query });
+    return result ?? [];
+  },
+  async getTeamProjects() {
+    const result = await safeInvoke<TeamProject[]>("tracker_get_team_projects");
+    return result ?? [];
+  },
+  async upsertTeamProjects(organizationId: string, projects: TeamProjectInput[]) {
+    const result = await safeInvoke<TeamProject[]>("tracker_upsert_team_projects", { query: { organizationId, projects } });
+    return result ?? [];
+  },
+  async saveTeamProjectAssignments(assignments: TeamProjectAssignmentRecord[]) {
+    const result = await safeInvoke<ProjectAssignmentsSaveResult>("tracker_save_team_project_assignments", { query: { assignments } });
+    return result ?? { saved: 0, skippedManual: 0 };
+  },
+  async getTeamProjectAssignments(query: TimelineQuery) {
+    const result = await safeInvoke<TeamProjectAssignmentRecord[]>("tracker_get_team_project_assignments", { query });
     return result ?? [];
   },
   async recordProjectPass(input: ProjectPassRunInput) {

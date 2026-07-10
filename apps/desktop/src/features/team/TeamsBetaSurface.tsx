@@ -1,18 +1,20 @@
 import type { AuthState } from "../auth/AuthContext";
 import { copyTextToClipboard } from "../profile/ProfileModals";
-import { TeamPage } from "./TeamPage";
+import { TeamWorkspace } from "./TeamWorkspace";
 import type { PendingTeamInvite } from "./teamInviteDeepLinks";
 import type { AcceptTeamInviteInput } from "./teamService";
 import { useTeamController } from "./useTeamController";
+import type { TeamProjectsSubView } from "./useTeamProjects";
 
 export type TeamsBetaSurfaceProps = {
   readonly hasRequiredAccountAuth: boolean;
   readonly isEffectiveAuthRequired: boolean;
   readonly isPolicySignedIn: boolean;
   readonly isSupabaseConfigured: boolean;
-  readonly showAiClassificationImpact: boolean;
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
+  readonly teamSubView: TeamProjectsSubView;
+  readonly onTeamSubViewChange: (subView: TeamProjectsSubView) => void;
   readonly pendingInvite?: PendingTeamInvite | null;
   readonly onAuthRequired: () => void;
   readonly onPendingInviteClear?: () => void;
@@ -23,81 +25,45 @@ export function TeamsBetaSurface({
   isEffectiveAuthRequired,
   isPolicySignedIn,
   isSupabaseConfigured,
-  showAiClassificationImpact,
   startOfDayMinutes,
   user,
+  teamSubView,
+  onTeamSubViewChange,
   pendingInvite = null,
   onAuthRequired,
   onPendingInviteClear,
 }: TeamsBetaSurfaceProps) {
-  const {
-    activeTeamPeriod,
-    invites: teamInvites,
-    liveRows: teamLiveRows,
-    rows: teamRows,
-    selectedTeam,
-    teamActionError,
-    teamActionLoading,
-    teamError,
-    teamLoading,
-    teamStatusMessage,
-    teamStatusTone,
-    teams,
-    handleAcceptInvite,
-    handleCreateInvite,
-    handleCreateTeam,
-    handlePublishTeamFocus,
-    handleRevokeInvite,
-    handleStopTeamFocusSharing,
-    refreshTeamData,
-    selectTeam,
-    setActiveTeamPeriod,
-  } = useTeamController({
+  const controller = useTeamController({
     activeTab: "team",
     hasRequiredAccountAuth,
     isEffectiveAuthRequired,
     isSupabaseConfigured,
-    showAiClassificationImpact,
-    startOfDayMinutes,
     user,
     onAuthRequired,
   });
 
   const handleAcceptPendingInvite = async (input: AcceptTeamInviteInput) => {
-    await handleAcceptInvite(input);
+    await controller.handleAcceptInvite(input);
     onPendingInviteClear?.();
   };
 
   return (
-    <TeamPage
-      actionError={teamActionError}
-      activePeriod={activeTeamPeriod}
-      error={teamError}
-      hasRequiredAccountAuth={hasRequiredAccountAuth}
-      isActionLoading={teamActionLoading}
-      isLoading={teamLoading}
-      isSignedIn={isPolicySignedIn}
-      isSupabaseEnabled={isSupabaseConfigured}
-      invites={teamInvites}
-      liveRows={teamLiveRows}
-      pendingInvite={pendingInvite}
-      rows={teamRows}
-      selectedTeam={selectedTeam}
-      statusMessage={teamStatusMessage}
-      statusTone={teamStatusTone}
-      teams={teams}
-      onAcceptInvite={pendingInvite ? handleAcceptPendingInvite : handleAcceptInvite}
-      onCopyInvite={copyTextToClipboard}
-      onCreateInvite={handleCreateInvite}
-      onCreateTeam={handleCreateTeam}
-      onPeriodChange={setActiveTeamPeriod}
-      onPublishTeamFocus={handlePublishTeamFocus}
-      onRefresh={refreshTeamData}
-      onRevokeInvite={handleRevokeInvite}
-      onSelectTeam={selectTeam}
-      onSignIn={onAuthRequired}
-      onPendingInviteClear={onPendingInviteClear}
-      onStopTeamFocusSharing={handleStopTeamFocusSharing}
-    />
+    <div className="page content content--team">
+      <TeamWorkspace
+        isSupabaseEnabled={isSupabaseConfigured}
+        hasRequiredAccountAuth={hasRequiredAccountAuth}
+        isSignedIn={isPolicySignedIn}
+        startOfDayMinutes={startOfDayMinutes}
+        user={user}
+        controller={controller}
+        subView={teamSubView}
+        onSubViewChange={onTeamSubViewChange}
+        pendingInvite={pendingInvite}
+        onSignIn={onAuthRequired}
+        onCopyInvite={copyTextToClipboard}
+        onAcceptPendingInvite={handleAcceptPendingInvite}
+        onPendingInviteClear={onPendingInviteClear}
+      />
+    </div>
   );
 }

@@ -188,6 +188,19 @@ pub struct ProjectAssignmentsSaveQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TeamProjectsUpsertQuery {
+    pub organization_id: String,
+    pub projects: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamProjectAssignmentsSaveQuery {
+    pub assignments: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectPassRecordQuery {
     pub input: serde_json::Value,
 }
@@ -691,6 +704,69 @@ pub async fn tracker_get_project_assignments(
     async_runtime::spawn_blocking(move || {
         controller
             .get_project_assignments(&app, query.day, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_team_projects(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_team_projects(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_upsert_team_projects(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: TeamProjectsUpsertQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .upsert_team_projects(&app, query.organization_id, query.projects)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_team_project_assignments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: TeamProjectAssignmentsSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_team_project_assignments(&app, query.assignments)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_team_project_assignments(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_team_project_assignments(&app, query.day, query.start, query.end)
             .map_err(|error| error.to_string())
     })
     .await

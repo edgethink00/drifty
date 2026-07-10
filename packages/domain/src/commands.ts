@@ -35,6 +35,10 @@ export type TrackerCommand =
   | "tracker_delete_project_anchor"
   | "tracker_save_project_assignments"
   | "tracker_get_project_assignments"
+  | "tracker_get_team_projects"
+  | "tracker_upsert_team_projects"
+  | "tracker_save_team_project_assignments"
+  | "tracker_get_team_project_assignments"
   | "tracker_record_project_pass"
   | "tracker_get_project_pass_runs"
   | "tracker_save_ai_review_events"
@@ -321,6 +325,38 @@ export interface ProjectAssignmentsSaveResult {
   skippedManual: number;
 }
 
+export interface TeamProject {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string;
+  color: string;
+  status: ProjectStatus;
+  anchors: ProjectAnchor[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamProjectInput {
+  id: string;
+  name: string;
+  description: string;
+  color?: string;
+  status?: ProjectStatus;
+  anchors?: ProjectAnchor[];
+}
+
+export interface TeamProjectAssignmentRecord {
+  segmentId: string;
+  teamProjectId: string | null;
+  source: ProjectAssignmentSource;
+  confidence?: number | null;
+  passId?: number | null;
+  chunkFingerprint?: string | null;
+  assignedAt?: string | null;
+  stale?: boolean | null;
+}
+
 export type ProjectPassTrigger = "schedule" | "open" | "eod" | "manual" | "backfill" | "discovery";
 
 export interface ProjectPassRunInput {
@@ -502,6 +538,10 @@ export interface TrackerApi {
   deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string): Promise<{ deleted: number }>;
   saveProjectAssignments(assignments: ProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
   getProjectAssignments(query: TimelineQuery): Promise<ProjectAssignmentRecord[]>;
+  getTeamProjects(): Promise<TeamProject[]>;
+  upsertTeamProjects(organizationId: string, projects: TeamProjectInput[]): Promise<TeamProject[]>;
+  saveTeamProjectAssignments(assignments: TeamProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
+  getTeamProjectAssignments(query: TimelineQuery): Promise<TeamProjectAssignmentRecord[]>;
   recordProjectPass(input: ProjectPassRunInput): Promise<ProjectPassRunRecord>;
   getProjectPassRuns(query: TimelineQuery): Promise<ProjectPassRun[]>;
   saveAiReviewEvents(events: AiReviewEventInput[]): Promise<{ saved: number }>;

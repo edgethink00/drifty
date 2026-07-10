@@ -16,6 +16,7 @@ import {
   type ProjectPassPromptInput,
   type ProjectPassPromptProject,
   type ProjectPassTrigger,
+  type TeamProjectAssignmentRecord,
   type ProductivityLabel,
   type TrackerApi,
 } from "@drifty/domain";
@@ -291,14 +292,26 @@ export function runProjectPass(options: RunProjectPassOptions): Promise<ProjectP
 
 async function runProjectPassInner(options: RunProjectPassOptions): Promise<ProjectPassSummary> {
   const { tracker, inference, range, trigger } = options;
-  const [segments, projects] = await Promise.all([
+  const [segments, projects, teamProjects] = await Promise.all([
     tracker.getTimeline({ start: range.start, end: range.end }),
     tracker.getProjects(),
+    tracker.getTeamProjects().catch(() => []),
   ]);
   const activeProjects = projects.filter((project) => project.status === "active");
-  const validProjectIds = new Set(activeProjects.map((project) => project.id));
+  // Classify once against the union of personal + subscribed team projects; team
+  // assignments route to the local team mirror (below) and never touch the personal
+  // project table's FK.
+  const activeTeamProjects = teamProjects.filter((project) => project.status === "active");
+  const teamProjectIds = new Set(activeTeamProjects.map((project) => project.id));
+  const validProjectIds = new Set([
+    ...activeProjects.map((project) => project.id),
+    ...teamProjectIds,
+  ]);
 
-  const promptProjects = activeProjects.map((project) => toPromptProject(project));
+  const promptProjects = [
+    ...activeProjects.map((project) => toPromptProject(project)),
+    ...activeTeamProjects.map((project) => toPromptProject(project)),
+  ];
   const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
   const windows = buildProjectPassAnalysisWindows(segments, {
     range,
@@ -320,12 +333,17 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   // prompt version) already has fresh stored assignments: nothing changed, so the
   // model call is pure wasted cost/tokens. Assignments are per-segment upserts, so
   // a skipped chunk's existing rows survive untouched.
-  const cachedChunkFingerprints = new Set(
-    await Promise.resolve()
-      .then(() => tracker.getProjectAssignments({ start: range.start, end: range.end }))
+  const [cachedPersonalFingerprints, cachedTeamFingerprints] = await Promise.all([
+    tracker
+      .getProjectAssignments({ start: range.start, end: range.end })
       .then((rows) => rows.filter((row) => !row.stale && row.chunkFingerprint).map((row) => row.chunkFingerprint as string))
       .catch(() => [] as string[]),
-  );
+    tracker
+      .getTeamProjectAssignments({ start: range.start, end: range.end })
+      .then((rows) => rows.filter((row) => !row.stale && row.chunkFingerprint).map((row) => row.chunkFingerprint as string))
+      .catch(() => [] as string[]),
+  ]);
+  const cachedChunkFingerprints = new Set([...cachedPersonalFingerprints, ...cachedTeamFingerprints]);
 
   const chunks = planProjectPassChunks(windows);
   options.onProgress?.(0, chunks.length);
@@ -389,8 +407,41 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     promptVersion: PROJECT_PASS_PROMPT_VERSION,
   });
 
-  if (bufferedAssignments.length) {
-    await tracker.saveProjectAssignments(bufferedAssignments.map((assignment) => ({ ...assignment, passId: passRecord.id })));
+  // Route by scope: team-project assignments persist to the local team mirror (their
+  // ids live in team_projects, not the personal projects FK); everything else stays
+  // personal. When team projects exist, write BOTH tables for every re-classified
+  // segment (owning table gets the id, the other gets null) so a segment that moved
+  // across the personal/team boundary can't leave a stale row inflating the other
+  // side's totals. Null AI rows never clobber manual assignments (guarded in the
+  // tracker save). With no team projects, this is the original personal-only path.
+  const hasTeamProjects = teamProjectIds.size > 0;
+  const personalAssignments: ProjectAssignmentRecord[] = [];
+  const teamAssignments: TeamProjectAssignmentRecord[] = [];
+  for (const assignment of bufferedAssignments) {
+    const isTeam = Boolean(assignment.projectId && teamProjectIds.has(assignment.projectId));
+    personalAssignments.push({
+      ...assignment,
+      projectId: isTeam ? null : assignment.projectId,
+      passId: passRecord.id,
+    });
+    if (hasTeamProjects) {
+      teamAssignments.push({
+        segmentId: assignment.segmentId,
+        teamProjectId: isTeam ? assignment.projectId : null,
+        source: assignment.source,
+        confidence: assignment.confidence,
+        passId: passRecord.id,
+        chunkFingerprint: assignment.chunkFingerprint,
+        assignedAt: assignment.assignedAt,
+        stale: assignment.stale,
+      });
+    }
+  }
+  if (personalAssignments.length) {
+    await tracker.saveProjectAssignments(personalAssignments);
+  }
+  if (teamAssignments.length) {
+    await tracker.saveTeamProjectAssignments(teamAssignments);
   }
   if (bufferedClassifications.length) {
     await tracker.saveClassifications(bufferedClassifications);

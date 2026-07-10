@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-upsert-team-projects"
+description = "Enables the tracker_upsert_team_projects command without any pre-configured scope."
+commands.allow = ["tracker_upsert_team_projects"]
+
+[[permission]]
+identifier = "deny-tracker-upsert-team-projects"
+description = "Denies the tracker_upsert_team_projects command without any pre-configured scope."
+commands.deny = ["tracker_upsert_team_projects"]
