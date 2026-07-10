@@ -1,8 +1,10 @@
 declare const __DRIFTY_BUILD_COMMIT__: string;
+declare const __DRIFTY_APP_VERSION__: string;
 
 export type BuildInfo = {
   readonly commit: string;
   readonly shortCommit: string;
+  readonly version: string;
 };
 
 const UNKNOWN_BUILD_COMMIT = "unknown";
@@ -23,7 +25,13 @@ export function createBuildInfo(rawCommit: string): BuildInfo {
   return {
     commit,
     shortCommit: buildShortCommit(commit),
+    version: normalizeAppVersion(typeof __DRIFTY_APP_VERSION__ === "string" ? __DRIFTY_APP_VERSION__ : "unknown"),
   };
+}
+
+export function normalizeAppVersion(rawVersion: string): string {
+  const trimmed = rawVersion.trim();
+  return trimmed.length > 0 ? trimmed : "unknown";
 }
 
 const RAW_BUILD_COMMIT = typeof __DRIFTY_BUILD_COMMIT__ === "string" ? __DRIFTY_BUILD_COMMIT__ : UNKNOWN_BUILD_COMMIT;

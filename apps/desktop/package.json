@@ -13,6 +13,8 @@
   "dependencies": {
     "@drifty/charts": "1.2.16",
     "@drifty/domain": "1.2.16",
+    "@sentry/react": "^10.64.0",
+    "@supabase/sentry-js-integration": "^0.3.0",
     "@supabase/supabase-js": "^2.105.0",
     "@tauri-apps/api": "^2.0.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
@@ -24,6 +26,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.3.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/react": "^18.3.12",

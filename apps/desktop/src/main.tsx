@@ -1,6 +1,8 @@
+import "./instrument";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
+import { captureSentryException } from "./lib/observability/sentry";
 import "./styles.css";
 import "./features/history/history.css";
 import "./features/dashboard/dashboard.css";
@@ -40,6 +42,13 @@ class BootstrapErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: Error) {
     return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    captureSentryException(error, {
+      tags: { surface: "bootstrap", phase: "react_render" },
+      extra: { componentStack: errorInfo.componentStack ?? "" },
+    });
   }
 
   render() {
@@ -109,6 +118,9 @@ function BootstrapLoader() {
           );
         });
       } catch (error) {
+        captureSentryException(error, {
+          tags: { surface: "bootstrap", phase: "startup" },
+        });
         const root = document.getElementById("root");
         if (!root) return;
         const message = error instanceof Error ? error.message : toSafeErrorMessage(error);
@@ -224,6 +236,10 @@ window.addEventListener("unhandledrejection", (event) => {
   if (!root) return;
   const message = toSafeErrorMessage(event.reason);
   const surface = resolveCurrentSurface();
+
+  captureSentryException(event.reason, {
+    tags: { surface, phase: window.__DRIFTY_BOOTSTRAPPED__ ? "runtime_rejection" : "startup_rejection" },
+  });
 
   if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "drift-alarm")) {
     event.preventDefault();

@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from typing import Final, Literal, TypedDict
 
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
-JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+JsonValue = object
 
 
 class OnScreenWindowRow(TypedDict):

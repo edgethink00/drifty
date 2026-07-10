@@ -1240,6 +1240,9 @@ fn command_from_argv(argv: Vec<OsString>) -> Result<Command, TrackerError> {
     };
     let mut command = Command::new(program);
     command.args(args);
+    for (key, value) in crate::observability::tracker_sentry_env_vars() {
+        command.env(key, value);
+    }
     Ok(command)
 }
 

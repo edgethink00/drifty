@@ -38,6 +38,7 @@ from app.tracker.adaptive_context.developer_diagnostics import (
     apply_developer_diagnostics_env as _apply_developer_diagnostics_env,
     save_developer_diagnostics,
 )
+from app.sentry_setup import capture_tracker_exception, init_tracker_sentry
 
 if TYPE_CHECKING:
     from app.tracker.macos_workspace import Snapshot
@@ -1030,11 +1031,12 @@ def daemon():
         while True:
             try:
                 last_capture_tick = _daemon_tick(db, last_capture_tick)
-            except Exception:
+            except Exception as exc:
                 # One failed tick (Apple Event failure, a locked database,
                 # an unexpected snapshot shape, ...) must not kill tracking
                 # until the next app relaunch; log it and keep sampling.
                 # KeyboardInterrupt/SystemExit still propagate and stop the loop.
+                capture_tracker_exception(exc, {"phase": "daemon_tick"})
                 print("tracker daemon tick failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
                 # A failed tick means a capture gap, so the next successful
@@ -1052,11 +1054,20 @@ def _dispatch(request: dict):
     return handler(payload)
 
 
+def _safe_request_command(request: dict | None) -> str:
+    if not request:
+        return "unknown"
+    command = request.get("command")
+    return command if isinstance(command, str) else "unknown"
+
+
 def handle_request(raw_request: str):
+    request = None
     try:
         request = json.loads(raw_request)
         print(json.dumps(_dispatch(request)))
     except Exception as exc:
+        capture_tracker_exception(exc, {"phase": "request", "command": _safe_request_command(request)})
         print(json.dumps(response(False, error=str(exc))))
 
 
@@ -1074,11 +1085,13 @@ def serve():
         if not line:
             continue
         request_id = None
+        request = None
         try:
             request = json.loads(line)
             request_id = request.get("id")
             envelope = _dispatch(request)
         except Exception as exc:  # never let a single bad request kill the server
+            capture_tracker_exception(exc, {"phase": "serve", "command": _safe_request_command(request)})
             envelope = response(False, error=str(exc))
         if request_id is not None:
             envelope = {**envelope, "id": request_id}
@@ -1097,6 +1110,8 @@ def main():
     global DB_PATH
     if args.db_path:
         DB_PATH = Path(args.db_path)
+
+    init_tracker_sentry(args.mode)
 
     if args.mode == "daemon":
         daemon()
