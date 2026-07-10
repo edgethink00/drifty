@@ -59,7 +59,9 @@ describe("FlowChartView lifecycle", () => {
     fireNativePointerMove(firstElement(nextDayCells), 160, 120);
 
     expect(document.querySelector(".flow-hover-card")?.textContent).toContain("02:00–02:06");
-    expect(document.querySelectorAll(".flow-cell--hover-group")).toHaveLength(2);
-    expect(document.querySelectorAll(".flow-hover-group-highlight")).toHaveLength(1);
+    const highlights = document.querySelectorAll(".flow-hover-group-highlight");
+    expect(highlights).toHaveLength(1);
+    // Both remounted cells belong to the reattached hover group (row span 2).
+    expect((highlights[0] as HTMLElement).style.getPropertyValue("--flow-hover-row-span")).toBe("2");
   });
 });

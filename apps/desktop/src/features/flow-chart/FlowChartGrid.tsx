@@ -1,12 +1,10 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { CSSProperties } from "react";
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
-import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
-import type { FlowHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { clockHourForLogicalHour } from "../../lib/formatting";
 import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
-import { flowBlockHoverGroupPosition, type FlowBlockHoverGroup } from "./flowHoverGroups";
+import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import { NO_PROJECT_COLOR } from "./projectFlowView";
 
 type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
@@ -18,8 +16,6 @@ type FlowChartGridProps = {
   readonly currentHourIndex: number | null;
   readonly currentMinuteOffset: number | null;
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
-  readonly hoveredBlock: FlowHoverState | null;
-  readonly hoveredGroupMinutes: ReadonlySet<number> | null;
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly setFlowGridElement: (element: HTMLDivElement | null) => void;
 };
@@ -28,15 +24,16 @@ type FlowCurrentHourStyle = CSSProperties & Record<"--flow-current-hour", number
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
-export function FlowChartGrid({
+// Memoized so pointer-driven hover (owned by FlowHoverLayer) never re-renders the grid's
+// hundreds of cells. All props are referentially stable across a hover: the maps are
+// memoized upstream and the hour/minute markers change only on the wall-clock tick.
+export const FlowChartGrid = memo(function FlowChartGrid({
   blockByCell,
   boundaryMinutes,
   colorMode,
   currentHourIndex,
   currentMinuteOffset,
   hoverGroupsByCell,
-  hoveredBlock,
-  hoveredGroupMinutes,
   intervalMinutes,
   setFlowGridElement,
 }: FlowChartGridProps) {
@@ -60,7 +57,6 @@ export function FlowChartGrid({
         })}
       </div>
       <div className="flow-chart-grid" ref={setFlowGridElement}>
-        {hoveredBlock ? <FlowHoverGroupHighlights group={hoveredBlock.group} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} /> : null}
         {rowMinuteOffsets.map((minuteOffset) => {
           const isCurrentMinuteRow = minuteOffset === currentMinuteOffset;
           const nearestLabelMinuteOffset = currentMinuteOffset !== null && currentMinuteOffset + intervalMinutes < 60
@@ -93,12 +89,6 @@ export function FlowChartGrid({
                     />
                   );
                 }
-                const hoverGroup = hoverGroupsByCell.get(block.minuteOfDay);
-                if (!hoverGroup) return null;
-                const hoverGroupPosition = hoveredGroupMinutes?.has(block.minuteOfDay) === true
-                  ? flowBlockHoverGroupPosition(hoverGroup, block.minuteOfDay)
-                  : null;
-                const hoverGroupClass = hoverGroupPosition ? ` flow-cell--hover-group flow-cell--hover-group-${hoverGroupPosition}` : "";
                 const isProjectMode = colorMode === "project";
                 const unclassifiedClass = !isProjectMode && block.category === "unknown"
                   ? ` flow-cell--unclassified${block.classificationSource === "unknown" ? " flow-cell--unclassified-pending" : ""}`
@@ -113,7 +103,7 @@ export function FlowChartGrid({
 
                 return (
                   <button
-                    className={`flow-cell ${colorClass}${unclassifiedClass}${remoteDeviceClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}${hoverGroupClass}`}
+                    className={`flow-cell ${colorClass}${unclassifiedClass}${remoteDeviceClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
@@ -130,4 +120,4 @@ export function FlowChartGrid({
       </div>
     </>
   );
-}
+});

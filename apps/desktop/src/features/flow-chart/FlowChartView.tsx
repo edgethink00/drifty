@@ -4,9 +4,9 @@ import { logicalMinuteOfDay, normalizeStartOfDayMinutes, type FlowBlock, type Fl
 import { FlowChartGrid } from "./FlowChartGrid";
 import { FlowChartHeader } from "./FlowChartHeader";
 import type { FlowColorMode } from "./FlowChartTypes";
-import { FlowHoverCard, FlowLegendHoverCard, type FlowHoverState, type FlowLegendHoverState } from "./FlowChartHoverCards";
+import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
+import { FlowHoverLayer } from "./FlowHoverLayer";
 import { buildFlowBlockHoverGroups } from "./flowHoverGroups";
-import { useFlowChartHoverDelegation } from "./useFlowChartHoverDelegation";
 import type { ProjectLegendEntry } from "./projectFlowView";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
@@ -40,19 +40,13 @@ export function FlowChartView({
   onColorModeChange?: (mode: FlowColorMode) => void;
   deviceLabelById?: ReadonlyMap<string, string>;
 }) {
-  const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   const [internalColorMode, setInternalColorMode] = useState<FlowColorMode>("category");
   const colorMode = controlledColorMode ?? internalColorMode;
   const setColorMode = onColorModeChange ?? setInternalColorMode;
   const effectiveColorMode: FlowColorMode = colorMode === "project" && !projectModeAvailable ? "category" : colorMode;
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
-  const hoveredBlockCardRef = useRef<HTMLDivElement>(null);
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
-  const hoveredGroupMinutes = useMemo(
-    () => hoveredBlock ? new Set(hoveredBlock.group.blocks.map((block) => block.minuteOfDay)) : null,
-    [hoveredBlock],
-  );
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const currentLogicalMinute = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined ? logicalMinuteOfDay(currentMinuteOfDay, boundaryMinutes) : null;
   const currentHourIndex = currentLogicalMinute !== null ? Math.floor(currentLogicalMinute / 60) : null;
@@ -68,7 +62,6 @@ export function FlowChartView({
     () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes),
     [blocks, boundaryMinutes, intervalMinutes],
   );
-  useFlowChartHoverDelegation({ gridElement: flowGridElement, cardRef: hoveredBlockCardRef, hoverGroupsByCell, setHoveredBlock });
   const minuteAxisFontSize = intervalMinutes === 3 ? "0.52rem" : "0.58rem";
   const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height" | "--flow-minute-axis-font-size" | "--flow-row-count", string> = {
     "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
@@ -99,13 +92,18 @@ export function FlowChartView({
         currentHourIndex={currentHourIndex}
         currentMinuteOffset={currentMinuteOffset}
         hoverGroupsByCell={hoverGroupsByCell}
-        hoveredBlock={hoveredBlock}
-        hoveredGroupMinutes={hoveredGroupMinutes}
         intervalMinutes={intervalMinutes}
         setFlowGridElement={setFlowGridElement}
       />
 
-      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={hoveredBlockCardRef} deviceLabelById={deviceLabelById} /> : null}
+      <FlowHoverLayer
+        gridElement={flowGridElement}
+        hoverGroupsByCell={hoverGroupsByCell}
+        intervalMinutes={intervalMinutes}
+        boundaryMinutes={boundaryMinutes}
+        appIcons={appIcons}
+        deviceLabelById={deviceLabelById}
+      />
       {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
     </section>
   );

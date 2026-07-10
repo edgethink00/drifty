@@ -267,16 +267,14 @@
 }
 
 button.flow-cell { cursor: pointer; }
-button.flow-cell:hover,
+/* Hover feedback is carried entirely by the group highlight overlay (see
+   .flow-hover-group-highlight), so cells get no per-cell hover styling — this keeps a
+   hovered run visually uniform. Keyboard focus keeps its own ring for accessibility. */
 button.flow-cell:focus {
-  z-index: 1;
+  z-index: 2;
   filter: brightness(1.08);
   outline: none;
   transform: none;
-}
-
-button.flow-cell:focus {
-  z-index: 2;
   box-shadow: inset 0 0 0 1px var(--surface), 0 0 0 2px var(--text);
 }
 

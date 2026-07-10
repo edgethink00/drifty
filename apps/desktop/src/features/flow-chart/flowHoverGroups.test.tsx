@@ -62,12 +62,9 @@ describe("flow hover groups", () => {
     const hoverCard = document.querySelector(".flow-hover-card");
     expect(hoverCard?.textContent).toContain("01:00–01:30");
     expect(hoverCard?.textContent).toContain("30m");
-    for (const cell of groupedCells) expect(cell.classList.contains("flow-cell--hover-group")).toBe(true);
-    expect(groupedCells[0].classList.contains("flow-cell--hover-group-start")).toBe(true);
-    expect(groupedCells[4].classList.contains("flow-cell--hover-group-middle")).toBe(true);
-    expect(groupedCells[9].classList.contains("flow-cell--hover-group-end")).toBe(true);
-    expect(groupedCells[4].classList.contains("flow-cell--hover-group-start")).toBe(false);
-    expect(groupedCells[4].classList.contains("flow-cell--hover-group-end")).toBe(false);
+    // The whole run is highlighted by a single overlay segment rather than per-cell
+    // classes, so the grid never re-renders on hover (see FlowHoverLayer).
+    for (const cell of groupedCells) expect(cell.classList.contains("flow-cell--hover-group")).toBe(false);
 
     const highlights = document.querySelectorAll(".flow-hover-group-highlight");
     expect(highlights).toHaveLength(1);

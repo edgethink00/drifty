@@ -10,8 +10,6 @@ export type FlowBlockHoverGroup = {
   readonly durationSeconds: number;
 };
 
-export type FlowBlockHoverGroupPosition = "single" | "start" | "middle" | "end";
-
 type MutableFlowBlockHoverGroup = {
   block: FlowBlock;
   blocks: FlowBlock[];
@@ -88,13 +86,4 @@ export function buildFlowBlockHoverGroups(blocks: readonly FlowBlock[], interval
   if (currentGroup !== null) finishGroup(currentGroup, groupsByMinute);
 
   return groupsByMinute;
-}
-
-export function flowBlockHoverGroupPosition(group: FlowBlockHoverGroup, minuteOfDay: number): FlowBlockHoverGroupPosition | null {
-  const blockIndex = group.blocks.findIndex((block) => block.minuteOfDay === minuteOfDay);
-  if (blockIndex < 0) return null;
-  if (group.blocks.length === 1) return "single";
-  if (blockIndex === 0) return "start";
-  if (blockIndex === group.blocks.length - 1) return "end";
-  return "middle";
 }

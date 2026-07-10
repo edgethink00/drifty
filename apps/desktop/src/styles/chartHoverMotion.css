@@ -107,38 +107,13 @@
   transition: box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);
 }
 
-button.flow-cell:hover,
 button.flow-cell:focus {
   transform: none;
-}
-
-button.flow-cell.flow-cell--hover-group {
-  filter: none;
-  box-shadow: none;
 }
 
 .flow-cell__mark {
   transform-origin: center;
   transition: opacity 160ms var(--ease-out-quart), background 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);
-}
-
-.flow-cell--hover-group .flow-cell__mark {
-  box-shadow: none;
-  opacity: 0;
-  transform: none;
-}
-
-button.flow-cell:hover .flow-cell__mark,
-button.flow-cell:focus .flow-cell__mark {
-  background: color-mix(in srgb, var(--surface) 16%, transparent);
-  box-shadow: none;
-  opacity: 0.5;
-  transform: none;
-}
-
-button.flow-cell.flow-cell--hover-group:hover .flow-cell__mark,
-button.flow-cell.flow-cell--hover-group:focus .flow-cell__mark {
-  opacity: 0;
 }
 
 .flow-hover-group-highlight {

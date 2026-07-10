@@ -20,28 +20,20 @@ describe("chart hover motion", () => {
 
   it("keeps flow grid cells stable while the inner overlay breathes on hover", () => {
     const flowCellRule = cssRule(motionStyles, ".flow-cell");
-    const flowCellHoverRule = motionStyles.match(/button\.flow-cell:hover,\s*button\.flow-cell:focus\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-    const flowCellGroupRule = cssRule(motionStyles, "button.flow-cell.flow-cell--hover-group");
     const flowHoverGroupHighlightRule = cssRule(motionStyles, ".flow-hover-group-highlight");
     const flowMarkRule = cssRule(motionStyles, ".flow-cell__mark");
-    const flowMarkGroupRule = cssRule(motionStyles, ".flow-cell--hover-group .flow-cell__mark");
-    const flowMarkHoverRule = motionStyles.match(/button\.flow-cell:hover \.flow-cell__mark,\s*button\.flow-cell:focus \.flow-cell__mark\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-    const flowMarkGroupHoverRule = motionStyles.match(/button\.flow-cell\.flow-cell--hover-group:hover \.flow-cell__mark,\s*button\.flow-cell\.flow-cell--hover-group:focus \.flow-cell__mark\s*\{([\s\S]*?)\}/)?.[1] ?? "";
 
+    // Hover feedback is owned entirely by the group highlight overlay, so grid cells carry
+    // no hover-driven per-cell styling — the grid never reacts to pointer movement. There is
+    // no longer a per-cell hover-group class (the overlay replaced it).
     expect(flowCellRule).toContain("transition: box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);");
-    expect(flowCellHoverRule).toContain("transform: none;");
-    expect(flowCellGroupRule).toContain("filter: none;");
-    expect(flowCellGroupRule).toContain("box-shadow: none;");
+    expect(motionStyles).not.toContain("flow-cell--hover-group");
+    expect(motionStyles).not.toContain("button.flow-cell:hover");
     expect(flowHoverGroupHighlightRule).toContain("position: absolute;");
     expect(flowHoverGroupHighlightRule).toContain("height: calc((100% / var(--flow-row-count)) * var(--flow-hover-row-span));");
     expect(flowHoverGroupHighlightRule).toContain("background: color-mix(in srgb, var(--surface) 26%, transparent);");
     expect(flowHoverGroupHighlightRule).toContain("animation: flow-hover-group-in 160ms var(--ease-out-quart) both;");
     expect(flowMarkRule).toContain("transition: opacity 160ms var(--ease-out-quart), background 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);");
-    expect(flowMarkGroupRule).toContain("opacity: 0;");
-    expect(flowMarkGroupRule).toContain("box-shadow: none;");
-    expect(flowMarkHoverRule).toContain("opacity: 0.5;");
-    expect(flowMarkHoverRule).toContain("transform: none;");
-    expect(flowMarkGroupHoverRule).toContain("opacity: 0;");
   });
 
   it("animates compact donut and stacked bar hovers with graph-specific feedback", () => {
