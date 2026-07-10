@@ -44,12 +44,12 @@ class AdaptiveContextNativeAppExtractorTests(unittest.TestCase):
         self.assertNotIn("body", serialized.lower())
 
     def test_native_obsidian_extracts_title_context_without_file_path(self) -> None:
-        # Given: Obsidian exposes a title hierarchy but no readable file path.
+        # Given: Obsidian titles follow "note - vault - Obsidian <version>" on macOS.
         capture = AdaptiveContextCaptureInput(
             observed_at="2026-07-10T00:00:00+00:00",
             app_name="Obsidian",
             bundle_id="md.obsidian",
-            window_title="Daily note - Client Alpha - Work Vault - Obsidian",
+            window_title="Daily note - Work Vault - Obsidian 1.12.7",
         )
 
         # When: local Markdown capture is enabled.
@@ -62,16 +62,74 @@ class AdaptiveContextNativeAppExtractorTests(unittest.TestCase):
         ):
             context = adaptive_content_context_for_capture(capture)
 
-        # Then: title-derived local note structure is stored without body text.
+        # Then: the versioned app suffix is dropped instead of leaking into project values.
         self.assertIsNotNone(context)
         items = context["items"] if context is not None else []
         self.assertEqual({item["sourceFamily"] for item in items}, {"local_notes_markdown"})
         values_by_kind = {item["kind"]: item["values"] for item in items}
         self.assertIn("Daily note", values_by_kind["heading"])
-        self.assertIn("Client Alpha", values_by_kind["folder"])
-        self.assertIn("Work Vault", values_by_kind["project"])
+        self.assertIn("Work Vault", values_by_kind["folder"])
+        self.assertNotIn("project", values_by_kind)
+        all_item_values = [value for item in items for value in item["values"]]
+        self.assertNotIn("Obsidian 1.12.7", all_item_values)
         serialized = json.dumps(context)
         self.assertNotIn("body", serialized.lower())
+
+    def test_issue_settings_paths_are_not_repos(self) -> None:
+        # Given: a GitHub account settings page rather than a repository.
+        capture = AdaptiveContextCaptureInput(
+            observed_at="2026-07-10T00:00:00+00:00",
+            app_name="Safari",
+            bundle_id="com.apple.Safari",
+            window_title="Personal access tokens",
+            browser_name="Safari",
+            site_domain="github.com",
+            site_title="Personal access tokens",
+            site_url="https://github.com/settings/tokens",
+        )
+
+        # When: work tracker capture is enabled.
+        with patch.dict(
+            os.environ,
+            {
+                "DRIFTY_ENABLE_ADAPTIVE_CONTEXT_CAPTURE": "1",
+                "DRIFTY_ADAPTIVE_CONTEXT_SOURCE_FAMILIES": "work_tracker_dev_platform",
+            },
+        ):
+            context = adaptive_content_context_for_capture(capture)
+
+        # Then: no repo item is derived from the settings path.
+        items = context["items"] if context is not None else []
+        self.assertNotIn("repo", {item["kind"] for item in items})
+
+    def test_communication_channel_drops_unread_count_badge(self) -> None:
+        # Given: a Gmail tab whose title carries a churning unread-count badge.
+        capture = AdaptiveContextCaptureInput(
+            observed_at="2026-07-10T00:00:00+00:00",
+            app_name="Aside",
+            bundle_id="com.aside.browser",
+            window_title="받은편지함 (843) - user@example.com - Gmail",
+            browser_name="Aside",
+            site_domain="mail.google.com",
+            site_title="받은편지함 (843) - user@example.com - Gmail",
+        )
+
+        # When: communication metadata capture is enabled.
+        with patch.dict(
+            os.environ,
+            {
+                "DRIFTY_ENABLE_ADAPTIVE_CONTEXT_CAPTURE": "1",
+                "DRIFTY_ADAPTIVE_CONTEXT_SOURCE_FAMILIES": "communication_metadata",
+            },
+        ):
+            context = adaptive_content_context_for_capture(capture)
+
+        # Then: the channel value is stable across unread-count changes.
+        self.assertIsNotNone(context)
+        items = context["items"] if context is not None else []
+        values_by_kind = {item["kind"]: item["values"] for item in items}
+        self.assertIn("받은편지함", values_by_kind["channel"])
+        self.assertNotIn("받은편지함 (843)", values_by_kind["channel"])
 
 
 if __name__ == "__main__":

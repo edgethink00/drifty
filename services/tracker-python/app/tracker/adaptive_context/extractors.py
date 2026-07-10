@@ -14,6 +14,7 @@ from app.tracker.adaptive_context.normalization import (
     COMMUNICATION_DOMAINS,
     DESIGN_DOMAINS,
     ISSUE_DOMAINS,
+    NON_REPO_PATH_SEGMENTS,
     calendar_structured_fields,
     clean_context_values,
     communication_structured_fields,
@@ -201,7 +202,8 @@ def issue_tool_items(capture: AdaptiveContextCaptureInput) -> list[AdaptiveConte
 
     fields = capture.structured_fields
     parts = url_path_parts(capture.site_url)
-    repo_values = [f"{parts[0]}/{parts[1]}"] if len(parts) >= 2 else []
+    # Account/settings-style paths (github.com/settings/..., sentry.io/organizations/...) are not repos.
+    repo_values = [f"{parts[0]}/{parts[1]}"] if len(parts) >= 2 and parts[0].lower() not in NON_REPO_PATH_SEGMENTS else []
     source_family = "work_tracker_dev_platform"
     items: list[AdaptiveContextItemPayload] = []
     append_adaptive_item(items, adaptive_item("work_tracker_dev_platform:repo", 1, "repo", source_family, repo_values, "metadata_only"))
