@@ -16,40 +16,15 @@ export type TeamResult<T = undefined> =
   | { readonly success: true; readonly error: null; readonly data: T }
   | { readonly success: false; readonly error: string; readonly reason: TeamFailureReason };
 
-export type TeamShareScope = "private" | "focus_only";
 export type TeamInviteStatus = "pending" | "accepted" | "revoked" | "expired";
-export type TeamPresenceState = "active_now" | "recent" | "shared" | "private";
 
 export type OwnTeam = {
   readonly organization_id: string;
   readonly organization_name: string;
   readonly member_display_name: string;
   readonly role_label: string;
-  readonly focus_share_scope: TeamShareScope;
   readonly member_count: number;
-  readonly focus_seconds: number;
-  readonly focus_score: number;
-  readonly private_rank: number | null;
-  readonly window_start_date: string;
-  readonly window_end_date: string;
   readonly updated_at: string;
-};
-
-export type TeamFocusSummaryRow = Omit<OwnTeam, "member_count">;
-
-export type TeamLiveStatusRow = {
-  readonly organization_id: string;
-  readonly organization_name: string;
-  readonly member_display_name: string;
-  readonly profile_avatar_url: string;
-  readonly role_label: string;
-  readonly focus_share_scope: TeamShareScope;
-  readonly presence_state: TeamPresenceState;
-  readonly focus_seconds: number;
-  readonly focus_score: number;
-  readonly window_start_date: string;
-  readonly window_end_date: string;
-  readonly last_shared_at: string;
 };
 
 export type TeamInvite = {
@@ -62,24 +37,6 @@ export type TeamInvite = {
   readonly status: TeamInviteStatus;
   readonly expires_at: string;
   readonly created_at: string;
-  readonly updated_at: string;
-};
-
-export type PublishedTeamFocusTotal = {
-  readonly organization_id: string;
-  readonly period: TeamPeriod;
-  readonly focus_share_scope: TeamShareScope;
-  readonly focus_seconds: number;
-  readonly focus_score: number;
-  readonly window_start_date: string;
-  readonly window_end_date: string;
-  readonly updated_at: string;
-};
-
-export type StoppedTeamFocusSharing = {
-  readonly organization_id: string;
-  readonly focus_share_scope: TeamShareScope;
-  readonly deleted_focus_total_count: number;
   readonly updated_at: string;
 };
 
@@ -191,26 +148,6 @@ export type CreateTeamInput = {
   readonly roleLabel?: string | null;
 };
 
-export type FetchTeamFocusSummaryInput = {
-  readonly organization_id: string;
-  readonly period?: TeamPeriod | string | null;
-};
-
-export type FetchTeamLiveStatusInput = FetchTeamFocusSummaryInput;
-
-export type PublishTeamFocusTotalInput = {
-  readonly organization_id: string;
-  readonly period: TeamPeriod | string;
-  readonly display_name: string;
-  readonly role_label: string;
-  readonly focus_seconds: number;
-  readonly focus_score: number;
-  readonly window_start_date: string;
-  readonly window_end_date: string;
-  readonly timezone: string;
-};
-
-export type StopTeamFocusSharingInput = { readonly organization_id: string };
 export type FetchTeamInvitesInput = { readonly organization_id: string };
 export type CreateTeamInviteInput = { readonly organization_id: string; readonly role_label?: string | null };
 export type AcceptTeamInviteInput = { readonly inviteKey: string };
@@ -226,10 +163,6 @@ export type AuthUser = {
 export type RpcProcedure =
   | "get_own_organization_teams"
   | "create_organization_team"
-  | "get_organization_focus_summary"
-  | "get_organization_live_status"
-  | "publish_organization_focus_total"
-  | "stop_organization_focus_sharing"
   | "get_organization_invites"
   | "create_organization_project"
   | "update_organization_project"

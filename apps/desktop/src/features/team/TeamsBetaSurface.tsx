@@ -11,7 +11,6 @@ export type TeamsBetaSurfaceProps = {
   readonly isEffectiveAuthRequired: boolean;
   readonly isPolicySignedIn: boolean;
   readonly isSupabaseConfigured: boolean;
-  readonly showAiClassificationImpact: boolean;
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
   readonly teamSubView: TeamProjectsSubView;
@@ -26,7 +25,6 @@ export function TeamsBetaSurface({
   isEffectiveAuthRequired,
   isPolicySignedIn,
   isSupabaseConfigured,
-  showAiClassificationImpact,
   startOfDayMinutes,
   user,
   teamSubView,
@@ -40,8 +38,6 @@ export function TeamsBetaSurface({
     hasRequiredAccountAuth,
     isEffectiveAuthRequired,
     isSupabaseConfigured,
-    showAiClassificationImpact,
-    startOfDayMinutes,
     user,
     onAuthRequired,
   });

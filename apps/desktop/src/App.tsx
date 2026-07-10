@@ -5774,7 +5774,6 @@ export default function App() {
             isEffectiveAuthRequired={isEffectiveAuthRequired}
             isPolicySignedIn={isPolicySignedIn}
             isSupabaseConfigured={isSupabaseConfigured}
-            showAiClassificationImpact={showAiClassificationImpact}
             startOfDayMinutes={startOfDayMinutes}
             user={user}
             teamSubView={teamSubView}

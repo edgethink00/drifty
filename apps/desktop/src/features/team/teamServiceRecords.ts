@@ -1,12 +1,9 @@
 import {
-  DEFAULT_TEAM_PERIOD,
   TEAM_PERIODS,
   type TeamInviteStatus,
   type TeamPeriod,
-  type TeamPresenceState,
   type TeamProjectAnchor,
   type TeamProjectStatus,
-  type TeamShareScope,
 } from "./teamTypes";
 
 export function readString(record: Record<string, unknown>, key: string): string {
@@ -40,28 +37,6 @@ export function readNumber(record: Record<string, unknown>, key: string): number
   const value = record[key];
   const numberValue = typeof value === "number" || typeof value === "string" ? Number(value) : 0;
   return Number.isFinite(numberValue) ? numberValue : 0;
-}
-
-export function readNullableNumber(record: Record<string, unknown>, key: string): number | null {
-  const value = record[key];
-  if (value === null || value === undefined) return null;
-  const numberValue = typeof value === "number" || typeof value === "string" ? Number(value) : null;
-  return numberValue !== null && Number.isFinite(numberValue) ? numberValue : null;
-}
-
-export function readPeriod(record: Record<string, unknown>): TeamPeriod {
-  const value = record.period;
-  return isTeamPeriod(value) ? value : DEFAULT_TEAM_PERIOD;
-}
-
-export function readShareScope(record: Record<string, unknown>): TeamShareScope {
-  return record.focus_share_scope === "focus_only" ? "focus_only" : "private";
-}
-
-export function readPresenceState(record: Record<string, unknown>): TeamPresenceState {
-  const value = record.presence_state;
-  if (value === "active_now" || value === "recent" || value === "shared") return value;
-  return "private";
 }
 
 export function readInviteStatus(record: Record<string, unknown>): TeamInviteStatus {

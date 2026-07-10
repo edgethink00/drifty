@@ -1,18 +1,14 @@
 import { callFirstRow, callRows, fail, invokeTeamInvite, requireAuthenticatedClient } from "./teamServiceClient";
 import {
-  normalizeFocusSummaryRow,
   normalizeOwnTeam,
-  normalizePublishedFocusTotal,
   normalizePublishedTeamProjectTotals,
-  normalizeStoppedSharing,
   normalizeStoppedTeamProjectSharing,
-  normalizeTeamLiveStatusRow,
   normalizeTeamInvite,
   normalizeTeamProject,
   normalizeTeamProjectMemberRow,
   normalizeTeamProjectMixRow,
 } from "./teamServiceMappers";
-import { optionalText, parsePeriod, parsePublishPayload, requiredText } from "./teamServiceValidation";
+import { optionalText, requiredText } from "./teamServiceValidation";
 import { DEFAULT_TEAM_PERIOD } from "./teamTypes";
 import type {
   AcceptTeamInviteInput,
@@ -20,26 +16,18 @@ import type {
   CreateTeamInput,
   CreateTeamInviteInput,
   CreateTeamProjectInput,
-  FetchTeamFocusSummaryInput,
   FetchTeamInvitesInput,
-  FetchTeamLiveStatusInput,
   FetchTeamProjectsInput,
   FetchTeamProjectWindowInput,
   OwnTeam,
-  PublishedTeamFocusTotal,
   PublishedTeamProjectTotals,
-  PublishTeamFocusTotalInput,
   PublishTeamProjectTotalsInput,
   RevokeTeamInviteInput,
-  StopTeamFocusSharingInput,
   StopTeamProjectSharingInput,
-  StoppedTeamFocusSharing,
   StoppedTeamProjectSharing,
   TeamClient,
-  TeamFocusSummaryRow,
   TeamInvite,
   TeamInviteActionResponse,
-  TeamLiveStatusRow,
   TeamPeriod,
   TeamProject,
   TeamProjectMemberRow,
@@ -54,26 +42,16 @@ export type {
   AcceptTeamInviteInput,
   CreateTeamInput,
   CreateTeamInviteInput,
-  FetchTeamFocusSummaryInput,
   FetchTeamInvitesInput,
-  FetchTeamLiveStatusInput,
   OwnTeam,
-  PublishedTeamFocusTotal,
-  PublishTeamFocusTotalInput,
   RevokeTeamInviteInput,
-  StopTeamFocusSharingInput,
-  StoppedTeamFocusSharing,
   TeamClient,
   TeamFailureReason,
-  TeamFocusSummaryRow,
   TeamInvite,
   TeamInviteActionResponse,
   TeamInviteStatus,
-  TeamLiveStatusRow,
   TeamPeriod,
-  TeamPresenceState,
   TeamResult,
-  TeamShareScope,
 } from "./teamTypes";
 
 export async function fetchOwnTeams(
@@ -101,64 +79,6 @@ export async function createTeam(
     input_organization_name: organizationName.value,
     input_role_label: roleLabel,
   }, normalizeOwnTeam);
-}
-
-export async function fetchTeamFocusSummary(
-  input: FetchTeamFocusSummaryInput,
-  client?: TeamClient | null,
-): Promise<TeamResult<readonly TeamFocusSummaryRow[]>> {
-  const auth = await requireAuthenticatedClient(client);
-  if (!auth.success) return auth;
-  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
-  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
-  const period = parsePeriod(input.period ?? DEFAULT_TEAM_PERIOD);
-  if (!period.ok) return fail("invalid_input", period.error);
-
-  return callRows(auth.data.client, "get_organization_focus_summary", {
-    input_organization_id: organizationId.value,
-    period_name: period.value,
-  }, normalizeFocusSummaryRow);
-}
-
-export async function fetchTeamLiveStatus(
-  input: FetchTeamLiveStatusInput,
-  client?: TeamClient | null,
-): Promise<TeamResult<readonly TeamLiveStatusRow[]>> {
-  const auth = await requireAuthenticatedClient(client);
-  if (!auth.success) return auth;
-  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
-  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
-  const period = parsePeriod(input.period ?? DEFAULT_TEAM_PERIOD);
-  if (!period.ok) return fail("invalid_input", period.error);
-
-  return callRows(auth.data.client, "get_organization_live_status", {
-    input_organization_id: organizationId.value,
-    period_name: period.value,
-  }, normalizeTeamLiveStatusRow);
-}
-
-export async function publishTeamFocusTotal(
-  input: PublishTeamFocusTotalInput,
-  client?: TeamClient | null,
-): Promise<TeamResult<PublishedTeamFocusTotal | null>> {
-  const auth = await requireAuthenticatedClient(client);
-  if (!auth.success) return auth;
-  const payload = parsePublishPayload(input);
-  if (!payload.ok) return fail("invalid_input", payload.error);
-  return callFirstRow(auth.data.client, "publish_organization_focus_total", payload.value, normalizePublishedFocusTotal);
-}
-
-export async function stopTeamFocusSharing(
-  input: StopTeamFocusSharingInput,
-  client?: TeamClient | null,
-): Promise<TeamResult<StoppedTeamFocusSharing | null>> {
-  const auth = await requireAuthenticatedClient(client);
-  if (!auth.success) return auth;
-  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
-  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
-  return callFirstRow(auth.data.client, "stop_organization_focus_sharing", {
-    input_organization_id: organizationId.value,
-  }, normalizeStoppedSharing);
 }
 
 export async function fetchTeamInvites(
