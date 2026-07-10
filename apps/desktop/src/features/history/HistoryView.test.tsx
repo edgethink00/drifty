@@ -164,6 +164,30 @@ describe("HistoryView", () => {
     expect(deleteButton.disabled).toBe(true);
   });
 
+  it("de-emphasizes destructive history actions when there are no records", () => {
+    const onOpenDeleteHistory = vi.fn();
+
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+        onOpenDeleteHistory={onOpenDeleteHistory}
+        segments={[]}
+      />,
+    );
+
+    const deleteSelectedButton = screen.getByRole("button", { name: /^delete selected$/i });
+    const deleteHistoryButton = screen.getByRole("button", { name: /^delete history/i });
+    if (!(deleteSelectedButton instanceof HTMLButtonElement) || !(deleteHistoryButton instanceof HTMLButtonElement)) {
+      throw new Error("History delete controls were not buttons");
+    }
+
+    expect(deleteSelectedButton.disabled).toBe(true);
+    expect(deleteHistoryButton.disabled).toBe(true);
+    expect(cssRule(".history-view .settings-btn--danger:disabled")).toContain("background: transparent;");
+  });
+
   it("keeps History search controls fixed while records scroll independently", () => {
     expect(cssRule(".content--history")).toContain("overflow-y: hidden;");
     expect(cssRule(".content--history .page--history")).toMatch(/display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-height:\s*0;/);

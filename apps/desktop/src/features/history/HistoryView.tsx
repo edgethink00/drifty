@@ -110,6 +110,7 @@ export function HistoryView({
 
   const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
   const selectedCount = selectedIds.size;
+  const hasAnySegments = segments.length > 0;
   const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
 
   const toggleRow = useCallback((segmentIds: readonly string[], selected: boolean) => {
@@ -157,7 +158,12 @@ export function HistoryView({
           {selectedCount === 0 ? "Delete selected" : deleteLabel}
         </button>
         {onOpenDeleteHistory ? (
-          <button type="button" className="settings-btn danger" onClick={onOpenDeleteHistory}>
+          <button
+            type="button"
+            className="settings-btn settings-btn--danger"
+            disabled={!hasAnySegments || deleting}
+            onClick={onOpenDeleteHistory}
+          >
             Delete history…
           </button>
         ) : null}

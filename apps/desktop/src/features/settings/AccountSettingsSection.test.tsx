@@ -201,11 +201,13 @@ describe("AccountSettingsSection", () => {
     expect(confirmRemoveRule).toContain("color: var(--canvas);");
   });
 
-  it("stacks Account section actions under their descriptions", () => {
+  it("keeps consistent spacing between Account settings sections", () => {
     const styles = readFileSync(desktopSourcePath("src/features/settings/AccountSettingsSection.css"), "utf8");
+    const sectionRule = cssRule(styles, ".content--settings .settings-section--account");
     const stackedRowRule = cssRule(styles, ".content--settings .settings-section--account .settings-row--stacked-action");
     const stackedControlRule = cssRule(styles, ".content--settings .settings-section--account .settings-row--stacked-action > .ctrl");
 
+    expect(sectionRule).toContain("gap: var(--space-5);");
     expect(stackedRowRule).toContain("display: grid;");
     expect(stackedRowRule).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(stackedControlRule).toContain("justify-self: start;");
