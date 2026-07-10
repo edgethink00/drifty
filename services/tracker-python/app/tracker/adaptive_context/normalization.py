@@ -21,6 +21,24 @@ BODY_LIKE_STRUCTURED_KEYS: Final = frozenset(
 DOCUMENT_DOMAINS: Final = ("notion.so", "atlassian.net", "confluence", "coda.io")
 DOCUMENT_APPS: Final = frozenset({"Notion"})
 ISSUE_DOMAINS: Final = ("github.com", "gitlab.com", "sentry.io", "atlassian.net", "jira")
+NON_REPO_PATH_SEGMENTS: Final = frozenset(
+    {
+        "codespaces",
+        "dashboard",
+        "explore",
+        "login",
+        "marketplace",
+        "new",
+        "notifications",
+        "organizations",
+        "orgs",
+        "search",
+        "settings",
+        "sponsors",
+        "topics",
+        "trending",
+    }
+)
 DESIGN_DOMAINS: Final = ("figma.com",)
 CALENDAR_DOMAINS: Final = ("calendar.google.com", "outlook.office.com")
 COMMUNICATION_DOMAINS: Final = (
@@ -32,12 +50,15 @@ COMMUNICATION_DOMAINS: Final = (
 )
 TITLE_PART_RE: Final = re.compile(r"\s+(?:[-–—|·•])\s+")
 BRACKET_LABEL_RE: Final = re.compile(r"\[([^\]]{1,80})\]")
+TITLE_SUFFIX_VERSION_RE: Final = re.compile(r"\s+v?\d+(?:\.\d+)*$")
+UNREAD_BADGE_RE: Final = re.compile(r"\s*\(\d+\)$")
 COMMON_TITLE_SUFFIXES: Final = frozenset(
     {
         "arc",
         "aside",
         "brave browser",
         "calendar",
+        "chrome",
         "discord",
         "figma",
         "github",
@@ -110,6 +131,12 @@ def humanized_url_part(part: str) -> str:
     return cleaned.strip()
 
 
+def is_common_title_suffix(part: str) -> bool:
+    lowered = part.lower()
+    # App suffixes may carry a version, e.g. "Obsidian 1.12.7".
+    return lowered in COMMON_TITLE_SUFFIXES or TITLE_SUFFIX_VERSION_RE.sub("", lowered) in COMMON_TITLE_SUFFIXES
+
+
 def title_parts(capture: AdaptiveContextCaptureInput) -> list[str]:
     parts: list[str] = []
     for title in (capture.site_title, capture.window_title):
@@ -117,7 +144,7 @@ def title_parts(capture: AdaptiveContextCaptureInput) -> list[str]:
             continue
         for part in TITLE_PART_RE.split(title):
             cleaned = part.strip()
-            if cleaned and cleaned.lower() not in COMMON_TITLE_SUFFIXES:
+            if cleaned and not is_common_title_suffix(cleaned):
                 parts.append(cleaned)
     return clean_context_values(parts)
 
@@ -235,7 +262,8 @@ def calendar_structured_fields(capture: AdaptiveContextCaptureInput) -> Adaptive
 
 def communication_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
     fields: AdaptiveStructuredFields = {}
-    parts = title_parts(capture)
+    # Unread-count badges such as "받은편지함 (843)" churn per segment without adding context.
+    parts = [part for part in (UNREAD_BADGE_RE.sub("", raw).strip() for raw in title_parts(capture)) if part]
     if parts:
         add_structured_values(fields, "channel", [parts[0].removeprefix("#")])
     if len(parts) >= 2:
