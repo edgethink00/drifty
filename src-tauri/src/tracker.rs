@@ -528,6 +528,49 @@ impl TrackerController {
         )
     }
 
+    pub fn get_team_projects(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_team_projects", json!({}))
+    }
+
+    pub fn upsert_team_projects(
+        &self,
+        app: &AppHandle,
+        organization_id: String,
+        projects: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "upsert_team_projects",
+            json!({ "organizationId": organization_id, "projects": projects }),
+        )
+    }
+
+    pub fn save_team_project_assignments(
+        &self,
+        app: &AppHandle,
+        assignments: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "save_team_project_assignments",
+            json!({ "assignments": assignments }),
+        )
+    }
+
+    pub fn get_team_project_assignments(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_team_project_assignments",
+            build_period_payload(day, start, end),
+        )
+    }
+
     pub fn record_project_pass(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "record_project_pass", json!({ "input": input }))
     }

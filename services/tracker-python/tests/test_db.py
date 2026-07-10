@@ -2417,6 +2417,120 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["projectId"])
 
+    def test_team_project_upsert_and_get(self) -> None:
+        result = self.database.upsert_team_projects(
+            "org-1",
+            [
+                {
+                    "id": "tp-a",
+                    "name": "Team A",
+                    "description": "shared work",
+                    "color": "#222222",
+                    "anchors": [
+                        {"kind": "app", "value": "Code", "source": "harvested"},
+                        {"kind": "bogus", "value": "x", "source": "manual"},
+                    ],
+                },
+                {"id": "tp-b", "name": "Team B", "description": "other"},
+            ],
+        )
+        self.assertEqual(len(result), 2)
+        by_id = {p["id"]: p for p in result}
+        self.assertEqual(by_id["tp-a"]["organizationId"], "org-1")
+        self.assertEqual(by_id["tp-a"]["status"], "active")
+        self.assertEqual([a["value"] for a in by_id["tp-a"]["anchors"]], ["Code"])
+        self.assertEqual(by_id["tp-b"]["color"], "#6366f1")
+
+        # id is required for team projects (cloud uuid).
+        with self.assertRaises(ValueError):
+            self.database.upsert_team_projects("org-1", [{"name": "x", "description": "d"}])
+        with self.assertRaises(ValueError):
+            self.database.upsert_team_projects("", [{"id": "tp-a", "name": "x", "description": "d"}])
+
+    def test_team_project_upsert_removes_vanished_but_preserves_survivor_assignment(self) -> None:
+        self.database.upsert_team_projects(
+            "org-1",
+            [
+                {"id": "tp-keep", "name": "Keep", "description": "d"},
+                {"id": "tp-drop", "name": "Drop", "description": "d"},
+            ],
+        )
+        seg = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        self.database.save_team_project_assignments(
+            [{"segmentId": seg, "teamProjectId": "tp-keep", "source": "ai"}]
+        )
+
+        # Resync with tp-drop gone. Non-destructive upsert must keep tp-keep and its assignment.
+        remaining = self.database.upsert_team_projects(
+            "org-1", [{"id": "tp-keep", "name": "Keep Renamed", "description": "d2"}]
+        )
+        self.assertEqual([p["id"] for p in remaining], ["tp-keep"])
+        self.assertEqual(remaining[0]["name"], "Keep Renamed")
+        rows = self.database.get_team_project_assignments("2026-04-06")
+        keep_row = [a for a in rows if a["segmentId"] == str(seg)][0]
+        self.assertEqual(keep_row["teamProjectId"], "tp-keep")
+
+    def test_team_project_upsert_nulls_assignment_of_dropped_project(self) -> None:
+        self.database.upsert_team_projects(
+            "org-1",
+            [
+                {"id": "tp-keep", "name": "Keep", "description": "d"},
+                {"id": "tp-drop", "name": "Drop", "description": "d"},
+            ],
+        )
+        seg = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        self.database.save_team_project_assignments(
+            [{"segmentId": seg, "teamProjectId": "tp-drop", "source": "ai"}]
+        )
+        # Resync drops tp-drop; ON DELETE SET NULL must null the assignment's project.
+        self.database.upsert_team_projects(
+            "org-1", [{"id": "tp-keep", "name": "Keep", "description": "d"}]
+        )
+        rows = self.database.get_team_project_assignments("2026-04-06")
+        dropped_row = [a for a in rows if a["segmentId"] == str(seg)][0]
+        self.assertIsNone(dropped_row["teamProjectId"])
+
+    def test_team_project_upsert_empty_clears_org(self) -> None:
+        self.database.upsert_team_projects(
+            "org-1", [{"id": "tp-a", "name": "A", "description": "d"}]
+        )
+        self.assertEqual(len(self.database.get_team_projects()), 1)
+        # An authoritative empty upsert intentionally clears the org's mirror. The app
+        # layer guards against sending [] on a transient fetch, so this only fires when
+        # the org truly has zero projects.
+        remaining = self.database.upsert_team_projects("org-1", [])
+        self.assertEqual(remaining, [])
+        self.assertEqual(self.database.get_team_projects(), [])
+
+    def test_team_project_assignment_manual_guard_and_range(self) -> None:
+        self.database.upsert_team_projects(
+            "org-1",
+            [
+                {"id": "tp-a", "name": "A", "description": "d"},
+                {"id": "tp-b", "name": "B", "description": "d"},
+            ],
+        )
+        seg_day1 = self._insert_segment_returning_id("2026-04-06T09:00:00+00:00")
+        seg_day2 = self._insert_segment_returning_id("2026-04-07T09:00:00+00:00")
+
+        self.database.save_team_project_assignments(
+            [
+                {"segmentId": seg_day1, "teamProjectId": "tp-a", "source": "manual"},
+                {"segmentId": seg_day2, "teamProjectId": "tp-a", "source": "ai"},
+            ]
+        )
+        guarded = self.database.save_team_project_assignments(
+            [{"segmentId": seg_day1, "teamProjectId": "tp-b", "source": "ai", "confidence": 0.9}]
+        )
+        self.assertEqual(guarded, {"saved": 0, "skippedManual": 1})
+
+        day1 = self.database.get_team_project_assignments(
+            "2026-04-06T00:00:00+00:00", "2026-04-06T23:59:59+00:00"
+        )
+        self.assertEqual([a["segmentId"] for a in day1], [str(seg_day1)])
+        self.assertEqual(day1[0]["teamProjectId"], "tp-a")
+        self.assertEqual(day1[0]["source"], "manual")
+
     def test_record_project_pass(self) -> None:
         result = self.database.record_project_pass(
             {

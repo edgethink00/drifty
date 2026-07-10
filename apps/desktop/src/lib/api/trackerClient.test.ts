@@ -272,4 +272,52 @@ describe("trackerClient", () => {
     expect(result).toEqual({ items: [], hasMore: false, nextCursor: null });
     expect(invoke).not.toHaveBeenCalled();
   });
+
+  it("invokes tracker_get_team_projects with no args", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce([{ id: "tp-1" }]);
+
+    const result = await trackerClient.getTeamProjects();
+
+    expect(result).toEqual([{ id: "tp-1" }]);
+    expect(invoke).toHaveBeenCalledWith("tracker_get_team_projects", undefined);
+  });
+
+  it("invokes tracker_upsert_team_projects with organizationId and projects", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce([{ id: "tp-1" }]);
+
+    const projects = [{ id: "tp-1", name: "A", description: "d" }];
+    const result = await trackerClient.upsertTeamProjects("org-1", projects);
+
+    expect(result).toEqual([{ id: "tp-1" }]);
+    expect(invoke).toHaveBeenCalledWith("tracker_upsert_team_projects", {
+      query: { organizationId: "org-1", projects },
+    });
+  });
+
+  it("invokes tracker_save_team_project_assignments with assignments", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({ saved: 1, skippedManual: 0 });
+
+    const assignments = [{ segmentId: "42", teamProjectId: "tp-1", source: "ai" as const }];
+    const result = await trackerClient.saveTeamProjectAssignments(assignments);
+
+    expect(result).toEqual({ saved: 1, skippedManual: 0 });
+    expect(invoke).toHaveBeenCalledWith("tracker_save_team_project_assignments", {
+      query: { assignments },
+    });
+  });
+
+  it("invokes tracker_get_team_project_assignments with the query", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce([{ segmentId: "42", teamProjectId: "tp-1" }]);
+
+    const result = await trackerClient.getTeamProjectAssignments({ day: "2026-04-06" });
+
+    expect(result).toEqual([{ segmentId: "42", teamProjectId: "tp-1" }]);
+    expect(invoke).toHaveBeenCalledWith("tracker_get_team_project_assignments", {
+      query: { day: "2026-04-06" },
+    });
+  });
 });

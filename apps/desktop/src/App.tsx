@@ -45,6 +45,7 @@ import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
+import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
@@ -352,6 +353,7 @@ export default function App() {
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
+  const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
@@ -5420,12 +5422,22 @@ export default function App() {
 
         {canOpenTeamsBeta ? (
           <>
-            <div className="nav-label">Team</div>
+            <div className="nav-label">Your teams</div>
             <nav className="sidebar-nav" aria-label="Team navigation">
               <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("team")}>
                 <NavIcon type="team" /><span>Team</span>
                 {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Team</span> : null}
               </button>
+              {activeTab === "team" && !isSidebarVisuallyCollapsed ? (
+                <div className="sidebar-subnav">
+                  <button type="button" aria-label="Team dashboards" className={teamSubView === "dashboards" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"} onClick={() => { setTeamSubView("dashboards"); navigateToTab("team"); }}>
+                    <span>Dashboards</span>
+                  </button>
+                  <button type="button" aria-label="Team projects" className={teamSubView === "projects" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"} onClick={() => { setTeamSubView("projects"); navigateToTab("team"); }}>
+                    <span>Projects</span>
+                  </button>
+                </div>
+              ) : null}
             </nav>
           </>
         ) : null}
@@ -5765,6 +5777,8 @@ export default function App() {
             showAiClassificationImpact={showAiClassificationImpact}
             startOfDayMinutes={startOfDayMinutes}
             user={user}
+            teamSubView={teamSubView}
+            onTeamSubViewChange={setTeamSubView}
             pendingInvite={pendingTeamInvite}
             onAuthRequired={requestTeamAuth}
             onPendingInviteClear={() => setPendingTeamInvite(null)}

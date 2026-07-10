@@ -83,6 +83,96 @@ export type StoppedTeamFocusSharing = {
   readonly updated_at: string;
 };
 
+export type TeamProjectStatus = "active" | "archived";
+
+export type TeamProjectAnchor = {
+  readonly kind: "app" | "domain" | "keyword";
+  readonly value: string;
+};
+
+export type TeamProject = {
+  readonly id: string;
+  readonly organization_id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly color: string;
+  readonly status: TeamProjectStatus;
+  readonly anchors: readonly TeamProjectAnchor[];
+  readonly can_manage: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type TeamProjectMixRow = {
+  readonly organization_id: string;
+  readonly organization_project_id: string;
+  readonly project_name: string;
+  readonly project_color: string;
+  readonly project_status: TeamProjectStatus;
+  readonly activity_date: string;
+  readonly seconds: number;
+};
+
+export type TeamProjectMemberRow = {
+  readonly organization_id: string;
+  readonly organization_project_id: string;
+  readonly project_name: string;
+  readonly member_display_name: string;
+  readonly seconds: number;
+};
+
+export type PublishedTeamProjectTotals = {
+  readonly organization_id: string;
+  readonly window_start_date: string;
+  readonly window_end_date: string;
+  readonly published_row_count: number;
+  readonly updated_at: string;
+};
+
+export type StoppedTeamProjectSharing = {
+  readonly organization_id: string;
+  readonly deleted_row_count: number;
+  readonly updated_at: string;
+};
+
+export type TeamProjectTotalsEntry = {
+  readonly project_id: string;
+  readonly activity_date: string;
+  readonly seconds: number;
+};
+
+export type CreateTeamProjectInput = {
+  readonly organization_id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly color?: string | null;
+  readonly anchors?: readonly TeamProjectAnchor[] | null;
+};
+
+export type UpdateTeamProjectInput = {
+  readonly project_id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly color?: string | null;
+  readonly anchors?: readonly TeamProjectAnchor[] | null;
+};
+
+export type ArchiveTeamProjectInput = { readonly project_id: string; readonly archived?: boolean };
+export type FetchTeamProjectsInput = { readonly organization_id: string };
+export type StopTeamProjectSharingInput = { readonly organization_id: string };
+export type FetchTeamProjectWindowInput = {
+  readonly organization_id: string;
+  readonly start_date: string;
+  readonly end_date: string;
+};
+export type PublishTeamProjectTotalsInput = {
+  readonly organization_id: string;
+  readonly display_name: string;
+  readonly window_start_date: string;
+  readonly window_end_date: string;
+  readonly entries: readonly TeamProjectTotalsEntry[];
+};
+
 export type TeamInviteActionResponse = {
   readonly ok?: boolean;
   readonly action?: string;
@@ -140,7 +230,15 @@ export type RpcProcedure =
   | "get_organization_live_status"
   | "publish_organization_focus_total"
   | "stop_organization_focus_sharing"
-  | "get_organization_invites";
+  | "get_organization_invites"
+  | "create_organization_project"
+  | "update_organization_project"
+  | "archive_organization_project"
+  | "get_organization_projects"
+  | "publish_organization_project_totals"
+  | "stop_organization_project_sharing"
+  | "get_organization_project_mix"
+  | "get_organization_project_member_breakdown";
 
 export type RpcResponse = {
   readonly data: readonly unknown[] | null;

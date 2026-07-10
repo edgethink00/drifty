@@ -684,6 +684,36 @@ def get_project_assignments(payload: dict):
     return response(True, database().get_project_assignments(start, end))
 
 
+def upsert_team_projects(payload: dict):
+    organization_id = payload.get("organizationId", payload.get("organization_id"))
+    if not isinstance(organization_id, str) or not organization_id.strip():
+        return response(False, error="organizationId is required")
+    projects = payload.get("projects", [])
+    if not isinstance(projects, list):
+        return response(False, error="projects must be a list")
+    try:
+        result = database().upsert_team_projects(organization_id, projects)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    return response(True, result)
+
+
+def get_team_projects(payload: dict):
+    return response(True, database().get_team_projects())
+
+
+def save_team_project_assignments(payload: dict):
+    assignments = payload.get("assignments", [])
+    if not isinstance(assignments, list):
+        return response(False, error="assignments must be a list")
+    return response(True, database().save_team_project_assignments(assignments))
+
+
+def get_team_project_assignments(payload: dict):
+    start, end = day_bounds(payload)
+    return response(True, database().get_team_project_assignments(start, end))
+
+
 def record_project_pass(payload: dict):
     pass_input = payload.get("input", payload)
     if not isinstance(pass_input, dict):
@@ -956,6 +986,10 @@ COMMANDS = {
     "delete_project_anchor": delete_project_anchor,
     "save_project_assignments": save_project_assignments,
     "get_project_assignments": get_project_assignments,
+    "upsert_team_projects": upsert_team_projects,
+    "get_team_projects": get_team_projects,
+    "save_team_project_assignments": save_team_project_assignments,
+    "get_team_project_assignments": get_team_project_assignments,
     "record_project_pass": record_project_pass,
     "get_project_pass_runs": get_project_pass_runs,
     "save_ai_review_events": save_ai_review_events,

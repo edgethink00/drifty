@@ -3,32 +3,49 @@ import {
   normalizeFocusSummaryRow,
   normalizeOwnTeam,
   normalizePublishedFocusTotal,
+  normalizePublishedTeamProjectTotals,
   normalizeStoppedSharing,
+  normalizeStoppedTeamProjectSharing,
   normalizeTeamLiveStatusRow,
   normalizeTeamInvite,
+  normalizeTeamProject,
+  normalizeTeamProjectMemberRow,
+  normalizeTeamProjectMixRow,
 } from "./teamServiceMappers";
 import { optionalText, parsePeriod, parsePublishPayload, requiredText } from "./teamServiceValidation";
 import { DEFAULT_TEAM_PERIOD } from "./teamTypes";
 import type {
   AcceptTeamInviteInput,
+  ArchiveTeamProjectInput,
   CreateTeamInput,
   CreateTeamInviteInput,
+  CreateTeamProjectInput,
   FetchTeamFocusSummaryInput,
   FetchTeamInvitesInput,
   FetchTeamLiveStatusInput,
+  FetchTeamProjectsInput,
+  FetchTeamProjectWindowInput,
   OwnTeam,
   PublishedTeamFocusTotal,
+  PublishedTeamProjectTotals,
   PublishTeamFocusTotalInput,
+  PublishTeamProjectTotalsInput,
   RevokeTeamInviteInput,
   StopTeamFocusSharingInput,
+  StopTeamProjectSharingInput,
   StoppedTeamFocusSharing,
+  StoppedTeamProjectSharing,
   TeamClient,
   TeamFocusSummaryRow,
   TeamInvite,
   TeamInviteActionResponse,
   TeamLiveStatusRow,
   TeamPeriod,
+  TeamProject,
+  TeamProjectMemberRow,
+  TeamProjectMixRow,
   TeamResult,
+  UpdateTeamProjectInput,
 } from "./teamTypes";
 
 export { DEFAULT_TEAM_PERIOD, TEAM_PERIODS } from "./teamTypes";
@@ -182,4 +199,187 @@ export async function revokeTeamInvite(
   const inviteId = requiredText(input.invite_id, "Invite id is required.", 120);
   if (!inviteId.ok) return fail("invalid_input", inviteId.error);
   return invokeTeamInvite({ action: "revoke", inviteId: inviteId.value }, client);
+}
+
+// ---------------------------------------------------------------------------
+// Team shared projects: shared definitions + aggregate-only per-project totals.
+// ---------------------------------------------------------------------------
+
+function toAnchorPayload(anchors: CreateTeamProjectInput["anchors"]): { kind: string; value: string }[] {
+  if (!anchors) return [];
+  const payload: { kind: string; value: string }[] = [];
+  for (const anchor of anchors) {
+    const value = typeof anchor?.value === "string" ? anchor.value.trim() : "";
+    if ((anchor?.kind === "app" || anchor?.kind === "domain" || anchor?.kind === "keyword") && value.length > 0 && value.length <= 120) {
+      payload.push({ kind: anchor.kind, value });
+    }
+  }
+  return payload.slice(0, 40);
+}
+
+function optionalDescription(value?: string | null): string | null {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed.length > 0 ? trimmed.slice(0, 2000) : null;
+}
+
+function optionalColor(value?: string | null): string | null {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed.length > 0 ? trimmed.slice(0, 40) : null;
+}
+
+function parseProjectWindow(input: FetchTeamProjectWindowInput) {
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return organizationId;
+  const start = requiredText(input.start_date, "Project window dates are invalid.", 20);
+  if (!start.ok) return start;
+  const end = requiredText(input.end_date, "Project window dates are invalid.", 20);
+  if (!end.ok) return end;
+  if (end.value < start.value) return { ok: false as const, error: "Project window dates are invalid." };
+  return {
+    ok: true as const,
+    value: { input_organization_id: organizationId.value, input_start_date: start.value, input_end_date: end.value },
+  };
+}
+
+function sanitizeProjectEntries(entries: PublishTeamProjectTotalsInput["entries"], start: string, end: string) {
+  const payload: { project_id: string; activity_date: string; seconds: number }[] = [];
+  for (const entry of entries ?? []) {
+    const projectId = typeof entry?.project_id === "string" ? entry.project_id.trim() : "";
+    const activityDate = typeof entry?.activity_date === "string" ? entry.activity_date.trim() : "";
+    const seconds = Number(entry?.seconds);
+    if (projectId.length > 0 && activityDate >= start && activityDate <= end && Number.isFinite(seconds) && seconds > 0) {
+      payload.push({ project_id: projectId, activity_date: activityDate, seconds: Math.round(seconds) });
+    }
+  }
+  return payload;
+}
+
+export async function fetchTeamProjects(
+  input: FetchTeamProjectsInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamProject[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callRows(auth.data.client, "get_organization_projects", {
+    input_organization_id: organizationId.value,
+  }, normalizeTeamProject);
+}
+
+export async function createTeamProject(
+  input: CreateTeamProjectInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<TeamProject | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  const name = requiredText(input.name, "Project name is required.", 120);
+  if (!name.ok) return fail("invalid_input", name.error);
+  return callFirstRow(auth.data.client, "create_organization_project", {
+    input_organization_id: organizationId.value,
+    input_name: name.value,
+    input_description: optionalDescription(input.description),
+    input_color: optionalColor(input.color),
+    input_anchors: toAnchorPayload(input.anchors),
+  }, normalizeTeamProject);
+}
+
+export async function updateTeamProject(
+  input: UpdateTeamProjectInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<TeamProject | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const projectId = requiredText(input.project_id, "Project id is required.", 120);
+  if (!projectId.ok) return fail("invalid_input", projectId.error);
+  const name = requiredText(input.name, "Project name is required.", 120);
+  if (!name.ok) return fail("invalid_input", name.error);
+  return callFirstRow(auth.data.client, "update_organization_project", {
+    input_project_id: projectId.value,
+    input_name: name.value,
+    input_description: optionalDescription(input.description),
+    input_color: optionalColor(input.color),
+    input_anchors: input.anchors === undefined ? null : toAnchorPayload(input.anchors),
+  }, normalizeTeamProject);
+}
+
+export async function archiveTeamProject(
+  input: ArchiveTeamProjectInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<{ readonly id: string; readonly status: string } | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const projectId = requiredText(input.project_id, "Project id is required.", 120);
+  if (!projectId.ok) return fail("invalid_input", projectId.error);
+  return callFirstRow(auth.data.client, "archive_organization_project", {
+    input_project_id: projectId.value,
+    input_archived: input.archived ?? true,
+  }, (row) => {
+    const record = (typeof row === "object" && row !== null ? row : {}) as Record<string, unknown>;
+    return {
+      id: typeof record.id === "string" ? record.id : "",
+      status: record.status === "archived" ? "archived" : "active",
+    };
+  });
+}
+
+export async function publishTeamProjectTotals(
+  input: PublishTeamProjectTotalsInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<PublishedTeamProjectTotals | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  const displayName = requiredText(input.display_name, "Display name is required.", 80);
+  if (!displayName.ok) return fail("invalid_input", displayName.error);
+  const start = requiredText(input.window_start_date, "Project window dates are invalid.", 20);
+  if (!start.ok) return fail("invalid_input", start.error);
+  const end = requiredText(input.window_end_date, "Project window dates are invalid.", 20);
+  if (!end.ok) return fail("invalid_input", end.error);
+  if (end.value < start.value) return fail("invalid_input", "Project window dates are invalid.");
+  return callFirstRow(auth.data.client, "publish_organization_project_totals", {
+    input_organization_id: organizationId.value,
+    input_display_name: displayName.value,
+    input_window_start_date: start.value,
+    input_window_end_date: end.value,
+    input_entries: sanitizeProjectEntries(input.entries, start.value, end.value),
+  }, normalizePublishedTeamProjectTotals);
+}
+
+export async function stopTeamProjectSharing(
+  input: StopTeamProjectSharingInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<StoppedTeamProjectSharing | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callFirstRow(auth.data.client, "stop_organization_project_sharing", {
+    input_organization_id: organizationId.value,
+  }, normalizeStoppedTeamProjectSharing);
+}
+
+export async function fetchTeamProjectMix(
+  input: FetchTeamProjectWindowInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamProjectMixRow[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const window = parseProjectWindow(input);
+  if (!window.ok) return fail("invalid_input", window.error);
+  return callRows(auth.data.client, "get_organization_project_mix", window.value, normalizeTeamProjectMixRow);
+}
+
+export async function fetchTeamProjectMemberBreakdown(
+  input: FetchTeamProjectWindowInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamProjectMemberRow[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const window = parseProjectWindow(input);
+  if (!window.ok) return fail("invalid_input", window.error);
+  return callRows(auth.data.client, "get_organization_project_member_breakdown", window.value, normalizeTeamProjectMemberRow);
 }

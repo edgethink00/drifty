@@ -1,8 +1,39 @@
-import { DEFAULT_TEAM_PERIOD, TEAM_PERIODS, type TeamInviteStatus, type TeamPeriod, type TeamPresenceState, type TeamShareScope } from "./teamTypes";
+import {
+  DEFAULT_TEAM_PERIOD,
+  TEAM_PERIODS,
+  type TeamInviteStatus,
+  type TeamPeriod,
+  type TeamPresenceState,
+  type TeamProjectAnchor,
+  type TeamProjectStatus,
+  type TeamShareScope,
+} from "./teamTypes";
 
 export function readString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   return typeof value === "string" ? value : value === null || value === undefined ? "" : String(value);
+}
+
+export function readBoolean(record: Record<string, unknown>, key: string): boolean {
+  return record[key] === true;
+}
+
+export function readProjectStatus(record: Record<string, unknown>): TeamProjectStatus {
+  return record.status === "archived" ? "archived" : "active";
+}
+
+export function readTeamProjectAnchors(value: unknown): readonly TeamProjectAnchor[] {
+  if (!Array.isArray(value)) return [];
+  const anchors: TeamProjectAnchor[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const kind = entry.kind;
+    const anchorValue = entry.value;
+    if ((kind === "app" || kind === "domain" || kind === "keyword") && typeof anchorValue === "string" && anchorValue.length > 0) {
+      anchors.push({ kind, value: anchorValue });
+    }
+  }
+  return anchors;
 }
 
 export function readNumber(record: Record<string, unknown>, key: string): number {
