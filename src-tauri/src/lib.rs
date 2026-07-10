@@ -5,6 +5,7 @@ mod cloud_device_store;
 mod commands;
 mod donut_icon;
 mod openrouter_key_store;
+mod observability;
 mod tracker;
 mod tray;
 
@@ -55,6 +56,10 @@ use tray::{
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
+
+pub fn init_native_observability() -> Option<sentry::ClientInitGuard> {
+    observability::init_native_sentry()
+}
 
 #[derive(Default)]
 struct PendingAuthDeepLinks(Mutex<Vec<String>>);

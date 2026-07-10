@@ -11,7 +11,7 @@ from app.tracker.adaptive_context.settings import (
     SUPPORTED_ADAPTIVE_SOURCE_FAMILIES,
 )
 
-JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+JsonValue = object
 JsonObject = dict[str, JsonValue]
 
 FORCE_CHROMIUM_AX_CAPTURE_META_KEY: Final = "developer_diagnostics_force_chromium_ax_capture"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildShortCommit, createBuildInfo, normalizeBuildCommit } from "./buildInfo";
+import { buildShortCommit, createBuildInfo, normalizeAppVersion, normalizeBuildCommit } from "./buildInfo";
 
 describe("buildInfo", () => {
   it("normalizes an empty build commit to unknown", () => {
@@ -13,10 +13,15 @@ describe("buildInfo", () => {
     expect(createBuildInfo(commit)).toEqual({
       commit,
       shortCommit: "d1f00b6a2cc9",
+      version: "1.2.16",
     });
   });
 
   it("does not shorten an unknown commit", () => {
     expect(buildShortCommit("unknown")).toBe("unknown");
+  });
+
+  it("normalizes an empty app version to unknown", () => {
+    expect(normalizeAppVersion("  ")).toBe("unknown");
   });
 });

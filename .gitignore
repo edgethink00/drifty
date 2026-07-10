@@ -34,6 +34,7 @@ drifty_mac_legacy/
 /evidence/
 apps/desktop/.omc/
 apps/desktop/.env
+.env.sentry-build-plugin
 supabase/.temp/
 apps/desktop/supabase/.temp/
 apps/desktop/supabase/supabase/.temp/
