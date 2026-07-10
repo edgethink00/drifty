@@ -33,37 +33,36 @@ const project: ProjectPassPromptProject = {
 
 describe("buildProjectPassPrompt", () => {
   it("has a stable version tag", () => {
-    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v2");
+    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v3");
   });
 
-  it("lists projects with signals and exemplars, and renders analysis window lines", () => {
-    const prompt = buildProjectPassPrompt({ windows, workProfile: "iOS developer", projects: [project] });
+  it("separates context windows from core windows and restricts output to core ids", () => {
+    const prompt = buildProjectPassPrompt({
+      beforeContextWindows: [windows[0]].filter((window) => window !== undefined),
+      coreWindows: [windows[1]].filter((window) => window !== undefined),
+      afterContextWindows: [],
+      workProfile: "iOS developer",
+      projects: [project],
+    });
     expect(prompt).toContain('p1 "Drifty": Mac app development');
     expect(prompt).toContain("Known signals: apps [Code]; domains [github.com]");
     expect(prompt).toContain("Confirmed examples:");
-    expect(prompt).toContain("Activity analysis windows (chronological, merged from 3-minute cells):");
+    expect(prompt).toContain("Context before (read-only; do not output these ids):");
+    expect(prompt).toContain("Core analysis windows (return assignments and corrections only for these ids):");
+    expect(prompt).toContain("Context after (read-only; do not output these ids):");
     expect(prompt).toContain("w0 |");
-    expect(prompt).toContain("dominant: Code (40m)");
+    expect(prompt).toContain("w1 |");
     expect(prompt).toContain("User work profile: iOS developer");
     expect(prompt).toContain('Return JSON only');
     expect(prompt).toContain('"assignments"');
     expect(prompt).toContain('"corrections"');
+    expect(prompt).toContain("Ignore surrounding context ids in the output.");
   });
 
   it("degrades gracefully with no projects defined", () => {
-    const prompt = buildProjectPassPrompt({ windows, workProfile: null, projects: [] });
+    const prompt = buildProjectPassPrompt({ beforeContextWindows: [], coreWindows: windows, afterContextWindows: [], workProfile: null, projects: [] });
     expect(prompt).toContain("(none defined");
     expect(prompt).toContain("User work profile: (not provided)");
-  });
-
-  it("includes the previous chunk summary when present", () => {
-    const prompt = buildProjectPassPrompt({ windows, workProfile: null, projects: [project], previousChunkSummary: "Morning was all coding." });
-    expect(prompt).toContain("Previous chunk summary (context only): Morning was all coding.");
-  });
-
-  it("says none when no previous chunk summary", () => {
-    const prompt = buildProjectPassPrompt({ windows, workProfile: null, projects: [project] });
-    expect(prompt).toContain("Previous chunk summary (context only): none");
   });
 });
 

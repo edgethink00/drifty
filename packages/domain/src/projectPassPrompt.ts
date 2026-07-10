@@ -1,7 +1,7 @@
 import type { ProjectAnchor } from "./commands";
 import { formatProjectPassAnalysisWindowLine, type ProjectPassAnalysisWindow } from "./projectPassWindow";
 
-export const PROJECT_PASS_PROMPT_VERSION = "pp-v2";
+export const PROJECT_PASS_PROMPT_VERSION = "pp-v3";
 
 export const PROJECT_ASSIGNMENT_MIN_CONFIDENCE = 0.6;
 
@@ -14,10 +14,11 @@ export interface ProjectPassPromptProject {
 }
 
 export interface ProjectPassPromptInput {
-  readonly windows: readonly ProjectPassAnalysisWindow[];
+  readonly beforeContextWindows: readonly ProjectPassAnalysisWindow[];
+  readonly coreWindows: readonly ProjectPassAnalysisWindow[];
+  readonly afterContextWindows: readonly ProjectPassAnalysisWindow[];
   readonly workProfile: string | null;
   readonly projects: readonly ProjectPassPromptProject[];
-  readonly previousChunkSummary?: string | null;
 }
 
 function anchorLine(anchors: readonly ProjectAnchor[]): string | null {
@@ -52,7 +53,9 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
     ? input.projects.map(projectBlock).join("\n")
     : "(none defined — return an empty assignments array and focus on corrections)";
 
-  const windowLines = input.windows.map(formatProjectPassAnalysisWindowLine).join("\n");
+  const beforeContextLines = formatWindowLines(input.beforeContextWindows);
+  const coreWindowLines = formatWindowLines(input.coreWindows);
+  const afterContextLines = formatWindowLines(input.afterContextWindows);
 
   return [
     "You are reviewing one user's day of computer activity to (1) attribute activity",
@@ -64,10 +67,14 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
     "Projects (the only valid project ids):",
     projectList,
     "",
-    "Activity analysis windows (chronological, merged from 3-minute cells):",
-    windowLines,
+    "Context before (read-only; do not output these ids):",
+    beforeContextLines,
     "",
-    `Previous chunk summary (context only): ${input.previousChunkSummary?.trim() ? input.previousChunkSummary.trim() : "none"}`,
+    "Core analysis windows (return assignments and corrections only for these ids):",
+    coreWindowLines,
+    "",
+    "Context after (read-only; do not output these ids):",
+    afterContextLines,
     "",
     "Rules:",
     "- Assign each window to at most one project id, or null when it belongs to none",
@@ -82,8 +89,13 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
     "- Categories: workspace, learning, communication, music, game, social_media,",
     "  entertainment, shopping, utility, unknown. Productivity: focus, neutral, drift.",
     "- Reasons must be short and must not quote raw titles, URLs, or work profile details.",
+    "- Ignore surrounding context ids in the output.",
     'Return JSON only in the shape {"assignments":[{"id":string,"projectId":string|null,"confidence":number,"reason":string}],"corrections":[{"id":string,"category":string|null,"productivity":string|null,"confidence":number,"reason":string}]}.',
   ].join("\n");
+}
+
+function formatWindowLines(windows: readonly ProjectPassAnalysisWindow[]): string {
+  return windows.length ? windows.map(formatProjectPassAnalysisWindowLine).join("\n") : "(none)";
 }
 
 export const PROJECT_PASS_SUMMARY_TAIL_WINDOWS = 6;

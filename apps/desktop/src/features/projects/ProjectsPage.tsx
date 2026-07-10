@@ -24,7 +24,6 @@ export interface ProjectsPageProps {
   readonly trendProjectBySegmentId: ReadonlyMap<string, string>;
   readonly projectsLoading: boolean;
   readonly running: boolean;
-  readonly progress: { readonly done: number; readonly total: number } | null;
   readonly runError: string | null;
   readonly analysisConnected: boolean;
   readonly analysisSetup: AnalysisAiSetupState;
@@ -64,25 +63,6 @@ export function ProjectsPage(props: ProjectsPageProps) {
           </span>
         </div>
       </div>
-
-      {props.running ? (
-        <div className="projects-analyzing" role="status" aria-live="polite">
-          <span className="projects-analyzing__spinner" aria-hidden="true" />
-          <div className="projects-analyzing__body">
-            <span className="projects-analyzing__label">
-              Analyzing your activity…{props.progress && props.progress.total > 0 ? ` chunk ${props.progress.done} of ${props.progress.total}` : ""}
-            </span>
-            {props.progress && props.progress.total > 0 ? (
-              <span className="projects-analyzing__bar" aria-hidden="true">
-                <span
-                  className="projects-analyzing__fill"
-                  style={{ width: `${Math.round((props.progress.done / props.progress.total) * 100)}%` }}
-                />
-              </span>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       <ProjectsSettingsSection
         projects={props.projects}

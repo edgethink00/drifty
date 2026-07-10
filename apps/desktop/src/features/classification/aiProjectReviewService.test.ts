@@ -4,6 +4,7 @@ import {
   chunkProjectPassWindows,
   parseProjectPassOutput,
   projectPassChunkFingerprint,
+  PROJECT_PASS_MAX_CHUNK_WINDOWS,
   resolveProjectPassApply,
   runProjectPass,
   type ProjectPassInference,
@@ -34,6 +35,9 @@ function classified(
     classification: { category, productivity, source, confidence: 0.8, inputFingerprint: `fp-${id}` },
   });
 }
+
+const EXPECTED_CONTEXT_WINDOW_OVERLAP = 4;
+const EXPECTED_MAX_PARALLEL_CHUNKS = 3;
 
 describe("parseProjectPassOutput", () => {
   it("parses clean and fenced JSON", () => {
@@ -227,20 +231,41 @@ describe("runProjectPass orchestration", () => {
     expect(prompts[0]).toContain("User work profile: Founder building a Mac time tracker");
   });
 
-  it("carries the previous chunk's tail into the next chunk's prompt", async () => {
+  it("runs chunks in bounded parallel with adjacent context while applying only core window output", async () => {
     const isoAt = (minute: number) =>
       `2026-04-06T${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}:00+00:00`;
-    const manySegments = Array.from({ length: 81 }, (_, i) =>
+    const manySegments = Array.from({ length: PROJECT_PASS_MAX_CHUNK_WINDOWS + EXPECTED_CONTEXT_WINDOW_OVERLAP + 1 }, (_, i) =>
       classified(`${i}`, isoAt(i * 6), isoAt(i * 6 + 5), `App${i}`, "social_media", "drift"),
     );
-    const { tracker } = mockTracker({ getTimeline: vi.fn(async () => manySegments) as TrackerApi["getTimeline"] });
+    const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => manySegments) as TrackerApi["getTimeline"] });
     const prompts: string[] = [];
+    let activeInferences = 0;
+    let resolveFirstInference: (() => void) | null = null;
+    const firstInferenceStarted = new Promise<void>((resolve) => {
+      resolveFirstInference = resolve;
+    });
+    let maxInFlight = 0;
     const inference: ProjectPassInference = vi.fn(async (prompt: string) => {
       prompts.push(prompt);
-      return { output: { assignments: [], corrections: [] }, usage: {} };
+      activeInferences += 1;
+      maxInFlight = Math.max(maxInFlight, activeInferences);
+      if (prompts.length === 1) resolveFirstInference?.();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      activeInferences -= 1;
+      const coreSection = prompt.split("Core analysis windows (return assignments and corrections only for these ids):")[1]?.split("Context after (read-only; do not output these ids):")[0] ?? "";
+      const output = coreSection.includes(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`)
+        ? {
+            assignments: [
+              { id: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}`, projectId: "p1", confidence: 0.99 },
+              { id: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1", confidence: 0.99 },
+            ],
+            corrections: [],
+          }
+        : { assignments: [], corrections: [] };
+      return { output, usage: { tokensIn: 10, tokensOut: 2 } };
     });
 
-    await runProjectPass({
+    const run = runProjectPass({
       range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
       trigger: "backfill",
       tracker,
@@ -248,10 +273,24 @@ describe("runProjectPass orchestration", () => {
       now: () => "2026-04-06T23:00:00+00:00",
     });
 
+    await firstInferenceStarted;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const observedParallelism = maxInFlight;
+    await run;
+
+    expect(observedParallelism).toBeGreaterThan(1);
+    expect(observedParallelism).toBeLessThanOrEqual(EXPECTED_MAX_PARALLEL_CHUNKS);
     expect(prompts).toHaveLength(2);
-    expect(prompts[0]).toContain("Previous chunk summary (context only): none");
-    expect(prompts[1]).not.toContain("Previous chunk summary (context only): none");
-    expect(prompts[1]).toContain("App79");
-    expect(prompts[1]).toContain("-> no project");
+    expect(prompts[0]).toContain("Context after (read-only; do not output these ids):");
+    expect(prompts[0]).toContain(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`);
+    expect(prompts[1]).toContain("Context before (read-only; do not output these ids):");
+    expect(prompts[1]).toContain(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}`);
+    expect(prompts[1]).toContain("Core analysis windows (return assignments and corrections only for these ids):");
+    expect(prompts[1]).toContain(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`);
+    expect(prompts[1]).toContain("Context after (read-only; do not output these ids):");
+    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: `${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1" })]);
+    expect(spies.saveProjectAssignments).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ segmentId: `${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}` })]),
+    );
   });
 });

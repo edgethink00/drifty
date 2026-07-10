@@ -5667,7 +5667,6 @@ export default function App() {
             trendProjectBySegmentId={projectsTrendProjectBySegmentId}
             projectsLoading={projectClassification.projectsLoading}
             running={projectClassification.running}
-            progress={projectClassification.progress}
             runError={projectClassification.runError}
             analysisConnected={analysisModel.analysisConnected}
             analysisSetup={analysisModel.analysisSetup}

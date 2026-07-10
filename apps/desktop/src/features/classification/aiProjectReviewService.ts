@@ -1,6 +1,5 @@
 import {
   buildProjectPassPrompt,
-  summarizeProjectPassChunk,
   buildProjectPassAnalysisWindows,
   formatProjectPassAnalysisWindowLine,
   CATEGORY_ORDER,
@@ -23,7 +22,9 @@ import {
 export { parseProjectPassOutput } from "./projectPassOutputParser";
 
 export const PROJECT_CORRECTION_MIN_CONFIDENCE = 0.8;
-export const PROJECT_PASS_MAX_CHUNK_WINDOWS = 80;
+export const PROJECT_PASS_MAX_CHUNK_WINDOWS = 40;
+export const PROJECT_PASS_CONTEXT_WINDOW_OVERLAP = 4;
+export const PROJECT_PASS_MAX_PARALLEL_CHUNKS = 3;
 export const PROJECT_PASS_STALE_MS = 3 * 60 * 60 * 1000;
 
 const VALID_CATEGORIES = new Set<string>(CATEGORY_ORDER);
@@ -72,6 +73,29 @@ export function chunkProjectPassWindows(windows: ProjectPassAnalysisWindow[], ma
     chunks.push(windows.slice(index, index + maxWindows));
   }
   return chunks;
+}
+
+interface ProjectPassChunkPlan {
+  readonly coreWindows: ProjectPassAnalysisWindow[];
+  readonly beforeContextWindows: ProjectPassAnalysisWindow[];
+  readonly afterContextWindows: ProjectPassAnalysisWindow[];
+}
+
+function planProjectPassChunks(
+  windows: ProjectPassAnalysisWindow[],
+  maxWindows = PROJECT_PASS_MAX_CHUNK_WINDOWS,
+  contextWindowOverlap = PROJECT_PASS_CONTEXT_WINDOW_OVERLAP,
+): ProjectPassChunkPlan[] {
+  const chunks = chunkProjectPassWindows(windows, maxWindows);
+  return chunks.map((coreWindows, index) => {
+    const coreStart = index * maxWindows;
+    const coreEnd = coreStart + coreWindows.length;
+    return {
+      coreWindows,
+      beforeContextWindows: windows.slice(Math.max(0, coreStart - contextWindowOverlap), coreStart),
+      afterContextWindows: windows.slice(coreEnd, coreEnd + contextWindowOverlap),
+    };
+  });
 }
 
 function toPromptProject(project: Project, exemplarsByProject: Map<string, string[]>): ProjectPassPromptProject {
@@ -242,6 +266,13 @@ export interface ProjectPassSummary {
   readonly tokensOut: number;
 }
 
+interface ProjectPassChunkResult {
+  readonly usage: ProjectPassInferenceUsage;
+  readonly assignments: ProjectAssignmentRecord[];
+  readonly correctionClassifications: ActivityClassificationRecord[];
+  readonly correctionEvents: Array<Omit<AiReviewEventInput, "passId">>;
+}
+
 let inFlight: Promise<ProjectPassSummary> | null = null;
 
 /** Serialize passes so scheduled + on-open + manual triggers never overlap. */
@@ -264,8 +295,6 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
 
   const exemplarsByProject = new Map<string, string[]>();
   const promptProjects = activeProjects.map((project) => toPromptProject(project, exemplarsByProject));
-  const projectNameById = new Map(activeProjects.map((project) => [project.id, project.name]));
-
   const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
   const windows = buildProjectPassAnalysisWindows(segments, {
     range,
@@ -283,7 +312,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       .catch(() => []),
   );
 
-  const chunks = chunkProjectPassWindows(windows);
+  const chunks = planProjectPassChunks(windows);
   options.onProgress?.(0, chunks.length);
   const bufferedAssignments: ProjectAssignmentRecord[] = [];
   const bufferedClassifications: ActivityClassificationRecord[] = [];
@@ -293,42 +322,37 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   let model: string | null = null;
   let provider: string | null = null;
 
-  let previousChunkSummary: string | null = null;
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunkWindows = chunks[index];
-    if (!chunkWindows) continue;
-    const fingerprint = await projectPassChunkFingerprint(chunkWindows, promptProjects);
+  const results = await runProjectPassChunks(chunks, async (chunk) => {
+    const fingerprint = await projectPassChunkFingerprint(chunk.coreWindows, promptProjects);
     const prompt = buildProjectPassPrompt({
-      windows: chunkWindows,
+      beforeContextWindows: chunk.beforeContextWindows,
+      coreWindows: chunk.coreWindows,
+      afterContextWindows: chunk.afterContextWindows,
       workProfile: options.workProfile ?? null,
       projects: promptProjects,
-      previousChunkSummary,
     });
     const { output, usage } = await inference(prompt);
-    tokensIn += usage.tokensIn ?? 0;
-    tokensOut += usage.tokensOut ?? 0;
-    model = usage.model ?? model;
-    provider = usage.provider ?? provider;
-    options.onProgress?.(index + 1, chunks.length);
-    if (!output) continue;
-
+    if (!output) return { usage, assignments: [], correctionClassifications: [], correctionEvents: [] };
     const resolved = resolveProjectPassApply({
       output,
-      windows: chunkWindows,
+      windows: chunk.coreWindows,
       segmentsById,
       validProjectIds,
       revertedSegmentIds,
       chunkFingerprint: fingerprint,
       now: options.now(),
     });
-    bufferedAssignments.push(...resolved.assignments);
-    bufferedClassifications.push(...resolved.correctionClassifications);
-    bufferedEvents.push(...resolved.correctionEvents);
+    return { usage, ...resolved };
+  }, (done) => options.onProgress?.(done, chunks.length));
 
-    if (index + 1 < chunks.length) {
-      const assignedProjectById = new Map(output.assignments.map((assignment) => [assignment.id, assignment.projectId]));
-      previousChunkSummary = summarizeProjectPassChunk(chunkWindows, assignedProjectById, projectNameById);
-    }
+  for (const result of results) {
+    tokensIn += result.usage.tokensIn ?? 0;
+    tokensOut += result.usage.tokensOut ?? 0;
+    model = result.usage.model ?? model;
+    provider = result.usage.provider ?? provider;
+    bufferedAssignments.push(...result.assignments);
+    bufferedClassifications.push(...result.correctionClassifications);
+    bufferedEvents.push(...result.correctionEvents);
   }
 
   const passRecord = await tracker.recordProjectPass({
@@ -361,4 +385,31 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     tokensIn,
     tokensOut,
   };
+}
+
+async function runProjectPassChunks(
+  chunks: readonly ProjectPassChunkPlan[],
+  runChunk: (chunk: ProjectPassChunkPlan) => Promise<ProjectPassChunkResult>,
+  onChunkComplete: (done: number) => void,
+): Promise<ProjectPassChunkResult[]> {
+  const results = new Map<number, ProjectPassChunkResult>();
+  let nextIndex = 0;
+  let completed = 0;
+  const workerCount = Math.min(PROJECT_PASS_MAX_PARALLEL_CHUNKS, chunks.length);
+  const runWorker = async () => {
+    for (;;) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const chunk = chunks[index];
+      if (!chunk) return;
+      results.set(index, await runChunk(chunk));
+      completed += 1;
+      onChunkComplete(completed);
+    }
+  };
+  await Promise.all(Array.from({ length: workerCount }, runWorker));
+  return chunks.flatMap((_, index) => {
+    const result = results.get(index);
+    return result ? [result] : [];
+  });
 }
