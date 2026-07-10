@@ -150,7 +150,7 @@ describe("leaderboardAutoPublishState", () => {
       record: makeRecord({ lastSuccessAt: "2026-07-03T12:05:00.000Z" }),
       payloadKey: makePayloadKey(1200),
       now: new Date("2026-07-03T12:30:00.000Z"),
-      bypassMinInterval: true,
+      bypassSlotGate: true,
     });
 
     expect(decision).toEqual({ shouldPublish: true, reason: "payload_changed", requiresRemoteOptInCheck: true });
@@ -161,14 +161,14 @@ describe("leaderboardAutoPublishState", () => {
       record: makeRecord({ lastErrorAt: new Date(BASE_TIME.getTime() - LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS + 1000).toISOString() }),
       payloadKey: makePayloadKey(4200),
       now: BASE_TIME,
-      bypassMinInterval: true,
+      bypassSlotGate: true,
     });
 
     const retryDecision = shouldPublishLeaderboardPeriod({
       record: makeRecord({ lastErrorAt: new Date(BASE_TIME.getTime() - LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS).toISOString() }),
       payloadKey: makePayloadKey(4200),
       now: BASE_TIME,
-      bypassMinInterval: true,
+      bypassSlotGate: true,
     });
 
     expect(blockedDecision).toEqual({ shouldPublish: false, reason: "failure_backoff", requiresRemoteOptInCheck: false });

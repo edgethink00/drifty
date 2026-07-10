@@ -118,7 +118,7 @@ export type LeaderboardAutoPublishReason =
   | "history_deleted";
 
 export type LeaderboardAutoPublishOptions = {
-  readonly bypassMinInterval?: boolean;
+  readonly bypassSlotGate?: boolean;
   readonly refreshAfter?: boolean;
 };
 
@@ -244,13 +244,13 @@ function selectAutoPublishPayloads({
   records,
   userScopeKey,
   now,
-  bypassMinInterval,
+  bypassSlotGate,
 }: {
   readonly payloads: readonly LeaderboardPublishPayload[];
   readonly records: readonly LeaderboardAutoPublishRecord[];
   readonly userScopeKey: string;
   readonly now: Date;
-  readonly bypassMinInterval: boolean;
+  readonly bypassSlotGate: boolean;
 }): Pick<LeaderboardAutoPublishPrepared, "payloads" | "decisions"> | null {
   const decisions = payloads.map((payload) => ({
     payload,
@@ -258,7 +258,7 @@ function selectAutoPublishPayloads({
       record: findLeaderboardAutoPublishRecord(records, userScopeKey, payload.period),
       payloadKey: payload.payloadKey,
       now,
-      bypassMinInterval,
+      bypassSlotGate,
     }),
   }));
 
@@ -536,7 +536,7 @@ export function useLeaderboardProfileController({
       records: readLeaderboardAutoPublishRecords(),
       userScopeKey: leaderboardOwnEntryScopeKey,
       now: new Date(),
-      bypassMinInterval: options.bypassMinInterval === true,
+      bypassSlotGate: options.bypassSlotGate === true,
     });
 
     if (!selection) return null;
@@ -630,7 +630,7 @@ export function useLeaderboardProfileController({
           records: seededRecords,
           userScopeKey: leaderboardOwnEntryScopeKey,
           now: new Date(),
-          bypassMinInterval: options.bypassMinInterval === true,
+          bypassSlotGate: options.bypassSlotGate === true,
         });
         if (!selection) return;
 

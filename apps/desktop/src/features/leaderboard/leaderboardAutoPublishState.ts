@@ -156,12 +156,12 @@ export function shouldPublishLeaderboardPeriod({
   record,
   payloadKey,
   now,
-  bypassMinInterval = false,
+  bypassSlotGate = false,
 }: {
   readonly record: LeaderboardAutoPublishRecord | null;
   readonly payloadKey: string;
   readonly now: Date;
-  readonly bypassMinInterval?: boolean;
+  readonly bypassSlotGate?: boolean;
 }): LeaderboardAutoPublishDecision {
   if (!record) {
     return { shouldPublish: true, reason: "no_record", requiresRemoteOptInCheck: true };
@@ -189,8 +189,8 @@ export function shouldPublishLeaderboardPeriod({
   // Payload changed. Publish at most once per wall-clock hour slot so the public
   // leaderboard's hour-truncated `updated_at` (and score deltas between polls)
   // can never reveal sub-hour activity timing. Explicit user actions — joining or
-  // deleting history — pass bypassMinInterval to skip the slot gate.
-  if (!bypassMinInterval && leaderboardAutoPublishSlotIndex(nowMs) <= leaderboardAutoPublishSlotIndex(lastSuccessMs)) {
+  // deleting history — pass bypassSlotGate to skip the slot gate.
+  if (!bypassSlotGate && leaderboardAutoPublishSlotIndex(nowMs) <= leaderboardAutoPublishSlotIndex(lastSuccessMs)) {
     return { shouldPublish: false, reason: "same_slot", requiresRemoteOptInCheck: false };
   }
 

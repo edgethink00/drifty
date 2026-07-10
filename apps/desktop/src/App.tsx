@@ -4589,7 +4589,7 @@ export default function App() {
       // Metrics refresh is best-effort after a bulk delete; the views below still reload.
     }
     await refresh(selectedDayRef.current);
-    await syncLeaderboardPublication("history_deleted", { bypassMinInterval: true });
+    await syncLeaderboardPublication("history_deleted", { bypassSlotGate: true });
     await refreshLeaderboardData();
   }, [refresh, refreshLeaderboardData, syncLeaderboardPublication]);
 
