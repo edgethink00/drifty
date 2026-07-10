@@ -1,10 +1,22 @@
 import type { LeaderboardPeriod } from "./leaderboardService";
 
 export const LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY = "drifty.leaderboardAutoPublish.v1";
-export const LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS = 24 * 60 * 60 * 1000;
-export const LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS = LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS;
-export const LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS = LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS;
+// Score changes publish at most once per wall-clock hour "slot". The public
+// leaderboard only exposes an hour-truncated `updated_at`, so a slot finer than
+// one hour would let observers reconstruct sub-hour activity timing from score
+// deltas, while a coarser slot would waste freshness. Publishing is additionally
+// aligned to slot boundaries by the controller's timer so the publish moment
+// itself never leaks sub-hour timing. See
+// docs/plans/leaderboard-hourly-publish-20260710.md.
+export const LEADERBOARD_AUTO_PUBLISH_SLOT_MS = 60 * 60 * 1000;
+// Even when the payload is unchanged, republish once a day so the server-side
+// freshness window keeps the row visible on the board.
+export const LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS = 24 * 60 * 60 * 1000;
 export const LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
+
+function leaderboardAutoPublishSlotIndex(ms: number): number {
+  return Math.floor(ms / LEADERBOARD_AUTO_PUBLISH_SLOT_MS);
+}
 
 export type LeaderboardAutoPublishPayloadKeyInput = {
   readonly profileDisplayName: string;
@@ -29,7 +41,7 @@ export type LeaderboardAutoPublishDecisionReason =
   | "payload_changed"
   | "heartbeat_due"
   | "same_payload_recent"
-  | "min_interval"
+  | "same_slot"
   | "failure_backoff";
 
 export type LeaderboardAutoPublishDecision = {
@@ -174,14 +186,25 @@ export function shouldPublishLeaderboardPeriod({
     return { shouldPublish: false, reason: "same_payload_recent", requiresRemoteOptInCheck: false };
   }
 
-  if (!bypassMinInterval && successAgeMs < LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS) {
-    return { shouldPublish: false, reason: "min_interval", requiresRemoteOptInCheck: false };
+  // Payload changed. Publish at most once per wall-clock hour slot so the public
+  // leaderboard's hour-truncated `updated_at` (and score deltas between polls)
+  // can never reveal sub-hour activity timing. Explicit user actions — joining or
+  // deleting history — pass bypassMinInterval to skip the slot gate.
+  if (!bypassMinInterval && leaderboardAutoPublishSlotIndex(nowMs) <= leaderboardAutoPublishSlotIndex(lastSuccessMs)) {
+    return { shouldPublish: false, reason: "same_slot", requiresRemoteOptInCheck: false };
   }
 
+  // Always re-verify remote opt-in before publishing a changed score. This must
+  // stay decoupled from publish frequency: under the hourly slot gate an active
+  // user republishes every hour, which resets lastSuccessAt so a heartbeat-based
+  // recheck would never fire — letting an always-on device silently resurrect an
+  // opt-out the user made on another device (publishOwnFocusTotal re-upserts
+  // opted_in=true). Rechecking on every real publish restores the pre-slot-gate
+  // guarantee.
   return {
     shouldPublish: true,
     reason: "payload_changed",
-    requiresRemoteOptInCheck: bypassMinInterval || successAgeMs >= LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS,
+    requiresRemoteOptInCheck: true,
   };
 }
 

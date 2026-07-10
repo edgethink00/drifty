@@ -474,9 +474,11 @@ describe("App leaderboard participation", () => {
     }, undefined, { updateProfile: false });
   });
 
-  it("does not automatically republish opted-in users when the remote row is under 24 hours old", async () => {
+  it("does not automatically republish opted-in users when the remote row is in the current hour slot", async () => {
     const today = todayIsoDate();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    // Pinned clock is 2026-06-02 13:15 local; 13:05 shares the current hour slot.
+    const sameSlotRemoteUpdatedAt = new Date(2026, 5, 2, 13, 5, 0, 0).toISOString();
 
     authState.user = { id: "user-1", email: "alex@example.com" };
     fetchOwnProfile.mockResolvedValue({
@@ -516,7 +518,7 @@ describe("App leaderboard participation", () => {
         ...makeOwnLeaderboardEntry(period),
         display_name: "Alex Remote",
         timezone,
-        updated_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        updated_at: sameSlotRemoteUpdatedAt,
       },
     }));
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
@@ -531,36 +533,38 @@ describe("App leaderboard participation", () => {
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
-  it("automatically republishes only periods whose 24-hour throttle has passed", async () => {
+  it("automatically republishes only periods whose hour slot has advanced", async () => {
     const today = todayIsoDate();
     const windowStartDay = shiftIsoDate(today, -6);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    const recentAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const staleAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    // Pinned clock is 2026-06-02 13:15 local. daily/monthly last published inside
+    // the current 13:00 hour slot (still throttled); weekly published two slots ago.
+    const sameSlotAt = new Date(2026, 5, 2, 13, 5, 0, 0).toISOString();
+    const previousSlotAt = new Date(2026, 5, 2, 11, 0, 0, 0).toISOString();
 
     window.localStorage.setItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY, JSON.stringify([
       {
         userScopeKey: "user-1",
         period: "daily",
         payloadKey: "previous-daily",
-        lastAttemptAt: recentAt,
-        lastSuccessAt: recentAt,
+        lastAttemptAt: sameSlotAt,
+        lastSuccessAt: sameSlotAt,
         lastErrorAt: null,
       },
       {
         userScopeKey: "user-1",
         period: "weekly",
         payloadKey: "previous-weekly",
-        lastAttemptAt: staleAt,
-        lastSuccessAt: staleAt,
+        lastAttemptAt: previousSlotAt,
+        lastSuccessAt: previousSlotAt,
         lastErrorAt: null,
       },
       {
         userScopeKey: "user-1",
         period: "monthly",
         payloadKey: "previous-monthly",
-        lastAttemptAt: recentAt,
-        lastSuccessAt: recentAt,
+        lastAttemptAt: sameSlotAt,
+        lastSuccessAt: sameSlotAt,
         lastErrorAt: null,
       },
     ]));

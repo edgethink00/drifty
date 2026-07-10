@@ -213,6 +213,14 @@ export function LeaderboardView({
                   ))}
                 </div>
               </div>
+              {!isOptedIn ? (
+                <p
+                  className="leaderboard-hero__participation-note"
+                  style={{ margin: 0, paddingTop: "var(--space-2)", paddingRight: "var(--space-5)", fontSize: "0.72rem", lineHeight: 1.45, color: "var(--text-muted)", maxWidth: "56ch" }}
+                >
+                  Joining shares your focus totals on the public leaderboard, updated hourly. Others can see roughly which hours you're active — never your apps, sites, or activity history.
+                </p>
+              ) : null}
             </section>
             {actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
             {publicProfile?.profileError || publicProfile?.profileMessage ? (

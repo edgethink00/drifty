@@ -45,7 +45,7 @@ export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = f
         <div className="settings-row">
           <div>
             <div className="lbl">Optional cloud features are explicit</div>
-            <div className="desc">If you connect Drifty Cloud and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total. Raw tracking history is not published there.</div>
+            <div className="desc">If you connect Drifty Cloud and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total, refreshed about once an hour. Other participants can see roughly which hours you're active, but raw tracking history is never published there.</div>
           </div>
           <div className="ctrl"><span className="chip">Aggregates only</span></div>
         </div>

@@ -12,7 +12,7 @@ import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import {
-  LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS,
+  LEADERBOARD_AUTO_PUBLISH_SLOT_MS,
   buildLeaderboardAutoPublishPayloadKey,
   clearLeaderboardAutoPublishRecordsForUser,
   findLeaderboardAutoPublishRecord,
@@ -110,7 +110,7 @@ type UseLeaderboardProfileControllerResult = {
 
 export type LeaderboardAutoPublishReason =
   | "startup"
-  | "interval"
+  | "slot"
   | "focus"
   | "visibility"
   | "day_changed"
@@ -717,9 +717,20 @@ export function useLeaderboardProfileController({
     // no-ops there); skip mounting the recurring timer and listeners entirely.
     if (shouldUsePreviewData()) return undefined;
     void syncLeaderboardPublication("startup");
-    const intervalId = window.setInterval(() => {
-      void syncLeaderboardPublication("interval");
-    }, LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS);
+
+    // Fire exactly on hour-slot boundaries rather than every N ms from mount, so
+    // the publish moment stays aligned to the same slot the publish gate uses and
+    // never leaks sub-hour timing. Re-arm each tick against the wall clock to stay
+    // aligned across drift and sleep/wake.
+    let slotTimeoutId = 0;
+    const scheduleNextSlot = () => {
+      const msUntilNextSlot = LEADERBOARD_AUTO_PUBLISH_SLOT_MS - (Date.now() % LEADERBOARD_AUTO_PUBLISH_SLOT_MS);
+      slotTimeoutId = window.setTimeout(() => {
+        void syncLeaderboardPublication("slot");
+        scheduleNextSlot();
+      }, msUntilNextSlot);
+    };
+    scheduleNextSlot();
 
     function handleFocus() {
       void syncLeaderboardPublication("focus");
@@ -733,7 +744,7 @@ export function useLeaderboardProfileController({
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(intervalId);
+      window.clearTimeout(slotTimeoutId);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

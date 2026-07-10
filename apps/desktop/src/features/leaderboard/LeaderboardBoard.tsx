@@ -122,7 +122,7 @@ function LeaderboardToolbar({
           </span>
         ) : (
           <span className="leaderboard-refresh-status leaderboard-refresh-status--idle" aria-hidden="true">
-            Updated just now
+            Scores update hourly
           </span>
         )}
       </div>

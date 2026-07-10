@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS,
   LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS,
-  LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS,
-  LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS,
+  LEADERBOARD_AUTO_PUBLISH_SLOT_MS,
   LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY,
   buildLeaderboardAutoPublishPayloadKey,
   findLeaderboardAutoPublishRecord,
@@ -56,10 +55,10 @@ describe("leaderboardAutoPublishState", () => {
     window.localStorage.clear();
   });
 
-  it("uses a 24-hour automatic publish cadence", () => {
-    expect(LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS).toBe(24 * 60 * 60 * 1000);
-    expect(LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS).toBe(LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS);
-    expect(LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS).toBe(LEADERBOARD_AUTO_PUBLISH_INTERVAL_MS);
+  it("publishes score changes at most once per hour slot, with a daily heartbeat", () => {
+    expect(LEADERBOARD_AUTO_PUBLISH_SLOT_MS).toBe(60 * 60 * 1000);
+    expect(LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS).toBe(24 * 60 * 60 * 1000);
+    expect(LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS).toBe(15 * 60 * 1000);
   });
 
   it("builds stable remote-safe payload keys", () => {
@@ -102,28 +101,55 @@ describe("leaderboardAutoPublishState", () => {
     expect(heartbeatDecision).toEqual({ shouldPublish: true, reason: "heartbeat_due", requiresRemoteOptInCheck: true });
   });
 
-  it("throttles changed payloads until the minimum success interval passes", () => {
-    const throttledDecision = shouldPublishLeaderboardPeriod({
-      record: makeRecord({ lastSuccessAt: new Date(BASE_TIME.getTime() - LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS + 1000).toISOString() }),
+  it("throttles changed payloads within the same hour slot, then publishes once a new slot starts", () => {
+    const now = new Date("2026-07-03T12:30:00.000Z");
+
+    // Last success at 12:05 is in the same 12:00 hour slot as `now` → blocked.
+    const sameSlotDecision = shouldPublishLeaderboardPeriod({
+      record: makeRecord({ lastSuccessAt: "2026-07-03T12:05:00.000Z" }),
       payloadKey: makePayloadKey(4200),
-      now: BASE_TIME,
+      now,
     });
 
-    const allowedDecision = shouldPublishLeaderboardPeriod({
-      record: makeRecord({ lastSuccessAt: new Date(BASE_TIME.getTime() - LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS).toISOString() }),
+    // Last success at 11:55 is in the previous (11:00) slot → publish. Every real
+    // publish of a changed score re-verifies remote opt-in, regardless of how
+    // recently we last published, so an active device cannot resurrect an opt-out
+    // made on another device.
+    const newSlotDecision = shouldPublishLeaderboardPeriod({
+      record: makeRecord({ lastSuccessAt: "2026-07-03T11:55:00.000Z" }),
       payloadKey: makePayloadKey(4200),
-      now: BASE_TIME,
+      now,
     });
 
-    expect(throttledDecision).toEqual({ shouldPublish: false, reason: "min_interval", requiresRemoteOptInCheck: false });
-    expect(allowedDecision).toEqual({ shouldPublish: true, reason: "payload_changed", requiresRemoteOptInCheck: true });
+    expect(sameSlotDecision).toEqual({ shouldPublish: false, reason: "same_slot", requiresRemoteOptInCheck: false });
+    expect(newSlotDecision).toEqual({ shouldPublish: true, reason: "payload_changed", requiresRemoteOptInCheck: true });
   });
 
-  it("lets explicit aggregate-changing triggers bypass the minimum success interval", () => {
+  it("resolves the slot from wall-clock hour boundaries", () => {
+    // 12:59:59.999 and 13:00:00.000 fall in different slots → publish across the boundary.
+    const crossBoundary = shouldPublishLeaderboardPeriod({
+      record: makeRecord({ lastSuccessAt: "2026-07-03T12:59:59.999Z" }),
+      payloadKey: makePayloadKey(4200),
+      now: new Date("2026-07-03T13:00:00.000Z"),
+    });
+
+    // 12:00:00.000 and 12:59:59.999 share the 12:00 slot → blocked.
+    const withinBoundary = shouldPublishLeaderboardPeriod({
+      record: makeRecord({ lastSuccessAt: "2026-07-03T12:00:00.000Z" }),
+      payloadKey: makePayloadKey(4200),
+      now: new Date("2026-07-03T12:59:59.999Z"),
+    });
+
+    expect(crossBoundary.shouldPublish).toBe(true);
+    expect(crossBoundary.reason).toBe("payload_changed");
+    expect(withinBoundary).toEqual({ shouldPublish: false, reason: "same_slot", requiresRemoteOptInCheck: false });
+  });
+
+  it("lets explicit aggregate-changing triggers bypass the slot gate", () => {
     const decision = shouldPublishLeaderboardPeriod({
-      record: makeRecord({ lastSuccessAt: new Date(BASE_TIME.getTime() - LEADERBOARD_AUTO_PUBLISH_MIN_SUCCESS_INTERVAL_MS + 1000).toISOString() }),
+      record: makeRecord({ lastSuccessAt: "2026-07-03T12:05:00.000Z" }),
       payloadKey: makePayloadKey(1200),
-      now: BASE_TIME,
+      now: new Date("2026-07-03T12:30:00.000Z"),
       bypassMinInterval: true,
     });
 
