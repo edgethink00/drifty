@@ -33,7 +33,6 @@ export type TrackerCommand =
   | "tracker_delete_project"
   | "tracker_save_project_anchors"
   | "tracker_delete_project_anchor"
-  | "tracker_save_project_exemplar"
   | "tracker_save_project_assignments"
   | "tracker_get_project_assignments"
   | "tracker_record_project_pass"
@@ -303,16 +302,6 @@ export interface ProjectInput {
   status?: ProjectStatus;
 }
 
-export type ProjectExemplarSource = "user_confirmed" | "user_corrected";
-
-export interface ProjectExemplar {
-  id: number;
-  projectId: string;
-  runSummary: string;
-  source: ProjectExemplarSource;
-  createdAt: string;
-}
-
 export type ProjectAssignmentSource = "ai" | "manual";
 
 export interface ProjectAssignmentRecord {
@@ -511,7 +500,6 @@ export interface TrackerApi {
   deleteProject(id: string): Promise<{ deleted: number }>;
   saveProjectAnchors(projectId: string, anchors: ProjectAnchor[]): Promise<ProjectAnchor[]>;
   deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string): Promise<{ deleted: number }>;
-  saveProjectExemplar(projectId: string, runSummary: string, source: ProjectExemplarSource): Promise<ProjectExemplar>;
   saveProjectAssignments(assignments: ProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
   getProjectAssignments(query: TimelineQuery): Promise<ProjectAssignmentRecord[]>;
   recordProjectPass(input: ProjectPassRunInput): Promise<ProjectPassRunRecord>;

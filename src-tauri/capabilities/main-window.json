@@ -66,7 +66,6 @@
     "allow-tracker-delete-project",
     "allow-tracker-save-project-anchors",
     "allow-tracker-delete-project-anchor",
-    "allow-tracker-save-project-exemplar",
     "allow-tracker-save-project-assignments",
     "allow-tracker-get-project-assignments",
     "allow-tracker-record-project-pass",

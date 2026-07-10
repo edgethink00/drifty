@@ -1304,6 +1304,46 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(events[0]["classification"]["classificationRuleId"], site_rule["id"])
         self.assertEqual(events[1]["classification"]["category"], "workspace")
 
+    def test_apply_classification_rules_preserves_manual_classification(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-04-06T09:00:00+00:00",
+                "ended_at": "2026-04-06T09:05:00+00:00",
+                "duration_seconds": 300,
+                "app_name": "Safari",
+                "bundle_id": "com.apple.Safari",
+                "site_domain": "docs.example.com",
+            }
+        )
+        with self.database.connect() as conn:
+            segment_id = conn.execute("SELECT id FROM activity_segments LIMIT 1").fetchone()["id"]
+        # The user manually classifies the segment.
+        self.database.save_classifications(
+            [
+                {"segmentId": segment_id, "category": "learning", "productivity": "neutral", "source": "manual", "confidence": 1.0}
+            ]
+        )
+        # A later, broad rule matches the same segment.
+        self.database.save_classification_rule(
+            {
+                "targetKind": "site",
+                "targetValue": "example.com",
+                "category": "workspace",
+                "productivity": "focus",
+            }
+        )
+
+        result = self.database.apply_classification_rules()
+        events = self.database.fetch_timeline("2026-04-06")
+
+        # The rule matches but must not overwrite the manual label.
+        self.assertEqual(result["matchedCount"], 1)
+        self.assertEqual(result["appliedCount"], 0)
+        self.assertEqual(result["skippedCount"], 1)
+        self.assertEqual(events[0]["classification"]["source"], "manual")
+        self.assertEqual(events[0]["classification"]["category"], "learning")
+        self.assertEqual(events[0]["classification"]["productivity"], "neutral")
+
     def test_detail_classification_rule_matches_only_exact_detail_on_same_site(self) -> None:
         self.database.insert_segment(
             {
@@ -2315,19 +2355,6 @@ class TrackerDatabaseTests(unittest.TestCase):
         deleted = self.database.delete_project_anchor(project_id, "app", "Code")
         self.assertEqual(deleted, 1)
         self.assertEqual(len(self.database.get_projects()[0]["anchors"]), 1)
-
-    def test_project_exemplar_cap_at_20(self) -> None:
-        project_id = self.database.save_project({"name": "P", "description": "d"})["id"]
-        for index in range(25):
-            self.database.save_project_exemplar(project_id, f"run line {index}", "user_confirmed")
-        exemplars = self.database.get_project_exemplars(project_id)
-        self.assertEqual(len(exemplars), 20)
-        # Newest kept: run line 24 present, run line 0 evicted.
-        summaries = {item["runSummary"] for item in exemplars}
-        self.assertIn("run line 24", summaries)
-        self.assertNotIn("run line 0", summaries)
-        with self.assertRaises(ValueError):
-            self.database.save_project_exemplar(project_id, "x", "invalid_source")
 
     def test_assignment_upsert_and_manual_guard(self) -> None:
         project_a = self.database.save_project({"name": "A", "description": "a"})["id"]

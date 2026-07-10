@@ -32,9 +32,7 @@ VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", 
 
 VALID_PROJECT_STATUSES = {"active", "archived"}
 VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword"}
-VALID_PROJECT_EXEMPLAR_SOURCES = {"user_confirmed", "user_corrected"}
 DEFAULT_PROJECT_COLOR = "#6366f1"
-PROJECT_EXEMPLAR_CAP = 20
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
@@ -264,17 +262,6 @@ class TrackerDatabase:
 
                 CREATE INDEX IF NOT EXISTS idx_project_anchors_project
                 ON project_anchors(project_id);
-
-                CREATE TABLE IF NOT EXISTS project_exemplars (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-                  run_summary TEXT NOT NULL,
-                  source TEXT NOT NULL,
-                  created_at TEXT NOT NULL
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_project_exemplars_project
-                ON project_exemplars(project_id, created_at DESC);
 
                 CREATE TABLE IF NOT EXISTS activity_project_assignments (
                   segment_id INTEGER PRIMARY KEY REFERENCES activity_segments(id) ON DELETE CASCADE,
@@ -2091,6 +2078,7 @@ class TrackerDatabase:
                         ai_result = excluded.ai_result,
                         stale = excluded.stale,
                         classification_rule_id = excluded.classification_rule_id
+                    WHERE activity_classifications.source NOT IN ('manual', 'ai_review')
                     """,
                     (
                         segment_id,
@@ -2222,67 +2210,6 @@ class TrackerDatabase:
                 (project_id, kind, value),
             )
             return cursor.rowcount
-
-    def save_project_exemplar(self, project_id: str, run_summary: str, source: str) -> dict[str, Any]:
-        run_summary = str(run_summary or "").strip()
-        if not run_summary:
-            raise ValueError("runSummary is required")
-        if source not in VALID_PROJECT_EXEMPLAR_SOURCES:
-            raise ValueError("source must be 'user_confirmed' or 'user_corrected'")
-        timestamp = datetime.now(timezone.utc).isoformat()
-        with self.connect() as conn:
-            if conn.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone() is None:
-                raise ValueError("project not found")
-            cursor = conn.execute(
-                """
-                INSERT INTO project_exemplars (project_id, run_summary, source, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (project_id, run_summary, source, timestamp),
-            )
-            exemplar_id = cursor.lastrowid
-            conn.execute(
-                """
-                DELETE FROM project_exemplars
-                WHERE project_id = ?
-                  AND id NOT IN (
-                    SELECT id FROM project_exemplars
-                    WHERE project_id = ?
-                    ORDER BY datetime(created_at) DESC, id DESC
-                    LIMIT ?
-                  )
-                """,
-                (project_id, project_id, PROJECT_EXEMPLAR_CAP),
-            )
-        return {
-            "id": exemplar_id,
-            "projectId": project_id,
-            "runSummary": run_summary,
-            "source": source,
-            "createdAt": timestamp,
-        }
-
-    def get_project_exemplars(self, project_id: str) -> list[dict[str, Any]]:
-        with self.connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT id, run_summary, source, created_at
-                FROM project_exemplars
-                WHERE project_id = ?
-                ORDER BY datetime(created_at) DESC, id DESC
-                """,
-                (project_id,),
-            ).fetchall()
-        return [
-            {
-                "id": row["id"],
-                "projectId": project_id,
-                "runSummary": row["run_summary"],
-                "source": row["source"],
-                "createdAt": row["created_at"],
-            }
-            for row in rows
-        ]
 
     def save_project_assignments(self, assignments: list[dict[str, Any]]) -> dict[str, int]:
         saved = 0

@@ -502,20 +502,6 @@ impl TrackerController {
         )
     }
 
-    pub fn save_project_exemplar(
-        &self,
-        app: &AppHandle,
-        project_id: String,
-        run_summary: String,
-        source: String,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "save_project_exemplar",
-            json!({ "projectId": project_id, "runSummary": run_summary, "source": source }),
-        )
-    }
-
     pub fn save_project_assignments(
         &self,
         app: &AppHandle,

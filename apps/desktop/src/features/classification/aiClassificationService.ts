@@ -43,7 +43,7 @@ const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v6-productivity-rubric";
+const AI_CLASSIFICATION_PROMPT_VERSION = "v7-definitions-anchors";
 const ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD = 0.55;
 const MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS = 512;
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
@@ -1130,6 +1130,7 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
   const classifiedAt = new Date().toISOString();
 
   return classifications.flatMap((entry): ActivityClassificationRecord[] => {
+    if (!entry || typeof entry !== "object") return [];
     const classification = entry as EdgeClassification;
     const segmentId = typeof classification.segmentId === "string"
       ? classification.segmentId
@@ -1595,8 +1596,12 @@ function enhancedRetryImproves(
     && enhancedConfidence > firstPassConfidence;
 }
 
+// A-3: under the v7 prompt the model signals insufficient evidence structurally —
+// category "unknown", or a confidence at/below the retry threshold — not through a
+// specific English phrase in the (terse, redacted, non-English-capable) reason.
+// Key the retry gate off that structured signal instead of a brittle regex.
 function retryEvidenceForRecord(record: ActivityClassificationRecord): "normal" | "insufficient" {
-  return /\binsufficient\b|\bnot enough evidence\b|\bunclear evidence\b/i.test(record.reason ?? "")
+  return record.category === "unknown" || finiteConfidence(record.confidence) <= ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD
     ? "insufficient"
     : "normal";
 }

@@ -9,7 +9,9 @@ import {
 } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 
-export const BUILT_IN_HEURISTIC_TAXONOMY_VERSION = "builtin-heuristics-v2";
+// v3: work communication registry entries (Slack, Zoom, Teams, Meet) flipped
+// neutral→focus; bump forces re-materialization of already-stored heuristic segments.
+export const BUILT_IN_HEURISTIC_TAXONOMY_VERSION = "builtin-heuristics-v3";
 
 const BUILT_IN_HEURISTIC_SAVE_BATCH_SIZE = 500;
 

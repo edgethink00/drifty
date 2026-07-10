@@ -182,14 +182,6 @@ pub struct ProjectAnchorDeleteQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectExemplarSaveQuery {
-    pub project_id: String,
-    pub run_summary: String,
-    pub source: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ProjectAssignmentsSaveQuery {
     pub assignments: serde_json::Value,
 }
@@ -667,22 +659,6 @@ pub async fn tracker_delete_project_anchor(
     async_runtime::spawn_blocking(move || {
         controller
             .delete_project_anchor(&app, query.project_id, query.kind, query.value)
-            .map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
-#[tauri::command]
-pub async fn tracker_save_project_exemplar(
-    app: AppHandle,
-    controller: State<'_, TrackerController>,
-    query: ProjectExemplarSaveQuery,
-) -> Result<serde_json::Value, String> {
-    let controller = *controller.inner();
-    async_runtime::spawn_blocking(move || {
-        controller
-            .save_project_exemplar(&app, query.project_id, query.run_summary, query.source)
             .map_err(|error| error.to_string())
     })
     .await

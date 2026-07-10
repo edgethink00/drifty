@@ -10,7 +10,6 @@ export interface ProjectPassPromptProject {
   readonly name: string;
   readonly description: string;
   readonly anchors: readonly ProjectAnchor[];
-  readonly exemplars: readonly string[];
 }
 
 export interface ProjectPassPromptInput {
@@ -41,10 +40,6 @@ function projectBlock(project: ProjectPassPromptProject): string {
   const lines = [`- ${project.id} "${project.name}": ${project.description}`];
   const signals = anchorLine(project.anchors);
   if (signals) lines.push(signals);
-  if (project.exemplars.length) {
-    lines.push(`  Confirmed examples:`);
-    for (const exemplar of project.exemplars) lines.push(`    ${exemplar}`);
-  }
   return lines.join("\n");
 }
 

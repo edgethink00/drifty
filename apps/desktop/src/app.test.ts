@@ -1090,7 +1090,7 @@ describe('domain helpers', () => {
       appName: 'Google Chrome',
       browserName: 'Google Chrome',
       siteDomain: 'meet.google.com',
-    })).toMatchObject({ category: 'communication', productivity: 'neutral', surface: 'browser', source: 'domain-db' });
+    })).toMatchObject({ category: 'communication', productivity: 'focus', surface: 'browser', source: 'domain-db' });
 
     expect(classifyActivityDetailed({
       ...segments[0],
@@ -1166,7 +1166,7 @@ describe('domain helpers', () => {
       segment({ id: 'sprint-4', start: localIsoAt(0, 9, 40), end: localIsoAt(0, 10, 0), appName: 'Spotify' }),
     ]],
     ['reactive_operator', [
-      segment({ id: 'reactive-1', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 9, 30), appName: 'Slack' }),
+      segment({ id: 'reactive-1', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 9, 30), appName: 'Messages' }),
       segment({ id: 'reactive-2', start: localIsoAt(0, 9, 30), end: localIsoAt(0, 9, 50), appName: 'Mail' }),
       segment({ id: 'reactive-3', start: localIsoAt(0, 9, 50), end: localIsoAt(0, 10, 20), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
     ]],
@@ -1177,7 +1177,7 @@ describe('domain helpers', () => {
     ]],
     ['balanced_builder', [
       segment({ id: 'balanced-1', start: localIsoAt(0, 9, 0), end: localIsoAt(0, 9, 35), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
-      segment({ id: 'balanced-2', start: localIsoAt(0, 9, 35), end: localIsoAt(0, 9, 55), appName: 'Slack' }),
+      segment({ id: 'balanced-2', start: localIsoAt(0, 9, 35), end: localIsoAt(0, 9, 55), appName: 'Mail' }),
       segment({ id: 'balanced-3', start: localIsoAt(0, 10, 0), end: localIsoAt(0, 10, 25), appName: 'Spotify' }),
     ]],
   ] satisfies Array<[ProductivityPersonaId, ActivitySegment[]]>)('builds the %s productivity persona locally', (personaId: ProductivityPersonaId, personaSegments: ActivitySegment[]) => {

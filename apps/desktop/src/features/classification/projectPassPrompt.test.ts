@@ -28,7 +28,6 @@ const project: ProjectPassPromptProject = {
     { kind: "app", value: "Code", source: "harvested" },
     { kind: "domain", value: "github.com", source: "manual" },
   ],
-  exemplars: ["w7 | 11:00-11:30 (30m active, 10x3m) | dominant: Code · github.com (30m) | current: workspace/focus (manual)"],
 };
 
 describe("buildProjectPassPrompt", () => {
@@ -46,7 +45,6 @@ describe("buildProjectPassPrompt", () => {
     });
     expect(prompt).toContain('p1 "Drifty": Mac app development');
     expect(prompt).toContain("Known signals: apps [Code]; domains [github.com]");
-    expect(prompt).toContain("Confirmed examples:");
     expect(prompt).toContain("Context before (read-only; do not output these ids):");
     expect(prompt).toContain("Core analysis windows (return assignments and corrections only for these ids):");
     expect(prompt).toContain("Context after (read-only; do not output these ids):");

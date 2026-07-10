@@ -96,7 +96,7 @@ describe("buildRollingFocusSeconds", () => {
           "communication",
           new Date(2026, 3, 6, 11, 0).toISOString(),
           new Date(2026, 3, 6, 11, 15).toISOString(),
-          "Slack",
+          "Mail",
         ),
         makeSegment(
           "drift",

@@ -98,13 +98,12 @@ function planProjectPassChunks(
   });
 }
 
-function toPromptProject(project: Project, exemplarsByProject: Map<string, string[]>): ProjectPassPromptProject {
+function toPromptProject(project: Project): ProjectPassPromptProject {
   return {
     id: project.id,
     name: project.name,
     description: project.description,
     anchors: project.anchors,
-    exemplars: exemplarsByProject.get(project.id) ?? [],
   };
 }
 
@@ -293,8 +292,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   const activeProjects = projects.filter((project) => project.status === "active");
   const validProjectIds = new Set(activeProjects.map((project) => project.id));
 
-  const exemplarsByProject = new Map<string, string[]>();
-  const promptProjects = activeProjects.map((project) => toPromptProject(project, exemplarsByProject));
+  const promptProjects = activeProjects.map((project) => toPromptProject(project));
   const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
   const windows = buildProjectPassAnalysisWindows(segments, {
     range,
@@ -312,6 +310,17 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       .catch(() => []),
   );
 
+  // Skip re-analyzing chunks whose fingerprint (core windows + project defs +
+  // prompt version) already has fresh stored assignments: nothing changed, so the
+  // model call is pure wasted cost/tokens. Assignments are per-segment upserts, so
+  // a skipped chunk's existing rows survive untouched.
+  const cachedChunkFingerprints = new Set(
+    await Promise.resolve()
+      .then(() => tracker.getProjectAssignments({ start: range.start, end: range.end }))
+      .then((rows) => rows.filter((row) => !row.stale && row.chunkFingerprint).map((row) => row.chunkFingerprint as string))
+      .catch(() => [] as string[]),
+  );
+
   const chunks = planProjectPassChunks(windows);
   options.onProgress?.(0, chunks.length);
   const bufferedAssignments: ProjectAssignmentRecord[] = [];
@@ -324,6 +333,10 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
 
   const results = await runProjectPassChunks(chunks, async (chunk) => {
     const fingerprint = await projectPassChunkFingerprint(chunk.coreWindows, promptProjects);
+    if (cachedChunkFingerprints.has(fingerprint)) {
+      // Identical prompt already analyzed; reuse the stored assignments untouched.
+      return { usage: {}, assignments: [], correctionClassifications: [], correctionEvents: [] };
+    }
     const prompt = buildProjectPassPrompt({
       beforeContextWindows: chunk.beforeContextWindows,
       coreWindows: chunk.coreWindows,

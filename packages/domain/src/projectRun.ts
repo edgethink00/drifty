@@ -202,7 +202,7 @@ export function formatRunDuration(seconds: number): string {
   return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`;
 }
 
-/** Canonical one-line rendering of a run for the project pass prompt (and exemplars). */
+/** Canonical one-line rendering of a run for the project pass prompt. */
 export function formatProjectRunLine(run: ProjectRun): string {
   const time = `${isoClock(run.startedAt)}–${isoClock(run.endedAt)} (${formatRunDuration(run.durationSeconds)})`;
   if (run.minor) {

@@ -76,7 +76,7 @@ describe("chunkProjectPassWindows", () => {
 
 describe("projectPassChunkFingerprint", () => {
   const windows = buildProjectPassAnalysisWindows([seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:30:00+00:00", durationSeconds: 1800, appName: "Code" })]);
-  const project = { id: "p1", name: "P", description: "d", anchors: [], exemplars: [] };
+  const project = { id: "p1", name: "P", description: "d", anchors: [] };
 
   it("is stable for identical inputs and changes with project definition", async () => {
     const a = await projectPassChunkFingerprint(windows, [project]);
@@ -200,6 +200,40 @@ describe("runProjectPass orchestration", () => {
     expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 1 }));
     expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: "p1", passId: 7 })]);
     expect(spies.saveAiReviewEvents).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", passId: 7, newProductivity: "focus" })]);
+  });
+
+  it("skips a chunk whose fingerprint already has fresh stored assignments", async () => {
+    const { tracker, spies } = mockTracker();
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: { model: "m", tokensIn: 100, tokensOut: 20 },
+    }));
+    const baseOptions = {
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "manual" as const,
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+    };
+
+    // First pass has nothing cached: the chunk runs and stores an assignment.
+    await runProjectPass(baseOptions);
+    const fingerprint = spies.saveProjectAssignments.mock.calls[0][0][0].chunkFingerprint as string;
+    expect(typeof fingerprint).toBe("string");
+
+    // Second pass sees that assignment as already stored → the chunk is skipped.
+    (inference as ReturnType<typeof vi.fn>).mockClear();
+    const cached = mockTracker({
+      getProjectAssignments: vi.fn(async () => [
+        { segmentId: "1", projectId: "p1", source: "ai" as const, chunkFingerprint: fingerprint, stale: false },
+      ]),
+    });
+    const summary = await runProjectPass({ ...baseOptions, tracker: cached.tracker });
+
+    expect(inference).not.toHaveBeenCalled();
+    expect(summary.ran).toBe(true);
+    expect(summary.assignments).toBe(0);
+    expect(summary.tokensIn).toBe(0);
   });
 
   it("skips cleanly when there is no activity", async () => {

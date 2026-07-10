@@ -672,23 +672,6 @@ def delete_project_anchor(payload: dict):
     return response(True, {"deleted": deleted})
 
 
-def save_project_exemplar(payload: dict):
-    project_id = payload.get("projectId", payload.get("project_id"))
-    run_summary = payload.get("runSummary", payload.get("run_summary"))
-    source = payload.get("source")
-    if not isinstance(project_id, str) or not project_id:
-        return response(False, error="projectId is required")
-    if not isinstance(run_summary, str):
-        return response(False, error="runSummary is required")
-    if not isinstance(source, str):
-        return response(False, error="source is required")
-    try:
-        exemplar = database().save_project_exemplar(project_id, run_summary, source)
-    except ValueError as exc:
-        return response(False, error=str(exc))
-    return response(True, exemplar)
-
-
 def save_project_assignments(payload: dict):
     assignments = payload.get("assignments", [])
     if not isinstance(assignments, list):
@@ -971,7 +954,6 @@ COMMANDS = {
     "delete_project": delete_project,
     "save_project_anchors": save_project_anchors,
     "delete_project_anchor": delete_project_anchor,
-    "save_project_exemplar": save_project_exemplar,
     "save_project_assignments": save_project_assignments,
     "get_project_assignments": get_project_assignments,
     "record_project_pass": record_project_pass,

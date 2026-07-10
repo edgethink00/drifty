@@ -170,7 +170,38 @@ function normalizeOpenRouterModels(primaryModel: string, fallbackModels: readonl
   return [model, ...normalizeOpenRouterFallbackModels(model, fallbackModels ?? [])];
 }
 
-function buildClassificationPrompt(
+// v7 prompt (definitions + coupling anchors). MUST stay byte-identical to
+// packages/domain/src/liveClassificationPrompt.ts buildLiveClassificationPrompt
+// with { includeDefinitions: true, couplingAnchors: "workspace-game" }, minus the
+// local-only enhancedRetry guidance. liveClassificationPromptParity.test.ts pins this.
+const CATEGORY_DEFINITIONS = [
+  "Category definitions:",
+  "- workspace: doing work in professional, dev, or business tools/sites (editors, terminals, analytics, ads, dashboards, business apps, code hosting, deploy, cloud consoles).",
+  "- learning: seeking or reading information — web search, docs, tutorials, technical articles, AI-assistant chats, reference reading.",
+  "- communication: messaging, email, chat, or meetings (Slack, Discord, email, Zoom/Meet), whatever the topic.",
+  "- music: listening to or managing music.",
+  "- game: playing a game.",
+  "- social_media: browsing personal social feeds, posts, or profiles.",
+  "- entertainment: watching videos/streams or other leisure media.",
+  "- shopping: browsing or buying products (product pages, marketplaces, carts).",
+  "- utility: personal admin and system tasks — settings, cloud storage, app stores, sign-in, account/service/booking management (including travel booking management), finance/quote lookups, maps.",
+  "- unknown: not enough evidence to tell.",
+].join("\n");
+
+const PRODUCTIVITY_DEFINITIONS = [
+  "Productivity definitions:",
+  "- focus: on-task work, work-adjacent activity that supports it (work tools, work-related search/reading/AI-chat/tutorials, account or business setup), and work communication (work chat channels, team servers, work meetings). Use the work profile to judge relevance.",
+  "- neutral: supporting or in-between activity that is neither deep work nor a distraction — personal communication (friends, personal DMs), background music, purposeful personal admin (settings, cloud storage, app store, account/service/booking management, finance quotes), personal informational reading (personal finance or news, general non-work research), and work-relevant discussion read on a social platform.",
+  "- drift: off-task personal leisure — personal social feeds and posts, entertainment video/streams, games, product shopping, and idle browsing.",
+  "- When evidence is insufficient, use category unknown with productivity neutral and confidence 0.5 or lower. Never label an activity drift just because you cannot tell what it is.",
+].join("\n");
+
+const COUPLING_ANCHORS_LINE =
+  "Category productivity anchors: workspace is always focus; game is always drift. For every other category (including learning), judge productivity from the evidence.";
+
+// Exported for liveClassificationPromptParity.test.ts, which pins this inline
+// copy to packages/domain's canonical builder so the two can't drift.
+export function buildClassificationPrompt(
   payload: readonly MinimizedActivityPayload[],
   workProfile: string | null,
   enhancedRetryContext: EnhancedContextProviderPayload | null,
@@ -188,7 +219,9 @@ function buildClassificationPrompt(
     ...redditPromptGuidance(payload),
     "Use only these categories: workspace, learning, communication, music, game, social_media, entertainment, shopping, utility, unknown.",
     "Use only these productivity labels: focus, neutral, drift.",
-    "Use neutral only for genuinely in-between activities, such as background music while working or brief communication with unclear purpose. Do not use neutral as an uncertainty fallback: if your reason says the activity is professional or work-related, the label must be focus, even for supporting tools, consoles, account setup, or work-relevant research. If the evidence is insufficient to decide, use category unknown with confidence 0.5 or lower instead of guessing.",
+    CATEGORY_DEFINITIONS,
+    PRODUCTIVITY_DEFINITIONS,
+    COUPLING_ANCHORS_LINE,
     "Return JSON only in the shape {\"results\":[{\"id\":string,\"category\":string,\"productivity\":string,\"confidence\":number,\"reason\":string}]}. Do not include raw titles, domains, or work profile details in the reason.",
     JSON.stringify(payload.map((item) => promptItem(item, enhancedRetryContext))),
   ].join("\n");

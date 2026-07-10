@@ -26,8 +26,6 @@ import type {
   ProjectAnchorKind,
   ProjectAssignmentRecord,
   ProjectAssignmentsSaveResult,
-  ProjectExemplar,
-  ProjectExemplarSource,
   ProjectInput,
   ProjectPassRun,
   ProjectPassRunInput,
@@ -367,10 +365,6 @@ export const trackerClient: TrackerApi = {
   async deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string) {
     const result = await safeInvoke<{ deleted: number }>("tracker_delete_project_anchor", { query: { projectId, kind, value } });
     return result ?? { deleted: 0 };
-  },
-  async saveProjectExemplar(projectId: string, runSummary: string, source: ProjectExemplarSource) {
-    const result = await safeInvoke<ProjectExemplar>("tracker_save_project_exemplar", { query: { projectId, runSummary, source } });
-    return result ?? { id: 0, projectId, runSummary, source, createdAt: "" };
   },
   async saveProjectAssignments(assignments: ProjectAssignmentRecord[]) {
     const result = await safeInvoke<ProjectAssignmentsSaveResult>("tracker_save_project_assignments", { query: { assignments } });
