@@ -56,7 +56,7 @@ export function LeaderboardPage({
       <div className="pg-head">
         <div>
           <h1>Global focus ranking</h1>
-          <p className="page-subhead">Publish only your aggregate focus total and public profile fields.</p>
+          <p className="page-subhead">Publicly share weekly focus and hourly patterns—not apps, sites, or raw history.</p>
         </div>
       </div>
 

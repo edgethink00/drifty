@@ -276,6 +276,7 @@ describe("LeaderboardView", () => {
     expect(screen.getByText(/not on the board yet/i)).toBeTruthy();
     expect(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /join leaderboard/i })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
+    expect(screen.queryByText(/joining shares|join the public leaderboard to share/i)).toBeNull();
     expect(screen.getAllByText(/^Alex Kim$/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("alex@example.com")).toBeNull();
   });
