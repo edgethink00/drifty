@@ -10,6 +10,7 @@ import { DriftAlarmSourceIcon } from "./DriftAlarmSourceIcon";
 import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 type AlarmPreviewSectionKey = Extract<DriftAlarmCopySectionKey, "drift" | "breakReturn">;
 
@@ -44,6 +45,7 @@ export function DriftAlarmCopySettings({
   readonly value: DriftAlarmCopySettingsValue;
   readonly onChange: (value: DriftAlarmCopySettingsValue) => void;
 }) {
+  const { t } = useLocalization();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeSectionKey, setActiveSectionKey] = useState<DriftAlarmCopySectionKey>("drift");
   const [draftCopy, setDraftCopy] = useState(value);
@@ -75,14 +77,14 @@ export function DriftAlarmCopySettings({
   };
 
   return (
-    <div className="settings-row settings-row--drift-copy" role="group" aria-label="Alarm copy">
+    <div className="settings-row settings-row--drift-copy" role="group" aria-label={t("settings.alarmCopy.label")}>
       <div>
-        <div className="lbl">Alarm copy</div>
-        <div className="desc">Customize only the representative titles used by production drift alarms.</div>
+        <div className="lbl">{t("settings.alarmCopy.label")}</div>
+        <div className="desc">{t("settings.alarmCopy.description")}</div>
       </div>
       <div className="ctrl settings-row__actions">
         <button type="button" className="settings-btn" onClick={openEditor}>
-          Edit alarm copy
+          {t("settings.alarmCopy.edit")}
         </button>
       </div>
       {isEditorOpen ? (
@@ -96,22 +98,22 @@ export function DriftAlarmCopySettings({
           >
             <div className="auth-modal__header drift-copy-modal__header">
               <div>
-                <h2 id="drift-copy-modal-title">Edit alarm copy</h2>
-                <p>{activeSection.description}</p>
+                <h2 id="drift-copy-modal-title">{t("settings.alarmCopy.edit")}</h2>
+                <p>{localizedCopySectionDescription(activeSectionKey, t)}</p>
               </div>
               <button
                 type="button"
                 className="settings-btn auth-modal__close"
                 onClick={cancelEditor}
-                aria-label="Close"
-                title="Close"
+                aria-label={t("settings.alarmCopy.close")}
+                title={t("settings.alarmCopy.close")}
               >
                 x
               </button>
             </div>
             <div className="drift-copy-modal__body">
               <div className="drift-copy-editor">
-                <div className="drift-copy-modal__tabs" role="tablist" aria-label="Alarm copy sections">
+                <div className="drift-copy-modal__tabs" role="tablist" aria-label={t("settings.alarmCopy.sectionsAria")}>
                   {DRIFT_ALARM_COPY_SECTIONS.map((section) => (
                     <button
                       key={section.key}
@@ -121,24 +123,24 @@ export function DriftAlarmCopySettings({
                       className={`drift-copy-modal__tab${activeSectionKey === section.key ? " is-active" : ""}`}
                       onClick={() => setActiveSectionKey(section.key)}
                     >
-                      {section.title}
+                      {localizedCopySectionTitle(section.key, t)}
                     </button>
                   ))}
                 </div>
-                <section className="drift-copy-editor__group" aria-label={activeSection.title}>
-                  <h4>{activeSection.title}</h4>
+                <section className="drift-copy-editor__group" aria-label={localizedCopySectionTitle(activeSectionKey, t)}>
+                  <h4>{localizedCopySectionTitle(activeSectionKey, t)}</h4>
                   <div className="drift-copy-editor__fields">
                     {activeSection.fields.map((field) => (
                       <label className="drift-copy-field" key={field.key}>
                         <span>
-                          <strong>{field.label}</strong>
-                          <small>{field.hint}</small>
+                          <strong>{t("settings.alarmCopy.titleField")}</strong>
+                          <small>{field.hint === "Plain text" ? t("settings.alarmCopy.plainText") : field.hint}</small>
                         </span>
                         <input
                           className="settings-input drift-copy-field__input"
                           value={draftCopy[field.key]}
                           onChange={(event) => updateField(field.key, event.target.value)}
-                          aria-label={field.label}
+                          aria-label={t("settings.alarmCopy.titleField")}
                         />
                       </label>
                     ))}
@@ -146,19 +148,19 @@ export function DriftAlarmCopySettings({
                 </section>
                 <div className="drift-copy-editor__actions">
                   <button type="button" className="settings-btn" onClick={() => setDraftCopy(buildDefaultDriftAlarmCopy())}>
-                    Reset alarm copy
+                    {t("settings.alarmCopy.reset")}
                   </button>
                   <div className="drift-copy-editor__commit-actions">
                     <button type="button" className="settings-btn" onClick={cancelEditor}>
-                      Cancel
+                      {t("settings.alarmCopy.cancel")}
                     </button>
                     <button type="button" className="settings-btn settings-btn--primary" onClick={saveEditor}>
-                      Save
+                      {t("settings.alarmCopy.save")}
                     </button>
                   </div>
                 </div>
               </div>
-              <aside className="drift-copy-preview" role="complementary" aria-label="Alarm copy preview">
+              <aside className="drift-copy-preview" role="complementary" aria-label={t("settings.alarmCopy.previewAria")}>
                 {previewEvent ? (
                   <div className="drift-copy-preview__alarm">
                     <DriftAlarm event={previewEvent} onAction={ignorePreviewAction} isPreview />
@@ -166,9 +168,9 @@ export function DriftAlarmCopySettings({
                 ) : null}
                 {activeSectionKey === "notification" ? (
                   <div className="drift-copy-preview__notification">
-                    <span className="drift-copy-preview__notification-kicker">macOS notification</span>
+                    <span className="drift-copy-preview__notification-kicker">{t("settings.alarmCopy.macosNotification")}</span>
                     <strong className="drift-copy-preview__notification-title">{notificationPreview.title}</strong>
-                    <div className="drift-copy-preview__notification-source" aria-label={`Notification source ${NOTIFICATION_PREVIEW.place}`}>
+                    <div className="drift-copy-preview__notification-source" aria-label={t("settings.alarmCopy.notificationSourceAria", { source: NOTIFICATION_PREVIEW.place })}>
                       <span className="src-tile src-tile--drift" aria-hidden="true">
                         <DriftAlarmSourceIcon
                           appName={NOTIFICATION_PREVIEW.sourceAppName}
@@ -193,6 +195,24 @@ export function DriftAlarmCopySettings({
       ) : null}
     </div>
   );
+}
+
+function localizedCopySectionTitle(key: DriftAlarmCopySectionKey, t: LocalizationController["t"]): string {
+  switch (key) {
+    case "drift": return t("settings.alarmCopy.drift");
+    case "breakReturn": return t("settings.alarmCopy.breakReturn");
+    case "notification": return t("settings.alarmCopy.notification");
+    case "extremeNudge": return t("settings.alarmCopy.extremeNudge");
+  }
+}
+
+function localizedCopySectionDescription(key: DriftAlarmCopySectionKey, t: LocalizationController["t"]): string {
+  switch (key) {
+    case "drift": return t("settings.alarmCopy.driftDescription");
+    case "breakReturn": return t("settings.alarmCopy.breakReturnDescription");
+    case "notification": return t("settings.alarmCopy.notificationDescription");
+    case "extremeNudge": return t("settings.alarmCopy.extremeNudgeDescription");
+  }
 }
 
 function buildExtremeNudgePreviewEvent(copySettings: DriftAlarmCopySettingsValue): ExtremeNudgeToastEvent {

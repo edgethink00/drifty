@@ -113,6 +113,7 @@ vi.mock("./features/share/focusCardService", () => ({
     },
   }),
   publishFocusCard: vi.fn().mockResolvedValue({ success: true, error: null }),
+  refreshFocusCardAggregates: vi.fn().mockResolvedValue({ success: true, error: null }),
   setFocusCardEnabled: vi.fn().mockResolvedValue({ success: true, error: null }),
   setFocusCardDetailFlags: vi.fn().mockResolvedValue({ success: true, error: null }),
 }));

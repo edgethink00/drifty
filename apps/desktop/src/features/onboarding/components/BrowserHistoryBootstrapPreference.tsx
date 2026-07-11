@@ -7,10 +7,11 @@ export function BrowserHistoryBootstrapPreference({
   enabled,
   onChange,
 }: BrowserHistoryBootstrapPreferenceProps) {
+  const { t } = useLocalization();
   return (
       <label className="onb-browser-history-preference">
         <span className="onb-browser-history-preference__title">
-          Import from browser history (last 48 hours)
+          {t("onboarding.browserHistory.label")}
         </span>
       <input
         type="checkbox"
@@ -25,8 +26,9 @@ export function BrowserHistoryBootstrapPreference({
         <span className="onb-toggle__track">
           <span className="onb-toggle__thumb" />
         </span>
-        <span className="onb-toggle__label">{enabled ? "On" : "Off"}</span>
+        <span className="onb-toggle__label">{enabled ? t("common.on") : t("common.off")}</span>
       </span>
     </label>
   );
 }
+import { useLocalization } from "../../localization/LocalizationContext";

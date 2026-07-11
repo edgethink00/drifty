@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { onboardingActivityLabel } from "./onboardingOptionLabels";
 import "./styles/first-day-preparation.css";
 
 export type FirstDayPreparationPhase = "importing" | "downloading" | "classifying";
@@ -8,40 +10,14 @@ type PhaseCopy = {
   readonly lines: readonly string[];
 };
 
-const PHASE_COPY: Record<FirstDayPreparationPhase, PhaseCopy> = {
-  importing: {
-    title: "Getting your day ready",
-    lines: [
-      "Gathering your last 48 hours…",
-      "Pulling in where you've been…",
-    ],
-  },
-  downloading: {
-    title: "Setting up your local AI",
-    lines: [
-      "Downloading your local model…",
-      "Classification will run entirely on this Mac…",
-    ],
-  },
-  classifying: {
-    title: "Making sense of your day",
-    lines: [
-      "Reading through your day…",
-      "Telling focus from drift…",
-      "Learning your rhythm…",
-      "Bringing it all together…",
-    ],
-  },
-};
-
 const LINE_ROTATION_MS = 8450;
 
 // The one personalized touch: lead the classifying phase with the work the user
 // named during onboarding, so the first loading screen shows Drifty remembered.
-function classifyingLines(workActivityLabel: string | null | undefined): readonly string[] {
-  const base = PHASE_COPY.classifying.lines;
+function classifyingLines(workActivityLabel: string | null | undefined, copy: PhaseCopy, t: LocalizationController["t"]): readonly string[] {
+  const base = copy.lines;
   if (!workActivityLabel) return base;
-  return [`Sorting your ${workActivityLabel} time…`, ...base];
+  return [t("onboarding.preparing.personalized", { activity: workActivityLabel }), ...base];
 }
 
 type FirstDayPreparationScreenProps = {
@@ -53,10 +29,16 @@ type FirstDayPreparationScreenProps = {
 };
 
 export function FirstDayPreparationScreen({ phase, progress, workActivityLabel }: FirstDayPreparationScreenProps) {
-  const copy = PHASE_COPY[phase];
+  const { effectiveLanguage, t } = useLocalization();
+  const phaseCopy = useMemo<Record<FirstDayPreparationPhase, PhaseCopy>>(() => ({
+    importing: { title: t("onboarding.preparing.importTitle"), lines: [t("onboarding.preparing.importLine1"), t("onboarding.preparing.importLine2")] },
+    downloading: { title: t("onboarding.preparing.downloadTitle"), lines: [t("onboarding.preparing.downloadLine1"), t("onboarding.preparing.downloadLine2")] },
+    classifying: { title: t("onboarding.preparing.classifyTitle"), lines: [t("onboarding.preparing.classifyLine1"), t("onboarding.preparing.classifyLine2"), t("onboarding.preparing.classifyLine3"), t("onboarding.preparing.classifyLine4")] },
+  }), [t]);
+  const copy = phaseCopy[phase];
   const lines = useMemo(
-    () => (phase === "classifying" ? classifyingLines(workActivityLabel) : PHASE_COPY[phase].lines),
-    [phase, workActivityLabel],
+    () => (phase === "classifying" ? classifyingLines(onboardingActivityLabel(workActivityLabel ?? "", effectiveLanguage), phaseCopy.classifying, t) : phaseCopy[phase].lines),
+    [effectiveLanguage, phase, phaseCopy, t, workActivityLabel],
   );
   const line = useRotatingLine(lines, phase);
   const determinate = progress !== null && Number.isFinite(progress);
@@ -102,7 +84,7 @@ export function FirstDayPreparationScreen({ phase, progress, workActivityLabel }
             style={determinate ? { width: `${percent}%` } : undefined}
           />
         </div>
-        <span className="first-day-prep__percent">{percent !== null ? `${percent}%` : "Working…"}</span>
+        <span className="first-day-prep__percent">{percent !== null ? `${percent}%` : t("onboarding.preparing.working")}</span>
       </div>
     </div>
   );

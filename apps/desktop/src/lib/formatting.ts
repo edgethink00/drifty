@@ -153,11 +153,10 @@ export function clockHourForLogicalHour(logicalHour: number, startOfDayMinutes =
   return Math.floor((logicalHour * 60 + startOfDayMinutes) / 60) % 24;
 }
 
-export function formatStartOfDayOptionLabel(minutes: number): string {
-  const hour = Math.floor(minutes / 60) % 24;
-  const period = hour < 12 ? "AM" : "PM";
-  const displayHour = hour % 12 || 12;
-  return `${displayHour}:00 ${period}`;
+export function formatStartOfDayOptionLabel(minutes: number, locale = UI_LOCALE): string {
+  const normalized = ((minutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const date = new Date(2026, 0, 1, Math.floor(normalized / 60), normalized % 60, 0, 0);
+  return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", hour12: true }).format(date);
 }
 
 export function filterSegmentsForRange(segments: ActivitySegment[], start: string, end: string): ActivitySegment[] {

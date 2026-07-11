@@ -1,5 +1,7 @@
 import type { CSSProperties, ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
 import { MAX_MAIN_ACTIVITY_SELECTIONS } from "../../constants";
+import { useLocalization } from "../../../localization/LocalizationContext";
+import { onboardingActivityLabel, onboardingDomainLabel } from "../../onboardingOptionLabels";
 
 export function JobStep({
   activityOpen,
@@ -48,33 +50,34 @@ export function JobStep({
   readonly onRemoveActivity: (option: string) => void;
   readonly onSelectDomain: (option: string) => void;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const activityQueryTrimmed = activityQuery.trim();
   const domainQueryTrimmed = domainQuery.trim();
   const activityPlaceholder = selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS
-    ? "Maximum 5 selected"
+    ? t("onboarding.job.maximumSelected")
     : selectedActivities.length > 0
-      ? "Add another…"
-      : "Type to search or add your own…";
+      ? t("onboarding.job.addAnother")
+      : t("onboarding.job.searchOrAdd");
 
   return (
     <div className="dc-onb-job">
       <div className="dc-onb-field-group">
         <div className="dc-onb-field-head">
-          <h2 className="dc-onb-field-label">What do you usually work on?</h2>
+          <h2 className="dc-onb-field-label">{t("onboarding.job.activityLabel")}</h2>
           <span className="dc-onb-count">{selectedActivities.length} / {MAX_MAIN_ACTIVITY_SELECTIONS}</span>
         </div>
         <div className="dc-onb-combobox" data-onb-combobox>
           {selectedActivities.length > 0 ? (
-            <div className="dc-onb-tags" role="group" aria-label="Selected activities">
+            <div className="dc-onb-tags" role="group" aria-label={t("onboarding.job.selectedActivities")}>
               {selectedActivities.map((activity) => (
                 <button
                   type="button"
                   className="dc-onb-tag"
                   key={activity}
                   onClick={() => onRemoveActivity(activity)}
-                  aria-label={`Remove ${activity}`}
+                  aria-label={t("onboarding.job.removeActivity", { activity: onboardingActivityLabel(activity, effectiveLanguage) })}
                 >
-                  <span>{activity}</span>
+                  <span>{onboardingActivityLabel(activity, effectiveLanguage)}</span>
                   <span aria-hidden="true">x</span>
                 </button>
               ))}
@@ -89,24 +92,24 @@ export function JobStep({
               onKeyDown={onActivityKeyDown}
               placeholder={activityPlaceholder}
               disabled={selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS}
-              aria-label="Search activities"
+              aria-label={t("onboarding.job.searchActivities")}
               ref={activityInputRef}
             />
             {activityOpen ? (
               <DropdownList style={activityDropdownStyle}>
                 {activityOptions.map((option) => (
                   <DropdownOption key={option} onClick={() => onAddActivity(option)}>
-                    {option}
+                    {onboardingActivityLabel(option, effectiveLanguage)}
                   </DropdownOption>
                 ))}
                 {showActivityCustom ? (
                   <DropdownOption onClick={() => onAddActivity(activityQueryTrimmed)}>
                     <span className="dc-onb-add-icon" aria-hidden="true">+</span>
-                    Add "{activityQueryTrimmed}"
+                    {t("onboarding.job.addCustom", { value: activityQueryTrimmed })}
                   </DropdownOption>
                 ) : null}
                 {activityOptions.length === 0 && !showActivityCustom ? (
-                  <div className="dc-onb-dropdown-empty">No matches — keep typing to add your own.</div>
+                  <div className="dc-onb-dropdown-empty">{t("onboarding.job.noMatches")}</div>
                 ) : null}
               </DropdownList>
             ) : null}
@@ -115,7 +118,7 @@ export function JobStep({
       </div>
 
       <div className="dc-onb-field-group">
-        <h2 className="dc-onb-field-label">What field are you in?</h2>
+        <h2 className="dc-onb-field-label">{t("onboarding.job.domainLabel")}</h2>
         <div className="dc-onb-combobox__anchor" data-onb-combobox>
           <input
             className="dc-onb-input"
@@ -123,21 +126,21 @@ export function JobStep({
             onChange={onDomainInput}
             onFocus={onDomainFocus}
             onKeyDown={onDomainKeyDown}
-            placeholder="Type to search or add your own…"
-            aria-label="Your field"
+            placeholder={t("onboarding.job.domainSearchOrAdd")}
+            aria-label={t("onboarding.job.yourField")}
             ref={domainInputRef}
           />
           {domainOpen ? (
             <DropdownList style={domainDropdownStyle}>
               {domainOptions.map((option) => (
                 <DropdownOption key={option} onClick={() => onSelectDomain(option)}>
-                  {option}
+                  {onboardingDomainLabel(option, effectiveLanguage)}
                 </DropdownOption>
               ))}
               {showDomainCustom ? (
                 <DropdownOption onClick={() => onSelectDomain(domainQueryTrimmed)}>
                   <span className="dc-onb-add-icon" aria-hidden="true">+</span>
-                  Add "{domainQueryTrimmed}"
+                  {t("onboarding.job.addCustom", { value: domainQueryTrimmed })}
                 </DropdownOption>
               ) : null}
             </DropdownList>
@@ -148,8 +151,8 @@ export function JobStep({
       <div className="dc-onb-job-hint">
         <InfoIcon />
         <p>
-          Drifty's AI uses these as hints to <strong>auto-sort your time</strong> into the right categories — so your
-          timeline reads like your real work, not a list of raw app names. You can edit or add more later.
+          {t("onboarding.job.hintBefore")} <strong>{t("onboarding.job.hintStrong")}</strong>{" "}
+          {t("onboarding.job.hintAfter")}
         </p>
       </div>
     </div>

@@ -8,17 +8,10 @@ import { localDateKey } from "../../lib/formatting";
 import { SettingsSelect } from "./SettingsSelect";
 import type { SettingsSelectOption } from "./SettingsSelect";
 import "./DeleteHistoryModal.css";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 
 type RangePreset = "lastHour" | "today" | "last7" | "last30" | "all" | "custom";
-
-const RANGE_OPTIONS: readonly SettingsSelectOption<RangePreset>[] = [
-  { value: "lastHour", label: "Last hour" },
-  { value: "today", label: "Today" },
-  { value: "last7", label: "Last 7 days" },
-  { value: "last30", label: "Last 30 days" },
-  { value: "all", label: "All time" },
-  { value: "custom", label: "Custom range" },
-] as const;
 
 // The deletion scope is fixed: tracked activity for the range, its
 // classifications (via cascade), and cached YouTube metadata. Classification
@@ -36,6 +29,15 @@ type DeleteHistoryModalProps = {
 };
 
 export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = false }: DeleteHistoryModalProps) {
+  const { effectiveLanguage, t } = useLocalization();
+  const rangeOptions: readonly SettingsSelectOption<RangePreset>[] = [
+    { value: "lastHour", label: t("settings.deleteHistory.lastHour") },
+    { value: "today", label: t("settings.deleteHistory.today") },
+    { value: "last7", label: t("settings.deleteHistory.last7") },
+    { value: "last30", label: t("settings.deleteHistory.last30") },
+    { value: "all", label: t("settings.deleteHistory.all") },
+    { value: "custom", label: t("settings.deleteHistory.custom") },
+  ];
   const [preset, setPreset] = useState<RangePreset>("today");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -104,27 +106,27 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
         onClick={(event) => event.stopPropagation()}
       >
         <div className="auth-modal__header">
-          <h2 id="delete-history-modal-title">Delete history</h2>
+          <h2 id="delete-history-modal-title">{t("settings.deleteHistory.title")}</h2>
           <p>
-            Removes tracked activity for the selected range, including its AI labels and cached YouTube metadata. Classification rules and settings are kept. This cannot be undone.
-            {deviceSyncEnabled ? " Device sync is on, so this range is also removed from your synced Macs and your cloud copy." : ""}
+            {t("settings.deleteHistory.description")}
+            {deviceSyncEnabled ? ` ${t("settings.deleteHistory.syncDescription")}` : ""}
           </p>
         </div>
 
-        {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
+        {error ? <p className="auth-modal__error" role="alert">{localizeSettingsError(error, effectiveLanguage, t)}</p> : null}
 
         {done ? (
           <p className="auth-modal__success" role="status">
-            Deleted {summarizeCounts(done)}.
+            {t("settings.deleteHistory.deleted", { summary: summarizeCounts(done, effectiveLanguage, t) })}
           </p>
         ) : (
           <>
             <div className="delete-history-modal__range-row">
-              <span className="delete-history-modal__range-label">Range</span>
+              <span className="delete-history-modal__range-label">{t("settings.deleteHistory.range")}</span>
               <SettingsSelect
-                ariaLabel="Delete range"
+                ariaLabel={t("settings.deleteHistory.rangeAria")}
                 className="delete-history-modal__range-select"
-                options={RANGE_OPTIONS}
+                options={rangeOptions}
                 value={preset}
                 onChange={setPreset}
               />
@@ -132,11 +134,11 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
             {preset === "custom" ? (
               <div className="delete-history-modal__custom-range">
                 <label>
-                  <span>From</span>
+                  <span>{t("settings.deleteHistory.from")}</span>
                   <input max={localDateKey(new Date())} type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
                 </label>
                 <label>
-                  <span>To</span>
+                  <span>{t("settings.deleteHistory.to")}</span>
                   <input max={localDateKey(new Date())} type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
                 </label>
               </div>
@@ -144,7 +146,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
 
             <div className="delete-history-modal__actions">
               <button className="settings-btn" disabled={deleting} type="button" onClick={onClose}>
-                Cancel
+                {t("settings.deleteHistory.cancel")}
               </button>
               <button
                 className={`settings-btn danger${armed ? " is-armed" : ""}`}
@@ -152,7 +154,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
                 type="button"
                 onClick={handleDelete}
               >
-                {deleting ? "Deleting…" : armed ? "Click again to confirm" : "Delete permanently"}
+                {deleting ? t("settings.deleteHistory.deleting") : armed ? t("settings.deleteHistory.confirmAgain") : t("settings.deleteHistory.deletePermanently")}
               </button>
             </div>
           </>
@@ -194,10 +196,11 @@ function localDateTimeKey(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function summarizeCounts(result: DeleteHistoryRangeResult): string {
+function summarizeCounts(result: DeleteHistoryRangeResult, language: "en" | "ko", t: LocalizationController["t"]): string {
   const parts: string[] = [];
-  if (result.activitySegments > 0) parts.push(`${result.activitySegments.toLocaleString()} activity ${result.activitySegments === 1 ? "segment" : "segments"}`);
-  if (result.classifications > 0) parts.push(`${result.classifications.toLocaleString()} ${result.classifications === 1 ? "classification" : "classifications"}`);
-  if (result.youtubeMetadata > 0) parts.push(`${result.youtubeMetadata.toLocaleString()} YouTube metadata ${result.youtubeMetadata === 1 ? "entry" : "entries"}`);
-  return parts.length > 0 ? parts.join(" · ") : "no rows";
+  const locale = language === "ko" ? "ko-KR" : "en-US";
+  if (result.activitySegments > 0) parts.push(t(result.activitySegments === 1 ? "settings.deleteHistory.activitySingle" : "settings.deleteHistory.activityPlural", { count: result.activitySegments.toLocaleString(locale) }));
+  if (result.classifications > 0) parts.push(t(result.classifications === 1 ? "settings.deleteHistory.classificationSingle" : "settings.deleteHistory.classificationPlural", { count: result.classifications.toLocaleString(locale) }));
+  if (result.youtubeMetadata > 0) parts.push(t(result.youtubeMetadata === 1 ? "settings.deleteHistory.youtubeSingle" : "settings.deleteHistory.youtubePlural", { count: result.youtubeMetadata.toLocaleString(locale) }));
+  return parts.length > 0 ? parts.join(" · ") : t("settings.deleteHistory.noRows");
 }

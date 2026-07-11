@@ -1,4 +1,6 @@
 import type { AiConnectionIssueKind } from "./aiConnectionHealth";
+import { localizeAiStatusLabel } from "../localization/aiStatusTranslations";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type AiConnectionTone = "ok" | "warning" | "error" | "neutral";
 
@@ -119,19 +121,24 @@ export function AiConnectionStatusBar({
   readonly status: AiConnectionStatus;
   readonly onOpenSettings: () => void;
 }) {
+  const { t } = useLocalization();
+  const statusLabel = localizeAiStatusLabel(status.label, t);
+  const providerLabel = localizeAiStatusLabel(status.providerLabel, t);
+  const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
+
   return (
     <button
       type="button"
       className="ai-connection-status"
-      aria-label={`AI connection: ${status.label}, ${status.providerLabel}${status.memoryLabel ? `, memory in use ${status.memoryLabel}` : ""}. Open AI settings`}
+      aria-label={t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
       data-tone={status.tone}
       data-activity={status.activity ?? undefined}
       onClick={onOpenSettings}
     >
       <span className="ai-connection-status__dot" aria-hidden="true" />
-      <span className="ai-connection-status__label">{status.label}</span>
-      <span className="ai-connection-status__provider">{status.providerLabel}</span>
-      {status.memoryLabel ? <span className="ai-connection-status__memory" title={`Actual memory in use ${status.memoryLabel}`}>{status.memoryLabel}</span> : null}
+      <span className="ai-connection-status__label">{statusLabel}</span>
+      <span className="ai-connection-status__provider">{providerLabel}</span>
+      {status.memoryLabel ? <span className="ai-connection-status__memory" title={t("ai.connection.memoryTitle", { memory: status.memoryLabel })}>{status.memoryLabel}</span> : null}
     </button>
   );
 }

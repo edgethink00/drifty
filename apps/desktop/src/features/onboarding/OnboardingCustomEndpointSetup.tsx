@@ -1,3 +1,5 @@
+import { useLocalization } from "../localization/LocalizationContext";
+
 export type CustomEndpointDraft = {
   readonly baseUrl: string;
   readonly model: string;
@@ -16,10 +18,11 @@ export function OnboardingCustomEndpointSetup({
   modelError,
   onDraftChange,
 }: OnboardingCustomEndpointSetupProps) {
+  const { t } = useLocalization();
   return (
     <div className="onb-server-form onb-server-form--custom-endpoint">
       <label className="onb-field">
-        <span className="onb-field__label">Base URL</span>
+        <span className="onb-field__label">{t("onboarding.connection.baseUrl")}</span>
         <input
           autoCapitalize="none"
           autoCorrect="off"
@@ -29,14 +32,14 @@ export function OnboardingCustomEndpointSetup({
           value={draft.baseUrl}
           onChange={(event) => onDraftChange({ ...draft, baseUrl: event.target.value })}
           aria-invalid={baseUrlError ? "true" : "false"}
-          aria-label="Custom endpoint base URL"
+          aria-label={t("onboarding.connection.baseUrlAria")}
         />
         <span className={`onb-field__hint${baseUrlError ? " onb-field__hint--error" : ""}`}>
-          {baseUrlError ?? "Use an OpenAI-compatible /v1 endpoint. Localhost works."}
+          {baseUrlError ?? t("onboarding.connection.baseUrlHint")}
         </span>
       </label>
       <label className="onb-field">
-        <span className="onb-field__label">Model</span>
+        <span className="onb-field__label">{t("onboarding.connection.model")}</span>
         <input
           autoCapitalize="none"
           autoCorrect="off"
@@ -46,10 +49,10 @@ export function OnboardingCustomEndpointSetup({
           value={draft.model}
           onChange={(event) => onDraftChange({ ...draft, model: event.target.value })}
           aria-invalid={modelError ? "true" : "false"}
-          aria-label="Custom endpoint model"
+          aria-label={t("onboarding.connection.modelAria")}
         />
         <span className={`onb-field__hint${modelError ? " onb-field__hint--error" : ""}`}>
-          {modelError ?? "Enter the model id your endpoint exposes."}
+          {modelError ?? t("onboarding.connection.modelHint")}
         </span>
       </label>
     </div>

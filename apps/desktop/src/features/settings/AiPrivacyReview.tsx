@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
+import { useLocalization } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
 import {
   AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
   readAiPrivacyRequestSettings,
@@ -10,16 +12,16 @@ import {
 } from "./aiPrivacyRequestSettings";
 
 type VisibleField = {
-  readonly label: string;
-  readonly detail: string;
+  readonly detailKey: TranslationKey;
   readonly scope: "app" | "site" | "windowTitle" | "content" | "time" | "profile";
+  readonly required?: boolean;
   readonly settingKey?: keyof AiPrivacyRequestOptionalSettings;
-  readonly helpText?: string;
+  readonly helpTextKey?: TranslationKey;
 };
 
 type ExcludedField = {
-  readonly label: string;
-  readonly detail: string;
+  readonly labelKey: TranslationKey;
+  readonly detailKey: TranslationKey;
 };
 
 type ControlField = VisibleField & {
@@ -29,32 +31,30 @@ type ControlField = VisibleField & {
 };
 
 const AI_VISIBLE_FIELDS: readonly VisibleField[] = [
-  { label: "App context", detail: "App name and basic app context", scope: "app" },
-  { label: "Duration", detail: "Activity duration", scope: "time" },
-  { label: "Site domain", detail: "Browser or site domain", scope: "site" },
-  { label: "Site URL", detail: "Site URL", scope: "site", settingKey: "siteUrl" },
-  { label: "Window title", detail: "Window title", scope: "windowTitle", settingKey: "windowTitle" },
+  { detailKey: "settings.aiPrivacy.appContext", scope: "app", required: true },
+  { detailKey: "settings.aiPrivacy.duration", scope: "time", required: true },
+  { detailKey: "settings.aiPrivacy.siteDomain", scope: "site", required: true },
+  { detailKey: "settings.aiPrivacy.siteUrl", scope: "site", settingKey: "siteUrl" },
+  { detailKey: "settings.aiPrivacy.windowTitle", scope: "windowTitle", settingKey: "windowTitle" },
   {
-    label: "Content context",
-    detail: "Content context",
+    detailKey: "settings.aiPrivacy.contentContext",
     scope: "content",
     settingKey: "contentContext",
-    helpText: "Current Content context means page/video titles, YouTube channel name, YouTube video category, and normalized Reddit community when available. It is separate from Dev-gated Enhanced context and does not include raw page text, document bodies, note bodies, or message bodies.",
+    helpTextKey: "settings.aiPrivacy.contentContextHelp",
   },
-  { label: "Work profile", detail: "Your saved work profile", scope: "profile", settingKey: "workProfile" },
+  { detailKey: "settings.aiPrivacy.workProfile", scope: "profile", settingKey: "workProfile" },
 ] as const;
 
 const AI_EXCLUDED_FIELDS: readonly ExcludedField[] = [
-  { label: "Raw timeline rows", detail: "No full activity row upload" },
-  { label: "Full session history", detail: "No replayable day or session history" },
-  { label: "Raw document and message bodies", detail: "No full Notion, Docs, Obsidian, chat, or email body upload" },
-  { label: "YouTube descriptions", detail: "Video descriptions and keywords stay local" },
-  { label: "Provider API keys", detail: "Stored locally, never sent as samples" },
+  { labelKey: "settings.aiPrivacy.rawTimeline", detailKey: "settings.aiPrivacy.rawTimelineDetail" },
+  { labelKey: "settings.aiPrivacy.fullHistory", detailKey: "settings.aiPrivacy.fullHistoryDetail" },
+  { labelKey: "settings.aiPrivacy.rawBodies", detailKey: "settings.aiPrivacy.rawBodiesDetail" },
+  { labelKey: "settings.aiPrivacy.youtubeDescriptions", detailKey: "settings.aiPrivacy.youtubeDescriptionsDetail" },
+  { labelKey: "settings.aiPrivacy.providerKeys", detailKey: "settings.aiPrivacy.providerKeysDetail" },
 ] as const;
 
-const REQUIRED_FIELD_LABELS = new Set(["App context", "Duration", "Site domain"]);
-
 export function AiPrivacyReview() {
+  const { t } = useLocalization();
   const [settings, setSettings] = useState<AiPrivacyRequestSettings>(() => readAiPrivacyRequestSettings());
   const controlFields = useMemo(() => toControlFields(settings), [settings]);
   const requiredFields = controlFields.filter((field) => field.control === "required");
@@ -79,25 +79,25 @@ export function AiPrivacyReview() {
   };
 
   return (
-    <section className="ai-privacy-review" aria-label="AI privacy review">
-      <p className="ai-privacy-review__intro">Choose the minimized fields Drifty may include in AI classification requests.</p>
-      <div className="ai-privacy-review__chips" aria-label="AI privacy safeguards">
-        <span className="chip green">Raw tracking stays local</span>
-        <span className="chip gray">Provider keys stay local</span>
-        <span className="chip gray">Optional context is user controlled</span>
+    <section className="ai-privacy-review" aria-label={t("settings.aiPrivacy.reviewAria")}>
+      <p className="ai-privacy-review__intro">{t("settings.aiPrivacy.intro")}</p>
+      <div className="ai-privacy-review__chips" aria-label={t("settings.aiPrivacy.safeguardsAria")}>
+        <span className="chip green">{t("settings.aiPrivacy.rawLocal")}</span>
+        <span className="chip gray">{t("settings.aiPrivacy.keysLocal")}</span>
+        <span className="chip gray">{t("settings.aiPrivacy.optionalControlled")}</span>
       </div>
       <div className="ai-privacy-review__boundary">
         <div className="ai-privacy-review__column">
-          <ColumnLabel label="Required for classification" meta="Locked on" />
-          <div className="ai-privacy-review__list" role="list" aria-label="Required AI classification fields">
+          <ColumnLabel label={t("settings.aiPrivacy.requiredFields")} meta={t("settings.aiPrivacy.lockedOn")} />
+          <div className="ai-privacy-review__list" role="list" aria-label={t("settings.aiPrivacy.requiredFieldsAria")}>
             {requiredFields.map((field) => (
-              <ControlRow field={field} key={field.label} />
+              <ControlRow field={field} key={field.detailKey} />
             ))}
           </div>
-          <ColumnLabel label="Optional context" meta="User controlled" />
-          <div className="ai-privacy-review__list" role="list" aria-label="Optional AI classification fields">
+          <ColumnLabel label={t("settings.aiPrivacy.optionalContext")} meta={t("settings.aiPrivacy.userControlled")} />
+          <div className="ai-privacy-review__list" role="list" aria-label={t("settings.aiPrivacy.optionalFieldsAria")}>
             {optionalFields.map((field) => (
-              <ControlRow field={field} key={field.label} onOptionalChange={handleOptionalChange} />
+              <ControlRow field={field} key={field.detailKey} onOptionalChange={handleOptionalChange} />
             ))}
           </div>
         </div>
@@ -118,7 +118,7 @@ function ColumnLabel({ label, meta }: { readonly label: string; readonly meta: s
 
 function toControlFields(settings: AiPrivacyRequestSettings): readonly ControlField[] {
   return AI_VISIBLE_FIELDS.map((field) => {
-    if (REQUIRED_FIELD_LABELS.has(field.label)) {
+    if (field.required) {
       return {
         ...field,
         control: "required",
@@ -151,13 +151,15 @@ function ControlRow({
   readonly field: ControlField;
   readonly onOptionalChange?: (key: keyof AiPrivacyRequestOptionalSettings, enabled: boolean) => void;
 }) {
+  const { t } = useLocalization();
+  const detail = t(field.detailKey);
   if (field.control === "required") {
     return (
       <div className="ai-privacy-review__row ai-privacy-review__row--required" role="listitem">
         <span className="ai-privacy-review__row-text">
-          <strong>{field.detail}</strong>
+          <strong>{detail}</strong>
         </span>
-        <em>Required</em>
+        <em>{t("common.required")}</em>
       </div>
     );
   }
@@ -166,8 +168,8 @@ function ControlRow({
     <div className="ai-privacy-review__row ai-privacy-review__row--optional" role="listitem">
       <span className="ai-privacy-review__row-text">
         <span className="ai-privacy-review__row-heading">
-          <strong>{field.detail}</strong>
-          {field.helpText ? <InfoTooltip label={field.detail} text={field.helpText} /> : null}
+          <strong>{detail}</strong>
+          {field.helpTextKey ? <InfoTooltip label={detail} text={t(field.helpTextKey)} /> : null}
         </span>
       </span>
       <ControlSwitch field={field} onOptionalChange={onOptionalChange} />
@@ -176,11 +178,12 @@ function ControlRow({
 }
 
 function InfoTooltip({ label, text }: { readonly label: string; readonly text: string }) {
+  const { t } = useLocalization();
   const reactId = useId();
   const tooltipId = `ai-privacy-${reactId.replace(/:/g, "")}-tooltip`;
   return (
     <span className="ai-privacy-review__help-wrap">
-      <button aria-describedby={tooltipId} aria-label={`${label} details`} className="ai-privacy-review__help" type="button">Details</button>
+      <button aria-describedby={tooltipId} aria-label={t("settings.aiPrivacy.detailsAria", { label })} className="ai-privacy-review__help" type="button">{t("settings.aiPrivacy.details")}</button>
       <span className="ai-privacy-review__tooltip" id={tooltipId} role="tooltip">{text}</span>
     </span>
   );
@@ -193,38 +196,42 @@ function ControlSwitch({
   readonly field: ControlField;
   readonly onOptionalChange?: (key: keyof AiPrivacyRequestOptionalSettings, enabled: boolean) => void;
 }) {
+  const { t } = useLocalization();
   const settingKey = field.settingKey;
+  const detail = t(field.detailKey);
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (!settingKey || !onOptionalChange) return;
     onOptionalChange(settingKey, event.currentTarget.checked);
   };
 
   return (
-    <label className="ai-privacy-review__switch" aria-label={field.detail}>
-      <input checked={field.enabled} role="switch" type="checkbox" aria-label={field.detail} onChange={handleChange} />
+    <label className="ai-privacy-review__switch" aria-label={detail}>
+      <input checked={field.enabled} role="switch" type="checkbox" aria-label={detail} onChange={handleChange} />
       <span aria-hidden="true" />
     </label>
   );
 }
 
 function LockedLocalColumn() {
+  const { t } = useLocalization();
   return (
     <div className="ai-privacy-review__column ai-privacy-review__column--local">
-      <ColumnLabel label="Always local" meta="Locked local" />
+      <ColumnLabel label={t("settings.aiPrivacy.alwaysLocal")} meta={t("settings.aiPrivacy.lockedLocal")} />
       <LockedFieldList />
     </div>
   );
 }
 
 function LockedFieldList() {
+  const { t } = useLocalization();
   return (
-    <div className="ai-privacy-review__locked-list" role="list" aria-label="Fields kept local">
+    <div className="ai-privacy-review__locked-list" role="list" aria-label={t("settings.aiPrivacy.localFieldsAria")}>
       {AI_EXCLUDED_FIELDS.map((field) => (
-        <div className="ai-privacy-review__locked-row" key={field.label} role="listitem">
+        <div className="ai-privacy-review__locked-row" key={field.labelKey} role="listitem">
           <ExclusionGlyph />
           <span>
-            <strong>{field.label}</strong>
-            <small>{field.detail}</small>
+            <strong>{t(field.labelKey)}</strong>
+            <small>{t(field.detailKey)}</small>
           </span>
         </div>
       ))}

@@ -11,15 +11,10 @@ import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
 import type { LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
+import { useLocalization } from "../localization/LocalizationContext";
+import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../localization/aiStatusTranslations";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
-const CUSTOM_ENDPOINT_MODEL_OPTION = { value: CUSTOM_ENDPOINT_MODEL_ID, label: "Custom endpoint" } as const satisfies SettingsSelectOption<string>;
-const PROVIDER_OPTIONS = [
-  { value: "drifty", label: "Drifty", iconSrc: driftyLogoUrl },
-  { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
-  { value: "custom", label: "Custom endpoint", accentColor: "var(--accent)" },
-] satisfies readonly SettingsSelectOption<AiSetupSection>[];
-
 type AiSetupModelBeingUsedProps = {
   readonly catalog: readonly ManagedLocalAiModel[];
   readonly driftyRoute: DriftyRoute;
@@ -69,6 +64,16 @@ export function AiSetupModelBeingUsed({
   onTestConnection,
   onStartCloudSetup,
 }: AiSetupModelBeingUsedProps) {
+  const { effectiveLanguage, t } = useLocalization();
+  const localizedConnectionStatus = {
+    label: localizeAiStatusLabel(connectionStatus.label, t),
+    providerLabel: localizeAiStatusLabel(connectionStatus.providerLabel, t),
+  };
+  const providerOptions = [
+    { value: "drifty", label: "Drifty", iconSrc: driftyLogoUrl },
+    { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
+    { value: "custom", label: t("settings.ai.customEndpoint"), accentColor: "var(--accent)" },
+  ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
   const selectedModelValue = (() => {
     switch (selectedProvider) {
       case "drifty":
@@ -92,11 +97,12 @@ export function AiSetupModelBeingUsed({
           cloudSubscribeActionLabel,
           onInstallModel,
           onStartCloudSetup,
+          t,
         );
       case "openrouter":
         return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
       case "custom":
-        return [CUSTOM_ENDPOINT_MODEL_OPTION];
+        return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: t("settings.ai.customEndpoint") } satisfies SettingsSelectOption<string>];
       default:
         return assertNever(selectedProvider);
     }
@@ -136,32 +142,37 @@ export function AiSetupModelBeingUsed({
 
   return (
     <ModelBeingUsedCard
-      regionAriaLabel="Model being used"
-      heading="Model being used"
+      regionAriaLabel={t("settings.ai.modelBeingUsed")}
+      heading={t("settings.ai.modelBeingUsed")}
       headingAction={
         <button
           type="button"
           className="settings-btn ai-setup-current-model__test"
-          aria-label="Test AI connection"
+          aria-label={t("settings.ai.testConnectionAria")}
           disabled={connectionTestDisabled}
           onClick={() => void onTestConnection()}
         >
-          {connectionTestRunning ? "Testing..." : "Test connection"}
+          {connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnection")}
         </button>
       }
       tone={connectionStatus.tone}
-      statusLabel={connectionStatus.label}
-      statusProviderLabel={connectionStatus.providerLabel}
-      statusAriaLabel={`AI status: ${connectionStatus.label}, ${connectionStatus.providerLabel}`}
-      providerAriaLabel="AI provider"
+      statusLabel={localizedConnectionStatus.label}
+      statusProviderLabel={localizedConnectionStatus.providerLabel}
+      statusAriaLabel={t("settings.ai.statusAria", {
+        status: localizedConnectionStatus.label,
+        provider: localizedConnectionStatus.providerLabel,
+      })}
+      providerAriaLabel={t("settings.ai.providerAria")}
       providerValue={selectedProvider}
-      providerOptions={PROVIDER_OPTIONS}
+      providerOptions={providerOptions}
       onProviderChange={(value) => handleProviderChange(value as AiSetupSection)}
-      modelAriaLabel="AI model"
+      modelAriaLabel={t("settings.ai.modelAria")}
       modelValue={selectedModelValue}
       modelOptions={modelOptions}
       onModelChange={handleModelChange}
-      statusMessage={connectionTestMessage}
+      statusMessage={connectionTestMessage && connectionTestKind
+        ? localizeAiConnectionTestMessage(connectionTestMessage, connectionTestKind, effectiveLanguage, t)
+        : connectionTestMessage}
       statusMessageKind={connectionTestKind}
     />
   );

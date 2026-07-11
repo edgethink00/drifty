@@ -4,33 +4,35 @@ type DataExportSettingsSectionProps = {
 };
 
 export function DataExportSettingsSection({ databasePath, todaySessionCount }: DataExportSettingsSectionProps) {
+  const { t } = useLocalization();
   return (
     <div className="settings-section">
       <div className="settings-block">
-        <h3>Data &amp; Export</h3>
+        <h3>{t("settings.section.data")}</h3>
         <div className="settings-row">
           <div>
-            <div className="lbl">Database</div>
+            <div className="lbl">{t("settings.data.database")}</div>
           </div>
-          <div className="ctrl ctrl--value">{databasePath ?? "Unknown"}</div>
+          <div className="ctrl ctrl--value">{databasePath ?? t("settings.data.unknown")}</div>
         </div>
         <div className="settings-row">
           <div>
-            <div className="lbl">Sessions logged</div>
+            <div className="lbl">{t("settings.data.sessions")}</div>
           </div>
-          <div className="ctrl ctrl--value">{todaySessionCount} today</div>
+          <div className="ctrl ctrl--value">{t("settings.data.sessionsToday", { count: todaySessionCount })}</div>
         </div>
       </div>
       <div className="settings-block">
-        <h3>Export</h3>
+        <h3>{t("settings.data.export")}</h3>
         <div className="settings-row">
           <div>
-            <div className="lbl">Export session data</div>
-            <div className="desc">All sessions as CSV</div>
+            <div className="lbl">{t("settings.data.exportSessions")}</div>
+            <div className="desc">{t("settings.data.exportDescription")}</div>
           </div>
-          <div className="ctrl"><button type="button" className="settings-btn">Download CSV</button></div>
+          <div className="ctrl"><button type="button" className="settings-btn">{t("settings.data.downloadCsv")}</button></div>
         </div>
       </div>
     </div>
   );
 }
+import { useLocalization } from "../localization/LocalizationContext";

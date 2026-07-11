@@ -1,0 +1,69 @@
+import type { DisplayLanguage, LocalizationController } from "./LocalizationContext";
+import type { TranslationKey } from "./translations";
+
+const AI_STATUS_TRANSLATION_KEYS = {
+  "Cloud off": "settings.ai.status.cloudOff",
+  "Sign-in needed": "settings.ai.status.signInNeeded",
+  "Checking cloud": "settings.ai.status.checkingCloud",
+  "Drifty Cloud needs attention": "settings.ai.status.cloudNeedsAttention",
+  "Drifty Cloud is connected": "settings.ai.status.cloudConnected",
+  "Not configured": "settings.ai.status.notConfigured",
+  Checking: "settings.ai.status.checking",
+  "Needs attention": "settings.ai.status.needsAttention",
+  Available: "settings.ai.status.available",
+  "AI checking": "settings.ai.status.aiChecking",
+  "AI not connected": "settings.ai.status.aiNotConnected",
+  "Managed Local AI": "settings.ai.status.managedLocal",
+  "Local AI": "settings.ai.status.local",
+  Connected: "settings.ai.status.connected",
+  "Connection issue": "settings.ai.status.connectionIssue",
+  Issue: "settings.ai.status.issue",
+  "Classifying…": "settings.ai.status.classifying",
+  "AI setup needed": "settings.ai.status.setupNeeded",
+  "Open settings": "settings.ai.status.openSettings",
+} as const satisfies Readonly<Record<string, TranslationKey>>;
+
+export function localizeAiStatusLabel(value: string, t: LocalizationController["t"]): string {
+  const key = AI_STATUS_TRANSLATION_KEYS[value as keyof typeof AI_STATUS_TRANSLATION_KEYS];
+  if (key) return t(key);
+
+  const remainingMatch = /^(\d[\d,]*) left$/u.exec(value);
+  return remainingMatch ? t("settings.ai.status.remaining", { count: remainingMatch[1] }) : value;
+}
+
+export function localizeAiConnectionTestMessage(
+  value: string,
+  kind: "success" | "error",
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): string {
+  if (language === "en") return value;
+
+  const connectedMatch = /^Connected in ([\d,.]+) ms\.$/u.exec(value);
+  if (connectedMatch) return t("settings.ai.connection.connectedIn", { latency: connectedMatch[1] });
+
+  const cloudConnectedMatch = /^Cloud AI connected via (.+) in ([\d,.]+) ms\.$/u.exec(value);
+  if (cloudConnectedMatch) {
+    return t("settings.ai.connection.cloudConnectedIn", {
+      provider: cloudConnectedMatch[1],
+      latency: cloudConnectedMatch[2],
+    });
+  }
+
+  if (value === "Complete the selected provider settings before testing.") return t("settings.ai.connection.completeSettings");
+  if (value === "Provider responded, but no assistant message was returned.") return t("settings.ai.connection.noAssistant");
+  if (value === "Supabase is not configured.") return t("settings.ai.connection.supabaseMissing");
+  if (value === "Drifty Cloud billing needs attention.") return t("settings.ai.connection.billingAttention");
+  if (value === "Cloud AI connection test returned an invalid response.") return t("settings.ai.connection.invalidResponse");
+
+  const providerHttpMatch = /^Provider returned HTTP (.+)\.$/u.exec(value);
+  if (providerHttpMatch) {
+    const status = providerHttpMatch[1];
+    return t(status === "401" || status === "403" ? "settings.ai.connection.authFailed" : "settings.ai.connection.providerHttp", { status });
+  }
+
+  return t(
+    kind === "error" ? "settings.ai.connection.errorDetail" : "settings.ai.connection.successDetail",
+    { detail: value },
+  );
+}

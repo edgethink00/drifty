@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
 import { toErrorMessage } from "../../lib/formatting";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type StartupSettingsStatus = "loading" | "ready" | "saving" | "unavailable";
 
 export function StartupSettingsRow() {
+  const { t } = useLocalization();
   const [enabled, setEnabled] = useState(false);
   const [status, setStatus] = useState<StartupSettingsStatus>(() => (
     startupSettingsClient.isAvailable() ? "loading" : "unavailable"
@@ -26,7 +28,7 @@ export function StartupSettingsRow() {
       } catch (nextError) {
         if (!isCurrent) return;
         setStatus("ready");
-        setError(`Startup setting unavailable: ${toErrorMessage(nextError)}`);
+        setError(t("settings.general.startupUnavailable", { error: toErrorMessage(nextError) }));
       }
     }
 
@@ -35,7 +37,7 @@ export function StartupSettingsRow() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [t]);
 
   async function handleChange(nextEnabled: boolean) {
     const previousEnabled = enabled;
@@ -50,7 +52,7 @@ export function StartupSettingsRow() {
     } catch (nextError) {
       setEnabled(previousEnabled);
       setStatus("ready");
-      setError(`Startup setting failed: ${toErrorMessage(nextError)}`);
+      setError(t("settings.general.startupFailed", { error: toErrorMessage(nextError) }));
     }
   }
 
@@ -59,8 +61,8 @@ export function StartupSettingsRow() {
   return (
     <div className="settings-row">
       <label htmlFor="open-at-login">
-        <div className="lbl">Open Drifty at login</div>
-        <div className="desc">Start Drifty in the background when you sign in to your Mac.</div>
+        <div className="lbl">{t("settings.general.openAtLogin")}</div>
+        <div className="desc">{t("settings.general.openAtLoginDescription")}</div>
         {error ? <p className="capture-recency capture-recency--error" role="status">{error}</p> : null}
       </label>
       <div className="ctrl">
@@ -68,7 +70,7 @@ export function StartupSettingsRow() {
           id="open-at-login"
           className="drifty-checkbox"
           type="checkbox"
-          aria-label="Open Drifty at login"
+          aria-label={t("settings.general.openAtLogin")}
           checked={enabled}
           disabled={disabled}
           onChange={(event) => void handleChange(event.target.checked)}

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import driftyLogoUrl from "../../assets/drifty-icon.png";
 import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 import { CollapsiblePanel } from "./CollapsiblePanel";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export const AI_SETUP_SECTIONS = [
   { id: "drifty", title: "Drifty" },
@@ -25,6 +26,7 @@ export function AiSetupSectionCard({
   children,
   onToggle,
 }: AiSetupSectionCardProps) {
+  const { t } = useLocalization();
   const panelId = `ai-setup-section-${section.id}`;
   const buttonId = `ai-setup-section-button-${section.id}`;
 
@@ -34,14 +36,14 @@ export function AiSetupSectionCard({
         id={buttonId}
         type="button"
         className="ai-setup-choice__toggle"
-        aria-label={`${section.title} setup row`}
+        aria-label={t("settings.ai.setupRowAria", { provider: localizedSectionTitle(section.id, section.title, t) })}
         aria-expanded={expanded}
         aria-controls={panelId}
         onClick={() => onToggle(section.id)}
       >
         <BrandMark section={section.id} />
         <span className="ai-setup-choice__copy">
-          <span className="ai-setup-choice__title">{section.title}</span>
+          <span className="ai-setup-choice__title">{localizedSectionTitle(section.id, section.title, t)}</span>
         </span>
         <span className="ai-setup-choice__chevron" aria-hidden="true" />
       </button>
@@ -50,6 +52,10 @@ export function AiSetupSectionCard({
       </CollapsiblePanel>
     </article>
   );
+}
+
+function localizedSectionTitle(section: AiSetupSection, fallback: string, t: ReturnType<typeof useLocalization>["t"]): string {
+  return section === "custom" ? t("settings.ai.customEndpoint") : fallback;
 }
 
 function BrandMark({ section }: { readonly section: AiSetupSection }) {

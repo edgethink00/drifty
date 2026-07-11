@@ -1,7 +1,9 @@
 import { useLiveTrackingPreview } from "../../useLiveTrackingPreview";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
+import { useLocalization } from "../../../localization/LocalizationContext";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   const accessibilityEnabled = flow.accessibilityGranted;
   const notificationsEnabled = flow.notificationsReady;
   const safariHistory = flow.safariHistoryPermission;
@@ -10,45 +12,43 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
 
   return (
     <>
-      <p className="dc-onb-copy">
-        Drifty needs a couple of Mac permissions to see your focus and drift patterns. Everything is processed for your own timeline.
-      </p>
+      <p className="dc-onb-copy">{t("onboarding.permissions.intro")}</p>
       {livePreview ? (
         <p className="dc-onb-live-note" role="status">
           {livePreview.kind === "current" ? (
-            <>I can see you&apos;re in <strong>{livePreview.appName}</strong> right now — tracking works.</>
+            <>{t("onboarding.permissions.currentApp", { appName: livePreview.appName })}</>
           ) : livePreview.kind === "recent" ? (
-            <>I saw you in <strong>{livePreview.appName}</strong> a moment ago — tracking works.</>
+            <>{t("onboarding.permissions.recentApp", { appName: livePreview.appName })}</>
           ) : (
-            <>Tracking is on — I&apos;ll see whichever app you switch to.</>
+            <>{t("onboarding.permissions.trackingOn")}</>
           )}
         </p>
       ) : null}
       <ul className="dc-onb-row-list">
         <PermissionRow
-          title="Accessibility"
-          description="Lets Drifty see your active app and window — required to track at all."
-          pill={accessibilityEnabled ? "Enabled" : "Required"}
+          title={t("settings.general.accessibility")}
+          description={t("onboarding.permissions.accessibilityDescription")}
+          pill={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("common.required")}
           tone={accessibilityEnabled ? "success" : "required"}
           disabled={accessibilityEnabled}
           onClick={() => void flow.handleRequestAccessibilityClick()}
         />
         <PermissionRow
-          title="Notifications"
-          description="Lets Drifty send gentle focus nudges and setup alerts."
-          pill={notificationsEnabled ? "Enabled" : "Recommended"}
+          title={t("onboarding.permissions.notifications")}
+          description={t("onboarding.permissions.notificationsDescription")}
+          pill={notificationsEnabled ? t("onboarding.permissions.allowed") : t("common.recommended")}
           tone={notificationsEnabled ? "success" : "neutral"}
           disabled={notificationsEnabled}
           onClick={() => void flow.handleNotificationPermissionClick()}
         />
         {safariHistory.show ? (
           <PermissionRow
-            title="Safari history"
-            description="Lets Drifty import your Safari browsing history — needs Full Disk Access."
-            pill={safariHistory.readable ? "Enabled" : "Optional"}
+            title={t("onboarding.permissions.safariHistory")}
+            description={t("onboarding.permissions.safariHistoryDescription")}
+            pill={safariHistory.readable ? t("onboarding.permissions.allowed") : t("common.optional")}
             tone={safariHistory.readable ? "success" : "neutral"}
             disabled={safariHistory.opening || safariHistory.readable}
-            actionLabel={safariHistory.readable ? "Enabled" : safariHistory.opening ? "Opening…" : "Enable"}
+            actionLabel={safariHistory.readable ? t("onboarding.permissions.allowed") : safariHistory.opening ? t("onboarding.permissions.opening") : t("common.enable")}
             onClick={safariHistory.onEnable}
           />
         ) : null}
@@ -74,6 +74,7 @@ function PermissionRow({
   readonly title: string;
   readonly tone: "success" | "required" | "neutral";
 }) {
+  const { t } = useLocalization();
   return (
     <li className="dc-onb-row">
       <div className="dc-onb-row__copy">
@@ -83,7 +84,7 @@ function PermissionRow({
       <div className="dc-onb-row__action">
         <span className={`dc-onb-pill dc-onb-pill--${tone}`}>{pill}</span>
         <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled}>
-          {actionLabel ?? (disabled ? "Enabled" : "Enable")}
+          {actionLabel ?? (disabled ? t("onboarding.permissions.allowed") : t("common.enable"))}
         </button>
       </div>
     </li>

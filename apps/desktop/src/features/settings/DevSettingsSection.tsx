@@ -18,6 +18,7 @@ import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlo
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
 import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
+import { useLocalization } from "../localization/LocalizationContext";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 
 type DevSettingsSectionProps = {
@@ -148,6 +149,7 @@ export function DevSettingsSection({
   onWatcherPeriodicMinChange,
 }: DevSettingsSectionProps) {
   const showWatcherPeekSettings = WATCHER_PEEK_SETTINGS_VISIBLE;
+  const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
 
   return (
     <div className="settings-section">
@@ -168,7 +170,20 @@ export function DevSettingsSection({
 
       {/* Preview feature toggles, grouped in one block */}
       <div className="settings-block settings-block--dev-preview">
-        <h3>Preview</h3>
+        <h3>{t("settings.dev.preview")}</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.dev.koreanPreviewLabel")}</div>
+            <div className="desc">{t("settings.dev.koreanPreviewDescription")}</div>
+          </div>
+          <div className="ctrl">
+            <Toggle
+              checked={koreanPreviewEnabled}
+              onChange={setKoreanPreviewEnabled}
+              ariaLabel={t("settings.dev.koreanPreviewToggle")}
+            />
+          </div>
+        </div>
         <DevSettingsDeviceSyncBlock
           deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
           onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}

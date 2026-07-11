@@ -1,5 +1,7 @@
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 import { managedModelRuntimeMemoryLabel } from "../settings/managedLocalAiMemory";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizedManagedModelDetail, localizedManagedModelFitDetail, localizedManagedModelTier } from "../localization/managedModelTranslations";
 
 type OnboardingManagedLocalAiSetupProps = {
   readonly actionModelId: string | null;
@@ -16,15 +18,16 @@ export function OnboardingManagedLocalAiSetup({
   status,
   onInstallModel,
 }: OnboardingManagedLocalAiSetupProps) {
+  const { t } = useLocalization();
   const statusMessage = status?.message
-    ?? (loading ? "Looking for downloaded local models..." : "Choose a local model and Drifty will download it inside the app.");
+    ?? (loading ? t("onboarding.connection.looking") : t("onboarding.connection.chooseModel"));
 
   return (
     <div className="onb-managed-local-ai">
       <div className="onb-managed-local-ai__status" role="status">
         {statusMessage}
       </div>
-      <div className="onb-managed-local-ai__models" aria-label="Local AI model choices">
+      <div className="onb-managed-local-ai__models" aria-label={t("onboarding.connection.localChoices")}>
         {catalog.map((model) => (
           <OnboardingManagedLocalAiModel
             key={model.id}
@@ -53,6 +56,7 @@ function OnboardingManagedLocalAiModel({
   readonly status: ManagedLocalAiStatus | null;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const ready = isReadyManagedModel(model.id, status);
   const installing = status?.selectedModelId === model.id && status.state === "installing";
   const failed = status?.selectedModelId === model.id && status.state === "error";
@@ -62,16 +66,16 @@ function OnboardingManagedLocalAiModel({
   const actionDisabled = unsupported || ready || (loading && status === null) || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
 
   return (
-    <article className={`onb-managed-model${ready ? " is-ready" : ""}${unsupported ? " is-unsupported" : ""}`} aria-label={`${model.label} local AI model`}>
+    <article className={`onb-managed-model${ready ? " is-ready" : ""}${unsupported ? " is-unsupported" : ""}`} aria-label={t("onboarding.connection.localModelAria", { model: model.label })}>
       <div className="onb-managed-model__copy">
         <strong>{model.label}</strong>
-        <span>{model.recommended ? (model.fit ? "Recommended for your Mac" : "Recommended") : model.tier}</span>
-        <p>{ready ? "Ready for private local classification." : model.detail}</p>
-        {!ready && model.fitDetail ? <p className="onb-managed-model__fit-note">{model.fitDetail}</p> : null}
+        <span>{model.recommended ? (model.fit ? t("onboarding.connection.recommendedForMac") : t("common.recommended")) : localizedManagedModelTier(model.tier, effectiveLanguage, t)}</span>
+        <p>{ready ? t("onboarding.connection.readyDescription") : localizedManagedModelDetail(model, effectiveLanguage, t)}</p>
+        {!ready && model.fitDetail ? <p className="onb-managed-model__fit-note">{localizedManagedModelFitDetail(model, effectiveLanguage, t)}</p> : null}
       </div>
       <dl className="onb-managed-model__facts">
-        <div><dt>Download</dt><dd>{model.downloadSize}</dd></div>
-        {runtimeMemoryLabel ? <div><dt>RAM while running</dt><dd>{runtimeMemoryLabel}</dd></div> : null}
+        <div><dt>{t("onboarding.connection.download")}</dt><dd>{model.downloadSize}</dd></div>
+        {runtimeMemoryLabel ? <div><dt>{t("onboarding.connection.ram")}</dt><dd>{runtimeMemoryLabel}</dd></div> : null}
       </dl>
       <button
         type="button"
@@ -79,7 +83,7 @@ function OnboardingManagedLocalAiModel({
         disabled={actionDisabled}
         onClick={() => void onInstallModel(model.id)}
       >
-        {managedModelActionLabel(ready, busy, failed, status?.progress?.percent ?? null)}
+        {managedModelActionLabel(ready, busy, failed, status?.progress?.percent ?? null, t)}
       </button>
     </article>
   );
@@ -101,11 +105,11 @@ function isReadyManagedModel(modelId: string, status: ManagedLocalAiStatus | nul
   }
 }
 
-function managedModelActionLabel(ready: boolean, busy: boolean, failed: boolean, percent: number | null): string {
-  if (ready) return "Ready";
-  if (busy) return percent === null ? "Downloading..." : `Downloading ${percent.toFixed(0)}%`;
-  if (failed) return "Retry";
-  return "Download";
+function managedModelActionLabel(ready: boolean, busy: boolean, failed: boolean, percent: number | null, t: LocalizationController["t"]): string {
+  if (ready) return t("onboarding.connection.ready");
+  if (busy) return percent === null ? t("onboarding.connection.downloading") : t("onboarding.connection.downloadingPercent", { percent: percent.toFixed(0) });
+  if (failed) return t("onboarding.connection.retry");
+  return t("onboarding.connection.download");
 }
 
 class OnboardingManagedLocalAiError extends Error {

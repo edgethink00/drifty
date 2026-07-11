@@ -5,13 +5,16 @@ import { isManagedLocalReady } from "../../onboardingManagedLocalStatus";
 import type { SetupChoice } from "../../onboardingFlow";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { SpinnerIcon, SuccessIcon } from "./shared";
+import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
+import { localizedManagedModelDetail, localizedManagedModelFitDetail, localizedManagedModelTier } from "../../../localization/managedModelTranslations";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 
 export function ConnectServerStep({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   return (
     <>
-      <p className="dc-onb-copy dc-onb-server-copy">{serverDescriptionForSetup(flow.setupChoice)}</p>
+      <p className="dc-onb-copy dc-onb-server-copy">{serverDescriptionForSetup(flow.setupChoice, t)}</p>
       {flow.setupChoice === "local_ai" ? <LocalAiSetup flow={flow} /> : null}
       {flow.isCustomEndpointSetup ? <CustomEndpointSetup flow={flow} /> : null}
       {flow.isByokSetup ? <ByokSetup flow={flow} /> : null}
@@ -20,6 +23,7 @@ export function ConnectServerStep({ flow }: { readonly flow: OnboardingFlow }) {
 }
 
 function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   const status = flow.managedLocalAi.status;
   const selectedModelId = flow.managedLocalAi.status?.selectedModelId
     ?? flow.managedLocalAi.actionModelId
@@ -32,8 +36,8 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
     || status?.state === "starting"
   );
   const statusMessage = statusReady
-    ? "Model ready — classification runs entirely on this Mac."
-    : localModelStatusMessage(flow.managedLocalAi.loading, status);
+    ? t("onboarding.connection.modelReady")
+    : localModelStatusMessage(flow.managedLocalAi.loading, status, t);
 
   return (
     <div className="dc-onb-local">
@@ -64,6 +68,7 @@ function LocalModelCard({
   readonly model: ManagedLocalAiModel;
   readonly selected: boolean;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const status = flow.managedLocalAi.status;
   const runtimeMemoryLabel = managedModelRuntimeMemoryLabel(model, status);
   const unsupported = model.fit === "insufficient";
@@ -82,38 +87,40 @@ function LocalModelCard({
     installing: installingThisModel,
     progress: installingThisModel ? status?.progress ?? null : null,
     ready,
+    t,
   });
   const description = localModelDescription({
-    defaultDescription: model.detail,
+    defaultDescription: localizedManagedModelDetail(model, effectiveLanguage, t),
     failed: failedThisModel,
     installing: installingThisModel,
     ready,
     status,
+    t,
   });
 
   return (
     <article
       className={`dc-onb-local-card${selected ? " dc-onb-local-card--selected" : ""}${unsupported ? " dc-onb-local-card--unsupported" : ""}`}
-      aria-label={`${model.label} local AI model`}
+      aria-label={t("onboarding.connection.localModelAria", { model: model.label })}
     >
       <div className="dc-onb-local-card__copy">
         <div className="dc-onb-local-card__title-line">
           <strong>{model.label}</strong>
           <span className={model.recommended ? "dc-onb-local-card__tier dc-onb-local-card__tier--recommended" : "dc-onb-local-card__tier"}>
-            {model.recommended ? (model.fit ? "Recommended for your Mac" : "Recommended") : titleCase(model.tier)}
+            {model.recommended ? (model.fit ? t("onboarding.connection.recommendedForMac") : t("common.recommended")) : localizedManagedModelTier(model.tier, effectiveLanguage, t)}
           </span>
         </div>
         <p>{description}</p>
-        {!ready && model.fitDetail ? <p className="dc-onb-local-card__fit-note">{model.fitDetail}</p> : null}
+        {!ready && model.fitDetail ? <p className="dc-onb-local-card__fit-note">{localizedManagedModelFitDetail(model, effectiveLanguage, t)}</p> : null}
       </div>
       <dl className="dc-onb-local-card__meta">
         <div>
-          <dt>Download</dt>
+          <dt>{t("onboarding.connection.download")}</dt>
           <dd>{model.downloadSize}</dd>
         </div>
         {runtimeMemoryLabel ? (
           <div>
-            <dt>RAM while running</dt>
+            <dt>{t("onboarding.connection.ram")}</dt>
             <dd>{runtimeMemoryLabel}</dd>
           </div>
         ) : null}
@@ -130,11 +137,11 @@ function LocalModelCard({
   );
 }
 
-function localModelStatusMessage(loading: boolean, status: ManagedLocalAiStatus | null): string {
+function localModelStatusMessage(loading: boolean, status: ManagedLocalAiStatus | null, t: LocalizationController["t"]): string {
   const progressText = managedLocalAiProgressText(status?.progress ?? null);
-  if (status?.progress && progressText) return `Downloading ${status.progress.percent.toFixed(0)}% · ${progressText}`;
+  if (status?.progress && progressText) return `${t("onboarding.connection.downloadingPercent", { percent: status.progress.percent.toFixed(0) })} · ${progressText}`;
   if (status) return status.message;
-  return loading ? "Looking for downloaded local models..." : "Choose a local model and Drifty will download it inside the app.";
+  return loading ? t("onboarding.connection.looking") : t("onboarding.connection.chooseModel");
 }
 
 function localModelIsReady(modelId: string, status: ManagedLocalAiStatus | null): boolean {
@@ -147,16 +154,18 @@ function localModelActionLabel({
   installing,
   progress,
   ready,
+  t,
 }: {
   readonly failed: boolean;
   readonly installing: boolean;
   readonly progress: ManagedLocalAiStatus["progress"];
   readonly ready: boolean;
+  readonly t: LocalizationController["t"];
 }): string {
-  if (ready) return "Ready";
-  if (failed) return "Retry";
-  if (installing) return progress === null ? "Downloading..." : `Downloading ${progress.percent.toFixed(0)}%`;
-  return "Download";
+  if (ready) return t("onboarding.connection.ready");
+  if (failed) return t("onboarding.connection.retry");
+  if (installing) return progress === null ? t("onboarding.connection.downloading") : t("onboarding.connection.downloadingPercent", { percent: progress.percent.toFixed(0) });
+  return t("onboarding.connection.download");
 }
 
 function localModelDescription({
@@ -165,26 +174,29 @@ function localModelDescription({
   installing,
   ready,
   status,
+  t,
 }: {
   readonly defaultDescription: string;
   readonly failed: boolean;
   readonly installing: boolean;
   readonly ready: boolean;
   readonly status: ManagedLocalAiStatus | null;
+  readonly t: LocalizationController["t"];
 }): string {
-  if (ready) return "Ready for private local classification.";
+  if (ready) return t("onboarding.connection.readyDescription");
   if ((installing || failed) && status?.message) return status.message;
   return defaultDescription;
 }
 
 function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   const baseIssue = flow.customEndpointDraft.baseUrl.trim() ? flow.customEndpointBaseUrlIssue : null;
   const modelIssue = flow.customEndpointDraft.model.trim() ? flow.customEndpointModelIssue : null;
 
   return (
     <div className="dc-onb-server-form">
       <label className="dc-onb-labeled-input">
-        <span>Base URL</span>
+        <span>{t("onboarding.connection.baseUrl")}</span>
         <input
           className={baseIssue ? "dc-onb-input dc-onb-input--invalid dc-onb-input--mono" : "dc-onb-input dc-onb-input--mono"}
           value={flow.customEndpointDraft.baseUrl}
@@ -194,14 +206,14 @@ function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {
           autoCorrect="off"
           spellCheck={false}
           aria-invalid={baseIssue ? "true" : "false"}
-          aria-label="Custom endpoint base URL"
+          aria-label={t("onboarding.connection.baseUrlAria")}
         />
         <span className={baseIssue ? "dc-onb-input-hint dc-onb-input-hint--error" : "dc-onb-input-hint"}>
-          {baseIssue ?? "Use an OpenAI-compatible /v1 endpoint. Localhost works."}
+          {baseIssue ?? t("onboarding.connection.baseUrlHint")}
         </span>
       </label>
       <label className="dc-onb-labeled-input">
-        <span>Model</span>
+        <span>{t("onboarding.connection.model")}</span>
         <input
           className={modelIssue ? "dc-onb-input dc-onb-input--invalid dc-onb-input--mono" : "dc-onb-input dc-onb-input--mono"}
           value={flow.customEndpointDraft.model}
@@ -211,10 +223,10 @@ function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {
           autoCorrect="off"
           spellCheck={false}
           aria-invalid={modelIssue ? "true" : "false"}
-          aria-label="Custom endpoint model"
+          aria-label={t("onboarding.connection.modelAria")}
         />
         <span className={modelIssue ? "dc-onb-input-hint dc-onb-input-hint--error" : "dc-onb-input-hint"}>
-          {modelIssue ?? "Enter the model id your endpoint exposes."}
+          {modelIssue ?? t("onboarding.connection.modelHint")}
         </span>
       </label>
     </div>
@@ -222,12 +234,13 @@ function CustomEndpointSetup({ flow }: { readonly flow: OnboardingFlow }) {
 }
 
 function ByokSetup({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   const apiInvalid = flow.apiKey.trim().length > 0 && !flow.apiKeyIsValid;
 
   return (
     <div className="dc-onb-server-form dc-onb-server-form--compact">
       <label className="dc-onb-labeled-input">
-        <span>OpenRouter API key</span>
+        <span>{t("onboarding.connection.apiKey")}</span>
         <input
           className={apiInvalid ? "dc-onb-input dc-onb-input--invalid dc-onb-input--mono" : "dc-onb-input dc-onb-input--mono"}
           type="password"
@@ -239,26 +252,22 @@ function ByokSetup({ flow }: { readonly flow: OnboardingFlow }) {
           autoComplete="off"
           spellCheck={false}
           aria-invalid={apiInvalid ? "true" : "false"}
-          aria-label="OpenRouter API key"
+          aria-label={t("onboarding.connection.apiKey")}
         />
         <span className={apiInvalid ? "dc-onb-input-hint dc-onb-input-hint--error" : "dc-onb-input-hint"}>
-          {apiInvalid ? "OpenRouter key should start with sk-or-." : "Drifty never displays the raw key after you leave this field."}
+          {apiInvalid ? t("onboarding.connection.invalidKey") : t("onboarding.connection.maskedKey")}
         </span>
       </label>
     </div>
   );
 }
 
-function serverDescriptionForSetup(setupChoice: SetupChoice | null): string {
+function serverDescriptionForSetup(setupChoice: SetupChoice | null, t: LocalizationController["t"]): string {
   if (setupChoice === "byok") {
-    return "Enter the OpenRouter key Drifty uses for focus insights. The key stays masked during setup.";
+    return t("onboarding.connection.byokDescription");
   }
   if (setupChoice === "custom_endpoint") {
-    return "Enter the OpenAI-compatible endpoint and model Drifty should use for minimized classification requests.";
+    return t("onboarding.connection.customDescription");
   }
-  return "Choose a managed local model. Drifty downloads it inside the app and keeps classification on this Mac.";
-}
-
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return t("onboarding.connection.localDescription");
 }

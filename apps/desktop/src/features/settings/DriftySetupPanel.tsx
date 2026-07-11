@@ -1,7 +1,6 @@
 import { CloudSetupPanel, type CloudSetupPanelProps } from "./CloudSetupPanel";
 import { ManagedLocalAiPanel, type ManagedLocalAiPanelProps } from "./ManagedLocalAiPanel";
-
-const DRIFTY_CLOUD_DESCRIPTION = "Access powerful AI models managed by Drifty, no local setup required.";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type DriftyRoute = "cloud" | "local";
 
@@ -15,16 +14,17 @@ export function DriftySetupPanel({
   selectedRoute,
   ...panelProps
 }: DriftySetupPanelProps) {
+  const { t } = useLocalization();
   return (
-    <div className="ai-setup-detail ai-setup-detail--drifty" role="group" aria-label="Drifty settings">
-      <section className={`ai-setup-route-option ai-setup-route-option--cloud${selectedRoute === "cloud" ? " is-selected" : ""}`} aria-label="Drifty Cloud option">
-        <p className="ai-setup-route-description">{DRIFTY_CLOUD_DESCRIPTION}</p>
+    <div className="ai-setup-detail ai-setup-detail--drifty" role="group" aria-label={t("settings.ai.driftySettingsAria")}>
+      <section className={`ai-setup-route-option ai-setup-route-option--cloud${selectedRoute === "cloud" ? " is-selected" : ""}`} aria-label={t("settings.ai.driftyCloudOptionAria")}>
+        <p className="ai-setup-route-description">{t("settings.ai.driftyCloudDescription")}</p>
         <CloudSetupPanel {...panelProps} />
       </section>
 
-      <div className="ai-setup-local-divider"><span>or use local model</span></div>
+      <div className="ai-setup-local-divider"><span>{t("settings.ai.orUseLocalModel")}</span></div>
 
-      <section className={`ai-setup-route-option ai-setup-route-option--local${selectedRoute === "local" ? " is-selected" : ""}`} aria-label="Managed local model option">
+      <section className={`ai-setup-route-option ai-setup-route-option--local${selectedRoute === "local" ? " is-selected" : ""}`} aria-label={t("settings.ai.managedLocalOptionAria")}>
         <ManagedLocalAiPanel {...panelProps} catalog={catalog} localAiSetup={localAiSetup} />
       </section>
     </div>

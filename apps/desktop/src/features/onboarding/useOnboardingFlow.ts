@@ -31,6 +31,7 @@ import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
+import { useLocalization } from "../localization/LocalizationContext";
 
 // Long enough for the "Account connected" success state to register before moving on.
 const ACCOUNT_CONNECTED_ADVANCE_MS = 1200;
@@ -72,6 +73,7 @@ export function useOnboardingFlow({
   onComplete,
   devInitialStep,
 }: UseOnboardingFlowOptions) {
+  const { t } = useLocalization();
   const progressEnabled = devInitialStep === undefined;
   const restoredProgress = useMemo(() => {
     if (!progressEnabled) return null;
@@ -151,7 +153,7 @@ export function useOnboardingFlow({
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
     step,
-  }), [
+  }, t), [
     canAdvance,
     connection.connectionPhase,
     connection.customEndpointBaseUrlIssue,
@@ -160,6 +162,7 @@ export function useOnboardingFlow({
     connection.isManagedProviderSetup,
     permissions.accessibilityRecheckPending,
     step,
+    t,
   ]);
   const title = useMemo(() => titleForStep({
     accountConnected,
@@ -168,18 +171,19 @@ export function useOnboardingFlow({
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     setupChoice: connection.setupChoice,
     step,
-  }), [
+  }, t), [
     accountConnected,
     connection.connectionPhase,
     connection.isByokSetup,
     connection.isCustomEndpointSetup,
     connection.setupChoice,
     step,
+    t,
   ]);
   const footerLabel = footerLabelForStep({
     isUserManagedProviderSetup: connection.isUserManagedProviderSetup,
     step,
-  });
+  }, t);
 
   useEffect(() => {
     capturePostHogEvent("onboarding_step_viewed", { step });

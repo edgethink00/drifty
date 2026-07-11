@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocalization } from "../../localization/LocalizationContext";
 
 type DropdownProps = {
   options: ReadonlyArray<string>;
@@ -12,6 +13,7 @@ type DropdownProps = {
   onOtherTextChange?: (value: string) => void;
   searchable?: boolean;
   ariaLabel?: string;
+  getOptionLabel?: (value: string) => string;
 };
 
 type DropdownMenuGeometry = {
@@ -33,7 +35,9 @@ export function Dropdown({
   onOtherTextChange,
   searchable = false,
   ariaLabel,
+  getOptionLabel = (option) => option,
 }: DropdownProps) {
+  const { t } = useLocalization();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [menuGeometry, setMenuGeometry] = useState<DropdownMenuGeometry | null>(null);
@@ -66,8 +70,9 @@ export function Dropdown({
 
   const filtered = useMemo(() => {
     if (!searchable || !search) return options;
-    return options.filter((option) => option.toLowerCase().includes(search.toLowerCase()));
-  }, [options, search, searchable]);
+    const normalizedSearch = search.toLowerCase();
+    return options.filter((option) => option.toLowerCase().includes(normalizedSearch) || getOptionLabel(option).toLowerCase().includes(normalizedSearch));
+  }, [getOptionLabel, options, search, searchable]);
 
   const hasOtherSelected = value === "Other";
   const displayValue = value ?? "";
@@ -167,7 +172,7 @@ export function Dropdown({
       role="listbox"
       style={menuStyle}
     >
-      {filtered.length === 0 ? <div className="onb-dropdown__no-results">No results</div> : null}
+      {filtered.length === 0 ? <div className="onb-dropdown__no-results">{t("onboarding.dropdown.noResults")}</div> : null}
       {filtered.map((option) => {
         const isSelected = value === option;
         return (
@@ -179,7 +184,7 @@ export function Dropdown({
             role="option"
             aria-selected={isSelected}
           >
-            {option}
+            {getOptionLabel(option)}
             {isSelected ? (
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M3 7L6 10L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -221,7 +226,7 @@ export function Dropdown({
         />
         <div className="onb-dropdown__icons">
           {value ? (
-            <button type="button" className="onb-dropdown__clear" onClick={handleClear} tabIndex={-1} aria-label="Clear selection">
+            <button type="button" className="onb-dropdown__clear" onClick={handleClear} tabIndex={-1} aria-label={t("onboarding.dropdown.clearSelection")}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M4 4L10 10M10 4L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
@@ -237,11 +242,11 @@ export function Dropdown({
         <input
           className="onb-dropdown__other-input"
           type="text"
-          placeholder="Tell us more…"
+          placeholder={t("onboarding.dropdown.tellUsMore")}
           value={otherText}
           onChange={(event) => onOtherTextChange(event.target.value)}
           autoFocus
-          aria-label={`${ariaLabel ?? placeholder} — other detail`}
+          aria-label={t("onboarding.dropdown.otherDetail", { label: ariaLabel ?? placeholder })}
         />
       ) : null}
     </div>

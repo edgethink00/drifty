@@ -7,15 +7,13 @@ import {
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { Toggle } from "../../components/Toggle";
-import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { useLocalization } from "../localization/LocalizationContext";
 import {
   classificationActivityLabel,
   classificationRuleAppIconSrc,
-  classificationRuleDetailKindLabel,
-  classificationRuleScopeLabel,
-  classificationRuleSurfaceLabel,
-  classificationRuleTargetLabel,
 } from "../classification/classificationViewData";
+import type { LocalizationController } from "../localization/LocalizationContext";
 
 type ClassificationSavedRulesListProps = {
   readonly appIcons: AppIconMap;
@@ -42,31 +40,32 @@ export function ClassificationSavedRulesList({
   onLoadClassificationRules,
   onToggleClassificationRule,
 }: ClassificationSavedRulesListProps) {
+  const { t } = useLocalization();
   return (
     <div className="settings-block classification-rule-saved-block">
-      <h3 id="classification-saved-rules-heading">Saved local rules</h3>
+      <h3 id="classification-saved-rules-heading">{t("settings.classification.savedRules")}</h3>
       <section className="settings-row settings-row--group-end classification-rule-list-section" aria-labelledby="classification-saved-rules-heading">
         <div className="classification-rule-list-head">
           <div>
-            <div className="lbl">Saved local rules</div>
-            <div className="desc">Use the switch to save a rule as off, delete it, or reapply enabled rules to existing activity.</div>
+            <div className="lbl">{t("settings.classification.savedRules")}</div>
+            <div className="desc">{t("settings.classification.savedRulesDescription")}</div>
           </div>
           <div className="ctrl settings-row__actions">
-            <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>Refresh</button>
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onApplyClassificationRules} disabled={classificationRuleApplying || classificationRules.length === 0}>{classificationRuleApplying ? "Applying..." : "Apply rules"}</button>
+            <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>{t("settings.classification.refresh")}</button>
+            <button type="button" className="settings-btn settings-btn--primary" onClick={onApplyClassificationRules} disabled={classificationRuleApplying || classificationRules.length === 0}>{classificationRuleApplying ? t("settings.classification.applying") : t("settings.classification.applyRules")}</button>
           </div>
         </div>
         <div className="classification-rule-list-shell">
-          {classificationRulesLoading ? <p className="classification-rule-hint">Loading local rules...</p> : null}
+          {classificationRulesLoading ? <p className="classification-rule-hint">{t("settings.classification.loadingRules")}</p> : null}
           {!classificationRulesLoading && classificationRules.length === 0 ? (
             <div className="empty-state classification-rule-empty">
-              <span className="eyebrow">No local rules</span>
-              <strong>No custom rules yet</strong>
-              <p>Add a Domain or App rule to override local classification for matching activity.</p>
+              <span className="eyebrow">{t("settings.classification.noLocalRules")}</span>
+              <strong>{t("settings.classification.noCustomRules")}</strong>
+              <p>{t("settings.classification.noRulesDescription")}</p>
             </div>
           ) : null}
           {classificationRules.length > 0 ? (
-            <div className="classification-rule-list" aria-label="Saved local classification rules">
+            <div className="classification-rule-list" aria-label={t("settings.classification.savedRulesAria")}>
               {classificationRules.map((rule) => (
                 <ClassificationSavedRuleCard
                   key={rule.id}
@@ -74,6 +73,7 @@ export function ClassificationSavedRulesList({
                   classificationRuleDeletingId={classificationRuleDeletingId}
                   classificationRuleSegments={classificationRuleSegments}
                   rule={rule}
+                  t={t}
                   onDeleteClassificationRule={onDeleteClassificationRule}
                   onToggleClassificationRule={onToggleClassificationRule}
                 />
@@ -91,6 +91,7 @@ type ClassificationSavedRuleCardProps = {
   readonly classificationRuleDeletingId: string | null;
   readonly classificationRuleSegments: readonly ActivitySegment[];
   readonly rule: ClassificationRule;
+  readonly t: LocalizationController["t"];
   readonly onDeleteClassificationRule: (rule: ClassificationRule) => void;
   readonly onToggleClassificationRule: (rule: ClassificationRule, enabled: boolean) => void;
 };
@@ -100,23 +101,25 @@ function ClassificationSavedRuleCard({
   classificationRuleDeletingId,
   classificationRuleSegments,
   rule,
+  t,
   onDeleteClassificationRule,
   onToggleClassificationRule,
 }: ClassificationSavedRuleCardProps) {
-  const detailKindLabel = classificationRuleDetailKindLabel(rule.detailKind);
+  const detailKindLabel = localizedRuleDetailKindLabel(rule.detailKind, t);
   const detailLabel = rule.matchScope === "detail" && rule.detailValue ? `${detailKindLabel}: ${rule.detailValue}` : null;
-  const surfaceLabel = `${classificationRuleSurfaceLabel(rule)}: ${rule.targetValue}`;
+  const surfaceLabel = `${localizedRuleSurfaceLabel(rule, t)}: ${rule.targetValue}`;
   const displayTitle = classificationRuleDisplayTitle(rule, classificationRuleSegments);
   const primaryLabel = displayTitle ?? surfaceLabel;
-  const metadataLabel = `${classificationRuleScopeLabel(rule)} · ${displayTitle ? `${surfaceLabel} · ` : ""}${categoryLabel(rule.category)} · ${productivityLabel(rule.productivity)} · ${rule.enabled ? "Enabled" : "Disabled"}`;
+  const scopeLabel = localizedRuleScopeLabel(rule, t);
+  const metadataLabel = `${scopeLabel} · ${displayTitle ? `${surfaceLabel} · ` : ""}${localizedCategoryLabel(rule.category, t)} · ${localizedProductivityLabel(rule.productivity, t)} · ${rule.enabled ? t("common.enabled") : t("common.disabled")}`;
 
   return (
-    <article className="classification-rule-card" aria-label={`${classificationRuleTargetLabel(rule.targetKind)} rule ${displayTitle ?? rule.targetValue}`}>
+    <article className="classification-rule-card" aria-label={t("settings.classification.ruleCardAria", { type: localizedRuleTargetLabel(rule.targetKind, t), value: displayTitle ?? rule.targetValue })}>
       <div className="classification-rule-card__main">
         <span className="classification-rule-card__icon">
           {rule.targetKind === "site" ? <SiteFavicon domain={rule.targetValue} size={24} /> : <AppGlyph appName={rule.targetValue} iconSrc={classificationRuleAppIconSrc(rule, appIcons)} size="sm" />}
         </span>
-        <span className="chip gray">{classificationRuleScopeLabel(rule)}</span>
+        <span className="chip gray">{scopeLabel}</span>
         <div className="classification-rule-card__text">
           <strong title={primaryLabel}>{primaryLabel}</strong>
           <p className="classification-rule-card__meta">
@@ -126,11 +129,34 @@ function ClassificationSavedRuleCard({
         </div>
       </div>
       <div className="classification-rule-card__actions">
-        <Toggle checked={rule.enabled} onChange={(enabled) => onToggleClassificationRule(rule, enabled)} ariaLabel={`${rule.enabled ? "Disable" : "Enable"} ${rule.targetValue} rule`} />
-        <button type="button" className="settings-btn danger classification-rule-card__delete" onClick={() => onDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? "Deleting..." : "Delete"}</button>
+        <Toggle checked={rule.enabled} onChange={(enabled) => onToggleClassificationRule(rule, enabled)} ariaLabel={t(rule.enabled ? "settings.classification.disableRuleAria" : "settings.classification.enableRuleAria", { value: rule.targetValue })} />
+        <button type="button" className="settings-btn danger classification-rule-card__delete" onClick={() => onDeleteClassificationRule(rule)} disabled={classificationRuleDeletingId === rule.id}>{classificationRuleDeletingId === rule.id ? t("settings.classification.deleting") : t("settings.classification.delete")}</button>
       </div>
     </article>
   );
+}
+
+function localizedRuleTargetLabel(targetKind: ClassificationRule["targetKind"], t: LocalizationController["t"]): string {
+  return targetKind === "site" ? t("settings.classification.domain") : t("settings.classification.app");
+}
+
+function localizedRuleSurfaceLabel(rule: Pick<ClassificationRule, "targetKind">, t: LocalizationController["t"]): string {
+  return rule.targetKind === "site" ? t("settings.classification.site") : t("settings.classification.app");
+}
+
+function localizedRuleScopeLabel(rule: Pick<ClassificationRule, "matchScope" | "targetKind" | "detailKind">, t: LocalizationController["t"]): string {
+  return rule.matchScope === "detail" ? localizedRuleDetailKindLabel(rule.detailKind, t) : localizedRuleTargetLabel(rule.targetKind, t);
+}
+
+function localizedRuleDetailKindLabel(detailKind: ClassificationRule["detailKind"], t: LocalizationController["t"]): string {
+  switch (detailKind) {
+    case "title": return t("settings.classification.title");
+    case "windowTitle": return t("settings.classification.windowTitle");
+    case "siteTitle": return t("settings.classification.pageTitle");
+    case "youtubeTitle": return t("settings.classification.youtubeTitle");
+    case "siteUrl": return "URL";
+    default: return t("settings.classification.detail");
+  }
 }
 
 function classificationRuleDisplayTitle(rule: ClassificationRule, segments: readonly ActivitySegment[]): string | null {

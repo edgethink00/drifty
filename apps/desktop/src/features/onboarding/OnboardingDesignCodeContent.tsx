@@ -20,6 +20,8 @@ import { ConnectServerStep } from "./components/steps/ConnectServerStep";
 import { TestConnectionStep } from "./components/steps/TestConnectionStep";
 import { SelfDataReviewStep } from "./components/steps/SelfDataReviewStep";
 import { ReadyStep } from "./components/steps/ReadyStep";
+import { useLocalization } from "../localization/LocalizationContext";
+import { onboardingActivityLabel, onboardingDomainLabel } from "./onboardingOptionLabels";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
@@ -34,6 +36,7 @@ export function OnboardingDesignCodeContent({
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
 }: OnboardingDesignCodeContentProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [activityQuery, setActivityQuery] = useState("");
   const [activityOpen, setActivityOpen] = useState(false);
   const [domainQuery, setDomainQuery] = useState("");
@@ -68,21 +71,21 @@ export function OnboardingDesignCodeContent({
   const activityOptions = useMemo(() => {
     const query = activityQuery.trim().toLowerCase();
     return MAIN_ACTIVITY_OPTIONS.filter((option) => (
-      !selectedActivities.includes(option) && (!query || option.toLowerCase().includes(query))
+      !selectedActivities.includes(option) && (!query || onboardingActivityLabel(option, effectiveLanguage).toLowerCase().includes(query))
     ));
-  }, [activityQuery, selectedActivities]);
+  }, [activityQuery, effectiveLanguage, selectedActivities]);
   const activityQueryTrimmed = activityQuery.trim();
   const showActivityCustom = activityQueryTrimmed.length > 0
-    && !MAIN_ACTIVITY_OPTIONS.some((option) => option.toLowerCase() === activityQueryTrimmed.toLowerCase())
+    && !MAIN_ACTIVITY_OPTIONS.some((option) => onboardingActivityLabel(option, effectiveLanguage).toLowerCase() === activityQueryTrimmed.toLowerCase())
     && !selectedActivities.some((option) => option.toLowerCase() === activityQueryTrimmed.toLowerCase())
     && selectedActivities.length < MAX_MAIN_ACTIVITY_SELECTIONS;
   const domainOptions = useMemo(() => {
     const query = domainQuery.trim().toLowerCase();
-    return WORK_DOMAIN_OPTIONS.filter((option) => !query || option.toLowerCase().includes(query));
-  }, [domainQuery]);
+    return WORK_DOMAIN_OPTIONS.filter((option) => !query || onboardingDomainLabel(option, effectiveLanguage).toLowerCase().includes(query));
+  }, [domainQuery, effectiveLanguage]);
   const domainQueryTrimmed = domainQuery.trim();
   const showDomainCustom = domainQueryTrimmed.length > 0
-    && !WORK_DOMAIN_OPTIONS.some((option) => option.toLowerCase() === domainQueryTrimmed.toLowerCase());
+    && !WORK_DOMAIN_OPTIONS.some((option) => onboardingDomainLabel(option, effectiveLanguage).toLowerCase() === domainQueryTrimmed.toLowerCase());
 
   useLayoutEffect(() => {
     if (!activityOpen && !domainOpen) return;
@@ -125,7 +128,7 @@ export function OnboardingDesignCodeContent({
   function selectDomain(option: string) {
     flow.setWorkDomain(option);
     flow.setWorkDomainOther("");
-    setDomainQuery(option);
+    setDomainQuery(onboardingDomainLabel(option, effectiveLanguage));
     setDomainOpen(false);
   }
 
@@ -199,7 +202,7 @@ export function OnboardingDesignCodeContent({
               </h1>
             )}
             {flow.step === "choose_setup" ? (
-              <p className="dc-onb-subtitle">Pick how Drifty runs its AI. You can change this any time.</p>
+              <p className="dc-onb-subtitle">{t("onboarding.setup.subtitle")}</p>
             ) : null}
 
             <div className="onboarding-step dc-onb-step" key={flow.step} ref={flow.stepBodyRef}>
@@ -292,7 +295,7 @@ export function OnboardingDesignCodeContent({
           <div className="onb-actions dc-onb-actions">
             {showBack ? (
               <button type="button" className="onb-actions__back dc-onb-back" onClick={flow.goToPreviousStep}>
-                Back
+                {t("common.back")}
               </button>
             ) : null}
             {showDots ? (
@@ -351,21 +354,19 @@ function ExtremeConfirmDialog({
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
+  const { t } = useLocalization();
   return (
     <div className="dc-onb-confirm-backdrop">
       <section className="dc-onb-confirm" role="alertdialog" aria-modal="true" aria-labelledby="dc-onb-confirm-title">
         <div className="dc-onb-confirm__icon" aria-hidden="true">
           <ScissorsIcon />
         </div>
-        <div className="dc-onb-confirm__eyebrow">Extreme nudge</div>
-        <h2 id="dc-onb-confirm-title">Let Drifty close drift?</h2>
-        <p>
-          When repeated drift is detected, Drifty can close the distracting browser tab or quit the distracting app.
-          This is more direct than a warning.
-        </p>
+        <div className="dc-onb-confirm__eyebrow">{t("onboarding.nudges.extreme")}</div>
+        <h2 id="dc-onb-confirm-title">{t("onboarding.extreme.title")}</h2>
+        <p>{t("onboarding.extreme.description")}</p>
         <div className="dc-onb-confirm__actions">
-          <button type="button" className="dc-onb-confirm__secondary" onClick={onCancel}>Keep off</button>
-          <button type="button" className="dc-onb-confirm__primary" onClick={onConfirm}>Allow closing</button>
+          <button type="button" className="dc-onb-confirm__secondary" onClick={onCancel}>{t("onboarding.extreme.keepOff")}</button>
+          <button type="button" className="dc-onb-confirm__primary" onClick={onConfirm}>{t("onboarding.extreme.allowClosing")}</button>
         </div>
       </section>
     </div>

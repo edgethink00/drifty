@@ -1,19 +1,21 @@
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { SpinnerIcon, SuccessIcon } from "./shared";
+import { useLocalization } from "../../../localization/LocalizationContext";
 
 export function TestConnectionStep({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   return (
     <>
       <p className="dc-onb-copy">
         {flow.connectionPhase === "success"
           ? flow.isByokSetup
-            ? "Your OpenRouter key is connected and ready for AI classification."
-            : "Your custom endpoint is connected and ready for AI classification."
+            ? t("onboarding.test.openRouterSuccess")
+            : t("onboarding.test.customSuccess")
           : flow.connectionPhase === "failed"
-            ? `Drifty could not connect: ${flow.connectionFailureLabel ?? "Connection test failed."}`
+            ? t("onboarding.test.failed", { reason: flow.connectionFailureLabel ?? t("onboarding.test.defaultFailure") })
           : flow.isByokSetup
-            ? "Checking that Drifty can use your masked OpenRouter key."
-            : "Checking that Drifty can use your custom endpoint."}
+            ? t("onboarding.test.openRouterChecking")
+            : t("onboarding.test.customChecking")}
       </p>
       <ul className="dc-onb-check-list">
         {flow.connectionChecks.map((check, index) => {

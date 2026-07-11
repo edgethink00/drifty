@@ -1,6 +1,9 @@
 import { formatCloudTrialStartedDetail } from "../billing/CloudTrialStartedNotice";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizeAiStatusLabel } from "../localization/aiStatusTranslations";
+import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 
 export type CloudSetupPanelProps = {
   readonly aiServerStatusLabel: string;
@@ -41,11 +44,14 @@ export function CloudSetupPanel({
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: CloudSetupPanelProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
   const isCurrentPaidPlan = isCurrentCloudPlan && billingEntitlementStatus === "active";
   const isCurrentTrial = isCurrentCloudPlan && billingEntitlementStatus === "trialing";
   const maskedUserEmail = maskCloudAccountEmail(userEmail);
+  const localizedAiServerStatusLabel = localizeAiStatusLabel(aiServerStatusLabel, t);
+  const localizedCloudStatusLabel = localizeAiStatusLabel(cloudStatusLabel, t);
   const primaryActionLabel = cloudActionLabel({
     billingCheckoutLoadingInterval,
     billingPortalLoading,
@@ -54,6 +60,7 @@ export function CloudSetupPanel({
     cloudStatusRefreshing,
     isCurrentCloudPlan,
     isSupabaseConfigured,
+    t,
   });
   const primaryActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null || billingPortalLoading;
   const handlePrimaryAction = isDeviceLimitLocked || isCurrentPaidPlan
@@ -62,29 +69,29 @@ export function CloudSetupPanel({
       ? () => onStartCloudSetup()
       : onRefreshCloudStatus;
   const statusHeadline = isCurrentTrial
-    ? "1-week free trial is active"
+    ? t("settings.ai.cloudTrialActive")
     : isDeviceLimitLocked
-      ? "Device limit reached"
+      ? t("settings.ai.deviceLimitReached")
     : isCurrentCloudPlan
-      ? "Cloud AI is active"
-      : [aiServerStatusLabel, cloudStatusLabel].filter(Boolean).join(" · ");
+      ? t("settings.ai.cloudActive")
+      : [localizedAiServerStatusLabel, localizedCloudStatusLabel].filter(Boolean).join(" · ");
   const statusDetail = isCurrentTrial
-    ? formatCloudTrialStartedDetail(cloudTrialEndsAt)
+    ? localizedCloudTrialDetail(cloudTrialEndsAt, effectiveLanguage, t)
     : isDeviceLimitLocked
-      ? "Individual includes 2 active Macs. Manage active Macs in Account settings to use Cloud AI here."
+      ? t("settings.ai.cloudDeviceLimitDetail")
     : isCurrentCloudPlan
-      ? "Manage your subscription, invoices, and payment method in Polar."
+      ? t("settings.ai.cloudManageDetail")
       : null;
   const statusSummary = statusDetail ? `${statusHeadline} · ${statusDetail}` : statusHeadline;
 
   return (
-    <div className="ai-setup-detail ai-setup-detail--cloud" role="group" aria-label="Drifty Cloud settings">
-      <article className="ai-setup-cloud-route" aria-label="Drifty Cloud checkout route">
+    <div className="ai-setup-detail ai-setup-detail--cloud" role="group" aria-label={t("settings.ai.driftyCloudSettingsAria")}>
+      <article className="ai-setup-cloud-route" aria-label={t("settings.ai.driftyCloudCheckoutAria")}>
         <div className="ai-setup-cloud-route__copy">
           <strong>Drifty Cloud</strong>
           <p>{statusSummary}</p>
           {maskedUserEmail ? <p className="ai-setup-cloud-route__account">{maskedUserEmail}</p> : null}
-          {billingEntitlementError ? <p className="ai-setup-detail__message">{billingEntitlementError}</p> : null}
+          {billingEntitlementError ? <p className="ai-setup-detail__message">{localizeSettingsError(billingEntitlementError, effectiveLanguage, t)}</p> : null}
         </div>
         <button type="button" className="settings-btn settings-btn--primary ai-setup-cloud-route__action" onClick={() => void handlePrimaryAction()} disabled={primaryActionDisabled}>
           {primaryActionLabel}
@@ -102,6 +109,7 @@ function cloudActionLabel({
   cloudStatusRefreshing,
   isCurrentCloudPlan,
   isSupabaseConfigured,
+  t,
 }: {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
@@ -110,15 +118,25 @@ function cloudActionLabel({
   readonly cloudStatusRefreshing: boolean;
   readonly isCurrentCloudPlan: boolean;
   readonly isSupabaseConfigured: boolean;
+  readonly t: LocalizationController["t"];
 }): string {
-  if (billingCheckoutLoadingInterval !== null) return "Opening checkout...";
-  if (billingPortalLoading) return "Opening billing...";
-  if (cloudStatusRefreshing) return "Checking...";
-  if (!isSupabaseConfigured || !isCurrentCloudPlan) return "Upgrade to Individual";
-  if (billingEntitlementLockedReason === "device_limit_reached") return "Manage billing";
-  if (billingEntitlementStatus === "trialing") return "Upgrade to Individual";
-  if (billingEntitlementStatus === "active") return "Manage billing";
-  return "Refresh Drifty Cloud";
+  if (billingCheckoutLoadingInterval !== null) return t("settings.account.openingCheckout");
+  if (billingPortalLoading) return t("settings.account.openingBilling");
+  if (cloudStatusRefreshing) return t("settings.account.checking");
+  if (!isSupabaseConfigured || !isCurrentCloudPlan) return t("settings.account.upgrade");
+  if (billingEntitlementLockedReason === "device_limit_reached") return t("settings.account.manageBilling");
+  if (billingEntitlementStatus === "trialing") return t("settings.account.upgrade");
+  if (billingEntitlementStatus === "active") return t("settings.account.manageBilling");
+  return t("settings.ai.refreshCloud");
+}
+
+function localizedCloudTrialDetail(trialEndsAt: string | null, language: "en" | "ko", t: LocalizationController["t"]): string {
+  if (language === "en") return formatCloudTrialStartedDetail(trialEndsAt);
+  if (!trialEndsAt) return t("settings.ai.cloudTrialAvailable");
+  const endDate = new Date(trialEndsAt);
+  if (Number.isNaN(endDate.getTime())) return t("settings.ai.cloudTrialAvailable");
+  const date = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(endDate);
+  return t("settings.ai.cloudTrialUntil", { date });
 }
 
 function maskCloudAccountEmail(email: string | null): string | null {

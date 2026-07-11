@@ -1,6 +1,7 @@
 import type { SettingsSelectOption } from "./SettingsSelect";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
-import { isRetryableManagedModelError, managedDownloadButtonLabel } from "./managedLocalAiLabels";
+import { isRetryableManagedModelError } from "./managedLocalAiLabels";
+import type { LocalizationController } from "../localization/LocalizationContext";
 
 export const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
 export const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Individual (Cloud)";
@@ -13,12 +14,13 @@ export function driftyModelOptions(
   cloudSubscribeActionLabel: string | null,
   onInstallModel: (modelId: string) => void | Promise<void>,
   onStartCloudSetup: () => void | Promise<void>,
+  t: LocalizationController["t"],
 ): readonly SettingsSelectOption<string>[] {
   const cloudActionAriaLabel = cloudSubscribeActionLabel === null
     ? undefined
-    : cloudSubscribeActionLabel === "Opening..."
-      ? "Opening Drifty Individual Cloud checkout"
-      : "Upgrade Drifty Individual Cloud";
+    : cloudSubscribeActionLabel === t("settings.ai.opening")
+      ? t("settings.ai.openingCloudCheckoutAria")
+      : t("settings.ai.upgradeCloudAria");
 
   return [
     {
@@ -43,8 +45,8 @@ export function driftyModelOptions(
         value: model.id,
         label: model.label,
         disabled: true,
-        actionLabel: managedDownloadButtonLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null),
-        actionAriaLabel: `Download ${model.label} managed local model`,
+        actionLabel: localizedDownloadButtonLabel(actionModelId === model.id || installing, failed, status?.progress?.percent ?? null, t),
+        actionAriaLabel: t("settings.ai.downloadManagedModelAria", { model: model.label }),
         actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
         onAction: (modelId: string) => {
           void onInstallModel(modelId);
@@ -52,6 +54,12 @@ export function driftyModelOptions(
       };
     }),
   ];
+}
+
+function localizedDownloadButtonLabel(isBusy: boolean, isError: boolean, percent: number | null, t: LocalizationController["t"]): string {
+  if (isBusy) return percent === null ? t("settings.ai.downloading") : t("settings.ai.downloadingPercent", { percent: percent.toFixed(0) });
+  if (isError) return t("settings.ai.retry");
+  return t("settings.ai.download");
 }
 
 export function isSelectableManagedModel(modelId: string, status: ManagedLocalAiStatus | null): boolean {

@@ -8,6 +8,7 @@ import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
 import { ANALYSIS_RECOMMENDED_MODELS, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_ANTHROPIC_MODEL, DEFAULT_ANALYSIS_OPENAI_MODEL } from "./analysisModelSetup";
 import type { AnalysisAiSetupState, AnalysisProvider } from "./analysisModelSetup";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 const CLOUD_MANAGED_MODEL_ID = "cloud_managed";
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
@@ -18,14 +19,6 @@ const ANTHROPIC_DIRECT_MODEL_ID = "anthropic_direct";
 // Anthropic clay). The provider cards carry the full SVG brand marks below.
 const OPENAI_BRAND_COLOR = "#10a37f";
 const ANTHROPIC_BRAND_COLOR = "#d97757";
-
-const ANALYSIS_PROVIDER_OPTIONS = [
-  { value: "cloud", label: "Drifty Cloud", iconSrc: driftyLogoUrl },
-  { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
-  { value: "openai", label: "OpenAI", accentColor: OPENAI_BRAND_COLOR },
-  { value: "anthropic", label: "Anthropic", accentColor: ANTHROPIC_BRAND_COLOR },
-  { value: "self_hosted", label: "Custom endpoint", accentColor: "var(--accent)" },
-] satisfies readonly SettingsSelectOption<AnalysisProvider>[];
 
 export interface IntelligenceSetupPanelProps {
   readonly setup: AnalysisAiSetupState;
@@ -71,36 +64,36 @@ type SummaryInfo = {
   readonly ready: boolean;
 };
 
-function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean): SummaryInfo {
+function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean, t: LocalizationController["t"]): SummaryInfo {
   switch (setup.provider) {
     case "cloud":
-      return { providerLabel: "Drifty Cloud", modelLabel: "Managed by Drifty", statusLabel: "Available", tone: "ok", ready: true };
+      return { providerLabel: "Drifty Cloud", modelLabel: t("settings.intelligence.managedByDrifty"), statusLabel: t("settings.intelligence.available"), tone: "ok", ready: true };
     case "openrouter": {
       const modelLabel = setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL;
       return openRouterConnected
-        ? { providerLabel: "OpenRouter", modelLabel, statusLabel: "Connected", tone: "ok", ready: true }
-        : { providerLabel: "OpenRouter", modelLabel, statusLabel: "Needs setup", tone: "warning", ready: false };
+        ? { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.connected"), tone: "ok", ready: true }
+        : { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "openai": {
       const configured = setup.openaiApiKey.trim().length > 0 && setup.openaiModel.trim().length > 0;
-      const modelLabel = setup.openaiModel.trim() || "Not set";
+      const modelLabel = setup.openaiModel.trim() || t("settings.intelligence.notSet");
       return configured
-        ? { providerLabel: "OpenAI", modelLabel, statusLabel: "Configured", tone: "ok", ready: true }
-        : { providerLabel: "OpenAI", modelLabel, statusLabel: "Needs setup", tone: "warning", ready: false };
+        ? { providerLabel: "OpenAI", modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
+        : { providerLabel: "OpenAI", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "anthropic": {
       const configured = setup.anthropicApiKey.trim().length > 0 && setup.anthropicModel.trim().length > 0;
-      const modelLabel = setup.anthropicModel.trim() || "Not set";
+      const modelLabel = setup.anthropicModel.trim() || t("settings.intelligence.notSet");
       return configured
-        ? { providerLabel: "Anthropic", modelLabel, statusLabel: "Configured", tone: "ok", ready: true }
-        : { providerLabel: "Anthropic", modelLabel, statusLabel: "Needs setup", tone: "warning", ready: false };
+        ? { providerLabel: "Anthropic", modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
+        : { providerLabel: "Anthropic", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "self_hosted": {
       const configured = setup.selfHostedBaseUrl.trim().length > 0 && setup.selfHostedModel.trim().length > 0;
-      const modelLabel = setup.selfHostedModel.trim() || "Not set";
+      const modelLabel = setup.selfHostedModel.trim() || t("settings.intelligence.notSet");
       return configured
-        ? { providerLabel: "Custom endpoint", modelLabel, statusLabel: "Configured", tone: "ok", ready: true }
-        : { providerLabel: "Custom endpoint", modelLabel, statusLabel: "Needs setup", tone: "warning", ready: false };
+        ? { providerLabel: t("settings.ai.customEndpoint"), modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
+        : { providerLabel: t("settings.ai.customEndpoint"), modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     default:
       return assertNever(setup.provider);
@@ -130,10 +123,10 @@ function summaryModelValue(setup: AnalysisAiSetupState): string {
  * here; the direct-key + custom providers surface a single read-only entry and
  * edit their model id inside the provider card below.
  */
-function summaryModelOptions(setup: AnalysisAiSetupState): SettingsSelectOption<string>[] {
+function summaryModelOptions(setup: AnalysisAiSetupState, t: LocalizationController["t"]): SettingsSelectOption<string>[] {
   switch (setup.provider) {
     case "cloud":
-      return [{ value: CLOUD_MANAGED_MODEL_ID, label: "Managed by Drifty" }];
+      return [{ value: CLOUD_MANAGED_MODEL_ID, label: t("settings.intelligence.managedByDrifty") }];
     case "openrouter": {
       const options: SettingsSelectOption<string>[] = ANALYSIS_RECOMMENDED_MODELS.map((model) => ({ value: model.id, label: model.label }));
       const current = setup.openRouterModel.trim();
@@ -145,22 +138,30 @@ function summaryModelOptions(setup: AnalysisAiSetupState): SettingsSelectOption<
     case "anthropic":
       return [{ value: ANTHROPIC_DIRECT_MODEL_ID, label: setup.anthropicModel.trim() || "Anthropic" }];
     case "self_hosted":
-      return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: setup.selfHostedModel.trim() || "Custom endpoint" }];
+      return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: setup.selfHostedModel.trim() || t("settings.ai.customEndpoint") }];
     default:
       return assertNever(setup.provider);
   }
 }
 
 export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, onConnectOpenRouter }: IntelligenceSetupPanelProps): JSX.Element {
+  const { t } = useLocalization();
+  const providerOptions = [
+    { value: "cloud", label: "Drifty Cloud", iconSrc: driftyLogoUrl },
+    { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
+    { value: "openai", label: "OpenAI", accentColor: OPENAI_BRAND_COLOR },
+    { value: "anthropic", label: "Anthropic", accentColor: ANTHROPIC_BRAND_COLOR },
+    { value: "self_hosted", label: t("settings.ai.customEndpoint"), accentColor: "var(--accent)" },
+  ] satisfies readonly SettingsSelectOption<AnalysisProvider>[];
   // Which provider card is expanded. Defaults to the active provider so the tab
   // opens focused on whatever analysis model is currently in use.
   const [expandedCard, setExpandedCard] = useState<IntelligenceCardId | null>(() => CARD_FOR_PROVIDER[setup.provider]);
-  const summary = summarizeAnalysisSetup(setup, openRouterConnected);
+  const summary = summarizeAnalysisSetup(setup, openRouterConnected, t);
 
   // The "Model being used" summary is directly selectable (like the Classification
   // tab): a provider dropdown + a model dropdown that write straight to setup.
   const selectedModelValue = summaryModelValue(setup);
-  const modelOptions = summaryModelOptions(setup);
+  const modelOptions = summaryModelOptions(setup, t);
 
   const handleProviderChange = (provider: AnalysisProvider) => {
     setExpandedCard(CARD_FOR_PROVIDER[provider]);
@@ -187,42 +188,42 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
   return (
     <>
       <ModelBeingUsedCard
-        regionAriaLabel="Analysis model being used"
-        heading="Model being used"
+        regionAriaLabel={t("settings.intelligence.modelBeingUsedAria")}
+        heading={t("settings.ai.modelBeingUsed")}
         tone={summary.tone}
         statusLabel={summary.statusLabel}
         statusProviderLabel={summary.providerLabel}
-        statusAriaLabel={`Analysis model: ${summary.providerLabel}, ${summary.modelLabel}, ${summary.statusLabel}`}
-        providerAriaLabel="Analysis provider"
+        statusAriaLabel={t("settings.intelligence.statusAria", { provider: summary.providerLabel, model: summary.modelLabel, status: summary.statusLabel })}
+        providerAriaLabel={t("settings.intelligence.providerAria")}
         providerValue={setup.provider}
-        providerOptions={ANALYSIS_PROVIDER_OPTIONS}
+        providerOptions={providerOptions}
         onProviderChange={(value) => handleProviderChange(value as AnalysisProvider)}
-        modelAriaLabel="Analysis model"
+        modelAriaLabel={t("settings.intelligence.modelAria")}
         modelValue={selectedModelValue}
         modelOptions={modelOptions}
         onModelChange={handleModelChange}
       />
       <p className="ai-setup-route-description intelligence-setup-panel__hint">
-        This model runs the heavy project pass — it groups your whole day into projects and corrects live labels with full-day context. Use a strong model; we recommend GPT-5 mini.
+        {t("settings.intelligence.description")}
       </p>
 
-      <h4 className="ai-setup-provider-heading">Configure providers</h4>
+      <h4 className="ai-setup-provider-heading">{t("settings.ai.configureProviders")}</h4>
 
-      <div className="ai-setup-choices" role="group" aria-label="Analysis model providers">
+      <div className="ai-setup-choices" role="group" aria-label={t("settings.intelligence.providersAria")}>
         <IntelligenceProviderCard id="drifty" title="Drifty Cloud" brandMark={<DriftyBrandMark />} expanded={expandedCard === "drifty"} onToggle={handleToggle}>
-          <div className="ai-setup-detail" role="group" aria-label="Drifty Cloud analysis model">
-            <p className="ai-setup-route-description">Drifty Cloud provides the analysis model. No configuration needed — a strong project-pass model is included with your plan.</p>
+          <div className="ai-setup-detail" role="group" aria-label={t("settings.intelligence.cloudModelAria")}>
+            <p className="ai-setup-route-description">{t("settings.intelligence.cloudDescription")}</p>
           </div>
         </IntelligenceProviderCard>
 
         <IntelligenceProviderCard id="openrouter" title="OpenRouter" brandMark={<OpenRouterBrandMark />} expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
-          <div className="ai-setup-detail" role="group" aria-label="OpenRouter analysis model">
+          <div className="ai-setup-detail" role="group" aria-label={t("settings.intelligence.openRouterModelAria")}>
             <div className="ai-setup-key-row">
               <label className="ai-setup-field">
-                <span>Model</span>
+                <span>{t("settings.ai.model")}</span>
                 <input
                   className="settings-input"
-                  aria-label="OpenRouter model id"
+                  aria-label={t("settings.intelligence.openRouterModelIdAria")}
                   list={ANALYSIS_MODEL_DATALIST_ID}
                   value={setup.openRouterModel}
                   onChange={(event) => onChange({ ...setup, provider: "openrouter", openRouterModel: event.target.value })}
@@ -237,39 +238,39 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
                 </datalist>
               </label>
               <button type="button" className="settings-btn ai-setup-model-action" onClick={onConnectOpenRouter}>
-                {openRouterConnected ? "Connected" : "Connect OpenRouter"}
+                {openRouterConnected ? t("settings.intelligence.connected") : t("settings.intelligence.connectOpenRouter")}
               </button>
             </div>
             <p className="ai-setup-route-description">
-              Pick a recommended model or type any OpenRouter model id. Connecting provisions a scoped key with a browser sign-in — your key is never shown here.
+              {t("settings.intelligence.openRouterDescription")}
             </p>
           </div>
         </IntelligenceProviderCard>
 
-        <IntelligenceProviderCard id="custom" title="Custom endpoint" brandMark={<CustomBrandMark />} expanded={expandedCard === "custom"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label="Custom endpoint analysis model">
+        <IntelligenceProviderCard id="custom" title={t("settings.ai.customEndpoint")} brandMark={<CustomBrandMark />} expanded={expandedCard === "custom"} onToggle={handleToggle}>
+          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.customModelAria")}>
             <label className="ai-setup-field">
-              <span>Base URL</span>
+              <span>{t("settings.ai.baseUrl")}</span>
               <input
                 className="settings-input"
-                aria-label="Analysis endpoint base URL"
+                aria-label={t("settings.intelligence.endpointBaseUrlAria")}
                 value={setup.selfHostedBaseUrl}
                 onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl: event.target.value })}
                 placeholder="https://api.openai.com/v1"
               />
             </label>
             <label className="ai-setup-field">
-              <span>Model</span>
+              <span>{t("settings.ai.model")}</span>
               <input
                 className="settings-input"
-                aria-label="Analysis endpoint model"
+                aria-label={t("settings.intelligence.endpointModelAria")}
                 value={setup.selfHostedModel}
                 onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedModel: event.target.value })}
                 placeholder="gpt-5-mini"
               />
             </label>
             <ApiKeyField
-              ariaLabel="Custom endpoint API key"
+              ariaLabel={t("settings.intelligence.customApiKeyAria")}
               value={setup.selfHostedApiKey}
               placeholder="sk-... (optional)"
               onValueChange={(value) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey: value })}
@@ -278,49 +279,49 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
         </IntelligenceProviderCard>
 
         <IntelligenceProviderCard id="chatgpt" title="OpenAI" brandMark={<OpenAiBrandMark />} expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label="OpenAI analysis model">
+          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.openAiModelAria")}>
             <ApiKeyField
-              ariaLabel="OpenAI API key"
+              ariaLabel={t("settings.intelligence.openAiApiKeyAria")}
               value={setup.openaiApiKey}
               placeholder="sk-..."
               onValueChange={(value) => onChange({ ...setup, provider: "openai", openaiApiKey: value })}
             />
             <label className="ai-setup-field">
-              <span>Model</span>
+              <span>{t("settings.ai.model")}</span>
               <input
                 className="settings-input"
-                aria-label="OpenAI model id"
+                aria-label={t("settings.intelligence.openAiModelIdAria")}
                 value={setup.openaiModel}
                 onChange={(event) => onChange({ ...setup, provider: "openai", openaiModel: event.target.value })}
                 placeholder={DEFAULT_ANALYSIS_OPENAI_MODEL}
               />
             </label>
             <p className="ai-setup-route-description">
-              Direct OpenAI key. Uses OpenAI's chat API — your key is sent only to api.openai.com and never leaves this device otherwise.
+              {t("settings.intelligence.openAiDescription")}
             </p>
           </div>
         </IntelligenceProviderCard>
 
         <IntelligenceProviderCard id="anthropic" title="Anthropic" brandMark={<AnthropicBrandMark />} expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label="Anthropic analysis model">
+          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.anthropicModelAria")}>
             <ApiKeyField
-              ariaLabel="Anthropic API key"
+              ariaLabel={t("settings.intelligence.anthropicApiKeyAria")}
               value={setup.anthropicApiKey}
               placeholder="sk-ant-..."
               onValueChange={(value) => onChange({ ...setup, provider: "anthropic", anthropicApiKey: value })}
             />
             <label className="ai-setup-field">
-              <span>Model</span>
+              <span>{t("settings.ai.model")}</span>
               <input
                 className="settings-input"
-                aria-label="Anthropic model id"
+                aria-label={t("settings.intelligence.anthropicModelIdAria")}
                 value={setup.anthropicModel}
                 onChange={(event) => onChange({ ...setup, provider: "anthropic", anthropicModel: event.target.value })}
                 placeholder={DEFAULT_ANALYSIS_ANTHROPIC_MODEL}
               />
             </label>
             <p className="ai-setup-route-description">
-              Direct Anthropic key. Uses Anthropic's Messages API — your key is sent only to api.anthropic.com and never leaves this device otherwise.
+              {t("settings.intelligence.anthropicDescription")}
             </p>
           </div>
         </IntelligenceProviderCard>
@@ -344,6 +345,7 @@ type IntelligenceProviderCardProps = {
  * a custom title + brand mark.
  */
 function IntelligenceProviderCard({ id, title, brandMark, expanded, children, onToggle }: IntelligenceProviderCardProps): JSX.Element {
+  const { t } = useLocalization();
   const panelId = `intelligence-provider-${id}`;
   const buttonId = `intelligence-provider-button-${id}`;
 
@@ -353,7 +355,7 @@ function IntelligenceProviderCard({ id, title, brandMark, expanded, children, on
         id={buttonId}
         type="button"
         className="ai-setup-choice__toggle"
-        aria-label={`${title} setup row`}
+        aria-label={t("settings.ai.setupRowAria", { provider: title })}
         aria-expanded={expanded}
         aria-controls={panelId}
         onClick={() => onToggle(id)}
@@ -385,9 +387,10 @@ type ApiKeyFieldProps = {
  * separate browser Connect flow and never renders a raw key here.
  */
 function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }: ApiKeyFieldProps): JSX.Element {
+  const { t } = useLocalization();
   return (
     <label className="ai-setup-field">
-      <span>API key</span>
+      <span>{t("settings.intelligence.apiKey")}</span>
       <input
         className="settings-input"
         type="password"

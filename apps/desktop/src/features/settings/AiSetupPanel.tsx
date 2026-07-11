@@ -25,6 +25,7 @@ import { useManagedLocalAiSetup } from "./useManagedLocalAiSetup";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { useWorkProfileSettings } from "./useWorkProfileSettings";
 import type { UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -88,6 +89,7 @@ export function AiSetupPanel({
   onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
+  const { t } = useLocalization();
   const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
@@ -103,8 +105,8 @@ export function AiSetupPanel({
   const cloudSubscribeActionLabel = canUseCloudModel
     ? null
     : billingCheckoutLoadingInterval === null
-      ? "Upgrade"
-      : "Opening...";
+      ? t("settings.ai.upgrade")
+      : t("settings.ai.opening");
   const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
   const connectionTestKind = connectionTest.result?.kind ?? null;
   const isCloudRouteSelected = localAiSetup.provider === "managed_local" && driftyRoute === "cloud";
@@ -167,13 +169,13 @@ export function AiSetupPanel({
   return (
     <div className="settings-block ai-setup-panel">
       <div className="ai-setup-panel__header">
-        <h3>AI setup</h3>
+        <h3>{t("settings.section.aiSetup")}</h3>
       </div>
 
       <AiSetupPanelTabs activeTab={activePanelTab} onChange={setActivePanelTab} showIntelligenceTab={showIntelligenceTab} />
 
       {activePanelTab === "providers" ? (
-        <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label="Providers">
+        <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.providers")}>
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
@@ -199,9 +201,9 @@ export function AiSetupPanel({
             onTestConnection={handleTestConnection}
           />
 
-          <h4 className="ai-setup-provider-heading">Configure providers</h4>
+          <h4 className="ai-setup-provider-heading">{t("settings.ai.configureProviders")}</h4>
 
-          <div className="ai-setup-choices" role="group" aria-label="AI setup choices">
+          <div className="ai-setup-choices" role="group" aria-label={t("settings.ai.setupChoicesAria")}>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={expandedSection === "drifty"} onToggle={handleToggleSection}>
               <DriftySetupPanel
                 actionModelId={managedLocalAi.actionModelId}
@@ -247,7 +249,7 @@ export function AiSetupPanel({
           </div>
         </section>
       ) : activePanelTab === "intelligence" && showIntelligenceTab ? (
-        <section id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label="Intelligence">
+        <section id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.intelligence")}>
           <IntelligenceSetupPanel
             setup={analysisSetup}
             onChange={onAnalysisChange}
@@ -259,14 +261,14 @@ export function AiSetupPanel({
           />
         </section>
       ) : (
-        <section id="ai-setup-panel-tab-profile" className="ai-setup-tab-panel" role="tabpanel" aria-label="Profile and information">
-          <div className="ai-setup-support-zone" aria-label="AI prompt settings">
+        <section id="ai-setup-panel-tab-profile" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.profile")}>
+          <div className="ai-setup-support-zone" aria-label={t("settings.ai.promptSettings")}>
             <div className="ai-setup-support-zone__header">
               <div>
-                <span className="eyebrow">AI prompt settings</span>
-                <strong>Work context and privacy</strong>
+                <span className="eyebrow">{t("settings.ai.promptSettings")}</span>
+                <strong>{t("settings.ai.workContextPrivacy")}</strong>
               </div>
-              <p>Shared by Drifty Cloud, OpenRouter, and local AI classification.</p>
+              <p>{t("settings.ai.promptSettingsDescription")}</p>
             </div>
             <AiSetupSupportSections
               workProfileDraft={workProfileSettings.workProfileDraft}

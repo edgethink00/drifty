@@ -3,6 +3,8 @@ import { Toggle } from "../../components/Toggle";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import "./AccountSettingsSection.css";
 
 export type AccountSettingsSectionProps = {
@@ -78,6 +80,7 @@ export function AccountSettingsSection({
   onSignIn,
   onStartCloudSetup,
 }: AccountSettingsSectionProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
   const shouldShowDeviceManagement = isCurrentCloudPlan || isDeviceLimitLocked || cloudDevices.length > 0;
@@ -95,27 +98,27 @@ export function AccountSettingsSection({
   });
   const trimmedUserEmail = userEmail?.trim() ?? "";
   const isSignedIn = trimmedUserEmail.length > 0;
-  const accountEmail = isSignedIn ? trimmedUserEmail : "Not signed in";
-  const cloudPlanLabel = currentBillingPlan === "individual" || isDeviceLimitLocked ? "Individual" : currentBillingPlan === "free" ? "Free" : "Unknown";
+  const accountEmail = isSignedIn ? trimmedUserEmail : t("settings.account.notSignedIn");
+  const cloudPlanLabel = currentBillingPlan === "individual" || isDeviceLimitLocked ? t("settings.account.individual") : currentBillingPlan === "free" ? t("settings.account.free") : t("settings.data.unknown");
   const cloudStatusCopy = isDeviceLimitLocked
-    ? "Device limit reached. Individual includes 2 active Macs; remove an old Mac below to use Cloud AI here."
+    ? t("settings.account.deviceLimit")
     : isCurrentCloudPlan
-      ? "Drifty Cloud AI is active for this account."
-      : "Upgrade to Individual to use hosted Cloud AI on up to 2 active Macs.";
+      ? t("settings.account.cloudActive")
+      : t("settings.account.cloudUpgrade");
 
   return (
     <div className="settings-section settings-section--account">
       <div className="settings-block">
-        <h3>Account</h3>
+        <h3>{t("settings.section.account")}</h3>
         <div className="settings-row settings-row--stacked-action">
           <div>
-            <div className="lbl">Signed-in account</div>
+            <div className="lbl">{t("settings.account.signedIn")}</div>
             <div className="desc">{accountEmail}</div>
           </div>
           {!isSignedIn ? (
             <div className="ctrl">
               <button type="button" className="settings-btn" onClick={onSignIn}>
-                Sign in
+                {t("settings.account.signIn")}
               </button>
             </div>
           ) : null}
@@ -123,18 +126,18 @@ export function AccountSettingsSection({
       </div>
 
       <div className="settings-block">
-        <h3>Public profile</h3>
+        <h3>{t("settings.account.publicProfile")}</h3>
         <div className="settings-row settings-row--stacked-action">
           <div>
-            <div className="lbl">{publicProfileDisplayName?.trim() || "Leaderboard profile"}</div>
-            <div className="desc">{publicProfileStatus?.trim() || "Shown with your aggregate focus total when you join the leaderboard."}</div>
+            <div className="lbl">{publicProfileDisplayName?.trim() || t("settings.account.leaderboardProfile")}</div>
+            <div className="desc">{publicProfileStatus?.trim() || t("settings.account.profileDescription")}</div>
           </div>
           <div className="ctrl account-public-profile-actions">
             <button type="button" className="settings-btn" onClick={onEditPublicProfile} disabled={!onEditPublicProfile}>
-              Edit public profile
+              {t("settings.account.editProfile")}
             </button>
             <button type="button" className="settings-btn" onClick={onOpenLeaderboard} disabled={!onOpenLeaderboard}>
-              Open leaderboard
+              {t("settings.account.openLeaderboard")}
             </button>
           </div>
         </div>
@@ -144,19 +147,19 @@ export function AccountSettingsSection({
         <h3>Drifty Cloud</h3>
         <div className="settings-row settings-row--stacked-action">
           <div>
-            <div className="lbl">Plan</div>
+            <div className="lbl">{t("settings.account.plan")}</div>
             <div className="desc">{cloudStatusCopy}</div>
-            {billingEntitlementError ? <p className="capture-recency capture-recency--error" role="status">{billingEntitlementError}</p> : null}
+            {billingEntitlementError ? <p className="capture-recency capture-recency--error" role="status">{localizeSettingsError(billingEntitlementError, effectiveLanguage, t)}</p> : null}
           </div>
           <div className="ctrl">
             <button type="button" className="settings-btn" onClick={() => void cloudAction.onSelect()} disabled={billingPlansDisabled || cloudAction.disabled}>
-              {cloudAction.label}
+              {translateCloudActionLabel(cloudAction.label, t)}
             </button>
           </div>
         </div>
         <div className="settings-row">
           <div>
-            <div className="lbl">Cloud plan</div>
+            <div className="lbl">{t("settings.account.cloudPlan")}</div>
             <div className="desc">{cloudPlanLabel}</div>
           </div>
         </div>
@@ -177,42 +180,37 @@ export function AccountSettingsSection({
 
       {onDeviceSyncEnabledChange ? (
         <div className="settings-block">
-          <h3>Device sync (preview)</h3>
+          <h3>{t("settings.account.deviceSync")}</h3>
           <div className="settings-row">
             <div>
-              <div className="lbl">Sync activity between your Macs</div>
-              <div className="desc">
-                Uploads this Mac&apos;s raw activity (app, window title, site) to your private Drifty
-                cloud space so your other Mac can show one merged timeline. Visible only to your
-                account; never shared with the leaderboard, teams, or public profiles. Turn it on
-                on both Macs. Included with the Individual plan (trial too).
-              </div>
+              <div className="lbl">{t("settings.account.syncMacs")}</div>
+              <div className="desc">{t("settings.account.syncDescription")}</div>
               {!deviceSyncGateActive && deviceSyncEnabled ? (
                 <p className="capture-recency capture-recency--error" role="status">
-                  Sync is paused: sign in with an active trial or subscription to resume.
+                  {t("settings.account.syncPaused")}
                 </p>
               ) : null}
               {deviceSyncStatus?.lastError ? (
-                <p className="capture-recency capture-recency--error" role="status">{deviceSyncStatus.lastError}</p>
+                <p className="capture-recency capture-recency--error" role="status">{localizeSettingsError(deviceSyncStatus.lastError, effectiveLanguage, t)}</p>
               ) : null}
             </div>
             <div className="ctrl">
               <Toggle
                 checked={deviceSyncEnabled}
                 onChange={onDeviceSyncEnabledChange}
-                ariaLabel="Toggle device sync"
+                ariaLabel={t("settings.account.toggleSync")}
               />
             </div>
           </div>
           {deviceSyncEnabled ? (
             <div className="settings-row settings-row--stacked-action">
               <div>
-                <div className="lbl">Sync status</div>
-                <div className="desc">{describeDeviceSyncStatus(deviceSyncStatus)}</div>
+                <div className="lbl">{t("settings.account.syncStatus")}</div>
+                <div className="desc">{describeDeviceSyncStatus(deviceSyncStatus, t)}</div>
               </div>
               <div className="ctrl account-public-profile-actions">
                 <button type="button" className="settings-btn" onClick={() => void onDeviceSyncNow?.()} disabled={!onDeviceSyncNow || !deviceSyncGateActive}>
-                  Sync now
+                  {t("settings.account.syncNow")}
                 </button>
                 <button
                   type="button"
@@ -220,7 +218,7 @@ export function AccountSettingsSection({
                   onClick={() => void onPurgeDeviceSyncData?.()}
                   disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
                 >
-                  {deviceSyncPurging ? "Deleting..." : "Delete cloud copy"}
+                  {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
                 </button>
               </div>
             </div>
@@ -231,18 +229,18 @@ export function AccountSettingsSection({
   );
 }
 
-function describeDeviceSyncStatus(status: DeviceSyncStatus | undefined): string {
-  if (!status || !status.enabled) return "Waiting for the first sync cycle.";
+function describeDeviceSyncStatus(status: DeviceSyncStatus | undefined, t: LocalizationController["t"]): string {
+  if (!status || !status.enabled) return t("settings.account.syncWaiting");
   const parts: string[] = [];
   if (status.backfill && status.backfill.pushedSeq < status.backfill.totalSeq) {
     const percent = status.backfill.totalSeq > 0
       ? Math.min(100, Math.floor((status.backfill.pushedSeq / status.backfill.totalSeq) * 100))
       : 0;
-    parts.push(`Uploading history (${percent}%)`);
+    parts.push(t("settings.account.syncUploading", { percent }));
   }
-  if (status.lastPushedAt) parts.push(`Last upload ${formatSyncTimestamp(status.lastPushedAt)}`);
-  if (status.lastPulledAt) parts.push(`Last download ${formatSyncTimestamp(status.lastPulledAt)}`);
-  if (parts.length === 0) return "Waiting for the first sync cycle.";
+  if (status.lastPushedAt) parts.push(t("settings.account.lastUpload", { time: formatSyncTimestamp(status.lastPushedAt) }));
+  if (status.lastPulledAt) parts.push(t("settings.account.lastDownload", { time: formatSyncTimestamp(status.lastPulledAt) }));
+  if (parts.length === 0) return t("settings.account.syncWaiting");
   return parts.join(" · ");
 }
 
@@ -250,6 +248,17 @@ function formatSyncTimestamp(value: string): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return value;
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function translateCloudActionLabel(label: string, t: LocalizationController["t"]): string {
+  switch (label) {
+    case "Opening billing...": return t("settings.account.openingBilling");
+    case "Opening checkout...": return t("settings.account.openingCheckout");
+    case "Checking...": return t("settings.account.checking");
+    case "Upgrade to Individual": return t("settings.account.upgrade");
+    case "Manage billing": return t("settings.account.manageBilling");
+    default: return label;
+  }
 }
 
 function resolveCloudAccountAction({

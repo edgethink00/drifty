@@ -1,15 +1,15 @@
 import { BrowserHistoryBootstrapPreference } from "../BrowserHistoryBootstrapPreference";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { TRIAL_DAYS, ToggleButton } from "./shared";
+import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
-  const summaryItems = summaryItemsForFlow(flow);
+  const { t } = useLocalization();
+  const summaryItems = summaryItemsForFlow(flow, t);
 
   return (
     <>
-      <p className="dc-onb-copy dc-onb-ready-copy">
-        Drifty will now track your focus and drift in the background while you work.
-      </p>
+      <p className="dc-onb-copy dc-onb-ready-copy">{t("onboarding.ready.intro")}</p>
       <ul className="dc-onb-ready-list">
         {summaryItems.map((item) => (
           <li className="dc-onb-ready-item" key={item.label}>
@@ -26,9 +26,9 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
         ))}
       </ul>
       <div className="dc-onb-login-row">
-        <h2>Start Drifty at login</h2>
+        <h2>{t("onboarding.ready.startAtLogin")}</h2>
         <ToggleButton
-          label="Start Drifty at login"
+          label={t("onboarding.ready.startAtLogin")}
           on={flow.openAtLoginEnabled}
           compact
           onClick={() => flow.setOpenAtLoginEnabled((current) => !current)}
@@ -38,29 +38,29 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
         enabled={flow.browserHistoryBootstrapEnabled}
         onChange={flow.setBrowserHistoryBootstrapEnabled}
       />
-      <p className="dc-onb-muted-note dc-onb-muted-note--ready">You can pause Drifty any time from the menu bar.</p>
+      <p className="dc-onb-muted-note dc-onb-muted-note--ready">{t("onboarding.ready.pauseNote")}</p>
     </>
   );
 }
 
-function summaryItemsForFlow(flow: OnboardingFlow): ReadonlyArray<{ readonly label: string; readonly sub?: string }> {
+function summaryItemsForFlow(flow: OnboardingFlow, t: LocalizationController["t"]): ReadonlyArray<{ readonly label: string; readonly sub?: string }> {
   if (flow.setupChoice === "local_ai" || flow.isUserManagedProviderSetup) {
     return [
-      { label: flow.setupChoice === "local_ai" ? "Local AI selected" : flow.isByokSetup ? "BYOK selected" : "Custom endpoint selected" },
-      { label: "Account connected" },
+      { label: flow.setupChoice === "local_ai" ? t("onboarding.ready.localSelected") : flow.isByokSetup ? t("onboarding.ready.byokSelected") : t("onboarding.ready.customSelected") },
+      { label: t("onboarding.ready.accountConnected") },
       {
         label: flow.setupChoice === "local_ai"
-          ? flow.managedLocalReady ? "Local model ready" : "Local model downloading"
-          : flow.isByokSetup ? "OpenRouter key connected" : "Custom endpoint connected",
+          ? flow.managedLocalReady ? t("onboarding.ready.localReady") : t("onboarding.ready.localDownloading")
+          : flow.isByokSetup ? t("onboarding.ready.openRouterConnected") : t("onboarding.ready.customConnected"),
       },
-      { label: "Tracking ready" },
+      { label: t("onboarding.ready.trackingReady") },
     ];
   }
   return [
-    { label: "Drifty Cloud selected" },
-    { label: "Account connected" },
-    { label: `${TRIAL_DAYS}-day free trial started`, sub: "Your Drifty Cloud trial is ready." },
-    { label: "Tracking ready" },
+    { label: t("onboarding.ready.cloudSelected") },
+    { label: t("onboarding.ready.accountConnected") },
+    { label: t("onboarding.ready.trialStarted", { days: TRIAL_DAYS }), sub: t("onboarding.ready.trialReady") },
+    { label: t("onboarding.ready.trackingReady") },
   ];
 }
 

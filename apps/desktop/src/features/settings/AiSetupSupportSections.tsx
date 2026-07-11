@@ -5,6 +5,7 @@ import { AiPrivacyReview } from "./AiPrivacyReview";
 import { AiSetupWorkProfileSection } from "./AiSetupWorkProfileSection";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import type { WorkProfileSettings } from "../onboarding/onboardingState";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type AiSetupSupportSectionId = "workProfile" | "privacyReview";
 
@@ -21,16 +22,17 @@ export function AiSetupSupportSections({
   onSaveWorkProfile,
   onWorkProfileDraftChange,
 }: AiSetupSupportSectionsProps) {
+  const { t } = useLocalization();
   const [expandedSection, setExpandedSection] = useState<AiSetupSupportSectionId | null>(null);
 
   return (
-    <div className="ai-setup-support-list" aria-label="Additional AI setup sections">
+    <div className="ai-setup-support-list" aria-label={t("settings.ai.additionalSectionsAria")}>
       <AiSetupSupportSection
         id="workProfile"
-        badge="Work context"
+        badge={t("settings.ai.workContext")}
         expanded={expandedSection === "workProfile"}
-        subtitle="Role and field from onboarding, editable here."
-        title="Work profile"
+        subtitle={t("settings.ai.workProfileSubtitle")}
+        title={t("settings.ai.workProfile")}
         onToggle={setExpandedSection}
       >
         <AiSetupWorkProfileSection
@@ -44,7 +46,7 @@ export function AiSetupSupportSections({
       <AiSetupSupportSection
         id="privacyReview"
         expanded={expandedSection === "privacyReview"}
-        title="Privacy review"
+        title={t("settings.ai.privacyReview")}
         onToggle={setExpandedSection}
       >
         <AiPrivacyReview />

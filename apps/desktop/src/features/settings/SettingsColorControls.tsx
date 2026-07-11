@@ -1,6 +1,8 @@
 import { useState, type CSSProperties } from "react";
 import type { ActivityCategory } from "@drifty/domain";
 import { SettingsSelect } from "./SettingsSelect";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 export type AppThemeColorKey = "accent" | "productivityFocus" | "productivityDrift" | "productivityNeutral";
 
@@ -97,6 +99,7 @@ function ColorPresetGroup<TKey extends string>({
   readonly onColorChange: (key: TKey, value: string) => void;
   readonly onColorReset: (key: TKey) => void;
 }) {
+  const { t } = useLocalization();
   const isOverridden = value.toLowerCase() !== option.defaultColor.toLowerCase();
   return (
     <div className={`settings-color-token${isOpen ? " is-open" : ""}`}>
@@ -109,13 +112,13 @@ function ColorPresetGroup<TKey extends string>({
         <span className="settings-color-trigger__swatch" style={swatchStyle(value)} aria-hidden="true" />
         <span className="settings-color-trigger__copy">
           <span className="settings-color-token__name">{option.label}</span>
-          <span className="settings-color-token__action">Change color</span>
+          <span className="settings-color-token__action">{t("settings.appearance.changeColor")}</span>
         </span>
         <span className="settings-color-trigger__chevron" aria-hidden="true" />
       </button>
       {isOpen ? (
-        <div className="settings-color-popover" aria-label={`${option.label} color palette`}>
-          <div className="settings-color-token__presets" aria-label={`${option.label} preset colors`}>
+        <div className="settings-color-popover" aria-label={t("settings.appearance.colorPaletteAria", { label: option.label })}>
+          <div className="settings-color-token__presets" aria-label={t("settings.appearance.presetColorsAria", { label: option.label })}>
             {presets.map((preset) => (
               <button
                 key={preset.id}
@@ -123,20 +126,20 @@ function ColorPresetGroup<TKey extends string>({
                 className={`settings-color-preset${value.toLowerCase() === preset.color ? " is-selected" : ""}`}
                 style={swatchStyle(preset.color)}
                 onClick={() => onColorChange(option.key, preset.color)}
-                aria-label={`${option.label} ${preset.id} preset`}
+                aria-label={t("settings.appearance.colorPresetAria", { label: option.label, preset: preset.id })}
               />
             ))}
           </div>
           <div className="settings-color-popover__footer">
             <span className="settings-color-main">
               <span style={swatchStyle(value)} aria-hidden="true" />
-              <span>Main</span>
+              <span>{t("settings.appearance.mainColor")}</span>
             </span>
             <label className="settings-color-more">
-              <input type="color" aria-label={`${option.label} ${ariaType} color`} value={value} onChange={(event) => onColorChange(option.key, event.currentTarget.value)} />
-              <span>More colors</span>
+              <input type="color" aria-label={t("settings.appearance.customColorAria", { label: option.label, type: ariaType })} value={value} onChange={(event) => onColorChange(option.key, event.currentTarget.value)} />
+              <span>{t("settings.appearance.moreColors")}</span>
             </label>
-            <button type="button" className="settings-color-default" onClick={() => onColorReset(option.key)} disabled={!isOverridden} aria-label={`${option.label} set default`}>Default</button>
+            <button type="button" className="settings-color-default" onClick={() => onColorReset(option.key)} disabled={!isOverridden} aria-label={t("settings.appearance.setDefaultAria", { label: option.label })}>{t("settings.appearance.defaultColor")}</button>
           </div>
         </div>
       ) : null}
@@ -145,19 +148,20 @@ function ColorPresetGroup<TKey extends string>({
 }
 
 export function CategoryColorControls({ options, overrides, onColorChange, onColorReset }: CategoryColorControlsProps) {
+  const { t } = useLocalization();
   const [openKey, setOpenKey] = useState<ActivityCategory | null>(null);
   return (
-    <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label="Category colors">
+    <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.categoryColors")}>
       <div>
-        <div className="lbl">Category colors</div>
-        <div className="desc">Click a color to open its preset palette. Use More colors only for custom values.</div>
+        <div className="lbl">{t("settings.appearance.categoryColors")}</div>
+        <div className="desc">{t("settings.appearance.categoryColorsDescription")}</div>
       </div>
       <div className="ctrl settings-row__actions settings-color-editor">
         <div className="settings-color-grid">
           {options.map((option) => (
             <ColorPresetGroup
               key={option.key}
-              option={option}
+              option={{ ...option, label: localizedCategoryLabel(option.key, t) }}
               value={activeColor(option, overrides)}
               presets={BALANCED_PRESETS}
               ariaType="category"
@@ -180,20 +184,21 @@ export function ThemeColorControls({
   onColorChange,
   onColorReset,
 }: ThemeColorControlsProps) {
+  const { t } = useLocalization();
   const [openKey, setOpenKey] = useState<AppThemeColorKey | null>(null);
   return (
     <>
-      <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label="Accent color">
+      <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.accentColor")}>
         <div>
-          <div className="lbl">Accent</div>
-          <div className="desc">Choose the primary app accent used for emphasis and selected states.</div>
+          <div className="lbl">{t("settings.appearance.accent")}</div>
+          <div className="desc">{t("settings.appearance.accentDescription")}</div>
         </div>
         <div className="ctrl settings-row__actions settings-color-editor">
           <div className="settings-color-grid settings-color-grid--single">
             {accentOptions.map((option) => (
               <ColorPresetGroup
                 key={option.key}
-                option={option}
+                option={{ ...option, label: localizedThemeColorOptionLabel(option.key, option.label, t) }}
                 value={activeColor(option, overrides)}
                 presets={BALANCED_PRESETS}
                 ariaType="theme"
@@ -206,17 +211,17 @@ export function ThemeColorControls({
           </div>
         </div>
       </div>
-      <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label="Productivity colors">
+      <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.productivityColors")}>
         <div>
-          <div className="lbl">Productivity colors</div>
-          <div className="desc">Tune Focus, Drift, and Neutral tones with presets first, then More for custom values.</div>
+          <div className="lbl">{t("settings.appearance.productivityColors")}</div>
+          <div className="desc">{t("settings.appearance.productivityColorsDescription")}</div>
         </div>
         <div className="ctrl settings-row__actions settings-color-editor">
           <div className="settings-color-grid">
             {productivityOptions.map((option) => (
               <ColorPresetGroup
                 key={option.key}
-                option={option}
+                option={{ ...option, label: localizedThemeColorOptionLabel(option.key, option.label, t) }}
                 value={activeColor(option, overrides)}
                 presets={BALANCED_PRESETS}
                 ariaType="theme"
@@ -231,6 +236,20 @@ export function ThemeColorControls({
       </div>
     </>
   );
+}
+
+function localizedThemeColorOptionLabel(
+  key: AppThemeColorKey,
+  fallback: string,
+  t: LocalizationController["t"],
+): string {
+  switch (key) {
+    case "accent": return t("settings.appearance.accent");
+    case "productivityFocus": return localizedProductivityLabel("focus", t);
+    case "productivityDrift": return localizedProductivityLabel("drift", t);
+    case "productivityNeutral": return localizedProductivityLabel("neutral", t);
+    default: return fallback;
+  }
 }
 
 export function ClassificationPicker<TValue extends string>({ label, ariaLabel, value, options, getLabel, getColor, onChange }: ClassificationPickerProps<TValue>) {

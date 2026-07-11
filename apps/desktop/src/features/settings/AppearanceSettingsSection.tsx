@@ -11,6 +11,7 @@ import {
   MENU_BAR_ICON_STYLE_OPTIONS,
   resolveInitialMenuBarIconStyle,
 } from "./settingsStorage";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type AppearanceSettingsSectionProps = {
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -33,6 +34,7 @@ export function AppearanceSettingsSection({
   onCategoryColorReset,
   onThemeChange,
 }: AppearanceSettingsSectionProps) {
+  const { t } = useLocalization();
   const [menuBarIconStyle, setMenuBarIconStyle] = useState<TrayIconStyle>(resolveInitialMenuBarIconStyle);
 
   useEffect(() => {
@@ -42,11 +44,11 @@ export function AppearanceSettingsSection({
 
   return (
     <div className="settings-section settings-section--appearance">
-      <div className="settings-block"><h3>Appearance</h3>
-        <div className="settings-row"><div><div className="lbl">Theme</div><div className="desc">Matches the titlebar theme switch.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Theme"><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => onThemeChange("light")}><span>Light</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => onThemeChange("dark")}><span>Dark</span></button></div></div></div>
-        <div className="settings-row"><div><div className="lbl">Menu bar icon</div><div className="desc">Default is the compact productivity ring.</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label="Menu bar icon">{MENU_BAR_ICON_STYLE_OPTIONS.map((option) => <button key={option.value} type="button" className={`settings-mode-option${menuBarIconStyle === option.value ? " is-active" : ""}`} role="radio" aria-checked={menuBarIconStyle === option.value} onClick={() => setMenuBarIconStyle(option.value)}><span>{option.label}</span></button>)}</div></div></div>
+      <div className="settings-block"><h3>{t("settings.section.appearance")}</h3>
+        <div className="settings-row"><div><div className="lbl">{t("settings.appearance.theme")}</div><div className="desc">{t("settings.appearance.themeDescription")}</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label={t("settings.appearance.theme")}><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => onThemeChange("light")}><span>{t("settings.appearance.light")}</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => onThemeChange("dark")}><span>{t("settings.appearance.dark")}</span></button></div></div></div>
+        <div className="settings-row"><div><div className="lbl">{t("settings.appearance.menuBarIcon")}</div><div className="desc">{t("settings.appearance.menuBarIconDescription")}</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label={t("settings.appearance.menuBarIcon")}>{MENU_BAR_ICON_STYLE_OPTIONS.map((option) => <button key={option.value} type="button" className={`settings-mode-option${menuBarIconStyle === option.value ? " is-active" : ""}`} role="radio" aria-checked={menuBarIconStyle === option.value} onClick={() => setMenuBarIconStyle(option.value)}><span>{option.value === "compact" ? t("settings.appearance.ringOnly") : t("settings.appearance.logoRing")}</span></button>)}</div></div></div>
       </div>
-      <div className="settings-block"><h3>Colors</h3>
+      <div className="settings-block"><h3>{t("settings.appearance.colors")}</h3>
         <CategoryColorControls
           options={CATEGORY_COLOR_OPTIONS}
           overrides={categoryColorOverrides}

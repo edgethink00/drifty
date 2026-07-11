@@ -1,6 +1,7 @@
 import type { OAuthCallbackStatus } from "../../../auth/AuthContext";
 import { GoogleMark } from "../GoogleMark";
 import { SuccessIcon } from "./shared";
+import { useLocalization } from "../../../localization/LocalizationContext";
 
 export function AccountStep({
   accountConnected,
@@ -13,6 +14,7 @@ export function AccountStep({
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
 }) {
+  const { t } = useLocalization();
   const isGoogleHandoffBusy = authCallbackStatus ? authCallbackStatus.phase !== "failed" : false;
   const callbackNoticeRole = authCallbackStatus?.phase === "failed" ? "alert" : "status";
   const callbackNoticeClassName = [
@@ -22,14 +24,12 @@ export function AccountStep({
 
   return (
     <div className="dc-onb-account">
-      <h2 className="dc-onb-account__title">Connect your account</h2>
-      <p className="dc-onb-account__copy">
-        Your account keeps focus and drift insights synced across your devices.
-      </p>
+      <h2 className="dc-onb-account__title">{t("onboarding.title.account")}</h2>
+      <p className="dc-onb-account__copy">{t("onboarding.account.copy")}</p>
       {accountConnected ? (
         <div className="dc-onb-account__connected" role="status">
           <SuccessIcon />
-          <span>Account connected</span>
+          <span>{t("onboarding.ready.accountConnected")}</span>
         </div>
       ) : (
         <div className="dc-onb-account__buttons">
@@ -40,11 +40,11 @@ export function AccountStep({
             disabled={isGoogleHandoffBusy}
           >
             <GoogleMark />
-            <span>Continue with Google</span>
+            <span>{t("onboarding.account.google")}</span>
           </button>
           <div className="dc-onb-divider" aria-hidden="true">
             <span />
-            or
+            {t("onboarding.account.or")}
             <span />
           </div>
           <button
@@ -52,7 +52,7 @@ export function AccountStep({
             className="dc-onb-account__email"
             onClick={onStartCloudTrialWithEmail}
           >
-            Continue with email
+            {t("onboarding.account.email")}
           </button>
         </div>
       )}
@@ -62,12 +62,12 @@ export function AccountStep({
         </div>
       ) : null}
       <p className="dc-onb-account__helper">
-        Drifty never shares your activity data with teammates unless you choose to join a team or share a report.
+        {t("onboarding.account.helper")}
       </p>
       <p className="dc-onb-account__legal">
-        By continuing, you accept{" "}
-        <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">Terms</a>{" "}
-        &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">Privacy</a>.
+        {t("onboarding.account.legalPrefix")}{" "}
+        <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
+        &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
       </p>
     </div>
   );

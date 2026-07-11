@@ -8,6 +8,7 @@ import {
 } from "./aiPrivacyRequestSettings";
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
@@ -15,6 +16,7 @@ type PrivacySettingsSectionProps = {
 };
 
 export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = false }: PrivacySettingsSectionProps = {}) {
+  const { t } = useLocalization();
   const [aiSettings, setAiSettings] = useState<AiPrivacyRequestSettings>(() => readAiPrivacyRequestSettings());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -34,45 +36,45 @@ export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = f
   return (
     <div className="settings-section settings-section--privacy">
       <div className="settings-block">
-        <h3>Privacy review</h3>
+        <h3>{t("settings.privacy.review")}</h3>
         <div className="settings-row">
           <div>
-            <div className="lbl">Raw tracking history is not published</div>
-            <div className="desc">Leaderboard and profile features publish aggregates only. AI classification may send minimized activity fields to your selected provider for a request, but raw app, site, window, and session history stays out of public surfaces.</div>
+            <div className="lbl">{t("settings.privacy.rawTitle")}</div>
+            <div className="desc">{t("settings.privacy.rawDescription")}</div>
           </div>
-          <div className="ctrl"><span className="chip green">Raw history local</span></div>
+          <div className="ctrl"><span className="chip green">{t("settings.privacy.rawChip")}</span></div>
         </div>
         <div className="settings-row">
           <div>
-            <div className="lbl">Optional cloud features are explicit</div>
-            <div className="desc">If you connect Drifty Cloud and join the leaderboard, Drifty publishes your public profile card plus a rolling 7 day focus total, refreshed about once an hour. Other participants can see roughly which hours you're active, but raw tracking history is never published there.</div>
+            <div className="lbl">{t("settings.privacy.cloudTitle")}</div>
+            <div className="desc">{t("settings.privacy.cloudDescription")}</div>
           </div>
-          <div className="ctrl"><span className="chip">Aggregates only</span></div>
+          <div className="ctrl"><span className="chip">{t("settings.privacy.aggregatesChip")}</span></div>
         </div>
       </div>
       <SettingsCollapsibleCard
-        subtitle="What Drifty can send for AI classification"
+        subtitle={t("settings.privacy.aiSubtitle")}
         summary={
           <>
-            <span className={`chip${optionalOnCount > 0 ? " green" : ""}`}>{optionalOnCount} of {optionalValues.length} optional on</span>
-            <span className="chip gray">4 locked local</span>
-            <span className="chip gray">Keys stay local</span>
+            <span className={`chip${optionalOnCount > 0 ? " green" : ""}`}>{t("settings.privacy.optionalOn", { enabled: optionalOnCount, total: optionalValues.length })}</span>
+            <span className="chip gray">{t("settings.privacy.lockedLocal")}</span>
+            <span className="chip gray">{t("settings.privacy.keysLocal")}</span>
           </>
         }
-        title="AI data sending"
+        title={t("settings.privacy.aiSending")}
       >
         <AiPrivacyReview />
       </SettingsCollapsibleCard>
       <div className="settings-block">
-        <h3>Danger zone</h3>
+        <h3>{t("settings.privacy.danger")}</h3>
         <div className="settings-row">
           <div>
-            <div className="lbl">Delete tracked history</div>
-            <div className="desc">Permanently remove local activity data for a time range. This cannot be undone.</div>
+            <div className="lbl">{t("settings.privacy.deleteTitle")}</div>
+            <div className="desc">{t("settings.privacy.deleteDescription")}</div>
           </div>
           <div className="ctrl">
             <button className="settings-btn danger" type="button" onClick={() => setDeleteModalOpen(true)}>
-              Delete history…
+              {t("settings.privacy.deleteAction")}
             </button>
           </div>
         </div>

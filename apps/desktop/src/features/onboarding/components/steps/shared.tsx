@@ -1,3 +1,5 @@
+import { useLocalization } from "../../../localization/LocalizationContext";
+
 export const TRIAL_DAYS = 7;
 
 type ToggleButtonProps = {
@@ -9,6 +11,7 @@ type ToggleButtonProps = {
 };
 
 export function ToggleButton({ compact = false, label, on, onClick, tone = "default" }: ToggleButtonProps) {
+  const { t } = useLocalization();
   return (
     <button
       type="button"
@@ -20,7 +23,7 @@ export function ToggleButton({ compact = false, label, on, onClick, tone = "defa
       <span className={`dc-onb-toggle__track${on ? ` dc-onb-toggle__track--on dc-onb-toggle__track--${tone}` : ""}`}>
         <span className="dc-onb-toggle__thumb" />
       </span>
-      <span className="dc-onb-toggle__label">{on ? "On" : "Off"}</span>
+      <span className="dc-onb-toggle__label">{on ? t("common.on") : t("common.off")}</span>
     </button>
   );
 }

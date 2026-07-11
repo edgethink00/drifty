@@ -1,12 +1,14 @@
+import { useLocalization } from "../localization/LocalizationContext";
+
 export type AiSetupPanelTab = "providers" | "intelligence" | "profile";
 
 const AI_SETUP_PANEL_TABS = [
-  { id: "providers", label: "Classification", icon: "providers" },
-  { id: "intelligence", label: "Intelligence", icon: "intelligence" },
-  { id: "profile", label: "Profile & info", icon: "profile" },
+  { id: "providers", labelKey: "settings.ai.classification", icon: "providers" },
+  { id: "intelligence", labelKey: "settings.ai.intelligence", icon: "intelligence" },
+  { id: "profile", labelKey: "settings.ai.profile", icon: "profile" },
 ] as const satisfies readonly {
   readonly id: AiSetupPanelTab;
-  readonly label: string;
+  readonly labelKey: "settings.ai.classification" | "settings.ai.intelligence" | "settings.ai.profile";
   readonly icon: "providers" | "intelligence" | "profile";
 }[];
 
@@ -18,9 +20,10 @@ type AiSetupPanelTabsProps = {
 };
 
 export function AiSetupPanelTabs({ activeTab, onChange, showIntelligenceTab = true }: AiSetupPanelTabsProps) {
+  const { t } = useLocalization();
   const tabs = AI_SETUP_PANEL_TABS.filter((tab) => showIntelligenceTab || tab.id !== "intelligence");
   return (
-    <div className="ai-setup-panel-tabs" role="tablist" aria-label="AI setup sections">
+    <div className="ai-setup-panel-tabs" role="tablist" aria-label={t("settings.ai.tabsLabel")}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -32,7 +35,7 @@ export function AiSetupPanelTabs({ activeTab, onChange, showIntelligenceTab = tr
           onClick={() => onChange(tab.id)}
         >
           <AiSetupPanelTabIcon icon={tab.icon} />
-          <span>{tab.label}</span>
+          <span>{t(tab.labelKey)}</span>
         </button>
       ))}
     </div>

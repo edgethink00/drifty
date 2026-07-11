@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { TRIAL_DAYS } from "./shared";
+import { useLocalization } from "../../../localization/LocalizationContext";
 
 type SetupCardProps = {
   readonly badge?: string;
@@ -20,20 +21,21 @@ export function SetupChoiceStep({
   readonly flow: OnboardingFlow;
   readonly onToggleAdvanced: () => void;
 }) {
+  const { t } = useLocalization();
   return (
     <div className="dc-onb-setup">
       <SetupCard
-        badge="Recommended"
-        description={`We host the AI for you — nothing to install. Includes a ${TRIAL_DAYS}-day free trial.`}
+        badge={t("common.recommended")}
+        description={t("onboarding.setup.cloudDescription", { days: TRIAL_DAYS })}
         icon={<CloudIcon />}
-        label="Drifty Cloud"
+        label={t("onboarding.setup.cloud")}
         selected={flow.setupChoice === "simple"}
         onClick={() => flow.handleSetupChoice("simple")}
       />
       <SetupCard
-        description="Runs on this Mac — your activity never leaves your device. One-time model download."
+        description={t("onboarding.setup.localDescription")}
         icon={<LocalIcon />}
-        label="Local AI"
+        label={t("onboarding.setup.local")}
         selected={flow.setupChoice === "local_ai"}
         onClick={() => flow.handleSetupChoice("local_ai")}
       />
@@ -44,21 +46,21 @@ export function SetupChoiceStep({
         aria-expanded={advancedVisible}
       >
         <ChevronIcon rotated={advancedVisible} />
-        Connect your own AI provider
+        {t("onboarding.setup.ownProvider")}
       </button>
       {advancedVisible ? (
         <div className="dc-onb-advanced-cards">
           <SetupCard
-            description="Use your own OpenRouter API key. Roughly $2-4/month, depending on usage."
+            description={t("onboarding.setup.byokDescription")}
             icon={<KeyIcon />}
-            label="Bring your own key"
+            label={t("onboarding.setup.byok")}
             selected={flow.setupChoice === "byok"}
             onClick={() => flow.handleSetupChoice("byok")}
           />
           <SetupCard
-            description="Point Drifty at any OpenAI-compatible endpoint and model you run."
+            description={t("onboarding.setup.customDescription")}
             icon={<CustomEndpointIcon />}
-            label="Custom endpoint"
+            label={t("onboarding.setup.custom")}
             selected={flow.setupChoice === "custom_endpoint"}
             onClick={() => flow.handleSetupChoice("custom_endpoint")}
           />

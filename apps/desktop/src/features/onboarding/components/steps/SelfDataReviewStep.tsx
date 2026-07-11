@@ -1,39 +1,41 @@
 import type { OnboardingFlow } from "../../useOnboardingFlow";
+import { useLocalization } from "../../../localization/LocalizationContext";
 
 export function SelfDataReviewStep({ flow }: { readonly flow: OnboardingFlow }) {
+  const { t } = useLocalization();
   const maskedApiKey = flow.maskedApiKey?.replace("••••••", "......") ?? null;
   const isByok = flow.isByokSetup;
   const isCustom = flow.isCustomEndpointSetup;
   const reviewIntro = isByok
-    ? "With BYOK, Drifty sends minimized activity context to your chosen provider through OpenRouter using your masked key."
+    ? t("onboarding.data.byokIntro")
     : isCustom
-      ? "With a custom endpoint, Drifty sends minimized activity context to the endpoint and model you entered."
-      : "With Local AI, minimized activity context stays on this Mac and is classified by the model you picked.";
+      ? t("onboarding.data.customIntro")
+      : t("onboarding.data.localIntro");
   const whereDesc = isByok
-    ? "Minimized classification context goes to OpenRouter for the model call."
+    ? t("onboarding.data.byokWhere")
     : isCustom
-      ? "Minimized classification context goes to your custom endpoint for the model call."
-      : "Activity goes to the selected local model on this Mac, not to Drifty Cloud.";
+      ? t("onboarding.data.customWhere")
+      : t("onboarding.data.localWhere");
   const whoDesc = isByok
-    ? "You manage the provider key, model access, and provider billing."
+    ? t("onboarding.data.byokWho")
     : isCustom
-      ? "You manage the endpoint, model access, uptime, and billing if it is hosted."
-      : "Drifty manages the local runtime files; you control whether the model is installed.";
+      ? t("onboarding.data.customWho")
+      : t("onboarding.data.localWho");
   const whatDesc = isByok
-    ? `A masked OpenRouter key${maskedApiKey ? ` (${maskedApiKey})` : ""} plus local permissions for activity context.`
+    ? t("onboarding.data.byokWhat", { maskedKey: maskedApiKey ? ` (${maskedApiKey})` : "" })
     : isCustom
-      ? `Local permissions plus ${flow.customEndpointDraft.model.trim() || "your model"} at ${flow.customEndpointDraft.baseUrl.trim()}.`
-      : "Local permissions to read activity context and a downloaded managed local model.";
+      ? t("onboarding.data.customWhat", { model: flow.customEndpointDraft.model.trim() || t("onboarding.data.yourModel"), endpoint: flow.customEndpointDraft.baseUrl.trim() })
+      : t("onboarding.data.localWhat");
 
   return (
     <>
       <p className="dc-onb-copy dc-onb-copy--wide">{reviewIntro}</p>
       <div className="dc-onb-data-grid">
-        <DataCard title="Where data goes" description={whereDesc} />
-        <DataCard title="Who manages it" description={whoDesc} />
-        <DataCard title="What Drifty needs" description={whatDesc} />
+        <DataCard title={t("onboarding.data.where")} description={whereDesc} />
+        <DataCard title={t("onboarding.data.who")} description={whoDesc} />
+        <DataCard title={t("onboarding.data.what")} description={whatDesc} />
       </div>
-      <p className="dc-onb-muted-note">You can change these settings later.</p>
+      <p className="dc-onb-muted-note">{t("onboarding.data.changeLater")}</p>
     </>
   );
 }
