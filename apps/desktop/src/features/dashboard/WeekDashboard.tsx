@@ -5,8 +5,7 @@ import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel 
 import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { logicalMinuteOfDay } from "@drifty/domain";
 import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty/domain";
-import { WeekCalendarHoverCard } from "./HoverCards";
-import type { WeekCalendarHoverState } from "./HoverCards";
+import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
@@ -14,12 +13,13 @@ import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
 import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
-const ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX = 29;
 /* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
 const WEEK_CALENDAR_TIME_RAIL_PX = 40;
+/* Longer than one animation frame, well under the 340ms panel transition. */
+const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
 
 export type WeekDashboardColorMode = "category" | "productivity";
 
@@ -195,12 +195,17 @@ export function WeekDashboard({
   currentMinuteOfDay,
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
 }: WeekDashboardProps) {
-  const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
-  const [activeWeekEventId, setActiveWeekEventId] = useState<string | null>(null);
   const [sideOpen, setSideOpen] = useState(true);
   const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
+  // Element state (not just a ref) so the hover layer's delegation effect can
+  // re-subscribe when the calendar body mounts.
+  const [calendarBodyElement, setCalendarBodyElement] = useState<HTMLDivElement | null>(null);
   const calendarScrollerRef = useRef<HTMLDivElement>(null);
-  const calendarBodyRef = useRef<HTMLDivElement>(null);
+  const calendarBodyRef = useRef<HTMLDivElement | null>(null);
+  const setCalendarBody = useCallback((element: HTMLDivElement | null) => {
+    calendarBodyRef.current = element;
+    setCalendarBodyElement(element);
+  }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
   const focusSeconds = productivityEntries.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const refreshStatusLabel = refreshStatus === "loading" ? "Updating" : refreshStatus === "error" ? "Update failed" : null;
@@ -271,10 +276,28 @@ export function WeekDashboard({
 
     updateDayColumnWidth();
     if (typeof ResizeObserver !== "function") return undefined;
-    const observer = new ResizeObserver(updateDayColumnWidth);
+    // The Breakdown panel animates grid-template-columns for 340ms, which fires
+    // the observer every frame; re-rendering the calendar per frame would fight
+    // that layout animation, so wait for the size to settle and apply once.
+    let settleTimeout = 0;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(settleTimeout);
+      settleTimeout = window.setTimeout(updateDayColumnWidth, WEEK_CALENDAR_RESIZE_SETTLE_MS);
+    });
     observer.observe(body);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(settleTimeout);
+    };
   }, []);
+
+  const eventsById = useMemo(() => {
+    const byId = new Map<string, WeekCalendarEvent>();
+    for (const events of calendarEvents.values()) {
+      for (const event of events) byId.set(event.id, event);
+    }
+    return byId;
+  }, [calendarEvents]);
 
   useLayoutEffect(() => {
     const scroller = calendarScrollerRef.current;
@@ -336,7 +359,7 @@ export function WeekDashboard({
                 );
               })}
             </div>
-            <div ref={calendarBodyRef} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
+            <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
                   <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes))}</span>
@@ -378,31 +401,18 @@ export function WeekDashboard({
                         height: formatWeekDashboardAxisPixelValue(eventLayout.eventHeight),
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 4px)` : "4px",
                         width: event.laneCount > 1 ? "calc(100% - 32px)" : "calc(100% - 8px)",
-                        zIndex: activeWeekEventId === event.id ? ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX : event.laneCount > 1 ? 10 + event.lane : 3,
+                        zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
                         "--event-tone": colorMode === "productivity" ? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
                       };
                       return (
                         <article
                           aria-label={event.detailTitle.replace(/\n/g, ", ")}
                           className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
+                          data-event-id={event.id}
                           key={event.id}
                           tabIndex={0}
                           style={eventStyle}
                           title={event.detailTitle}
-                          onFocus={() => setActiveWeekEventId(event.id)}
-                          onBlur={() => setActiveWeekEventId(null)}
-                          onMouseEnter={(pointerEvent: MouseEvent<HTMLElement>) => {
-                            setActiveWeekEventId(event.id);
-                            setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY });
-                          }}
-                          onMouseMove={(pointerEvent: MouseEvent<HTMLElement>) => {
-                            setActiveWeekEventId(event.id);
-                            setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY });
-                          }}
-                          onMouseLeave={() => {
-                            setActiveWeekEventId(null);
-                            setWeekHover(null);
-                          }}
                         >
                           <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
                           {eventLayout.showsIdentityStrip ? (
@@ -445,7 +455,7 @@ export function WeekDashboard({
             </div>
           </div>
         </section>
-        {weekHover ? <WeekCalendarHoverCard appIcons={appIcons} hover={weekHover} /> : null}
+        <WeekCalendarHoverLayer appIcons={appIcons} bodyElement={calendarBodyElement} eventsById={eventsById} />
 
         <BreakdownSidePanel
           open={sideOpen}
