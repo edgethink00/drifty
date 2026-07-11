@@ -112,13 +112,14 @@ export function initializeSentry(): boolean {
 export function captureSentryException(
   error: unknown,
   context?: { readonly tags?: Record<string, string>; readonly extra?: Record<string, unknown> },
-): void {
-  if (!sentryReady) return;
+): boolean {
+  if (!sentryReady) return false;
   try {
     Sentry.captureException(error, {
       tags: context?.tags ? sanitizeSentryTags(context.tags) : undefined,
       extra: context?.extra ? sanitizeSentryRecord(context.extra) : undefined,
     });
+    return true;
   } catch (captureError) {
     if (import.meta.env.DEV) {
       console.warn(
@@ -126,5 +127,6 @@ export function captureSentryException(
         captureError instanceof Error ? captureError.message : String(captureError),
       );
     }
+    return false;
   }
 }

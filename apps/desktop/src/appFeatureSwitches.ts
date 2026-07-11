@@ -10,6 +10,18 @@ export const REPLAY_ONBOARDING_DEV_TOOL_ENABLED = true;
 export const END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED = false;
 export const END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED = true;
 export const END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED = END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED;
+const SENTRY_SMOKE_CHANNELS = new Set(["development", "dev", "internal", "staging", "preview"]);
+
+export function resolveSentrySmokeDiagnosticsEnabled(channel: string | undefined, devBuild: boolean): boolean {
+  const normalizedChannel = channel?.trim().toLowerCase();
+  if (normalizedChannel === "production") return false;
+  return devBuild || (normalizedChannel !== undefined && SENTRY_SMOKE_CHANNELS.has(normalizedChannel));
+}
+
+export const SENTRY_SMOKE_DIAGNOSTICS_ENABLED = resolveSentrySmokeDiagnosticsEnabled(
+  import.meta.env.VITE_DRIFTY_CHANNEL,
+  import.meta.env.DEV,
+);
 
 const RAW_DEV_SKIP_ONBOARDING = typeof __DRIFTY_DEV_SKIP_ONBOARDING__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING__ : false;
 const RAW_DEV_SKIP_ONBOARDING_AUTH = typeof __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__ : false;

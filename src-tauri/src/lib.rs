@@ -20,6 +20,7 @@ use commands::{
     extreme_nudge_apply, focus_target_activate_browser_tab, focus_target_browser_tab_exists,
     focus_target_open_app, managed_ai_catalog, managed_ai_delete, managed_ai_install,
     managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
+    sentry_capture_native_smoke,
     setup_drift_alarm_window, setup_watcher_window, startup_get_open_at_login_status,
     startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_delete_activity_segments,
@@ -266,6 +267,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             accessibility_get_status,
             accessibility_request_access,
+            sentry_capture_native_smoke,
             ai_classification_anthropic_chat,
             ai_classification_openai_chat,
             app_menu_set_dev_mode_checked,

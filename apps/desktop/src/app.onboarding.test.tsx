@@ -203,6 +203,7 @@ vi.mock("./appFeatureSwitches", () => ({
   get REPLAY_ONBOARDING_DEV_TOOL_ENABLED() {
     return appFeatureSwitches.replayOnboardingDevToolEnabled;
   },
+  SENTRY_SMOKE_DIAGNOSTICS_ENABLED: false,
   isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
 }));
 
