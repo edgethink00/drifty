@@ -10,13 +10,11 @@ import type { FocusCardPayload } from "./focusCardPublisher";
 export interface FocusCardDetailFlags {
   readonly shareCategoryBreakdown: boolean;
   readonly shareHourlyPattern: boolean;
-  readonly shareTopApps: boolean;
 }
 
 export const DEFAULT_FOCUS_CARD_DETAIL_FLAGS: FocusCardDetailFlags = {
   shareCategoryBreakdown: false,
   shareHourlyPattern: false,
-  shareTopApps: false,
 };
 
 export interface FocusCardStatus {
@@ -35,8 +33,12 @@ type FocusCardRow = {
   enabled?: boolean | null;
   share_category_breakdown?: boolean | null;
   share_hourly_pattern?: boolean | null;
-  share_top_apps?: boolean | null;
   updated_at?: string | null;
+};
+
+type FocusCardUpdateResult = { error: { message: string } | null };
+type FocusCardUpdateBuilder = PromiseLike<FocusCardUpdateResult> & {
+  eq: (column: string, value: string | boolean) => FocusCardUpdateBuilder;
 };
 
 type FocusCardClient = {
@@ -48,6 +50,7 @@ type FocusCardClient = {
       };
     };
     upsert: (payload: Record<string, unknown>, options: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
+    update: (payload: Record<string, unknown>) => FocusCardUpdateBuilder;
   };
 };
 
@@ -79,7 +82,7 @@ export async function fetchOwnFocusCard(client?: FocusCardClient | null): Promis
   try {
     const { data, error } = await resolved
       .from("public_focus_cards")
-      .select("enabled, share_category_breakdown, share_hourly_pattern, share_top_apps, updated_at")
+      .select("enabled, share_category_breakdown, share_hourly_pattern, updated_at")
       .eq("user_id", userId)
       .maybeSingle();
     if (error) return { success: false, error: error.message };
@@ -92,7 +95,6 @@ export async function fetchOwnFocusCard(client?: FocusCardClient | null): Promis
             detailFlags: {
               shareCategoryBreakdown: data.share_category_breakdown === true,
               shareHourlyPattern: data.share_hourly_pattern === true,
-              shareTopApps: data.share_top_apps === true,
             },
             updatedAt: data.updated_at ?? null,
           }
@@ -131,13 +133,65 @@ export async function publishFocusCard(payload: FocusCardPayload, enabled: boole
       // withdrawn consent also removes the data at rest, not just at the RPC gate.
       share_category_breakdown: payload.share_category_breakdown,
       share_hourly_pattern: payload.share_hourly_pattern,
-      share_top_apps: payload.share_top_apps,
+      // Public profiles never publish app identity. Clear legacy opt-ins and data on every write.
+      share_top_apps: false,
       category_breakdown_7d: payload.category_breakdown_7d ?? [],
       hourly_focus_pattern: payload.hourly_focus_pattern ?? [],
-      top_apps_7d: payload.top_apps_7d ?? [],
+      top_apps_7d: [],
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
     if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Refresh an already-enabled card without writing consent. Every update checks the live
+ * server flags in its WHERE clause, so a concurrent disable or detail opt-out wins instead
+ * of being overwritten by a stale client read.
+ */
+export async function refreshFocusCardAggregates(payload: FocusCardPayload, client?: FocusCardClient | null): Promise<FocusCardResult> {
+  const resolved = resolveClient(client);
+  if (!resolved) return { success: false, error: "Supabase is not configured" };
+  const userId = await currentUserId(resolved);
+  if (!userId) return { success: false, error: "Not authenticated" };
+
+  const updatedAt = new Date().toISOString();
+  try {
+    const base = await resolved.from("public_focus_cards").update({
+      focus_seconds_today: payload.focus_seconds_today,
+      focus_seconds_7d: payload.focus_seconds_7d,
+      drift_seconds_7d: payload.drift_seconds_7d,
+      neutral_seconds_7d: payload.neutral_seconds_7d,
+      focus_share: payload.focus_share,
+      daily_focus: payload.daily_focus,
+      window_start_date: payload.window_start_date,
+      window_end_date: payload.window_end_date,
+      timezone: resolvePublisherTimezone(),
+      share_top_apps: false,
+      top_apps_7d: [],
+      updated_at: updatedAt,
+    }).eq("user_id", userId).eq("enabled", true);
+    if (base.error) return { success: false, error: base.error.message };
+
+    const category = await resolved.from("public_focus_cards").update({
+      category_breakdown_7d: payload.category_breakdown_7d ?? [],
+      share_top_apps: false,
+      top_apps_7d: [],
+      updated_at: updatedAt,
+    }).eq("user_id", userId).eq("enabled", true).eq("share_category_breakdown", true);
+    if (category.error) return { success: false, error: category.error.message };
+
+    const hourly = await resolved.from("public_focus_cards").update({
+      hourly_focus_pattern: payload.hourly_focus_pattern ?? [],
+      share_top_apps: false,
+      top_apps_7d: [],
+      updated_at: updatedAt,
+    }).eq("user_id", userId).eq("enabled", true).eq("share_hourly_pattern", true);
+    if (hourly.error) return { success: false, error: hourly.error.message };
+
     return { success: true, error: null };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -158,12 +212,12 @@ export async function setFocusCardDetailFlags(flags: FocusCardDetailFlags, clien
     user_id: userId,
     share_category_breakdown: flags.shareCategoryBreakdown,
     share_hourly_pattern: flags.shareHourlyPattern,
-    share_top_apps: flags.shareTopApps,
+    share_top_apps: false,
     updated_at: new Date().toISOString(),
   };
   if (!flags.shareCategoryBreakdown) payload.category_breakdown_7d = [];
   if (!flags.shareHourlyPattern) payload.hourly_focus_pattern = [];
-  if (!flags.shareTopApps) payload.top_apps_7d = [];
+  payload.top_apps_7d = [];
 
   try {
     const { error } = await resolved.from("public_focus_cards").upsert(payload, { onConflict: "user_id" });

@@ -13,6 +13,7 @@ export type LeaderboardPageProps = {
   isSignedIn: boolean;
   isSupabaseEnabled: boolean;
   leaderboard: LeaderboardRow[];
+  ownFocusSeconds?: number | null;
   ownRank?: number | null;
   profileDisplayName?: string | null;
   publicProfile?: LeaderboardPublicProfileControls;
@@ -21,7 +22,6 @@ export type LeaderboardPageProps = {
   totalFocusSeconds7d: number;
   onOptIn: () => void;
   onOptOut: () => void;
-  onOpenProfile?: () => void;
   onPeriodChange: (period: LeaderboardPeriod) => void;
   onSelectProfile: (row: LeaderboardRow) => void;
   onSignIn: () => void;
@@ -38,6 +38,7 @@ export function LeaderboardPage({
   isSignedIn,
   isSupabaseEnabled,
   leaderboard,
+  ownFocusSeconds,
   ownRank,
   profileDisplayName,
   publicProfile,
@@ -46,7 +47,6 @@ export function LeaderboardPage({
   totalFocusSeconds7d,
   onOptIn,
   onOptOut,
-  onOpenProfile,
   onPeriodChange,
   onSelectProfile,
   onSignIn,
@@ -56,7 +56,7 @@ export function LeaderboardPage({
       <div className="pg-head">
         <div>
           <h1>Global focus ranking</h1>
-          <p className="page-subhead">Publicly share weekly focus and hourly patterns—not apps, sites, or raw history.</p>
+          <p className="page-subhead">Publish only your aggregate focus total and public profile fields.</p>
         </div>
       </div>
 
@@ -67,6 +67,7 @@ export function LeaderboardPage({
           isLoading={isLoading}
           error={error}
           isOptedIn={isOptedIn}
+          ownFocusSeconds={ownFocusSeconds}
           ownRank={ownRank}
           activePeriod={activePeriod}
           leaderboard={leaderboard}
@@ -81,7 +82,6 @@ export function LeaderboardPage({
           onOptIn={onOptIn}
           onSignIn={onSignIn}
           onOptOut={onOptOut}
-          onOpenProfile={onOpenProfile}
           onPeriodChange={onPeriodChange}
           onSelectProfile={onSelectProfile}
         />

@@ -39,8 +39,8 @@ import {
   type DashboardAiUnavailablePreviewState,
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
-import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
+import { SocialPage, type SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
@@ -284,6 +284,7 @@ export default function App() {
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const rawActiveTab = activeSnapshot.tabId;
   const activeTab = rawActiveTab === "profile" ? "leaderboard" : rawActiveTab;
+  const socialSection: SocialSection = rawActiveTab === "profile" ? "profile" : "leaderboard";
   const dashPeriod = activeSnapshot.dashPeriod;
   const isDeferredTabBodyReady = useDeferredTabBodyReady(activeTab);
   const canNavigateBack = navigationHistory.index > 0;
@@ -536,18 +537,6 @@ export default function App() {
       return { ...current, entries };
     });
   }, [activeTab, canOpenTeamsBeta]);
-
-  useEffect(() => {
-    if (rawActiveTab !== "profile") return;
-
-    setNavigationHistory((current) => {
-      const safeEntry: NavigationHistoryState["entries"][number] = { tabId: "leaderboard", dashPeriod: "Today" };
-      if (current.entries.length === 0) return { entries: [safeEntry], index: 0 };
-      const entries = current.entries.slice();
-      entries[current.index] = safeEntry;
-      return { ...current, entries };
-    });
-  }, [rawActiveTab]);
 
   useEffect(() => {
     const handleTeamInvite = (event: Event) => {
@@ -933,6 +922,7 @@ export default function App() {
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
+    handleProfileVisibilityChange,
     handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
@@ -5458,6 +5448,26 @@ export default function App() {
           ))}
         </nav>
 
+        <div className="nav-label">Social</div>
+        <nav className="sidebar-nav sidebar-nav--social" aria-label="Social navigation">
+          <button
+            type="button"
+            className={activeTab === "leaderboard" && socialSection === "profile" ? "nav-item active" : "nav-item"}
+            onClick={() => navigateToTab("profile")}
+          >
+            <NavIcon type="profile" /><span>Profile</span>
+            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Profile</span> : null}
+          </button>
+          <button
+            type="button"
+            className={activeTab === "leaderboard" && socialSection === "leaderboard" ? "nav-item active" : "nav-item"}
+            onClick={() => navigateToTab("leaderboard")}
+          >
+            <NavIcon type="leaderboard" /><span>Leaderboard</span>
+            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Leaderboard</span> : null}
+          </button>
+        </nav>
+
         {canOpenTeamsBeta ? (
           <>
             <div className="nav-label">Your teams</div>
@@ -5530,7 +5540,7 @@ export default function App() {
             isDarkMode={theme === "dark"}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             onProfile={() => {
-              navigateToTab("leaderboard");
+              navigateToTab("profile");
               if (isPolicySignedIn) void focusCard.refresh();
               setAccountMenuOpen(false);
             }}
@@ -5766,9 +5776,10 @@ export default function App() {
           />
         ) : null}
 
-        {/* Leaderboard */}
+        {/* Social: public profile, embeds, and leaderboard */}
         {activeTab === "leaderboard" ? (
-          <LeaderboardPage
+          <SocialPage
+            activeSection={socialSection}
             actionError={leaderboardActionError}
             activePeriod={activeLeaderboardPeriod}
             email={user?.email ?? null}
@@ -5779,6 +5790,9 @@ export default function App() {
             isSignedIn={isPolicySignedIn}
             isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
             leaderboard={leaderboardRows}
+            ownFocusSeconds={leaderboardUsesPreviewProfile
+              ? leaderboardRows.find((row) => row.rank === 6)?.focus_seconds ?? null
+              : ownLeaderboardEntry?.focus_seconds ?? null}
             ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
             profileDisplayName={leaderboardProfileDisplayName}
             publicProfile={{
@@ -5786,20 +5800,23 @@ export default function App() {
               dailyProductivity: profileDailyProductivity,
               draft: profileDraft,
               focusSeconds7d: localRollingFocusSeconds,
+              isPreviewProfile: leaderboardUsesPreviewProfile,
               profileError: isProfileEditorOpen ? null : profileError,
+              profileLoading,
               profileMessage: isProfileEditorOpen ? null : profileMessage,
+              profileSaving,
               publicId: profile?.public_id ?? (leaderboardUsesPreviewProfile ? "00000000-0000-4000-8000-000000000000" : null),
               shareMessage: profileShareMessage,
-              webAccountPreview: devWebAccountPreviewEnabled,
               onCopyProfileLink: () => void handleShareLeaderboardProfile(),
               onEditProfile: openProfileEditor,
+              onEnsureProfile: handleSaveProfile,
+              onSetProfileVisibility: handleProfileVisibilityChange,
             }}
             statusMessage={leaderboardStatusMessage}
             statusTone={leaderboardStatusTone}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
             onOptIn={() => void handleLeaderboardOptIn()}
             onOptOut={() => void handleLeaderboardOptOut()}
-            onOpenProfile={openProfileEditor}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
             onSignIn={() => void handleLeaderboardOptIn()}
@@ -5861,7 +5878,9 @@ export default function App() {
 	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
 	                    onEditPublicProfile={openProfileEditor}
 	                    onManageCloudBilling={handleManageCloudBilling}
-	                    onOpenLeaderboard={() => navigateToTab("leaderboard")}
+	                    onOpenLeaderboard={() => {
+                          navigateToTab("leaderboard");
+                        }}
 	                    onRefreshCloudStatus={refreshBillingEntitlement}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
                     onSignIn={() => setAuthModalOpen(true)}

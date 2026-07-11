@@ -1,26 +1,29 @@
-import { useMemo, useState } from "react";
-import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
-import { LeaderboardBoard } from "./LeaderboardBoard";
-import { ProfileAvatar, StateBlock, formatRank } from "./leaderboardViewHelpers";
+import { useMemo, useState, type ReactNode } from "react";
 import { formatRoundedDuration } from "../../lib/formatting";
+import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
-import { ProfileEmbedsModal } from "../profile/ProfileEmbedsModal";
-import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
-import type { ReactNode } from "react";
+import { LeaderboardBoard } from "./LeaderboardBoard";
+import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
+import { formatRank, ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
+import { RankEmbedsModal } from "./RankEmbedsModal";
 
 export type LeaderboardPublicProfileControls = {
   readonly card: FocusCardControls;
   readonly dailyProductivity: readonly DailyProductivityPoint[] | null;
   readonly draft: ProfileDraft;
   readonly focusSeconds7d: number;
+  readonly isPreviewProfile?: boolean;
   readonly profileError: string | null;
+  readonly profileLoading: boolean;
   readonly profileMessage: string | null;
+  readonly profileSaving: boolean;
   readonly publicId: string | null;
   readonly shareMessage: string | null;
-  readonly webAccountPreview?: boolean;
   readonly onCopyProfileLink: () => void;
   readonly onEditProfile: () => void;
+  readonly onEnsureProfile: () => Promise<boolean>;
+  readonly onSetProfileVisibility: (isPublic: boolean) => Promise<boolean>;
 };
 
 export type LeaderboardViewProps = {
@@ -32,6 +35,7 @@ export type LeaderboardViewProps = {
   ownRank?: number | null;
   activePeriod?: LeaderboardPeriod;
   leaderboard?: LeaderboardRow[];
+  ownFocusSeconds?: number | null;
   totalFocusSeconds7d?: number;
   profileDisplayName?: string | null;
   email?: string | null;
@@ -43,7 +47,6 @@ export type LeaderboardViewProps = {
   onOptIn?: () => void;
   onSignIn?: () => void;
   onOptOut?: () => void;
-  onOpenProfile?: () => void;
   onPeriodChange?: (period: LeaderboardPeriod) => void;
   onSelectProfile?: (row: LeaderboardRow) => void;
 };
@@ -57,6 +60,7 @@ export function LeaderboardView({
   ownRank = null,
   activePeriod = "weekly",
   leaderboard = [],
+  ownFocusSeconds = null,
   totalFocusSeconds7d = 0,
   profileDisplayName = null,
   email = null,
@@ -68,21 +72,21 @@ export function LeaderboardView({
   onOptIn,
   onSignIn,
   onOptOut,
-  onOpenProfile,
   onPeriodChange,
   onSelectProfile,
 }: LeaderboardViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [embedsOpen, setEmbedsOpen] = useState(false);
+  const [rankEmbedOpen, setRankEmbedOpen] = useState(false);
   const previewName = resolvePublicNamePreview(profileDisplayName, email);
-  const currentUserRank = ownRank ?? leaderboard.find((row) => row.display_name === previewName)?.rank ?? null;
+  const matchedOwnRow = ownRank === null
+    ? leaderboard.find((row) => row.display_name === previewName)
+    : leaderboard.find((row) => row.rank === ownRank);
+  const currentUserRank = isOptedIn ? ownRank ?? matchedOwnRow?.rank ?? null : null;
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const profileDraft = publicProfile?.draft ?? null;
   const profileAvatarUrl = profileDraft?.avatarUrl.trim() ?? "";
-  const editProfile = publicProfile?.onEditProfile ?? onOpenProfile ?? null;
+  const editProfile = publicProfile?.onEditProfile ?? null;
   const profileHandle = resolveProfileHandle(email);
-  // Presence stats: all derived from local rolling focus + the 30-day daily series
-  // already flowing to the embeds — no lifetime/all-time value is published.
   const weekFocusSeconds = publicProfile?.focusSeconds7d ?? 0;
   const dailyAverageSeconds = Math.round(weekFocusSeconds / 7);
   const last30FocusSeconds = (publicProfile?.dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
@@ -92,170 +96,168 @@ export function LeaderboardView({
     return leaderboard.filter((row) => row.display_name.toLowerCase().includes(trimmedSearchQuery) || String(row.rank).includes(trimmedSearchQuery));
   }, [leaderboard, trimmedSearchQuery]);
 
+  if (!isSupabaseEnabled) {
+    return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Sync required" title="Leaderboard unavailable" detail="Supabase is not configured for this workspace." /></section>;
+  }
+  if (isLoading) {
+    return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Refreshing" title="Loading leaderboard" detail="Checking the latest opt-in rankings." /></section>;
+  }
+  if (error) {
+    return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Fetch error" title="Unable to load leaderboard" detail={error} /></section>;
+  }
+
+  const resolvedOwnFocusSeconds = ownFocusSeconds
+    ?? matchedOwnRow?.focus_seconds
+    ?? (activePeriod === "weekly" ? publicProfile?.focusSeconds7d ?? 0 : 0);
+  const publicRankReady = Boolean(publicProfile?.publicId && publicProfile.draft.isPublic && currentUserRank !== null);
+
   return (
     <section className="leaderboard-panel" aria-label="Leaderboard">
-      {!isSupabaseEnabled ? (
-        <StateBlock
-          eyebrow="Sync required"
-          title="Leaderboard unavailable"
-          detail="Supabase is not configured for this workspace."
-        />
-      ) : isLoading ? (
-        <StateBlock
-          eyebrow="Refreshing"
-          title="Loading leaderboard"
-          detail="Checking the latest opt-in rankings."
-        />
-      ) : error ? (
-        <StateBlock
-          eyebrow="Fetch error"
-          title="Unable to load leaderboard"
-          detail={error}
-        />
-      ) : (
-        <div className="leaderboard-panel__stack">
-          <section className="leaderboard-profile-block" aria-label="Leaderboard participation">
-            <section
-              className="leaderboard-hero"
-              aria-label="Your leaderboard participation"
-              style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
-            >
-              <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
-                <div
-                  style={{ position: "relative", display: "flex", alignItems: "center", gap: "var(--space-4)", minWidth: 0, padding: "var(--space-4) var(--space-3)", border: 0, borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--accent-soft) 46%, var(--surface))" }}
-                >
-                  <ProfileAvatar
-                    className="leaderboard-hero__avatar"
-                    name={previewName}
-                    src={profileAvatarUrl || null}
-                    style={{ width: 77, height: 77, borderRadius: 18, fontSize: "1.68rem", flex: "0 0 auto" }}
-                  />
-                  <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
-                    <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`} style={{ justifySelf: "start" }}>
-                      {isOptedIn
-                        ? currentUserRank !== null
-                          ? `On the board · ${formatRank(currentUserRank)}`
-                          : "On the board"
-                        : "Not on the board yet"}
-                    </span>
-                    <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
-                    {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
-                  </div>
-                  {editProfile ? (
-                    <button
-                      type="button"
-                      className="leaderboard-profile-edit-button"
-                      aria-label="Edit public profile"
-                      onClick={editProfile}
-                      style={{ position: "absolute", top: "var(--space-3)", right: "var(--space-3)", margin: 0 }}
-                    >
-                      <PencilIcon />
-                    </button>
-                  ) : null}
+      <div className="leaderboard-panel__stack">
+        <section className="leaderboard-profile-block" aria-label="Leaderboard participation">
+          <section
+            className="leaderboard-hero"
+            aria-label="Your leaderboard participation"
+            style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
+              <div
+                style={{ position: "relative", display: "flex", alignItems: "center", gap: "var(--space-4)", minWidth: 0, padding: "var(--space-4) var(--space-3)", border: 0, borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--accent-soft) 46%, var(--surface))" }}
+              >
+                <ProfileAvatar
+                  className="leaderboard-hero__avatar"
+                  name={previewName}
+                  src={profileAvatarUrl || null}
+                  style={{ width: 77, height: 77, borderRadius: 18, fontSize: "1.68rem", flex: "0 0 auto" }}
+                />
+                <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
+                  <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`} style={{ justifySelf: "start" }}>
+                    {isOptedIn
+                      ? currentUserRank !== null
+                        ? `On the board · ${formatRank(currentUserRank)}`
+                        : "On the board"
+                      : "Not on the board yet"}
+                  </span>
+                  <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
+                  {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
                 </div>
-                {publicProfile ? (
-                  <div
-                    aria-label="Focus totals"
-                    style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%", paddingRight: "var(--space-5)" }}
+                {editProfile ? (
+                  <button
+                    type="button"
+                    className="leaderboard-profile-edit-button"
+                    aria-label="Edit public profile"
+                    onClick={editProfile}
+                    style={{ position: "absolute", top: "var(--space-3)", right: "var(--space-3)", margin: 0 }}
                   >
-                    <HeroStat label="Focus · this week" value={formatRoundedDuration(weekFocusSeconds)} accent />
-                    <HeroStat label="Daily avg" value={formatRoundedDuration(dailyAverageSeconds)} />
-                    <HeroStat label="Last 30 days" value={formatRoundedDuration(last30FocusSeconds)} />
-                  </div>
+                    <PencilIcon />
+                  </button>
                 ) : null}
               </div>
-
-              <div
-                style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", paddingRight: "var(--space-5)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
-              >
-                <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
-                  {isOptedIn ? (
-                    <button
-                      type="button"
-                      className="ghost-button leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
-                      onClick={() => onOptOut?.()}
-                      disabled={isActionLoading || !onOptOut}
-                    >
-                      {isActionLoading ? "Leaving…" : "Leave leaderboard"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="settings-btn settings-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
-                      onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
-                      disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
-                    >
-                      {isActionLoading ? "Joining…" : "Join leaderboard"}
-                    </button>
-                  )}
+              {publicProfile ? (
+                <div
+                  aria-label="Focus totals"
+                  style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%", paddingRight: "var(--space-5)" }}
+                >
+                  <HeroStat label="Focus · this week" value={formatRoundedDuration(weekFocusSeconds)} accent />
+                  <HeroStat label="Daily avg" value={formatRoundedDuration(dailyAverageSeconds)} />
+                  <HeroStat label="Last 30 days" value={formatRoundedDuration(last30FocusSeconds)} />
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-                  {publicProfile ? (
-                    <>
-                      <button type="button" className="settings-btn settings-btn--primary profile-btn hero-action-btn" onClick={() => setEmbedsOpen(true)}>
-                        <EmbedIcon />
-                        Embed
+              ) : null}
+            </div>
+
+            <div
+              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", paddingRight: "var(--space-5)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
+            >
+              <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
+                {isOptedIn ? (
+                  <button
+                    type="button"
+                    className="ghost-button leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                    onClick={() => onOptOut?.()}
+                    disabled={isActionLoading || !onOptOut}
+                  >
+                    {isActionLoading ? "Leaving…" : "Leave leaderboard"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="settings-btn settings-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
+                    title="Publishes rank totals. Profile visibility is separate."
+                    onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
+                    disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
+                  >
+                    {isActionLoading ? "Joining…" : "Join leaderboard"}
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                {publicProfile ? (
+                  <>
+                    <button
+                      type="button"
+                      className="settings-btn settings-btn--primary profile-btn hero-action-btn"
+                      onClick={() => setRankEmbedOpen(true)}
+                      title={!publicRankReady ? "Join and make your profile public to activate this embed" : undefined}
+                    >
+                      <EmbedIcon />
+                      Rank embed
+                    </button>
+                    {isOptedIn ? (
+                      <button type="button" className="ghost-button profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
+                        <ShareIcon />
+                        Share
                       </button>
-                      {/* Share copies the public profile link — only meaningful once you're on the board. */}
-                      {isOptedIn ? (
-                        <button type="button" className="ghost-button profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
-                          <ShareIcon />
-                          Share
-                        </button>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {socialPills.map((pill) => (
-                    <a key={pill.key} href={pill.href} target="_blank" rel="noreferrer" className="ghost-button profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
-                      {pill.icon}
-                      {pill.label}
-                    </a>
-                  ))}
-                </div>
+                    ) : null}
+                  </>
+                ) : null}
+                {socialPills.map((pill) => (
+                  <a key={pill.key} href={pill.href} target="_blank" rel="noreferrer" className="ghost-button profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
+                    {pill.icon}
+                    {pill.label}
+                  </a>
+                ))}
               </div>
-            </section>
-            {actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
-            {publicProfile?.profileError || publicProfile?.profileMessage ? (
-              <div className="leaderboard-public-profile__messages">
-                {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
-                {publicProfile.profileMessage ? <p className="capture-recency">{publicProfile.profileMessage}</p> : null}
-              </div>
-            ) : null}
+            </div>
           </section>
-
-          {publicProfile && embedsOpen ? (
-            <ProfileEmbedsModal
-              card={publicProfile.card}
-              dailyProductivity={publicProfile.dailyProductivity}
-              displayName={previewName}
-              draft={publicProfile.draft}
-              focusSeconds7d={publicProfile.focusSeconds7d}
-              publicId={publicProfile.publicId}
-              webAccountPreview={publicProfile.webAccountPreview}
-              onClose={() => setEmbedsOpen(false)}
-              onCopyProfileLink={publicProfile.onCopyProfileLink}
-              onEditProfile={publicProfile.onEditProfile}
-            />
+          {actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
+          {publicProfile?.profileError || publicProfile?.profileMessage ? (
+            <div className="leaderboard-public-profile__messages">
+              {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
+              {publicProfile.profileMessage ? <p className="capture-recency">{publicProfile.profileMessage}</p> : null}
+            </div>
           ) : null}
+        </section>
 
-          <LeaderboardBoard
-            activePeriod={activePeriod}
-            currentUserRank={currentUserRank}
-            filteredLeaderboard={filteredLeaderboard}
-            isOptedIn={isOptedIn}
-            leaderboard={leaderboard}
-            previewName={previewName}
-            searchQuery={searchQuery}
-            statusMessage={statusMessage}
-            statusTone={statusTone}
-            totalFocusSeconds7d={totalFocusSeconds7d}
-            onPeriodChange={onPeriodChange}
-            onSearchQueryChange={setSearchQuery}
-            onSelectProfile={onSelectProfile}
-          />
-          {publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
-        </div>
-      )}
+        <LeaderboardBoard
+          activePeriod={activePeriod}
+          currentUserRank={currentUserRank}
+          filteredLeaderboard={filteredLeaderboard}
+          isOptedIn={isOptedIn}
+          leaderboard={leaderboard}
+          previewName={previewName}
+          searchQuery={searchQuery}
+          statusMessage={statusMessage}
+          statusTone={statusTone}
+          totalFocusSeconds7d={totalFocusSeconds7d}
+          onPeriodChange={onPeriodChange}
+          onSearchQueryChange={setSearchQuery}
+          onSelectProfile={onSelectProfile}
+        />
+        {publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
+      </div>
+
+      {publicProfile && rankEmbedOpen ? (
+        <RankEmbedsModal
+          displayName={previewName}
+          focusSeconds={resolvedOwnFocusSeconds}
+          isProfilePublic={publicProfile.draft.isPublic}
+          isRanked={currentUserRank !== null}
+          period={activePeriod}
+          publicId={publicProfile.publicId}
+          rank={currentUserRank}
+          onClose={() => setRankEmbedOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -263,7 +265,6 @@ export function LeaderboardView({
 function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null) {
   const trimmedName = profileDisplayName?.trim();
   if (trimmedName) return trimmedName;
-
   const emailPrefix = email?.split("@")[0]?.trim();
   return emailPrefix || "drifty";
 }

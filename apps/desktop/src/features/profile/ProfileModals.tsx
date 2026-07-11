@@ -164,9 +164,8 @@ export function EditProfileModal({
 }
 
 /**
- * Master visibility switch for everything public. `profiles.is_public` gates every public
- * read server-side (public profile page, focus badge, embeds, leaderboard RPCs), so this one
- * toggle hides all of them at once without deleting anything.
+ * Master visibility for profile-owned surfaces. `profiles.is_public` gates the public profile
+ * page and profile/rank embeds. Leaderboard rows are governed separately by their opt-in state.
  */
 export function PublicProfileToggle({
   checked,
@@ -191,8 +190,8 @@ export function PublicProfileToggle({
       <span className="profile-visibility-toggle__copy">
         <strong>Public profile</strong>
         <small>
-          Gates your public profile page, focus badge, embeds, and leaderboard visibility. Off hides
-          all of them at once — nothing is deleted, and they return when you switch it back on.
+          Controls your profile page and profile embeds. Leaderboard participation is separate;
+          turning this off does not leave the board.
         </small>
       </span>
     </label>

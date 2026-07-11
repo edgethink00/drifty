@@ -102,13 +102,13 @@ vi.mock("./lib/api/trackerClient", () => ({
 }));
 
 vi.mock("./features/share/focusCardService", () => ({
-  DEFAULT_FOCUS_CARD_DETAIL_FLAGS: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
+  DEFAULT_FOCUS_CARD_DETAIL_FLAGS: { shareCategoryBreakdown: false, shareHourlyPattern: false },
   fetchOwnFocusCard: vi.fn().mockResolvedValue({
     success: true,
     error: null,
     data: {
       enabled: true,
-      detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
+      detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false },
       updatedAt: null,
     },
   }),
@@ -141,6 +141,19 @@ function markOnboardingCompleted(userId: string) {
 
 function formatDayLabel(day: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
+}
+
+async function openSocialLeaderboard() {
+  const nav = await screen.findByRole("navigation", { name: /social navigation/i });
+  fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+  await screen.findByRole("heading", { name: /global focus ranking/i });
+  await screen.findByRole("region", { name: /^leaderboard$/i });
+}
+
+async function openSocialProfile() {
+  const nav = await screen.findByRole("navigation", { name: /social navigation/i });
+  fireEvent.click(within(nav).getByRole("button", { name: /^profile$/i }));
+  await screen.findByRole("heading", { name: /^profile$/i });
 }
 
 type Deferred<T> = {
@@ -205,6 +218,10 @@ describe("App leaderboard participation", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(2026, 5, 2, 13, 15, 0, 0));
     vi.clearAllMocks();
+    fetchGlobalLeaderboard.mockReset().mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockReset().mockResolvedValue({ success: true, error: null, data: null });
+    publishOwnFocusTotal.mockReset().mockResolvedValue({ success: true, error: null });
+    optOutLeaderboard.mockReset().mockResolvedValue({ success: true, error: null });
     window.localStorage.clear();
     markOnboardingCompleted("local");
     markOnboardingCompleted("user-1");
@@ -279,8 +296,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
 
     expect(await screen.findByRole("region", { name: /^leaderboard$/i })).toBeTruthy();
     expect(await screen.findByText("alex")).toBeTruthy();
@@ -340,8 +356,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
     await waitFor(() => {
@@ -664,8 +679,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
     await waitFor(() => {
@@ -676,8 +690,9 @@ describe("App leaderboard participation", () => {
 
     expect(screen.queryByText(/loading leaderboard/i)).toBeNull();
     expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
-    expect(await screen.findByRole("button", { name: /leave leaderboard/i })).toBeTruthy();
-    expect(await screen.findByRole("button", { name: /edit public profile/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /^leave leaderboard$/i })).toBeTruthy();
+    await openSocialProfile();
+    expect(await screen.findByRole("button", { name: /edit profile/i })).toBeTruthy();
     expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ timezone, is_public: true }));
   });
 
@@ -695,8 +710,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
     await waitFor(() => {
@@ -736,8 +750,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
     await waitFor(() => {
@@ -757,8 +770,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
     await waitFor(() => {
@@ -826,8 +838,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
 
     await waitFor(() => {
@@ -937,7 +948,7 @@ describe("App leaderboard participation", () => {
     const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
     fireEvent.click(within(nav).getByRole("button", { name: /^classification$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /show previous day/i }));
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
 
     expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
     expect(screen.queryByText(formatDayLabel(previousDay))).toBeNull();
@@ -968,7 +979,7 @@ describe("App leaderboard participation", () => {
       });
     });
 
-    const leaveButton = await screen.findByRole("button", { name: /leave leaderboard/i });
+    const leaveButton = await screen.findByRole("button", { name: /^leave leaderboard$/i });
     fireEvent.click(leaveButton);
 
     await waitFor(() => {
@@ -988,7 +999,7 @@ describe("App leaderboard participation", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /my profile/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /^embed$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /profile embed/i }));
     fireEvent.click(await screen.findByRole("button", { name: /copy profile link/i }));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("https://drifty.so/profile/?id=profile-1");
@@ -1005,8 +1016,7 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
 
     expect(await screen.findByRole("button", { name: /view alex profile/i })).toBeTruthy();
     expect(await screen.findByText("Alex")).toBeTruthy();
@@ -1051,20 +1061,18 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
 
-    fireEvent.click(await screen.findByRole("button", { name: /leave leaderboard/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^leave leaderboard$/i }));
 
     await waitFor(() => {
       expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
     });
     expect(await screen.findByRole("button", { name: /join leaderboard/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /leave leaderboard/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /view profile/i })).toBeNull();
-    // Embed (public-card control) persists after opting out, but Share is hidden —
-    // there is no public profile link to copy until you're on the board.
-    expect(screen.getByRole("button", { name: /^embed$/i })).toBeTruthy();
+    // Rank embed remains discoverable after opting out, but stays locked until rejoining.
+    expect(screen.getByRole("button", { name: /rank embed/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
     expect(JSON.parse(window.localStorage.getItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY) ?? "[]")).toEqual([]);
     expect((await screen.findByRole("status")).textContent).toMatch(/network unavailable/i);
@@ -1112,12 +1120,12 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
+    await openSocialLeaderboard();
     expect(await screen.findByRole("searchbox", { name: /search leaderboard/i })).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: /edit public profile/i }));
-    expect(await screen.findByText(/^edit profile$/i)).toBeTruthy();
+    await openSocialProfile();
+    fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
+    expect(await screen.findByRole("dialog", { name: /edit profile/i })).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Display name"), { target: { value: "Alex Drifty" } });
     fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
 
@@ -1125,13 +1133,14 @@ describe("App leaderboard participation", () => {
       expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Alex Drifty" }));
     });
     await waitFor(() => {
-      expect(screen.queryByText(/^edit profile$/i)).toBeNull();
+      expect(screen.queryByRole("dialog", { name: /edit profile/i })).toBeNull();
     });
     await waitFor(() => {
       expect(fetchGlobalLeaderboard).toHaveBeenCalledTimes(2);
     });
     const blockingLoading = screen.queryByText(/loading leaderboard/i);
     deferredLeaderboard.resolve({ success: true, error: null, data: [makeLeaderboardRow("weekly")] });
+    await openSocialLeaderboard();
     await screen.findByRole("button", { name: /view alex profile/i });
 
     expect(blockingLoading).toBeNull();
@@ -1145,10 +1154,10 @@ describe("App leaderboard participation", () => {
 
     render(<App />);
 
-    const nav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /edit public profile/i }));
-    expect(await screen.findByText(/^edit profile$/i)).toBeTruthy();
+    await openSocialLeaderboard();
+    await openSocialProfile();
+    fireEvent.click(await screen.findByRole("button", { name: /edit profile/i }));
+    expect(await screen.findByRole("dialog", { name: /edit profile/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
 
     await waitFor(() => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 
-import { buildFocusCardPayload, TOP_APPS_MAX, TOP_APPS_MIN_SECONDS } from "./focusCardPublisher";
+import { buildFocusCardPayload } from "./focusCardPublisher";
 
 // Safari on stackoverflow.com classifies as focus (mirrors leaderboardPublisher.test).
 function makeSegment(day: string, durationSeconds: number, appName = "Safari"): ActivitySegment {
@@ -85,7 +85,7 @@ describe("buildFocusCardPayload", () => {
   });
 
   // ── Detail opt-ins (embed detail levels) ──────────────────────────────────
-  // Regression contract: with no flags (old callers), the payload gains only the three
+  // Regression contract: with no flags, both public detail fields stay absent.
   // false flags — every detail FIELD stays absent, so nothing new is published by default.
   it("omits every detail field when no flags are set (regression: old behavior)", () => {
     const today = todayIsoDate();
@@ -97,7 +97,6 @@ describe("buildFocusCardPayload", () => {
 
     expect(payload.share_category_breakdown).toBe(false);
     expect(payload.share_hourly_pattern).toBe(false);
-    expect(payload.share_top_apps).toBe(false);
     expect(payload).not.toHaveProperty("category_breakdown_7d");
     expect(payload).not.toHaveProperty("hourly_focus_pattern");
     expect(payload).not.toHaveProperty("top_apps_7d");
@@ -119,13 +118,10 @@ describe("buildFocusCardPayload", () => {
     expect(hourlyOnly).not.toHaveProperty("category_breakdown_7d");
     expect(hourlyOnly).not.toHaveProperty("top_apps_7d");
 
-    const topAppsOnly = buildFocusCardPayload(segments, { ...base, shareTopApps: true });
-    expect(topAppsOnly.top_apps_7d).toBeDefined();
-    expect(topAppsOnly).not.toHaveProperty("category_breakdown_7d");
-    expect(topAppsOnly).not.toHaveProperty("hourly_focus_pattern");
+    expect(categoryOnly).not.toHaveProperty("share_top_apps");
   });
 
-  it("computes a week-scoped category breakdown with category + seconds only", () => {
+  it("computes a week-scoped category breakdown with aggregate productivity detail", () => {
     const today = todayIsoDate();
     const midWeek = shiftIsoDate(today, -3);
     const outsideWeek = shiftIsoDate(today, -20);
@@ -140,9 +136,10 @@ describe("buildFocusCardPayload", () => {
     // Week-scoped: the 20-days-ago segment is excluded (5400 = 3600 + 1800).
     expect(breakdown.reduce((sum, entry) => sum + entry.seconds, 0)).toBe(5400);
     for (const entry of breakdown) {
-      expect(Object.keys(entry).sort()).toEqual(["category", "seconds"]);
+      expect(Object.keys(entry).sort()).toEqual(["category", "driftSeconds", "focusSeconds", "neutralSeconds", "seconds"]);
       expect(entry.category).not.toBe("unknown");
       expect(entry.seconds).toBeGreaterThan(0);
+      expect(entry.focusSeconds + entry.neutralSeconds + entry.driftSeconds).toBe(entry.seconds);
     }
     // Sorted largest-first.
     const seconds = breakdown.map((entry) => entry.seconds);
@@ -173,33 +170,17 @@ describe("buildFocusCardPayload", () => {
     }
   });
 
-  it("caps top apps at 5, drops under-15-minute apps, and emits appName + seconds only", () => {
+  it("never includes app identity in the public focus-card payload", () => {
     const today = todayIsoDate();
-    const midWeek = shiftIsoDate(today, -2);
-    const segments = [
-      makeSegment(today, 7200, "Xcode"),
-      makeSegment(today, 5400, "Safari"),
-      makeSegment(midWeek, 4500, "Figma"),
-      makeSegment(midWeek, 3600, "Slack"),
-      makeSegment(today, 1800, "Notes"),
-      makeSegment(midWeek, 1200, "Terminal"),
-      makeSegment(today, TOP_APPS_MIN_SECONDS - 1, "Preview"), // under the 15-minute floor
-    ];
-
-    const payload = buildFocusCardPayload(segments, {
+    const payload = buildFocusCardPayload([makeSegment(today, 7200, "Xcode")], {
       windowEndDay: today,
       startOfDayMinutes: 0,
       includeAiClassifications: false,
-      shareTopApps: true,
+      shareCategoryBreakdown: true,
     });
 
-    const topApps = payload.top_apps_7d ?? [];
-    expect(topApps).toHaveLength(TOP_APPS_MAX); // 6 qualify, capped at 5 — Terminal (1200s) is cut
-    expect(topApps.map((entry) => entry.appName)).toEqual(["Xcode", "Safari", "Figma", "Slack", "Notes"]);
-    expect(topApps.every((entry) => entry.seconds >= TOP_APPS_MIN_SECONDS)).toBe(true);
-    for (const entry of topApps) {
-      // appName + seconds ONLY — never bundle ids, titles, or URLs.
-      expect(Object.keys(entry).sort()).toEqual(["appName", "seconds"]);
-    }
+    expect(payload).not.toHaveProperty("share_top_apps");
+    expect(payload).not.toHaveProperty("top_apps_7d");
+    expect(JSON.stringify(payload)).not.toContain("Xcode");
   });
 });

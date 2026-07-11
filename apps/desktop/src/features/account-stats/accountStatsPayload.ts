@@ -23,11 +23,32 @@ import { getLeaderboardWindowStartDay } from "../leaderboard/leaderboardWindow";
 import {
   buildCategoryBreakdown7d,
   buildHourlyFocusPattern,
-  buildTopApps7d,
 } from "../share/focusCardPublisher";
-import type { CategoryBreakdownEntry, HourlyFocusPoint, TopAppEntry } from "../share/focusCardPublisher";
+import type { CategoryBreakdownEntry, HourlyFocusPoint } from "../share/focusCardPublisher";
 import { buildDailyProductivitySeries } from "../share/dailyProductivity";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
+
+export interface TopAppEntry {
+  readonly appName: string;
+  readonly seconds: number;
+}
+
+export const TOP_APPS_MAX = 5;
+export const TOP_APPS_MIN_SECONDS = 900;
+
+function buildTopApps7d(weekSegments: ActivitySegment[]): TopAppEntry[] {
+  const totals = new Map<string, number>();
+  for (const segment of weekSegments) {
+    const appName = segment.appName?.trim();
+    if (!appName) continue;
+    totals.set(appName, (totals.get(appName) ?? 0) + Math.max(0, segment.durationSeconds));
+  }
+  return [...totals.entries()]
+    .map(([appName, seconds]) => ({ appName, seconds: Math.round(seconds) }))
+    .filter((entry) => entry.seconds >= TOP_APPS_MIN_SECONDS)
+    .sort((a, b) => b.seconds - a.seconds)
+    .slice(0, TOP_APPS_MAX);
+}
 
 /** CamelCase mirror of the `account_activity_summaries` columns; the service maps to snake_case. */
 export interface AccountStatsPayload {

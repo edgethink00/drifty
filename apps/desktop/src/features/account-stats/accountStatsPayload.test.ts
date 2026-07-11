@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 
-import { buildAccountStatsPayload, buildAccountStatsPayloadFromTracker } from "./accountStatsPayload";
-import { TOP_APPS_MAX, TOP_APPS_MIN_SECONDS } from "../share/focusCardPublisher";
+import { buildAccountStatsPayload, buildAccountStatsPayloadFromTracker, TOP_APPS_MAX, TOP_APPS_MIN_SECONDS } from "./accountStatsPayload";
 import { trackerClient } from "../../lib/api/trackerClient";
 
 vi.mock("../../lib/api/trackerClient", () => ({

@@ -19,7 +19,9 @@ import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
 import "./features/loading/loading-skeletons.css";
 import "./features/leaderboard/leaderboard.css";
+import "./features/leaderboard/rank-embeds.css";
 import "./features/profile/profile-page.css";
+import "./features/social/social.css";
 import "./styles/chartHoverMotion.css";
 
 declare global {

@@ -1,43 +1,25 @@
-// Embeds modal (prototype "embeds v2"): a focused overlay opened from the Leaderboard
-// presence hero. Left column = a single live preview stage + its copy-paste snippets;
-// right rail = what's public (publish master + the real detail-share scopes), the format
-// picker, and per-format options (badge theme, card range).
+// Focus embeds modal. Sharing consent lives on the Social → Profile surface; this dialog
+// only changes presentation and copies the selected snippet. Left column = a single live
+// preview stage + snippets; right rail = format and per-format options.
 //
-// Everything here is wired to REAL capabilities only: theme (light/dark), card range
-// (7/30), the four working formats (badge/card/chart/data), and the three focus-card
-// detail flags. The "Hourly focus rhythm" flag is the aggregate-timeline scope — 24
-// hourly averages, never raw session start/end times — so no raw timeline is ever
-// published from here.
+// Everything here is wired to real presentation capabilities only: theme (light/dark),
+// card range (7/30), and the four working formats (badge/card/chart/data).
 import { useEffect, useMemo, useState } from "react";
 import { formatFocusDuration, renderFocusBadgeSvg, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets } from "../share/embedSnippets";
 import type { BadgeThemeOption, CardRangeOption } from "../share/embedSnippets";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
-import type { FocusCardDetailFlags } from "../share/focusCardService";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "./ProfileModals";
 import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./ProfileEmbedGroups";
 
-type FormatKey = "badge" | "card" | "chart" | "data";
+export type ProfileEmbedFormat = "badge" | "card" | "chart" | "data";
 
-const FORMAT_META: ReadonlyArray<{ readonly key: FormatKey; readonly label: string; readonly desc: string }> = [
-  { key: "badge", label: "Badge", desc: "Weekly total pill" },
+const FORMAT_META: ReadonlyArray<{ readonly key: ProfileEmbedFormat; readonly label: string; readonly desc: string }> = [
+  { key: "badge", label: "Badge", desc: "7-day total pill" },
   { key: "card", label: "Card", desc: "Rich focus card" },
   { key: "chart", label: "Chart", desc: "30-day bars" },
   { key: "data", label: "Data", desc: "Aggregate JSON" },
-];
-
-// Real detail-share scopes. "Hourly focus rhythm" is the aggregate timeline — 24 averages,
-// never raw sessions — so it is safe to publish behind this opt-in toggle.
-const SCOPE_DEFS: ReadonlyArray<{
-  readonly key: keyof FocusCardDetailFlags;
-  readonly label: string;
-  readonly desc: string;
-  readonly warning: string | null;
-}> = [
-  { key: "shareCategoryBreakdown", label: "Category breakdown", desc: "7-day totals per category — no app names or titles.", warning: null },
-  { key: "shareHourlyPattern", label: "Hourly rhythm", desc: "Average focus per hour of day — 24 averages, not a session timeline.", warning: null },
-  { key: "shareTopApps", label: "Top apps", desc: "Your top 5 apps this week (15 min+ each).", warning: "Makes those app names public." },
 ];
 
 export type ProfileEmbedsModalProps = {
@@ -46,10 +28,9 @@ export type ProfileEmbedsModalProps = {
   readonly displayName: string;
   readonly draft: ProfileDraft;
   readonly focusSeconds7d: number;
+  readonly initialFormat?: ProfileEmbedFormat;
+  readonly isProfilePublic: boolean;
   readonly publicId: string | null;
-  /** Gates the optional detail-share scopes (category / hourly / top-apps), matching the
-   *  existing Dev-preview gating; the base weekly+daily publish is always available. */
-  readonly webAccountPreview?: boolean;
   readonly onClose: () => void;
   readonly onCopyProfileLink: () => void;
   readonly onEditProfile: () => void;
@@ -61,13 +42,14 @@ export function ProfileEmbedsModal({
   displayName,
   draft,
   focusSeconds7d,
+  initialFormat = "badge",
+  isProfilePublic,
   publicId,
-  webAccountPreview = false,
   onClose,
   onCopyProfileLink,
   onEditProfile,
 }: ProfileEmbedsModalProps) {
-  const [activeFormat, setActiveFormat] = useState<FormatKey>("badge");
+  const [activeFormat, setActiveFormat] = useState<ProfileEmbedFormat>(initialFormat);
   const [embedTheme, setEmbedTheme] = useState<BadgeThemeOption>("light");
   const [cardRange, setCardRange] = useState<CardRangeOption>(7);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -80,15 +62,7 @@ export function ProfileEmbedsModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Load the real publish state on open — `card.enabled` is null until the first
-  // refresh, and without this the modal would show the lock overlay for a card
-  // that is actually live (the only other refresh trigger is the account menu).
-  const { refresh: refreshCard } = card;
-  useEffect(() => {
-    void refreshCard();
-  }, [refreshCard]);
-
-  const cardLocked = card.enabled !== true;
+  const cardLocked = card.enabled !== true || !isProfilePublic;
   const chartStats = useMemo(() => summarizeDailyProductivity(dailyProductivity), [dailyProductivity]);
   const snippets = publicId ? buildEmbedSnippets(publicId, { theme: embedTheme, range: cardRange }) : null;
   const publicProfileUrl = publicId ? buildPublicProfileUrl(publicId) : null;
@@ -145,8 +119,8 @@ export function ProfileEmbedsModal({
         : []
       : activeGroup?.variants ?? [];
   const stageIsDark = activeFormat === "badge" && embedTheme === "dark";
-  const publishPillText = card.enabled === true ? "Live" : card.enabled === null ? "…" : "Private";
-  const publishPillClass = `profile-state-pill${card.enabled === true ? " profile-state-pill--on" : card.enabled === null ? " profile-state-pill--pending" : ""}`;
+  const publishPillText = card.enabled === null ? "…" : card.enabled === true && isProfilePublic ? "Live" : card.enabled === true ? "Hidden" : "Private";
+  const publishPillClass = `profile-state-pill${card.enabled === true && isProfilePublic ? " profile-state-pill--on" : card.enabled === null ? " profile-state-pill--pending" : ""}`;
 
   const copyInputClassName = "settings-input profile-field profile-field--code profile-embed-card__code";
   const copyRowClassName = "profile-copy-row profile-embed-card__variant-row";
@@ -172,8 +146,8 @@ export function ProfileEmbedsModal({
           </div>
           <div>
             <span className="label-mono">Share</span>
-            <h2 id="embeds-modal-title">Embeds</h2>
-            <p>Badge, card, chart, JSON — auto-updating with your public data.</p>
+            <h2 id="embeds-modal-title">Profile embed</h2>
+            <p>Choose a format for the aggregate data shared from Profile.</p>
           </div>
         </div>
 
@@ -201,7 +175,7 @@ export function ProfileEmbedsModal({
               <div className="embeds-main">
                 <div className="embeds-topbar">
                   <span className="label-mono" style={{ flex: "0 0 auto" }}>Public page</span>
-                  {card.enabled === true && publicProfileUrl ? (
+                  {isProfilePublic && publicProfileUrl ? (
                     <div className={copyRowClassName} style={{ flex: 1 }}>
                       <input
                         className={copyInputClassName}
@@ -214,7 +188,7 @@ export function ProfileEmbedsModal({
                       </button>
                     </div>
                   ) : (
-                    <span className="embeds-rail__hint">Off — your public page link appears here once your card is public.</span>
+                    <span className="embeds-rail__hint">Off — turn on Public profile to restore this link.</span>
                   )}
                 </div>
 
@@ -253,16 +227,15 @@ export function ProfileEmbedsModal({
                           <path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7" />
                         </svg>
                       </span>
-                      <strong>Your public card is off</strong>
-                      <p>Turn on your public focus card to activate these embeds. Only opt-in aggregates are shared.</p>
+                      <strong>{!isProfilePublic ? "Your public profile is off" : "Your focus summary is off"}</strong>
+                      <p>{!isProfilePublic ? "Turn on Public profile in Profile to restore these embeds." : "Turn on Focus summary in Profile. Your choices stay saved."}</p>
                       <button
                         type="button"
                         className={primaryButtonClassName}
                         style={{ borderRadius: 999 }}
-                        disabled={card.busy || card.enabled === null}
-                        onClick={() => void card.enable()}
+                        onClick={onClose}
                       >
-                        {card.busy ? "Turning on…" : "Go public"}
+                        Back to Profile
                       </button>
                     </div>
                   ) : null}
@@ -272,46 +245,10 @@ export function ProfileEmbedsModal({
               <aside className="embeds-rail" aria-label="Embed options">
                 <div className="embeds-rail__group">
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", width: "100%" }}>
-                    <span className="label-mono">Publicly shared data</span>
+                    <span className="label-mono">Focus sharing</span>
                     <span className={publishPillClass} style={{ marginLeft: "auto" }}>{publishPillText}</span>
                   </div>
-                  <div className="embeds-scopes">
-                    <label className="embeds-scope">
-                      <input
-                        className="drifty-checkbox"
-                        type="checkbox"
-                        role="switch"
-                        aria-label="Public focus card"
-                        checked={card.enabled === true}
-                        disabled={card.busy || card.enabled === null}
-                        onChange={(event) => void (event.target.checked ? card.enable() : card.disable())}
-                      />
-                      <span className="embeds-scope__copy">
-                        <span className="embeds-scope__name">Weekly focus + daily series</span>
-                        <span className="embeds-scope__desc">The base card. Aggregate weekly total and day-by-day focus.</span>
-                      </span>
-                    </label>
-                    {(webAccountPreview ? SCOPE_DEFS : []).map((scope) => (
-                      <label key={scope.key} className={`embeds-scope${cardLocked ? " embeds-scope--disabled" : ""}`}>
-                        <input
-                          className="drifty-checkbox"
-                          type="checkbox"
-                          role="switch"
-                          aria-label={scope.label}
-                          checked={card.detailFlags?.[scope.key] === true}
-                          disabled={cardLocked || card.busy || card.detailFlags === null}
-                          onChange={(event) => void card.setDetailFlag(scope.key, event.target.checked)}
-                        />
-                        <span className="embeds-scope__copy">
-                          <span className="embeds-scope__name">{scope.label}</span>
-                          <span className="embeds-scope__desc">
-                            {scope.desc}
-                            {scope.warning ? <em className="profile-detail-shares__warning"> {scope.warning}</em> : null}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                  <p className="embeds-rail__hint">Choose what is public from the Profile tab. Embed settings only change presentation.</p>
                   {card.error ? <p className="profile-note profile-note--error">{card.error}</p> : null}
                 </div>
 

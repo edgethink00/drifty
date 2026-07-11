@@ -24,6 +24,7 @@ function renderView(overrides: Partial<TestProps> = {}) {
     isActionLoading: false,
     actionError: null,
     onOptIn: vi.fn(),
+    onOptOut: vi.fn(),
     ...overrides,
   };
 
@@ -52,7 +53,7 @@ function mockCard(overrides: Partial<FocusCardControls> = {}): FocusCardControls
     enabled: false,
     busy: false,
     error: null,
-    detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false, shareTopApps: false },
+    detailFlags: { shareCategoryBreakdown: false, shareHourlyPattern: false },
     refresh: vi.fn().mockResolvedValue(undefined),
     enable: vi.fn().mockResolvedValue(true),
     disable: vi.fn().mockResolvedValue(undefined),
@@ -76,11 +77,15 @@ function makePublicProfile(overrides: Partial<NonNullable<TestProps["publicProfi
     },
     focusSeconds7d: 20 * 3600 + 59 * 60,
     profileError: null,
+    profileLoading: false,
     profileMessage: null,
+    profileSaving: false,
     publicId: PUBLIC_ID,
     shareMessage: null,
     onCopyProfileLink: vi.fn(),
     onEditProfile: vi.fn(),
+    onEnsureProfile: vi.fn().mockResolvedValue(true),
+    onSetProfileVisibility: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -111,7 +116,41 @@ describe("LeaderboardView", () => {
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the participation strip and board as sibling blocks", () => {
+  it("does not present stale rank or focus values before joining", () => {
+    renderView({
+      isOptedIn: false,
+      ownRank: 6,
+      profileDisplayName: "Alex",
+      leaderboard: [makeLeaderboardRow({ rank: 6, display_name: "Alex", focus_seconds: 3120 })],
+      publicProfile: makePublicProfile(),
+    });
+
+    const participation = screen.getByLabelText(/your leaderboard participation/i);
+    expect(within(participation).queryByText("#6")).toBeNull();
+    expect(within(participation).queryByText("52m")).toBeNull();
+    expect(within(participation).getByRole("button", { name: /join leaderboard/i }).getAttribute("title")).toMatch(/profile visibility is separate/i);
+  });
+
+  it("uses the authenticated entry total even when the user is outside the visible board slice", () => {
+    renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: 117, leaderboard: [], publicProfile: makePublicProfile() });
+
+    const participation = screen.getByLabelText(/your leaderboard participation/i);
+    expect(within(participation).getByText(/on the board · #117/i)).toBeTruthy();
+    fireEvent.click(within(participation).getByRole("button", { name: /rank embed/i }));
+    expect(within(screen.getByRole("dialog", { name: /rank embed/i })).getByText("1h 31m")).toBeTruthy();
+  });
+
+  it("keeps the rank embed locked until the selected period has a public rank", () => {
+    renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: null, leaderboard: [], publicProfile: makePublicProfile() });
+
+    const participation = screen.getByLabelText(/your leaderboard participation/i);
+    fireEvent.click(within(participation).getByRole("button", { name: /rank embed/i }));
+    const modal = screen.getByRole("dialog", { name: /rank embed/i });
+    expect(within(modal).getByRole("note").textContent).toMatch(/not public yet/i);
+    expect((within(modal).getByRole("textbox") as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("keeps the existing participation hero and board as sibling blocks", () => {
     renderView({
       leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
       profileDisplayName: "Alex",
@@ -124,11 +163,12 @@ describe("LeaderboardView", () => {
     expect(participationBlock.contains(boardBlock)).toBe(false);
     expect(boardBlock.contains(participationBlock)).toBe(false);
     expect(within(participationBlock).getByText(/on the board · #1/i)).toBeTruthy();
+    expect(within(participationBlock).getByLabelText(/your leaderboard participation/i).classList.contains("leaderboard-hero")).toBe(true);
     expect(within(boardBlock).getByRole("group", { name: /leaderboard period/i })).toBeTruthy();
     expect(within(boardBlock).getByRole("list", { name: /global focus leaderboard rankings/i })).toBeTruthy();
   });
 
-  it("shows the saved profile summary and opens editing from the pencil action", () => {
+  it("restores the existing profile actions in the leaderboard hero", () => {
     const onEditProfile = vi.fn();
     renderView({
       profileDisplayName: "Alex",
@@ -146,44 +186,26 @@ describe("LeaderboardView", () => {
       }),
     });
 
-    const hero = screen.getByLabelText(/your leaderboard participation/i);
-    const profileButton = within(hero).getByRole("button", { name: /edit public profile/i });
-    // Public links render as pill actions in the hero action bar.
-    const websitePill = within(hero).getByRole("link", { name: /website/i });
-    expect(websitePill.getAttribute("href")).toBe("https://drifty.so");
-    expect(hero.querySelector("img.leaderboard-hero__avatar")).not.toBeNull();
-    expect(screen.queryByText(/public card and embeds stay with this leaderboard profile/i)).toBeNull();
-    expect(screen.queryByRole("button", { name: /open profile/i })).toBeNull();
-    fireEvent.click(profileButton);
+    const participation = screen.getByLabelText(/your leaderboard participation/i);
+    fireEvent.click(within(participation).getByRole("button", { name: /edit public profile/i }));
+    expect(within(participation).getByRole("link", { name: /website/i })).toBeTruthy();
+    expect(within(participation).getByRole("button", { name: /rank embed/i })).toBeTruthy();
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the embeds modal from the hero and surfaces per-format snippets", () => {
+  it("opens a rank-only embed from the leaderboard strip", () => {
     const card = mockCard({ enabled: true });
     renderView({ profileDisplayName: "Alex", publicProfile: makePublicProfile({ card }) });
 
-    // Embeds now live in a modal opened from the hero, not an inline accordion.
-    expect(screen.queryByLabelText(/^embeds$/i)).toBeNull();
-    expect(screen.queryByRole("button", { name: /expand embeds/i })).toBeNull();
+    const strip = screen.getByLabelText(/your leaderboard participation/i);
+    fireEvent.click(within(strip).getByRole("button", { name: /rank embed/i }));
+
+    const modal = screen.getByRole("dialog", { name: /rank embed/i });
+    const snippet = within(modal).getByRole("textbox") as HTMLInputElement;
+    expect(snippet.value).toContain(`id=${PUBLIC_ID}`);
+    expect(snippet.value).toContain("view=rank");
+    expect(within(modal).queryByText(/category breakdown/i)).toBeNull();
     expect(card.refresh).not.toHaveBeenCalled();
-
-    const hero = screen.getByLabelText(/your leaderboard participation/i);
-    fireEvent.click(within(hero).getByRole("button", { name: /^embed$/i }));
-
-    const modal = screen.getByRole("dialog", { name: /embeds/i });
-    // Opening the modal loads the real publish state (enabled is null until the first refresh).
-    expect(card.refresh).toHaveBeenCalled();
-    expect(within(modal).getByRole("button", { name: /copy profile link/i })).toBeTruthy();
-
-    // Topbar carries the public profile URL; the default badge format carries the badge endpoint.
-    const badgeValues = (within(modal).getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
-    expect(badgeValues.some((value) => value.includes(`profile/?id=${PUBLIC_ID}`))).toBe(true);
-    expect(badgeValues.some((value) => value.includes(`badge?id=${PUBLIC_ID}`))).toBe(true);
-
-    // Switching to the Card format surfaces the hosted iframe embed.
-    fireEvent.click(within(modal).getByRole("radio", { name: /card/i }));
-    const cardValues = (within(modal).getAllByRole("textbox") as HTMLInputElement[]).map((input) => input.value);
-    expect(cardValues.some((value) => value.includes(`drifty.so/embed/?id=${PUBLIC_ID}`))).toBe(true);
   });
 
   it("uses the profile editor avatar itself as the photo change control", () => {

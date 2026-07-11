@@ -7,6 +7,7 @@ import {
   buildCategoryDurations,
   buildProductivityDurations,
   buildRollingFocusSeconds,
+  CATEGORY_ORDER,
   classifyActivity,
   isBrowserHistoryImportSegment,
   isRemoteDeviceSegment,
@@ -29,21 +30,15 @@ export interface DailyFocusPoint {
 export interface CategoryBreakdownEntry {
   readonly category: ActivityCategory;
   readonly seconds: number;
+  readonly focusSeconds: number;
+  readonly neutralSeconds: number;
+  readonly driftSeconds: number;
 }
 
 export interface HourlyFocusPoint {
   readonly hour: number;
   readonly focusSeconds: number;
 }
-
-export interface TopAppEntry {
-  readonly appName: string;
-  readonly seconds: number;
-}
-
-/** Top-apps publication rules: at most 5 apps, each with at least 15 minutes over the week. */
-export const TOP_APPS_MAX = 5;
-export const TOP_APPS_MIN_SECONDS = 900;
 
 export interface FocusCardPayload {
   readonly focus_seconds_today: number;
@@ -59,11 +54,9 @@ export interface FocusCardPayload {
   /** Per-detail consent flags — persisted alongside the data so the RPC gate and the row agree. */
   readonly share_category_breakdown: boolean;
   readonly share_hourly_pattern: boolean;
-  readonly share_top_apps: boolean;
   /** Detail fields exist ONLY while their consent flag is on; off means absent (and cleared server-side). */
   readonly category_breakdown_7d?: readonly CategoryBreakdownEntry[];
   readonly hourly_focus_pattern?: readonly HourlyFocusPoint[];
-  readonly top_apps_7d?: readonly TopAppEntry[];
 }
 
 export interface FocusCardInput {
@@ -73,8 +66,9 @@ export interface FocusCardInput {
   /** Per-detail opt-ins, all default OFF: a detail is computed and attached only when its flag is on. */
   readonly shareCategoryBreakdown?: boolean;
   readonly shareHourlyPattern?: boolean;
-  readonly shareTopApps?: boolean;
 }
+
+const PUBLIC_CATEGORY_ALLOWLIST = new Set<ActivityCategory>(CATEGORY_ORDER.filter((category) => category !== "unknown"));
 
 function bucketSeconds(durations: ReturnType<typeof buildProductivityDurations>, label: ProductivityLabel): number {
   return Math.max(0, Math.round(durations.find((entry) => entry.productivity === label)?.totalSeconds ?? 0));
@@ -86,10 +80,28 @@ function bucketSeconds(durations: ReturnType<typeof buildProductivityDurations>,
  * categories are dropped, sorted largest first. Category labels only — never app names.
  */
 export function buildCategoryBreakdown7d(weekSegments: ActivitySegment[], options: ClassificationOptions): CategoryBreakdownEntry[] {
+  const productivityByCategory = new Map<ActivityCategory, Record<ProductivityLabel, number>>();
+  for (const segment of weekSegments) {
+    const classification = classifyActivity(segment, options);
+    if (!PUBLIC_CATEGORY_ALLOWLIST.has(classification.category)) continue;
+    const current = productivityByCategory.get(classification.category) ?? { focus: 0, neutral: 0, drift: 0 };
+    current[classification.productivity] += Math.max(0, segment.durationSeconds);
+    productivityByCategory.set(classification.category, current);
+  }
+
   return buildCategoryDurations(weekSegments, options)
-    .filter((entry) => entry.category !== "unknown" && entry.totalSeconds > 0)
+    .filter((entry) => PUBLIC_CATEGORY_ALLOWLIST.has(entry.category) && entry.totalSeconds > 0)
     .sort((a, b) => b.totalSeconds - a.totalSeconds)
-    .map((entry) => ({ category: entry.category, seconds: Math.max(0, Math.round(entry.totalSeconds)) }));
+    .map((entry) => {
+      const productivity = productivityByCategory.get(entry.category) ?? { focus: 0, neutral: 0, drift: 0 };
+      return {
+        category: entry.category,
+        seconds: Math.max(0, Math.round(entry.totalSeconds)),
+        focusSeconds: Math.max(0, Math.round(productivity.focus)),
+        neutralSeconds: Math.max(0, Math.round(productivity.neutral)),
+        driftSeconds: Math.max(0, Math.round(productivity.drift)),
+      };
+    });
 }
 
 /**
@@ -129,25 +141,6 @@ export function buildHourlyFocusPattern(
 }
 
 /**
- * Pure: top apps by TOTAL time (focus + neutral + drift + unclassified — what a "top apps"
- * reader expects) over the week window. Sorted desc, capped at TOP_APPS_MAX, apps under
- * TOP_APPS_MIN_SECONDS dropped. Emits appName + seconds only — no bundle ids, titles, or URLs.
- */
-export function buildTopApps7d(weekSegments: ActivitySegment[]): TopAppEntry[] {
-  const totals = new Map<string, number>();
-  for (const segment of weekSegments) {
-    const appName = segment.appName?.trim();
-    if (!appName) continue;
-    totals.set(appName, (totals.get(appName) ?? 0) + Math.max(0, segment.durationSeconds));
-  }
-  return [...totals.entries()]
-    .map(([appName, seconds]) => ({ appName, seconds: Math.round(seconds) }))
-    .filter((entry) => entry.seconds >= TOP_APPS_MIN_SECONDS)
-    .sort((a, b) => b.seconds - a.seconds)
-    .slice(0, TOP_APPS_MAX);
-}
-
-/**
  * Pure: build the card aggregate from the segments fetched for the 30-day window.
  * The daily series covers the full 30 days (graphs + raw data); the headline aggregates
  * (focus/drift/neutral/share) stay scoped to the last 7 days so the card reads "this week".
@@ -182,7 +175,6 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
   // upsert clears the stored column the moment consent is withdrawn (service maps absent → []).
   const shareCategoryBreakdown = input.shareCategoryBreakdown === true;
   const shareHourlyPattern = input.shareHourlyPattern === true;
-  const shareTopApps = input.shareTopApps === true;
   const weekOptions = { ...options, fallbackCandidates: weekSegments };
 
   return {
@@ -196,10 +188,8 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
     window_end_date: input.windowEndDay,
     share_category_breakdown: shareCategoryBreakdown,
     share_hourly_pattern: shareHourlyPattern,
-    share_top_apps: shareTopApps,
     ...(shareCategoryBreakdown ? { category_breakdown_7d: buildCategoryBreakdown7d(weekSegments, weekOptions) } : {}),
     ...(shareHourlyPattern ? { hourly_focus_pattern: buildHourlyFocusPattern(monthSegments, weekStartDay, input.windowEndDay, options, sod) } : {}),
-    ...(shareTopApps ? { top_apps_7d: buildTopApps7d(weekSegments) } : {}),
   };
 }
 

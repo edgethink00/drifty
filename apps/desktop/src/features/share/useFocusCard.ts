@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
 import { buildFocusCardPayloadFromTracker } from "./focusCardPublisher";
+import type { FocusCardPayload } from "./focusCardPublisher";
 import {
   DEFAULT_FOCUS_CARD_DETAIL_FLAGS,
   fetchOwnFocusCard,
   publishFocusCard,
+  refreshFocusCardAggregates,
   setFocusCardDetailFlags,
   setFocusCardEnabled,
 } from "./focusCardService";
@@ -13,7 +15,7 @@ import type { FocusCardDetailFlags } from "./focusCardService";
 // auto-publish hot path: the card is (re)published when the user enables it and refreshed
 // when the panel opens. `enabled` is null until the first status load.
 //
-// Detail opt-ins (category breakdown / hourly rhythm / top apps) live on the SERVER row —
+// Detail opt-ins (category breakdown / hourly rhythm) live on the SERVER row —
 // it is the single source of truth, so the get_focus_card gate and the publisher can never
 // disagree about what the user consented to. `detailFlags` is null until the first load.
 export interface UseFocusCardInput {
@@ -27,6 +29,8 @@ export interface FocusCardControls {
   readonly busy: boolean;
   readonly error: string | null;
   readonly detailFlags: FocusCardDetailFlags | null;
+  /** Locally computed only; lets Profile show exactly what would be shared before consent. */
+  readonly previewPayload?: FocusCardPayload | null;
   readonly refresh: () => Promise<void>;
   readonly enable: () => Promise<boolean>;
   readonly disable: () => Promise<void>;
@@ -37,14 +41,31 @@ export function useFocusCard(input: UseFocusCardInput): FocusCardControls {
   const { windowEndDay, startOfDayMinutes, includeAiClassifications } = input;
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [detailFlags, setDetailFlags] = useState<FocusCardDetailFlags | null>(null);
+  const [previewPayload, setPreviewPayload] = useState<FocusCardPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const result = await fetchOwnFocusCard();
-    setEnabled(result.success ? (result.data?.enabled ?? false) : false);
-    setDetailFlags(result.success ? (result.data?.detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS) : DEFAULT_FOCUS_CARD_DETAIL_FLAGS);
-  }, []);
+    const [result, localPreview] = await Promise.all([
+      fetchOwnFocusCard(),
+      buildFocusCardPayloadFromTracker({
+        windowEndDay,
+        startOfDayMinutes,
+        includeAiClassifications,
+        shareCategoryBreakdown: true,
+        shareHourlyPattern: true,
+      }).catch(() => null),
+    ]);
+    const nextEnabled = result.success ? (result.data?.enabled ?? false) : false;
+    const nextFlags = result.success ? (result.data?.detailFlags ?? DEFAULT_FOCUS_CARD_DETAIL_FLAGS) : DEFAULT_FOCUS_CARD_DETAIL_FLAGS;
+    setEnabled(nextEnabled);
+    setDetailFlags(nextFlags);
+    setPreviewPayload(localPreview);
+    if (result.success && nextEnabled && localPreview) {
+      const published = await refreshFocusCardAggregates(localPreview);
+      setError(published.success ? null : (published.error ?? "Couldn't refresh your public focus summary."));
+    }
+  }, [windowEndDay, startOfDayMinutes, includeAiClassifications]);
 
   const publishWithFlags = useCallback(async (flags: FocusCardDetailFlags) => {
     const payload = await buildFocusCardPayloadFromTracker({
@@ -106,5 +127,5 @@ export function useFocusCard(input: UseFocusCardInput): FocusCardControls {
     }
   }, [detailFlags, enabled, publishWithFlags]);
 
-  return { enabled, busy, error, detailFlags, refresh, enable, disable, setDetailFlag };
+  return { enabled, busy, error, detailFlags, previewPayload, refresh, enable, disable, setDetailFlag };
 }

@@ -95,6 +95,7 @@ type UseLeaderboardProfileControllerResult = {
   readonly handleLeaderboardOptIn: () => Promise<void>;
   readonly handleLeaderboardOptOut: () => Promise<void>;
   readonly handleProfilePhotoSelected: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  readonly handleProfileVisibilityChange: (isPublic: boolean) => Promise<boolean>;
   readonly handleSaveProfile: () => Promise<boolean>;
   readonly handleSaveProfileFromModal: () => Promise<void>;
   readonly handleSelectLeaderboardProfile: (row: LeaderboardRow) => Promise<void>;
@@ -946,21 +947,21 @@ export function useLeaderboardProfileController({
     }
   }, [leaderboardOwnEntryScopeKey, refreshLeaderboardData]);
 
-  const handleSaveProfile = useCallback(async () => {
+  const saveProfileDraft = useCallback(async (nextDraft: ProfileDraft) => {
     setProfileSaving(true);
     setProfileMessage(null);
     setProfileError(null);
 
     try {
       const result = await saveOwnProfile({
-        display_name: profileDraft.displayName,
-        bio: profileDraft.bio,
-        avatar_url: profileDraft.avatarUrl,
-        website_url: profileDraft.websiteUrl,
-        github_url: profileDraft.githubUrl,
-        linkedin_url: profileDraft.linkedinUrl,
+        display_name: nextDraft.displayName,
+        bio: nextDraft.bio,
+        avatar_url: nextDraft.avatarUrl,
+        website_url: nextDraft.websiteUrl,
+        github_url: nextDraft.githubUrl,
+        linkedin_url: nextDraft.linkedinUrl,
         timezone: leaderboardTimezone,
-        is_public: profileDraft.isPublic,
+        is_public: nextDraft.isPublic,
       });
 
       if (!result.success || !result.data) {
@@ -980,7 +981,18 @@ export function useLeaderboardProfileController({
     } finally {
       setProfileSaving(false);
     }
-  }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, onAuthRequired, profileDraft, refreshLeaderboardData, user?.email]);
+  }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, onAuthRequired, refreshLeaderboardData, user?.email]);
+
+  const handleSaveProfile = useCallback(async () => saveProfileDraft(profileDraft), [profileDraft, saveProfileDraft]);
+
+  const handleProfileVisibilityChange = useCallback(async (isPublic: boolean) => {
+    const previousDraft = profileDraft;
+    const nextDraft = { ...previousDraft, isPublic };
+    setProfileDraft(nextDraft);
+    const saved = await saveProfileDraft(nextDraft);
+    if (!saved) setProfileDraft(previousDraft);
+    return saved;
+  }, [profileDraft, saveProfileDraft]);
 
   const handleSaveProfileFromModal = useCallback(async () => {
     const saved = await handleSaveProfile();
@@ -1124,6 +1136,7 @@ export function useLeaderboardProfileController({
     handleLeaderboardOptIn,
     handleLeaderboardOptOut,
     handleProfilePhotoSelected,
+    handleProfileVisibilityChange,
     handleSaveProfile,
     handleSaveProfileFromModal,
     handleSelectLeaderboardProfile,
