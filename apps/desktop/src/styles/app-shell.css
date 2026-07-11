@@ -1220,3 +1220,8 @@
   line-height: 1.4;
   min-width: min(100%, 12rem);
 }
+
+/* 2026-07 dashboard redesign: slightly tighter card radius app-wide. */
+.app-shell {
+  --radius-md: 10px;
+}

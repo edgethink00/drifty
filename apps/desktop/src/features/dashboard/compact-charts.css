@@ -264,3 +264,9 @@
   letter-spacing: 0.02em;
   margin-top: 0.35rem;
 }
+
+/* 2026-07 dashboard redesign: the compact split charts moved into the
+   Breakdown side panel, so the flow chart spans the full main column. */
+.flow-breakdown-layout--full {
+  grid-template-columns: minmax(0, 1fr);
+}

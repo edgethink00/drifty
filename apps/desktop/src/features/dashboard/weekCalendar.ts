@@ -12,6 +12,12 @@ export type WeekCategorySlice = {
   ratio: number;
 };
 
+export type WeekProductivitySlice = {
+  productivity: ProductivityLabel;
+  totalSeconds: number;
+  ratio: number;
+};
+
 export type WeekDayRow = {
   day: string;
   dayName: string;
@@ -20,6 +26,7 @@ export type WeekDayRow = {
   focusSeconds: number;
   focusScore: number;
   slices: WeekCategorySlice[];
+  productivitySlices: WeekProductivitySlice[];
 };
 
 export type WeekCalendarIdentity = {
@@ -81,9 +88,9 @@ export function buildWeekDayRows(
 ): WeekDayRow[] {
   const days = buildIsoDayList(startDay, endDay);
 
-  const rows = new Map<string, { totalSeconds: number; focusSeconds: number; categories: Map<ActivityCategory, number> }>();
+  const rows = new Map<string, { totalSeconds: number; focusSeconds: number; categories: Map<ActivityCategory, number>; productivity: Map<ProductivityLabel, number> }>();
   for (const day of days) {
-    rows.set(day, { totalSeconds: 0, focusSeconds: 0, categories: new Map() });
+    rows.set(day, { totalSeconds: 0, focusSeconds: 0, categories: new Map(), productivity: new Map() });
   }
 
   for (const segment of segments) {
@@ -94,6 +101,7 @@ export function buildWeekDayRows(
       row.totalSeconds += overlap.durationSeconds;
       if (classification.productivity === "focus") row.focusSeconds += overlap.durationSeconds;
       row.categories.set(classification.category, (row.categories.get(classification.category) ?? 0) + overlap.durationSeconds);
+      row.productivity.set(classification.productivity, (row.productivity.get(classification.productivity) ?? 0) + overlap.durationSeconds);
     }
   }
 
@@ -102,6 +110,10 @@ export function buildWeekDayRows(
     const date = new Date(`${day}T12:00:00`);
     const slices = Array.from(row.categories.entries())
       .map(([category, total]) => ({ category, totalSeconds: total, ratio: row.totalSeconds > 0 ? total / row.totalSeconds : 0 }))
+      .filter((slice) => slice.totalSeconds > 0)
+      .sort((left, right) => right.totalSeconds - left.totalSeconds);
+    const productivitySlices = Array.from(row.productivity.entries())
+      .map(([productivity, total]) => ({ productivity, totalSeconds: total, ratio: row.totalSeconds > 0 ? total / row.totalSeconds : 0 }))
       .filter((slice) => slice.totalSeconds > 0)
       .sort((left, right) => right.totalSeconds - left.totalSeconds);
 
@@ -113,6 +125,7 @@ export function buildWeekDayRows(
       focusSeconds: row.focusSeconds,
       focusScore: row.totalSeconds > 0 ? Math.round((row.focusSeconds / row.totalSeconds) * 100) : 0,
       slices,
+      productivitySlices,
     };
   });
 }

@@ -7,7 +7,13 @@ import { FlowChartView } from "../flow-chart/FlowChartView";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { EmptyState } from "../../components/EmptyState";
-import { FlowCompactSplitChart } from "./CompactCharts";
+import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
+import { UI_LOCALE, formatCompactDurationFromSeconds, logicalTodayIsoDate } from "../../lib/formatting";
+import { CompactRingChart } from "./CompactRingChart";
+import { CompactClassificationBar } from "./CompactClassificationBar";
+import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
+import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
+import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import type { CompactRingEntry } from "./CompactRingChart";
 import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
@@ -53,6 +59,8 @@ type DashboardPageProps = {
   readonly flowProjectRingEntries?: readonly CompactRingEntry[];
   readonly flowProjectCenterPercent?: number;
   readonly focusDriftSection: ReactNode;
+  readonly dayBreakdownTiles: ReactNode;
+  readonly dayFocusDeltaPercent: number | null;
   readonly hasTimelineData: boolean;
   readonly historyClassificationOptions: ClassificationOptions;
   readonly historySegments: ActivitySegment[];
@@ -107,6 +115,8 @@ export function DashboardPage({
   flowProjectRingEntries,
   flowProjectCenterPercent,
   focusDriftSection,
+  dayBreakdownTiles,
+  dayFocusDeltaPercent,
   hasTimelineData,
   historyClassificationOptions,
   historySegments,
@@ -134,6 +144,7 @@ export function DashboardPage({
   onSelectDay,
 }: DashboardPageProps) {
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
+  const [daySideOpen, setDaySideOpen] = useState(true);
   const pageClassName = [
     "page",
     dashPeriod === "Week" ? "page--week-dashboard" : null,
@@ -142,6 +153,17 @@ export function DashboardPage({
   const isDashboardReplayActive = dashboardReplay !== null;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
     ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused or unavailable. Start the tracker, then activity will appear here.");
+  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
+  const weekIncludesToday = dashboardRange.startDay <= todayDay && todayDay <= dashboardRange.endDay;
+  const weekTitle = weekIncludesToday
+    ? "This week"
+    : `Week of ${new Date(`${dashboardRange.startDay}T12:00:00`).toLocaleDateString(UI_LOCALE, { month: "short", day: "numeric" })}`;
+  const headTitle = dashPeriod === "Week" ? weekTitle : dashboardTitle;
+  const dayFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
+  const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
+  const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals);
+  const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardEffectiveProductivityTotals);
+  const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
 
   return (
     <div className={pageClassName}>
@@ -163,15 +185,14 @@ export function DashboardPage({
         />
       ) : null}
 
-      {dashPeriod === "Week" ? null : (
-        <div className={`pg-head dashboard-page-head${dashPeriod === "Today" ? " dashboard-page-head--today" : ""}`}>
+      <div className={`pg-head dashboard-page-head${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
           <div className="dashboard-page-head__row">
             <div>
               <h1
-                aria-label={initialDataLoading ? "Loading dashboard data" : `${dashboardTitle} ${dashboardTitleDuration}`}
+                aria-label={initialDataLoading ? "Loading dashboard data" : `${headTitle} ${dashboardTitleDuration}`}
                 className="dashboard-page-head__title"
               >
-                <span className="dashboard-page-head__title-value">{dashboardTitle}</span>
+                <span className="dashboard-page-head__title-value">{headTitle}</span>
                 <span className={`dashboard-page-head__title-value dashboard-page-head__title-duration${initialDataLoading ? " dashboard-page-head__title-duration--loading" : ""}`}>
                   {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : dashboardTitleDuration}
                 </span>
@@ -179,8 +200,7 @@ export function DashboardPage({
             </div>
             {dashboardDateNavigator}
           </div>
-        </div>
-      )}
+      </div>
 
       <DashboardDemoReplayBanner replay={dashboardReplay} />
 
@@ -229,7 +249,6 @@ export function DashboardPage({
           refreshStatus={weekRefreshStatus}
           isPreviewSurface={isPreviewSurface}
           startOfDayMinutes={startOfDayMinutes}
-          dateNavigator={dashboardDateNavigator}
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
           axisScalePercent={weekDashboardAxisScalePercent}
@@ -243,61 +262,97 @@ export function DashboardPage({
           onSelectDay={onSelectDay}
         />
       ) : (
-        <>
-          {hasTimelineData || isDashboardReplayActive ? (
-            <div className="flow-breakdown-layout">
-              <div className="flow-breakdown-layout__chart">
-                <FlowChartView
-                  blocks={flowBlocks}
-                  appIcons={appIcons}
-                  currentMinuteOfDay={currentMinuteOfDay}
-                  intervalMinutes={flowIntervalMinutes}
-                  startOfDayMinutes={startOfDayMinutes}
-                  onIntervalChange={onFlowIntervalChange}
-                  showEmptyGrid={isDashboardReplayActive}
-                  projectModeAvailable={projectModeAvailable}
-                  projectLegend={projectLegend}
-                  colorMode={flowColorMode}
-                  onColorModeChange={setFlowColorMode}
-                  deviceLabelById={deviceLabelById}
-                />
+        <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${daySideOpen ? " week-v2-grid--side-open" : ""}`}>
+          <div className="day-split__main">
+            {hasTimelineData || isDashboardReplayActive ? (
+              <div className="flow-breakdown-layout flow-breakdown-layout--full">
+                <div className="flow-breakdown-layout__chart">
+                  <FlowChartView
+                    blocks={flowBlocks}
+                    appIcons={appIcons}
+                    currentMinuteOfDay={currentMinuteOfDay}
+                    intervalMinutes={flowIntervalMinutes}
+                    startOfDayMinutes={startOfDayMinutes}
+                    onIntervalChange={onFlowIntervalChange}
+                    showEmptyGrid={isDashboardReplayActive}
+                    projectModeAvailable={projectModeAvailable}
+                    projectLegend={projectLegend}
+                    colorMode={flowColorMode}
+                    onColorModeChange={setFlowColorMode}
+                    deviceLabelById={deviceLabelById}
+                  />
+                </div>
               </div>
-              <FlowCompactSplitChart
-                categoryEntries={dashboardCategoryTotals}
-                productivityEntries={dashboardEffectiveProductivityTotals}
-                totalSeconds={totalSeconds}
-                flowBlocks={flowBlocks}
-                appIcons={appIcons}
-                donutMode={flowColorMode === "project" ? "project" : "productivity"}
-                projectRingEntries={flowProjectRingEntries}
-                projectCenterPercent={flowProjectCenterPercent}
-              />
-            </div>
-          ) : (
-            <EmptyState title="No timeline yet" detail={emptyTimelineDetail}>
-              {dashPeriod === "Today" && browserHistoryBootstrapNotice ? (
-                <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />
-              ) : null}
-            </EmptyState>
-          )}
-        </>
-      )}
+            ) : (
+              <EmptyState title="No timeline yet" detail={emptyTimelineDetail}>
+                {browserHistoryBootstrapNotice ? (
+                  <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />
+                ) : null}
+              </EmptyState>
+            )}
 
-      {dashPeriod === "Today" && !initialDataLoading ? (
-        <>
-          <div className="dashboard-insight-stack">
-            {focusDriftSection}
+            <div className="dashboard-insight-stack">
+              {focusDriftSection}
+            </div>
+
+            <AppUsagePanel
+              items={dashboardAppUsage}
+              periodLabel={dashPeriod.toLowerCase()}
+              totalSeconds={totalSeconds}
+              appIcons={appIcons}
+              emptyPresentation={isDashboardReplayActive ? "blank" : "message"}
+            />
           </div>
 
-          <AppUsagePanel
-            items={dashboardAppUsage}
-            periodLabel={dashPeriod.toLowerCase()}
-            totalSeconds={totalSeconds}
-            appIcons={appIcons}
-            emptyPresentation={isDashboardReplayActive ? "blank" : "message"}
-          />
-        </>
-      ) : null}
+          <BreakdownSidePanel
+            open={daySideOpen}
+            onToggle={() => setDaySideOpen((open) => !open)}
+            ariaLabel="Day breakdown"
+            toggleSubject="day breakdown"
+          >
+            <BreakdownHeroCard
+              ariaLabel="Focus total today"
+              eyebrow={dashboardTitle === "Today" ? "Focus today" : "Focus"}
+              value={dayFocusSeconds > 0 ? formatCompactDurationFromSeconds(dayFocusSeconds) : "0m"}
+              deltaPercent={dayFocusDeltaPercent}
+              deltaComparisonLabel={dashboardTitle === "Today" ? "vs yesterday" : "vs previous day"}
+            />
+            {showProjectDonut ? (
+              <CompactRingChart
+                title="Projects"
+                entries={flowProjectRingEntries ?? []}
+                totalSeconds={totalSeconds}
+                centerPercent={flowProjectCenterPercent ?? 0}
+                flowBlocks={flowBlocks}
+                appIcons={appIcons}
+              />
+            ) : (
+              <CompactRingChart
+                title="Productivity"
+                entries={dayProductivityRingEntries}
+                totalSeconds={totalSeconds}
+                centerPercent={dayProductivityCenterPercent}
+                flowBlocks={flowBlocks}
+                appIcons={appIcons}
+              />
+            )}
+            <CompactClassificationBar<CategoryDuration>
+              title="Categories"
+              ariaLabel="Category compact classification"
+              entries={dayActiveCategoryEntries}
+              totalSeconds={totalSeconds}
+              getKey={(entry) => entry.category}
+              getLabel={(entry) => categoryLabel(entry.category)}
+              getColor={(entry) => CATEGORY_COLORS[entry.category]}
+              getDotClassName={(entry) => `category-dot--${entry.category}`}
+              getAppBreakdown={(entry) => buildCompactClassificationBreakdown(flowBlocks, (block) => block.category === entry.category)}
+              appIcons={appIcons}
+              visibleLimit={5}
+            />
+            {dayBreakdownTiles}
+          </BreakdownSidePanel>
+        </div>
+      )}
     </div>
   );
 }

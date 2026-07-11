@@ -28,16 +28,8 @@ function focusSegment(): ActivitySegment {
 function renderFocusDriftSection(chart: ReturnType<typeof buildFocusDriftChart>) {
   return render(
     <FocusDriftSection
-      activeHourCount={0}
       appIcons={{}}
-      averageSessionMinutes={0}
       chart={chart}
-      peakTrackedSeconds={0}
-      peakWindowLabel="No peak"
-      sessionCount={0}
-      topAppLabel="No apps"
-      totalSeconds={0}
-      uniqueAppsCount={0}
     />,
   );
 }

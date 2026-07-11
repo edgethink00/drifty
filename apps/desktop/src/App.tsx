@@ -219,7 +219,7 @@ import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificatio
 import { AccountMenu } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
-import { FocusDriftSection } from "./features/dashboard/FocusDriftSection";
+import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
@@ -324,6 +324,7 @@ export default function App() {
   const normalizedHistorySearchQuery = historySearchQuery.trim();
   const isHistorySearchActive = normalizedHistorySearchQuery.length > 0;
   const [dashboardPreviousWeekFocusLoad, setDashboardPreviousWeekFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
+  const [dashboardPreviousDayFocusLoad, setDashboardPreviousDayFocusLoad] = useState<DashboardPreviousWeekFocusLoad | null>(null);
   const [dashboardWeekRefreshState, setDashboardWeekRefreshState] = useState<DashboardWeekRefreshState>({ key: null, status: "idle" });
   const [hourly, setHourly] = useState<HourBucket[]>([]);
   const [insightHourly, setInsightHourly] = useState<HourBucket[]>([]);
@@ -3726,6 +3727,14 @@ export default function App() {
     };
   }, [dashboardWeekRange.startDay, startOfDayMinutes]);
   const dashboardPreviousWeekFocusKey = `${dashboardPreviousWeekRange.start}:${dashboardPreviousWeekRange.end}:${showAiClassificationImpact}`;
+  const dashboardPreviousDayRange = useMemo(() => {
+    const day = shiftIsoDate(selectedDay, -1);
+    return {
+      day,
+      ...getLogicalDayRange(day, day, startOfDayMinutes),
+    };
+  }, [selectedDay, startOfDayMinutes]);
+  const dashboardPreviousDayFocusKey = `${dashboardPreviousDayRange.start}:${dashboardPreviousDayRange.end}:${showAiClassificationImpact}`;
   const dashboardWeekCompactSource = useMemo<DashboardSegmentSource | null>(() => (
     dashboardWeekCompactHistoryLoad
       ? {
@@ -3998,6 +4007,57 @@ export default function App() {
     dashboardPreviousWeekRange.endDay,
     dashboardPreviousWeekRange.start,
     dashboardPreviousWeekRange.startDay,
+    loadCompactHistoryRange,
+    shouldBlockLocalTrackerAccess,
+    showAiClassificationImpact,
+    startOfDayMinutes,
+  ]);
+  useEffect(() => {
+    if (activeTab !== "dashboard" || dashPeriod !== "Today") return undefined;
+    if (shouldBlockLocalTrackerAccess) return undefined;
+    if (dashboardPreviousDayFocusLoad?.key === dashboardPreviousDayFocusKey) return undefined;
+
+    let cancelled = false;
+    let cancelIdleWork: (() => void) | null = null;
+    const timeout = window.setTimeout(() => {
+      if (cancelled) return;
+      cancelIdleWork = scheduleIdleWork(() => {
+        void loadCompactHistoryRange({
+          start: dashboardPreviousDayRange.start,
+          end: dashboardPreviousDayRange.end,
+        }).then((load) => {
+          if (cancelled) return;
+          const previousDayClassificationOptions: ClassificationOptions = {
+            fallbackCandidates: load.materialized.segments,
+            includeAiClassifications: showAiClassificationImpact,
+          };
+          setDashboardPreviousDayFocusLoad({
+            key: dashboardPreviousDayFocusKey,
+            focusSeconds: buildRollingFocusSeconds(
+              load.materialized.segments,
+              dashboardPreviousDayRange.day,
+              dashboardPreviousDayRange.day,
+              previousDayClassificationOptions,
+              startOfDayMinutes,
+            ),
+          });
+        }).catch(() => undefined);
+      });
+    }, DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      cancelIdleWork?.();
+    };
+  }, [
+    activeTab,
+    dashPeriod,
+    dashboardPreviousDayFocusKey,
+    dashboardPreviousDayFocusLoad?.key,
+    dashboardPreviousDayRange.day,
+    dashboardPreviousDayRange.end,
+    dashboardPreviousDayRange.start,
     loadCompactHistoryRange,
     shouldBlockLocalTrackerAccess,
     showAiClassificationImpact,
@@ -4519,6 +4579,10 @@ export default function App() {
     ? dashboardPreviousWeekFocusLoad.focusSeconds
     : null;
   const weekFocusDeltaPercent = previousWeekFocusSeconds !== null && previousWeekFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousWeekFocusSeconds) / previousWeekFocusSeconds) * 100) : null;
+  const previousDayFocusSeconds = dashPeriod === "Today" && dashboardPreviousDayFocusLoad?.key === dashboardPreviousDayFocusKey
+    ? dashboardPreviousDayFocusLoad.focusSeconds
+    : null;
+  const dayFocusDeltaPercent = previousDayFocusSeconds !== null && previousDayFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousDayFocusSeconds) / previousDayFocusSeconds) * 100) : null;
   const weekDashboardModel = useMemo(() => {
     if (dashPeriod !== "Week") return emptyWeekDashboardModel();
     return buildWeekDashboardModel({
@@ -5243,8 +5307,14 @@ export default function App() {
 
   const focusDriftSection = (
     <FocusDriftSection
-      activeHourCount={activeHourCount}
       appIcons={appIcons}
+      chart={focusDriftChart}
+    />
+  );
+
+  const dayBreakdownTiles = (
+    <FocusDriftSummaryTiles
+      activeHourCount={activeHourCount}
       averageSessionMinutes={averageSessionMinutes}
       chart={focusDriftChart}
       peakTrackedSeconds={peakTrackedSeconds}
@@ -5614,6 +5684,8 @@ export default function App() {
             flowProjectRingEntries={dashboardProjectRing.entries}
             flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
+            dayBreakdownTiles={dayBreakdownTiles}
+            dayFocusDeltaPercent={isPreviewSurface ? 12 : dayFocusDeltaPercent}
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}

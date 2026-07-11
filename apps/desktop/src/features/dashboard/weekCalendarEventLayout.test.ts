@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WeekCalendarEvent } from "./weekCalendar";
-import { buildWeekCalendarEventLayout } from "./weekCalendarEventLayout";
+import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 
 function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): WeekCalendarEvent {
   return {
@@ -119,5 +119,58 @@ describe("buildWeekCalendarEventLayout", () => {
     const atCompressed = buildWeekCalendarEventLayout(event, 42);
     expect(atCompressed.isTinyEvent).toBe(false);
     expect(atCompressed.showsIdentityStrip).toBe(true);
+  });
+});
+
+describe("planWeekIdentityStrip", () => {
+  it("keeps the model's icons and count when the column is wide enough", () => {
+    // 160px column: 4 icons + "+N" chip fit comfortably.
+    expect(planWeekIdentityStrip(4, 2, 160)).toEqual({ visibleCount: 4, hiddenCount: 2, tilePx: 18, gapPx: 3 });
+  });
+
+  it("keeps all icons without a chip when nothing is hidden and they fit", () => {
+    expect(planWeekIdentityStrip(4, 0, 120)).toEqual({ visibleCount: 4, hiddenCount: 0, tilePx: 18, gapPx: 3 });
+  });
+
+  it("drops icons into the +N chip when the squished column cannot fit them", () => {
+    // 120px column: 33px chrome leaves 87px; 4 icons + chip need 106px but
+    // 3 icons + a one-digit chip fit at 85px — at full size.
+    expect(planWeekIdentityStrip(4, 2, 120)).toEqual({ visibleCount: 3, hiddenCount: 3, tilePx: 18, gapPx: 3 });
+  });
+
+  it("prefers dropping to two full-size icons over shrinking three", () => {
+    // 110px column: available 77px; 3 icons + chip need 85px at full size, so
+    // show 2 icons + "+2" (64px) at the regular tile size instead.
+    expect(planWeekIdentityStrip(4, 0, 110)).toEqual({ visibleCount: 2, hiddenCount: 2, tilePx: 18, gapPx: 3 });
+  });
+
+  it("shrinks the tiles continuously, only as far as this strip needs", () => {
+    // 88px column: available 55px; even 2 icons + chip need 64px at full size,
+    // so the tiles drop just to 16px (2×16 + 2 + 2 + 19 = 55px), no further.
+    expect(planWeekIdentityStrip(4, 0, 88)).toEqual({ visibleCount: 2, hiddenCount: 2, tilePx: 16, gapPx: 2 });
+  });
+
+  it("keeps small strips at full size even in narrow columns", () => {
+    // Same 110px column: 3 icons with no chip (60px) fit without shrinking.
+    expect(planWeekIdentityStrip(3, 0, 110)).toEqual({ visibleCount: 3, hiddenCount: 0, tilePx: 18, gapPx: 3 });
+    // 77px column: a two-icon strip (39px ≤ 44px) needs no shrink either.
+    expect(planWeekIdentityStrip(2, 0, 77)).toEqual({ visibleCount: 2, hiddenCount: 0, tilePx: 18, gapPx: 3 });
+  });
+
+  it("always keeps at least two icons, bottoming out at the 13px tile", () => {
+    expect(planWeekIdentityStrip(4, 1, 60)).toEqual({ visibleCount: 2, hiddenCount: 3, tilePx: 13, gapPx: 2 });
+    expect(planWeekIdentityStrip(2, 1, 60)).toEqual({ visibleCount: 2, hiddenCount: 1, tilePx: 13, gapPx: 2 });
+  });
+
+  it("reserves a wider chip for double-digit hidden counts", () => {
+    // 130px column: available 97px; 4 icons + a one-digit chip need 106px,
+    // 3 icons + a two-digit chip fit at 90px.
+    expect(planWeekIdentityStrip(4, 9, 130)).toEqual({ visibleCount: 3, hiddenCount: 10, tilePx: 18, gapPx: 3 });
+  });
+
+  it("falls back to the model values without a usable measurement", () => {
+    expect(planWeekIdentityStrip(4, 2, null)).toEqual({ visibleCount: 4, hiddenCount: 2, tilePx: 18, gapPx: 3 });
+    expect(planWeekIdentityStrip(4, 2, 0)).toEqual({ visibleCount: 4, hiddenCount: 2, tilePx: 18, gapPx: 3 });
+    expect(planWeekIdentityStrip(0, 0, 120)).toEqual({ visibleCount: 0, hiddenCount: 0, tilePx: 18, gapPx: 3 });
   });
 });

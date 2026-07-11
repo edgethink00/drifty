@@ -16,6 +16,92 @@ const TINY_EVENT_MAX_ACTIVE_MINUTES = 10;
 const MICRO_EVENT_HEIGHT_PX = 6;
 const TINY_EVENT_HEIGHT_PX = 12;
 
+export type WeekIdentityStripPlan = {
+  readonly visibleCount: number;
+  readonly hiddenCount: number;
+  /** Largest tile size (13–18px) at which this strip fits its column; 18 means
+   *  the regular size, smaller values are applied per strip via CSS vars. */
+  readonly tilePx: number;
+  readonly gapPx: number;
+};
+
+/** The model caps identity icons at this count; narrower columns show fewer. */
+export const WEEK_IDENTITY_STRIP_MAX_ICONS = 4;
+
+// Identity strip geometry (see week-dashboard.css). The chrome around the
+// strip inside a day column is 4px+4px column insets, 6px+6px event padding,
+// 1px+1px borders and the ~11px category-dot grid column. The "+N" chip is
+// roughly 22px for one digit and 27px for two.
+const IDENTITY_STRIP_HORIZONTAL_CHROME_PX = 33;
+const IDENTITY_TILE_BASE_PX = 18;
+const IDENTITY_TILE_MIN_PX = 13;
+const IDENTITY_GAP_BASE_PX = 3;
+const IDENTITY_GAP_TIGHT_PX = 2;
+/** Narrow columns drop icons into the "+N" chip down to two; only when even
+ *  two icons + chip cannot fit at full size does the tile size shrink. */
+const IDENTITY_MIN_VISIBLE_ICONS = 2;
+
+/** The chip's own font and min-width scale down with the tiles (CSS clamp), so
+ *  shrunk strips reserve less room for it than full-size ones. */
+function identityMoreChipWidthPx(hiddenCount: number, shrunk: boolean): number {
+  if (shrunk) return hiddenCount >= 10 ? 24 : 19;
+  return hiddenCount >= 10 ? 27 : 22;
+}
+
+function identityStripWidthPx(visibleCount: number, hiddenCount: number, tilePx: number, gapPx: number): number {
+  const iconsWidth = visibleCount * tilePx + (visibleCount - 1) * gapPx;
+  if (hiddenCount === 0) return iconsWidth;
+  return iconsWidth + gapPx + identityMoreChipWidthPx(hiddenCount, tilePx < IDENTITY_TILE_BASE_PX);
+}
+
+/** How many identity icons (plus a recomputed "+N") fit in a day column, and
+ *  the largest 13–18px tile size that fills the chosen strip into the width.
+ *  With no usable width measurement, falls back to the model's own cap so
+ *  behaviour matches the pre-measurement rendering. */
+export function planWeekIdentityStrip(
+  identityCount: number,
+  modelHiddenCount: number,
+  dayColumnWidth: number | null,
+): WeekIdentityStripPlan {
+  const fallback: WeekIdentityStripPlan = {
+    visibleCount: identityCount,
+    hiddenCount: modelHiddenCount,
+    tilePx: IDENTITY_TILE_BASE_PX,
+    gapPx: IDENTITY_GAP_BASE_PX,
+  };
+  if (identityCount === 0) return fallback;
+  if (dayColumnWidth === null || !Number.isFinite(dayColumnWidth) || dayColumnWidth <= IDENTITY_STRIP_HORIZONTAL_CHROME_PX) {
+    return fallback;
+  }
+
+  // Pick the icon count with regular-size metrics, keeping the two-icon floor.
+  const availableWidth = dayColumnWidth - IDENTITY_STRIP_HORIZONTAL_CHROME_PX;
+  const minVisibleCount = Math.min(IDENTITY_MIN_VISIBLE_ICONS, identityCount);
+  let visibleCount = minVisibleCount;
+  for (let candidate = identityCount; candidate > minVisibleCount; candidate -= 1) {
+    const hiddenCount = modelHiddenCount + (identityCount - candidate);
+    if (identityStripWidthPx(candidate, hiddenCount, IDENTITY_TILE_BASE_PX, IDENTITY_GAP_BASE_PX) <= availableWidth) {
+      visibleCount = candidate;
+      break;
+    }
+  }
+  const hiddenCount = modelHiddenCount + (identityCount - visibleCount);
+
+  if (identityStripWidthPx(visibleCount, hiddenCount, IDENTITY_TILE_BASE_PX, IDENTITY_GAP_BASE_PX) <= availableWidth) {
+    return { visibleCount, hiddenCount, tilePx: IDENTITY_TILE_BASE_PX, gapPx: IDENTITY_GAP_BASE_PX };
+  }
+
+  // Shrink continuously: the largest tile at which the strip still fits, so a
+  // strip that is only a few pixels over loses those pixels, not a full tier.
+  const gapPx = IDENTITY_GAP_TIGHT_PX;
+  for (let tilePx = IDENTITY_TILE_BASE_PX - 1; tilePx > IDENTITY_TILE_MIN_PX; tilePx -= 1) {
+    if (identityStripWidthPx(visibleCount, hiddenCount, tilePx, gapPx) <= availableWidth) {
+      return { visibleCount, hiddenCount, tilePx, gapPx };
+    }
+  }
+  return { visibleCount, hiddenCount, tilePx: IDENTITY_TILE_MIN_PX, gapPx };
+}
+
 export function buildWeekCalendarEventLayout(
   event: WeekCalendarEvent,
   calendarHourHeight: number,

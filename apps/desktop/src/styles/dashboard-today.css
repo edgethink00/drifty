@@ -877,3 +877,19 @@
 }
 
 .pcard-freq { font-family: var(--font-mono); font-size: 9px; color: var(--text-soft); text-align: right; }
+
+/* ── 2026-07 dashboard redesign ──
+   Focus/drift chart matches the flow chart: same pending-region tint and the
+   same inset plot surface. */
+.focus-drift__future-region {
+  fill: var(--flow-chart-empty-cell-surface);
+  opacity: var(--flow-chart-empty-cell-opacity);
+}
+
+.focus-drift__plot::before {
+  background: var(--flow-chart-plot-surface);
+}
+
+.focus-drift {
+  --focus-drift-right-bleed: calc(4.712% - 7.8px);
+}

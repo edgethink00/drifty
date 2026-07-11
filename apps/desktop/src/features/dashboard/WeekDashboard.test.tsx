@@ -20,6 +20,7 @@ const weekRows: WeekDayRow[] = [
   focusScore: index === 2 ? 80 : 0,
   focusSeconds: index === 2 ? 3600 : 0,
   slices: [],
+  productivitySlices: [],
   totalSeconds: index === 2 ? 4500 : 0,
 }));
 
@@ -74,7 +75,6 @@ function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
       axisScalePercent={axisScalePercent}
       calendarEvents={calendarEvents}
       categoryEntries={categoryEntries}
-      dateNavigator={<button type="button">Pick week</button>}
       endDay="2024-01-07"
       focusDeltaPercent={null}
       productivityEntries={productivityEntries}
