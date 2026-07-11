@@ -7,7 +7,7 @@ from typing import Callable
 
 JsonValue = object
 CaptureException = Callable[..., object]
-Flush = Callable[[float], bool]
+Flush = Callable[[float], object]
 
 FILTERED_VALUE = "[Filtered]"
 REDACTED_EMAIL = "[Email]"
@@ -75,18 +75,20 @@ def init_tracker_sentry(mode: str) -> bool:
     return True
 
 
-def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonValue] | None = None) -> None:
+def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonValue] | None = None) -> bool:
     capture_exception = _capture_exception
     if capture_exception is None:
-        return
+        return False
 
     try:
         capture_exception(error, extras=sanitize_mapping(dict(context or {})))
         flush = _flush
-        if flush is not None:
-            flush(2.0)
+        if flush is None:
+            return False
+        flush(2.0)
+        return True
     except Exception:  # noqa: BROAD_EXCEPT_OK - capture failures must not affect the tracker.
-        return
+        return False
 
 
 def scrub_sentry_event(event: dict[str, JsonValue], _hint: Mapping[str, JsonValue] | None = None) -> dict[str, JsonValue]:

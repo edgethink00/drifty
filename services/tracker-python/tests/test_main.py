@@ -19,6 +19,41 @@ from app.tracker.power_state import PowerStateSample
 
 
 class TrackerMainTests(unittest.TestCase):
+    def test_sentry_smoke_test_requires_initialized_sdk(self) -> None:
+        result = tracker_main.sentry_smoke_test("drifty-sentry-smoke-abcdef", False)
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["data"]["captureRequested"])
+        self.assertFalse(result["data"]["deliveryConfirmed"])
+
+    def test_sentry_smoke_test_rejects_unsafe_identifier(self) -> None:
+        with patch.object(tracker_main, "capture_tracker_exception") as capture:
+            result = tracker_main.sentry_smoke_test("person@example.com", True)
+
+        self.assertFalse(result["ok"])
+        self.assertIsNone(result["data"]["smokeId"])
+        capture.assert_not_called()
+
+    def test_sentry_smoke_test_requests_capture_without_claiming_delivery(self) -> None:
+        with patch.object(tracker_main, "capture_tracker_exception", return_value=True) as capture:
+            result = tracker_main.sentry_smoke_test("drifty-sentry-smoke-abcdef", True)
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["data"]["captureRequested"])
+        self.assertFalse(result["data"]["deliveryConfirmed"])
+        error = capture.call_args.args[0]
+        context = capture.call_args.args[1]
+        self.assertEqual(str(error), "drifty-sentry-smoke-abcdef")
+        self.assertEqual(context, {"phase": "sentry-smoke-test", "smokeId": "drifty-sentry-smoke-abcdef"})
+
+    def test_sentry_smoke_test_generates_safe_identifier(self) -> None:
+        with patch.object(tracker_main.secrets, "token_hex", return_value="0123456789abcdef"), patch.object(
+            tracker_main, "capture_tracker_exception", return_value=True
+        ):
+            result = tracker_main.sentry_smoke_test(None, True)
+
+        self.assertEqual(result["data"]["smokeId"], "drifty-sentry-smoke-0123456789abcdef")
+
     def test_day_bounds_supports_day_payload(self) -> None:
         start, end = tracker_main.day_bounds({"day": "2026-04-06"})
         self.assertEqual(start, "2026-04-06T00:00:00")

@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import secrets
 import signal
 import subprocess
 import sys
@@ -53,10 +55,42 @@ TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 RuntimeMode = Literal["source", "frozen"]
+SENTRY_SMOKE_MODE = "sentry-smoke-test"
+SENTRY_SMOKE_ID_PATTERN = re.compile(r"\Adrifty-sentry-smoke-[A-Za-z0-9_-]{6,48}\Z")
 
 
 def response(ok: bool, data=None, error: str | None = None):
     return {"ok": ok, "data": data, "error": error}
+
+
+def sentry_smoke_test(smoke_id: str | None, sentry_initialized: bool) -> dict:
+    resolved_smoke_id = smoke_id or f"drifty-sentry-smoke-{secrets.token_hex(8)}"
+    if not SENTRY_SMOKE_ID_PATTERN.fullmatch(resolved_smoke_id):
+        return response(
+            False,
+            {"smokeId": None, "captureRequested": False, "deliveryConfirmed": False},
+            "Smoke ID must match drifty-sentry-smoke-[A-Za-z0-9_-]{6,48}.",
+        )
+    if not sentry_initialized:
+        return response(
+            False,
+            {"smokeId": resolved_smoke_id, "captureRequested": False, "deliveryConfirmed": False},
+            "Tracker Sentry is not initialized; configure a DSN and install the Sentry SDK.",
+        )
+
+    capture_requested = capture_tracker_exception(
+        RuntimeError(resolved_smoke_id),
+        {"phase": SENTRY_SMOKE_MODE, "smokeId": resolved_smoke_id},
+    )
+    return response(
+        capture_requested,
+        {
+            "smokeId": resolved_smoke_id,
+            "captureRequested": capture_requested,
+            "deliveryConfirmed": False,
+        },
+        None if capture_requested else "Tracker Sentry capture or flush request failed.",
+    )
 
 
 def state_dir() -> Path:
@@ -1121,13 +1155,24 @@ def main():
     parser.add_argument("mode", nargs="?", default="request")
     parser.add_argument("--request-json", dest="request_json")
     parser.add_argument("--db", dest="db_path")
+    parser.add_argument("--smoke-id", dest="smoke_id")
     args = parser.parse_args()
+
+    if args.smoke_id is not None and args.mode != SENTRY_SMOKE_MODE:
+        parser.error("--smoke-id is only valid with sentry-smoke-test mode")
 
     global DB_PATH
     if args.db_path:
         DB_PATH = Path(args.db_path)
 
-    init_tracker_sentry(args.mode)
+    sentry_initialized = init_tracker_sentry(args.mode)
+
+    if args.mode == SENTRY_SMOKE_MODE:
+        result = sentry_smoke_test(args.smoke_id, sentry_initialized)
+        print(json.dumps(result))
+        if not result["ok"]:
+            raise SystemExit(1)
+        return
 
     if args.mode == "daemon":
         daemon()
