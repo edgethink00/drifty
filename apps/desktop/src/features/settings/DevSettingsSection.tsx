@@ -1,6 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, SENTRY_SMOKE_DIAGNOSTICS_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
 import { formatDayLabel } from "../../lib/formatting";
@@ -152,7 +152,7 @@ export function DevSettingsSection({
   return (
     <div className="settings-section">
       <DevSettingsDebugLogsBlock onOpenDebugLogs={onOpenDebugLogs} />
-      {SENTRY_SMOKE_DIAGNOSTICS_ENABLED ? <SentrySmokeDiagnostics /> : null}
+      <SentrySmokeDiagnostics />
       <div className="settings-block settings-block--dev-preview">
         <h3>Pre-release updates</h3>
         <PreReleaseUpdatesSettingsRow

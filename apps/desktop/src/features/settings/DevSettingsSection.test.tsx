@@ -19,16 +19,12 @@ import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
-  sentrySmokeDiagnosticsEnabled: false,
 }));
 
 vi.mock("../../appFeatureSwitches", () => ({
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: false,
   get DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED() {
     return featureSwitches.demoDashboardReplayDevToolEnabled;
-  },
-  get SENTRY_SMOKE_DIAGNOSTICS_ENABLED() {
-    return featureSwitches.sentrySmokeDiagnosticsEnabled;
   },
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: false,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: false,
@@ -43,12 +39,9 @@ describe("DevSettingsSection", () => {
 
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
-    featureSwitches.sentrySmokeDiagnosticsEnabled = false;
   });
 
-  it("shows Sentry smoke controls only when their non-production gate is enabled", () => {
-    featureSwitches.sentrySmokeDiagnosticsEnabled = true;
-
+  it("shows Sentry smoke controls in production Dev settings", () => {
     renderProductionDevSettings();
 
     expect(screen.getByRole("group", { name: "Sentry smoke diagnostics" })).toBeTruthy();
@@ -57,7 +50,6 @@ describe("DevSettingsSection", () => {
   });
 
   it("locks smoke controls after submission until the operator explicitly resets them", () => {
-    featureSwitches.sentrySmokeDiagnosticsEnabled = true;
     renderProductionDevSettings();
 
     const rendererButton = screen.getByRole("button", { name: "Test renderer" });

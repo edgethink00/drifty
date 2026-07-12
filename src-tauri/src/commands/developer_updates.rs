@@ -4,7 +4,6 @@ use tauri_plugin_updater::{Update, Updater, UpdaterExt};
 use url::Url;
 
 const PRE_RELEASE_UPDATER_ENDPOINT: &str = "https://github.com/edgethink00/drifty_releases/releases/download/pre-release-channel/latest-prerelease.json";
-const RELEASE_CHANNEL: Option<&str> = option_env!("VITE_DRIFTY_CHANNEL");
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,7 +19,6 @@ pub struct DeveloperPreReleaseUpdate {
 pub async fn developer_check_pre_release_update(
     app: AppHandle,
 ) -> Result<DeveloperPreReleaseUpdate, String> {
-    ensure_developer_pre_release_updates_enabled()?;
     let updater = build_pre_release_updater(&app)?;
     let update = updater.check().await.map_err(|error| error.to_string())?;
     Ok(pre_release_update_response(&app, update))
@@ -28,7 +26,6 @@ pub async fn developer_check_pre_release_update(
 
 #[tauri::command]
 pub async fn developer_install_pre_release_update(app: AppHandle) -> Result<bool, String> {
-    ensure_developer_pre_release_updates_enabled()?;
     let updater = build_pre_release_updater(&app)?;
     let Some(update) = updater.check().await.map_err(|error| error.to_string())? else {
         return Ok(false);
@@ -53,18 +50,6 @@ fn build_pre_release_updater(app: &AppHandle) -> Result<Updater, String> {
         .map_err(|error| error.to_string())
 }
 
-fn ensure_developer_pre_release_updates_enabled() -> Result<(), String> {
-    if developer_pre_release_updates_enabled(RELEASE_CHANNEL) {
-        return Ok(());
-    }
-
-    Err("Developer pre-release updates are disabled in production builds.".to_string())
-}
-
-fn developer_pre_release_updates_enabled(_release_channel: Option<&str>) -> bool {
-    true
-}
-
 fn pre_release_update_response(
     app: &AppHandle,
     update: Option<Update>,
@@ -84,23 +69,5 @@ fn pre_release_update_response(
             date: None,
             body: None,
         },
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::developer_pre_release_updates_enabled;
-
-    #[test]
-    fn developer_pre_release_updates_remain_available_for_production_channel() {
-        assert!(developer_pre_release_updates_enabled(Some("production")));
-        assert!(developer_pre_release_updates_enabled(Some(" Production ")));
-    }
-
-    #[test]
-    fn developer_pre_release_updates_remain_available_for_local_channels() {
-        assert!(developer_pre_release_updates_enabled(None));
-        assert!(developer_pre_release_updates_enabled(Some("")));
-        assert!(developer_pre_release_updates_enabled(Some("dev")));
     }
 }

@@ -19,7 +19,6 @@ describe("app feature switches", () => {
     expect(switches.REPLAY_ONBOARDING_DEV_TOOL_ENABLED).toBe(true);
     expect(switches.END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED).toBe(false);
     expect(switches.END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED).toBe(true);
-    expect(switches.SENTRY_SMOKE_DIAGNOSTICS_ENABLED).toBe(false);
   });
 
   it("does not let release-channel values change feature availability", async () => {
@@ -34,16 +33,6 @@ describe("app feature switches", () => {
     expect(switches.REPLAY_ONBOARDING_DEV_TOOL_ENABLED).toBe(true);
     expect(switches.END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED).toBe(false);
     expect(switches.END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED).toBe(true);
-    expect(switches.SENTRY_SMOKE_DIAGNOSTICS_ENABLED).toBe(true);
-  });
-
-  it("fails closed for missing or unknown smoke diagnostic channels outside dev builds", async () => {
-    const switches = await import("./appFeatureSwitches");
-
-    expect(switches.resolveSentrySmokeDiagnosticsEnabled(undefined, false)).toBe(false);
-    expect(switches.resolveSentrySmokeDiagnosticsEnabled("typo", false)).toBe(false);
-    expect(switches.resolveSentrySmokeDiagnosticsEnabled(undefined, true)).toBe(true);
-    expect(switches.resolveSentrySmokeDiagnosticsEnabled("production", true)).toBe(false);
   });
 
   it("passes through the compile-time onboarding bypass flag", async () => {
