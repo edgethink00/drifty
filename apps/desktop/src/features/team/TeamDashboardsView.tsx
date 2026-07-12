@@ -1,566 +1,355 @@
-import { useMemo } from "react";
-import type {
-  TeamProject,
-  TeamProjectMemberRow,
-  TeamProjectMixRow,
-} from "./teamTypes";
-import "./team-projects.css";
+import { useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent } from "react";
+
+import { formatCompactDurationFromSeconds, formatDayLabel } from "../../lib/formatting";
+import type { ProjectTrendColumn } from "../projects/projectTrendView";
+import { buildTeamTrendModel } from "./teamTrendView";
+import type { TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
+import type { TeamProjectsWindow } from "./useTeamProjects";
+import "../projects/project-trend-chart.css";
 
 export type TeamDashboardsViewProps = {
-  readonly teamName: string;
-  readonly window: { readonly start_date: string; readonly end_date: string };
+  readonly window: TeamProjectsWindow;
   readonly projects: readonly TeamProject[];
   readonly mix: readonly TeamProjectMixRow[];
   readonly members: readonly TeamProjectMemberRow[];
+  readonly memberCount: number;
+  readonly memberDisplayName: string | null;
   readonly loading: boolean;
   readonly error: string | null;
-  readonly actionError: string | null;
-  readonly publishing: boolean;
   readonly publishNote: string | null;
-  readonly onPublishMyTime: () => void;
-  readonly onStopSharing: () => void;
   readonly onRefresh: () => void;
 };
 
-const FALLBACK_PALETTE = [
-  "#6f9a4b",
-  "#c98a3c",
-  "#4c86b5",
-  "#a05fb0",
-  "#c25f6e",
-  "#4fa6a0",
-  "#b7953d",
-  "#7f7bce",
-] as const;
-
-const NEUTRAL_GRAY = "#9ca3af";
-
-function isUsableColor(color: string | null | undefined): boolean {
-  return typeof color === "string" && color.trim().length > 0;
-}
-
-function formatSeconds(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.round(totalSeconds));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours <= 0) {
-    return `${minutes}m`;
-  }
-  return `${hours}h ${minutes}m`;
-}
-
-function formatSecondsLong(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.round(totalSeconds));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const hh = String(hours).padStart(2, "0");
-  const mm = String(minutes).padStart(2, "0");
-  return `${hh} h ${mm} m`;
-}
-
-type ProjectMeta = {
-  readonly id: string;
-  readonly name: string;
+interface HoverRow {
+  readonly key: string;
+  readonly label: string;
   readonly color: string;
-};
-
-// Resolve a stable color + name per project id, preferring the projects list,
-// then the mix rows, then a deterministic fallback palette / neutral gray.
-function useProjectMeta(
-  projects: readonly TeamProject[],
-  mix: readonly TeamProjectMixRow[],
-): Map<string, ProjectMeta> {
-  return useMemo(() => {
-    const meta = new Map<string, ProjectMeta>();
-    const idOrder: string[] = [];
-
-    const remember = (id: string, name: string, color: string | null) => {
-      if (!id) return;
-      if (!meta.has(id)) {
-        idOrder.push(id);
-        meta.set(id, {
-          id,
-          name: name || "Untitled project",
-          color: isUsableColor(color) ? (color as string) : "",
-        });
-        return;
-      }
-      const existing = meta.get(id)!;
-      if (!existing.color && isUsableColor(color)) {
-        meta.set(id, { ...existing, color: color as string });
-      }
-      if ((!existing.name || existing.name === "Untitled project") && name) {
-        meta.set(id, { ...meta.get(id)!, name });
-      }
-    };
-
-    for (const project of projects) {
-      remember(project.id, project.name, project.color);
-    }
-    for (const row of mix) {
-      remember(row.organization_project_id, row.project_name, row.project_color);
-    }
-
-    // Fill unresolved colors from the fallback palette in a stable order.
-    idOrder.forEach((id, index) => {
-      const entry = meta.get(id)!;
-      if (!entry.color) {
-        const fallback = FALLBACK_PALETTE[index % FALLBACK_PALETTE.length] ?? NEUTRAL_GRAY;
-        meta.set(id, { ...entry, color: fallback });
-      }
-    });
-
-    return meta;
-  }, [projects, mix]);
+  readonly durationLabel: string;
 }
 
-function colorFor(meta: Map<string, ProjectMeta>, id: string): string {
-  return meta.get(id)?.color ?? NEUTRAL_GRAY;
+interface HoverState {
+  readonly dayLabel: string;
+  readonly totalLabel: string;
+  readonly rows: readonly HoverRow[];
+  readonly x: number;
+  readonly y: number;
 }
 
-function nameFor(meta: Map<string, ProjectMeta>, id: string, fallback: string): string {
-  return meta.get(id)?.name ?? fallback ?? "Untitled project";
-}
-
-// ---- Donut ----
-
-type DonutSlice = {
-  readonly id: string;
+interface MemberBarRow {
   readonly name: string;
-  readonly color: string;
-  readonly seconds: number;
-  readonly fraction: number;
-};
-
-function polarToCartesian(cx: number, cy: number, radius: number, angleDeg: number): [number, number] {
-  const angleRad = ((angleDeg - 90) * Math.PI) / 180;
-  return [cx + radius * Math.cos(angleRad), cy + radius * Math.sin(angleRad)];
+  readonly isYou: boolean;
+  readonly totalSeconds: number;
+  readonly segments: readonly {
+    readonly projectId: string;
+    readonly color: string;
+    readonly pct: number;
+    readonly label: string;
+    readonly title: string;
+  }[];
 }
 
-function arcPath(
-  cx: number,
-  cy: number,
-  outer: number,
-  inner: number,
-  startAngle: number,
-  endAngle: number,
-): string {
-  // Clamp a full circle slightly so start != end (SVG arc degenerates at 360).
-  const sweep = Math.min(endAngle - startAngle, 359.999);
-  const end = startAngle + sweep;
-  const [ox1, oy1] = polarToCartesian(cx, cy, outer, startAngle);
-  const [ox2, oy2] = polarToCartesian(cx, cy, outer, end);
-  const [ix2, iy2] = polarToCartesian(cx, cy, inner, end);
-  const [ix1, iy1] = polarToCartesian(cx, cy, inner, startAngle);
-  const largeArc = sweep > 180 ? 1 : 0;
-  return [
-    `M ${ox1} ${oy1}`,
-    `A ${outer} ${outer} 0 ${largeArc} 1 ${ox2} ${oy2}`,
-    `L ${ix2} ${iy2}`,
-    `A ${inner} ${inner} 0 ${largeArc} 0 ${ix1} ${iy1}`,
-    "Z",
-  ].join(" ");
+const FALLBACK_COLOR = "#9ca3af";
+
+type ScaleTickStyle = CSSProperties & { readonly "--ptc-scale-y": string };
+type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
+
+function windowDayCount(window: TeamProjectsWindow): number {
+  const start = Date.parse(`${window.start_date}T00:00:00Z`);
+  const end = Date.parse(`${window.end_date}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 1;
+  return Math.round((end - start) / 86_400_000) + 1;
 }
 
-function MixDonut({ slices, total }: { readonly slices: readonly DonutSlice[]; readonly total: number }): JSX.Element {
-  const size = 160;
-  const cx = size / 2;
-  const cy = size / 2;
-  const outer = 72;
-  const inner = 46;
-
-  let cursor = 0;
-  const arcs = slices.map((slice) => {
-    const start = cursor * 360;
-    cursor += slice.fraction;
-    const end = cursor * 360;
-    return (
-      <path
-        key={slice.id}
-        d={arcPath(cx, cy, outer, inner, start, end)}
-        fill={slice.color}
-        stroke="var(--surface-strong)"
-        strokeWidth={1}
-      />
-    );
-  });
-
-  return (
-    <svg
-      className="tpj-donut"
-      viewBox={`0 0 ${size} ${size}`}
-      role="img"
-      aria-label="Team project mix donut chart"
-    >
-      {arcs}
-      <text
-        className="tpj-donut-center"
-        x={cx}
-        y={cy - 2}
-        textAnchor="middle"
-        fontSize={13}
-        fontWeight={640}
-      >
-        {formatSeconds(total)}
-      </text>
-      <text
-        className="tpj-donut-center-sub"
-        x={cx}
-        y={cy + 13}
-        textAnchor="middle"
-        fontSize={8}
-        letterSpacing={1.4}
-      >
-        SHARED
-      </text>
-    </svg>
-  );
+function initialsFor(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
+  const initials = parts.map((part) => part[0]!.toUpperCase()).join("");
+  return initials || "?";
 }
 
-// ---- Trend chart ----
+/**
+ * Shared-project dashboards: Team mix ranked bars, the over-time stacked area,
+ * window totals, and the per-member split. The member split intentionally shows
+ * percentages only — published per-project totals stay aggregate, and nothing
+ * here renders another member's absolute hours.
+ */
+export function TeamDashboardsView({
+  window: timeWindow,
+  projects,
+  mix,
+  members,
+  memberCount,
+  memberDisplayName,
+  loading,
+  error,
+  publishNote,
+  onRefresh,
+}: TeamDashboardsViewProps) {
+  const [hover, setHover] = useState<HoverState | null>(null);
 
-type TrendSeries = {
-  readonly id: string;
-  readonly name: string;
-  readonly color: string;
-  readonly values: readonly number[];
-};
+  const trend = useMemo(() => buildTeamTrendModel(mix, timeWindow), [mix, timeWindow]);
+  const { view, slices, totalSeconds } = trend;
+  const hasMix = slices.length > 0 && totalSeconds > 0;
+  const maxSliceSeconds = slices.reduce((max, slice) => Math.max(max, slice.seconds), 0);
 
-function buildLinePath(values: readonly number[], xs: readonly number[], scaleY: (v: number) => number): string {
-  if (values.length === 0) return "";
-  if (values.length === 1) {
-    const y = scaleY(values[0]);
-    // A tiny horizontal stub so a single point is still visible.
-    return `M ${xs[0] - 3} ${y} L ${xs[0] + 3} ${y}`;
-  }
-  return values
-    .map((value, index) => `${index === 0 ? "M" : "L"} ${xs[index]} ${scaleY(value)}`)
-    .join(" ");
-}
+  const colorByProjectId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const project of projects) map.set(project.id, project.color);
+    for (const slice of slices) if (!map.has(slice.projectId)) map.set(slice.projectId, slice.color);
+    return map;
+  }, [projects, slices]);
 
-function TrendChart({
-  dates,
-  series,
-  maxValue,
-}: {
-  readonly dates: readonly string[];
-  readonly series: readonly TrendSeries[];
-  readonly maxValue: number;
-}): JSX.Element {
-  const width = 560;
-  const height = 200;
-  const padLeft = 8;
-  const padRight = 8;
-  const padTop = 12;
-  const padBottom = 24;
-  const plotW = width - padLeft - padRight;
-  const plotH = height - padTop - padBottom;
-
-  const denom = Math.max(dates.length - 1, 1);
-  const xs = dates.map((_, index) =>
-    dates.length === 1 ? padLeft + plotW / 2 : padLeft + (plotW * index) / denom,
-  );
-
-  const safeMax = maxValue > 0 ? maxValue : 1;
-  const scaleY = (value: number) => padTop + plotH - (plotH * value) / safeMax;
-
-  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-    const y = padTop + plotH - plotH * ratio;
-    return <line key={ratio} className="tpj-trend-grid" x1={padLeft} y1={y} x2={width - padRight} y2={y} />;
-  });
-
-  // Pick a few x labels: first, last, and a couple between.
-  const labelIndices = new Set<number>();
-  if (dates.length > 0) {
-    labelIndices.add(0);
-    labelIndices.add(dates.length - 1);
-    if (dates.length > 2) labelIndices.add(Math.floor((dates.length - 1) / 3));
-    if (dates.length > 3) labelIndices.add(Math.floor((2 * (dates.length - 1)) / 3));
-  }
-
-  const xLabels = dates.map((date, index) => {
-    if (!labelIndices.has(index)) return null;
-    const anchor = index === 0 ? "start" : index === dates.length - 1 ? "end" : "middle";
-    return (
-      <text
-        key={date + index}
-        className="tpj-trend-axis"
-        x={xs[index]}
-        y={height - 8}
-        textAnchor={anchor}
-      >
-        {date.slice(5)}
-      </text>
-    );
-  });
-
-  return (
-    <svg
-      className="tpj-trend"
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      role="img"
-      aria-label="Team project time over the window"
-    >
-      {gridLines}
-      {series.map((line) => (
-        <path
-          key={line.id}
-          className="tpj-trend-line"
-          d={buildLinePath(line.values, xs, scaleY)}
-          stroke={line.color}
-        />
-      ))}
-      {xLabels}
-    </svg>
-  );
-}
-
-function TeamDashboardsView(props: TeamDashboardsViewProps): JSX.Element {
-  const {
-    teamName,
-    window: windowRange,
-    projects,
-    mix,
-    members,
-    loading,
-    error,
-    actionError,
-    publishing,
-    publishNote,
-    onPublishMyTime,
-    onStopSharing,
-    onRefresh,
-  } = props;
-
-  const meta = useProjectMeta(projects, mix);
-
-  // ---- Aggregate mix by project ----
-  const { slices, grandTotal } = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const row of mix) {
-      totals.set(
-        row.organization_project_id,
-        (totals.get(row.organization_project_id) ?? 0) + Math.max(0, row.seconds),
-      );
-    }
-    const total = Array.from(totals.values()).reduce((sum, value) => sum + value, 0);
-    const built: DonutSlice[] = Array.from(totals.entries())
-      .map(([id, seconds]) => ({
-        id,
-        name: nameFor(meta, id, ""),
-        color: colorFor(meta, id),
-        seconds,
-        fraction: total > 0 ? seconds / total : 0,
-      }))
-      .filter((slice) => slice.seconds > 0)
-      .sort((a, b) => b.seconds - a.seconds);
-    return { slices: built, grandTotal: total };
-  }, [mix, meta]);
-
-  // ---- Trend series ----
-  const { dates, series, maxDaily } = useMemo(() => {
-    const dateSet = new Set<string>();
-    for (const row of mix) dateSet.add(row.activity_date);
-    const sortedDates = Array.from(dateSet).sort();
-    const dateIndex = new Map(sortedDates.map((date, index) => [date, index] as const));
-
-    const perProject = new Map<string, number[]>();
-    for (const row of mix) {
-      let arr = perProject.get(row.organization_project_id);
-      if (!arr) {
-        arr = new Array<number>(sortedDates.length).fill(0);
-        perProject.set(row.organization_project_id, arr);
-      }
-      const idx = dateIndex.get(row.activity_date);
-      if (idx !== undefined) arr[idx] += Math.max(0, row.seconds);
-    }
-
-    let max = 0;
-    for (const arr of perProject.values()) {
-      for (const value of arr) if (value > max) max = value;
-    }
-
-    const built: TrendSeries[] = Array.from(perProject.entries())
-      .map(([id, values]) => ({
-        id,
-        name: nameFor(meta, id, ""),
-        color: colorFor(meta, id),
-        values,
-      }))
-      .sort((a, b) => {
-        const sumA = a.values.reduce((s, v) => s + v, 0);
-        const sumB = b.values.reduce((s, v) => s + v, 0);
-        return sumB - sumA;
-      });
-
-    return { dates: sortedDates, series: built, maxDaily: max };
-  }, [mix, meta]);
-
-  // ---- Member breakdown ----
-  const memberRows = useMemo(() => {
-    type MemberAgg = { name: string; total: number; segments: Map<string, number> };
-    const byMember = new Map<string, MemberAgg>();
+  const memberRows = useMemo<readonly MemberBarRow[]>(() => {
+    const activeProjectIds = new Set(projects.filter((project) => project.status === "active").map((project) => project.id));
+    for (const slice of slices) activeProjectIds.add(slice.projectId);
+    const nameByProjectId = new Map<string, string>();
+    const byMember = new Map<string, Map<string, number>>();
     for (const row of members) {
-      let agg = byMember.get(row.member_display_name);
-      if (!agg) {
-        agg = { name: row.member_display_name, total: 0, segments: new Map() };
-        byMember.set(row.member_display_name, agg);
-      }
-      const seconds = Math.max(0, row.seconds);
-      agg.total += seconds;
-      agg.segments.set(
-        row.organization_project_id,
-        (agg.segments.get(row.organization_project_id) ?? 0) + seconds,
-      );
+      if (!activeProjectIds.has(row.organization_project_id)) continue;
+      const seconds = Number.isFinite(row.seconds) ? Math.max(0, row.seconds) : 0;
+      if (seconds <= 0) continue;
+      nameByProjectId.set(row.organization_project_id, row.project_name);
+      const bucket = byMember.get(row.member_display_name) ?? new Map<string, number>();
+      bucket.set(row.organization_project_id, (bucket.get(row.organization_project_id) ?? 0) + seconds);
+      byMember.set(row.member_display_name, bucket);
     }
-    return Array.from(byMember.values())
-      .map((agg) => ({
-        name: agg.name,
-        total: agg.total,
-        segments: Array.from(agg.segments.entries())
-          .map(([id, seconds]) => ({
-            id,
-            color: colorFor(meta, id),
-            name: nameFor(meta, id, ""),
-            seconds,
-            pct: agg.total > 0 ? (seconds / agg.total) * 100 : 0,
-          }))
-          .sort((a, b) => b.seconds - a.seconds),
-      }))
-      .sort((a, b) => b.total - a.total);
-  }, [members, meta]);
+    return [...byMember.entries()]
+      .map(([name, bucket]) => {
+        const total = [...bucket.values()].reduce((sum, seconds) => sum + seconds, 0);
+        const segments = [...bucket.entries()]
+          .sort((left, right) => right[1] - left[1])
+          .map(([projectId, seconds]) => {
+            const pct = total > 0 ? (seconds / total) * 100 : 0;
+            const projectName = nameByProjectId.get(projectId) ?? "Project";
+            return {
+              projectId,
+              color: colorByProjectId.get(projectId) ?? FALLBACK_COLOR,
+              pct,
+              label: pct >= 9 ? `${Math.round(pct)}%` : "",
+              title: `${projectName} · ${Math.round(pct)}%`,
+            };
+          });
+        return { name, isYou: name === memberDisplayName, totalSeconds: total, segments };
+      })
+      .sort((left, right) => right.totalSeconds - left.totalSeconds || left.name.localeCompare(right.name));
+  }, [colorByProjectId, memberDisplayName, members, projects, slices]);
 
-  const hasMix = slices.length > 0 && grandTotal > 0;
-  const showLoadingMix = loading && !hasMix;
+  const dayCount = windowDayCount(timeWindow);
+  const windowShortLabel = dayCount <= 1 ? "Today" : `${dayCount} days`;
+  const sharingLabel = memberCount > 0 ? `${memberRows.length} of ${memberCount}` : `${memberRows.length}`;
+  const activeProjectCount = projects.filter((project) => project.status === "active").length;
+  const { left, right, top, bottom } = view.bounds;
+
+  function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
+    const labelByKey = new Map(view.series.map((item) => [item.key, item.label]));
+    setHover({
+      dayLabel: formatDayLabel(column.day),
+      totalLabel: column.segments.length === 0 ? "No shared time" : formatCompactDurationFromSeconds(column.totalSeconds),
+      rows: column.segments.map((segment) => ({
+        key: segment.key,
+        label: labelByKey.get(segment.key) ?? "Project",
+        color: segment.color,
+        durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+      })),
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
 
   return (
-    <div className="tpj-root">
-      {/* Header */}
-      <div className="tpj-head">
-        <div className="tpj-head-titles">
-          <span className="tpj-head-team">{teamName}</span>
-          <h2 className="tpj-head-title">Shared project dashboards</h2>
-          <span className="tpj-head-window">
-            {windowRange.start_date} – {windowRange.end_date}
-          </span>
+    <section className="team-data-panel team-grid" aria-label="Shared project dashboards">
+      <div className="team-dash-section team-card team-card--side editorial-panel editorial-panel--soft insight-chart-panel" aria-labelledby="team-mix-heading">
+        <div className="insight-panel-head">
+          <span className="label-mono" id="team-mix-heading">Team mix</span>
         </div>
-        <div className="tpj-head-actions">
-          <button
-            type="button"
-            className="tpj-btn tpj-btn--accent"
-            onClick={onPublishMyTime}
-            disabled={publishing}
-            aria-label="Share my project time with the team"
-          >
-            {publishing ? "Sharing…" : "Share my time"}
-          </button>
-          <button
-            type="button"
-            className="tpj-btn tpj-btn--ghost"
-            onClick={onStopSharing}
-            aria-label="Stop sharing my project time"
-          >
-            Stop sharing
-          </button>
-          <button
-            type="button"
-            className="tpj-btn"
-            onClick={onRefresh}
-            aria-label="Refresh team dashboards"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
 
-      {publishNote ? <p className="tpj-muted">{publishNote}</p> : null}
-      {actionError ? <p className="tpj-warn">{actionError}</p> : null}
-      {error ? <p className="tpj-warn">{error}</p> : null}
+        {publishNote ? (
+          <p className="team-pubnote">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+            {publishNote}
+          </p>
+        ) : null}
 
-      {/* Team mix */}
-      <section className="tpj-panel" aria-label="Team mix">
-        <h3 className="tpj-section-title">Team mix</h3>
-        {showLoadingMix ? (
-          <div className="tpj-loading" style={{ height: "10rem" }} />
-        ) : hasMix ? (
-          <div className="tpj-mix">
-            <MixDonut slices={slices} total={grandTotal} />
-            <div className="tpj-legend">
-              {slices.map((slice) => {
-                const pct = grandTotal > 0 ? Math.round((slice.seconds / grandTotal) * 100) : 0;
-                return (
-                  <div className="tpj-legend-row" key={slice.id}>
-                    <span className="tpj-legend-swatch" style={{ background: slice.color }} />
-                    <span className="tpj-legend-name">{slice.name || "Untitled project"}</span>
-                    <span className="tpj-legend-meta">
-                      {formatSecondsLong(slice.seconds)} ({pct}%)
+        {hasMix ? (
+          <div className="team-rank">
+            {slices.map((slice) => {
+              const pct = totalSeconds > 0 ? Math.round((slice.seconds / totalSeconds) * 100) : 0;
+              const barWidth = maxSliceSeconds > 0 ? (slice.seconds / maxSliceSeconds) * 100 : 0;
+              return (
+                <div className="team-rank-row" key={slice.projectId} title={`${slice.name} · ${formatCompactDurationFromSeconds(slice.seconds)} (${pct}%)`}>
+                  <div className="team-rank-meta">
+                    <span className="team-rank-name">
+                      <span className="team-legend-swatch" style={{ background: slice.color }} />
+                      {slice.name}
+                    </span>
+                    <span className="team-rank-val">
+                      <b>{formatCompactDurationFromSeconds(slice.seconds)}</b>
+                      <span>{pct}%</span>
                     </span>
                   </div>
-                );
-              })}
-            </div>
+                  <span className="team-rank-track">
+                    <span className="team-rank-fill" style={{ width: `${Math.max(barWidth, 3)}%`, background: slice.color }} />
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <div className="tpj-empty">No shared project time yet — click Share my time.</div>
+          <div className="team-empty">
+            {loading ? "Loading shared time…" : "No shared project time yet — define shared projects, then share your time from Team settings."}
+          </div>
         )}
-      </section>
+      </div>
 
-      {/* Over time */}
-      <section className="tpj-panel" aria-label="Over time">
-        <h3 className="tpj-section-title">Over time</h3>
-        {showLoadingMix ? (
-          <div className="tpj-loading" style={{ height: "12rem" }} />
-        ) : hasMix ? (
-          <div>
-            <TrendChart dates={dates} series={series} maxValue={maxDaily} />
-            <div className="tpj-legend" style={{ marginTop: "0.6rem", gridAutoFlow: "column", gridAutoColumns: "max-content" }}>
-              {series.slice(0, 6).map((line) => (
-                <div className="tpj-legend-row" key={line.id} style={{ gap: "0.4rem" }}>
-                  <span className="tpj-legend-swatch" style={{ background: line.color }} />
-                  <span className="tpj-legend-name">{line.name || "Untitled project"}</span>
-                </div>
+      <div className="team-dash-section team-card team-card--chart editorial-panel editorial-panel--soft insight-chart-panel ptc-panel" aria-labelledby="team-trend-heading">
+        <div className="insight-panel-head">
+          <span className="label-mono" id="team-trend-heading">Shared time &middot; {view.spanLabel}</span>
+          <div className="insight-panel-head__legend">
+            {slices.slice(0, 6).map((slice) => (
+              <span className="chip ptc-chip" key={slice.projectId}>
+                <span className="sw" style={{ background: slice.color }} />
+                {slice.name}
+              </span>
+            ))}
+          </div>
+        </div>
+        {hasMix ? (
+          <div className="ptc-chart">
+            <div className="ptc-plot">
+              <svg
+                className="ptc-svg"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label="Stacked shared project time by day"
+              >
+                <path className="ptc-grid" d={view.gridPath} />
+                <g className="ptc-areas">
+                  {view.areaBands.map((band) => (
+                    <path className="ptc-area" d={band.areaPath} fill={band.color} key={`area-${band.key}`} />
+                  ))}
+                </g>
+                <g className="ptc-lines">
+                  {view.areaBands.map((band) => (
+                    <path className="ptc-line" d={band.linePath} stroke={band.color} key={`line-${band.key}`} />
+                  ))}
+                </g>
+                <g className="ptc-hits">
+                  {view.columns.map((column, index) => {
+                    const previous = view.columns[index - 1];
+                    const next = view.columns[index + 1];
+                    const x0 = previous ? (previous.x + column.x) / 2 : left;
+                    const x1 = next ? (column.x + next.x) / 2 : right;
+                    return (
+                      <rect
+                        className="ptc-hit"
+                        x={x0}
+                        y={top}
+                        width={Math.max(0, x1 - x0)}
+                        height={bottom - top}
+                        key={column.day}
+                        onMouseEnter={(event) => showHover(column, event)}
+                        onMouseMove={(event) => showHover(column, event)}
+                        onMouseLeave={() => setHover(null)}
+                      />
+                    );
+                  })}
+                </g>
+              </svg>
+              <div className="ptc-scale" aria-hidden="true">
+                {view.yAxis.map((tick) => (
+                  <span style={{ "--ptc-scale-y": `${tick.y}%` } as ScaleTickStyle} key={tick.label}>{tick.label}</span>
+                ))}
+              </div>
+            </div>
+            <div className="ptc-axis" aria-hidden="true">
+              {view.axisTicks.map((tick) => (
+                <span style={{ "--ptc-axis-x": `${tick.x}%` } as AxisTickStyle} key={tick.id}>{tick.label}</span>
               ))}
             </div>
           </div>
         ) : (
-          <div className="tpj-empty">No timeline yet — shared time appears here once members share.</div>
+          <div className="team-empty">No timeline yet — shared time appears here once members share.</div>
         )}
-      </section>
+      </div>
 
-      {/* By member */}
-      <section className="tpj-panel" aria-label="By member">
-        <h3 className="tpj-section-title">By member</h3>
-        {memberRows.length > 0 ? (
-          <div className="tpj-members">
+      <div className="team-dash-section team-card team-card--stats editorial-panel editorial-panel--soft insight-chart-panel" aria-label="Team totals">
+        <div className="insight-panel-head">
+          <span className="label-mono">Totals</span>
+          <button type="button" className="ghost-button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+        <div className="team-stats-stack">
+          <div className="team-stat team-stat--lead">
+            <span className="label-mono">Shared · {windowShortLabel}</span>
+            <strong>{formatCompactDurationFromSeconds(totalSeconds)}</strong>
+          </div>
+          <div className="team-stat">
+            <span className="label-mono">Active projects</span>
+            <strong>{activeProjectCount}</strong>
+          </div>
+          <div className="team-stat">
+            <span className="label-mono">Sharing</span>
+            <strong>{sharingLabel}</strong>
+          </div>
+        </div>
+        {error ? <p className="team-message team-message--error">{error}</p> : null}
+      </div>
+
+      <div className="team-dash-section team-card team-card--members editorial-panel editorial-panel--soft insight-chart-panel" aria-labelledby="team-members-heading">
+        <div className="insight-panel-head">
+          <span className="label-mono" id="team-members-heading">By member</span>
+        </div>
+        {memberRows.length === 0 ? (
+          <div className="team-empty">No member breakdown yet.</div>
+        ) : (
+          <div className="team-members">
             {memberRows.map((member) => (
-              <div className="tpj-member" key={member.name}>
-                <div className="tpj-member-head">
-                  <span className="tpj-member-name">{member.name}</span>
-                  <span className="tpj-member-total">{formatSeconds(member.total)}</span>
-                </div>
-                <div
-                  className="tpj-member-bar"
-                  role="img"
-                  aria-label={`${member.name} project split`}
-                >
+              <div className="team-member" key={member.name}>
+                <span className="team-member__avatar" aria-hidden="true">{initialsFor(member.name)}</span>
+                <span className="team-member__name">
+                  <strong>{member.name}</strong>
+                  {member.isYou ? <span className="team-you-chip">You</span> : null}
+                </span>
+                <div className="team-member__bar" role="img" aria-label={`${member.name} project split`}>
                   {member.segments.map((segment) => (
                     <span
-                      key={segment.id}
-                      className="tpj-member-seg"
+                      className="team-member__seg"
                       style={{ width: `${segment.pct}%`, background: segment.color }}
-                      title={`${segment.name || "Untitled"} · ${formatSeconds(segment.seconds)}`}
-                    />
+                      title={segment.title}
+                      key={segment.projectId}
+                    >
+                      <span className="team-member__seg-label">{segment.label}</span>
+                    </span>
                   ))}
                 </div>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="tpj-empty">No member breakdown yet.</div>
         )}
-      </section>
-    </div>
+      </div>
+
+      {hover ? (
+        <div className="ptc-tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="presentation">
+          <div className="ptc-tooltip__head">
+            <span className="ptc-tooltip__day">{hover.dayLabel}</span>
+            <span className="ptc-tooltip__total">{hover.totalLabel}</span>
+          </div>
+          {hover.rows.length > 0 ? (
+            <ul className="ptc-tooltip__rows">
+              {hover.rows.map((row) => (
+                <li className="ptc-tooltip__row" key={row.key}>
+                  <span className="ptc-tooltip__dot" style={{ background: row.color }} aria-hidden="true" />
+                  <span className="ptc-tooltip__name">{row.label}</span>
+                  <span className="ptc-tooltip__dur">{row.durationLabel}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

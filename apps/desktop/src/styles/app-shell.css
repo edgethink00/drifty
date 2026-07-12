@@ -307,11 +307,23 @@
   height: 100vh;
   margin-top: calc(-1 * var(--window-chrome-height));
   overflow-x: hidden;
-  overflow-y: auto;
+  /* Scrolling happens inside .sidebar-scroll; the tracker pill + account foot stay pinned. */
+  overflow-y: hidden;
   transition:
     padding var(--sidebar-duration) var(--sidebar-ease),
     background var(--transition-base),
     border-color var(--transition-base);
+}
+
+/* Upper rail (labels + navs) scrolls on its own so the foot never moves. */
+.sidebar-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) .sidebar {

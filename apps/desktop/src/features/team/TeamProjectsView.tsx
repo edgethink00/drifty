@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import type { TeamProject, TeamProjectAnchor } from "./teamTypes";
-import "./team-projects.css";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { SettingsSelect } from "../settings/SettingsSelect";
+import { TeamProjectDetailView } from "./TeamProjectDetailView";
+import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
+import type { TeamProjectsWindow } from "./useTeamProjects";
 
 export type TeamProjectDraft = {
   readonly name: string;
@@ -12,6 +16,10 @@ export type TeamProjectDraft = {
 export type TeamProjectsViewProps = {
   readonly teamName: string;
   readonly projects: readonly TeamProject[];
+  readonly mix: readonly TeamProjectMixRow[];
+  readonly members: readonly TeamProjectMemberRow[];
+  readonly memberDisplayName: string | null;
+  readonly window: TeamProjectsWindow;
   readonly loading: boolean;
   readonly error: string | null;
   readonly actionError: string | null;
@@ -27,101 +35,20 @@ export type TeamProjectsViewProps = {
   readonly onArchive: (projectId: string, archived: boolean) => void;
 };
 
-const COLOR_PRESETS = [
-  "#6f9a4b",
-  "#c98a3c",
-  "#4c86b5",
-  "#a05fb0",
-  "#c25f6e",
-  "#4fa6a0",
-  "#b7953d",
-  "#7f7bce",
+const COLOR_SWATCHES = [
+  { color: "#6366f1", name: "Indigo" },
+  { color: "#ec4899", name: "Pink" },
+  { color: "#f59e0b", name: "Amber" },
+  { color: "#10b981", name: "Emerald" },
+  { color: "#3b82f6", name: "Blue" },
+  { color: "#8b5cf6", name: "Violet" },
+  { color: "#ef4444", name: "Red" },
+  { color: "#14b8a6", name: "Teal" },
+  { color: "#f97316", name: "Orange" },
+  { color: "#84cc16", name: "Lime" },
 ] as const;
 
-const ANCHOR_KINDS = ["app", "domain", "keyword"] as const;
-type AnchorKind = (typeof ANCHOR_KINDS)[number];
-
-type AnchorRow = { readonly kind: AnchorKind; readonly value: string };
-
-// ---- Icons ----
-
-function PencilIcon(): JSX.Element {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M11.3 2.3a1 1 0 0 1 1.4 0l1 1a1 1 0 0 1 0 1.4L6 13.4l-3 .6.6-3 7.7-8.7Z"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ArchiveBoxIcon(): JSX.Element {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="2" y="4.5" width="12" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M1.5 3.5h13v2h-13z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <path d="M6.5 8h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CaretIcon({ open }: { readonly open: boolean }): JSX.Element {
-  return (
-    <svg
-      className={`tpj-archived-caret${open ? " tpj-archived-caret--open" : ""}`}
-      width="10"
-      height="10"
-      viewBox="0 0 10 10"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path d="M3 1l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// ---- Anchor summary chips ----
-
-function AnchorSummary({ anchors }: { readonly anchors: readonly TeamProjectAnchor[] }): JSX.Element | null {
-  const grouped = useMemo(() => {
-    const map = new Map<AnchorKind, string[]>();
-    for (const anchor of anchors) {
-      const kind = anchor.kind as AnchorKind;
-      const list = map.get(kind) ?? [];
-      list.push(anchor.value);
-      map.set(kind, list);
-    }
-    return ANCHOR_KINDS.map((kind) => ({ kind, values: map.get(kind) ?? [] })).filter(
-      (group) => group.values.length > 0,
-    );
-  }, [anchors]);
-
-  if (anchors.length === 0) {
-    return <span className="tpj-muted">No signals yet</span>;
-  }
-
-  return (
-    <div style={{ display: "grid", gap: "0.4rem" }}>
-      {grouped.map((group) => (
-        <div className="tpj-anchor-group" key={group.kind}>
-          <span className="tpj-anchor-kind">{group.kind}</span>
-          <div className="tpj-chips">
-            {group.values.map((value, index) => (
-              <span className="tpj-chip" key={`${group.kind}-${index}`}>
-                {value}
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ---- Editor modal ----
+type StatusFilter = "all" | "active" | "archived";
 
 type EditorState = {
   readonly mode: "create" | "edit";
@@ -130,6 +57,7 @@ type EditorState = {
 
 function ProjectEditorModal({
   state,
+  teamName,
   actionLoading,
   actionError,
   onClose,
@@ -137,358 +65,399 @@ function ProjectEditorModal({
   onUpdate,
 }: {
   readonly state: EditorState;
+  readonly teamName: string;
   readonly actionLoading: boolean;
   readonly actionError: string | null;
   readonly onClose: () => void;
   readonly onCreate: TeamProjectsViewProps["onCreate"];
   readonly onUpdate: TeamProjectsViewProps["onUpdate"];
 }): JSX.Element {
-  const editing = state.mode === "edit" ? state.project : null;
-
-  const [name, setName] = useState(editing?.name ?? "");
-  const [description, setDescription] = useState(editing?.description ?? "");
-  const [color, setColor] = useState<string>(editing?.color ?? COLOR_PRESETS[0]);
-  const [anchors, setAnchors] = useState<AnchorRow[]>(
-    editing
-      ? editing.anchors.map((anchor) => ({ kind: anchor.kind as AnchorKind, value: anchor.value }))
-      : [],
-  );
+  const project = state.project;
+  const [name, setName] = useState(project?.name ?? "");
+  const [description, setDescription] = useState(project?.description ?? "");
+  const [color, setColor] = useState(project?.color || COLOR_SWATCHES[0].color);
+  const [colorOpen, setColorOpen] = useState(false);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const trimmedName = name.trim();
-  const canSave = trimmedName.length > 0 && !actionLoading;
+  const colorName = COLOR_SWATCHES.find((swatch) => swatch.color === color)?.name ?? "Custom";
 
-  const updateAnchor = (index: number, patch: Partial<AnchorRow>) => {
-    setAnchors((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  };
-
-  const removeAnchor = (index: number) => {
-    setAnchors((rows) => rows.filter((_, i) => i !== index));
-  };
-
-  const addAnchor = () => {
-    setAnchors((rows) => [...rows, { kind: "app", value: "" }]);
-  };
-
-  const handleSave = () => {
-    if (!canSave) return;
-    const cleanAnchors: TeamProjectAnchor[] = anchors
-      .map((row) => ({ kind: row.kind, value: row.value.trim() }))
-      .filter((row) => row.value.length > 0);
-    const trimmedDescription = description.trim();
-
-    if (state.mode === "edit" && editing) {
-      onUpdate({
-        project_id: editing.id,
-        name: trimmedName,
-        description: trimmedDescription.length > 0 ? trimmedDescription : null,
-        color,
-        anchors: cleanAnchors,
-      });
+  // The editor is deliberately signal-free — the description is the project's
+  // definition. Signals keep whatever the project already has (harvested/auto).
+  const submit = () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    if (state.mode === "edit" && project) {
+      onUpdate({ project_id: project.id, name: trimmedName, description: description.trim(), color, anchors: project.anchors });
     } else {
-      onCreate({
-        name: trimmedName,
-        description: trimmedDescription.length > 0 ? trimmedDescription : null,
-        color,
-        anchors: cleanAnchors,
-      });
+      onCreate({ name: trimmedName, description: description.trim(), color });
     }
-    onClose();
   };
 
   return (
-    <div
-      className="tpj-modal-overlay"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="tpj-modal"
+    <div className="auth-modal__overlay" onClick={onClose}>
+      <section
+        className="auth-modal profile-modal team-modal team-editor-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={state.mode === "edit" ? "Edit project" : "New project"}
+        aria-labelledby="team-editor-title"
+        onClick={(event) => event.stopPropagation()}
       >
-        <h3 className="tpj-modal-title">{state.mode === "edit" ? "Edit project" : "New project"}</h3>
-
-        {actionError ? <p className="tpj-warn">{actionError}</p> : null}
-
-        <div className="tpj-field">
-          <label className="tpj-label" htmlFor="tpj-name">
-            Name
-          </label>
-          <input
-            id="tpj-name"
-            className="tpj-input"
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="e.g. Q3 launch"
-            autoFocus
-          />
-        </div>
-
-        <div className="tpj-field">
-          <label className="tpj-label" htmlFor="tpj-desc">
-            Description
-          </label>
-          <textarea
-            id="tpj-desc"
-            className="tpj-textarea"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="What counts toward this project?"
-          />
-        </div>
-
-        <div className="tpj-field">
-          <span className="tpj-label">Color</span>
-          <div className="tpj-swatches" role="radiogroup" aria-label="Project color">
-            {COLOR_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className={`tpj-swatch${color === preset ? " tpj-swatch--selected" : ""}`}
-                style={{ background: preset }}
-                onClick={() => setColor(preset)}
-                role="radio"
-                aria-checked={color === preset}
-                aria-label={`Color ${preset}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="tpj-field">
-          <span className="tpj-label">Signals</span>
-          <div className="tpj-anchor-rows">
-            {anchors.map((row, index) => (
-              <div className="tpj-anchor-row" key={index}>
-                <select
-                  className="tpj-select"
-                  value={row.kind}
-                  onChange={(event) => updateAnchor(index, { kind: event.target.value as AnchorKind })}
-                  aria-label={`Signal ${index + 1} kind`}
-                >
-                  {ANCHOR_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {kind}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="tpj-input"
-                  type="text"
-                  value={row.value}
-                  onChange={(event) => updateAnchor(index, { value: event.target.value })}
-                  placeholder={row.kind === "domain" ? "figma.com" : row.kind === "app" ? "Figma" : "keyword"}
-                  aria-label={`Signal ${index + 1} value`}
-                />
-                <button
-                  type="button"
-                  className="tpj-icon-btn"
-                  onClick={() => removeAnchor(index)}
-                  aria-label={`Remove signal ${index + 1}`}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            <button type="button" className="tpj-btn tpj-btn--ghost" onClick={addAnchor}>
-              + Add signal
-            </button>
-          </div>
-        </div>
-
-        <div className="tpj-modal-actions">
-          <button
-            type="button"
-            className="tpj-btn tpj-btn--ghost"
-            onClick={onClose}
-            aria-label="Cancel"
-          >
-            Cancel
-          </button>
-          <span className="tpj-spacer" />
-          <button
-            type="button"
-            className="tpj-btn tpj-btn--accent"
-            onClick={handleSave}
-            disabled={!canSave}
-            aria-label="Save project"
-          >
-            {actionLoading ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---- Card ----
-
-function ProjectCard({
-  project,
-  onEdit,
-  onArchive,
-}: {
-  readonly project: TeamProject;
-  readonly onEdit: (project: TeamProject) => void;
-  readonly onArchive: (projectId: string, archived: boolean) => void;
-}): JSX.Element {
-  const swatchColor = project.color && project.color.trim().length > 0 ? project.color : "#9ca3af";
-  return (
-    <div className="tpj-card">
-      <div className="tpj-card-top">
-        <span className="tpj-card-swatch" style={{ background: swatchColor }} />
-        <span className="tpj-card-name">{project.name || "Untitled project"}</span>
-        {project.can_manage ? (
-          <div className="tpj-card-actions">
-            <button
-              type="button"
-              className="tpj-icon-btn"
-              onClick={() => onEdit(project)}
-              aria-label={`Edit ${project.name}`}
-            >
-              <PencilIcon />
-            </button>
-            <button
-              type="button"
-              className="tpj-icon-btn"
-              onClick={() => onArchive(project.id, true)}
-              aria-label={`Archive ${project.name}`}
-            >
-              <ArchiveBoxIcon />
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      {project.description ? <p className="tpj-card-desc">{project.description}</p> : null}
-
-      <AnchorSummary anchors={project.anchors} />
-
-      <div className="tpj-card-foot">
-        <span className="tpj-pill tpj-pill--active">
-          <span className="tpj-pill-dot" />
-          Active
-        </span>
-        <span className="tpj-muted" style={{ fontFamily: "var(--font-mono)", fontSize: "0.66rem" }}>
-          {project.anchors.length} {project.anchors.length === 1 ? "signal" : "signals"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function TeamProjectsView(props: TeamProjectsViewProps): JSX.Element {
-  const { teamName, projects, loading, error, actionError, actionLoading, onCreate, onUpdate, onArchive } = props;
-
-  const [editor, setEditor] = useState<EditorState | null>(null);
-  const [archivedOpen, setArchivedOpen] = useState(false);
-
-  const active = useMemo(() => projects.filter((p) => p.status === "active"), [projects]);
-  const archived = useMemo(() => projects.filter((p) => p.status === "archived"), [projects]);
-
-  const openCreate = () => setEditor({ mode: "create", project: null });
-  const openEdit = (project: TeamProject) => setEditor({ mode: "edit", project });
-  const closeEditor = () => setEditor(null);
-
-  const showEmptyLoading = loading && projects.length === 0;
-
-  return (
-    <div className="tpj-root">
-      <div className="tpj-head">
-        <div className="tpj-head-titles">
-          <span className="tpj-head-team">{teamName}</span>
-          <h2 className="tpj-head-title">Shared projects</h2>
-          <span className="tpj-section-sub">
-            Anyone on the team can add a project. Your Mac matches your own activity to these; only totals are shared.
+        <div className="team-editor-head">
+          <span className="team-editor-head__badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></svg>
           </span>
-        </div>
-      </div>
-
-      {error ? <p className="tpj-warn">{error}</p> : null}
-      {actionError && !editor ? <p className="tpj-warn">{actionError}</p> : null}
-
-      {showEmptyLoading ? (
-        <div className="tpj-grid">
-          <div className="tpj-loading" style={{ height: "8rem" }} />
-          <div className="tpj-loading" style={{ height: "8rem" }} />
-          <div className="tpj-loading" style={{ height: "8rem" }} />
-        </div>
-      ) : (
-        <div className="tpj-grid">
-          <button
-            type="button"
-            className="tpj-card tpj-card--add"
-            onClick={openCreate}
-            aria-label="Create a new project"
-          >
-            <span className="tpj-card-add-plus">＋</span>
-            <span className="tpj-card-add-label">New project</span>
+          <h2 id="team-editor-title" className="team-editor-head__title">
+            <span className="team-editor-head__team">{teamName}</span>
+            <span className="team-editor-head__sep">/</span>
+            {state.mode === "edit" ? "Edit project" : "New shared project"}
+          </h2>
+          <button type="button" className="team-editor-head__x" aria-label="Close project editor" onClick={onClose}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
           </button>
-          {active.map((project) => (
-            <ProjectCard key={project.id} project={project} onEdit={openEdit} onArchive={onArchive} />
-          ))}
         </div>
-      )}
+        <div className="team-modal__body">
+          <div className="team-modal__field">
+            <span className="label-mono">Name</span>
+            <input
+              className="settings-input"
+              type="text"
+              value={name}
+              maxLength={120}
+              autoFocus
+              placeholder="e.g. Q3 launch"
+              aria-label="Project name"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="team-modal__field">
+            <span className="label-mono">Description</span>
+            <textarea
+              className="settings-input"
+              value={description}
+              maxLength={2000}
+              placeholder="What counts toward this project? Drifty matches activity from this."
+              aria-label="Project description"
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+          <div className="team-editor-inline">
+            <div className={`team-pick${colorOpen ? " is-open" : ""}`}>
+              <span className="label-mono">Color</span>
+              <button type="button" className="team-pick__trigger" aria-expanded={colorOpen} onClick={() => setColorOpen((open) => !open)}>
+                <span className="team-pick__swatch" style={{ background: color }} />
+                <span className="team-pick__val">{colorName}</span>
+                <svg className="team-pick__chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
+              </button>
+              {colorOpen ? (
+                <div className="team-pick__pop" role="radiogroup" aria-label="Project color">
+                  {COLOR_SWATCHES.map((swatch) => (
+                    <button
+                      type="button"
+                      className={swatch.color === color ? "team-swatch team-swatch--on" : "team-swatch"}
+                      style={{ background: swatch.color }}
+                      role="radio"
+                      aria-checked={swatch.color === color}
+                      aria-label={`Color ${swatch.name}`}
+                      key={swatch.color}
+                      onClick={() => {
+                        setColor(swatch.color);
+                        setColorOpen(false);
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {actionError ? <p className="team-message team-message--error">{actionError}</p> : null}
+          <div className="team-modal__actions">
+            <button type="button" className="settings-btn settings-btn--primary" disabled={actionLoading || !name.trim()} onClick={submit}>
+              {state.mode === "edit" ? "Save changes" : "Create project"}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
 
-      {archived.length > 0 ? (
-        <div className="tpj-archived">
-          <button
-            type="button"
-            className="tpj-archived-head"
-            onClick={() => setArchivedOpen((open) => !open)}
-            aria-expanded={archivedOpen}
-            aria-label={`${archivedOpen ? "Collapse" : "Expand"} archived projects`}
-          >
-            <CaretIcon open={archivedOpen} />
-            Archived ({archived.length})
+/**
+ * Shared projects table: search + status filter, expandable rows (description +
+ * signal chips), and a per-row menu for edit/archive. Anyone on the team can add
+ * a project; edit/archive respects each project's `can_manage`.
+ */
+export function TeamProjectsView({
+  teamName,
+  projects,
+  mix,
+  members,
+  memberDisplayName,
+  window: timeWindow,
+  loading,
+  error,
+  actionError,
+  actionLoading,
+  onCreate,
+  onUpdate,
+  onArchive,
+}: TeamProjectsViewProps) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const submittedRef = useRef(false);
+
+  const secondsByProjectId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of mix) {
+      const seconds = Number.isFinite(row.seconds) ? Math.max(0, row.seconds) : 0;
+      if (seconds <= 0) continue;
+      map.set(row.organization_project_id, (map.get(row.organization_project_id) ?? 0) + seconds);
+    }
+    return map;
+  }, [mix]);
+
+  const filtered = useMemo(() => {
+    const trimmedQuery = query.trim().toLowerCase();
+    return projects.filter((project) => {
+      if (statusFilter !== "all" && project.status !== statusFilter) return false;
+      if (trimmedQuery && !project.name.toLowerCase().includes(trimmedQuery)) return false;
+      return true;
+    });
+  }, [projects, query, statusFilter]);
+
+  useEffect(() => {
+    if (menuFor === null) return;
+    const onMouseDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest(".pt-menu") || target?.closest(".pt-more")) return;
+      setMenuFor(null);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [menuFor]);
+
+  // Close the editor once its save round-trip finishes without an error.
+  // `projects` is a dependency so a list change also closes it (covers flows
+  // that resolve without a loading cycle, e.g. the QA mock).
+  useEffect(() => {
+    if (!submittedRef.current || actionLoading) return;
+    if (actionError) {
+      submittedRef.current = false;
+      return;
+    }
+    submittedRef.current = false;
+    setEditor(null);
+  }, [actionError, actionLoading, projects]);
+
+  const startCreate = () => setEditor({ mode: "create", project: null });
+  const startEdit = (project: TeamProject) => {
+    setMenuFor(null);
+    setEditor({ mode: "edit", project });
+  };
+
+  const selectedProject = selectedProjectId
+    ? projects.find((project) => project.id === selectedProjectId) ?? null
+    : null;
+  useEffect(() => {
+    if (selectedProjectId && !selectedProject) setSelectedProjectId(null);
+  }, [selectedProjectId, selectedProject]);
+
+  const windowDays = (() => {
+    const start = Date.parse(`${timeWindow.start_date}T00:00:00Z`);
+    const end = Date.parse(`${timeWindow.end_date}T00:00:00Z`);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 1;
+    return Math.round((end - start) / 86_400_000) + 1;
+  })();
+  const totalCaption = windowDays <= 1 ? "Today" : `Last ${windowDays} days`;
+
+  const emptyLabel = projects.length === 0
+    ? loading
+      ? "Loading shared projects…"
+      : "No shared projects yet. Create the first one — the definition syncs to every member's Mac."
+    : "No projects match.";
+
+  if (selectedProject) {
+    return (
+      <section className="team-data-panel" aria-label="Shared projects">
+        <TeamProjectDetailView
+          project={selectedProject}
+          mix={mix}
+          members={members}
+          window={timeWindow}
+          memberDisplayName={memberDisplayName}
+          loading={loading}
+          actionLoading={actionLoading}
+          onBack={() => setSelectedProjectId(null)}
+          onEdit={startEdit}
+          onArchive={onArchive}
+        />
+        {actionError && !editor ? <p className="team-message team-message--error">{actionError}</p> : null}
+        {editor ? (
+          <ProjectEditorModal
+            state={editor}
+            teamName={teamName}
+            actionLoading={actionLoading}
+            actionError={actionError}
+            onClose={() => setEditor(null)}
+            onCreate={(draft) => {
+              submittedRef.current = true;
+              onCreate(draft);
+            }}
+            onUpdate={(input) => {
+              submittedRef.current = true;
+              onUpdate(input);
+            }}
+          />
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="team-data-panel" aria-label="Shared projects">
+      <div className="team-dash-section">
+        <div className="projects-toolbar" aria-label="Shared project filters">
+          <span className="projects-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input
+              className="settings-input"
+              type="text"
+              aria-label="Search project name"
+              placeholder="Search project name…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </span>
+          <SettingsSelect
+            ariaLabel="Filter by status"
+            className="projects-status-filter"
+            value={statusFilter}
+            options={[
+              { value: "all", label: "All statuses" },
+              { value: "active", label: "Active" },
+              { value: "archived", label: "Archived" },
+            ]}
+            onChange={setStatusFilter}
+          />
+          <span className="projects-toolbar__spacer" />
+          <button type="button" className="settings-btn settings-btn--primary" disabled={actionLoading} onClick={startCreate}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            New project
           </button>
-          {archivedOpen
-            ? archived.map((project) => {
-                const swatchColor =
-                  project.color && project.color.trim().length > 0 ? project.color : "#9ca3af";
-                return (
-                  <div className="tpj-archived-row" key={project.id}>
-                    <span className="tpj-card-swatch" style={{ background: swatchColor }} />
-                    <span className="tpj-archived-name">{project.name || "Untitled project"}</span>
+        </div>
+
+        {error ? <p className="team-message team-message--error">{error}</p> : null}
+        {actionError && !editor ? <p className="team-message team-message--error">{actionError}</p> : null}
+
+        <div className="projects-table" role="table" aria-label="Shared projects">
+          <div className="projects-table__head" role="row">
+            <span>Project</span>
+            <span>Status</span>
+            <span>Team time</span>
+            <span />
+          </div>
+          {filtered.map((project) => {
+            const isArchived = project.status === "archived";
+            const totalSeconds = secondsByProjectId.get(project.id) ?? 0;
+            const descShort = project.description.trim() || "No description yet";
+            return (
+              <div
+                className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`}
+                key={project.id}
+              >
+                <div className="projects-table__row" role="row" onClick={() => setSelectedProjectId(project.id)}>
+                  <div className="pt-proj">
+                    <span className="pt-swatch" style={{ background: project.color }} />
+                    <div>
+                      <strong>{project.name || "Untitled project"}</strong>
+                      <small>{descShort}</small>
+                    </div>
+                  </div>
+                  <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
+                  <div className="pt-total">
+                    <small>{totalCaption}</small>
+                    <b>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</b>
+                  </div>
+                  <span className="pt-menu-slot">
                     {project.can_manage ? (
                       <button
                         type="button"
-                        className="tpj-btn"
-                        onClick={() => onArchive(project.id, false)}
-                        aria-label={`Restore ${project.name}`}
+                        className="pt-more"
+                        aria-label={`Options for ${project.name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menuFor === project.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuFor((current) => (current === project.id ? null : project.id));
+                        }}
                       >
-                        Restore
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.4" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="18.6" r="1.7" /></svg>
                       </button>
                     ) : null}
-                  </div>
-                );
-              })
-            : null}
+                    {menuFor === project.id ? (
+                      <div className="pt-menu" role="menu" aria-label="Project options">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startEdit(project);
+                          }}
+                        >
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M11.2 2.8a1.4 1.4 0 0 1 2 2L5.5 12.5l-2.7.7.7-2.7 7.7-7.7Z" /></svg>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={actionLoading}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setMenuFor(null);
+                            onArchive(project.id, !isArchived);
+                          }}
+                        >
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2.2" y="3" width="11.6" height="2.6" rx="0.6" /><path d="M3.2 5.6v6.2a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.6" /><path d="M6.4 8.2h3.2" /></svg>
+                          {isArchived ? "Restore" : "Archive"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {filtered.length === 0 ? <div className="projects-table__empty">{emptyLabel}</div> : null}
         </div>
-      ) : null}
+      </div>
 
       {editor ? (
         <ProjectEditorModal
           state={editor}
+          teamName={teamName}
           actionLoading={actionLoading}
           actionError={actionError}
-          onClose={closeEditor}
-          onCreate={onCreate}
-          onUpdate={onUpdate}
+          onClose={() => setEditor(null)}
+          onCreate={(draft) => {
+            submittedRef.current = true;
+            onCreate(draft);
+          }}
+          onUpdate={(input) => {
+            submittedRef.current = true;
+            onUpdate(input);
+          }}
         />
       ) : null}
-    </div>
+    </section>
   );
 }
 
