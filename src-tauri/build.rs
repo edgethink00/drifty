@@ -22,6 +22,7 @@ fn main() {
             "app_menu_set_dev_mode_checked",
             "developer_check_pre_release_update",
             "developer_install_pre_release_update",
+            "sentry_capture_native_smoke",
             "update_prompt_show_native",
             "tracker_get_status",
             "tracker_start",

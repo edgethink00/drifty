@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sentry-capture-native-smoke"
+description = "Enables the sentry_capture_native_smoke command without any pre-configured scope."
+commands.allow = ["sentry_capture_native_smoke"]
+
+[[permission]]
+identifier = "deny-sentry-capture-native-smoke"
+description = "Denies the sentry_capture_native_smoke command without any pre-configured scope."
+commands.deny = ["sentry_capture_native_smoke"]

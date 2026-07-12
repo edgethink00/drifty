@@ -24,6 +24,7 @@
     "allow-ai-classification-openai-chat",
     "allow-developer-check-pre-release-update",
     "allow-developer-install-pre-release-update",
+    "allow-sentry-capture-native-smoke",
     "allow-tracker-get-status",
     "allow-tracker-start",
     "allow-tracker-stop",
