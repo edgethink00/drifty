@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import subprocess
 
+OSASCRIPT_TIMEOUT_SECONDS = 5.0
+
 
 def read_front_window_title() -> str | None:
     script = """
@@ -15,12 +17,16 @@ def read_front_window_title() -> str | None:
     end tell
     """
 
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=OSASCRIPT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return None
 
     if result.returncode != 0:
         return None

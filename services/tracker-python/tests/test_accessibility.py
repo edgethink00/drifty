@@ -48,6 +48,14 @@ class AccessibilityPermissionTests(unittest.TestCase):
         with patch("app.permissions.accessibility.subprocess.run", return_value=completed):
             self.assertFalse(accessibility_granted())
 
+    def test_accessibility_denied_when_system_events_probe_times_out(self) -> None:
+        with patch(
+            "app.permissions.accessibility.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["osascript"], timeout=5.0),
+        ) as mock_run:
+            self.assertFalse(accessibility_granted())
+        self.assertEqual(mock_run.call_args.kwargs["timeout"], 5.0)
+
 
 if __name__ == "__main__":
     unittest.main()
