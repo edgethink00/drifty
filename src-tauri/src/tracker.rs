@@ -709,25 +709,28 @@ impl TrackerController {
     ) -> Result<T, TrackerError> {
         let runtime = resolve_tracker_runtime(app)?;
         let db_path = resolve_db_path(app);
+        let retry_safety = sidecar_command_retry_safety(command);
 
         let request = json!({
             "command": command,
             "payload": payload,
         });
 
-        // Fast path: reuse a long-lived `serve` process so each query avoids the
-        // ~160ms interpreter/import cold-start (and the contention of spawning
-        // several interpreters at once during a refresh burst). Fall back to a
-        // one-shot invocation if the persistent process is unavailable.
-        let serve_result = if should_use_one_shot_when_serve_busy(command) {
-            serve_request_if_idle(&runtime, &db_path, &request)
-        } else {
-            serve_request(&runtime, &db_path, &request)
-        };
-        let raw = match serve_result {
-            Ok(line) => line.into_bytes(),
-            Err(_) => invoke_one_shot(&runtime, &db_path, &request)?,
-        };
+        // Fast path: reuse a long-lived `serve` process so each request avoids
+        // the ~160ms interpreter/import cold-start (and the contention of
+        // spawning several interpreters at once during a refresh burst).
+        let raw = invoke_with_serve_fallback(
+            retry_safety,
+            || {
+                let serve_result = if should_use_one_shot_when_serve_busy(command) {
+                    serve_request_if_idle(&runtime, &db_path, &request, retry_safety)
+                } else {
+                    serve_request(&runtime, &db_path, &request, retry_safety)
+                };
+                serve_result.map(|line| line.into_bytes())
+            },
+            || invoke_one_shot(&runtime, &db_path, &request),
+        )?;
 
         parse_envelope::<T>(&raw)
     }
@@ -879,6 +882,64 @@ enum ServeLockMode {
     SkipIfBusy,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SidecarCommandRetrySafety {
+    SafeRead,
+    Mutation,
+}
+
+fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
+    // New commands must opt in here only after establishing they are safe to
+    // replay. An unknown command is conservatively treated as a mutation.
+    match command {
+        "get_status"
+        | "get_timeline"
+        | "get_timeline_page"
+        | "search_timeline"
+        | "get_dashboard_week_timeline"
+        | "get_live_tail"
+        | "get_current_snapshot"
+        | "preview_browser_history_import"
+        | "get_browser_history_environment"
+        | "get_sync_outbox"
+        | "get_sync_state"
+        | "get_pending_sync_deletions"
+        | "get_hourly_summary"
+        | "get_raw_events"
+        | "get_top_sites"
+        | "get_unclassified_segments"
+        | "get_reusable_ai_classifications"
+        | "get_classification_rules"
+        | "search_classification_rule_candidates"
+        | "get_projects"
+        | "get_project_assignments"
+        | "get_team_projects"
+        | "get_team_project_assignments"
+        | "get_project_pass_runs"
+        | "get_ai_review_events"
+        | "get_classification_metrics" => SidecarCommandRetrySafety::SafeRead,
+        _ => SidecarCommandRetrySafety::Mutation,
+    }
+}
+
+fn invoke_with_serve_fallback<F, G>(
+    retry_safety: SidecarCommandRetrySafety,
+    serve: F,
+    one_shot: G,
+) -> Result<Vec<u8>, TrackerError>
+where
+    F: FnOnce() -> Result<Vec<u8>, TrackerError>,
+    G: FnOnce() -> Result<Vec<u8>, TrackerError>,
+{
+    match serve() {
+        Ok(raw) => Ok(raw),
+        Err(_) if retry_safety == SidecarCommandRetrySafety::SafeRead => one_shot(),
+        // A failed write/flush or a missing serve response is ambiguous: the
+        // sidecar may have already completed a mutating request.
+        Err(err) => Err(err),
+    }
+}
+
 fn should_use_one_shot_when_serve_busy(command: &str) -> bool {
     command == "get_timeline_page"
 }
@@ -979,22 +1040,31 @@ fn serve_request(
     runtime: &TrackerRuntime,
     db: &Path,
     request: &Value,
+    retry_safety: SidecarCommandRetrySafety,
 ) -> Result<String, TrackerError> {
-    serve_request_with_lock_mode(runtime, db, request, ServeLockMode::Wait)
+    serve_request_with_lock_mode(runtime, db, request, retry_safety, ServeLockMode::Wait)
 }
 
 fn serve_request_if_idle(
     runtime: &TrackerRuntime,
     db: &Path,
     request: &Value,
+    retry_safety: SidecarCommandRetrySafety,
 ) -> Result<String, TrackerError> {
-    serve_request_with_lock_mode(runtime, db, request, ServeLockMode::SkipIfBusy)
+    serve_request_with_lock_mode(
+        runtime,
+        db,
+        request,
+        retry_safety,
+        ServeLockMode::SkipIfBusy,
+    )
 }
 
 fn serve_request_with_lock_mode(
     runtime: &TrackerRuntime,
     db: &Path,
     request: &Value,
+    retry_safety: SidecarCommandRetrySafety,
     lock_mode: ServeLockMode,
 ) -> Result<String, TrackerError> {
     let slot = serve_slot();
@@ -1025,10 +1095,13 @@ fn serve_request_with_lock_mode(
         }
     }
 
-    // Two attempts: the first may discover a dead process (broken pipe), the
-    // second runs against a freshly spawned one.
+    // A retry is safe only for the explicitly whitelisted read commands.
+    let retry_attempts = match retry_safety {
+        SidecarCommandRetrySafety::SafeRead => 2,
+        SidecarCommandRetrySafety::Mutation => 1,
+    };
     let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
-    for _ in 0..2 {
+    for _ in 0..retry_attempts {
         if guard.is_none() {
             *guard = Some(spawn_serve_process(runtime, db)?);
         }
@@ -1667,6 +1740,134 @@ mod tests {
     }
 
     #[test]
+    fn mutating_commands_return_serve_errors_without_one_shot_replay() {
+        for serve_error in [
+            TrackerError::ServeTimedOut(Duration::from_millis(10)),
+            TrackerError::CommandFailed("serve process closed its output".into()),
+        ] {
+            let expected_error = serve_error.to_string();
+            let fallback_invocations = std::cell::Cell::new(0);
+
+            let result = invoke_with_serve_fallback(
+                sidecar_command_retry_safety("save_project"),
+                || Err(serve_error),
+                || {
+                    fallback_invocations.set(fallback_invocations.get() + 1);
+                    Ok(b"one-shot response".to_vec())
+                },
+            );
+
+            assert_eq!(
+                result
+                    .expect_err("mutations must return the serve error")
+                    .to_string(),
+                expected_error
+            );
+            assert_eq!(fallback_invocations.get(), 0);
+        }
+    }
+
+    #[test]
+    fn safe_read_uses_one_shot_fallback_after_serve_failure() {
+        let fallback_invocations = std::cell::Cell::new(0);
+
+        let raw = invoke_with_serve_fallback(
+            sidecar_command_retry_safety("get_status"),
+            || {
+                Err(TrackerError::CommandFailed(
+                    "serve process unavailable".into(),
+                ))
+            },
+            || {
+                fallback_invocations.set(fallback_invocations.get() + 1);
+                Ok(b"one-shot response".to_vec())
+            },
+        )
+        .expect("safe reads use the one-shot fallback");
+
+        assert_eq!(raw, b"one-shot response");
+        assert_eq!(fallback_invocations.get(), 1);
+    }
+
+    #[test]
+    fn retry_policy_whitelists_current_read_commands_and_defaults_to_mutation() {
+        for command in [
+            "get_status",
+            "get_timeline",
+            "get_timeline_page",
+            "search_timeline",
+            "get_dashboard_week_timeline",
+            "get_live_tail",
+            "get_current_snapshot",
+            "preview_browser_history_import",
+            "get_browser_history_environment",
+            "get_sync_outbox",
+            "get_sync_state",
+            "get_pending_sync_deletions",
+            "get_hourly_summary",
+            "get_raw_events",
+            "get_top_sites",
+            "get_unclassified_segments",
+            "get_reusable_ai_classifications",
+            "get_classification_rules",
+            "search_classification_rule_candidates",
+            "get_projects",
+            "get_project_assignments",
+            "get_team_projects",
+            "get_team_project_assignments",
+            "get_project_pass_runs",
+            "get_ai_review_events",
+            "get_classification_metrics",
+        ] {
+            assert_eq!(
+                sidecar_command_retry_safety(command),
+                SidecarCommandRetrySafety::SafeRead,
+                "{command} should retain read fallback"
+            );
+        }
+
+        for command in [
+            "start_tracking",
+            "stop_tracking",
+            "set_developer_diagnostics",
+            "import_browser_history",
+            "set_sync_state",
+            "apply_synced_segments",
+            "mark_sync_deletions_pushed",
+            "apply_synced_deletions",
+            "purge_remote_segments",
+            "save_classification_rule",
+            "delete_classification_rule",
+            "delete_activity_segments",
+            "delete_history_range",
+            "apply_classification_rules",
+            "save_classifications",
+            "refresh_non_ai_classifications",
+            "save_project",
+            "delete_project",
+            "save_project_anchors",
+            "delete_project_anchor",
+            "save_project_assignments",
+            "upsert_team_projects",
+            "save_team_project_assignments",
+            "record_project_pass",
+            "save_ai_review_events",
+            "revert_ai_review_event",
+        ] {
+            assert_eq!(
+                sidecar_command_retry_safety(command),
+                SidecarCommandRetrySafety::Mutation,
+                "{command} must never be replayed"
+            );
+        }
+
+        assert_eq!(
+            sidecar_command_retry_safety("future_command"),
+            SidecarCommandRetrySafety::Mutation
+        );
+    }
+
+    #[test]
     fn dashboard_week_timeline_payload_preserves_range() {
         let payload = build_dashboard_week_timeline_payload(
             Some("2026-04-01T00:00:00".into()),
@@ -1989,9 +2190,9 @@ mod tests {
         let request = json!({ "command": "ping", "payload": {} });
 
         let started = std::time::Instant::now();
-        let hung = serve_request(&runtime, &db, &request);
+        let hung = serve_request(&runtime, &db, &request, SidecarCommandRetrySafety::SafeRead);
         let elapsed = started.elapsed();
-        let respawned = serve_request(&runtime, &db, &request);
+        let respawned = serve_request(&runtime, &db, &request, SidecarCommandRetrySafety::SafeRead);
         std::env::remove_var("DRIFTY_TRACKER_ROUNDTRIP_TIMEOUT_MS");
         shutdown_serve_process();
 

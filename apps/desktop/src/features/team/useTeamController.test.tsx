@@ -2,6 +2,7 @@
 
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { OwnTeam } from "./teamService";
 
 import { fail, makeTeam, ok, pendingInvite, privateTeam, renderController } from "./useTeamControllerTestFixtures";
 
@@ -28,6 +29,14 @@ vi.mock("./teamService", () => ({
   ),
   messageFromTeamError: (value: Error | { readonly message: string }, fallback: string) => value.message || fallback,
 }));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe("useTeamController", () => {
   beforeEach(() => {
@@ -182,6 +191,46 @@ describe("useTeamController", () => {
     expect(hook.result.current.teamError).toBeNull();
     expect(hook.result.current.teamStatusMessage).toBe("Network unavailable");
     expect(hook.result.current.teamStatusTone).toBe("error");
+  });
+
+  it("Given an in-flight team load When the user logs out Then its late result cannot repopulate team state", async () => {
+    // Given
+    const firstRequest = deferred<ReturnType<typeof ok<OwnTeam[]>>>();
+    teamServiceMocks.fetchOwnTeams.mockReturnValueOnce(firstRequest.promise);
+    const { hook, initialProps } = renderController();
+    await waitFor(() => expect(teamServiceMocks.fetchOwnTeams).toHaveBeenCalledTimes(1));
+
+    // When
+    hook.rerender({ ...initialProps, user: null });
+    await act(async () => {
+      firstRequest.resolve(ok([privateTeam]));
+      await firstRequest.promise;
+    });
+
+    // Then
+    expect(hook.result.current.teams).toEqual([]);
+    expect(hook.result.current.selectedTeam).toBeNull();
+  });
+
+  it("Given an in-flight team load for account A When account B becomes active away from Teams Then A's late result cannot populate state", async () => {
+    // Given
+    const firstRequest = deferred<ReturnType<typeof ok<OwnTeam[]>>>();
+    teamServiceMocks.fetchOwnTeams.mockReturnValueOnce(firstRequest.promise);
+    const { hook, initialProps } = renderController();
+    await waitFor(() => expect(teamServiceMocks.fetchOwnTeams).toHaveBeenCalledTimes(1));
+    const userB = { ...initialProps.user!, id: "user-2", email: "blair@example.com" };
+
+    // When
+    hook.rerender({ ...initialProps, activeTab: "dashboard", user: userB });
+    await act(async () => {
+      firstRequest.resolve(ok([makeTeam({ organization_id: "team-a" })]));
+      await firstRequest.promise;
+    });
+
+    // Then
+    expect(teamServiceMocks.fetchOwnTeams).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.teams).toEqual([]);
+    expect(hook.result.current.selectedTeam).toBeNull();
   });
 
   it("Given disabled or insufficient account states When load and actions run Then team services are not called", async () => {

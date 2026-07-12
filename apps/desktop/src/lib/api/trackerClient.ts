@@ -51,6 +51,7 @@ import type {
   TeamProjectInput,
   TeamProjectAssignmentRecord,
   TrackerApi,
+  TrackerClientCommand,
   TrackerLiveTail,
   TrackerStatus,
   TrayIconStyle,
@@ -126,7 +127,7 @@ function emptyBrowserHistoryImportResult(query?: BrowserHistoryImportQuery): Bro
   };
 }
 
-async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
+async function safeInvoke<T>(cmd: TrackerClientCommand, args?: Record<string, unknown>): Promise<T | null> {
   if (!isTauriRuntime()) {
     return null;
   }

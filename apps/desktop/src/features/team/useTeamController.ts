@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { AuthState } from "../auth/AuthContext";
 import { fetchOwnTeams, isTeamErrorMessage, messageFromTeamError, type OwnTeam } from "./teamService";
@@ -36,6 +36,18 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const refreshRequestRef = useRef(0); const hasResolvedOnceRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
   const selectedTeamIdRef = useRef<string | null>(null);
+  const userId = user?.id ?? null;
+  const teamAccessKey = JSON.stringify([isSupabaseConfigured, hasRequiredAccountAuth, userId]);
+  const currentTeamAccessKeyRef = useRef(teamAccessKey);
+  const currentUserIdRef = useRef(userId);
+  const previousTeamAccessKeyRef = useRef(teamAccessKey);
+
+  useLayoutEffect(() => {
+    if (currentTeamAccessKeyRef.current === teamAccessKey) return;
+    currentTeamAccessKeyRef.current = teamAccessKey;
+    currentUserIdRef.current = userId;
+    refreshRequestRef.current += 1;
+  }, [teamAccessKey, userId]);
 
   const canUseTeamServices = isSupabaseConfigured && Boolean(user) && hasRequiredAccountAuth;
   const authRequiredMessage = isEffectiveAuthRequired
@@ -54,6 +66,13 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
   const refreshTeamDataCore = useCallback(async (preferredTeamId = selectedTeamIdRef.current): Promise<string | null> => {
     const requestId = ++refreshRequestRef.current;
+    const initiatingTeamAccessKey = teamAccessKey;
+    const initiatingUserId = userId;
+    const isCurrentRequest = () => (
+      refreshRequestRef.current === requestId
+      && currentTeamAccessKeyRef.current === initiatingTeamAccessKey
+      && currentUserIdRef.current === initiatingUserId
+    );
     const shouldPreserveState = hasLoadedOnceRef.current;
 
     if (!canUseTeamServices) {
@@ -66,7 +85,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
     try {
       const teamsResult = await fetchOwnTeams();
-      if (refreshRequestRef.current !== requestId) return null;
+      if (!isCurrentRequest()) return null;
 
       if (!teamsResult.success) {
         if (!shouldPreserveState) {
@@ -92,7 +111,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
       setTeamError(null);
       return nextSelectedTeamId;
     } catch (error) {
-      if (refreshRequestRef.current !== requestId) return null;
+      if (!isCurrentRequest()) return null;
       if (!shouldPreserveState) {
         setTeams([]); setSelectedTeamId(null);
         selectedTeamIdRef.current = null;
@@ -102,9 +121,9 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
       if (error instanceof Error || isTeamErrorMessage(error)) { setTeamError(messageFromTeamError(error, "Unable to load teams")); return null; }
       throw error;
     } finally {
-      if (refreshRequestRef.current === requestId) setTeamRefreshing(false);
+      if (isCurrentRequest()) setTeamRefreshing(false);
     }
-  }, [activeTab, canUseTeamServices, clearTeamState]);
+  }, [activeTab, canUseTeamServices, clearTeamState, teamAccessKey, userId]);
 
   const requireTeamActionAccess = useCallback(() => {
     if (!isSupabaseConfigured) {
@@ -131,14 +150,21 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   }, [refreshInvites, refreshTeamDataCore]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
+    const accessChanged = previousTeamAccessKeyRef.current !== teamAccessKey;
+    if (accessChanged) {
+      previousTeamAccessKeyRef.current = teamAccessKey;
       clearTeamState();
+      void refreshInvites(null);
+    }
+
+    if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
+      if (!accessChanged) clearTeamState();
       void refreshInvites(null);
       return;
     }
 
     if (activeTab === "team") void refreshTeamData();
-  }, [activeTab, clearTeamState, hasRequiredAccountAuth, isSupabaseConfigured, refreshInvites, refreshTeamData, user]);
+  }, [activeTab, clearTeamState, hasRequiredAccountAuth, isSupabaseConfigured, refreshInvites, refreshTeamData, teamAccessKey, user]);
 
   const selectTeam = useCallback((organizationId: string) => {
     selectedTeamIdRef.current = organizationId;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type AiReviewEvent,
   type Project,
@@ -75,8 +75,18 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const { tracker, selectedDayRange, analysisSetup, resolveOpenRouterKey, analysisConnected } = args;
   const now = args.now ?? (() => new Date().toISOString());
 
+  const selectedDayRangeStart = selectedDayRange?.start ?? null;
+  const selectedDayRangeEnd = selectedDayRange?.end ?? null;
   const insightRangeStart = args.insightRange?.start ?? null;
   const insightRangeEnd = args.insightRange?.end ?? null;
+  const selectedDayRangeValue = useMemo(
+    () => (
+      selectedDayRangeStart === null || selectedDayRangeEnd === null
+        ? null
+        : { start: selectedDayRangeStart, end: selectedDayRangeEnd }
+    ),
+    [selectedDayRangeStart, selectedDayRangeEnd],
+  );
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -88,6 +98,20 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const [progress, setProgress] = useState<{ readonly done: number; readonly total: number } | null>(null);
   const [lastRunSummary, setLastRunSummary] = useState<ProjectPassSummary | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const assignmentsRequestRef = useRef(0);
+  const reviewEventsRequestRef = useRef(0);
+  const insightAssignmentsRequestRef = useRef(0);
+  const isMountedRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      assignmentsRequestRef.current += 1;
+      reviewEventsRequestRef.current += 1;
+      insightAssignmentsRequestRef.current += 1;
+    };
+  }, []);
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true);
@@ -101,28 +125,48 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   }, [tracker]);
 
   const loadAssignments = useCallback(async () => {
-    if (!selectedDayRange) {
-      setAssignments([]);
-      return;
-    }
-    try {
-      setAssignments((await tracker.getProjectAssignments?.({ start: selectedDayRange.start, end: selectedDayRange.end })) ?? []);
-    } catch {
-      setAssignments([]);
-    }
-  }, [tracker, selectedDayRange]);
+    const requestId = ++assignmentsRequestRef.current;
+    const isCurrentRequest = () => (
+      isMountedRef.current && assignmentsRequestRef.current === requestId
+    );
 
-  // Keyed on the primitive range bounds (not the object identity) so an inline
-  // `insightRange={{ start, end }}` from the caller does not re-fire every render.
-  const loadInsightAssignments = useCallback(async () => {
-    if (!insightRangeStart || !insightRangeEnd) {
-      setInsightAssignments([]);
+    if (selectedDayRangeStart === null || selectedDayRangeEnd === null) {
+      if (isCurrentRequest()) setAssignments([]);
       return;
     }
+
     try {
-      setInsightAssignments((await tracker.getProjectAssignments?.({ start: insightRangeStart, end: insightRangeEnd })) ?? []);
+      const nextAssignments = await tracker.getProjectAssignments?.({
+        start: selectedDayRangeStart,
+        end: selectedDayRangeEnd,
+      });
+      if (isCurrentRequest()) setAssignments(nextAssignments ?? []);
     } catch {
-      setInsightAssignments([]);
+      if (isCurrentRequest()) setAssignments([]);
+    }
+  }, [tracker, selectedDayRangeStart, selectedDayRangeEnd]);
+
+  // Keyed on primitive range bounds so an inline range object from the caller
+  // neither re-fires every render nor validates an older request.
+  const loadInsightAssignments = useCallback(async () => {
+    const requestId = ++insightAssignmentsRequestRef.current;
+    const isCurrentRequest = () => (
+      isMountedRef.current && insightAssignmentsRequestRef.current === requestId
+    );
+
+    if (!insightRangeStart || !insightRangeEnd) {
+      if (isCurrentRequest()) setInsightAssignments([]);
+      return;
+    }
+
+    try {
+      const nextAssignments = await tracker.getProjectAssignments?.({
+        start: insightRangeStart,
+        end: insightRangeEnd,
+      });
+      if (isCurrentRequest()) setInsightAssignments(nextAssignments ?? []);
+    } catch {
+      if (isCurrentRequest()) setInsightAssignments([]);
     }
   }, [tracker, insightRangeStart, insightRangeEnd]);
 
@@ -135,16 +179,26 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   }, [tracker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadReviewEvents = useCallback(async () => {
-    if (!selectedDayRange) {
-      setAiReviewEvents([]);
+    const requestId = ++reviewEventsRequestRef.current;
+    const isCurrentRequest = () => (
+      isMountedRef.current && reviewEventsRequestRef.current === requestId
+    );
+
+    if (selectedDayRangeStart === null || selectedDayRangeEnd === null) {
+      if (isCurrentRequest()) setAiReviewEvents([]);
       return;
     }
+
     try {
-      setAiReviewEvents((await tracker.getAiReviewEvents?.({ start: selectedDayRange.start, end: selectedDayRange.end })) ?? []);
+      const nextReviewEvents = await tracker.getAiReviewEvents?.({
+        start: selectedDayRangeStart,
+        end: selectedDayRangeEnd,
+      });
+      if (isCurrentRequest()) setAiReviewEvents(nextReviewEvents ?? []);
     } catch {
-      setAiReviewEvents([]);
+      if (isCurrentRequest()) setAiReviewEvents([]);
     }
-  }, [tracker, selectedDayRange]);
+  }, [tracker, selectedDayRangeStart, selectedDayRangeEnd]);
 
   const revertReviewEvent = useCallback(
     async (id: number) => {
@@ -191,7 +245,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
 
   const runPassNow = useCallback(
     async (range?: { start: string; end: string }) => {
-      const effectiveRange = range ?? selectedDayRange;
+      const effectiveRange = range ?? selectedDayRangeValue;
       if (!effectiveRange || !analysisConnected) return;
       setRunning(true);
       setRunError(null);
@@ -226,7 +280,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         setProgress(null);
       }
     },
-    [selectedDayRange, analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [selectedDayRangeValue, analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
   const runScheduledPass = useCallback(

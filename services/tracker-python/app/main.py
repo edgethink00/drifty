@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 import re
 import secrets
+import shlex
 import signal
 import subprocess
 import sys
 import threading
 import time
 import traceback
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -55,6 +58,7 @@ TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 RuntimeMode = Literal["source", "frozen"]
+TrackerProcessOwnership = Literal["tracker", "unrelated", "unknown"]
 SENTRY_SMOKE_MODE = "sentry-smoke-test"
 SENTRY_SMOKE_ID_PATTERN = re.compile(r"\Adrifty-sentry-smoke-[A-Za-z0-9_-]{6,48}\Z")
 
@@ -101,8 +105,23 @@ def pid_path() -> Path:
     return state_dir() / "tracker.pid"
 
 
+def lifecycle_lock_path() -> Path:
+    return state_dir() / "tracker.lifecycle.lock"
+
+
 def ensure_state_dir() -> None:
     state_dir().mkdir(parents=True, exist_ok=True)
+
+
+@contextmanager
+def tracker_lifecycle_lock():
+    ensure_state_dir()
+    with lifecycle_lock_path().open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 _DATABASE_CACHE: TrackerDatabase | None = None
@@ -266,22 +285,28 @@ def _browser_history_import_request(payload: dict):
 
 def is_running() -> bool:
     pid_file = pid_path()
-    if not pid_file.exists():
+    pid = _read_tracker_pid()
+    if pid is None:
+        pid_file.unlink(missing_ok=True)
         return False
     try:
-        pid = int(pid_file.read_text().strip())
         os.kill(pid, 0)
-        return True
     except Exception:
         pid_file.unlink(missing_ok=True)
         return False
+    ownership = _tracker_process_ownership(pid)
+    if ownership == "unrelated":
+        pid_file.unlink(missing_ok=True)
+        return False
+    return True
 
 
 def _read_tracker_pid() -> int | None:
     try:
-        return int(pid_path().read_text().strip())
+        pid = int(pid_path().read_text().strip())
     except Exception:
         return None
+    return pid if pid > 0 else None
 
 
 def _process_command(pid: int) -> str | None:
@@ -349,22 +374,69 @@ def _tracker_runtime_fingerprint() -> str:
     return digest.hexdigest()
 
 
+def _tracker_process_ownership(pid: int) -> TrackerProcessOwnership:
+    command = _process_command(pid)
+    if command is None:
+        return "unknown"
+    if _command_arguments(command) is None:
+        return "unknown"
+    if not _is_tracker_daemon_command(command):
+        return "unrelated"
+    return "tracker"
+
+
+def _command_arguments(command: str) -> list[str] | None:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return None
+
+
+def _command_db_path(command: str) -> Path | None:
+    _, separator, raw_db_path = command.rpartition(" --db ")
+    if not separator:
+        return None
+    value = raw_db_path.strip()
+    if not value:
+        return None
+    if value[0] in {"'", '"'}:
+        parsed = _command_arguments(value)
+        if parsed is None or len(parsed) != 1:
+            return None
+        value = parsed[0]
+    try:
+        return Path(value).expanduser().resolve()
+    except OSError:
+        return None
+
+
+def _is_tracker_daemon_command(command: str) -> bool:
+    arguments = _command_arguments(command)
+    if not arguments or "daemon" not in arguments:
+        return False
+    command_db_path = _command_db_path(command)
+    if command_db_path is None or command_db_path != DB_PATH.expanduser().resolve():
+        return False
+    if _current_runtime_mode() == "frozen" and arguments[0] == sys.executable:
+        return True
+    if _current_script_path() in arguments:
+        return True
+    return any(
+        Path(argument).name == "main.py" and "tracker-python" in Path(argument).parts
+        for argument in arguments
+    )
+
+
 def _running_daemon_matches_current_script(pid: int) -> bool:
     command = _process_command(pid)
-    if not command:
-        return True
-    current_script = _current_script_path()
-    if _current_runtime_mode() == "frozen":
-        if "tracker-python" in command and "main.py" in command:
-            return False
-        if sys.executable in command and "daemon" in command:
-            return True
-        return True
-    if current_script in command:
-        return True
-    if "tracker-python" in command and "main.py" in command:
+    if command is None or not _is_tracker_daemon_command(command):
         return False
-    return True
+    arguments = _command_arguments(command)
+    if arguments is None:
+        return False
+    if _current_runtime_mode() == "frozen":
+        return arguments[0] == sys.executable
+    return _current_script_path() in arguments
 
 
 def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bool:
@@ -373,22 +445,46 @@ def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bo
     return db.get_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY) == _tracker_runtime_fingerprint()
 
 
-def _stop_stale_tracker_daemon(pid: int) -> None:
+def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
+    ownership = _tracker_process_ownership(pid)
+    if ownership == "unknown":
+        return ownership
+    if ownership == "unrelated":
+        pid_path().unlink(missing_ok=True)
+        return ownership
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         pass
-    pid_path().unlink(missing_ok=True)
+    finally:
+        pid_path().unlink(missing_ok=True)
+    return ownership
 
 
 def start_tracking():
-    ensure_state_dir()
+    with tracker_lifecycle_lock():
+        return _start_tracking_locked()
+
+
+def _start_tracking_locked():
     if is_running():
         pid = _read_tracker_pid()
-        if pid is None or _running_daemon_matches_current_runtime(pid, database()):
+        if pid is None:
+            return response(False, get_status()["data"], "Tracker PID record became unavailable.")
+        ownership = _tracker_process_ownership(pid)
+        if ownership == "unknown":
+            return response(
+                False,
+                get_status()["data"],
+                "Unable to verify the existing tracker process; refusing to start a second daemon.",
+            )
+        if ownership == "tracker" and _running_daemon_matches_current_runtime(pid, database()):
             return response(True, get_status()["data"])
-        _stop_stale_tracker_daemon(pid)
-        time.sleep(0.25)
+        if ownership == "tracker":
+            _stop_verified_tracker_daemon(pid)
+            time.sleep(0.25)
+        else:
+            pid_path().unlink(missing_ok=True)
 
     command = _daemon_command("daemon")
     subprocess.Popen(
@@ -406,19 +502,32 @@ def start_tracking():
 
 
 def stop_tracking():
+    with tracker_lifecycle_lock():
+        return _stop_tracking_locked()
+
+
+def _stop_tracking_locked():
     pid_file = pid_path()
     if not pid_file.exists():
         return response(True, get_status()["data"])
 
+    pid = _read_tracker_pid()
+    if pid is None:
+        pid_file.unlink(missing_ok=True)
+        return response(True, get_status()["data"])
+
     try:
-        pid = int(pid_file.read_text().strip())
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
+        ownership = _stop_verified_tracker_daemon(pid)
     except Exception as exc:
         return response(False, error=str(exc))
-    finally:
-        pid_file.unlink(missing_ok=True)
+    if ownership == "unknown":
+        return response(
+            False,
+            get_status()["data"],
+            "Unable to verify the tracker process; refusing to signal it.",
+        )
+    if ownership == "unrelated":
+        return response(True, get_status()["data"])
 
     return response(True, get_status()["data"])
 

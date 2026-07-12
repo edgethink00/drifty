@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { trackerClientInvokeCommands, type TrackerClientCommand } from "@drifty/domain";
 
 const { invoke } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -20,6 +21,70 @@ vi.mock("./previewData", () => ({
   shouldUsePreviewData: () => false,
 }));
 
+const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
+  "tracker_get_status",
+  "tracker_start",
+  "tracker_stop",
+  "tracker_get_timeline",
+  "tracker_get_timeline_page",
+  "tracker_search_timeline",
+  "tracker_get_dashboard_week_timeline",
+  "tracker_get_live_tail",
+  "tracker_get_current_snapshot",
+  "tracker_get_hourly_summary",
+  "tracker_get_raw_events",
+  "tracker_get_top_sites",
+  "tracker_set_developer_diagnostics",
+  "tracker_get_app_icons",
+  "tracker_get_unclassified_segments",
+  "tracker_get_reusable_ai_classifications",
+  "tracker_get_classification_rules",
+  "tracker_save_classification_rule",
+  "tracker_delete_classification_rule",
+  "tracker_delete_activity_segments",
+  "tracker_delete_history_range",
+  "tracker_search_classification_rule_candidates",
+  "tracker_apply_classification_rules",
+  "tracker_save_classifications",
+  "tracker_refresh_non_ai_classifications",
+  "tracker_get_classification_metrics",
+  "tracker_get_projects",
+  "tracker_save_project",
+  "tracker_delete_project",
+  "tracker_save_project_anchors",
+  "tracker_delete_project_anchor",
+  "tracker_save_project_assignments",
+  "tracker_get_project_assignments",
+  "tracker_get_team_projects",
+  "tracker_upsert_team_projects",
+  "tracker_save_team_project_assignments",
+  "tracker_get_team_project_assignments",
+  "tracker_record_project_pass",
+  "tracker_get_project_pass_runs",
+  "tracker_save_ai_review_events",
+  "tracker_get_ai_review_events",
+  "tracker_revert_ai_review_event",
+  "tracker_preview_browser_history_import",
+  "tracker_import_browser_history",
+  "tracker_get_browser_history_environment",
+  "tracker_get_sync_outbox",
+  "tracker_get_sync_state",
+  "tracker_set_sync_state",
+  "tracker_apply_synced_segments",
+  "tracker_get_pending_sync_deletions",
+  "tracker_mark_sync_deletions_pushed",
+  "tracker_apply_synced_deletions",
+  "tracker_purge_remote_segments",
+  "tray_update_productivity_icon",
+  "tray_update_icon_style",
+  "tray_update_drift_alarm_status",
+];
+
+describe("trackerClient command registry", () => {
+  it("contains every command invoked by trackerClient", () => {
+    expect(trackerClientInvokeCommands).toEqual(trackerClientInvokeCommandLiterals);
+  });
+});
 describe("trackerClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
