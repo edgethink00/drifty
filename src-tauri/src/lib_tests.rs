@@ -52,7 +52,7 @@ fn team_invite_deep_link_filter_accepts_only_team_invite_links() {
 }
 
 #[test]
-fn main_window_close_policy_only_handles_main_label() {
+fn command_w_main_window_close_hides_instead_of_closing() {
     assert!(should_hide_instead_of_close("main"));
     assert!(!should_hide_instead_of_close("watcher-peek"));
     assert!(!should_hide_instead_of_close("settings"));
@@ -232,8 +232,10 @@ fn exit_cleanup_steps_preserve_production_order() {
     let managed_ai_calls = std::sync::Arc::clone(&calls);
     let daemon_calls = std::sync::Arc::clone(&calls);
     let serve_calls = std::sync::Arc::clone(&calls);
+    let tray_worker_calls = std::sync::Arc::clone(&calls);
 
     run_exit_cleanup_steps(
+        || push_exit_call(&tray_worker_calls, "tray-refresh-worker"),
         || push_exit_call(&managed_ai_calls, "managed-ai"),
         || push_exit_call(&daemon_calls, "tracker-daemon"),
         || push_exit_call(&serve_calls, "tracker-serve-process"),
@@ -244,7 +246,13 @@ fn exit_cleanup_steps_preserve_production_order() {
             .lock()
             .expect("cleanup call log should not be poisoned")
             .as_slice(),
-        ["managed-ai", "tracker-daemon", "tracker-serve-process"].as_slice()
+        [
+            "tray-refresh-worker",
+            "managed-ai",
+            "tracker-daemon",
+            "tracker-serve-process",
+        ]
+        .as_slice()
     );
 }
 
@@ -254,9 +262,11 @@ fn exit_cleanup_steps_continue_after_a_panicking_step() {
     let managed_ai_calls = std::sync::Arc::clone(&calls);
     let daemon_calls = std::sync::Arc::clone(&calls);
     let serve_calls = std::sync::Arc::clone(&calls);
+    let tray_worker_calls = std::sync::Arc::clone(&calls);
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_exit_cleanup_steps(
+            || push_exit_call(&tray_worker_calls, "tray-refresh-worker"),
             || push_exit_call(&managed_ai_calls, "managed-ai"),
             || {
                 push_exit_call(&daemon_calls, "tracker-daemon");
@@ -272,7 +282,13 @@ fn exit_cleanup_steps_continue_after_a_panicking_step() {
             .lock()
             .expect("cleanup call log should not be poisoned")
             .as_slice(),
-        ["managed-ai", "tracker-daemon", "tracker-serve-process"].as_slice()
+        [
+            "tray-refresh-worker",
+            "managed-ai",
+            "tracker-daemon",
+            "tracker-serve-process",
+        ]
+        .as_slice()
     );
 }
 

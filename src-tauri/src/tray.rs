@@ -3,7 +3,15 @@ mod productivity_icon;
 #[cfg(test)]
 mod tests;
 
-use std::sync::Mutex;
+use std::{
+    panic::{self, AssertUnwindSafe},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
 
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItem};
@@ -36,12 +44,139 @@ const MENU_TOGGLE_THEME: &str = "menu-toggle-theme";
 const MENU_SETTINGS: &str = "menu-settings";
 const MENU_QUIT: &str = "menu-quit";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
+const TRAY_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
 pub struct TrayDriftAlarmState(Mutex<TrayDriftAlarmStatus>);
 
 #[derive(Default)]
 pub struct TrayIconStyleState(Mutex<TrayIconStyle>);
+
+pub struct TrayRefreshWorker {
+    lifecycle: Mutex<TrayRefreshWorkerLifecycle>,
+}
+
+enum TrayRefreshWorkerLifecycle {
+    NotStarted,
+    Running {
+        stop_tx: mpsc::Sender<()>,
+        stopping: Arc<AtomicBool>,
+        failed: Arc<AtomicBool>,
+        join: JoinHandle<()>,
+    },
+    Stopping,
+    Stopped,
+}
+
+impl Default for TrayRefreshWorker {
+    fn default() -> Self {
+        Self {
+            lifecycle: Mutex::new(TrayRefreshWorkerLifecycle::NotStarted),
+        }
+    }
+}
+
+impl TrayRefreshWorker {
+    pub(crate) fn start(
+        &self,
+        refresh: impl Fn(&Arc<AtomicBool>) + Send + 'static,
+    ) -> std::io::Result<bool> {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .expect("tray refresh worker lifecycle should not be poisoned");
+        if !matches!(&*lifecycle, TrayRefreshWorkerLifecycle::NotStarted) {
+            return Ok(false);
+        }
+
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let stopping = Arc::new(AtomicBool::new(false));
+        let failed = Arc::new(AtomicBool::new(false));
+        let worker_stopping = Arc::clone(&stopping);
+        let worker_failed = Arc::clone(&failed);
+        let join = std::thread::Builder::new()
+            .name("drifty-tray-refresh".into())
+            .spawn(move || {
+                while !worker_stopping.load(Ordering::Acquire) {
+                    if panic::catch_unwind(AssertUnwindSafe(|| refresh(&worker_stopping))).is_err()
+                    {
+                        worker_failed.store(true, Ordering::Release);
+                        worker_stopping.store(true, Ordering::Release);
+                        eprintln!("[tray] Refresh worker panicked and stopped");
+                        break;
+                    }
+
+                    if worker_stopping.load(Ordering::Acquire) {
+                        break;
+                    }
+
+                    match stop_rx.recv_timeout(TRAY_REFRESH_INTERVAL) {
+                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    }
+                }
+            })?;
+
+        *lifecycle = TrayRefreshWorkerLifecycle::Running {
+            stop_tx,
+            stopping,
+            failed,
+            join,
+        };
+        Ok(true)
+    }
+
+    pub(crate) fn shutdown(&self) -> bool {
+        let worker = {
+            let mut lifecycle = self
+                .lifecycle
+                .lock()
+                .expect("tray refresh worker lifecycle should not be poisoned");
+            let previous = std::mem::replace(&mut *lifecycle, TrayRefreshWorkerLifecycle::Stopping);
+            match previous {
+                TrayRefreshWorkerLifecycle::Running {
+                    stop_tx,
+                    stopping,
+                    failed,
+                    join,
+                } => {
+                    stopping.store(true, Ordering::Release);
+                    Some((stop_tx, failed, join))
+                }
+                state => {
+                    *lifecycle = state;
+                    None
+                }
+            }
+        };
+
+        let Some((stop_tx, failed, join)) = worker else {
+            return false;
+        };
+
+        let _ = stop_tx.send(());
+        let join_failed = join.join().is_err();
+        if join_failed {
+            eprintln!("[tray] Refresh worker thread terminated with a panic");
+        }
+
+        let refresh_failed = failed.load(Ordering::Acquire) || join_failed;
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .expect("tray refresh worker lifecycle should not be poisoned");
+        if matches!(&*lifecycle, TrayRefreshWorkerLifecycle::Stopping) {
+            *lifecycle = TrayRefreshWorkerLifecycle::Stopped;
+        }
+        refresh_failed
+    }
+}
+
+pub(crate) fn shutdown_tray_refresh_worker(app: &AppHandle) {
+    if let Some(worker) = app.try_state::<TrayRefreshWorker>() {
+        worker.shutdown();
+    }
+}
 
 #[tauri::command]
 pub fn tray_update_productivity_icon(
@@ -152,10 +287,9 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .build(app)?;
 
     let app_handle = app.clone();
-    std::thread::spawn(move || loop {
-        update_tray_icon(&app_handle);
-        std::thread::sleep(std::time::Duration::from_secs(60));
-    });
+    let _ = app
+        .state::<TrayRefreshWorker>()
+        .start(move |stopping| refresh_tray_icon_on_worker(&app_handle, stopping))?;
 
     Ok(())
 }
@@ -259,9 +393,8 @@ fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
 }
 
 /// Equality key over everything that feeds the tray icon rasterizer. The 60s
-/// refresh thread calls update_tray_icon unconditionally; when the key matches
-/// the last applied render, the icon is already correct and the re-rasterize +
-/// set_icon can be skipped.
+/// worker prepares a new icon off-thread, then queues only the final tray
+/// mutation onto the main thread; request generations discard stale callbacks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TrayIconRenderKey {
     focus_bits: u64,
@@ -283,12 +416,97 @@ impl TrayIconRenderKey {
     }
 }
 
-static LAST_TRAY_ICON_RENDER_KEY: Mutex<Option<TrayIconRenderKey>> = Mutex::new(None);
+struct PreparedTrayIcon {
+    request_generation: u64,
+    key: TrayIconRenderKey,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Default)]
+struct TrayIconRenderState {
+    latest_requested_generation: u64,
+    last_applied_key: Option<TrayIconRenderKey>,
+}
+
+impl TrayIconRenderState {
+    fn claim_request(&mut self) -> u64 {
+        self.latest_requested_generation = self.latest_requested_generation.saturating_add(1);
+        self.latest_requested_generation
+    }
+
+    fn is_current_key(&self, key: TrayIconRenderKey) -> bool {
+        self.last_applied_key == Some(key)
+    }
+
+    fn should_apply(&self, request_generation: u64, key: TrayIconRenderKey) -> bool {
+        request_generation == self.latest_requested_generation && !self.is_current_key(key)
+    }
+
+    fn record_applied(&mut self, key: TrayIconRenderKey) {
+        self.last_applied_key = Some(key);
+    }
+}
+
+static TRAY_ICON_RENDER_STATE: Mutex<TrayIconRenderState> = Mutex::new(TrayIconRenderState {
+    latest_requested_generation: 0,
+    last_applied_key: None,
+});
 
 fn update_tray_icon(app: &AppHandle) {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+    if app.tray_by_id(TRAY_ID).is_none() {
+        return;
+    }
+
+    let request_generation = claim_tray_icon_render_request();
+    if let Some(icon) = prepare_tray_icon(app, request_generation) {
+        apply_prepared_tray_icon(app, icon);
+    }
+}
+
+fn refresh_tray_icon_on_worker(app: &AppHandle, stopping: &Arc<AtomicBool>) {
+    if stopping.load(Ordering::Acquire) {
+        return;
+    }
+
+    let request_generation = claim_tray_icon_render_request();
+    let Some(icon) = prepare_tray_icon(app, request_generation) else {
         return;
     };
+
+    let scheduler = app.clone();
+    let callback_app = app.clone();
+    if let Err(error) = enqueue_main_thread_mutation(
+        stopping,
+        move |callback| scheduler.run_on_main_thread(callback),
+        move || apply_prepared_tray_icon(&callback_app, icon),
+    ) {
+        if !stopping.load(Ordering::Acquire) {
+            eprintln!("[tray] Could not queue refresh icon update: {error}");
+        }
+    }
+}
+
+fn enqueue_main_thread_mutation<E>(
+    stopping: &Arc<AtomicBool>,
+    enqueue: impl FnOnce(Box<dyn FnOnce() + Send + 'static>) -> Result<(), E>,
+    mutation: impl FnOnce() + Send + 'static,
+) -> Result<bool, E> {
+    if stopping.load(Ordering::Acquire) {
+        return Ok(false);
+    }
+
+    let callback_stopping = Arc::clone(stopping);
+    enqueue(Box::new(move || {
+        if !callback_stopping.load(Ordering::Acquire) {
+            mutation();
+        }
+    }))?;
+    Ok(true)
+}
+
+fn prepare_tray_icon(app: &AppHandle, request_generation: u64) -> Option<PreparedTrayIcon> {
     let mix = latest_tray_productivity_mix(app).or_else(|| {
         let controller = app.try_state::<TrackerController>()?;
         let (focus, drift, neutral) = controller.get_daily_stats(app);
@@ -300,25 +518,61 @@ fn update_tray_icon(app: &AppHandle) {
     };
     let dark = is_dark_mode();
     let style = latest_tray_icon_style(app);
-
     let key = TrayIconRenderKey::new(focus, drift, neutral, dark, style);
-    let mut last_key = match LAST_TRAY_ICON_RENDER_KEY.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if *last_key == Some(key) {
-        return;
+
+    if tray_icon_render_key_is_current(key) {
+        return None;
     }
 
-    let (rgba, w, h) = donut_icon::render(DonutIconRenderInput {
+    let (rgba, width, height) = donut_icon::render(DonutIconRenderInput {
         focus,
         drift,
         neutral,
         is_dark: dark,
         style,
     });
-    if tray.set_icon(Some(Image::new_owned(rgba, w, h))).is_ok() {
-        *last_key = Some(key);
+    Some(PreparedTrayIcon {
+        request_generation,
+        key,
+        rgba,
+        width,
+        height,
+    })
+}
+
+fn claim_tray_icon_render_request() -> u64 {
+    let mut state = match TRAY_ICON_RENDER_STATE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    state.claim_request()
+}
+
+fn tray_icon_render_key_is_current(key: TrayIconRenderKey) -> bool {
+    let state = match TRAY_ICON_RENDER_STATE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    state.is_current_key(key)
+}
+
+fn apply_prepared_tray_icon(app: &AppHandle, icon: PreparedTrayIcon) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let mut render_state = match TRAY_ICON_RENDER_STATE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if !render_state.should_apply(icon.request_generation, icon.key) {
+        return;
+    }
+
+    if tray
+        .set_icon(Some(Image::new_owned(icon.rgba, icon.width, icon.height)))
+        .is_ok()
+    {
+        render_state.record_applied(icon.key);
     }
 }
 

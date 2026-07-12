@@ -1,5 +1,13 @@
 use super::*;
 
+struct ThreadExitSignal(std::sync::mpsc::Sender<()>);
+
+impl Drop for ThreadExitSignal {
+    fn drop(&mut self) {
+        let _ = self.0.send(());
+    }
+}
+
 #[test]
 fn app_version_label_formats_drifty_version() {
     assert_eq!(app_version_label("1.2.3"), "Drifty 1.2.3");
@@ -33,9 +41,239 @@ fn tray_icon_render_key_matches_for_unchanged_input() {
 fn tray_icon_render_key_changes_when_any_render_input_changes() {
     let base = TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Compact);
 
-    assert_ne!(base, TrayIconRenderKey::new(0.6, 0.25, 0.25, true, TrayIconStyle::Compact));
-    assert_ne!(base, TrayIconRenderKey::new(0.5, 0.3, 0.25, true, TrayIconStyle::Compact));
-    assert_ne!(base, TrayIconRenderKey::new(0.5, 0.25, 0.3, true, TrayIconStyle::Compact));
-    assert_ne!(base, TrayIconRenderKey::new(0.5, 0.25, 0.25, false, TrayIconStyle::Compact));
-    assert_ne!(base, TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Expanded));
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(0.6, 0.25, 0.25, true, TrayIconStyle::Compact)
+    );
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(0.5, 0.3, 0.25, true, TrayIconStyle::Compact)
+    );
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(0.5, 0.25, 0.3, true, TrayIconStyle::Compact)
+    );
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(0.5, 0.25, 0.25, false, TrayIconStyle::Compact)
+    );
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Expanded)
+    );
+}
+
+#[test]
+fn older_queued_render_cannot_overwrite_newer_direct_render() {
+    let mut state = TrayIconRenderState::default();
+    let queued_a_generation = state.claim_request();
+    let queued_a_key = TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Compact);
+
+    let direct_b_generation = state.claim_request();
+    let direct_b_key = TrayIconRenderKey::new(0.6, 0.25, 0.15, true, TrayIconStyle::Compact);
+    assert!(
+        state.should_apply(direct_b_generation, direct_b_key),
+        "newer direct update should apply"
+    );
+    state.record_applied(direct_b_key);
+
+    assert!(
+        !state.should_apply(queued_a_generation, queued_a_key),
+        "older queued update must be discarded when it executes after direct update"
+    );
+    assert_eq!(state.last_applied_key, Some(direct_b_key));
+}
+
+#[test]
+fn tray_refresh_worker_starts_once_and_does_not_restart_after_shutdown() {
+    let worker = TrayRefreshWorker::default();
+    let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
+
+    assert!(worker
+        .start(move |_| {
+            started_tx
+                .send(())
+                .expect("test should receive the first refresh");
+        })
+        .expect("worker should start"));
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("worker should run its initial refresh");
+    assert!(!worker
+        .start(|_| panic!("duplicate start must not launch a second worker"))
+        .expect("duplicate start should be a no-op"));
+
+    worker.shutdown();
+
+    assert!(!worker
+        .start(|_| panic!("stopped worker must not restart"))
+        .expect("start after shutdown should be a no-op"));
+}
+
+#[test]
+fn tray_refresh_worker_stop_wakes_wait_joins_and_is_idempotent() {
+    let worker = TrayRefreshWorker::default();
+    let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
+    let (exited_tx, exited_rx) = std::sync::mpsc::channel();
+    let thread_exit_signal = ThreadExitSignal(exited_tx);
+
+    assert!(worker
+        .start(move |_| {
+            let _ = &thread_exit_signal;
+            started_tx
+                .send(())
+                .expect("test should receive the first refresh");
+        })
+        .expect("worker should start"));
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("worker should be waiting for its next refresh");
+
+    let shutdown_started = std::time::Instant::now();
+    worker.shutdown();
+
+    assert!(
+        shutdown_started.elapsed() < std::time::Duration::from_secs(5),
+        "shutdown should interrupt the 60-second refresh wait"
+    );
+    exited_rx
+        .try_recv()
+        .expect("shutdown should join the refresh worker before returning");
+
+    worker.shutdown();
+    assert!(exited_rx.try_recv().is_err());
+}
+
+#[test]
+fn tray_refresh_worker_does_not_wait_for_main_thread_handoff() {
+    let worker = TrayRefreshWorker::default();
+    let (callback_tx, callback_rx) = std::sync::mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(1);
+    let (queued_tx, queued_rx) = std::sync::mpsc::sync_channel(1);
+    let mutation_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let refresh_mutation_count = std::sync::Arc::clone(&mutation_count);
+
+    assert!(worker
+        .start(move |stopping| {
+            let callback_tx = callback_tx.clone();
+            let queued_tx = queued_tx.clone();
+            let mutation_count = std::sync::Arc::clone(&refresh_mutation_count);
+            let queued = enqueue_main_thread_mutation(
+                stopping,
+                move |callback| {
+                    callback_tx
+                        .send(callback)
+                        .expect("test should receive the main-thread callback");
+                    Ok::<(), ()>(())
+                },
+                move || {
+                    mutation_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                },
+            )
+            .expect("test callback queue should accept the handoff");
+            queued_tx
+                .send(queued)
+                .expect("test should receive the enqueue result");
+        })
+        .expect("worker should start"));
+    assert!(queued_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("refresh should enqueue without waiting for the main thread"));
+
+    let shutdown_started = std::time::Instant::now();
+    worker.shutdown();
+
+    assert!(
+        shutdown_started.elapsed() < std::time::Duration::from_secs(5),
+        "shutdown must not wait for the queued main-thread callback"
+    );
+    callback_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("main-thread callback should remain queued")();
+    assert_eq!(
+        mutation_count.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "a callback queued before shutdown must skip its tray mutation"
+    );
+}
+
+#[test]
+fn tray_refresh_worker_prevents_late_main_thread_enqueue_during_shutdown() {
+    let worker = std::sync::Arc::new(TrayRefreshWorker::default());
+    let (refresh_started_tx, refresh_started_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_refresh_tx, release_refresh_rx) = std::sync::mpsc::channel();
+    let (callback_tx, callback_rx) = std::sync::mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(1);
+    let (enqueue_result_tx, enqueue_result_rx) = std::sync::mpsc::sync_channel(1);
+
+    assert!(worker
+        .start(move |stopping| {
+            refresh_started_tx
+                .send(std::sync::Arc::clone(stopping))
+                .expect("test should observe the active refresh");
+            release_refresh_rx
+                .recv()
+                .expect("test should release the active refresh");
+            let callback_tx = callback_tx.clone();
+            let enqueue_result_tx = enqueue_result_tx.clone();
+            let queued = enqueue_main_thread_mutation(
+                stopping,
+                move |callback| {
+                    callback_tx
+                        .send(callback)
+                        .expect("late callback must not be queued");
+                    Ok::<(), ()>(())
+                },
+                || {},
+            )
+            .expect("test callback queue should accept the handoff");
+            enqueue_result_tx
+                .send(queued)
+                .expect("test should receive the enqueue result");
+        })
+        .expect("worker should start"));
+
+    let stopping = refresh_started_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("refresh should begin before shutdown");
+    let shutdown_worker = std::sync::Arc::clone(&worker);
+    let shutdown = std::thread::spawn(move || shutdown_worker.shutdown());
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    while !stopping.load(std::sync::atomic::Ordering::Acquire) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "shutdown should mark the worker stopping before joining it"
+        );
+        std::thread::yield_now();
+    }
+
+    release_refresh_tx
+        .send(())
+        .expect("active refresh should still be waiting");
+    assert!(!enqueue_result_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("refresh should finish after shutdown starts"));
+    shutdown
+        .join()
+        .expect("shutdown should join the active refresh worker");
+    assert!(callback_rx.try_recv().is_err());
+}
+
+#[test]
+fn tray_refresh_worker_records_refresh_panics() {
+    let worker = TrayRefreshWorker::default();
+    let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
+
+    assert!(worker
+        .start(move |_| {
+            started_tx
+                .send(())
+                .expect("test should observe the panicking refresh");
+            panic!("refresh failure");
+        })
+        .expect("worker should start"));
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("refresh should run");
+
+    assert!(worker.shutdown());
 }

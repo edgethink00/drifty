@@ -57,8 +57,9 @@ use commands::{
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
 use tray::{
-    setup_tray, tray_update_drift_alarm_status, tray_update_icon_style,
-    tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState, TrayProductivityState,
+    setup_tray, shutdown_tray_refresh_worker, tray_update_drift_alarm_status,
+    tray_update_icon_style, tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState,
+    TrayProductivityState, TrayRefreshWorker,
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
@@ -122,13 +123,15 @@ impl AppExitCoordinator {
 }
 
 fn run_exit_cleanup_steps(
+    mut stop_tray_refresh_worker: impl FnMut(),
     mut stop_managed_ai: impl FnMut(),
     mut stop_tracker_daemon: impl FnMut(),
     mut stop_tracker_serve_process: impl FnMut(),
 ) {
     let mut first_panic = None;
     for cleanup in [
-        &mut stop_managed_ai as &mut dyn FnMut(),
+        &mut stop_tray_refresh_worker as &mut dyn FnMut(),
+        &mut stop_managed_ai,
         &mut stop_tracker_daemon,
         &mut stop_tracker_serve_process,
     ] {
@@ -147,6 +150,8 @@ fn run_exit_cleanup_steps(
 fn shutdown_app_for_exit(app: &AppHandle) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
         run_exit_cleanup_steps(
+            // Stop and join before tracker shutdown because refresh reads tracker stats.
+            || shutdown_tray_refresh_worker(app),
             || managed_ai_stop_runtime_for_app_exit(app),
             // Quitting the app must also stop the detached sampling daemon.
             || tracker::stop_tracking_daemon_for_app_exit(app),
@@ -293,6 +298,7 @@ pub fn run() {
         .manage(TrayProductivityState::default())
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
+        .manage(TrayRefreshWorker::default())
         .manage(DriftAlarmState::default())
         .manage(AppExitCoordinator::default())
         .plugin(
