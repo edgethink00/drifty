@@ -189,4 +189,38 @@ describe("ProjectTrendChart", () => {
     expect(screen.getByText(/No project activity in this range yet/i)).toBeTruthy();
     expect(container.querySelectorAll(".ptc-area")).toHaveLength(0);
   });
+
+  it("renders the intraday (Day mode) view through the same panel with minute ticks and hour x-labels", () => {
+    const daySegments: ActivitySegment[] = [
+      seg("d1", "2026-07-06T09:05:00", 600), // Alpha, 09:00–09:30 window
+      seg("d2", "2026-07-06T09:40:00", 300), // Beta, 09:30–10:00 window
+      seg("d3", "2026-07-06T11:10:00", 900), // unassigned
+    ];
+    const dayAssignments = new Map<string, string>([
+      ["d1", "p-alpha"],
+      ["d2", "p-beta"],
+    ]);
+    const { container } = render(
+      <ProjectTrendChart
+        segments={daySegments}
+        projectBySegmentId={dayAssignments}
+        projects={PROJECTS}
+        days={1}
+        endDay="2026-07-06"
+        intraday
+        startOfDayMinutes={0}
+      />,
+    );
+
+    // Same ptc panel family as Week/Month.
+    expect(container.querySelector(".ptc-panel")).toBeTruthy();
+    expect(container.querySelectorAll("path.ptc-area").length).toBe(3);
+    // Minute-scale y ticks (busiest window is 15m → 5m steps).
+    const scale = [...container.querySelectorAll(".ptc-scale span")].map((node) => node.textContent);
+    expect(scale).toEqual(["5m", "10m"]);
+    // X axis labels are clock hours within the trimmed active span.
+    const axis = [...container.querySelectorAll(".ptc-axis span")].map((node) => node.textContent);
+    expect(axis.length).toBeGreaterThan(0);
+    expect(axis.every((label) => /(am|pm)/i.test(label ?? ""))).toBe(true);
+  });
 });

@@ -1,6 +1,6 @@
-import { shiftIsoDate } from "@drifty/domain";
+import { logicalMinuteOfDay, normalizeStartOfDayMinutes, shiftIsoDate } from "@drifty/domain";
 import type { ActivitySegment, Project } from "@drifty/domain";
-import { isoDateFromTimestamp } from "../../lib/formatting";
+import { formatCompactHourLabel, formatQuarterHourLabel, isoDateFromTimestamp } from "../../lib/formatting";
 import { chooseChartStepHours, formatChartHourLabel } from "../insights/weeklyChartView";
 
 // Unassigned classified time renders as a single gray band, matching the flow
@@ -36,10 +36,12 @@ export interface ProjectTrendSegment {
   readonly seconds: number;
 }
 
-/** One calendar day column, oldest → newest across the window. */
+/** One column (a calendar day, or a 30-minute window in the intraday view). */
 export interface ProjectTrendColumn {
   readonly day: string;
   readonly label: string;
+  /** Tooltip heading override; defaults to the full formatted calendar day. */
+  readonly hoverLabel?: string;
   readonly totalSeconds: number;
   readonly x: number;
   readonly segments: readonly ProjectTrendSegment[];
@@ -90,7 +92,7 @@ export interface BuildProjectTrendViewParams {
   readonly endDay: string;
 }
 
-interface TrendPoint {
+export interface TrendPoint {
   readonly x: number;
   readonly y: number;
 }
@@ -126,7 +128,7 @@ function padBasisEndpoints(points: readonly TrendPoint[]): readonly TrendPoint[]
   return [first, first, first, ...points.slice(1, -1), last, last, last];
 }
 
-function buildSmoothLinePath(points: readonly TrendPoint[]): string {
+export function buildSmoothLinePath(points: readonly TrendPoint[]): string {
   const first = points[0];
   if (!first) return "";
   if (points.length === 1) return `M ${round2(first.x)} ${round2(first.y)}`;
@@ -150,7 +152,7 @@ function buildSmoothLinePath(points: readonly TrendPoint[]): string {
 }
 
 /** Closed band between an upper and lower curve, both smoothed the same way. */
-function buildSmoothAreaPath(upper: readonly TrendPoint[], lower: readonly TrendPoint[]): string {
+export function buildSmoothAreaPath(upper: readonly TrendPoint[], lower: readonly TrendPoint[]): string {
   const upperPath = buildSmoothLinePath(upper);
   const lastUpper = upper[upper.length - 1];
   const lastLower = lower[lower.length - 1];
@@ -213,10 +215,37 @@ export function buildProjectTrendView(params: BuildProjectTrendViewParams): Proj
     ? [...activeSeries, { key: NO_PROJECT_KEY, label: NO_PROJECT_LABEL, color: NO_PROJECT_COLOR }]
     : activeSeries;
 
-  const dayTotals = dayList.map((day) => {
-    const bucket = buckets.get(day)!;
-    return series.reduce((sum, item) => sum + (bucket.get(item.key) ?? 0), 0);
+  // Scale the plot to PROJECT time (excluding the "No project" bucket) so the
+  // actual projects fill the chart instead of being crushed under a dominant gray
+  // unassigned band. The unassigned band still renders (faint, clamped to the top)
+  // for context.
+  return buildTrendGeometry({
+    dayList,
+    series,
+    secondsFor: (day, key) => buckets.get(day)?.get(key) ?? 0,
+    axisKeys: series.filter((item) => item.key !== NO_PROJECT_KEY).map((item) => item.key),
   });
+}
+
+export interface TrendGeometryParams {
+  /** Calendar days oldest → newest, "YYYY-MM-DD". */
+  readonly dayList: readonly string[];
+  /** Bands bottom → top (largest first by convention). */
+  readonly series: readonly ProjectTrendSeriesItem[];
+  readonly secondsFor: (day: string, seriesKey: string) => number;
+  /** Series keys that set the y-scale; other bands render clamped for context. Defaults to all series. */
+  readonly axisKeys?: readonly string[];
+}
+
+/**
+ * Geometry-only half of the trend model: takes per-day per-series second totals
+ * (however they were bucketed — activity segments, published team aggregates)
+ * and emits the smooth stacked-area view. Deterministic, never reads the clock.
+ */
+export function buildTrendGeometry(params: TrendGeometryParams): ProjectTrendView {
+  const { dayList, series, secondsFor } = params;
+
+  const dayTotals = dayList.map((day) => series.reduce((sum, item) => sum + secondsFor(day, item.key), 0));
   const maxDaySeconds = dayTotals.reduce((max, value) => Math.max(max, value), 0);
 
   // Fit the plotted window to the days that actually have tracked time so the
@@ -238,19 +267,16 @@ export function buildProjectTrendView(params: BuildProjectTrendViewParams): Proj
   }
   const visibleDays = dayList.slice(firstIdx, lastIdx + 1);
   const visibleCount = visibleDays.length;
+  const fallbackDay = dayList[dayList.length - 1] ?? "";
   const spanLabel =
     visibleCount <= 1
-      ? compactDayLabel(visibleDays[0] ?? endDay)
+      ? compactDayLabel(visibleDays[0] ?? fallbackDay)
       : `${compactDayLabel(visibleDays[0]!)} – ${compactDayLabel(visibleDays[visibleCount - 1]!)}`;
 
-  // Scale the plot to PROJECT time (excluding the "No project" bucket) so the
-  // actual projects fill the chart instead of being crushed under a dominant gray
-  // unassigned band. The unassigned band still renders (faint, clamped to the top)
-  // for context. Fall back to total time on days that have no assigned project time.
-  const projectKeys = series.filter((item) => item.key !== NO_PROJECT_KEY).map((item) => item.key);
+  // Fall back to total time on days that have no axis-basis series time.
+  const axisKeys = params.axisKeys ?? series.map((item) => item.key);
   const maxProjectDaySeconds = dayList.reduce((max, day) => {
-    const bucket = buckets.get(day)!;
-    return Math.max(max, projectKeys.reduce((sum, key) => sum + (bucket.get(key) ?? 0), 0));
+    return Math.max(max, axisKeys.reduce((sum, key) => sum + secondsFor(day, key), 0));
   }, 0);
   const axisBasisSeconds = maxProjectDaySeconds > 0 ? maxProjectDaySeconds : maxDaySeconds;
 
@@ -265,10 +291,9 @@ export function buildProjectTrendView(params: BuildProjectTrendViewParams): Proj
   // Per-day cumulative sums across the VISIBLE window: cumulative[i][seriesIndex]
   // is the running total through series 0..seriesIndex (the band's upper edge).
   const cumulative = visibleDays.map((day) => {
-    const bucket = buckets.get(day)!;
     let running = 0;
     return series.map((item) => {
-      running += bucket.get(item.key) ?? 0;
+      running += secondsFor(day, item.key);
       return running;
     });
   });
@@ -313,12 +338,11 @@ export function buildProjectTrendView(params: BuildProjectTrendViewParams): Proj
     .join(" ");
 
   const columns: ProjectTrendColumn[] = visibleDays.map((day, index) => {
-    const bucket = buckets.get(day)!;
     const columnSegments: ProjectTrendSegment[] = [];
     // Series order (largest project first) matches the bottom→top band stacking.
     let total = 0;
     for (const item of series) {
-      const seconds = bucket.get(item.key) ?? 0;
+      const seconds = secondsFor(day, item.key);
       total += seconds;
       if (seconds <= 0) continue;
       columnSegments.push({
@@ -332,4 +356,205 @@ export function buildProjectTrendView(params: BuildProjectTrendViewParams): Proj
   });
 
   return { columns, series, areaBands, axisTicks, yAxis, gridPath, bounds: PROJECT_TREND_CHART_BOUNDS, maxDaySeconds, spanLabel, visibleDayCount: visibleCount };
+}
+
+export interface BuildProjectIntradayTrendViewParams {
+  readonly segments: readonly ActivitySegment[];
+  readonly projectBySegmentId: ReadonlyMap<string, string>;
+  readonly projects: readonly Project[];
+  /** The logical day being shown, "YYYY-MM-DD" (for the span label only). */
+  readonly day: string;
+  readonly startOfDayMinutes?: number;
+}
+
+const INTRADAY_WINDOW_MINUTES = 30;
+const INTRADAY_WINDOW_COUNT = (24 * 60) / INTRADAY_WINDOW_MINUTES;
+
+function chooseIntradayMinuteStep(maxMinutes: number): number {
+  for (const step of [2, 5, 10, 15, 30]) {
+    if (maxMinutes / step <= 4.5) return step;
+  }
+  return 30;
+}
+
+/**
+ * Single-day variant of the trend model in the SAME ProjectTrendView shape:
+ * segments bucket into 30-minute windows instead of days, so Day mode renders
+ * through the identical smooth stacked-area panel as Week/Month. Leading and
+ * trailing idle windows are trimmed (like empty days in the multi-day view),
+ * the y-scale switches to minutes-per-window while a window's peak stays under
+ * an hour, and x-ticks land on clock-hour boundaries.
+ */
+export function buildProjectIntradayTrendView(params: BuildProjectIntradayTrendViewParams): ProjectTrendView {
+  const { segments, projectBySegmentId, projects } = params;
+  const boundaryMinutes = normalizeStartOfDayMinutes(params.startOfDayMinutes ?? 0);
+
+  const buckets: Map<string, number>[] = Array.from({ length: INTRADAY_WINDOW_COUNT }, () => new Map());
+  const projectTotals = new Map<string, number>();
+
+  for (const segment of segments) {
+    const seconds = Number.isFinite(segment.durationSeconds) ? Math.max(0, segment.durationSeconds) : 0;
+    if (seconds <= 0) continue;
+    const startedMs = new Date(segment.startedAt).getTime();
+    if (Number.isNaN(startedMs)) continue;
+    const started = new Date(startedMs);
+    const clockMinute = started.getHours() * 60 + started.getMinutes();
+    const logicalMinute = logicalMinuteOfDay(clockMinute, boundaryMinutes);
+    const index = Math.min(Math.max(Math.floor(logicalMinute / INTRADAY_WINDOW_MINUTES), 0), INTRADAY_WINDOW_COUNT - 1);
+    const key = projectBySegmentId.get(segment.id) ?? NO_PROJECT_KEY;
+    buckets[index]!.set(key, (buckets[index]!.get(key) ?? 0) + seconds);
+    projectTotals.set(key, (projectTotals.get(key) ?? 0) + seconds);
+  }
+
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const activeSeries: ProjectTrendSeriesItem[] = [...projectTotals.entries()]
+    .filter(([key, total]) => key !== NO_PROJECT_KEY && total > 0 && projectById.has(key))
+    .map(([key, total]) => {
+      const project = projectById.get(key)!;
+      return { key, total, label: project.name, color: project.color };
+    })
+    .sort((left, right) => right.total - left.total || left.label.localeCompare(right.label))
+    .map(({ key, label, color }) => ({ key, label, color }));
+
+  const noProjectSeconds = projectTotals.get(NO_PROJECT_KEY) ?? 0;
+  const series: ProjectTrendSeriesItem[] = noProjectSeconds > 0
+    ? [...activeSeries, { key: NO_PROJECT_KEY, label: NO_PROJECT_LABEL, color: NO_PROJECT_COLOR }]
+    : activeSeries;
+
+  const windowTotals = buckets.map((bucket) => [...bucket.values()].reduce((sum, value) => sum + value, 0));
+  const maxDaySeconds = windowTotals.reduce((max, value) => Math.max(max, value), 0);
+
+  let firstIdx = windowTotals.findIndex((total) => total > 0);
+  let lastIdx = -1;
+  for (let index = windowTotals.length - 1; index >= 0; index -= 1) {
+    if (windowTotals[index]! > 0) {
+      lastIdx = index;
+      break;
+    }
+  }
+  if (firstIdx === -1 || lastIdx < firstIdx) {
+    firstIdx = 0;
+    lastIdx = INTRADAY_WINDOW_COUNT - 1;
+  }
+  const visibleCount = lastIdx - firstIdx + 1;
+  const xFor = (visibleIndex: number): number => {
+    const { left, right } = PROJECT_TREND_CHART_BOUNDS;
+    if (visibleCount <= 1) return (left + right) / 2;
+    return left + (visibleIndex / (visibleCount - 1)) * (right - left);
+  };
+
+  // Project-only basis (gray band clamps) with a minute scale under one hour.
+  const axisBasisWindow = buckets.reduce((max, bucket) => {
+    let projectSeconds = 0;
+    for (const [key, value] of bucket) if (key !== NO_PROJECT_KEY) projectSeconds += value;
+    return Math.max(max, projectSeconds);
+  }, 0);
+  const axisBasisSeconds = axisBasisWindow > 0 ? axisBasisWindow : maxDaySeconds;
+  const axisSeconds = axisBasisSeconds > 0 ? axisBasisSeconds / 0.97 : 3600;
+
+  const yAxis: ProjectTrendYAxisTick[] = [];
+  if (axisBasisSeconds > 0) {
+    if (axisBasisSeconds < 3600) {
+      const maxMinutes = axisBasisSeconds / 60;
+      const step = chooseIntradayMinuteStep(maxMinutes);
+      for (let value = step; value <= maxMinutes + 1e-9; value += step) {
+        yAxis.push({ value: value / 60, label: `${value}m`, y: yForSeconds(value * 60, axisSeconds) });
+      }
+    } else {
+      const maxHours = axisBasisSeconds / 3600;
+      const step = chooseChartStepHours(maxHours);
+      for (let value = step; value <= maxHours + 1e-9; value += step) {
+        yAxis.push({ value, label: `${formatChartHourLabel(value)}h`, y: yForSeconds(value * 3600, axisSeconds) });
+      }
+    }
+  }
+  const gridPath = yAxis
+    .map((tick) => `M ${PROJECT_TREND_CHART_BOUNDS.left} ${round2(tick.y)} H ${PROJECT_TREND_CHART_BOUNDS.right}`)
+    .join(" ");
+
+  const cumulative = Array.from({ length: visibleCount }, (_, visibleIndex) => {
+    const bucket = buckets[firstIdx + visibleIndex]!;
+    let running = 0;
+    return series.map((item) => {
+      running += bucket.get(item.key) ?? 0;
+      return running;
+    });
+  });
+
+  const samples = visibleCount <= 1
+    ? [{ windowIndex: 0, x: PROJECT_TREND_CHART_BOUNDS.left }, { windowIndex: 0, x: PROJECT_TREND_CHART_BOUNDS.right }]
+    : Array.from({ length: visibleCount }, (_, index) => ({ windowIndex: index, x: xFor(index) }));
+
+  const areaBands: ProjectTrendAreaBand[] = series.map((item, seriesIndex) => {
+    const upperPoints = samples.map((sample) => ({
+      x: sample.x,
+      y: yForSeconds(cumulative[sample.windowIndex]![seriesIndex]!, axisSeconds),
+    }));
+    const lowerPoints = samples.map((sample) => ({
+      x: sample.x,
+      y: yForSeconds(seriesIndex === 0 ? 0 : cumulative[sample.windowIndex]![seriesIndex - 1]!, axisSeconds),
+    }));
+    return {
+      key: item.key,
+      color: item.color,
+      areaPath: buildSmoothAreaPath(upperPoints, lowerPoints),
+      linePath: buildSmoothLinePath(upperPoints),
+    };
+  });
+
+  // Clock-hour ticks along the visible span, thinned to at most ~7 labels.
+  const visibleMinutes = visibleCount * INTRADAY_WINDOW_MINUTES;
+  const strideMinutes = Math.max(60, Math.ceil(visibleMinutes / 7 / 60) * 60);
+  const axisTicks: ProjectTrendAxisTick[] = [];
+  for (let index = firstIdx; index <= lastIdx; index += 1) {
+    const startMinute = index * INTRADAY_WINDOW_MINUTES;
+    if (startMinute % strideMinutes !== 0) continue;
+    const clockHour = Math.floor(((startMinute + boundaryMinutes) % (24 * 60)) / 60);
+    axisTicks.push({
+      id: `ptc-axis-w${index}`,
+      label: formatCompactHourLabel(clockHour),
+      x: xFor(index - firstIdx),
+    });
+  }
+
+  const columns: ProjectTrendColumn[] = Array.from({ length: visibleCount }, (_, visibleIndex) => {
+    const index = firstIdx + visibleIndex;
+    const bucket = buckets[index]!;
+    const clockMinute = (index * INTRADAY_WINDOW_MINUTES + boundaryMinutes) % (24 * 60);
+    const endClockMinute = (clockMinute + INTRADAY_WINDOW_MINUTES) % (24 * 60);
+    const columnSegments: ProjectTrendSegment[] = [];
+    let total = 0;
+    for (const item of series) {
+      const seconds = bucket.get(item.key) ?? 0;
+      total += seconds;
+      if (seconds <= 0) continue;
+      columnSegments.push({
+        key: item.key,
+        color: item.color,
+        seconds,
+        heightPct: axisSeconds > 0 ? (seconds / axisSeconds) * 100 : 0,
+      });
+    }
+    return {
+      day: `w${index}`,
+      label: formatQuarterHourLabel(clockMinute),
+      hoverLabel: `${formatQuarterHourLabel(clockMinute)} – ${formatQuarterHourLabel(endClockMinute)}`,
+      totalSeconds: total,
+      x: xFor(visibleIndex),
+      segments: columnSegments,
+    };
+  });
+
+  return {
+    columns,
+    series,
+    areaBands,
+    axisTicks,
+    yAxis,
+    gridPath,
+    bounds: PROJECT_TREND_CHART_BOUNDS,
+    maxDaySeconds,
+    spanLabel: compactDayLabel(params.day),
+    visibleDayCount: visibleCount,
+  };
 }
