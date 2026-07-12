@@ -114,6 +114,8 @@ type AccountMenuProps = {
   readonly isDarkMode: boolean;
   readonly onToggle: () => void;
   readonly onProfile: () => void;
+  /** Profile is a Dev-mode beta surface; hide the item when the gate is off. */
+  readonly showProfile?: boolean;
   readonly onAiSetting: () => void;
   readonly onSettings: () => void;
   readonly onToggleTheme: () => void;
@@ -131,6 +133,7 @@ export function AccountMenu({
   isDarkMode,
   onToggle,
   onProfile,
+  showProfile = true,
   onAiSetting,
   onSettings,
   onToggleTheme,
@@ -223,10 +226,12 @@ export function AccountMenu({
         </span>
       </button>
       <div className="account-menu-separator" role="separator" />
-      <button type="button" className="account-menu-item" onClick={onProfile} role="menuitem">
-        <span className="account-menu-icon"><ProfileIcon /></span>
-        <span>My profile</span>
-      </button>
+      {showProfile ? (
+        <button type="button" className="account-menu-item" onClick={onProfile} role="menuitem">
+          <span className="account-menu-icon"><ProfileIcon /></span>
+          <span>My profile</span>
+        </button>
+      ) : null}
       <button type="button" className="account-menu-item" onClick={onCheckForUpdates} role="menuitem">
         <span className="account-menu-icon"><UpdateIcon /></span>
         <span>Check for updates</span>

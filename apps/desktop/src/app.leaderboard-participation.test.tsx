@@ -151,6 +151,12 @@ async function openSocialLeaderboard() {
   await screen.findByRole("region", { name: /^leaderboard$/i });
 }
 
+/** Profile is a Dev-mode beta surface — call before render(<App/>) to expose it. */
+function enableProfileBetaGate() {
+  window.localStorage.setItem("drifty.dev.mode", "1");
+  window.localStorage.setItem("drifty.dev.profileBeta", "1");
+}
+
 async function openSocialProfile() {
   const nav = await screen.findByRole("navigation", { name: /social navigation/i });
   fireEvent.click(within(nav).getByRole("button", { name: /^profile$/i }));
@@ -224,6 +230,7 @@ describe("App leaderboard participation", () => {
     publishOwnFocusTotal.mockReset().mockResolvedValue({ success: true, error: null });
     optOutLeaderboard.mockReset().mockResolvedValue({ success: true, error: null });
     window.localStorage.clear();
+    enableProfileBetaGate();
     markOnboardingCompleted("local");
     markOnboardingCompleted("user-1");
     authState.user = { email: "alex@example.com" };
@@ -1073,7 +1080,7 @@ describe("App leaderboard participation", () => {
     expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /view profile/i })).toBeNull();
     // Rank embed remains discoverable after opting out, but stays locked until rejoining.
-    expect(screen.getByRole("button", { name: /rank embed/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^embed$/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
     expect(JSON.parse(window.localStorage.getItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY) ?? "[]")).toEqual([]);
     expect((await screen.findByRole("status")).textContent).toMatch(/network unavailable/i);

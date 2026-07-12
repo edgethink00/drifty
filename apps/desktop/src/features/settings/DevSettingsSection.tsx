@@ -33,7 +33,6 @@ type DevSettingsSectionProps = {
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
   readonly deviceSyncPreviewEnabled: boolean;
   readonly webAccountPreviewEnabled: boolean;
-  readonly projectClassificationEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
   readonly projectClassificationCorrectionsBusy: boolean;
   readonly projectPassRuns: readonly ProjectPassRun[];
@@ -57,21 +56,21 @@ type DevSettingsSectionProps = {
   readonly onEnhancedContextEnabledChange: (enabled: boolean) => void;
   readonly onEnhancedContextRetryLowConfidenceChange: (enabled: boolean) => void;
   readonly onEnhancedContextSourceFamilyChange: (family: EnhancedContextSourceFamily, enabled: boolean) => void;
-  readonly onOpenOnboardingV22Preview: () => void;
   readonly onForceBrowserHistoryUrlFallbackChange: (enabled: boolean) => void;
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onDeviceSyncPreviewEnabledChange: (enabled: boolean) => void;
   readonly onWebAccountPreviewEnabledChange: (enabled: boolean) => void;
-  readonly onProjectClassificationEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
   readonly onCheckLatestBuild: () => void;
   readonly onInstallLatestBuild: () => void;
   readonly teamsBetaEnabled: boolean;
+  readonly profileBetaEnabled: boolean;
   readonly onTeamsBetaChange: (enabled: boolean) => void;
+  readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
@@ -97,7 +96,6 @@ export function DevSettingsSection({
   forceFrontmostFallbackCaptureEnabled,
   deviceSyncPreviewEnabled,
   webAccountPreviewEnabled,
-  projectClassificationEnabled,
   projectClassificationAiReviewEvents,
   projectClassificationCorrectionsBusy,
   projectPassRuns,
@@ -121,21 +119,21 @@ export function DevSettingsSection({
   onEnhancedContextEnabledChange,
   onEnhancedContextRetryLowConfidenceChange,
   onEnhancedContextSourceFamilyChange,
-  onOpenOnboardingV22Preview,
   onForceBrowserHistoryUrlFallbackChange,
   onForceChromiumAxCaptureChange,
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
   onDeviceSyncPreviewEnabledChange,
   onWebAccountPreviewEnabledChange,
-  onProjectClassificationEnabledChange,
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
   onCheckLatestBuild,
   onInstallLatestBuild,
   teamsBetaEnabled,
+  profileBetaEnabled,
   onTeamsBetaChange,
+  onProfileBetaChange,
   onPreviewDashboardAiUnavailableCase,
   onPreviewDriftAlarm,
   onReplayDashboardDemo,
@@ -201,6 +199,15 @@ export function DevSettingsSection({
             <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
           </div>
         </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Profile (beta)</div>
+            <div className="desc">Show the public Profile tab in the Social section. Dev-mode opt-in; the leaderboard stays available either way.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
+          </div>
+        </div>
       </div>
       <SettingsCollapsibleCard title="Enhanced context (Dev)">
         <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onCaptureLocalChange={onEnhancedContextCaptureLocalChange} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onEnabledChange={onEnhancedContextEnabledChange} onRetryLowConfidenceChange={onEnhancedContextRetryLowConfidenceChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
@@ -208,9 +215,7 @@ export function DevSettingsSection({
       <DevSettingsProjectClassificationBlock
         projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
         projectClassificationCorrectionsBusy={projectClassificationCorrectionsBusy}
-        projectClassificationEnabled={projectClassificationEnabled}
         projectPassRuns={projectPassRuns}
-        onProjectClassificationEnabledChange={onProjectClassificationEnabledChange}
         onRevertProjectClassificationCorrection={onRevertProjectClassificationCorrection}
       />
 
@@ -278,7 +283,6 @@ export function DevSettingsSection({
           watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
           watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
           onEndOfDayReviewPreview={onEndOfDayReviewPreview}
-          onOpenOnboardingV22Preview={onOpenOnboardingV22Preview}
           onOpenReplayOnboarding={onOpenReplayOnboarding}
           onPreviewDriftAlarm={onPreviewDriftAlarm}
           onShowWatcherPeek={onShowWatcherPeek}

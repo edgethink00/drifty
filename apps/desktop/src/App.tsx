@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
@@ -45,6 +45,9 @@ import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
 import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
+import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
+import type { TeamWorkspaceAction } from "./features/team/TeamWorkspace";
+import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HistoryView } from "./features/history/HistoryView";
@@ -89,10 +92,11 @@ import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSecti
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
+import { analysisModelDisplayLabel } from "./features/settings/analysisModelSetup";
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { ProjectsPage } from "./features/projects/ProjectsPage";
-import { contextualProjectColorBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
+import { contextualProjectColorBySegment, contextualProjectIdBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
@@ -103,7 +107,6 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
 import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
-import { OnboardingV22Preview } from "./features/onboarding/previews/OnboardingV22Preview";
 import {
   WatcherPeek,
   type WatcherPeekEvent,
@@ -200,7 +203,7 @@ import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialProjectClassificationEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
@@ -362,20 +365,29 @@ export default function App() {
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
+  const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
-  const [onboardingV22PreviewOpen, setOnboardingV22PreviewOpen] = useState(false);
+  const [pendingTeamAction, setPendingTeamAction] = useState<TeamWorkspaceAction | null>(null);
+  const [teamNavMenuOpen, setTeamNavMenuOpen] = useState(false);
+  // Viewport coordinates for the fixed team-options popover (opens to the right
+  // of the rail so it never joins the sidebar scroll area or hides the foot).
+  const [teamNavMenuPos, setTeamNavMenuPos] = useState<{ readonly left: number; readonly top: number } | null>(null);
+  // undefined = follow the selected team (auto-expanded); null = user collapsed it.
+  const [teamNavExpandedId, setTeamNavExpandedId] = useState<string | null | undefined>(undefined);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
-  const canOpenTeamsBeta = devModeEnabled && teamsBetaEnabled;
+  const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
+  const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
   // Project classification is a Dev-mode preview control (opt-in, off by default):
   // the Dev-settings toggle is the sole gate, so it is available in any build —
   // including public/prerelease binaries — only after the user turns it on.
-  const [devProjectClassificationEnabled, setDevProjectClassificationEnabled] = useState(resolveInitialProjectClassificationEnabled);
-  const projectClassificationFeatureEnabled = devProjectClassificationEnabled;
+  // Project classification (Projects tab + Intelligence analysis) shipped as a
+  // default-on production surface — the Dev-mode preview gate is retired.
+  const projectClassificationFeatureEnabled = true;
   const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(resolveInitialDeviceSyncEnabled);
   const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
@@ -886,6 +898,40 @@ export default function App() {
   }, []);
   const requestLeaderboardAuth = useCallback(() => setAuthModalOpen(true), []);
   const requestTeamAuth = useCallback(() => setAuthModalOpen(true), []);
+  // Owned here (not inside the Team surface) so the sidebar team nav can list teams.
+  const realTeamController = useTeamController({
+    activeTab,
+    hasRequiredAccountAuth,
+    isEffectiveAuthRequired,
+    isSupabaseConfigured,
+    user,
+    onAuthRequired: requestTeamAuth,
+  });
+  // Dev-server-only QA fixtures; both hooks always run to keep hook order stable.
+  const teamQaMockController = useTeamQaMockController();
+  const teamController = isTeamQaMockEnabled() ? teamQaMockController : realTeamController;
+  const openTeamAction = useCallback((action: TeamWorkspaceAction) => {
+    setTeamNavMenuOpen(false);
+    setPendingTeamAction(action);
+    navigateToTab("team");
+  }, [navigateToTab]);
+  useEffect(() => {
+    if (!teamNavMenuOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest(".team-nav-menu") || target?.closest(".team-nav-more")) return;
+      setTeamNavMenuOpen(false);
+    };
+    // The popover is fixed-positioned, so any scroll would detach it from its
+    // anchor row — just dismiss it.
+    const onScroll = () => setTeamNavMenuOpen(false);
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("scroll", onScroll, true);
+    };
+  }, [teamNavMenuOpen]);
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
@@ -2511,9 +2557,6 @@ export default function App() {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
 
-  useEffect(() => {
-    window.localStorage.setItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY, devProjectClassificationEnabled ? "1" : "0");
-  }, [devProjectClassificationEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, deviceSyncEnabled ? "1" : "0");
@@ -2529,9 +2572,6 @@ export default function App() {
 
   // Leaving the Projects tab visible after the preview is switched off would strand
   // the user on a hidden surface — send them back to the dashboard.
-  useEffect(() => {
-    if (!projectClassificationFeatureEnabled && activeTab === "projects") navigateToTab("dashboard");
-  }, [projectClassificationFeatureEnabled, activeTab, navigateToTab]);
 
   useEffect(() => {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
@@ -2540,16 +2580,34 @@ export default function App() {
     if (localization.koreanPreviewEnabled) localization.setKoreanPreviewEnabled(false);
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
+    if (profileBetaEnabled) setProfileBetaEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
     window.localStorage.setItem(TEAMS_BETA_STORAGE_KEY, effectiveTeamsBetaEnabled ? "1" : "0");
   }, [devModeEnabled, teamsBetaEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PROFILE_BETA_STORAGE_KEY, canOpenProfileBeta ? "1" : "0");
+  }, [canOpenProfileBeta]);
+
+  // Profile is a Dev-mode beta surface; without the gate, profile requests land
+  // on the leaderboard (replacing the history entry so back/forward stays sane).
+  useEffect(() => {
+    if (rawActiveTab !== "profile" || canOpenProfileBeta) return;
+    setNavigationHistory((current) => {
+      const safeEntry: NavigationHistoryState["entries"][number] = { tabId: "leaderboard", dashPeriod };
+      if (current.entries.length === 0) return { entries: [safeEntry], index: 0 };
+      const entries = current.entries.slice();
+      entries[current.index] = safeEntry;
+      return { ...current, entries };
+    });
+  }, [rawActiveTab, canOpenProfileBeta, dashPeriod]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -4362,7 +4420,9 @@ export default function App() {
   const insightSiteSummary = insightTopSites.slice(0, 5);
   const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
   const selectedDayRange = useMemo(() => getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
-  const analysisModel = useAnalysisModelSetup(isSupabaseConfigured);
+  const analysisModel = useAnalysisModelSetup(isSupabaseConfigured, localAiSetup.provider);
+  // One-shot: "AI setup" on the Projects page lands on the Intelligence tab.
+  const [aiSetupRequestedTab, setAiSetupRequestedTab] = useState<"providers" | "intelligence" | null>(null);
   const projectClassification = useProjectClassification({
     tracker: trackerClient,
     selectedDayRange,
@@ -4410,6 +4470,12 @@ export default function App() {
     () => contextualProjectColorBySegment(effectiveSelectedDaySegments, projectClassification.assignments, projectColorMap(projectClassification.projects), effectiveSelectedDayClassificationOptions),
     [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.projects, effectiveSelectedDayClassificationOptions],
   );
+  // Same contextual attribution as the colors, but as project IDs — lets the
+  // flow hover card name the project a block belongs to.
+  const flowProjectIdBySegment = useMemo(
+    () => contextualProjectIdBySegment(effectiveSelectedDaySegments, projectClassification.assignments, effectiveSelectedDayClassificationOptions),
+    [effectiveSelectedDaySegments, projectClassification.assignments, effectiveSelectedDayClassificationOptions],
+  );
   // segment.id → projectId for the selected day (assigned only), for the Projects
   // page charts + dashboard donut.
   const selectedDayProjectBySegmentId = useMemo(
@@ -4421,26 +4487,36 @@ export default function App() {
     [projectClassification.assignments],
   );
   // The Projects tab isn't the Trends tab, so the rolling insight segments aren't
-  // loaded here. Load a dedicated last-14-days window (segments + assignments) for
-  // the project trend chart, refreshing whenever a pass finishes.
-  const [projectsTrend, setProjectsTrend] = useState<{ readonly segments: ActivitySegment[]; readonly assignments: ProjectAssignmentRecord[] }>({ segments: [], assignments: [] });
+  // loaded here. Load a dedicated trend window (segments + assignments) for the
+  // project trend chart + table, refreshing whenever a pass finishes. The window
+  // is driven by the page's Day/Week/Month range controls; the last-14-days
+  // default covers the first render before the page reports its window.
+  const [projectsTrend, setProjectsTrend] = useState<{ readonly segments: ActivitySegment[]; readonly assignments: ProjectAssignmentRecord[]; readonly loadedRange: { readonly startDay: string; readonly endDay: string } | null }>({ segments: [], assignments: [], loadedRange: null });
+  const [projectsTrendRange, setProjectsTrendRange] = useState<{ readonly startDay: string; readonly endDay: string } | null>(null);
+  const handleProjectsTrendWindowChange = useCallback((next: { readonly startDay: string; readonly endDay: string }) => {
+    setProjectsTrendRange((previous) =>
+      previous && previous.startDay === next.startDay && previous.endDay === next.endDay ? previous : next,
+    );
+  }, []);
   useEffect(() => {
     if (activeTab !== "projects" || projectClassification.running) return;
     let cancelled = false;
-    const range = getLogicalDayRange(shiftIsoDate(selectedDay, -13), selectedDay, startOfDayMinutes);
+    const startDay = projectsTrendRange?.startDay ?? shiftIsoDate(selectedDay, -13);
+    const endDay = projectsTrendRange?.endDay ?? selectedDay;
+    const range = getLogicalDayRange(startDay, endDay, startOfDayMinutes);
     void (async () => {
       try {
         const [segments, assignments] = await Promise.all([
           trackerClient.getTimeline(range),
           trackerClient.getProjectAssignments?.(range) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
         ]);
-        if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [] });
+        if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [], loadedRange: { startDay, endDay } });
       } catch {
-        if (!cancelled) setProjectsTrend({ segments: [], assignments: [] });
+        if (!cancelled) setProjectsTrend({ segments: [], assignments: [], loadedRange: { startDay, endDay } });
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, selectedDay, startOfDayMinutes, projectClassification.running, trackerClient]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedDay, startOfDayMinutes, projectClassification.running, projectsTrendRange, trackerClient]); // eslint-disable-line react-hooks/exhaustive-deps
   const projectsTrendProjectBySegmentId = useMemo(
     () => new Map(
       projectsTrend.assignments
@@ -4479,7 +4555,7 @@ export default function App() {
     const centerPercent = total > 0 ? Math.round(((entries[0]?.totalSeconds ?? 0) / total) * 100) : 0;
     return { entries, centerPercent };
   }, [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.projects]);
-  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes, flowProjectColorBySegment), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment]);
+  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
   const [projectPassConsented, setProjectPassConsented] = useState(() => {
     try {
       return typeof window !== "undefined" && window.localStorage.getItem(PROJECT_PASS_CONSENT_STORAGE_KEY) === "1";
@@ -4508,11 +4584,11 @@ export default function App() {
   const analysisProviderLabel = analysisModel.analysisSetup.provider === "cloud"
     ? "Drifty Cloud"
     : analysisModel.analysisSetup.provider === "openrouter"
-      ? `OpenRouter (${analysisModel.analysisSetup.openRouterModel})`
+      ? `OpenRouter (${analysisModelDisplayLabel(analysisModel.analysisSetup.openRouterModel)})`
       : analysisModel.analysisSetup.provider === "openai"
-        ? `OpenAI (${analysisModel.analysisSetup.openaiModel})`
+        ? `OpenAI (${analysisModelDisplayLabel(analysisModel.analysisSetup.openaiModel)})`
         : analysisModel.analysisSetup.provider === "anthropic"
-          ? `Anthropic (${analysisModel.analysisSetup.anthropicModel})`
+          ? `Anthropic (${analysisModelDisplayLabel(analysisModel.analysisSetup.anthropicModel)})`
           : "your custom endpoint";
   const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   const classificationCategoryBreakdowns = useMemo(
@@ -5500,6 +5576,7 @@ export default function App() {
           <img key={brandCaptureMotionKey} className="brand__logo" src={logoUrl} alt="" aria-hidden="true" />
         </div>
 
+        <div className="sidebar-scroll">
         <div className="nav-label">Dashboard</div>
         <nav className="sidebar-nav sidebar-nav--periods" aria-label="Dashboard views">
           {dashboardPeriodOptions.map((item) => (
@@ -5528,14 +5605,16 @@ export default function App() {
 
         <div className="nav-label">Social</div>
         <nav className="sidebar-nav sidebar-nav--social" aria-label="Social navigation">
-          <button
-            type="button"
-            className={activeTab === "leaderboard" && socialSection === "profile" ? "nav-item active" : "nav-item"}
-            onClick={() => navigateToTab("profile")}
-          >
-            <NavIcon type="profile" /><span>Profile</span>
-            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Profile</span> : null}
-          </button>
+          {canOpenProfileBeta ? (
+            <button
+              type="button"
+              className={activeTab === "leaderboard" && socialSection === "profile" ? "nav-item active" : "nav-item"}
+              onClick={() => navigateToTab("profile")}
+            >
+              <NavIcon type="profile" /><span>Profile</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Profile</span> : null}
+            </button>
+          ) : null}
           <button
             type="button"
             className={activeTab === "leaderboard" && socialSection === "leaderboard" ? "nav-item active" : "nav-item"}
@@ -5548,25 +5627,155 @@ export default function App() {
 
         {canOpenTeamsBeta ? (
           <>
-            <div className="nav-label">Your teams</div>
-            <nav className="sidebar-nav" aria-label="Team navigation">
-              <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("team")}>
-                <NavIcon type="team" /><span>Team</span>
-                {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Team</span> : null}
-              </button>
-              {activeTab === "team" && !isSidebarVisuallyCollapsed ? (
-                <div className="sidebar-subnav">
-                  <button type="button" aria-label="Team dashboards" className={teamSubView === "dashboards" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"} onClick={() => { setTeamSubView("dashboards"); navigateToTab("team"); }}>
-                    <span>Dashboards</span>
+            <div className="nav-label nav-label--teams">
+              <span>Your teams</span>
+              {!isSidebarVisuallyCollapsed ? (
+                <button
+                  type="button"
+                  className="nav-label__add"
+                  aria-label="Create or join a team"
+                  title="Create or join a team"
+                  onClick={() => openTeamAction("add")}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+              ) : null}
+            </div>
+            <nav className="sidebar-nav sidebar-nav--teams" aria-label="Your teams">
+              {teamController.teams.length === 0 ? (
+                <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("team")}>
+                  <NavIcon type="team" /><span>Teams</span>
+                  {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Teams</span> : null}
+                </button>
+              ) : (
+                teamController.teams.map((team) => {
+                  const isSelectedTeam = teamController.selectedTeam?.organization_id === team.organization_id;
+                  const expandedTeamId = teamNavExpandedId === undefined
+                    ? teamController.selectedTeam?.organization_id ?? null
+                    : teamNavExpandedId;
+                  const isExpandedTeam = expandedTeamId === team.organization_id;
+                  // The team row is only an expander — selection highlight lives on the sub-items.
+                  const toggleTeam = () => {
+                    if (isSidebarVisuallyCollapsed) {
+                      teamController.selectTeam(team.organization_id);
+                      navigateToTab("team");
+                      return;
+                    }
+                    teamController.selectTeam(team.organization_id);
+                    setTeamNavExpandedId(isExpandedTeam ? null : team.organization_id);
+                  };
+                  return (
+                    <Fragment key={team.organization_id}>
+                      <div
+                        className="nav-item nav-item--team"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={team.organization_name}
+                        aria-expanded={isExpandedTeam}
+                        onClick={toggleTeam}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            toggleTeam();
+                          }
+                        }}
+                      >
+                        <NavIcon type="team" />
+                        <span className="nav-item--team__name">{team.organization_name}</span>
+                        {isSidebarVisuallyCollapsed ? (
+                          <span className="nav-item__hover-label" aria-hidden="true">{team.organization_name}</span>
+                        ) : (
+                          <>
+                            <svg
+                              className={isExpandedTeam ? "team-nav-caret team-nav-caret--open" : "team-nav-caret"}
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.7"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M6 3.5 10.5 8 6 12.5" />
+                            </svg>
+                            {isSelectedTeam ? (
+                              <button
+                                type="button"
+                                className="team-nav-more"
+                                aria-label="Team options"
+                                aria-haspopup="menu"
+                                aria-expanded={teamNavMenuOpen}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  const anchorRect = event.currentTarget.getBoundingClientRect();
+                                  const sidebarRect = event.currentTarget.closest(".sidebar")?.getBoundingClientRect();
+                                  setTeamNavMenuPos({
+                                    left: Math.max(anchorRect.right, sidebarRect?.right ?? 0) + 8,
+                                    top: Math.max(8, anchorRect.top - 6),
+                                  });
+                                  setTeamNavMenuOpen((open) => !open);
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="18.5" cy="12" r="1.6" /></svg>
+                              </button>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                      {isExpandedTeam && !isSidebarVisuallyCollapsed ? (
+                        <div className="sidebar-subnav">
+                          <button
+                            type="button"
+                            aria-label="Team dashboards"
+                            className={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
+                            onClick={() => {
+                              teamController.selectTeam(team.organization_id);
+                              setTeamSubView("dashboards");
+                              navigateToTab("team");
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="1.5" /><rect x="13.5" y="12" width="7.5" height="9" rx="1.5" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="1.5" /></svg>
+                            <span>Dashboards</span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Team projects"
+                            className={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
+                            onClick={() => {
+                              teamController.selectTeam(team.organization_id);
+                              setTeamSubView("projects");
+                              navigateToTab("team");
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></svg>
+                            <span>Projects</span>
+                          </button>
+                        </div>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
+              )}
+              {teamNavMenuOpen && teamNavMenuPos && !isSidebarVisuallyCollapsed ? (
+                <div className="team-nav-menu" role="menu" aria-label="Team options" style={{ left: teamNavMenuPos.left, top: teamNavMenuPos.top }}>
+                  <button type="button" role="menuitem" onClick={() => openTeamAction("invite")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
+                    Invite teammate
                   </button>
-                  <button type="button" aria-label="Team projects" className={teamSubView === "projects" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"} onClick={() => { setTeamSubView("projects"); navigateToTab("team"); }}>
-                    <span>Projects</span>
+                  <button type="button" role="menuitem" onClick={() => openTeamAction("settings")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
+                    Team settings
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => openTeamAction("add")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    Create or join a team
                   </button>
                 </div>
               ) : null}
             </nav>
           </>
         ) : null}
+        </div>
 
         <div className="sidebar-foot">
           <div className="tracker-control" data-state={sidebarTrackerControlState}>
@@ -5617,6 +5826,7 @@ export default function App() {
             userEmail={user?.email ?? null}
             isDarkMode={theme === "dark"}
             onToggle={() => setAccountMenuOpen((open) => !open)}
+            showProfile={canOpenProfileBeta}
             onProfile={() => {
               navigateToTab("profile");
               if (isPolicySignedIn) void focusCard.refresh();
@@ -5805,6 +6015,7 @@ export default function App() {
             dayProjectBySegmentId={selectedDayProjectBySegmentId}
             trendSegments={projectsTrend.segments}
             trendProjectBySegmentId={projectsTrendProjectBySegmentId}
+            trendLoadedRange={projectsTrend.loadedRange}
             projectsLoading={projectClassification.projectsLoading}
             running={projectClassification.running}
             runError={projectClassification.runError}
@@ -5812,11 +6023,14 @@ export default function App() {
             analysisSetup={analysisModel.analysisSetup}
             consentOpen={projectPassConsentOpen}
             consentProviderLabel={analysisProviderLabel}
-            onConfigureModel={() => { navigateToTab("settings"); setSettingsSection("aiSetup"); }}
+            onTrendWindowChange={handleProjectsTrendWindowChange}
+            onConfigureModel={() => {
+              navigateToTab("settings");
+              setSettingsSection("aiSetup");
+              setAiSetupRequestedTab("intelligence");
+            }}
             onSaveProject={(input) => void projectClassification.saveProject(input)}
             onDeleteProject={(id) => void projectClassification.deleteProject(id)}
-            onAddAnchor={(projectId, kind, value) => void projectClassification.addAnchor(projectId, kind, value)}
-            onDeleteAnchor={(projectId, kind, value) => void projectClassification.deleteAnchor(projectId, kind, value)}
             onRunAnalysis={() => requestProjectPassRun()}
             onConsentConfirm={confirmProjectPassConsent}
             onConsentCancel={() => setProjectPassConsentOpen(false)}
@@ -5906,14 +6120,16 @@ export default function App() {
         {activeTab === "team" && canOpenTeamsBeta ? (
           <TeamsBetaSurface
             hasRequiredAccountAuth={hasRequiredAccountAuth}
-            isEffectiveAuthRequired={isEffectiveAuthRequired}
             isPolicySignedIn={isPolicySignedIn}
             isSupabaseConfigured={isSupabaseConfigured}
             startOfDayMinutes={startOfDayMinutes}
             user={user}
+            controller={teamController}
             teamSubView={teamSubView}
             onTeamSubViewChange={setTeamSubView}
             pendingInvite={pendingTeamInvite}
+            pendingAction={pendingTeamAction}
+            onPendingActionConsumed={() => setPendingTeamAction(null)}
             onAuthRequired={requestTeamAuth}
             onPendingInviteClear={() => setPendingTeamInvite(null)}
           />
@@ -6070,6 +6286,8 @@ export default function App() {
                     analysisSetup={analysisModel.analysisSetup}
                     analysisOpenRouterConnected={analysisModel.openRouterConnected}
                     showIntelligenceTab={projectClassificationFeatureEnabled}
+                    requestedTab={aiSetupRequestedTab}
+                    onRequestedTabConsumed={() => setAiSetupRequestedTab(null)}
                     onAnalysisChange={analysisModel.setAnalysisSetup}
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
@@ -6110,7 +6328,6 @@ export default function App() {
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
                     deviceSyncPreviewEnabled={devDeviceSyncPreviewEnabled}
                     webAccountPreviewEnabled={devWebAccountPreviewEnabled}
-                    projectClassificationEnabled={devProjectClassificationEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
                     weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
@@ -6139,15 +6356,15 @@ export default function App() {
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onDeviceSyncPreviewEnabledChange={setDevDeviceSyncPreviewEnabled}
                     onWebAccountPreviewEnabledChange={setDevWebAccountPreviewEnabled}
-                    onProjectClassificationEnabledChange={setDevProjectClassificationEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
-                    onOpenOnboardingV22Preview={() => setOnboardingV22PreviewOpen(true)}
                     onCheckLatestBuild={() => void developerPreReleaseUpdateController.checkLatestBuild()}
                     onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
                     teamsBetaEnabled={teamsBetaEnabled}
+                    profileBetaEnabled={profileBetaEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}
+                    onProfileBetaChange={setProfileBetaEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onPreviewDriftAlarm={previewDriftAlarm}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
@@ -6223,7 +6440,6 @@ export default function App() {
         />
       ) : null}
 
-      <OnboardingV22Preview open={onboardingV22PreviewOpen} onClose={() => setOnboardingV22PreviewOpen(false)} />
 
       <ProfileDialogs
         avatarUrl={profileDraft.avatarUrl}
