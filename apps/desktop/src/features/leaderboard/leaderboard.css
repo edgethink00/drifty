@@ -1324,9 +1324,11 @@
   box-shadow: none;
 }
 
+/* Cluster the three totals instead of stretching them across the row. */
 .leaderboard-toolbar__stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(3, auto);
+  justify-content: start;
+  gap: clamp(1.1rem, 2.4vw, 2rem);
   border-left: 0;
 }
 
@@ -1600,8 +1602,8 @@
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-2);
 }
 
 .leaderboard-profile-block .leaderboard-hero {
@@ -1611,7 +1613,7 @@
     linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 50%, transparent), transparent 78%),
     color-mix(in srgb, var(--surface) 92%, transparent);
   grid-template-columns: minmax(0, 1fr) minmax(11rem, 0.22fr);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-2);
 }
 
 .leaderboard-profile-block .leaderboard-hero__avatar {
@@ -2058,13 +2060,16 @@
   grid-row: 1 / span 3;
 }
 
+/* No inner card — the toolbar sits directly in the board block, separated
+   from the list by a hairline divider. */
 .leaderboard-board-block .leaderboard-toolbar {
   align-items: center;
-  background: color-mix(in srgb, var(--surface-strong) 28%, transparent);
-  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 0;
   grid-template-columns: auto minmax(10rem, 0.25fr) minmax(0, 1fr) minmax(14rem, 0.38fr);
-  padding: var(--space-2);
+  padding: var(--space-1) 0 var(--space-2);
 }
 
 .leaderboard-period-control {
@@ -2480,7 +2485,8 @@
   transform: translateY(-1px);
 }
 
-.leaderboard-hero__participation.hero-action-btn {
+.leaderboard-hero__participation.hero-action-btn,
+.hero-action-btn--mono {
   min-width: 0;
   font-family: var(--font-mono);
   font-size: 0.6875rem;

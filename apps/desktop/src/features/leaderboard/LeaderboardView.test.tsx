@@ -136,18 +136,20 @@ describe("LeaderboardView", () => {
 
     const participation = screen.getByLabelText(/your leaderboard participation/i);
     expect(within(participation).getByText(/on the board · #117/i)).toBeTruthy();
-    fireEvent.click(within(participation).getByRole("button", { name: /rank embed/i }));
-    expect(within(screen.getByRole("dialog", { name: /rank embed/i })).getByText("1h 31m")).toBeTruthy();
+    fireEvent.click(within(participation).getByRole("button", { name: /^embed$/i }));
+    expect(within(screen.getByRole("dialog", { name: /^embed$/i })).getByText("1h 31m")).toBeTruthy();
   });
 
   it("keeps the rank embed locked until the selected period has a public rank", () => {
     renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: null, leaderboard: [], publicProfile: makePublicProfile() });
 
     const participation = screen.getByLabelText(/your leaderboard participation/i);
-    fireEvent.click(within(participation).getByRole("button", { name: /rank embed/i }));
-    const modal = screen.getByRole("dialog", { name: /rank embed/i });
+    fireEvent.click(within(participation).getByRole("button", { name: /^embed$/i }));
+    const modal = screen.getByRole("dialog", { name: /^embed$/i });
     expect(within(modal).getByRole("note").textContent).toMatch(/not public yet/i);
-    expect((within(modal).getByRole("textbox") as HTMLInputElement).disabled).toBe(true);
+    for (const snippetInput of within(modal).getAllByRole("textbox")) {
+      expect((snippetInput as HTMLInputElement).disabled).toBe(true);
+    }
   });
 
   it("keeps the existing participation hero and board as sibling blocks", () => {
@@ -189,7 +191,7 @@ describe("LeaderboardView", () => {
     const participation = screen.getByLabelText(/your leaderboard participation/i);
     fireEvent.click(within(participation).getByRole("button", { name: /edit public profile/i }));
     expect(within(participation).getByRole("link", { name: /website/i })).toBeTruthy();
-    expect(within(participation).getByRole("button", { name: /rank embed/i })).toBeTruthy();
+    expect(within(participation).getByRole("button", { name: /^embed$/i })).toBeTruthy();
     expect(onEditProfile).toHaveBeenCalledTimes(1);
   });
 
@@ -198,12 +200,14 @@ describe("LeaderboardView", () => {
     renderView({ profileDisplayName: "Alex", publicProfile: makePublicProfile({ card }) });
 
     const strip = screen.getByLabelText(/your leaderboard participation/i);
-    fireEvent.click(within(strip).getByRole("button", { name: /rank embed/i }));
+    fireEvent.click(within(strip).getByRole("button", { name: /^embed$/i }));
 
-    const modal = screen.getByRole("dialog", { name: /rank embed/i });
-    const snippet = within(modal).getByRole("textbox") as HTMLInputElement;
-    expect(snippet.value).toContain(`id=${PUBLIC_ID}`);
-    expect(snippet.value).toContain("view=rank");
+    const modal = screen.getByRole("dialog", { name: /^embed$/i });
+    const [htmlSnippet, markdownSnippet] = within(modal).getAllByRole("textbox") as HTMLInputElement[];
+    expect(htmlSnippet!.value).toContain(`id=${PUBLIC_ID}`);
+    expect(htmlSnippet!.value).toContain("view=rank");
+    expect(markdownSnippet!.value).toContain("embed/badge?");
+    expect(markdownSnippet!.value).toContain("view=rank");
     expect(within(modal).queryByText(/category breakdown/i)).toBeNull();
     expect(card.refresh).not.toHaveBeenCalled();
   });
