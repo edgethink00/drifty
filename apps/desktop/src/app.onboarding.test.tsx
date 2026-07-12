@@ -20,6 +20,7 @@ const {
   accessibilityGetStatus,
   accessibilityRequestAccess,
   trackerGetStatus,
+  trackerStart,
   trackerGetHourlySummary,
   trackerPreviewBrowserHistoryImport,
   trackerImportBrowserHistory,
@@ -64,6 +65,7 @@ const {
   accessibilityGetStatus: vi.fn(),
   accessibilityRequestAccess: vi.fn(),
   trackerGetStatus: vi.fn(),
+  trackerStart: vi.fn(),
   trackerGetHourlySummary: vi.fn(),
   trackerPreviewBrowserHistoryImport: vi.fn(),
   trackerImportBrowserHistory: vi.fn(),
@@ -172,7 +174,7 @@ vi.mock("./lib/api/trackerClient", () => ({
     getHourlySummary: trackerGetHourlySummary,
     getTopSites: vi.fn().mockResolvedValue([]),
     getAppIcons: vi.fn().mockResolvedValue({}),
-    start: vi.fn(),
+    start: trackerStart,
     stop: vi.fn(),
     updateTrayProductivityIcon: vi.fn().mockResolvedValue(undefined),
     previewBrowserHistoryImport: trackerPreviewBrowserHistoryImport,
@@ -442,6 +444,12 @@ describe("App onboarding", () => {
       accessibilityGranted: true,
       trackerMode: "unavailable",
       message: "Tracker not available in this environment",
+    }));
+    trackerStart.mockResolvedValue(makeTrackerStatus({
+      running: true,
+      accessibilityGranted: true,
+      trackerMode: "tracking",
+      message: null,
     }));
     isPermissionGranted.mockResolvedValue(false);
     requestPermission.mockResolvedValue("granted");

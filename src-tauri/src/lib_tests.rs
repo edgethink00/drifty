@@ -1,4 +1,9 @@
 use super::*;
+use crate::tracker::{
+    apply_tracker_startup_state, degraded_tracker_status, tracker_start_error_message,
+    tracker_status_error_message, tracker_stop_error_message, TrackerError, TrackerStartupState,
+    TrackerStatus, TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS,
+};
 
 #[test]
 fn auth_deep_link_filter_accepts_drifty_callbacks() {
@@ -57,6 +62,161 @@ fn main_window_close_policy_only_handles_main_label() {
 fn macos_reopen_policy_reveals_only_without_visible_windows() {
     assert!(should_reveal_main_window_on_reopen(false));
     assert!(!should_reveal_main_window_on_reopen(true));
+}
+fn tracker_status(running: bool) -> TrackerStatus {
+    let (tracker_mode, message) = if running {
+        ("tracking", "Tracker is running.")
+    } else {
+        ("stopped", "Tracker is stopped.")
+    };
+
+    TrackerStatus {
+        running,
+        accessibility_granted: true,
+        last_event_at: Some("2026-07-12T12:00:00Z".into()),
+        database_path: Some("tracker.sqlite3".into()),
+        tracker_mode: Some(tracker_mode.into()),
+        idle_seconds: Some(0.0),
+        idle_detection_available: Some(true),
+        message: Some(message.into()),
+    }
+}
+
+#[test]
+fn tracker_startup_state_retains_failure_until_tracker_recovers() {
+    let startup_state = TrackerStartupState::default();
+    let initial_start = startup_state.begin_start_attempt();
+    assert!(startup_state.record_start_failure(
+        initial_start,
+        &TrackerError::MissingRuntime("/private/tracker-runtime".into()),
+    ));
+    assert_eq!(
+        startup_state.failure_message().as_deref(),
+        Some("Activity tracking components are unavailable. Try starting it again.")
+    );
+
+    let retry_start = startup_state.begin_start_attempt();
+    assert!(startup_state.record_start_failure(
+        retry_start,
+        &TrackerError::CommandFailed("raw tracker output must not reach the user".into()),
+    ));
+    assert_eq!(
+        startup_state.failure_message().as_deref(),
+        Some("Activity tracking could not start. Try starting it again.")
+    );
+
+    let degraded = apply_tracker_startup_state(&startup_state, tracker_status(false));
+    assert!(!degraded.running);
+    assert_eq!(degraded.tracker_mode.as_deref(), Some("degraded"));
+    assert!(startup_state.failure_message().is_some());
+
+    let recovered = apply_tracker_startup_state(&startup_state, tracker_status(true));
+    assert!(recovered.running);
+    assert_eq!(recovered.tracker_mode.as_deref(), Some("tracking"));
+    assert_eq!(recovered.message.as_deref(), Some("Tracker is running."));
+    assert_eq!(startup_state.failure_message(), None);
+}
+#[test]
+fn tracker_startup_state_ignores_stale_start_completions() {
+    let startup_state = TrackerStartupState::default();
+    let automatic_start = startup_state.begin_start_attempt();
+    let explicit_start = startup_state.begin_start_attempt();
+
+    assert!(startup_state.record_start_failure(
+        explicit_start,
+        &TrackerError::CommandFailed("newer explicit start stderr".into()),
+    ));
+    assert!(!startup_state.complete_start_success(automatic_start));
+    assert!(startup_state.failure_message().is_some());
+
+    assert!(startup_state.complete_start_success(explicit_start));
+    assert_eq!(startup_state.failure_message(), None);
+    assert!(!startup_state.record_start_failure(
+        automatic_start,
+        &TrackerError::CommandFailed("stale automatic start stderr".into()),
+    ));
+}
+
+#[test]
+fn tracker_startup_state_stop_supersedes_in_flight_start() {
+    let startup_state = TrackerStartupState::default();
+    let start_generation = startup_state.begin_start_attempt();
+
+    assert!(startup_state.record_start_failure(
+        start_generation,
+        &TrackerError::CommandFailed("initial start stderr".into()),
+    ));
+    assert!(startup_state.failure_message().is_some());
+
+    let stop_generation = startup_state.begin_stop_attempt();
+    assert!(startup_state.complete_stop_success(stop_generation));
+    assert_eq!(startup_state.failure_message(), None);
+    assert!(!startup_state.complete_start_success(start_generation));
+    assert!(!startup_state.record_start_failure(
+        start_generation,
+        &TrackerError::CommandFailed("late start stderr".into()),
+    ));
+
+    let stopped = apply_tracker_startup_state(&startup_state, tracker_status(false));
+    assert!(!stopped.running);
+    assert_eq!(stopped.tracker_mode.as_deref(), Some("stopped"));
+    assert_eq!(stopped.message.as_deref(), Some("Tracker is stopped."));
+}
+
+#[test]
+fn older_stop_completion_does_not_discard_newer_start_failure() {
+    let startup_state = TrackerStartupState::default();
+    let older_stop = startup_state.begin_stop_attempt();
+    let newer_start = startup_state.begin_start_attempt();
+
+    assert!(!startup_state.complete_stop_success(older_stop));
+    assert!(startup_state.record_start_failure(
+        newer_start,
+        &TrackerError::CommandFailed("newer start failed".into()),
+    ));
+    assert!(startup_state.failure_message().is_some());
+}
+
+#[test]
+fn tracker_start_and_status_errors_are_safe_and_bounded() {
+    let raw_detail = "/private/tracker-runtime stderr: provider secret";
+    let start_error = tracker_start_error_message();
+    let status_error = tracker_status_error_message();
+    let stop_error = tracker_stop_error_message();
+
+    for message in [&start_error, &status_error, &stop_error] {
+        assert!(message.chars().count() <= TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS);
+        assert!(!message.contains(raw_detail));
+    }
+    assert_eq!(
+        start_error,
+        "Activity tracking could not start. Try starting it again."
+    );
+    assert_eq!(
+        status_error,
+        "Activity tracking status is unavailable. Try again."
+    );
+    assert_eq!(
+        stop_error,
+        "Activity tracking could not stop. Try again."
+    );
+}
+
+#[test]
+fn degraded_tracker_status_uses_a_bounded_message() {
+    let status = degraded_tracker_status("x".repeat(TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS + 1));
+
+    assert!(!status.running);
+    assert_eq!(status.tracker_mode.as_deref(), Some("degraded"));
+    assert_eq!(
+        status
+            .message
+            .as_deref()
+            .expect("degraded status includes a user-safe message")
+            .chars()
+            .count(),
+        TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS
+    );
 }
 
 fn push_exit_call(calls: &std::sync::Arc<std::sync::Mutex<Vec<&'static str>>>, call: &'static str) {

@@ -13,6 +13,51 @@ import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { createProjectPassInference } from "./projectPassInference";
 import { resolveClassificationWorkProfileForPrompt } from "./aiClassificationService";
 import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
+export type ScheduledProjectPassFailureCategory =
+  | "configuration"
+  | "network"
+  | "provider_error"
+  | "timeout"
+  | "tracker_unavailable"
+  | "unknown";
+
+export type ScheduledProjectPassOutcome =
+  | {
+    readonly status: "completed";
+    readonly summary: ProjectPassSummary;
+  }
+  | {
+    readonly status: "skipped";
+    readonly reason: "analysis_disconnected" | "no_work";
+  }
+  | {
+    readonly status: "failed";
+    readonly category: ScheduledProjectPassFailureCategory;
+  };
+
+function scheduledProjectPassFailureCategory(error: unknown): ScheduledProjectPassFailureCategory {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  if (message.includes("api key") || message.includes("not configured") || message.includes("configuration")) {
+    return "configuration";
+  }
+  if (message.includes("timeout") || message.includes("timed out")) return "timeout";
+  if (message.includes("network") || message.includes("fetch") || message.includes("offline")) return "network";
+  if (message.includes("tracker") || message.includes("sidecar") || message.includes("database")) {
+    return "tracker_unavailable";
+  }
+  if (
+    message.includes("provider")
+    || message.includes("openrouter")
+    || message.includes("openai")
+    || message.includes("anthropic")
+    || message.includes("model")
+    || message.includes("http")
+  ) {
+    return "provider_error";
+  }
+  return "unknown";
+}
+
 
 export interface UseProjectClassificationArgs {
   readonly tracker: TrackerApi;
@@ -57,10 +102,11 @@ export interface UseProjectClassificationResult {
   readonly runPassNow: (range?: { start: string; end: string }) => Promise<void>;
   /**
    * Quiet background pass for the scheduler (Item 1). Unlike runPassNow it never
-   * touches the manual-run UI state (running/progress/runError) and swallows
-   * errors, so a periodic/on-open tick can never disrupt the user or pop a modal.
+   * touches the manual-run UI state (running/progress/runError), and returns only
+   * privacy-safe diagnostics so a periodic/on-open tick can never disrupt the user
+   * or expose provider errors.
    */
-  readonly runScheduledPass: (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }) => Promise<void>;
+  readonly runScheduledPass: (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }) => Promise<ScheduledProjectPassOutcome>;
   readonly backfillLast7Days: () => Promise<void>;
   readonly reload: () => Promise<void>;
 }
@@ -284,8 +330,11 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   );
 
   const runScheduledPass = useCallback(
-    async (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }) => {
-      if (!range || !analysisConnected) return;
+    async (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }): Promise<ScheduledProjectPassOutcome> => {
+      if (!analysisConnected) {
+        return { status: "skipped", reason: "analysis_disconnected" };
+      }
+
       try {
         const inference = await buildInference();
         const workProfile = await resolveClassificationWorkProfileForPrompt(true).catch(() => null);
@@ -301,9 +350,16 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         // Only refresh views when the pass actually did work; the chunk-fingerprint
         // skip makes a no-op tick cheap and silent. The service inFlight lock
         // coalesces this with any concurrent manual run.
-        if (summary.ran) await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
-      } catch {
+        if (summary.ran) {
+          await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+          return { status: "completed", summary };
+        }
+
+        return { status: "skipped", reason: "no_work" };
+      } catch (error) {
         // Background tick: never surface an error or disturb the manual-run UI.
+        // Convert potentially sensitive failures immediately to a bounded category.
+        return { status: "failed", category: scheduledProjectPassFailureCategory(error) };
       }
     },
     [analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],

@@ -25,6 +25,24 @@ extern "C" {
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrackerController;
+pub(crate) const TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS: usize = 160;
+pub(crate) const TRACKER_START_ERROR_MESSAGE: &str =
+    "Activity tracking could not start. Try starting it again.";
+pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str =
+    "Activity tracking could not stop. Try again.";
+pub(crate) const TRACKER_STATUS_ERROR_MESSAGE: &str =
+    "Activity tracking status is unavailable. Try again.";
+
+#[derive(Debug, Default)]
+struct TrackerStartupLifecycle {
+    generation: u64,
+    failure_message: Option<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct TrackerStartupState {
+    lifecycle: Mutex<TrackerStartupLifecycle>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +98,159 @@ pub enum TrackerError {
     TrackerReturnedError(String),
     #[error("tracker returned no data")]
     MissingData,
+}
+
+impl TrackerStartupState {
+    pub(crate) fn begin_start_attempt(&self) -> u64 {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        advance_tracker_startup_generation(&mut lifecycle);
+        lifecycle.generation
+    }
+
+    pub(crate) fn record_start_failure(
+        &self,
+        generation: u64,
+        error: &TrackerError,
+    ) -> bool {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if lifecycle.generation != generation {
+            return false;
+        }
+
+        lifecycle.failure_message = Some(bounded_tracker_startup_failure_message(error));
+        true
+    }
+
+    pub(crate) fn complete_start_success(&self, generation: u64) -> bool {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if lifecycle.generation != generation {
+            return false;
+        }
+
+        retire_tracker_startup_state(&mut lifecycle);
+        true
+    }
+
+    pub(crate) fn begin_stop_attempt(&self) -> u64 {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        advance_tracker_startup_generation(&mut lifecycle);
+        lifecycle.generation
+    }
+
+    pub(crate) fn complete_stop_success(&self, generation: u64) -> bool {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if lifecycle.generation != generation {
+            return false;
+        }
+
+        retire_tracker_startup_state(&mut lifecycle);
+        true
+    }
+
+    pub(crate) fn record_healthy_running_status(&self) {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        retire_tracker_startup_state(&mut lifecycle);
+    }
+
+    pub(crate) fn failure_message(&self) -> Option<String> {
+        self.lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .failure_message
+            .clone()
+    }
+}
+
+fn advance_tracker_startup_generation(lifecycle: &mut TrackerStartupLifecycle) {
+    lifecycle.generation = lifecycle.generation.wrapping_add(1);
+}
+
+fn retire_tracker_startup_state(lifecycle: &mut TrackerStartupLifecycle) {
+    advance_tracker_startup_generation(lifecycle);
+    lifecycle.failure_message = None;
+}
+
+pub(crate) fn apply_tracker_startup_state(
+    startup_state: &TrackerStartupState,
+    mut status: TrackerStatus,
+) -> TrackerStatus {
+    if status.running {
+        startup_state.record_healthy_running_status();
+        return status;
+    }
+
+    let Some(message) = startup_state.failure_message() else {
+        return status;
+    };
+
+    status.running = false;
+    status.tracker_mode = Some("degraded".into());
+    status.message = Some(bounded_tracker_status_message(&message));
+    status
+}
+
+pub(crate) fn degraded_tracker_status(failure_message: String) -> TrackerStatus {
+    TrackerStatus {
+        running: false,
+        accessibility_granted: false,
+        last_event_at: None,
+        database_path: None,
+        tracker_mode: Some("degraded".into()),
+        idle_seconds: None,
+        idle_detection_available: None,
+        message: Some(bounded_tracker_status_message(&failure_message)),
+    }
+}
+
+fn bounded_tracker_startup_failure_message(error: &TrackerError) -> String {
+    let message = match error {
+        TrackerError::MissingScript(_) | TrackerError::MissingRuntime(_) => {
+            "Activity tracking components are unavailable. Try starting it again."
+        }
+        TrackerError::CommandFailed(_)
+        | TrackerError::ServeTimedOut(_)
+        | TrackerError::ParseFailed(_)
+        | TrackerError::TrackerReturnedError(_)
+        | TrackerError::MissingData => TRACKER_START_ERROR_MESSAGE,
+    };
+    bounded_tracker_status_message(message)
+}
+
+pub(crate) fn tracker_start_error_message() -> String {
+    bounded_tracker_status_message(TRACKER_START_ERROR_MESSAGE)
+}
+
+pub(crate) fn tracker_status_error_message() -> String {
+    bounded_tracker_status_message(TRACKER_STATUS_ERROR_MESSAGE)
+}
+
+pub(crate) fn tracker_stop_error_message() -> String {
+    bounded_tracker_status_message(TRACKER_STOP_ERROR_MESSAGE)
+}
+
+fn bounded_tracker_status_message(message: &str) -> String {
+    message
+        .chars()
+        .take(TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS)
+        .collect()
 }
 
 impl TrackerController {

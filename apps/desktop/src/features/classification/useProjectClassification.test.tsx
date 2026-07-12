@@ -2,9 +2,20 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { AiReviewEvent, ProjectAssignmentRecord, TrackerApi } from "@drifty/domain";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useProjectClassification, type UseProjectClassificationArgs } from "./useProjectClassification";
+import { useProjectClassification, type ScheduledProjectPassOutcome, type UseProjectClassificationArgs } from "./useProjectClassification";
+import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
+
+vi.mock("./aiProjectReviewService", () => ({
+  runProjectPass: vi.fn(),
+}));
+
+const scheduledProjectPass = vi.mocked(runProjectPass);
+
+beforeEach(() => {
+  scheduledProjectPass.mockReset();
+});
 
 type Deferred<T> = {
   readonly promise: Promise<T>;
@@ -143,5 +154,97 @@ describe("useProjectClassification request ownership", () => {
     });
     expect(hook.result.current.assignments).toEqual([assignmentB]);
     expect(hook.result.current.aiReviewEvents).toEqual([reviewEventB]);
+  });
+});
+
+describe("useProjectClassification scheduled passes", () => {
+  it("reports a skipped outcome without invoking the pass when analysis is disconnected", async () => {
+    const { tracker } = createTracker();
+    const { hook } = renderClassification(tracker, { analysisConnected: false });
+    let outcome!: ScheduledProjectPassOutcome;
+
+    await act(async () => {
+      outcome = await hook.result.current.runScheduledPass("schedule", rangeA);
+    });
+
+    expect(outcome).toEqual({ status: "skipped", reason: "analysis_disconnected" });
+    expect(scheduledProjectPass).not.toHaveBeenCalled();
+    expect(hook.result.current.running).toBe(false);
+    expect(hook.result.current.progress).toBeNull();
+    expect(hook.result.current.runError).toBeNull();
+  });
+
+  it("reports completion and refreshes data when the scheduled pass ran", async () => {
+    const { tracker } = createTracker();
+    const getProjectPassRuns = vi.fn(async () => []);
+    const scheduledTracker = { ...tracker, getProjectPassRuns } as TrackerApi;
+    const summary: ProjectPassSummary = {
+      ran: true,
+      chunks: 1,
+      assignments: 2,
+      corrections: 1,
+      tokensIn: 10,
+      tokensOut: 5,
+    };
+    scheduledProjectPass.mockResolvedValueOnce(summary);
+    const { hook } = renderClassification(scheduledTracker, { analysisConnected: true });
+    await waitFor(() => expect(getProjectPassRuns).toHaveBeenCalledTimes(1));
+    let outcome!: ScheduledProjectPassOutcome;
+
+    await act(async () => {
+      outcome = await hook.result.current.runScheduledPass("open", rangeA);
+    });
+
+    expect(outcome).toEqual({ status: "completed", summary });
+    expect(scheduledProjectPass).toHaveBeenCalledWith(expect.objectContaining({
+      range: rangeA,
+      trigger: "open",
+      tracker: scheduledTracker,
+    }));
+    expect(getProjectPassRuns).toHaveBeenCalledTimes(2);
+    expect(hook.result.current.running).toBe(false);
+    expect(hook.result.current.progress).toBeNull();
+    expect(hook.result.current.runError).toBeNull();
+  });
+
+  it("reports a skipped outcome when the scheduled pass had no work", async () => {
+    const { tracker } = createTracker();
+    scheduledProjectPass.mockResolvedValueOnce({
+      ran: false,
+      skippedReason: "already analyzed",
+      chunks: 0,
+      assignments: 0,
+      corrections: 0,
+      tokensIn: 0,
+      tokensOut: 0,
+    });
+    const { hook } = renderClassification(tracker, { analysisConnected: true });
+    let outcome!: ScheduledProjectPassOutcome;
+
+    await act(async () => {
+      outcome = await hook.result.current.runScheduledPass("eod", rangeA);
+    });
+
+    expect(outcome).toEqual({ status: "skipped", reason: "no_work" });
+    expect(hook.result.current.running).toBe(false);
+    expect(hook.result.current.progress).toBeNull();
+    expect(hook.result.current.runError).toBeNull();
+  });
+
+  it("reports a privacy-safe failure category when the scheduled pass throws", async () => {
+    const { tracker } = createTracker();
+    scheduledProjectPass.mockRejectedValueOnce(new Error("OpenRouter rejected key sk-live-secret"));
+    const { hook } = renderClassification(tracker, { analysisConnected: true });
+    let outcome!: ScheduledProjectPassOutcome;
+
+    await act(async () => {
+      outcome = await hook.result.current.runScheduledPass("schedule", rangeA);
+    });
+
+    expect(outcome).toEqual({ status: "failed", category: "provider_error" });
+    expect(JSON.stringify(outcome)).not.toContain("sk-live-secret");
+    expect(hook.result.current.running).toBe(false);
+    expect(hook.result.current.progress).toBeNull();
+    expect(hook.result.current.runError).toBeNull();
   });
 });

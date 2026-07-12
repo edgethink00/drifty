@@ -1,4 +1,5 @@
 import type { AiClassificationSummary } from "../features/classification/aiClassificationService";
+import type { ScheduledProjectPassOutcome } from "../features/classification/useProjectClassification";
 import type { DashboardPeriod } from "../features/dashboard/dashboardPeriods";
 import {
   capturePostHogEvent,
@@ -50,6 +51,7 @@ export function toTrackerModeAnalytics(trackerMode: string | null | undefined): 
   switch (trackerMode) {
     case "tracking":
     case "idle":
+    case "degraded":
     case "unavailable":
     case "preview":
     case "demo":
@@ -100,6 +102,39 @@ export function captureAiClassificationRun(
     range,
     ...(summary.status === "error" ? { error_kind: toAnalyticsErrorKind(summary.message) } : {}),
   });
+}
+
+export function toScheduledProjectPassAnalytics(
+  trigger: PostHogEventPropertiesByName["project_classification_run"]["trigger"],
+  outcome: ScheduledProjectPassOutcome,
+): PostHogEventPropertiesByName["project_classification_run"] {
+  switch (outcome.status) {
+    case "completed":
+      return {
+        trigger,
+        result: "success",
+        assignment_count_bucket: toCountBucket(outcome.summary.assignments),
+        correction_count_bucket: toCountBucket(outcome.summary.corrections),
+      };
+    case "skipped":
+      return {
+        trigger,
+        result: "skipped",
+        skip_reason: outcome.reason,
+        assignment_count_bucket: "none",
+        correction_count_bucket: "none",
+      };
+    case "failed":
+      return {
+        trigger,
+        result: "error",
+        assignment_count_bucket: "none",
+        correction_count_bucket: "none",
+        error_kind: outcome.category,
+      };
+    default:
+      return assertNever(outcome);
+  }
 }
 
 function assertNever(value: never): never {

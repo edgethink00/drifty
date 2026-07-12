@@ -12,6 +12,7 @@ export const POSTHOG_EVENT_NAMES = [
   "leaderboard_action",
   "ai_setup_action",
   "ai_classification_run",
+  "project_classification_run",
   "app_error",
 ] as const;
 
@@ -47,7 +48,7 @@ export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] a
 export const PERMISSIONS = ["accessibility", "notifications"] as const;
 export const PERMISSION_ACTIONS = ["check", "request", "open_settings"] as const;
 export const TRACKER_ACTIONS = ["refresh", "start", "stop", "status_check"] as const;
-export const TRACKER_MODES = ["tracking", "idle", "unavailable", "preview", "demo", "unknown"] as const;
+export const TRACKER_MODES = ["tracking", "idle", "degraded", "unavailable", "preview", "demo", "unknown"] as const;
 export const RESULT_VALUES = ["success", "error", "cancelled", "skipped", "unavailable", "disabled"] as const;
 export const AUTH_STATES = ["signed_in", "signed_out"] as const;
 export const ACCOUNT_KINDS = ["anonymous_account", "account", "none"] as const;
@@ -68,6 +69,8 @@ export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
 export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none"] as const;
 export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "live", "drift_alarm"] as const;
+export const PROJECT_CLASSIFICATION_TRIGGERS = ["schedule", "open", "eod"] as const;
+export const PROJECT_CLASSIFICATION_SKIP_REASONS = ["analysis_disconnected", "no_work"] as const;
 export const CLASSIFICATION_RANGES = ["current_day", "recent", "unknown"] as const;
 export const COUNT_BUCKETS = ["none", "1", "2_5", "6_20", "21_50", "50_plus"] as const;
 export const ERROR_KINDS = [
@@ -172,6 +175,14 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     selected_count_bucket: COUNT_BUCKETS,
     saved_count_bucket: COUNT_BUCKETS,
     range: CLASSIFICATION_RANGES,
+    error_kind: ERROR_KINDS,
+  },
+  project_classification_run: {
+    trigger: PROJECT_CLASSIFICATION_TRIGGERS,
+    result: RESULT_VALUES,
+    skip_reason: PROJECT_CLASSIFICATION_SKIP_REASONS,
+    assignment_count_bucket: COUNT_BUCKETS,
+    correction_count_bucket: COUNT_BUCKETS,
     error_kind: ERROR_KINDS,
   },
   app_error: {

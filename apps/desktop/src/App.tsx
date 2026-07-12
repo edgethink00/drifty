@@ -216,6 +216,7 @@ import {
   toAiProviderAnalytics,
   toAppSurfaceAnalytics,
   toDashboardPeriodAnalytics,
+  toScheduledProjectPassAnalytics,
   toTrackerModeAnalytics,
 } from "./app/appAnalytics";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
@@ -2420,7 +2421,7 @@ export default function App() {
     if (status.trackerMode === "unavailable") return;
 
     autoStartAttemptedRef.current = true;
-    void handleStartTracking();
+    void handleBackgroundStartTracking();
   }, [hasLoadedOnce, shouldBlockLocalTrackerAccess, status]);
 
   useEffect(() => {
@@ -4314,10 +4315,11 @@ export default function App() {
   const isBootstrappingTracker = loading && status === null;
   const trackerModeLabel = status?.trackerMode ?? "unknown";
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
+  const isTrackerDegraded = trackerModeLabel === "degraded";
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
-  const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
-  const liveTrackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : status.running ? "Pause tracking" : "Start tracking";
+  const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
+  const liveTrackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Retry tracker" : status.running ? "Pause tracking" : "Start tracking";
   const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
     currentDay: effectiveTodayDayForWeekModel,
     currentMinuteOfDay: effectiveCurrentMinuteOfDay,
@@ -4332,10 +4334,10 @@ export default function App() {
     startOfDayMinutes,
   ]);
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
-  const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable ? "unavailable" : "idle");
-  const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : "Tracker paused");
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? "Tracker setup needed" : `${trackerStateLabel} · ${formatDuration(dayTotalSeconds)}`);
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? "Start tracker to collect activity" : liveAppLabel);
+  const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable || isTrackerDegraded ? "unavailable" : "idle");
+  const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : "Tracker paused");
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? "Tracker setup needed" : isTrackerDegraded ? (status?.message ?? "Tracker could not start") : `${trackerStateLabel} · ${formatDuration(dayTotalSeconds)}`);
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? "Start tracker to collect activity" : isTrackerDegraded ? "Retry activity tracking" : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? `Last capture: ${lastCaptureDistanceLabel}`;
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
@@ -4880,7 +4882,21 @@ export default function App() {
     }
     const tick = (trigger: "schedule" | "open") => {
       const day = logicalTodayIsoDate(startOfDayMinutes);
-      void runScheduledProjectPassRef.current(trigger, getLogicalDayRange(day, day, startOfDayMinutes));
+      void runScheduledProjectPassRef.current(
+        trigger,
+        getLogicalDayRange(day, day, startOfDayMinutes),
+      ).then((outcome) => {
+        capturePostHogEvent(
+          "project_classification_run",
+          toScheduledProjectPassAnalytics(trigger, outcome),
+        );
+        if (outcome.status === "failed") {
+          console.warn("[project-pass] Scheduled pass failed", {
+            trigger,
+            category: outcome.category,
+          });
+        }
+      });
     };
     // Only fire the on-open tick once the analysis model is connected, else a
     // slow cold start would burn the one-shot guard on a no-op and defer today's
@@ -4999,28 +5015,83 @@ export default function App() {
     setOnboardingOpen(true);
   }
 
+  async function handleBackgroundStartTracking() {
+    try {
+      const nextStatus = await trackerClient.start();
+      setStatus(nextStatus);
+      setAccessibilityGranted(nextStatus.accessibilityGranted);
+      const degraded = nextStatus.trackerMode === "degraded" || nextStatus.running !== true;
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: degraded ? "unavailable" : "success",
+        tracker_mode: toTrackerModeAnalytics(nextStatus.trackerMode),
+        running: nextStatus.running ?? false,
+        ...(degraded ? { error_kind: "tracker_unavailable" } : {}),
+      });
+      if (!degraded) await refresh();
+    } catch (startError) {
+      const nextStatus = await trackerClient.getStatus().catch((): TrackerStatus => ({
+        running: false,
+        accessibilityGranted: false,
+        lastEventAt: null,
+        databasePath: null,
+        trackerMode: "degraded",
+        message: "Activity tracking could not start. Try starting it again.",
+      }));
+      setStatus(nextStatus);
+      setAccessibilityGranted(nextStatus.accessibilityGranted);
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: "error",
+        tracker_mode: toTrackerModeAnalytics(nextStatus.trackerMode),
+        running: nextStatus.running ?? false,
+        error_kind: toAnalyticsErrorKind(startError),
+      });
+      console.warn("[tracker] Background start failed", {
+        errorKind: toAnalyticsErrorKind(startError),
+      });
+    }
+  }
+
   // Throws on failure (after surfacing the error) so onboarding completion can abort.
   async function handleStartTrackingFromOnboarding() {
     setError(null);
+    let nextStatus: TrackerStatus;
     try {
-      const nextStatus: TrackerStatus | undefined = await trackerClient.start();
-      await refresh();
-      capturePostHogEvent("tracker_action", {
-        action: "start",
-        result: "success",
-        tracker_mode: toTrackerModeAnalytics(nextStatus?.trackerMode ?? status?.trackerMode),
-        running: nextStatus?.running ?? true,
-      });
-    } catch (e) {
-      const message = toErrorMessage(e);
+      nextStatus = await trackerClient.start();
+    } catch (startError) {
+      const message = toErrorMessage(startError);
       setError(message);
       capturePostHogEvent("tracker_action", {
         action: "start",
         result: "error",
-        error_kind: toAnalyticsErrorKind(e),
+        error_kind: toAnalyticsErrorKind(startError),
       });
       throw new Error(message);
     }
+
+    setStatus(nextStatus);
+    setAccessibilityGranted(nextStatus.accessibilityGranted);
+    if (nextStatus.trackerMode === "degraded" || nextStatus.running !== true) {
+      const message = nextStatus.message ?? "Activity tracking could not start. Try starting it again.";
+      setError(message);
+      capturePostHogEvent("tracker_action", {
+        action: "start",
+        result: "unavailable",
+        tracker_mode: toTrackerModeAnalytics(nextStatus.trackerMode),
+        running: nextStatus.running ?? false,
+        error_kind: "tracker_unavailable",
+      });
+      throw new Error(message);
+    }
+
+    await refresh();
+    capturePostHogEvent("tracker_action", {
+      action: "start",
+      result: "success",
+      tracker_mode: toTrackerModeAnalytics(nextStatus.trackerMode),
+      running: nextStatus.running ?? true,
+    });
   }
 
   async function handleStartTracking() {
@@ -5824,7 +5895,7 @@ export default function App() {
                   stopDashboardDemoReplay();
                   return;
                 }
-                void (status?.running ? handleStopTracking() : handleStartTracking());
+                void (status?.running && !isTrackerDegraded ? handleStopTracking() : handleStartTracking());
               }}
               disabled={isSidebarTrackerActionDisabled}
               aria-label={sidebarTrackerActionLabel}

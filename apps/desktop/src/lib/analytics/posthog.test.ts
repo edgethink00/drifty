@@ -61,6 +61,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
         "leaderboard_action",
         "ai_setup_action",
         "ai_classification_run",
+        "project_classification_run",
         "app_error",
       ]),
     );
@@ -71,6 +72,14 @@ describe("PostHog desktop analytics privacy boundary", () => {
       selected_count_bucket: expect.any(Array),
       saved_count_bucket: expect.any(Array),
       range: expect.any(Array),
+      error_kind: expect.any(Array),
+    });
+    expect(POSTHOG_EVENT_PROPERTY_ALLOWLIST.project_classification_run).toMatchObject({
+      trigger: expect.any(Array),
+      result: expect.any(Array),
+      skip_reason: expect.any(Array),
+      assignment_count_bucket: expect.any(Array),
+      correction_count_bucket: expect.any(Array),
       error_kind: expect.any(Array),
     });
   });
@@ -126,6 +135,30 @@ describe("PostHog desktop analytics privacy boundary", () => {
         range: "current_day",
       },
     });
+  });
+
+  it("builds a privacy-safe scheduled project classification payload", () => {
+    const properties = {
+      trigger: "schedule",
+      result: "error",
+      assignment_count_bucket: "none",
+      correction_count_bucket: "none",
+      error_kind: "provider_error",
+    } satisfies PostHogEventPropertiesByName["project_classification_run"];
+
+    const sanitized = sanitizePostHogEventProperties("project_classification_run", {
+      ...properties,
+      raw_payload: { window_title: "Sensitive title" },
+    });
+    const payload = createPostHogEventPayload({
+      apiKey: "phc_test",
+      distinctId: "launch-session",
+      event: "project_classification_run",
+      properties: sanitized,
+    });
+
+    expect(payload.properties).toMatchObject(properties);
+    expect("raw_payload" in payload.properties).toBe(false);
   });
 
   it("forces person profile opt-out and omits sensitive or unsupported caller properties", () => {

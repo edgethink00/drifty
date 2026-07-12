@@ -1,8 +1,12 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use tauri::async_runtime;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
-use crate::tracker::{AppIdentity, DeveloperDiagnosticsSettings, TrackerController, TrackerStatus};
+use crate::tracker::{
+    apply_tracker_startup_state, degraded_tracker_status, tracker_start_error_message,
+    tracker_status_error_message, tracker_stop_error_message, AppIdentity,
+    DeveloperDiagnosticsSettings, TrackerController, TrackerStartupState, TrackerStatus,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -302,12 +306,17 @@ pub async fn tracker_get_status(
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
-        controller
-            .get_status(&app)
-            .map_err(|error| error.to_string())
+        let startup_state = app.state::<TrackerStartupState>();
+        match controller.get_status(&app) {
+            Ok(status) => Ok(apply_tracker_startup_state(&startup_state, status)),
+            Err(_) => match startup_state.failure_message() {
+                Some(message) => Ok(degraded_tracker_status(message)),
+                None => Err(tracker_status_error_message()),
+            },
+        }
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|_| tracker_status_error_message())?
 }
 
 #[tauri::command]
@@ -316,9 +325,24 @@ pub async fn tracker_start(
     controller: State<'_, TrackerController>,
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
-    async_runtime::spawn_blocking(move || controller.start(&app).map_err(|error| error.to_string()))
-        .await
-        .map_err(|error| error.to_string())?
+    let generation = app
+        .state::<TrackerStartupState>()
+        .begin_start_attempt();
+    async_runtime::spawn_blocking(move || {
+        let startup_state = app.state::<TrackerStartupState>();
+        match controller.start(&app) {
+            Ok(status) => {
+                startup_state.complete_start_success(generation);
+                Ok(status)
+            }
+            Err(error) => {
+                startup_state.record_start_failure(generation, &error);
+                Err(tracker_start_error_message())
+            }
+        }
+    })
+    .await
+    .map_err(|_| tracker_start_error_message())?
 }
 
 #[tauri::command]
@@ -327,9 +351,21 @@ pub async fn tracker_stop(
     controller: State<'_, TrackerController>,
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
-    async_runtime::spawn_blocking(move || controller.stop(&app).map_err(|error| error.to_string()))
-        .await
-        .map_err(|error| error.to_string())?
+    let generation = app
+        .state::<TrackerStartupState>()
+        .begin_stop_attempt();
+    async_runtime::spawn_blocking(move || {
+        let startup_state = app.state::<TrackerStartupState>();
+        match controller.stop(&app) {
+            Ok(status) => {
+                startup_state.complete_stop_success(generation);
+                Ok(status)
+            }
+            Err(_) => Err(tracker_stop_error_message()),
+        }
+    })
+    .await
+    .map_err(|_| tracker_stop_error_message())?
 }
 
 #[tauri::command]

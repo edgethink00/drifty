@@ -55,7 +55,7 @@ use commands::{
     DriftAlarmState,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
-use tracker::TrackerController;
+use tracker::{TrackerController, TrackerStartupState};
 use tray::{
     setup_tray, tray_update_drift_alarm_status, tray_update_icon_style,
     tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState, TrayProductivityState,
@@ -343,6 +343,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TrackerController::default())
+        .manage(TrackerStartupState::default())
         .on_menu_event(|app, event| handle_app_menu_event(app, event.id().as_ref()));
 
     if let Err(error) = builder
@@ -351,8 +352,25 @@ pub fn run() {
             setup_watcher_window(app)?;
             setup_drift_alarm_window(app)?;
             setup_tray(app.handle())?;
-            let controller = app.state::<TrackerController>();
-            let _ = controller.start(app.handle());
+
+            let startup_state = app.state::<TrackerStartupState>();
+            let generation = startup_state.begin_start_attempt();
+            let app_handle = app.handle().clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                let controller = *app_handle.state::<TrackerController>();
+                let startup_state = app_handle.state::<TrackerStartupState>();
+                match controller.start(&app_handle) {
+                    Ok(_) => {
+                        startup_state.complete_start_success(generation);
+                    }
+                    Err(error) => {
+                        startup_state.record_start_failure(generation, &error);
+                        eprintln!(
+                            "[tracker] Automatic start failed; exposing recoverable degraded status"
+                        );
+                    }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

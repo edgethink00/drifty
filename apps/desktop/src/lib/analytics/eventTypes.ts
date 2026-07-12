@@ -22,6 +22,8 @@ import type {
   ONBOARDING_STEPS,
   PERMISSION_ACTIONS,
   PERMISSIONS,
+  PROJECT_CLASSIFICATION_TRIGGERS,
+  PROJECT_CLASSIFICATION_SKIP_REASONS,
   RESULT_VALUES,
   SETTINGS_SECTIONS,
   SETUP_CHOICES,
@@ -105,6 +107,14 @@ export type PostHogEventPropertiesByName = {
     readonly selected_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly saved_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly range?: (typeof CLASSIFICATION_RANGES)[number];
+    readonly error_kind?: (typeof ERROR_KINDS)[number];
+  };
+  readonly project_classification_run: {
+    readonly trigger: (typeof PROJECT_CLASSIFICATION_TRIGGERS)[number];
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly skip_reason?: (typeof PROJECT_CLASSIFICATION_SKIP_REASONS)[number];
+    readonly assignment_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly correction_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
   };
   readonly app_error: {
