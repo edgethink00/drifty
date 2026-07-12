@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { LocalAiProvider } from "./localAiSetup";
 import { loadOpenRouterApiKey } from "./openRouterApiKeyStore";
 import {
   ANALYSIS_AI_SETUP_STORAGE_KEY,
+  hasStoredAnalysisAiSetup,
+  isLegacyDefaultAnalysisSetup,
   resolveInitialAnalysisAiSetup,
   toPersistedAnalysisAiSetup,
   type AnalysisAiSetupState,
@@ -21,8 +24,18 @@ export interface UseAnalysisModelSetupResult {
  * with the classification slot (same Keychain entry) so connecting once covers
  * both; cloud relies on the Supabase account, self-hosted on base URL + model.
  */
-export function useAnalysisModelSetup(supabaseConfigured: boolean): UseAnalysisModelSetupResult {
-  const [analysisSetup, setAnalysisSetupState] = useState<AnalysisAiSetupState>(resolveInitialAnalysisAiSetup);
+export function useAnalysisModelSetup(supabaseConfigured: boolean, liveProvider?: LocalAiProvider): UseAnalysisModelSetupResult {
+  const [storedSetup, setStoredSetup] = useState<AnalysisAiSetupState>(resolveInitialAnalysisAiSetup);
+  // Until the user explicitly saves an analysis setup, the slot follows the live
+  // classification provider: OpenRouter stays on OpenRouter (same Keychain key),
+  // everything else defaults to Drifty Cloud.
+  const [hasExplicitSetup, setHasExplicitSetup] = useState<boolean>(
+    () => hasStoredAnalysisAiSetup() && !isLegacyDefaultAnalysisSetup(resolveInitialAnalysisAiSetup()),
+  );
+  const analysisSetup = useMemo<AnalysisAiSetupState>(() => {
+    if (hasExplicitSetup) return storedSetup;
+    return { ...storedSetup, provider: liveProvider === "openrouter_byok" ? "openrouter" : "cloud" };
+  }, [hasExplicitSetup, storedSetup, liveProvider]);
   const [openRouterKeyPresent, setOpenRouterKeyPresent] = useState(false);
 
   const refreshOpenRouterKey = useCallback(async () => {
@@ -40,7 +53,8 @@ export function useAnalysisModelSetup(supabaseConfigured: boolean): UseAnalysisM
   }, [analysisSetup.provider, refreshOpenRouterKey]);
 
   const setAnalysisSetup = useCallback((next: AnalysisAiSetupState) => {
-    setAnalysisSetupState(next);
+    setStoredSetup(next);
+    setHasExplicitSetup(true);
     try {
       window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedAnalysisAiSetup(next)));
     } catch {

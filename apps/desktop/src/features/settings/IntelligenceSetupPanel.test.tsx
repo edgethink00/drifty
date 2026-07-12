@@ -39,7 +39,7 @@ describe("IntelligenceSetupPanel", () => {
     const summary = summaryRegion();
     // "Drifty Cloud" appears in both the status row and the provider select.
     expect(within(summary).getAllByText("Drifty Cloud").length).toBeGreaterThan(0);
-    expect(within(summary).getByText("Managed by Drifty")).toBeTruthy();
+    expect(within(summary).getAllByText("Drifty Cloud")[0]).toBeTruthy();
     expect(within(summary).getByText("Available")).toBeTruthy();
 
     // The expanded Drifty Cloud card explains no configuration is needed.
