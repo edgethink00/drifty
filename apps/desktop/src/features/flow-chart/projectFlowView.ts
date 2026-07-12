@@ -70,3 +70,22 @@ export function contextualProjectColorBySegment(
   }
   return result;
 }
+
+/**
+ * Per-segment project IDs with the same contextual gap-filling as the color
+ * map above — the hover card uses this to name the project a block belongs to.
+ */
+export function contextualProjectIdBySegment(
+  segments: ActivitySegment[],
+  assignments: readonly ProjectAssignmentRecord[],
+  options?: ClassificationOptions,
+): Map<string, string> {
+  const assignmentBySegmentId = new Map<string, string | null>();
+  for (const assignment of assignments) assignmentBySegmentId.set(assignment.segmentId, assignment.projectId ?? null);
+  const effective = buildContextualProjectBySegmentId(segments, assignmentBySegmentId, options);
+  const result = new Map<string, string>();
+  for (const [segmentId, resolution] of effective) {
+    if (resolution.projectId) result.set(segmentId, resolution.projectId);
+  }
+  return result;
+}
