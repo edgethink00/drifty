@@ -596,23 +596,123 @@ class TrackerMainTests(unittest.TestCase):
             limit=200,
         )
 
-    def test_search_timeline_non_dict_payload_uses_blank_query(self) -> None:
+    def test_search_timeline_rejects_non_dict_selector(self) -> None:
         mock_db = MagicMock()
-        mock_db.search_timeline_page.return_value = {"items": [], "hasMore": False, "nextCursor": None}
 
         with patch.object(tracker_main, "database", return_value=mock_db):
             result = tracker_main.search_timeline("not a payload")
 
+        self.assertFalse(result["ok"])
+        self.assertIsNone(result["data"])
+        mock_db.search_timeline_page.assert_not_called()
+
+    def test_timeline_page_accepts_day_selector(self) -> None:
+        mock_db = MagicMock()
+        mock_db.timeline_page.return_value = {"items": [], "hasMore": False, "nextCursor": None}
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_timeline_page({"day": "2026-04-06"})
+
         self.assertTrue(result["ok"])
-        self.assertEqual(result["data"], {"items": [], "hasMore": False, "nextCursor": None})
-        mock_db.search_timeline_page.assert_called_once_with(
-            query="",
-            start=None,
-            end=None,
+        mock_db.timeline_page.assert_called_once_with(
+            start="2026-04-06T00:00:00",
+            end="2026-04-06T23:59:59",
             before_ended_at=None,
             before_segment_id=None,
             limit=None,
         )
+
+    def test_search_timeline_accepts_day_selector(self) -> None:
+        mock_db = MagicMock()
+        mock_db.search_timeline_page.return_value = {"items": [], "hasMore": False, "nextCursor": None}
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.search_timeline({"query": "arc project", "day": "2026-04-06"})
+
+        self.assertTrue(result["ok"])
+        mock_db.search_timeline_page.assert_called_once_with(
+            query="arc project",
+            start="2026-04-06T00:00:00",
+            end="2026-04-06T23:59:59",
+            before_ended_at=None,
+            before_segment_id=None,
+            limit=None,
+        )
+
+    def test_timeline_page_rejects_empty_partial_and_mixed_selectors(self) -> None:
+        for payload in (
+            {},
+            {"start": "2026-04-01T00:00:00"},
+            {"end": "2026-04-07T23:59:59"},
+            {
+                "day": "2026-04-06",
+                "start": "2026-04-01T00:00:00",
+                "end": "2026-04-07T23:59:59",
+            },
+        ):
+            with self.subTest(payload=payload):
+                mock_db = MagicMock()
+                with patch.object(tracker_main, "database", return_value=mock_db):
+                    result = tracker_main.get_timeline_page(payload)
+
+                self.assertFalse(result["ok"])
+                self.assertIsNone(result["data"])
+                mock_db.timeline_page.assert_not_called()
+
+    def test_get_unclassified_segments_omitting_segment_ids_preserves_existing_behavior(self) -> None:
+        mock_db = MagicMock()
+        segments = [{"id": "segment-1"}, {"id": "segment-2"}]
+        mock_db.fetch_unclassified_segments.return_value = segments
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_unclassified_segments({})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"], segments)
+        mock_db.fetch_unclassified_segments.assert_called_once_with(None, None, 50, None)
+
+    def test_get_unclassified_segments_filters_to_requested_segment_ids(self) -> None:
+        mock_db = MagicMock()
+        mock_db.fetch_unclassified_segments.return_value = [{"id": "segment-2"}]
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_unclassified_segments({
+                "limit": 20,
+                "segmentIds": ["segment-2", "unknown-segment"],
+            })
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"], [{"id": "segment-2"}])
+        mock_db.fetch_unclassified_segments.assert_called_once_with(
+            None,
+            None,
+            20,
+            {"segment-2", "unknown-segment"},
+        )
+
+    def test_get_unclassified_segments_returns_no_segments_for_empty_segment_ids(self) -> None:
+        mock_db = MagicMock()
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            result = tracker_main.get_unclassified_segments({"segmentIds": []})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"], [])
+        mock_db.fetch_unclassified_segments.assert_not_called()
+
+    def test_get_unclassified_segments_rejects_invalid_segment_ids(self) -> None:
+        for payload in (
+            {"segmentIds": "segment-1"},
+            {"segmentIds": ["segment-1", 2]},
+        ):
+            with self.subTest(payload=payload):
+                mock_db = MagicMock()
+                with patch.object(tracker_main, "database", return_value=mock_db):
+                    result = tracker_main.get_unclassified_segments(payload)
+
+                self.assertFalse(result["ok"])
+                self.assertIsNone(result["data"])
+                mock_db.fetch_unclassified_segments.assert_not_called()
 
     def test_get_dashboard_week_timeline_uses_compact_range_filter(self) -> None:
         mock_db = MagicMock()

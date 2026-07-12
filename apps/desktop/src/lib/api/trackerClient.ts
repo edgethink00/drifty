@@ -10,6 +10,7 @@ import type {
   BrowserHistoryImportResult,
   ClassificationMetrics,
   ClassificationQuery,
+  UnclassifiedSegmentsQuery,
   ClassificationRule,
   ClassificationRuleApplyResult,
   ClassificationRuleCandidate,
@@ -269,7 +270,7 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke<AppIconMap>("tracker_get_app_icons", { query: { apps } });
     return result ?? {};
   },
-  async getUnclassifiedSegments(query: ClassificationQuery) {
+  async getUnclassifiedSegments(query: UnclassifiedSegmentsQuery) {
     if (shouldUsePreviewData()) return [];
     const result = await safeInvoke<ActivitySegment[]>("tracker_get_unclassified_segments", { query });
     return result ?? [];

@@ -240,6 +240,33 @@ def day_bounds(payload: dict) -> tuple[str | None, str | None]:
     return payload.get("start"), payload.get("end")
 
 
+def timeline_page_bounds(payload: object) -> tuple[str, str]:
+    if not isinstance(payload, dict):
+        raise ValueError("timeline page selector must be an object")
+
+    has_day = "day" in payload
+    has_start = "start" in payload
+    has_end = "end" in payload
+    if has_day:
+        if has_start or has_end:
+            raise ValueError("timeline page selector cannot mix day with start or end")
+        day = payload["day"]
+        if not isinstance(day, str) or not day:
+            raise ValueError("timeline page selector day must be a non-empty string")
+        return f"{day}T00:00:00", f"{day}T23:59:59"
+
+    if has_start != has_end:
+        raise ValueError("timeline page selector requires both start and end")
+    if not has_start:
+        raise ValueError("timeline page selector requires day or both start and end")
+
+    start = payload["start"]
+    end = payload["end"]
+    if not isinstance(start, str) or not start or not isinstance(end, str) or not end:
+        raise ValueError("timeline page selector start and end must be non-empty strings")
+    return start, end
+
+
 def _datetime_payload(value: JsonValue, *, name: str) -> datetime:
     if value is None:
         return datetime.now(timezone.utc)
@@ -566,38 +593,56 @@ def get_timeline(payload: dict):
     return response(True, items)
 
 
+def _segment_ids(payload: object) -> set[str] | None:
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be an object")
+    if "segmentIds" not in payload:
+        return None
+
+    segment_ids = payload["segmentIds"]
+    if not isinstance(segment_ids, list):
+        raise ValueError("segmentIds must be a list of strings")
+    if any(not isinstance(segment_id, str) for segment_id in segment_ids):
+        raise ValueError("segmentIds must contain only strings")
+    return set(segment_ids)
+
+
 def get_timeline_page(payload: dict):
-    safe_payload = payload if isinstance(payload, dict) else {}
-    db = database()
-    start, end = day_bounds(safe_payload)
+    try:
+        start, end = timeline_page_bounds(payload)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+
     return response(
         True,
-        db.timeline_page(
+        database().timeline_page(
             start=start,
             end=end,
-            before_ended_at=safe_payload.get("beforeEndedAt"),
-            before_segment_id=safe_payload.get("beforeSegmentId"),
-            limit=safe_payload.get("limit"),
+            before_ended_at=payload.get("beforeEndedAt"),
+            before_segment_id=payload.get("beforeSegmentId"),
+            limit=payload.get("limit"),
         ),
     )
 
 
 def search_timeline(payload: dict):
-    safe_payload = payload if isinstance(payload, dict) else {}
-    query = safe_payload.get("query", "")
+    try:
+        start, end = timeline_page_bounds(payload)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+
+    query = payload.get("query", "")
     if not isinstance(query, str):
         query = ""
-    db = database()
-    start, end = day_bounds(safe_payload)
     return response(
         True,
-        db.search_timeline_page(
+        database().search_timeline_page(
             query=query,
             start=start,
             end=end,
-            before_ended_at=safe_payload.get("beforeEndedAt"),
-            before_segment_id=safe_payload.get("beforeSegmentId"),
-            limit=safe_payload.get("limit"),
+            before_ended_at=payload.get("beforeEndedAt"),
+            before_segment_id=payload.get("beforeSegmentId"),
+            limit=payload.get("limit"),
         ),
     )
 
@@ -669,9 +714,24 @@ def get_top_sites(payload: dict):
 
 
 def get_unclassified_segments(payload: dict):
-    db = database()
+    try:
+        segment_ids = _segment_ids(payload)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+
+    if segment_ids is not None and not segment_ids:
+        return response(True, [])
+
     start, end = day_bounds(payload)
-    return response(True, db.fetch_unclassified_segments(start, end, payload.get("limit", 50)))
+    return response(
+        True,
+        database().fetch_unclassified_segments(
+            start,
+            end,
+            payload.get("limit", 50),
+            segment_ids,
+        ),
+    )
 
 
 def save_classifications(payload: dict):

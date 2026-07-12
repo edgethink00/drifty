@@ -1001,6 +1001,24 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual([row["app_name"] for row in rows], ["Calendar"])
         self.assertEqual(rows[0]["started_at"], "2026-06-10T00:41:46+00:00")
 
+    def test_unclassified_segment_allow_list_is_applied_before_limit(self) -> None:
+        first_id = self._insert_history_segment(
+            "2026-04-06T09:00:00+00:00",
+            "2026-04-06T09:01:00+00:00",
+        )
+        requested_id = self._insert_history_segment(
+            "2026-04-06T10:00:00+00:00",
+            "2026-04-06T10:01:00+00:00",
+        )
+
+        unclassified = self.database.fetch_unclassified_segments(
+            limit=1,
+            segment_ids={str(requested_id)},
+        )
+
+        self.assertNotEqual(first_id, requested_id)
+        self.assertEqual([segment["id"] for segment in unclassified], [str(requested_id)])
+
     def test_saved_classification_is_serialized_with_timeline(self) -> None:
         self.database.record_snapshot(
             Snapshot(

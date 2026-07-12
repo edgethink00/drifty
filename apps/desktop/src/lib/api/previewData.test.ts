@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { previewAppIcons, previewTimeline, previewTimelineSearch, shouldUsePreviewData } from "./previewData";
 
 describe("previewData", () => {
+  const previewHistoryRange = {
+    start: "2026-01-01T00:00:00",
+    end: "2026-05-08T23:59:59",
+  } as const;
   afterEach(() => {
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();
@@ -103,18 +107,18 @@ describe("previewData", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-08T20:30:00"));
 
-    expect(previewTimelineSearch({ query: "   ", limit: 25 })).toEqual({
+    expect(previewTimelineSearch({ query: "   ", ...previewHistoryRange, limit: 25 })).toEqual({
       items: [],
       hasMore: false,
       nextCursor: null,
     });
   });
 
-  it("searches all preview history by default with whitespace tokens across fields", () => {
+  it("searches preview history within the explicit range with whitespace tokens across fields", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-08T20:30:00"));
 
-    const page = previewTimelineSearch({ query: "arc react", limit: 20 });
+    const page = previewTimelineSearch({ query: "arc react", ...previewHistoryRange, limit: 20 });
 
     expect(page.items.length).toBeGreaterThan(0);
     expect(page.items.every((segment) => segment.appName === "Arc" && segment.siteDomain === "react.dev")).toBe(true);
@@ -141,9 +145,10 @@ describe("previewData", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-08T20:30:00"));
 
-    const firstPage = previewTimelineSearch({ query: "github", limit: 1 });
+    const firstPage = previewTimelineSearch({ query: "github", ...previewHistoryRange, limit: 1 });
     const secondPage = previewTimelineSearch({
       query: "github",
+      ...previewHistoryRange,
       beforeEndedAt: firstPage.nextCursor?.beforeEndedAt,
       beforeSegmentId: firstPage.nextCursor?.beforeSegmentId,
       limit: 1,
@@ -160,7 +165,7 @@ describe("previewData", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-08T20:30:00"));
 
-    const page = previewTimelineSearch({ query: "social_media drift", limit: 50 });
+    const page = previewTimelineSearch({ query: "social_media drift", ...previewHistoryRange, limit: 50 });
 
     expect(page.items.length).toBeGreaterThan(0);
     expect(page.items.every((segment) => segment.classification?.category === "social_media")).toBe(true);

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
@@ -244,6 +244,10 @@ const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const MANUAL_UPDATE_STATUS_NOTICE_MS = 6_000;
 const APP_REFRESH_INTERVAL_MS = 30_000;
 const LIVE_TAIL_LIMIT = 8;
+const FULL_HISTORY_SEARCH_RANGE = {
+  start: "1970-01-01T00:00:00+00:00",
+  end: "9999-12-31T23:59:59+00:00",
+} as const;
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
@@ -1179,6 +1183,7 @@ export default function App() {
         try {
           const timelinePage = await trackerClient.searchTimeline({
             query,
+            ...FULL_HISTORY_SEARCH_RANGE,
             limit: HISTORY_TIMELINE_PAGE_SIZE,
           });
           const materializedPage = materializeBuiltInHeuristicTimeline(timelinePage.items);
@@ -1876,7 +1881,6 @@ export default function App() {
       }
     }
   }
-
   function startClassificationCorrection(scope: ClassificationCorrectionScope, rowId: string | null = null) {
     const sourceRow = rowId ? classificationActivityRows.find((row) => row.id === rowId) ?? null : null;
     const sourceSegment = sourceRow?.segments[0]
@@ -2192,6 +2196,7 @@ export default function App() {
     try {
       const timelinePage = await trackerClient.searchTimeline({
         query: normalizedHistorySearchQuery,
+        ...FULL_HISTORY_SEARCH_RANGE,
         beforeEndedAt: historySearchNextCursor.beforeEndedAt,
         beforeSegmentId: historySearchNextCursor.beforeSegmentId,
         limit: HISTORY_TIMELINE_PAGE_SIZE,
@@ -2335,6 +2340,15 @@ export default function App() {
     }
   }, [shouldBlockLocalTrackerAccess, startOfDayMinutes]);
 
+  const refreshRef = useRef(refresh);
+  const refreshLiveTailRef = useRef(refreshLiveTail);
+  const selectTodayAfterDateRolloverRef = useRef(selectTodayAfterDateRollover);
+  useLayoutEffect(() => {
+    refreshRef.current = refresh;
+    refreshLiveTailRef.current = refreshLiveTail;
+    selectTodayAfterDateRolloverRef.current = selectTodayAfterDateRollover;
+  });
+
   useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
     window.__DRIFTY_BOOTSTRAPPED__ = true;
@@ -2417,7 +2431,7 @@ export default function App() {
     // the recurring refresh is app-only; preview keeps the initial load only.
     if (isPreviewSurface) return undefined;
     const intervalId = setInterval(() => {
-      if (selectTodayAfterDateRollover()) return;
+      if (selectTodayAfterDateRolloverRef.current()) return;
       // Unfocused ticks use the same cursor live-tail merge as focused ones;
       // the full-day rebuild runs only as a low-cadence background reconcile
       // (see resolveAppRefreshTickAction) because rebuilding the whole
@@ -2429,13 +2443,13 @@ export default function App() {
         lastFullDayRefreshAtMs: lastFullDayRefreshAtRef.current,
       });
       if (tickAction === "reconcile") {
-        void refresh(selectedDay, { foreground: false });
+        void refreshRef.current(selectedDay, { foreground: false });
         return;
       }
-      void refreshLiveTail(selectedDay);
+      void refreshLiveTailRef.current(selectedDay);
     }, APP_REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [activeTab, classificationRange, dashPeriod, isPreviewSurface, refreshLiveTail, selectTodayAfterDateRollover, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
+  }, [activeTab, classificationRange, dashPeriod, isPreviewSurface, selectedDay, shouldBlockLocalTrackerAccess, trendsRange]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;

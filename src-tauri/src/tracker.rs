@@ -113,6 +113,7 @@ impl TrackerController {
     pub fn get_timeline_page(
         &self,
         app: &AppHandle,
+        day: Option<String>,
         start: Option<String>,
         end: Option<String>,
         before_segment_id: Option<String>,
@@ -122,7 +123,7 @@ impl TrackerController {
         self.invoke::<Value>(
             app,
             "get_timeline_page",
-            build_timeline_page_payload(start, end, before_segment_id, before_ended_at, limit),
+            build_timeline_page_payload(day, start, end, before_segment_id, before_ended_at, limit),
         )
     }
 
@@ -130,6 +131,7 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         query: String,
+        day: Option<String>,
         start: Option<String>,
         end: Option<String>,
         before_segment_id: Option<String>,
@@ -141,6 +143,7 @@ impl TrackerController {
             "search_timeline",
             build_timeline_search_payload(
                 query,
+                day,
                 start,
                 end,
                 before_segment_id,
@@ -345,12 +348,13 @@ impl TrackerController {
         start: Option<String>,
         end: Option<String>,
         limit: Option<u32>,
+        segment_ids: Option<Vec<String>>,
     ) -> Result<Value, TrackerError> {
-        let mut payload = build_period_payload(day, start, end);
-        if let Some(payload_object) = payload.as_object_mut() {
-            payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
-        }
-        self.invoke::<Value>(app, "get_unclassified_segments", payload)
+        self.invoke::<Value>(
+            app,
+            "get_unclassified_segments",
+            build_unclassified_segments_payload(day, start, end, limit, segment_ids),
+        )
     }
 
     pub fn get_reusable_ai_classifications(
@@ -1224,13 +1228,14 @@ fn build_dashboard_week_timeline_payload(start: Option<String>, end: Option<Stri
 }
 
 fn build_timeline_page_payload(
+    day: Option<String>,
     start: Option<String>,
     end: Option<String>,
     before_segment_id: Option<String>,
     before_ended_at: Option<String>,
     limit: Option<u32>,
 ) -> Value {
-    let mut payload = build_period_payload(None, start, end);
+    let mut payload = build_period_payload(day, start, end);
 
     if let Some(payload_object) = payload.as_object_mut() {
         if let Some(before_segment_id) = before_segment_id {
@@ -1247,6 +1252,7 @@ fn build_timeline_page_payload(
 
 fn build_timeline_search_payload(
     query: String,
+    day: Option<String>,
     start: Option<String>,
     end: Option<String>,
     before_segment_id: Option<String>,
@@ -1254,12 +1260,29 @@ fn build_timeline_search_payload(
     limit: Option<u32>,
 ) -> Value {
     let mut payload =
-        build_timeline_page_payload(start, end, before_segment_id, before_ended_at, limit);
+        build_timeline_page_payload(day, start, end, before_segment_id, before_ended_at, limit);
 
     if let Some(payload_object) = payload.as_object_mut() {
         payload_object.insert("query".into(), json!(query));
     }
 
+    payload
+}
+
+fn build_unclassified_segments_payload(
+    day: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    limit: Option<u32>,
+    segment_ids: Option<Vec<String>>,
+) -> Value {
+    let mut payload = build_period_payload(day, start, end);
+    if let Some(payload_object) = payload.as_object_mut() {
+        payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
+        if let Some(segment_ids) = segment_ids {
+            payload_object.insert("segmentIds".into(), json!(segment_ids));
+        }
+    }
     payload
 }
 
@@ -1689,6 +1712,7 @@ mod tests {
     #[test]
     fn timeline_page_payload_preserves_range_cursor_and_default_limit() {
         let payload = build_timeline_page_payload(
+            None,
             Some("2026-04-06T00:00:00".into()),
             Some("2026-04-06T23:59:59".into()),
             Some("42".into()),
@@ -1709,9 +1733,34 @@ mod tests {
     }
 
     #[test]
+    fn timeline_page_payload_preserves_day_selector() {
+        let payload =
+            build_timeline_page_payload(Some("2026-04-06".into()), None, None, None, None, None);
+
+        assert_eq!(payload, json!({ "day": "2026-04-06", "limit": 200 }));
+    }
+
+    #[test]
+    fn unclassified_segments_payload_preserves_segment_ids() {
+        let payload = build_unclassified_segments_payload(
+            Some("2026-04-06".into()),
+            None,
+            None,
+            Some(20),
+            Some(vec!["42".into(), "43".into()]),
+        );
+
+        assert_eq!(
+            payload,
+            json!({ "day": "2026-04-06", "limit": 20, "segmentIds": ["42", "43"] })
+        );
+    }
+
+    #[test]
     fn timeline_search_payload_preserves_query_range_cursor_and_default_limit() {
         let payload = build_timeline_search_payload(
             "github issue".into(),
+            None,
             Some("2026-04-06T00:00:00".into()),
             Some("2026-04-06T23:59:59".into()),
             Some("42".into()),
@@ -1729,6 +1778,24 @@ mod tests {
                 "beforeEndedAt": "2026-04-06T09:05:00+00:00",
                 "limit": 200
             })
+        );
+    }
+
+    #[test]
+    fn timeline_search_payload_preserves_day_selector() {
+        let payload = build_timeline_search_payload(
+            "github issue".into(),
+            Some("2026-04-06".into()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(
+            payload,
+            json!({ "query": "github issue", "day": "2026-04-06", "limit": 200 })
         );
     }
 

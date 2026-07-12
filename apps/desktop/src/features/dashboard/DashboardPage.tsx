@@ -244,7 +244,7 @@ export function DashboardPage({
       ) : null}
 
       {initialDataLoading ? (
-        <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={dashboardDateNavigator} />
+        <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={null} />
       ) : dashPeriod === "Week" ? (
         <WeekDashboard
           rows={weekRows}

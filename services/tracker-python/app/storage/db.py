@@ -1192,7 +1192,13 @@ class TrackerDatabase:
             ).fetchone()
         return row["ended_at"] if row else None
 
-    def fetch_unclassified_segments(self, start: str | None = None, end: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    def fetch_unclassified_segments(
+        self,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int = 50,
+        segment_ids: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         query = """
             SELECT
                 activity_segments.*,
@@ -1218,6 +1224,10 @@ class TrackerDatabase:
         """
         params: list[Any] = []
         query = self._append_overlap_filters(query, params, start, end)
+        if segment_ids is not None:
+            placeholders = ", ".join("?" for _ in segment_ids)
+            query += f" AND CAST(activity_segments.id AS TEXT) IN ({placeholders})"
+            params.extend(sorted(segment_ids))
         query += " ORDER BY started_at ASC LIMIT ?"
         params.append(limit)
         with self.connect() as conn:

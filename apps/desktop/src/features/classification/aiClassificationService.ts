@@ -5,7 +5,7 @@ import type {
   ActivityClassificationRecord,
   ActivitySegment,
   ClassificationMetrics,
-  ClassificationQuery,
+  UnclassifiedSegmentsQuery,
   ProductivityLabel,
 } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -32,10 +32,6 @@ import { withClassificationActivity } from "./classificationActivity";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
-// A `segmentIds` allow-list can't be pushed to the tracker query, so fetch a generous slice of
-// the day's unclassified pool and filter client-side. A single logical day's unclassified
-// segments stay comfortably under this ceiling.
-const ALLOW_LISTED_UNCLASSIFIED_SCAN_LIMIT = 5000;
 export const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -294,23 +290,19 @@ export function diffAiClassificationUsageSummary(
   };
 }
 
-export async function runAiClassification(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+export async function runAiClassification(query: UnclassifiedSegmentsQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   return withClassificationActivity(
     () => runAiClassificationImpl(query, batchSize, options),
     (summary) => summary.metrics?.unclassifiedSegments ?? null,
   );
 }
 
-async function runAiClassificationImpl(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
-  // Optional allow-list: prioritize only these segment ids (e.g. the flow chart's visible set).
-  // The tracker query can't filter by id, so pull a wide slice of the day's unclassified pool
-  // and filter client-side before capping to the batch size. Absent an allow-list this is the
-  // original single-limit fetch.
-  const allowList = query.segmentIds && query.segmentIds.length > 0 ? new Set(query.segmentIds) : null;
+async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = Math.min(query.limit ?? batchSize, EDGE_MAX_BATCH_SIZE);
-  const fetchLimit = allowList ? ALLOW_LISTED_UNCLASSIFIED_SCAN_LIMIT : selectedBatchSize;
-  const fetched = await trackerClient.getUnclassifiedSegments({ ...query, limit: fetchLimit });
-  const segments = (allowList ? fetched.filter((segment) => allowList.has(segment.id)) : fetched).slice(0, selectedBatchSize);
+  const segments = (await trackerClient.getUnclassifiedSegments({
+    ...query,
+    limit: selectedBatchSize,
+  })).slice(0, selectedBatchSize);
   const privacySettings = readAiPrivacyRequestSettings();
   const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
   const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile, privacySettings)));
@@ -415,14 +407,14 @@ async function runAiClassificationImpl(query: ClassificationQuery, batchSize = D
   };
 }
 
-export async function runAiClassificationForUnknownThreshold(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+export async function runAiClassificationForUnknownThreshold(query: UnclassifiedSegmentsQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   return withClassificationActivity(
     () => runAiClassificationForUnknownThresholdImpl(query, threshold, options),
     (summary) => summary.metrics?.unclassifiedSegments ?? null,
   );
 }
 
-async function runAiClassificationForUnknownThresholdImpl(query: ClassificationQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSegmentsQuery, threshold: number, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   const selectedBatchSize = EDGE_MAX_BATCH_SIZE;
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
   const privacySettings = readAiPrivacyRequestSettings();
@@ -572,14 +564,14 @@ async function saveLiveResultIfRequested(result: LiveAiClassificationResult, opt
   return result;
 }
 
-export async function runAiClassificationUntilEmpty(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+export async function runAiClassificationUntilEmpty(query: UnclassifiedSegmentsQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   return withClassificationActivity(
     () => runAiClassificationUntilEmptyImpl(query, batchSize, options),
     (summary) => summary.metrics?.unclassifiedSegments ?? null,
   );
 }
 
-async function runAiClassificationUntilEmptyImpl(query: ClassificationQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
+async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuery, batchSize = DEFAULT_BATCH_SIZE, options: AiClassificationRunOptions = {}): Promise<AiClassificationSummary> {
   let selectedSegments = 0;
   let savedRecords = 0;
   let processedBatches = 0;
@@ -633,7 +625,7 @@ async function runAiClassificationUntilEmptyImpl(query: ClassificationQuery, bat
   };
 }
 
-export function toClassificationQueryForDay(day: string, limit?: number): ClassificationQuery {
+export function toClassificationQueryForDay(day: string, limit?: number): UnclassifiedSegmentsQuery {
   return limit ? { day, limit } : { day };
 }
 
@@ -1210,7 +1202,7 @@ function toReusableClassificationRecords(
 }
 
 async function savedPartialAiSummary(
-  query: ClassificationQuery,
+  query: UnclassifiedSegmentsQuery,
   localSavedRecords: number,
   reusedSavedRecords: number,
   remainingUnknownSegments: number,
@@ -1294,7 +1286,7 @@ function messageFromUnknownError(error: unknown, fallback: string): string {
 }
 
 async function runLocalAiClassification(
-  query: ClassificationQuery,
+  query: UnclassifiedSegmentsQuery,
   selectedSegments: number,
   deterministicSavedRecords: number,
   representatives: MinimizedActivityPayload[],

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
@@ -8,7 +8,10 @@ const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
   readonly browserHistoryBootstrapNotice?: ComponentProps<typeof DashboardPage>["browserHistoryBootstrapNotice"];
+  readonly dashboardDateNavigator?: ComponentProps<typeof DashboardPage>["dashboardDateNavigator"];
   readonly dashboardReplay?: ComponentProps<typeof DashboardPage>["dashboardReplay"];
+  readonly dashPeriod?: ComponentProps<typeof DashboardPage>["dashPeriod"];
+  readonly initialDataLoading?: boolean;
 };
 
 function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
@@ -23,14 +26,14 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       dashboardAppUsage={[]}
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={[]}
-      dashboardDateNavigator={<div aria-label="date navigator" />}
+      dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}
       dashboardEffectiveProductivityTotals={[]}
       dashboardProductivityTotals={[]}
       dashboardReplay={options.dashboardReplay === undefined ? { phase: "playing", progress: 0, onRestart: noop, onStop: noop } : options.dashboardReplay}
       dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
       dashboardTitle="Today"
       dashboardTitleDuration="0m"
-      dashPeriod="Today"
+      dashPeriod={options.dashPeriod ?? "Today"}
       flowBlocks={[]}
       flowIntervalMinutes={3}
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
@@ -39,7 +42,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       hasTimelineData={false}
       historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       historySegments={[]}
-      initialDataLoading={false}
+      initialDataLoading={options.initialDataLoading ?? false}
       isPreviewSurface={false}
       selectedDay="2026-06-29"
       selectedDayLabel="Mon, Jun 29"
@@ -63,6 +66,27 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
   );
 }
 
+describe("DashboardPage date navigator", () => {
+  it.each([
+    ["loading", true],
+    ["loaded", false],
+  ] as const)("renders one navigator and invokes its callback once while %s", (_state, initialDataLoading) => {
+    const onNavigate = vi.fn();
+
+    renderDashboardWithNoData({
+      dashPeriod: "Week",
+      initialDataLoading,
+      dashboardDateNavigator: <button type="button" onClick={onNavigate}>Previous week</button>,
+    });
+
+    const dateNavigatorButtons = screen.getAllByRole("button", { name: "Previous week" });
+    expect(dateNavigatorButtons).toHaveLength(1);
+
+    fireEvent.click(dateNavigatorButtons[0]);
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+});
 describe("DashboardPage demo replay empty data", () => {
   it("keeps blank chart frames visible instead of empty-state copy while replay is active", () => {
     renderDashboardWithNoData();

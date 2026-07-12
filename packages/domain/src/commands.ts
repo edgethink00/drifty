@@ -90,15 +90,19 @@ export interface TimelinePageCursor {
   beforeSegmentId: string;
 }
 
-export interface TimelinePageQuery extends Partial<DayQuery>, Partial<DateRangeQuery> {
+export type TimelinePageSelector =
+  | (DayQuery & { start?: never; end?: never })
+  | (DateRangeQuery & { day?: never });
+
+export type TimelinePageQuery = TimelinePageSelector & {
   beforeEndedAt?: string | null;
   beforeSegmentId?: string | null;
   limit?: number;
-}
+};
 
-export interface TimelineSearchQuery extends TimelinePageQuery {
+export type TimelineSearchQuery = TimelinePageQuery & {
   readonly query: string;
-}
+};
 
 export interface TimelinePage {
   items: ActivitySegment[];
@@ -265,11 +269,12 @@ export interface BrowserHistoryEnvironment {
 
 export interface ClassificationQuery extends Partial<DateRangeQuery>, Partial<DayQuery> {
   limit?: number;
+}
+
+export interface UnclassifiedSegmentsQuery extends ClassificationQuery {
   /**
-   * Optional allow-list of segment ids to prioritize. When present, classification selection
-   * is restricted to these segments (applied client-side over the fetched unclassified pool);
-   * unknown to the tracker backend, which safely ignores the extra field. Additive: callers
-   * that omit it keep the previous whole-range selection behavior.
+   * Optional allow-list of segment ids. When present, tracker selection is restricted to these
+   * segments; an empty list returns no segments. Omitting it keeps whole-range selection behavior.
    */
   segmentIds?: readonly string[];
 }
@@ -543,7 +548,7 @@ export interface TrackerApi {
   getTopSites(query: TopSitesQuery): Promise<SiteDuration[]>;
   setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings): Promise<void>;
   getAppIcons(apps: AppIdentity[]): Promise<AppIconMap>;
-  getUnclassifiedSegments(query: ClassificationQuery): Promise<ActivitySegment[]>;
+  getUnclassifiedSegments(query: UnclassifiedSegmentsQuery): Promise<ActivitySegment[]>;
   getReusableAiClassifications(inputFingerprints: string[]): Promise<Record<string, ActivityClassificationRecord>>;
   getClassificationRules(): Promise<ClassificationRule[]>;
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tauri::async_runtime;
 use tauri::{AppHandle, State};
 
@@ -22,11 +22,51 @@ pub struct LiveTailQuery {
     pub limit: Option<u32>,
 }
 
+#[derive(Debug, Default)]
+enum TimelineSelectorField {
+    #[default]
+    Missing,
+    Null,
+    Value(String),
+}
+
+impl TimelineSelectorField {
+    fn as_deref(&self) -> Option<&str> {
+        match self {
+            Self::Value(value) => Some(value),
+            Self::Missing | Self::Null => None,
+        }
+    }
+
+    fn into_option(self) -> Option<String> {
+        match self {
+            Self::Value(value) => Some(value),
+            Self::Missing | Self::Null => None,
+        }
+    }
+}
+
+fn deserialize_timeline_selector_field<'de, D>(
+    deserializer: D,
+) -> Result<TimelineSelectorField, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(match Option::<String>::deserialize(deserializer)? {
+        Some(value) => TimelineSelectorField::Value(value),
+        None => TimelineSelectorField::Null,
+    })
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelinePageQuery {
-    pub start: Option<String>,
-    pub end: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_timeline_selector_field")]
+    day: TimelineSelectorField,
+    #[serde(default, deserialize_with = "deserialize_timeline_selector_field")]
+    start: TimelineSelectorField,
+    #[serde(default, deserialize_with = "deserialize_timeline_selector_field")]
+    end: TimelineSelectorField,
     pub before_segment_id: Option<String>,
     pub before_ended_at: Option<String>,
     pub limit: Option<u32>,
@@ -36,11 +76,48 @@ pub struct TimelinePageQuery {
 #[serde(rename_all = "camelCase")]
 pub struct TimelineSearchQuery {
     pub query: String,
-    pub start: Option<String>,
-    pub end: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_timeline_selector_field")]
+    day: TimelineSelectorField,
+    #[serde(default, deserialize_with = "deserialize_timeline_selector_field")]
+    start: TimelineSelectorField,
+    #[serde(default, deserialize_with = "deserialize_timeline_selector_field")]
+    end: TimelineSelectorField,
     pub before_segment_id: Option<String>,
     pub before_ended_at: Option<String>,
     pub limit: Option<u32>,
+}
+
+fn validate_timeline_page_selector(
+    day: &TimelineSelectorField,
+    start: &TimelineSelectorField,
+    end: &TimelineSelectorField,
+) -> Result<(), String> {
+    if matches!(day, TimelineSelectorField::Null)
+        || matches!(start, TimelineSelectorField::Null)
+        || matches!(end, TimelineSelectorField::Null)
+    {
+        return Err("timeline page selector fields cannot be null".into());
+    }
+
+    match (day.as_deref(), start.as_deref(), end.as_deref()) {
+        (Some(day), None, None) if !day.is_empty() => Ok(()),
+        (None, Some(start), Some(end)) if !start.is_empty() && !end.is_empty() => Ok(()),
+        (Some(_), Some(_), _) | (Some(_), _, Some(_)) => {
+            Err("timeline page selector cannot mix day with start or end".into())
+        }
+        (None, Some(_), None) | (None, None, Some(_)) => {
+            Err("timeline page selector requires both start and end".into())
+        }
+        (None, None, None) => {
+            Err("timeline page selector requires day or both start and end".into())
+        }
+        (Some(_), None, None) => {
+            Err("timeline page selector day must be a non-empty string".into())
+        }
+        (None, Some(_), Some(_)) => {
+            Err("timeline page selector start and end must be non-empty strings".into())
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +152,7 @@ pub struct ClassificationQuery {
     pub start: Option<String>,
     pub end: Option<String>,
     pub limit: Option<u32>,
+    pub segment_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -276,13 +354,15 @@ pub async fn tracker_get_timeline_page(
     controller: State<'_, TrackerController>,
     query: TimelinePageQuery,
 ) -> Result<serde_json::Value, String> {
+    validate_timeline_page_selector(&query.day, &query.start, &query.end)?;
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
             .get_timeline_page(
                 &app,
-                query.start,
-                query.end,
+                query.day.into_option(),
+                query.start.into_option(),
+                query.end.into_option(),
                 query.before_segment_id,
                 query.before_ended_at,
                 query.limit,
@@ -299,14 +379,16 @@ pub async fn tracker_search_timeline(
     controller: State<'_, TrackerController>,
     query: TimelineSearchQuery,
 ) -> Result<serde_json::Value, String> {
+    validate_timeline_page_selector(&query.day, &query.start, &query.end)?;
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
             .search_timeline(
                 &app,
                 query.query,
-                query.start,
-                query.end,
+                query.day.into_option(),
+                query.start.into_option(),
+                query.end.into_option(),
                 query.before_segment_id,
                 query.before_ended_at,
                 query.limit,
@@ -513,7 +595,14 @@ pub async fn tracker_get_unclassified_segments(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .get_unclassified_segments(&app, query.day, query.start, query.end, query.limit)
+            .get_unclassified_segments(
+                &app,
+                query.day,
+                query.start,
+                query.end,
+                query.limit,
+                query.segment_ids,
+            )
             .map_err(|error| error.to_string())
     })
     .await
@@ -914,6 +1003,7 @@ pub async fn tracker_apply_classification_rules(
             start: None,
             end: None,
             limit: None,
+            segment_ids: None,
         });
         controller
             .apply_classification_rules(&app, query.day, query.start, query.end, query.limit)
@@ -1133,4 +1223,69 @@ pub async fn tracker_purge_remote_segments(
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        validate_timeline_page_selector, TimelinePageQuery, TimelineSearchQuery,
+        TimelineSelectorField,
+    };
+    use serde_json::json;
+
+    fn value(value: &str) -> TimelineSelectorField {
+        TimelineSelectorField::Value(value.to_owned())
+    }
+
+    fn missing() -> TimelineSelectorField {
+        TimelineSelectorField::Missing
+    }
+
+    #[test]
+    fn timeline_page_selector_accepts_day_or_complete_range() {
+        assert!(
+            validate_timeline_page_selector(&value("2026-07-12"), &missing(), &missing(),).is_ok()
+        );
+        assert!(validate_timeline_page_selector(
+            &missing(),
+            &value("2026-07-12T00:00:00"),
+            &value("2026-07-12T23:59:59"),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn timeline_page_selector_rejects_empty_partial_and_mixed_forms() {
+        for selector in [
+            (missing(), missing(), missing()),
+            (missing(), value("start"), missing()),
+            (missing(), missing(), value("end")),
+            (value("day"), value("start"), value("end")),
+            (value(""), missing(), missing()),
+            (missing(), value(""), value("end")),
+        ] {
+            assert!(
+                validate_timeline_page_selector(&selector.0, &selector.1, &selector.2).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn timeline_page_and_search_selectors_reject_explicit_null_fields() {
+        let page: TimelinePageQuery = serde_json::from_value(json!({
+            "day": null,
+            "start": "2026-07-12T00:00:00",
+            "end": "2026-07-12T23:59:59"
+        }))
+        .expect("page query should deserialize before validation");
+        assert!(validate_timeline_page_selector(&page.day, &page.start, &page.end).is_err());
+
+        let search: TimelineSearchQuery = serde_json::from_value(json!({
+            "query": "focus",
+            "day": "2026-07-12",
+            "start": null
+        }))
+        .expect("search query should deserialize before validation");
+        assert!(validate_timeline_page_selector(&search.day, &search.start, &search.end).is_err());
+    }
 }

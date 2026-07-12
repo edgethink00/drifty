@@ -550,6 +550,29 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("passes the segment allow-list to the tracker before applying the batch limit", async () => {
+    const segment = createUnknownSegment(7);
+
+    try {
+      const { runAiClassification, invoke, getUnclassifiedSegments } = await importServiceWithSegments([segment]);
+      await runAiClassification({
+        day: "2026-05-22",
+        segmentIds: [segment.id],
+        limit: 50,
+      }, 50);
+
+      expect(getUnclassifiedSegments).toHaveBeenCalledWith({
+        day: "2026-05-22",
+        segmentIds: [segment.id],
+        limit: 20,
+      });
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<{ id: string }> };
+      expect(body.items.map((item) => item.id)).toEqual([segment.id]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("uses a 5-item Edge payload for focused idle unknown-threshold batches", async () => {
     const segments = Array.from({ length: 5 }, (_, index) => createUnknownSegment(index));
 

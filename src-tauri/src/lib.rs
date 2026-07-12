@@ -9,7 +9,10 @@ mod observability;
 mod tracker;
 mod tray;
 
-use std::sync::Mutex;
+use std::{
+    panic::{self, AssertUnwindSafe},
+    sync::{Condvar, Mutex},
+};
 
 use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_menu};
 use commands::{
@@ -59,6 +62,98 @@ use tray::{
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
+
+#[derive(Debug, Default, Eq, PartialEq)]
+enum AppExitState {
+    #[default]
+    Idle,
+    Running(std::thread::ThreadId),
+    Complete,
+}
+
+#[derive(Default)]
+struct AppExitCoordinator {
+    state: Mutex<AppExitState>,
+    completed: Condvar,
+}
+
+impl AppExitCoordinator {
+    fn shutdown_once(&self, cleanup: impl FnOnce()) {
+        let owner = std::thread::current().id();
+        let mut state = self
+            .state
+            .lock()
+            .expect("app exit state should not be poisoned");
+        loop {
+            match &*state {
+                AppExitState::Complete => return,
+                AppExitState::Running(running_owner) if *running_owner == owner => return,
+                AppExitState::Running(_) => {
+                    state = self
+                        .completed
+                        .wait(state)
+                        .expect("app exit state should not be poisoned");
+                }
+                AppExitState::Idle => {
+                    *state = AppExitState::Running(owner);
+                    break;
+                }
+            }
+        }
+        drop(state);
+
+        let result = panic::catch_unwind(AssertUnwindSafe(cleanup));
+        let mut state = self
+            .state
+            .lock()
+            .expect("app exit state should not be poisoned");
+        *state = if result.is_ok() {
+            AppExitState::Complete
+        } else {
+            AppExitState::Idle
+        };
+        self.completed.notify_all();
+        drop(state);
+
+        if let Err(payload) = result {
+            panic::resume_unwind(payload);
+        }
+    }
+}
+
+fn run_exit_cleanup_steps(
+    mut stop_managed_ai: impl FnMut(),
+    mut stop_tracker_daemon: impl FnMut(),
+    mut stop_tracker_serve_process: impl FnMut(),
+) {
+    let mut first_panic = None;
+    for cleanup in [
+        &mut stop_managed_ai as &mut dyn FnMut(),
+        &mut stop_tracker_daemon,
+        &mut stop_tracker_serve_process,
+    ] {
+        if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(cleanup)) {
+            if first_panic.is_none() {
+                first_panic = Some(payload);
+            }
+        }
+    }
+
+    if let Some(payload) = first_panic {
+        panic::resume_unwind(payload);
+    }
+}
+
+fn shutdown_app_for_exit(app: &AppHandle) {
+    app.state::<AppExitCoordinator>().shutdown_once(|| {
+        run_exit_cleanup_steps(
+            || managed_ai_stop_runtime_for_app_exit(app),
+            // Quitting the app must also stop the detached sampling daemon.
+            || tracker::stop_tracking_daemon_for_app_exit(app),
+            tracker::shutdown_serve_process,
+        );
+    });
+}
 
 pub fn init_native_observability() -> Option<sentry::ClientInitGuard> {
     observability::init_native_sentry()
@@ -199,20 +294,16 @@ pub fn run() {
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
         .manage(DriftAlarmState::default())
+        .manage(AppExitCoordinator::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
                 .on_event(|app, event| match event {
                     tauri::RunEvent::Opened { urls } => {
                         let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
                     }
-                    tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. } => {
-                        managed_ai_stop_runtime_for_app_exit(app);
-                        // Quitting the app must also stop the detached sampling
-                        // daemon; leaving it recording after quit would violate
-                        // the user's expectation that tracking has stopped.
-                        tracker::stop_tracking_daemon_for_app_exit(app);
-                        tracker::shutdown_serve_process();
-                    }
+                    // ExitRequested can still be prevented by another listener. Run irreversible
+                    // cleanup only once the runtime commits to Exit.
+                    tauri::RunEvent::Exit => shutdown_app_for_exit(app),
                     tauri::RunEvent::WindowEvent {
                         label,
                         event: tauri::WindowEvent::CloseRequested { api, .. },

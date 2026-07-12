@@ -170,6 +170,8 @@ describe("trackerClient", () => {
 
     const result = await trackerClient.searchTimeline({
       query: "github review",
+      start: "2026-04-01T00:00:00",
+      end: "2026-04-07T23:59:59",
       beforeEndedAt: "2026-04-06T09:05:00+00:00",
       beforeSegmentId: "42",
       limit: 50,
@@ -179,6 +181,8 @@ describe("trackerClient", () => {
     expect(invoke).toHaveBeenCalledWith("tracker_search_timeline", {
       query: {
         query: "github review",
+        start: "2026-04-01T00:00:00",
+        end: "2026-04-07T23:59:59",
         beforeEndedAt: "2026-04-06T09:05:00+00:00",
         beforeSegmentId: "42",
         limit: 50,
@@ -329,6 +333,8 @@ describe("trackerClient", () => {
 
     const result = await trackerClient.searchTimeline({
       query: "github",
+      start: "2026-04-01T00:00:00",
+      end: "2026-04-07T23:59:59",
       beforeEndedAt: "2026-04-06T09:05:00+00:00",
       beforeSegmentId: "42",
       limit: 50,
