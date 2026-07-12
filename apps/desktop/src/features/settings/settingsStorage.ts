@@ -18,6 +18,8 @@ export const MENU_BAR_ICON_STYLE_STORAGE_KEY = "drifty.appearance.menuBarIconSty
 
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 
+export const DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY = "drifty.dashboard.breakdownOpen";
+
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
@@ -364,6 +366,19 @@ export function resolveInitialMenuBarIconStyle(): TrayIconStyle {
 export function resolveInitialSidebarCollapsed(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+}
+
+// One preference shared by Your Day and Your Week: the Breakdown side panel
+// reads as a single surface across both dashboards, so collapsing it anywhere
+// collapses it everywhere, including across relaunches. Open by default.
+export function resolveInitialDashboardBreakdownOpen(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY) !== "0";
+}
+
+export function persistDashboardBreakdownOpen(open: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY, open ? "1" : "0");
 }
 
 export function resolveInitialAiClassificationVisibility(): boolean {
