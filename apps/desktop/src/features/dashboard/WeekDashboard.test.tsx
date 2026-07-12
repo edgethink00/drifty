@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
@@ -64,6 +64,8 @@ type WeekDashboardRenderOverrides = {
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
+  readonly sideOpen?: boolean;
+  readonly onToggleSide?: () => void;
 };
 
 function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
@@ -139,5 +141,25 @@ describe("WeekDashboard axis scale", () => {
     expect(currentMarker?.style.getPropertyValue("--week-calendar-now-offset")).toBe("403.2px");
     expect(event.style.top).toBe("403.2px");
     expect(event.style.height).toBe("40.8px");
+  });
+});
+
+describe("WeekDashboard breakdown panel", () => {
+  it("follows the controlled sideOpen prop and reports toggles to the owner", () => {
+    const onToggleSide = vi.fn();
+    const { container } = renderWeekDashboard({ sideOpen: false, onToggleSide });
+
+    expect(container.querySelector(".week-v2-grid--side-open")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show week breakdown" }));
+    expect(onToggleSide).toHaveBeenCalledTimes(1);
+    // Controlled: the panel stays closed until the owner flips the prop.
+    expect(container.querySelector(".week-v2-grid--side-open")).toBeNull();
+  });
+
+  it("stays open by default when rendered standalone", () => {
+    const { container } = renderWeekDashboard();
+
+    expect(container.querySelector(".week-v2-grid--side-open")).toBeTruthy();
   });
 });

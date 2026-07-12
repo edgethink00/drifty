@@ -167,6 +167,10 @@ type WeekDashboardProps = {
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
   readonly axisScalePercent?: number;
+  /** Breakdown collapse state is owned by DashboardPage so Day and Week share
+   *  one preference; standalone renders (tests) fall back to open. */
+  readonly sideOpen?: boolean;
+  readonly onToggleSide?: () => void;
 };
 
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
@@ -194,8 +198,14 @@ export function WeekDashboard({
   currentCalendarDay,
   currentMinuteOfDay,
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
+  sideOpen: controlledSideOpen,
+  onToggleSide,
 }: WeekDashboardProps) {
-  const [sideOpen, setSideOpen] = useState(true);
+  // Controlled by DashboardPage in the app (shared Day/Week preference);
+  // standalone renders fall back to local state so the toggle still works.
+  const [localSideOpen, setLocalSideOpen] = useState(true);
+  const sideOpen = controlledSideOpen ?? localSideOpen;
+  const toggleSide = onToggleSide ?? (() => setLocalSideOpen((open) => !open));
   const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
   // Element state (not just a ref) so the hover layer's delegation effect can
   // re-subscribe when the calendar body mounts.
@@ -459,7 +469,7 @@ export function WeekDashboard({
 
         <BreakdownSidePanel
           open={sideOpen}
-          onToggle={() => setSideOpen((open) => !open)}
+          onToggle={toggleSide}
           ariaLabel="Week time breakdown"
           toggleSubject="week breakdown"
         >

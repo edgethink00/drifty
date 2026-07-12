@@ -19,6 +19,7 @@ import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
+import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen } from "../settings/settingsStorage";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
 import {
   DashboardAiUnavailableNotice,
@@ -144,7 +145,16 @@ export function DashboardPage({
   onSelectDay,
 }: DashboardPageProps) {
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
-  const [daySideOpen, setDaySideOpen] = useState(true);
+  // Shared by the Day view and WeekDashboard: the Breakdown side panel is one
+  // surface across both dashboards, so its collapse state lives here (and in
+  // localStorage) instead of per view.
+  const [breakdownOpen, setBreakdownOpen] = useState(resolveInitialDashboardBreakdownOpen);
+  const toggleBreakdown = () => {
+    setBreakdownOpen((open) => {
+      persistDashboardBreakdownOpen(!open);
+      return !open;
+    });
+  };
   const pageClassName = [
     "page",
     dashPeriod === "Week" ? "page--week-dashboard" : null,
@@ -252,6 +262,8 @@ export function DashboardPage({
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
           axisScalePercent={weekDashboardAxisScalePercent}
+          sideOpen={breakdownOpen}
+          onToggleSide={toggleBreakdown}
         />
       ) : dashPeriod === "Month" ? (
         <HistoryCalendarPanel
@@ -262,7 +274,7 @@ export function DashboardPage({
           onSelectDay={onSelectDay}
         />
       ) : (
-        <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${daySideOpen ? " week-v2-grid--side-open" : ""}`}>
+        <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
           <div className="day-split__main">
             {hasTimelineData || isDashboardReplayActive ? (
               <div className="flow-breakdown-layout flow-breakdown-layout--full">
@@ -305,8 +317,8 @@ export function DashboardPage({
           </div>
 
           <BreakdownSidePanel
-            open={daySideOpen}
-            onToggle={() => setDaySideOpen((open) => !open)}
+            open={breakdownOpen}
+            onToggle={toggleBreakdown}
             ariaLabel="Day breakdown"
             toggleSubject="day breakdown"
           >
