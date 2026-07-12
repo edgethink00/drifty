@@ -1,19 +1,155 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
-import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { logicalMinuteOfDay } from "@drifty/domain";
 import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty/domain";
-import { WeekCalendarHoverCard } from "./HoverCards";
-import type { WeekCalendarHoverState } from "./HoverCards";
-import { buildWeekCalendarEventLayout } from "./weekCalendarEventLayout";
+import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
+import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent, ReactNode } from "react";
+import { CompactRingChart } from "./CompactRingChart";
+import { CompactClassificationBar } from "./CompactClassificationBar";
+import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
+import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
-const ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX = 29;
+/* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
+const WEEK_CALENDAR_TIME_RAIL_PX = 40;
+/* Longer than one animation frame, well under the 340ms panel transition. */
+const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
+
+export type WeekDashboardColorMode = "category" | "productivity";
+
+const WEEK_COLOR_MODE_OPTIONS = [
+  { id: "category", label: "Category" },
+  { id: "productivity", label: "Productivity" },
+] as const satisfies readonly { readonly id: WeekDashboardColorMode; readonly label: string }[];
+
+/* Categories grouped by their productivity tone, mirroring the Day flow chart legend. */
+const WEEK_LEGEND_GROUPS = [
+  { productivity: "focus", categories: ["workspace", "learning"] },
+  { productivity: "neutral", categories: ["communication", "music", "utility", "unknown"] },
+  { productivity: "drift", categories: ["entertainment", "social_media", "shopping", "game"] },
+] as const;
+
+function WeekCalendarLegend({ colorMode }: { colorMode: WeekDashboardColorMode }) {
+  if (colorMode === "productivity") {
+    return (
+      <div className="flow-chart-legend" aria-label="Week productivity tones">
+        {WEEK_LEGEND_GROUPS.map((group) => (
+          <span className="flow-chart-legend__group flow-chart-legend__group--productivity" key={group.productivity}>
+            <span className="flow-chart-legend__parent flow-chart-legend__parent--tone" title={`${productivityLabel(group.productivity)} blocks`}>
+              <span className="flow-chart-legend__tone-dot" style={{ "--flow-legend-tone": PRODUCTIVITY_COLORS[group.productivity] } as WeekLegendToneStyle} />
+              {productivityLabel(group.productivity)}
+            </span>
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flow-chart-legend" aria-label="Week category tones">
+      {WEEK_LEGEND_GROUPS.map((group) => (
+        <span className="flow-chart-legend__group" key={group.productivity}>
+          <span className="flow-chart-legend__parent" title={`${productivityLabel(group.productivity)} categories`}>
+            {productivityLabel(group.productivity)}
+          </span>
+          <span className="flow-chart-legend__categories" aria-label={`${productivityLabel(group.productivity)} categories`}>
+            {group.categories.map((category) => (
+              <span
+                aria-label={categoryLabel(category)}
+                className={`flow-chart-legend__dot flow-chart-legend__dot--${category}`}
+                key={category}
+                title={categoryLabel(category)}
+              />
+            ))}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type WeekLegendToneStyle = CSSProperties & { "--flow-legend-tone": string };
+
+type WeekIdentityStripStyle = CSSProperties & {
+  "--week-identity-tile": string;
+  "--week-identity-gap": string;
+};
+
+type WeekSideTrendSegment = {
+  readonly key: string;
+  readonly heightPercent: number;
+  readonly color: string;
+  readonly title: string;
+};
+
+type WeekSideTrendColumn = {
+  readonly day: string;
+  readonly dayLabel: string;
+  readonly off: boolean;
+  readonly barHeightPercent: number;
+  readonly segments: WeekSideTrendSegment[];
+};
+
+type WeekSideTrendChart = {
+  readonly gridlines: { readonly label: string; readonly topPercent: number }[];
+  readonly columns: WeekSideTrendColumn[];
+};
+
+const WEEK_SIDE_TREND_VLINE_LEFTS = [14.2857, 28.5714, 42.8571, 57.1429, 71.4286, 85.7143];
+const WEEK_SIDE_TREND_STEP_CANDIDATES = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
+
+/** Compact Trends-style stacked bars for the Breakdown side panel. */
+function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardColorMode): WeekSideTrendChart {
+  const maxHours = Math.max(...rows.map((row) => row.totalSeconds / 3600), 0);
+  const axisMaxHours = maxHours > 0 ? maxHours / 0.93 : 1;
+  const stepHours = WEEK_SIDE_TREND_STEP_CANDIDATES.find((candidate) => maxHours / candidate <= 4)
+    ?? WEEK_SIDE_TREND_STEP_CANDIDATES[WEEK_SIDE_TREND_STEP_CANDIDATES.length - 1];
+  const gridlines: { label: string; topPercent: number }[] = [];
+  for (let value = stepHours; value <= maxHours + 1e-9; value += stepHours) {
+    gridlines.push({
+      label: `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}h`,
+      topPercent: (1 - value / axisMaxHours) * 100,
+    });
+  }
+  gridlines.reverse();
+
+  const columns = rows.map((row) => {
+    const off = row.totalSeconds <= 0;
+    const slices = colorMode === "productivity"
+      ? row.productivitySlices.map((slice) => ({
+          key: slice.productivity,
+          seconds: slice.totalSeconds,
+          color: PRODUCTIVITY_COLORS[slice.productivity],
+          label: productivityLabel(slice.productivity),
+        }))
+      : row.slices.map((slice) => ({
+          key: slice.category,
+          seconds: slice.totalSeconds,
+          color: CATEGORY_COLORS[slice.category],
+          label: categoryLabel(slice.category),
+        }));
+    return {
+      day: row.day,
+      dayLabel: row.dayName,
+      off,
+      barHeightPercent: Math.min((row.totalSeconds / (axisMaxHours * 3600)) * 100, 100),
+      segments: slices.map((slice) => ({
+        key: slice.key,
+        heightPercent: off ? 0 : (slice.seconds / row.totalSeconds) * 100,
+        color: slice.color,
+        title: `${slice.label} · ${formatCompactDurationFromSeconds(slice.seconds)}`,
+      })),
+    };
+  });
+
+  return { gridlines, columns };
+}
 
 type WeekDashboardProps = {
   readonly rows: WeekDayRow[];
@@ -28,7 +164,6 @@ type WeekDashboardProps = {
   readonly refreshStatus: "idle" | "loading" | "error";
   readonly isPreviewSurface?: boolean;
   readonly startOfDayMinutes: number;
-  readonly dateNavigator: ReactNode;
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
   readonly axisScalePercent?: number;
@@ -56,29 +191,28 @@ export function WeekDashboard({
   refreshStatus,
   isPreviewSurface = false,
   startOfDayMinutes,
-  dateNavigator,
   currentCalendarDay,
   currentMinuteOfDay,
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
 }: WeekDashboardProps) {
-  const [weekHover, setWeekHover] = useState<WeekCalendarHoverState | null>(null);
-  const [activeWeekEventId, setActiveWeekEventId] = useState<string | null>(null);
+  const [sideOpen, setSideOpen] = useState(true);
+  const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
+  // Element state (not just a ref) so the hover layer's delegation effect can
+  // re-subscribe when the calendar body mounts.
+  const [calendarBodyElement, setCalendarBodyElement] = useState<HTMLDivElement | null>(null);
   const calendarScrollerRef = useRef<HTMLDivElement>(null);
-  const calendarBodyRef = useRef<HTMLDivElement>(null);
+  const calendarBodyRef = useRef<HTMLDivElement | null>(null);
+  const setCalendarBody = useCallback((element: HTMLDivElement | null) => {
+    calendarBodyRef.current = element;
+    setCalendarBodyElement(element);
+  }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
   const focusSeconds = productivityEntries.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
-  const driftSeconds = productivityEntries.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0;
-  const productivePercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
   const refreshStatusLabel = refreshStatus === "loading" ? "Updating" : refreshStatus === "error" ? "Update failed" : null;
-  const activeCategories = categoryEntries
-    .filter((entry) => entry.totalSeconds > 0)
-    .slice()
-    .sort((left, right) => right.totalSeconds - left.totalSeconds);
-  const visibleCategories = activeCategories.slice(0, 5);
-  const rankedRows = rows.slice().sort((left, right) => right.totalSeconds - left.totalSeconds || left.day.localeCompare(right.day));
-  const bestDay = rankedRows.find((row) => row.totalSeconds > 0) ?? null;
-  const peakSeconds = Math.max(rankedRows[0]?.totalSeconds ?? 0, 1);
-  const summaryPeakSeconds = Math.max(...rows.map((row) => row.focusSeconds), 1);
+  const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
+  const productivityRingEntries = buildProductivityRingEntries(productivityEntries);
+  const productivityCenterPercent = buildProductivityCenterPercent(productivityEntries);
+  const sideTrendChart = useMemo(() => buildWeekSideTrendChart(rows, colorMode), [colorMode, rows]);
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
@@ -126,6 +260,45 @@ export function WeekDashboard({
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
   }, [calendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute]);
 
+  // The calendar squishes (no horizontal scroll) while the Breakdown panel is
+  // open, so the identity strips must adapt to the live day-column width
+  // instead of always showing the model's 4-icon cap.
+  const [dayColumnWidth, setDayColumnWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const body = calendarBodyRef.current;
+    if (!body) return undefined;
+
+    const updateDayColumnWidth = () => {
+      const bodyWidth = body.getBoundingClientRect().width;
+      const nextWidth = bodyWidth > 0 ? Math.round((bodyWidth - WEEK_CALENDAR_TIME_RAIL_PX) / 7) : null;
+      setDayColumnWidth(nextWidth);
+    };
+
+    updateDayColumnWidth();
+    if (typeof ResizeObserver !== "function") return undefined;
+    // The Breakdown panel animates grid-template-columns for 340ms, which fires
+    // the observer every frame; re-rendering the calendar per frame would fight
+    // that layout animation, so wait for the size to settle and apply once.
+    let settleTimeout = 0;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(settleTimeout);
+      settleTimeout = window.setTimeout(updateDayColumnWidth, WEEK_CALENDAR_RESIZE_SETTLE_MS);
+    });
+    observer.observe(body);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(settleTimeout);
+    };
+  }, []);
+
+  const eventsById = useMemo(() => {
+    const byId = new Map<string, WeekCalendarEvent>();
+    for (const events of calendarEvents.values()) {
+      for (const event of events) byId.set(event.id, event);
+    }
+    return byId;
+  }, [calendarEvents]);
+
   useLayoutEffect(() => {
     const scroller = calendarScrollerRef.current;
     const body = calendarBodyRef.current;
@@ -149,58 +322,29 @@ export function WeekDashboard({
 
   return (
     <section className="week-v2" aria-label="Your week overview" data-week-axis-scale-percent={effectiveAxisScalePercent}>
-      <div className="week-v2-grid week-v2-grid--calendar">
+      <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
         <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label="Week calendar schedule">
-          <div className="week-v2-summary week-v2-summary--compact week-v2-summary--integrated" aria-label="Week summary">
-            <div className="week-v2-summary__main">
-              <span className="label-mono">Week focus</span>
-              <strong>{isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}</strong>
-            </div>
-            <div className="week-v2-summary__bars" aria-hidden="true">
-              {calendarRows.map((row) => {
-                const ratio = row.focusSeconds > 0 ? row.focusSeconds / summaryPeakSeconds : 0;
-                const barHeight = row.focusSeconds > 0 ? Math.max(4, Math.round(ratio * 30)) : 2;
-                const isPeak = bestDay?.day === row.day && row.focusSeconds > 0;
-                const isToday = markerCalendarDay === row.day;
-                const dayLetter = row.dayName.charAt(0);
-                return (
-                  <span
-                    className={`week-v2-summary__bar${isPeak ? " is-peak" : ""}${isToday ? " is-today" : ""}${row.focusSeconds === 0 ? " is-empty" : ""}`}
-                    key={row.day}
-                    title={`${row.dayName} ${row.dayNumber} · ${row.focusSeconds > 0 ? formatCompactDurationFromSeconds(row.focusSeconds) : "No focus"}`}
+          <div className="week-v2-calendar__legend" aria-label="Week legend">
+            <div className="flow-chart-head__actions">
+              <div className="seg flow-color-mode-control" aria-label="Week color mode">
+                {WEEK_COLOR_MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={option.id === colorMode ? "on" : undefined}
+                    aria-pressed={option.id === colorMode}
+                    onClick={() => setColorMode(option.id)}
                   >
-                    <span className="week-v2-summary__bar-fill" style={{ height: `${barHeight}px` }} />
-                    <small>{dayLetter}</small>
-                  </span>
-                );
-              })}
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <WeekCalendarLegend colorMode={colorMode} />
             </div>
-            <div className="week-v2-summary__meta">
-              {refreshStatusLabel ? (
-                <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
-              ) : null}
-              <span>Focus share {isPreviewSurface ? 77 : productivePercent}%</span>
-              <span>Drift {isPreviewSurface ? "6h 25m" : driftSeconds > 0 ? formatCompactDurationFromSeconds(driftSeconds) : "0m"}</span>
-              {refreshStatus !== "idle" ? (
-                <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">
-                  {refreshStatus === "loading" ? "Updating" : "Update failed"}
-                </span>
-              ) : null}
-            </div>
-            <div className="week-v2-summary__actions">
-              {dateNavigator}
-            </div>
+            {refreshStatusLabel ? (
+              <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
+            ) : null}
           </div>
-          {activeCategories.length > 0 ? (
-            <div className="week-v2-calendar__legend" aria-label="Week category legend">
-              {activeCategories.map((entry) => (
-                <span className="week-v2-calendar__legend-item" key={entry.category}>
-                  <span className={`category-dot category-dot--${entry.category}`} aria-hidden="true" />
-                  <span>{categoryLabel(entry.category)}</span>
-                </span>
-              ))}
-            </div>
-          ) : null}
           <div ref={calendarScrollerRef} className="week-v2-calendar__scroller">
             <div className="week-v2-calendar__day-head" aria-hidden="true">
               <span />
@@ -215,7 +359,7 @@ export function WeekDashboard({
                 );
               })}
             </div>
-            <div ref={calendarBodyRef} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
+            <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
                   <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes))}</span>
@@ -246,47 +390,47 @@ export function WeekDashboard({
                     ))}
                     {events.map((event) => {
                       const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight);
+                      const identityStrip = planWeekIdentityStrip(
+                        event.identities.length,
+                        event.hiddenIdentityCount,
+                        // Lane-stacked events render 24px narrower than the full column.
+                        dayColumnWidth === null ? null : dayColumnWidth - (event.laneCount > 1 ? 24 : 0),
+                      );
                       const eventStyle: WeekCalendarEventStyle = {
                         top: formatWeekDashboardAxisPixelValue((event.topMinutes / 60) * calendarHourHeight),
                         height: formatWeekDashboardAxisPixelValue(eventLayout.eventHeight),
                         left: event.laneCount > 1 ? `calc(${event.lane * 12}px + 4px)` : "4px",
                         width: event.laneCount > 1 ? "calc(100% - 32px)" : "calc(100% - 8px)",
-                        zIndex: activeWeekEventId === event.id ? ACTIVE_WEEK_CALENDAR_EVENT_Z_INDEX : event.laneCount > 1 ? 10 + event.lane : 3,
-                        "--event-tone": CATEGORY_COLORS[event.category],
+                        zIndex: event.laneCount > 1 ? 10 + event.lane : 3,
+                        "--event-tone": colorMode === "productivity" ? PRODUCTIVITY_COLORS[event.productivity] : CATEGORY_COLORS[event.category],
                       };
                       return (
                         <article
                           aria-label={event.detailTitle.replace(/\n/g, ", ")}
                           className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
+                          data-event-id={event.id}
                           key={event.id}
                           tabIndex={0}
                           style={eventStyle}
                           title={event.detailTitle}
-                          onFocus={() => setActiveWeekEventId(event.id)}
-                          onBlur={() => setActiveWeekEventId(null)}
-                          onMouseEnter={(pointerEvent: MouseEvent<HTMLElement>) => {
-                            setActiveWeekEventId(event.id);
-                            setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY });
-                          }}
-                          onMouseMove={(pointerEvent: MouseEvent<HTMLElement>) => {
-                            setActiveWeekEventId(event.id);
-                            setWeekHover({ event, x: pointerEvent.clientX, y: pointerEvent.clientY });
-                          }}
-                          onMouseLeave={() => {
-                            setActiveWeekEventId(null);
-                            setWeekHover(null);
-                          }}
                         >
                           <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
                           {eventLayout.showsIdentityStrip ? (
-                            <span className="week-v2-calendar__identity-strip" aria-hidden="true">
-                              {event.identities.map((identity) => (
+                            <span
+                              className="week-v2-calendar__identity-strip"
+                              style={identityStrip.tilePx !== 18 ? {
+                                "--week-identity-tile": `${identityStrip.tilePx}px`,
+                                "--week-identity-gap": `${identityStrip.gapPx}px`,
+                              } as WeekIdentityStripStyle : undefined}
+                              aria-hidden="true"
+                            >
+                              {event.identities.slice(0, identityStrip.visibleCount).map((identity) => (
                                 <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
                                   {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} /> : null}
                                 </span>
                               ))}
-                              {event.hiddenIdentityCount > 0 ? (
-                                <span className="week-v2-calendar__identity-more">+{event.hiddenIdentityCount}</span>
+                              {identityStrip.hiddenCount > 0 ? (
+                                <span className="week-v2-calendar__identity-more">+{identityStrip.hiddenCount}</span>
                               ) : null}
                             </span>
                           ) : null}
@@ -311,56 +455,79 @@ export function WeekDashboard({
             </div>
           </div>
         </section>
-        {weekHover ? <WeekCalendarHoverCard appIcons={appIcons} hover={weekHover} /> : null}
+        <WeekCalendarHoverLayer appIcons={appIcons} bodyElement={calendarBodyElement} eventsById={eventsById} />
 
-        <aside className="week-v2-side" aria-label="Week time breakdown">
-          <section className="week-v2-side-card" aria-label="Week totals by category">
-            <span className="label-mono">Category mix</span>
-            {visibleCategories.length > 0 ? (
-              <div className="week-v2-cat-list">
-                {visibleCategories.map((entry) => (
-                  <div className="week-v2-cat-row" key={entry.category}>
-                    <div className="week-v2-cat-row__head">
-                      <span className={`category-dot category-dot--${entry.category}`} aria-hidden="true" />
-                      <strong>{categoryLabel(entry.category)}</strong>
-                      <span>{Math.round(entry.ratio * 100)}%</span>
+        <BreakdownSidePanel
+          open={sideOpen}
+          onToggle={() => setSideOpen((open) => !open)}
+          ariaLabel="Week time breakdown"
+          toggleSubject="week breakdown"
+        >
+          <BreakdownHeroCard
+            ariaLabel="Focus total this week"
+            eyebrow="Focus this week"
+            value={isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}
+            deltaPercent={focusDeltaPercent}
+            deltaComparisonLabel="vs last week"
+          />
+          <CompactRingChart
+            title="Productivity"
+            entries={productivityRingEntries}
+            totalSeconds={totalSeconds}
+            centerPercent={productivityCenterPercent}
+            flowBlocks={[]}
+            appIcons={appIcons}
+          />
+          <CompactClassificationBar<CategoryDuration>
+            title="Categories"
+            ariaLabel="Week category classification"
+            entries={activeCategoryEntries}
+            totalSeconds={totalSeconds}
+            getKey={(entry) => entry.category}
+            getLabel={(entry) => categoryLabel(entry.category)}
+            getColor={(entry) => CATEGORY_COLORS[entry.category]}
+            getDotClassName={(entry) => `category-dot--${entry.category}`}
+            getAppBreakdown={() => []}
+            appIcons={appIcons}
+            visibleLimit={5}
+          />
+          <section className="week-v2-side-card week-v2-side-card--weekly-breakdown" aria-label="Weekly breakdown">
+            <span className="label-mono">Weekly breakdown</span>
+            <div className="wt-plot">
+              <div className="wt-grid">
+                {sideTrendChart.gridlines.map((line) => (
+                  <div className="wt-gridline" style={{ top: `${line.topPercent.toFixed(2)}%` }} key={`gl-${line.label}`}>
+                    <span className="wt-gridlabel">{line.label}</span>
+                  </div>
+                ))}
+                {WEEK_SIDE_TREND_VLINE_LEFTS.map((left) => (
+                  <div className="wt-vline" style={{ left: `${left}%` }} key={`vl-${left}`} />
+                ))}
+              </div>
+              <div className="wt-cols">
+                {sideTrendChart.columns.map((column) => (
+                  <div className={`wt-col${column.off ? " wt-col--off" : ""}`} key={column.day}>
+                    <div className="wt-bars-zone">
+                      {column.off ? null : (
+                        <div className="wt-bar" style={{ height: `${column.barHeightPercent.toFixed(2)}%` }}>
+                          {column.segments.map((segment) => (
+                            <div
+                              className="wt-seg"
+                              style={{ height: `${segment.heightPercent.toFixed(2)}%`, background: segment.color }}
+                              key={segment.key}
+                              title={segment.title}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="week-v2-cat-row__bar" aria-hidden="true">
-                      <span style={{ width: `${Math.max(entry.ratio * 100, 2)}%`, background: CATEGORY_COLORS[entry.category] }} />
-                    </div>
-                    <div className="week-v2-cat-row__delta">
-                      <span>{formatCompactDurationFromSeconds(entry.totalSeconds)}</span>
-                      <span>of tracked week</span>
-                    </div>
+                    <div className="wt-daylabel">{column.dayLabel}</div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="week-v2-empty">No tracked categories yet.</p>
-            )}
+            </div>
           </section>
-
-          <section className="week-v2-side-card" aria-label="Ranked days">
-            <span className="label-mono">Ranked days</span>
-            <ol className="week-v2-rank">
-              {rankedRows.map((row, index) => {
-                const hasActivity = row.totalSeconds > 0;
-                const widthPercent = hasActivity ? Math.max((row.totalSeconds / peakSeconds) * 100, 2) : 0;
-                return (
-                  <li className={hasActivity ? undefined : "is-empty"} key={row.day}>
-                    <span className="week-v2-rank__pos">{String(index + 1).padStart(2, "0")}</span>
-                    <span className="week-v2-rank__day">
-                      <strong>{row.dayName} {row.dayNumber}</strong>
-                      <small>{hasActivity ? `FS ${row.focusScore}` : "No activity"}</small>
-                    </span>
-                    <span className="week-v2-rank__bar" aria-hidden="true"><span style={{ width: `${widthPercent}%` }} /></span>
-                    <span className="week-v2-rank__val">{hasActivity ? formatCompactDurationFromSeconds(row.totalSeconds) : "—"}</span>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        </aside>
+        </BreakdownSidePanel>
       </div>
     </section>
   );

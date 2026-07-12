@@ -122,7 +122,7 @@ export function LeaderboardView({
           >
             <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
               <div
-                style={{ position: "relative", display: "flex", alignItems: "center", gap: "var(--space-4)", minWidth: 0, padding: "var(--space-4) var(--space-3)", border: 0, borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--accent-soft) 46%, var(--surface))" }}
+                style={{ position: "relative", display: "flex", alignItems: "center", gap: "var(--space-4)", minWidth: 0 }}
               >
                 <ProfileAvatar
                   className="leaderboard-hero__avatar"
@@ -147,7 +147,7 @@ export function LeaderboardView({
                     className="leaderboard-profile-edit-button"
                     aria-label="Edit public profile"
                     onClick={editProfile}
-                    style={{ position: "absolute", top: "var(--space-3)", right: "var(--space-3)", margin: 0 }}
+                    style={{ position: "absolute", top: 0, right: 0, margin: 0 }}
                   >
                     <PencilIcon />
                   </button>
@@ -156,7 +156,7 @@ export function LeaderboardView({
               {publicProfile ? (
                 <div
                   aria-label="Focus totals"
-                  style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%", paddingRight: "var(--space-5)" }}
+                  style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%" }}
                 >
                   <HeroStat label="Focus · this week" value={formatRoundedDuration(weekFocusSeconds)} accent />
                   <HeroStat label="Daily avg" value={formatRoundedDuration(dailyAverageSeconds)} />
@@ -166,7 +166,7 @@ export function LeaderboardView({
             </div>
 
             <div
-              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", paddingRight: "var(--space-5)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
+              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
             >
               <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
                 {isOptedIn ? (
@@ -195,12 +195,12 @@ export function LeaderboardView({
                   <>
                     <button
                       type="button"
-                      className="settings-btn settings-btn--primary profile-btn hero-action-btn"
+                      className="settings-btn settings-btn--primary profile-btn hero-action-btn hero-action-btn--mono"
                       onClick={() => setRankEmbedOpen(true)}
                       title={!publicRankReady ? "Join and make your profile public to activate this embed" : undefined}
                     >
                       <EmbedIcon />
-                      Rank embed
+                      Embed
                     </button>
                     {isOptedIn ? (
                       <button type="button" className="ghost-button profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>

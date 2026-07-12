@@ -21,12 +21,12 @@ export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
-export const PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY = "drifty.dev.projectClassification";
 export const DEVICE_SYNC_ENABLED_STORAGE_KEY = "drifty.deviceSync.enabled";
 export const DEVICE_SYNC_PREVIEW_STORAGE_KEY = "drifty.dev.deviceSyncPreview";
 export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
+export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 
 export const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
 export const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
@@ -379,11 +379,6 @@ export function resolveInitialDevModeEnabled(): boolean {
 // Off by default (opt-in): the Dev-settings toggle is the sole gate for the
 // project-classification preview, so the Projects/Intelligence surfaces stay hidden
 // in every build until a developer explicitly enables them in Dev mode.
-export function resolveInitialProjectClassificationEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(PROJECT_CLASSIFICATION_ENABLED_STORAGE_KEY) === "1";
-}
-
 // Off by default (explicit opt-in): device sync uploads raw activity segments to the
 // user's private cloud space, so each Mac must be enabled deliberately — never by a
 // build default or a remote flag.
@@ -412,6 +407,11 @@ export function resolveInitialWebAccountPreviewEnabled(): boolean {
 export function resolveInitialTeamsBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(TEAMS_BETA_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialProfileBetaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(PROFILE_BETA_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialEnhancedContextSettings(): EnhancedContextSettings {

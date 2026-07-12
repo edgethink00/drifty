@@ -40,10 +40,6 @@ export function FlowChartHeader({
     : BASE_FLOW_COLOR_MODE_OPTIONS;
   return (
     <div className="flow-chart-head">
-      <div>
-        <span className="label-mono">flow chart</span>
-        <p className="flow-chart-copy">{intervalMinutes}-minute cells show the dominant app or site in each block.</p>
-      </div>
       <div className="flow-chart-head__actions">
         <div className="seg flow-color-mode-control" aria-label="Flow chart color mode">
           {colorModeOptions.map((option) => (

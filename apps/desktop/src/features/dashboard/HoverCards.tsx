@@ -10,6 +10,7 @@ import { ClassificationSourcePill } from "../classification/ClassificationBreakd
 import { WeekCalendarIdentityIcon } from "./WeekDashboard";
 import { createPortal } from "react-dom";
 import { useLayoutEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 
 export type TimelineHoverState = {
   segment: DayRibbonSegment;
@@ -116,8 +117,9 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
   return createPortal(card, document.body);
 }
 
-export function WeekCalendarHoverCard({ hover, appIcons }: { hover: WeekCalendarHoverState; appIcons: AppIconMap }) {
-  const cardRef = useRef<HTMLDivElement>(null);
+export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRef }: { hover: WeekCalendarHoverState; appIcons: AppIconMap; cardRef?: RefObject<HTMLDivElement> }) {
+  const internalCardRef = useRef<HTMLDivElement>(null);
+  const cardRef = externalCardRef ?? internalCardRef;
   const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
 
   useLayoutEffect(() => {

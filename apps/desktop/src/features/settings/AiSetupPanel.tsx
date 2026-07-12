@@ -52,6 +52,9 @@ export type AiSetupPanelProps = {
   readonly analysisOpenRouterConnected: boolean;
   /** Show the Intelligence tab (project-classification preview). Dev-gated. */
   readonly showIntelligenceTab: boolean;
+  /** One-shot: open this tab on arrival (e.g. Projects → AI setup lands on Intelligence). */
+  readonly requestedTab?: AiSetupPanelTab | null;
+  readonly onRequestedTabConsumed?: () => void;
   readonly onAnalysisChange: (next: AnalysisAiSetupState) => void;
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
@@ -82,6 +85,8 @@ export function AiSetupPanel({
   analysisSetup,
   analysisOpenRouterConnected,
   showIntelligenceTab,
+  requestedTab = null,
+  onRequestedTabConsumed,
   onAnalysisChange,
   onDialogOpenChange,
   onLocalAiSetupChange,
@@ -116,6 +121,13 @@ export function AiSetupPanel({
     onDialogOpenChange(modelPickers.openRouterModelPickerOpen);
     return () => onDialogOpenChange(false);
   }, [modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
+
+  // Externally requested tab (one-shot), e.g. the Projects page's "AI setup".
+  useEffect(() => {
+    if (!requestedTab) return;
+    if (requestedTab !== "intelligence" || showIntelligenceTab) setActivePanelTab(requestedTab);
+    onRequestedTabConsumed?.();
+  }, [requestedTab, showIntelligenceTab, onRequestedTabConsumed]);
 
   // If the Intelligence preview is switched off while its tab is open, fall back
   // to Classification so the panel never shows an orphaned tab.

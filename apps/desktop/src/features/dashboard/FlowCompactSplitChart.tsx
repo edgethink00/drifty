@@ -26,6 +26,43 @@ type FlowCompactSplitChartProps = {
   readonly projectCenterPercent?: number;
 };
 
+/** Productivity donut entries in the fixed focus/neutral/drift order. */
+export function buildProductivityRingEntries(productivityEntries: ProductivityDuration[]): CompactRingEntry[] {
+  return FLOW_BREAKDOWN_PRODUCTIVITY_ORDER
+    .map((productivity) => productivityEntries.find((entry) => entry.productivity === productivity))
+    .filter((entry): entry is ProductivityDuration => Boolean(entry))
+    .map((entry) => ({
+      key: entry.productivity,
+      label: productivityLabel(entry.productivity),
+      color: PRODUCTIVITY_COLORS[entry.productivity],
+      totalSeconds: entry.totalSeconds,
+      ratio: entry.ratio,
+      matchesBlock: (block) => block.productivity === entry.productivity,
+      dotClassName: `productivity-dot--${entry.productivity}`,
+    }));
+}
+
+/** Focus share of classified time (the productivity ring excludes unclassified). */
+export function buildProductivityCenterPercent(productivityEntries: ProductivityDuration[]): number {
+  const classifiedSeconds = productivityEntries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const focusSeconds = productivityEntries.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
+  return classifiedSeconds > 0 ? Math.round((focusSeconds / classifiedSeconds) * 100) : 0;
+}
+
+/** Category bar entries with the unclassified bookkeeping bucket kept last. */
+export function buildActiveCategoryEntries(categoryEntries: CategoryDuration[]): CategoryDuration[] {
+  return categoryEntries
+    .filter((entry) => entry.totalSeconds > 0)
+    .slice()
+    .sort((left, right) => {
+      // Unclassified is bookkeeping, not a real category: keep it last.
+      if ((left.category === "unknown") !== (right.category === "unknown")) {
+        return left.category === "unknown" ? 1 : -1;
+      }
+      return right.totalSeconds - left.totalSeconds;
+    });
+}
+
 export function FlowCompactSplitChart({
   categoryEntries,
   productivityEntries,
@@ -36,36 +73,9 @@ export function FlowCompactSplitChart({
   projectRingEntries = [],
   projectCenterPercent = 0,
 }: FlowCompactSplitChartProps) {
-  const orderedProductivityEntries = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER
-    .map((productivity) => productivityEntries.find((entry) => entry.productivity === productivity))
-    .filter((entry): entry is ProductivityDuration => Boolean(entry));
-  const activeCategoryEntries = categoryEntries
-    .filter((entry) => entry.totalSeconds > 0)
-    .slice()
-    .sort((left, right) => {
-      // Unclassified is bookkeeping, not a real category: keep it last.
-      if ((left.category === "unknown") !== (right.category === "unknown")) {
-        return left.category === "unknown" ? 1 : -1;
-      }
-      return right.totalSeconds - left.totalSeconds;
-    });
-
-  const productivityRingEntries: CompactRingEntry[] = orderedProductivityEntries.map((entry) => ({
-    key: entry.productivity,
-    label: productivityLabel(entry.productivity),
-    color: PRODUCTIVITY_COLORS[entry.productivity],
-    totalSeconds: entry.totalSeconds,
-    ratio: entry.ratio,
-    matchesBlock: (block) => block.productivity === entry.productivity,
-    dotClassName: `productivity-dot--${entry.productivity}`,
-  }));
-
-  // Focus share of classified time (the productivity ring excludes unclassified).
-  const productivityClassifiedSeconds = orderedProductivityEntries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
-  const focusSeconds = orderedProductivityEntries.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
-  const productivityCenterPercent = productivityClassifiedSeconds > 0
-    ? Math.round((focusSeconds / productivityClassifiedSeconds) * 100)
-    : 0;
+  const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
+  const productivityRingEntries = buildProductivityRingEntries(productivityEntries);
+  const productivityCenterPercent = buildProductivityCenterPercent(productivityEntries);
 
   // Only swap to the project donut when the toggle asks for it and there is data;
   // otherwise the productivity donut stays (e.g. a day with no assignments yet).

@@ -3,7 +3,6 @@ import type { CSSProperties, MouseEvent } from "react";
 import type { ActivitySegment, Project } from "@drifty/domain";
 import { describeRelativeDay, formatCompactDurationFromSeconds } from "../../lib/formatting";
 import {
-  PROJECT_DAY_PLOT_BOUNDS,
   buildProjectDayChart,
   scaleProjectDayY,
   type ProjectDayWindow,
@@ -37,9 +36,9 @@ type AxisTickStyle = CSSProperties & {
   readonly "--project-day-axis-x": string;
 };
 
-const GRID_PATH = [PROJECT_DAY_PLOT_BOUNDS.top, (PROJECT_DAY_PLOT_BOUNDS.top + PROJECT_DAY_PLOT_BOUNDS.bottom) / 2, PROJECT_DAY_PLOT_BOUNDS.bottom]
-  .map((y) => `M${PROJECT_DAY_PLOT_BOUNDS.left} ${y}H${PROJECT_DAY_PLOT_BOUNDS.right}`)
-  .join(" ");
+type ScaleTickStyle = CSSProperties & {
+  readonly "--project-day-scale-y": string;
+};
 
 function hoverFromSlice(window: ProjectDayWindow, slice: ProjectDayWindowSlice, event: MouseEvent): ProjectDayHover {
   return {
@@ -108,7 +107,7 @@ export function ProjectDayEnergyChart({
           role="img"
           aria-label={svgAriaLabel}
         >
-          <path className="project-day-energy__grid" d={GRID_PATH} aria-hidden="true" />
+          <path className="project-day-energy__grid" d={chart.gridPath} aria-hidden="true" />
           {chart.bands.map((band) => (
             <path className="project-day-energy__band" d={band.areaPath} fill={band.color} key={band.key} />
           ))}
@@ -134,6 +133,12 @@ export function ProjectDayEnergyChart({
             )}
           </g>
         </svg>
+
+        <div className="project-day-energy__scale" aria-hidden="true">
+          {chart.yAxis.map((tick) => (
+            <span style={{ "--project-day-scale-y": `${tick.y}%` } as ScaleTickStyle} key={tick.label}>{tick.label}</span>
+          ))}
+        </div>
 
         {hover ? (
           <div

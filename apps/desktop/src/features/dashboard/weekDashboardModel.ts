@@ -290,5 +290,6 @@ function buildEmptyWeekDayRow(day: string, startOfDayMinutes: number): WeekDayRo
     focusSeconds: 0,
     focusScore: 0,
     slices: [],
+    productivitySlices: [],
   };
 }

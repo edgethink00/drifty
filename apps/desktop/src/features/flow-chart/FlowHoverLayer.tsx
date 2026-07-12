@@ -4,6 +4,7 @@ import type { FlowIntervalMinutes } from "@drifty/domain";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
 import { FlowHoverCard, type FlowHoverState } from "./FlowChartHoverCards";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
+import type { ProjectLegendEntry } from "./projectFlowView";
 import { useFlowChartHoverDelegation } from "./useFlowChartHoverDelegation";
 
 type FlowHoverLayerProps = {
@@ -13,6 +14,7 @@ type FlowHoverLayerProps = {
   readonly boundaryMinutes: number;
   readonly appIcons: Record<string, string | null>;
   readonly deviceLabelById?: ReadonlyMap<string, string>;
+  readonly projectsById?: ReadonlyMap<string, ProjectLegendEntry>;
 };
 
 // Owns the pointer-driven hover state so that moving across cells re-renders only this
@@ -26,6 +28,7 @@ export function FlowHoverLayer({
   boundaryMinutes,
   appIcons,
   deviceLabelById,
+  projectsById,
 }: FlowHoverLayerProps) {
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -39,7 +42,7 @@ export function FlowHoverLayer({
             gridElement,
           )
         : null}
-      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={cardRef} deviceLabelById={deviceLabelById} /> : null}
+      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={cardRef} deviceLabelById={deviceLabelById} projectsById={projectsById} /> : null}
     </>
   );
 }

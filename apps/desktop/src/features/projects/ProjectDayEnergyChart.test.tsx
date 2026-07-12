@@ -78,6 +78,23 @@ describe("ProjectDayEnergyChart", () => {
     expect(container.querySelectorAll("path.project-day-energy__band")).toHaveLength(3);
   });
 
+  it("renders minute-scale ticks with matching grid lines", () => {
+    const { container } = render(
+      <ProjectDayEnergyChart
+        segments={SEGMENTS}
+        projectBySegmentId={ASSIGNMENTS}
+        projects={PROJECTS}
+        day={DAY}
+      />,
+    );
+
+    // Busiest window is 10m (s1) → 5-minute steps: 5m, 10m.
+    const ticks = [...container.querySelectorAll(".project-day-energy__scale span")].map((node) => node.textContent);
+    expect(ticks).toEqual(["5m", "10m"]);
+    const gridPath = container.querySelector("path.project-day-energy__grid")?.getAttribute("d") ?? "";
+    expect(gridPath.split("M").filter(Boolean)).toHaveLength(ticks.length);
+  });
+
   it("shows the muted empty state when there are no segments", () => {
     render(
       <ProjectDayEnergyChart

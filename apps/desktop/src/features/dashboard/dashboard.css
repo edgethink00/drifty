@@ -1244,3 +1244,29 @@
 .browser-history-bootstrap--error .browser-history-bootstrap__status {
   color: var(--danger-text, var(--text-soft));
 }
+
+/* ── 2026-07 dashboard redesign: app usage panel ── */
+/* #1 feature card without the strong outer border; thinner share meters */
+.app-usage-feature {
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, color-mix(in srgb, var(--line) 62%, transparent));
+  box-shadow: none;
+}
+
+.app-usage-feature__meter,
+.app-usage-row__bar {
+  height: 6px;
+  border-radius: 2px;
+}
+
+/* Feature card 4 : ranked list 6, rows shrink instead of clipping */
+.app-usage-content {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+}
+
+.app-usage-row {
+  grid-template-columns: 2.7ch minmax(0, 1.42fr) minmax(3.5rem, 0.68fr) minmax(0, auto);
+}
+
+.app-usage-row__figures {
+  min-width: 0;
+}

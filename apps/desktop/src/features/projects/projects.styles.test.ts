@@ -4,16 +4,14 @@ import { readCssWithImports } from "../../test/readStyles";
 
 const projectsStyles = readCssWithImports("src/features/projects/projects.css");
 
-describe("project library grid styles", () => {
-  it("keeps four project tiles in the first desktop row before wrapping", () => {
-    const wideDesktopRule = projectsStyles.match(
-      /@media\s*\(min-width:\s*(?<breakpoint>\d+)px\)\s*{[\s\S]*?\.projects-list__items\s*{(?<body>[\s\S]*?)}/,
+describe("project table styles", () => {
+  it("lays the table out as a five-column grid (project, last activity, status, total, menu)", () => {
+    const tableRule = projectsStyles.match(
+      /\.projects-page \.projects-table__head,\s*\.projects-page \.projects-table__row\s*{(?<body>[\s\S]*?)}/,
     );
-    const desktopBreakpoint = Number(wideDesktopRule?.groups?.breakpoint ?? 0);
-    const gridTemplate = wideDesktopRule?.groups?.body.match(/grid-template-columns:\s*([^;]+);/)?.[1].trim() ?? "";
-    const desktopColumnCount = Number(gridTemplate.match(/^repeat\((\d+),/)?.[1] ?? 0);
+    const gridTemplate = tableRule?.groups?.body.match(/grid-template-columns:\s*([^;]+);/)?.[1].trim() ?? "";
+    const columnCount = gridTemplate.split(/\s+(?![^(]*\))/).filter(Boolean).length;
 
-    expect(desktopBreakpoint).toBeGreaterThanOrEqual(1024);
-    expect(desktopColumnCount).toBe(4);
+    expect(columnCount).toBe(5);
   });
 });

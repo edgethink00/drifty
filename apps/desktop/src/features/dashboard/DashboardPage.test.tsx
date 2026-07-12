@@ -34,6 +34,8 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       flowBlocks={[]}
       flowIntervalMinutes={3}
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
+      dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
+      dayFocusDeltaPercent={null}
       hasTimelineData={false}
       historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       historySegments={[]}

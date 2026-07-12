@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ProjectAnchor, TeamProjectInput } from "@drifty/domain";
+import { shiftIsoDate, type ProjectAnchor, type TeamProjectInput } from "@drifty/domain";
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
@@ -20,6 +20,7 @@ import {
 } from "./teamService";
 import type {
   CreateTeamProjectInput,
+  TeamPeriod,
   TeamProject,
   TeamProjectMemberRow,
   TeamProjectMixRow,
@@ -37,6 +38,10 @@ export type UseTeamProjectsInput = {
   readonly userEmail?: string | null;
   readonly startOfDayMinutes: number;
   readonly currentDay?: string | null;
+  /** Dashboard range granularity; defaults to the weekly focus window. */
+  readonly period?: TeamPeriod;
+  /** How many whole windows back from the latest one (0 = latest). */
+  readonly windowOffset?: number;
 };
 
 export type CreateTeamProjectFields = Omit<CreateTeamProjectInput, "organization_id">;
@@ -83,7 +88,7 @@ const EMPTY_MIX: readonly TeamProjectMixRow[] = [];
 const EMPTY_MEMBERS: readonly TeamProjectMemberRow[] = [];
 
 export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsResult {
-  const { enabled, organizationId, memberDisplayName, userEmail, startOfDayMinutes, currentDay } = input;
+  const { enabled, organizationId, memberDisplayName, userEmail, startOfDayMinutes, currentDay, period = "weekly", windowOffset = 0 } = input;
 
   const [projects, setProjects] = useState<readonly TeamProject[]>(EMPTY_PROJECTS);
   const [mix, setMix] = useState<readonly TeamProjectMixRow[]>(EMPTY_MIX);
@@ -97,13 +102,16 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
   const requestRef = useRef(0);
 
   const window = useMemo<TeamProjectsWindow>(() => {
-    const endDay = currentDay ?? logicalTodayIsoDate(startOfDayMinutes);
-    const focusWindow = getTeamFocusWindow("weekly", endDay);
+    const latestEndDay = currentDay ?? logicalTodayIsoDate(startOfDayMinutes);
+    const windowDays = period === "daily" ? 1 : period === "monthly" ? 30 : 7;
+    const offset = Math.max(0, Math.floor(windowOffset));
+    const endDay = shiftIsoDate(latestEndDay, -offset * windowDays);
+    const focusWindow = getTeamFocusWindow(period, endDay);
     if (focusWindow) {
       return { start_date: focusWindow.window_start_date, end_date: focusWindow.window_end_date };
     }
     return { start_date: endDay, end_date: endDay };
-  }, [currentDay, startOfDayMinutes]);
+  }, [currentDay, period, startOfDayMinutes, windowOffset]);
 
   const active = enabled && Boolean(organizationId);
 

@@ -1,6 +1,7 @@
 import { logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
 import type { ActivitySegment, Project } from "@drifty/domain";
 import { formatCompactHourLabel, formatQuarterHourLabel } from "../../lib/formatting";
+import { buildSmoothAreaPath, type TrendPoint } from "./projectTrendView";
 
 // Intraday "which project got my energy" chart geometry. One logical day is
 // split into 48 thirty-minute windows; each project is a stacked band and any
@@ -58,6 +59,11 @@ export interface ProjectDayAxisTick {
   readonly x: number;
 }
 
+export interface ProjectDayYAxisTick {
+  readonly label: string;
+  readonly y: number;
+}
+
 export interface ProjectDayChart {
   readonly windows: readonly ProjectDayWindow[];
   readonly series: readonly ProjectDaySeries[];
@@ -67,6 +73,9 @@ export interface ProjectDayChart {
   readonly hasData: boolean;
   readonly topProjectLabel: string | null;
   readonly axisTicks: readonly ProjectDayAxisTick[];
+  /** Minute-scale ticks up the left edge, with matching horizontal grid lines. */
+  readonly yAxis: readonly ProjectDayYAxisTick[];
+  readonly gridPath: string;
 }
 
 export interface ProjectDayChartInput {
@@ -97,10 +106,6 @@ export function scaleProjectDayY(seconds: number, maxWindowSeconds: number): num
   return PROJECT_DAY_PLOT_BOUNDS.bottom - (bounded / denom) * PLOT_HEIGHT;
 }
 
-function coord(value: number): string {
-  return (Math.round(value * 1000) / 1000).toString();
-}
-
 function windowIndexForSegment(segment: ActivitySegment, startOfDayMinutes: number): number | null {
   const startedMs = new Date(segment.startedAt).getTime();
   if (Number.isNaN(startedMs)) return null;
@@ -126,20 +131,24 @@ export function buildProjectDayAxisTicks(startOfDayMinutes = 0): ProjectDayAxisT
   return ticks;
 }
 
+// Smoothed with the same cubic B-spline as the multi-day trend chart (and the
+// Focus/Drift chart), so the intraday bands read as one family with Your Week.
 function buildBandPath(prefix: readonly number[][], seriesIndex: number, maxWindowSeconds: number): string {
-  const upper: string[] = [];
-  const lower: string[] = [];
+  const upper: TrendPoint[] = [];
+  const lower: TrendPoint[] = [];
   for (let windowIndex = 0; windowIndex < PROJECT_DAY_WINDOW_COUNT; windowIndex += 1) {
-    const x = coord(windowCenterX(windowIndex));
-    const upperY = coord(scaleProjectDayY(prefix[windowIndex][seriesIndex + 1], maxWindowSeconds));
-    upper.push(`${windowIndex === 0 ? "M" : "L"} ${x} ${upperY}`);
+    const x = windowCenterX(windowIndex);
+    upper.push({ x, y: scaleProjectDayY(prefix[windowIndex][seriesIndex + 1], maxWindowSeconds) });
+    lower.push({ x, y: scaleProjectDayY(prefix[windowIndex][seriesIndex], maxWindowSeconds) });
   }
-  for (let windowIndex = PROJECT_DAY_WINDOW_COUNT - 1; windowIndex >= 0; windowIndex -= 1) {
-    const x = coord(windowCenterX(windowIndex));
-    const lowerY = coord(scaleProjectDayY(prefix[windowIndex][seriesIndex], maxWindowSeconds));
-    lower.push(`L ${x} ${lowerY}`);
+  return buildSmoothAreaPath(upper, lower);
+}
+
+function chooseMinuteStep(maxMinutes: number): number {
+  for (const step of [2, 5, 10, 15, 30]) {
+    if (maxMinutes / step <= 4.5) return step;
   }
-  return `${upper.join(" ")} ${lower.join(" ")} Z`;
+  return 30;
 }
 
 export function buildProjectDayChart(input: ProjectDayChartInput): ProjectDayChart {
@@ -244,6 +253,18 @@ export function buildProjectDayChart(input: ProjectDayChartInput): ProjectDayCha
 
   const totalSeconds = series.reduce((sum, entry) => sum + entry.totalSeconds, 0);
 
+  const maxMinutes = maxWindowSeconds / 60;
+  const yAxis: ProjectDayYAxisTick[] = [];
+  if (maxMinutes > 0) {
+    const step = chooseMinuteStep(maxMinutes);
+    for (let value = step; value <= maxMinutes + 1e-9; value += step) {
+      yAxis.push({ label: `${value}m`, y: scaleProjectDayY(value * 60, maxWindowSeconds) });
+    }
+  }
+  const gridPath = yAxis
+    .map((tick) => `M${PROJECT_DAY_PLOT_BOUNDS.left} ${Math.round(tick.y * 100) / 100}H${PROJECT_DAY_PLOT_BOUNDS.right}`)
+    .join(" ");
+
   return {
     windows,
     series,
@@ -253,5 +274,7 @@ export function buildProjectDayChart(input: ProjectDayChartInput): ProjectDayCha
     hasData: totalSeconds > 0,
     topProjectLabel: series[0]?.label ?? null,
     axisTicks: buildProjectDayAxisTicks(startOfDayMinutes),
+    yAxis,
+    gridPath,
   };
 }

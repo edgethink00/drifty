@@ -23,7 +23,6 @@ type DevPreviewControlsProps = {
   readonly watcherPeriodicMaxMinutes: number;
   readonly watcherPeriodicMinMinutes: number;
   readonly onEndOfDayReviewPreview: () => void;
-  readonly onOpenOnboardingV22Preview: () => void;
   readonly onOpenReplayOnboarding: () => void;
   readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onShowWatcherPeek: (force?: boolean) => void;
@@ -41,7 +40,6 @@ export function DevPreviewControls({
   watcherPeriodicMaxMinutes,
   watcherPeriodicMinMinutes,
   onEndOfDayReviewPreview,
-  onOpenOnboardingV22Preview,
   onOpenReplayOnboarding,
   onPreviewDriftAlarm,
   onShowWatcherPeek,
@@ -63,15 +61,6 @@ export function DevPreviewControls({
           </div>
         </div>
       ) : null}
-      <div className="settings-row">
-        <div>
-          <div className="lbl">Onboarding v2.2 preview</div>
-          <div className="desc">Open the v2.2 onboarding design prototype in an isolated Dev-mode preview.</div>
-        </div>
-        <div className="ctrl">
-          <button type="button" className="settings-btn" onClick={onOpenOnboardingV22Preview}>Open preview</button>
-        </div>
-      </div>
       {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED ? (
         <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}>
           <div>

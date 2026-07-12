@@ -179,7 +179,8 @@
   max-width: calc(var(--sidebar-collapsed-width) - 14px);
 }
 
-.sidebar--collapsed::-webkit-scrollbar {
+.sidebar--collapsed::-webkit-scrollbar,
+.sidebar--collapsed .sidebar-scroll::-webkit-scrollbar {
   display: none;
 }
 

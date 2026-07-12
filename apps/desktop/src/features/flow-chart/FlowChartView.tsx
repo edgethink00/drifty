@@ -41,6 +41,14 @@ export function FlowChartView({
   deviceLabelById?: ReadonlyMap<string, string>;
 }) {
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
+  // projectId → legend entry, so the hover card can name a block's project.
+  const projectsById = useMemo(() => {
+    const next = new Map<string, ProjectLegendEntry>();
+    for (const entry of projectLegend ?? []) {
+      if (entry.projectId) next.set(entry.projectId, entry);
+    }
+    return next;
+  }, [projectLegend]);
   const [internalColorMode, setInternalColorMode] = useState<FlowColorMode>("category");
   const colorMode = controlledColorMode ?? internalColorMode;
   const setColorMode = onColorModeChange ?? setInternalColorMode;
@@ -103,6 +111,7 @@ export function FlowChartView({
         boundaryMinutes={boundaryMinutes}
         appIcons={appIcons}
         deviceLabelById={deviceLabelById}
+        projectsById={projectsById}
       />
       {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
     </section>

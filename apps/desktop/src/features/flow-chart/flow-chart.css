@@ -354,3 +354,62 @@ button.flow-cell:focus {
     ),
     color-mix(in srgb, var(--surface) 20%, transparent);
 }
+
+/* ── 2026-07 dashboard redesign ──
+   The head no longer carries a "flow chart" label: the legend hugs the left
+   edge and the segment controls stay right (actions are row-reverse). */
+.flow-chart-head__actions {
+  flex: 1 1 auto;
+}
+
+.flow-chart-head__actions .flow-chart-legend {
+  margin-right: auto;
+  justify-content: flex-start;
+  max-width: none;
+}
+
+/* Flow chart squishes instead of horizontal scrolling */
+.flow-chart-hours,
+.flow-chart-row {
+  min-width: 0;
+  grid-template-columns: var(--flow-axis-gutter) repeat(24, minmax(0, 1fr));
+}
+
+.flow-chart-grid {
+  overflow-x: visible;
+  overflow-y: visible;
+}
+
+.flow-chart-hours span {
+  white-space: nowrap;
+}
+
+/* Only when the chart is genuinely tight: stack the controls row so the full
+   width goes to the legend + controls. With enough width the head above applies. */
+.flow-breakdown-layout__chart {
+  container-type: inline-size;
+}
+
+@container (max-width: 660px) {
+  .flow-chart-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .flow-chart-head__actions {
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .flow-chart-head__actions .flow-chart-legend {
+    margin-right: auto;
+    justify-content: flex-start;
+    max-width: none;
+    min-width: 0;
+  }
+}

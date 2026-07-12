@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent } from "react";
 import type { ActivitySegment, Project } from "@drifty/domain";
 import { formatCompactDurationFromSeconds, formatDayLabel } from "../../lib/formatting";
 import {
+  buildProjectIntradayTrendView,
   buildProjectTrendView,
   NO_PROJECT_KEY,
   NO_PROJECT_LABEL,
@@ -16,6 +17,9 @@ export interface ProjectTrendChartProps {
   readonly projects: readonly Project[];
   readonly days?: number; // number of days to show, default 14
   readonly endDay: string; // "YYYY-MM-DD" (most recent day, inclusive)
+  /** Render a single day bucketed into 30-minute windows instead of day columns. */
+  readonly intraday?: boolean;
+  readonly startOfDayMinutes?: number;
 }
 
 interface HoverRow {
@@ -54,20 +58,28 @@ function axisTickStyle(x: number): AxisTickStyle {
 export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
   const days = props.days ?? 14;
   const [hover, setHover] = useState<HoverState | null>(null);
-  const view = buildProjectTrendView({
-    segments: props.segments,
-    projectBySegmentId: props.projectBySegmentId,
-    projects: props.projects,
-    days,
-    endDay: props.endDay,
-  });
+  const view = props.intraday
+    ? buildProjectIntradayTrendView({
+        segments: props.segments,
+        projectBySegmentId: props.projectBySegmentId,
+        projects: props.projects,
+        day: props.endDay,
+        startOfDayMinutes: props.startOfDayMinutes ?? 0,
+      })
+    : buildProjectTrendView({
+        segments: props.segments,
+        projectBySegmentId: props.projectBySegmentId,
+        projects: props.projects,
+        days,
+        endDay: props.endDay,
+      });
 
   const hasData = view.series.length > 0 && view.maxDaySeconds > 0;
   const labelByKey = new Map(view.series.map((item) => [item.key, item.label]));
   const { left, right, top, bottom } = view.bounds;
 
   function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
-    const fullDay = formatDayLabel(column.day);
+    const fullDay = column.hoverLabel ?? formatDayLabel(column.day);
     const rows: HoverRow[] = column.segments.map((segment) => ({
       key: segment.key,
       label: labelByKey.get(segment.key) ?? NO_PROJECT_LABEL,
@@ -139,7 +151,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
                   const next = view.columns[index + 1];
                   const x0 = previous ? (previous.x + column.x) / 2 : left;
                   const x1 = next ? (column.x + next.x) / 2 : right;
-                  const fullDay = formatDayLabel(column.day);
+                  const fullDay = column.hoverLabel ?? formatDayLabel(column.day);
                   return (
                     <rect
                       className="ptc-hit"

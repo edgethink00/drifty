@@ -69,14 +69,6 @@ describe("DevSettingsSection", () => {
     expect(rendererButton.getAttribute("disabled")).toBeNull();
   });
 
-  it("opens the onboarding v2.2 preview from the Dev preview block", () => {
-    const props = renderProductionDevSettings();
-
-    expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Open preview$/ }));
-    expect(props.onOpenOnboardingV22Preview).toHaveBeenCalledTimes(1);
-  });
-
   it("toggles Team preview from the Preview block", () => {
     const props = renderProductionDevSettings();
 
@@ -96,7 +88,6 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("button", { name: /^Check Latest Build$/i })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Preview$/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /^Dev$/ })).toBeTruthy();
-    expect(screen.getByText("Onboarding v2.2 preview")).toBeTruthy();
     expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
@@ -175,18 +166,11 @@ describe("DevSettingsSection", () => {
     expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(90);
   });
 
-  it("always shows the project classification toggle in the Dev section", () => {
+  it("keeps the project classification diagnostics in the Dev section without an enable toggle", () => {
     renderProductionDevSettings();
-    expect(screen.getByRole("heading", { name: "Project classification (preview)" })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Toggle project classification preview" })).toBeTruthy();
-  });
-
-  it("toggles the project classification preview when clicked", () => {
-    const props = renderProductionDevSettings();
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle project classification preview" }));
-
-    expect(props.onProjectClassificationEnabledChange).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("heading", { name: "Project classification" })).toBeTruthy();
+    // The feature ships default-on; only the diagnostics remain in Dev.
+    expect(screen.queryByRole("switch", { name: "Toggle project classification preview" })).toBeNull();
   });
 
   it("defaults enhanced context Dev settings off and persists only Dev-active values", () => {

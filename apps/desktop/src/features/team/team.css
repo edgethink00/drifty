@@ -1,109 +1,876 @@
-.page.content--team,
-.team-page-layout {
-  max-width: none;
-}
+/* Teams · shared projects surface (design: claude.ai/design "Drifty Team").
+   Everything page-level is scoped under .content--team; the sidebar team-nav
+   pieces live at the top since they render inside the app shell's sidebar. */
 
-.team-panel {
-  --team-surface: color-mix(in srgb, var(--surface-strong) 82%, var(--surface));
-  --team-surface-soft: color-mix(in srgb, var(--surface-strong) 92%, var(--surface));
-  --team-ring: color-mix(in srgb, var(--accent) 20%, var(--line));
-  display: grid;
-  gap: var(--space-2);
-  max-width: 68rem;
-  margin: 0 auto;
-}
+/* ── Sidebar: "Your teams" label + collapsible team item ── */
 
-.team-requirement,
-.team-pending-invite,
-.team-control-panel,
-.team-data-panel,
-.team-invite-section,
-.team-form,
-.team-state {
-  border: 1px solid color-mix(in srgb, var(--line-strong) 76%, var(--line));
-  background: var(--team-surface);
-}
-
-.team-selected strong,
-.team-sharing strong,
-.team-pending-invite strong,
-.team-section-head h3,
-.team-state strong {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: var(--type-section-title-size);
-  font-weight: 640;
-  letter-spacing: 0;
-  line-height: 1.15;
-}
-
-.team-page-head {
+.nav-label--teams {
+  display: flex;
   align-items: center;
-  max-width: 68rem;
-  margin-right: auto;
-  margin-left: auto;
+  justify-content: space-between;
+  gap: 0.4rem;
 }
 
-.team-page-refresh {
-  flex: 0 0 auto;
-  min-height: 1.9rem;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-strong);
+.nav-label__add {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.nav-label--teams:hover .nav-label__add,
+.nav-label__add:focus-visible {
+  opacity: 1;
+}
+
+.nav-label__add:hover {
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  letter-spacing: 0.08em;
-  padding: 0.36rem 0.72rem;
-  text-transform: uppercase;
+  background: color-mix(in srgb, var(--line) 46%, transparent);
+}
+
+.nav-label__add svg {
+  width: 12px;
+  height: 12px;
+}
+
+.sidebar-nav--teams {
+  position: relative;
+  /* Pin the implicit grid track to the rail width — otherwise the team row's
+     max-content (name + caret + more button) widens the track past the other
+     nav pills. */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nav-item--team {
+  cursor: pointer;
+}
+
+.nav-item--team__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
 }
 
-.team-page-refresh:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--accent-soft) 44%, var(--surface));
+.team-nav-caret {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+
+.team-nav-caret--open {
+  transform: rotate(90deg);
+}
+
+.team-nav-more {
+  flex: 0 0 auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  margin: -0.2rem -0.2rem -0.2rem 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.nav-item--team:hover .team-nav-more {
+  opacity: 1;
+}
+
+.team-nav-more:hover,
+.team-nav-more[aria-expanded="true"] {
+  opacity: 1;
   color: var(--text);
+  background: color-mix(in srgb, var(--line) 46%, transparent);
 }
 
-.team-requirement {
+.team-nav-more svg {
+  width: 14px;
+  height: 14px;
+}
+
+.team-nav-menu {
+  /* Fixed popover to the right of the rail (anchored inline from the ⋯ button):
+     stays above the pinned foot and never adds height to the sidebar scroll. */
+  position: fixed;
+  z-index: 60;
+  width: 13rem;
+  display: grid;
+  gap: 2px;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+}
+
+.team-nav-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.42rem 0.55rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.team-nav-menu button:hover {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+}
+
+.team-nav-menu svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+
+.sidebar-subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 2px 0.85rem;
+  padding-left: 0.7rem;
+  border-left: 1.5px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
+}
+
+.nav-item--sub {
+  font-size: 0.85em;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  opacity: 0.82;
+}
+
+.nav-item--sub.active {
+  opacity: 1;
+}
+
+.nav-item--sub svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* ── Page scaffolding ── */
+
+/* Full-width like every other tab (.page has max-width: none); empty/onboard
+   state blocks carry their own readable max-widths below. */
+.content--team .team-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.content--team .team-page-head h1 {
+  letter-spacing: -0.01em;
+}
+
+.content--team .pg-head.team-page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0 var(--space-1) var(--space-1);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  flex-wrap: wrap;
 }
 
-.team-requirement__copy {
-  display: flex;
+/* ── Buttons ──
+   Team uses the app-wide button language (settings-btn / settings-btn--primary
+   black pill / ghost-button). Only icon alignment is added here. */
+
+.content--team .settings-btn,
+.content--team .ghost-button,
+.team-modal .settings-btn,
+.team-modal .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.content--team .settings-btn > svg,
+.content--team .ghost-button > svg,
+.team-modal .settings-btn > svg,
+.team-modal .ghost-button > svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+}
+
+/* ── Segmented pills (add-team modal tabs) ── */
+
+.content--team .team-panel .team-seg,
+.team-modal .team-seg {
+  display: inline-flex;
+  gap: 0.3rem;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
+}
+
+.team-modal .team-seg--head {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+
+.team-modal .team-seg--head button {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.7rem;
+}
+
+.content--team .team-panel .team-seg button,
+.team-modal .team-seg button {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  border-radius: 999px;
+  min-height: 1.9rem;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 52%, var(--line));
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.content--team .team-panel .team-seg button:hover,
+.team-modal .team-seg button:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.content--team .team-panel .team-seg button.on,
+.team-modal .team-seg button.on {
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* ── Icon button ── */
+
+.content--team .team-panel .team-iconbtn,
+.team-modal .team-iconbtn {
+  flex: 0 0 auto;
+  width: 1.95rem;
+  height: 1.95rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 52%, var(--line));
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.content--team .team-panel .team-iconbtn:hover,
+.team-modal .team-iconbtn:hover {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+}
+
+.content--team .team-panel .team-iconbtn svg,
+.team-modal .team-iconbtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ── Data panel: card grid ── */
+
+.content--team .team-data-panel {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.content--team .team-grid {
+  grid-template-columns: minmax(0, 7fr) minmax(18rem, 3fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+/* Card chrome comes from the shared editorial-panel / insight-chart-panel
+   classes (same family as the Trends + personal Projects chart panels); this
+   only handles the internal stack + grid placement. */
+.content--team .team-card {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
   min-width: 0;
 }
 
-.team-requirement__copy strong {
-  color: var(--text-muted);
-  font-size: var(--type-setting-desc-size);
-  font-weight: 620;
+.content--team .team-card--chart { grid-column: 1; grid-row: 1; }
+.content--team .team-card--side { grid-column: 2; grid-row: 1; }
+.content--team .team-card--stats { grid-column: 2; grid-row: 2; }
+.content--team .team-card--members { grid-column: 1; grid-row: 2; }
+
+@media (max-width: 860px) {
+  .content--team .team-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content--team .team-card--chart,
+  .content--team .team-card--side,
+  .content--team .team-card--stats,
+  .content--team .team-card--members {
+    grid-column: 1;
+    grid-row: auto;
+  }
 }
 
-.team-requirement p,
-.team-pending-invite p,
-.team-selected p,
-.team-sharing p,
-.team-state p,
-.team-message {
+.content--team .team-dash-section {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.content--team .team-pubnote {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--accent-strong);
+}
+
+.content--team .team-pubnote svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* ── Totals stack ── */
+
+.content--team .team-stats-stack {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.content--team .team-stats-stack .team-stat + .team-stat {
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  padding-top: 0.55rem;
+}
+
+.content--team .team-stat {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.content--team .team-stat .label-mono {
+  font-size: 0.56rem;
+  color: var(--text-muted);
+}
+
+.content--team .team-stat strong {
+  font-family: var(--font-display);
+  font-size: 1.42rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.content--team .team-stat--lead .label-mono,
+.content--team .team-stat--lead strong {
+  color: var(--accent-strong);
+}
+
+/* ── Team mix: ranked bars, same format as the Trends "Top categories"
+   breakdown (meta line + thin pill track). ── */
+
+.content--team .team-rank {
+  display: grid;
+  gap: 0.34rem;
+  margin-top: 0.27rem;
+}
+
+.content--team .team-rank-row {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.content--team .team-rank-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 560;
+  line-height: 1.15;
+}
+
+.content--team .team-rank-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-rank-val {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.content--team .team-rank-val b {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.content--team .team-rank-val span {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.content--team .team-rank-track {
+  display: block;
+  height: 0.28rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-2) 82%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 18%, transparent);
+}
+
+.content--team .team-rank-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  min-width: 0.42rem;
+  opacity: 0.9;
+}
+
+/* Round color dot, same shape family as the Classification category dots. */
+.content--team .team-legend-swatch {
+  flex: 0 0 auto;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+}
+
+
+/* ── By member: percentage-only stacked bars ── */
+
+.content--team .team-members {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.content--team .team-member {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(6rem, 10rem) minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.content--team .team-member__avatar {
+  display: grid;
+  width: 1.6rem;
+  height: 1.6rem;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 68%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface));
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+}
+
+.content--team .team-member__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.content--team .team-member__name strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-member__bar {
+  display: flex;
+  width: 100%;
+  height: 1.2rem;
+  gap: 2px;
+}
+
+.content--team .team-member__seg {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-width: 4px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.content--team .team-member__seg:first-child {
+  border-top-left-radius: 7px;
+  border-bottom-left-radius: 7px;
+}
+
+.content--team .team-member__seg:last-child {
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+
+.content--team .team-member__seg-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  padding: 0 0.3rem;
+}
+
+.content--team .team-you-chip {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.1rem 0.34rem;
+  line-height: 1;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+}
+
+/* ── Shared projects toolbar + table ── */
+
+.content--team .projects-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.content--team .projects-search {
+  position: relative;
+  flex: 1 1 15rem;
+  min-width: 11rem;
+  max-width: 22rem;
+}
+
+.content--team .projects-search svg {
+  position: absolute;
+  left: 0.68rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.content--team .projects-search .settings-input {
+  width: 100%;
+  padding-left: 2.05rem;
+}
+
+/* Status filter uses the shared SettingsSelect control (10rem default width);
+   its trigger drops the settings-page control height to match the search input. */
+.content--team .projects-status-filter {
+  align-self: stretch;
+}
+
+.content--team .projects-status-filter .settings-select-control__trigger {
+  min-height: 0;
+  height: 100%;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-radius: 7px;
+}
+
+.content--team .projects-toolbar__spacer {
+  margin-left: auto;
+}
+
+.content--team .projects-table {
+  border: 1px solid color-mix(in srgb, var(--line-strong) 46%, var(--line));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.content--team .projects-table__head,
+.content--team .projects-table__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.7fr) minmax(4.6rem, 6rem) minmax(5rem, 7rem) 2.2rem;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0.55rem var(--space-3);
+}
+
+.content--team .projects-table__head > *,
+.content--team .projects-table__row > * {
+  min-width: 0;
+}
+
+.content--team .projects-table__head {
+  border-bottom: 1px solid var(--line);
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+.content--team .projects-table__head span {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.content--team .projects-table__rowwrap {
+  border-bottom: 1px solid var(--line);
+}
+
+.content--team .projects-table__rowwrap:last-child {
+  border-bottom: 0;
+}
+
+.content--team .projects-table__row {
+  min-height: 3.15rem;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.content--team .projects-table__row:hover {
+  background: color-mix(in srgb, var(--accent-soft) 24%, transparent);
+}
+
+.content--team .projects-table__rowwrap--archived .projects-table__row {
+  opacity: 0.62;
+}
+
+.content--team .pt-proj {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.content--team .pt-swatch {
+  flex: 0 0 auto;
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+}
+
+.content--team .pt-proj > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.04rem;
+}
+
+.content--team .pt-proj strong {
+  font-size: 0.88rem;
+  font-weight: 620;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content--team .pt-proj small {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content--team .pt-mono {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content--team .pt-total {
+  display: grid;
+  gap: 0.05rem;
+}
+
+.content--team .pt-total small {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.content--team .pt-total b {
+  font-size: 0.82rem;
+  font-weight: 660;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.content--team .pt-menu-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.content--team .pt-more {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.content--team .projects-table__row:hover .pt-more {
+  opacity: 1;
+}
+
+.content--team .pt-more:hover,
+.content--team .pt-more[aria-expanded="true"] {
+  opacity: 1;
+  color: var(--text);
+  background: color-mix(in srgb, var(--line) 46%, transparent);
+}
+
+.content--team .pt-more svg {
+  width: 15px;
+  height: 15px;
+}
+
+.content--team .pt-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 10.5rem;
+  display: grid;
+  gap: 2px;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+}
+
+.content--team .pt-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.content--team .pt-menu button:hover {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+}
+
+.content--team .pt-menu button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.content--team .pt-menu svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+
+.content--team .projects-table__detail {
+  padding: 0.1rem var(--space-3) var(--space-3) calc(var(--space-3) + 0.85rem + 0.6rem);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.content--team .projects-table__detail .team-proj-card__desc {
+  max-width: 60ch;
+}
+
+.content--team .projects-table__empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.content--team .team-proj-card__desc {
   margin: 0;
   color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
+  font-size: 0.76rem;
   line-height: 1.45;
 }
 
-.team-requirement__status,
-.team-message {
+/* ── States: empty blocks, messages, pending invite, onboarding, footnote ── */
+
+.content--team .team-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.content--team .team-message {
+  width: fit-content;
+  margin: 0;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--surface) 76%, transparent);
@@ -111,571 +878,599 @@
   font-family: var(--font-mono);
   font-size: var(--type-caption-size);
   padding: 0.34rem 0.58rem;
-  white-space: nowrap;
 }
 
-.team-workspace,
-.team-actions,
-.team-pending-invite,
-.team-control-panel,
-.team-data-panel,
-.team-list-section,
-.team-selected,
-.team-sharing {
+.content--team .team-message--error,
+.team-modal .team-message--error {
+  width: fit-content;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--warn-soft) 78%, var(--surface));
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  padding: 0.34rem 0.58rem;
+}
+
+.content--team .team-pending-invite {
+  width: 100%;
+  max-width: 46rem;
   display: grid;
-  gap: var(--space-2);
-}
-
-.team-form,
-.team-pending-invite,
-.team-control-panel,
-.team-data-panel,
-.team-invite-section,
-.team-state {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-lg);
-}
-
-.team-actions {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  gap: var(--space-2);
-}
-
-.team-pending-invite {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  background: color-mix(in srgb, var(--accent-soft) 32%, var(--team-surface-soft));
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-soft) 32%, var(--surface));
 }
 
-.team-pending-invite > div:first-child {
+.content--team .team-pending-invite > div:first-child {
   display: grid;
   gap: 0.18rem;
   min-width: 0;
 }
 
-.team-pending-invite strong {
+.content--team .team-pending-invite strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-section-title-size);
+  font-weight: 640;
   overflow-wrap: anywhere;
 }
 
-.team-action-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.team-action-strip .settings-btn,
-.team-action-strip .ghost-button {
-  min-width: 8rem;
-}
-
-.team-panel .settings-btn.is-selected {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 68%, var(--surface));
-  color: var(--accent);
-}
-
-.team-panel .settings-btn,
-.team-panel .ghost-button,
-.team-period button {
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-strong);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.team-panel .ghost-button {
-  background: transparent;
-  color: var(--text-soft);
-}
-
-.team-panel .settings-btn:hover:not(:disabled),
-.team-panel .ghost-button:hover:not(:disabled),
-.team-period button:hover {
-  border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--accent-soft) 44%, var(--surface));
-  color: var(--text);
-}
-
-.team-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(8rem, 0.8fr) auto;
-  align-items: end;
-  gap: var(--space-2);
-  background: var(--team-surface-soft);
-}
-
-.team-form--join {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.team-form label,
-.team-invite-form label,
-.team-select {
-  display: grid;
-  gap: var(--space-1);
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-}
-
-.team-form input,
-.team-invite-form input,
-.team-select select {
-  min-height: 2.18rem;
-  width: 100%;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-strong) 78%, var(--surface));
-  color: var(--text);
-  font: inherit;
-  padding: 0.44rem 0.62rem;
-}
-
-.team-form input:focus-visible,
-.team-invite-form input:focus-visible,
-.team-select select:focus-visible {
-  outline: 2px solid var(--team-ring);
-  outline-offset: 2px;
-}
-
-.team-message {
-  width: fit-content;
-}
-
-.team-message--error,
-.team-message[data-tone="error"] {
-  border-color: var(--danger-line);
-  background: color-mix(in srgb, var(--warn-soft) 78%, var(--surface));
-  color: var(--warn);
-}
-
-.team-selected {
-  grid-template-columns: minmax(0, 1fr) minmax(11rem, 16rem) auto;
-  align-items: end;
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--line);
-}
-
-.team-selected__summary {
-  min-width: 0;
-}
-
-.team-title-line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.team-title-line strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-mini-action {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: 1.65rem;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-strong) 86%, var(--surface));
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  letter-spacing: 0.06em;
-  padding: 0.22rem 0.48rem;
-  text-transform: uppercase;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.team-mini-action b {
-  display: inline-grid;
-  min-width: 1rem;
-  height: 1rem;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.6rem;
-  font-weight: 720;
-  line-height: 1;
-}
-
-.team-mini-action:hover:not(:disabled),
-.team-mini-action[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
-  color: var(--accent);
-}
-
-.team-mini-action:focus-visible {
-  outline: 2px solid var(--team-ring);
-  outline-offset: 2px;
-}
-
-.team-period {
-  display: inline-grid;
-  grid-auto-flow: column;
-  justify-content: end;
-  gap: var(--space-1);
-}
-
-.team-period button {
-  min-width: 4.8rem;
-}
-
-.team-period button.on {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface));
-  color: var(--accent);
-}
-
-.team-sharing {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  padding-top: var(--space-1);
-}
-
-.team-invite-dock {
-  display: grid;
-  gap: var(--space-2);
-  width: min(34rem, 100%);
-  padding-top: var(--space-1);
-}
-
-.team-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  justify-content: flex-end;
-}
-
-.team-section-head {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.team-row-list,
-.team-invite-list {
-  display: grid;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface) 74%, transparent);
-  list-style: none;
-}
-
-.team-row,
-.team-invite-row {
-  display: grid;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  min-height: 2.7rem;
-  padding: 0.52rem var(--space-3);
-  border-bottom: 1px solid var(--line);
-}
-
-.team-row:last-child,
-.team-invite-row:last-child {
-  border-bottom: 0;
-}
-
-.team-row {
-  grid-template-columns: 2rem minmax(8rem, 1fr) minmax(5rem, 0.42fr) minmax(5rem, 0.32fr) minmax(11rem, 0.7fr);
-}
-
-.team-row span,
-.team-row em,
-.team-row small,
-.team-invite-row span {
-  overflow: hidden;
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-row b {
-  color: var(--text-muted);
-  font-weight: 620;
-}
-
-.team-invite-form,
-.team-invite-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.team-invite-form {
-  align-items: end;
-  gap: var(--space-2);
-}
-
-.team-invite-form--inline {
-  grid-template-columns: minmax(7rem, 10rem) auto;
-  justify-content: start;
-}
-
-.team-invite-form--inline label {
-  max-width: 10rem;
-}
-
-.team-invite-form--inline label span {
-  color: var(--text-soft);
-}
-
-.team-invite-row div {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.team-invite-dock .team-invite-list {
-  gap: var(--space-1);
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.team-invite-dock .team-invite-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 2.4rem;
-  padding: 0.38rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface) 62%, transparent);
-}
-
-.team-invite-dock .team-invite-row:last-child {
-  border-bottom: 1px solid var(--line);
-}
-
-.team-invite-dock .team-row-actions .settings-btn,
-.team-invite-dock .team-row-actions .ghost-button {
-  min-height: 1.55rem;
-  padding: 0.22rem 0.5rem;
-}
-
-.team-data-panel {
-  gap: var(--space-3);
-}
-
-.team-data-panel .team-list-section + .team-list-section {
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
-}
-
-.team-live-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(9.35rem, 100%), 10rem));
-  gap: var(--space-2);
-  justify-content: start;
+.content--team .team-pending-invite p {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
 }
 
-.team-live-row {
+.content--team .team-code-inline {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 860px) {
+  .content--team .team-pending-invite {
+    grid-template-columns: 1fr;
+  }
+}
+
+.content--team .team-onboard {
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
   display: grid;
-  align-items: start;
-  gap: 0.36rem;
-  min-width: 0;
-  min-height: 5.5rem;
-  padding: 0.52rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-8) var(--space-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface) 76%, transparent);
 }
 
-.team-live-row[data-state="active_now"] {
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 26%, var(--surface));
-}
-
-.team-live-avatar {
+.content--team .team-onboard__icon {
+  width: 44px;
+  height: 44px;
   display: grid;
-  width: 1.85rem;
-  height: 1.85rem;
   place-items: center;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface));
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  font-weight: 720;
-  letter-spacing: 0.04em;
-  object-fit: cover;
+  border-radius: 13px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  margin-bottom: 0.2rem;
 }
 
-.team-live-row__topline {
-  display: grid;
-  grid-template-columns: 1.85rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
+.content--team .team-onboard__icon svg {
+  width: 20px;
+  height: 20px;
 }
 
-.team-live-row__identity {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-}
-
-.team-live-row__identity strong {
-  overflow: hidden;
+.content--team .team-onboard strong {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 640;
   color: var(--text);
-  font-size: var(--type-setting-label-size);
-  font-weight: 680;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.team-live-row__identity span,
-.team-live-row__meta em {
+.content--team .team-onboard p {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  font-style: normal;
 }
 
-.team-live-row__meta {
+.content--team .team-onboard__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.content--team .team-state {
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
   display: grid;
-  gap: 0.26rem;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-8) var(--space-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
 }
 
-.team-live-row__meta span {
-  display: grid;
-  grid-template-columns: 3.15rem minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0.36rem;
-  min-width: 0;
+.content--team .team-state strong {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 640;
+  color: var(--text);
 }
 
-.team-live-row__meta em {
-  font-family: var(--font-mono);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.content--team .team-state p {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-soft);
 }
 
-.team-live-row__meta b {
-  overflow: hidden;
+.content--team .team-footnote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: var(--space-1) 0 var(--space-4);
   color: var(--text-muted);
-  font-size: var(--type-caption-size);
-  font-weight: 620;
+  font-size: 0.72rem;
+}
+
+.content--team .team-footnote svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* ── Modals (on top of the shared auth-modal/profile-modal chrome) ── */
+
+.team-modal {
+  position: relative;
+  max-width: 460px;
+  width: calc(100vw - 2rem);
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+
+.team-modal__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding-right: 2.4rem;
+}
+
+.team-modal__header > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.14rem;
+}
+
+.team-modal__header .label-mono {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+}
+
+.team-modal__header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.team-modal__header p {
+  margin: 0.1rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.team-modal__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.team-modal__avatar svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+}
+
+.team-modal__body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.team-modal__field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.team-modal__field > .label-mono {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+}
+
+.team-copy-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.team-copy-row .settings-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.team-copy-row .settings-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-width: 6.2rem;
+}
+
+.team-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed color-mix(in srgb, var(--line-strong) 80%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 46%, transparent);
+}
+
+.team-code strong {
+  font-family: var(--font-mono);
+  font-size: 1.02rem;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  font-weight: 640;
+}
+
+.team-code__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.team-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+}
+
+.team-modal .settings-input {
+  width: 100%;
+}
+
+.team-modal textarea.settings-input {
+  min-height: 4.2rem;
+  resize: vertical;
+  line-height: 1.45;
+  padding-top: 0.5rem;
+}
+
+.team-modal__hint {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Team settings modal ── */
+
+.team-settings-modal {
+  max-width: 32rem;
+}
+
+.team-settings {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.team-set-section {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.team-set-memhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.team-set-invite {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.7rem !important;
+  font-size: 0.74rem !important;
+}
+
+.team-set-member {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.team-set-member__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  margin-right: auto;
+  font-size: 0.82rem;
+  font-weight: 560;
+  color: var(--text);
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.team-presence {
-  display: inline-flex;
+.team-set-role,
+.team-set-role--admin {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.16rem 0.44rem;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.team-set-role--admin {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.team-set-share {
+  display: flex;
   align-items: center;
-  gap: 0.34rem;
-  color: var(--text);
-  font-size: var(--type-caption-size);
-  white-space: nowrap;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
-.team-presence::before {
+/* ── Project editor modal ── */
+
+.team-editor-modal {
+  max-width: 30rem;
+}
+
+.team-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.team-editor-head__badge {
   flex: 0 0 auto;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: var(--line-strong);
-  content: "";
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
 }
 
-.team-presence[data-state="active_now"]::before {
-  background: var(--accent);
-  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--accent) 18%, transparent);
+.team-editor-head__badge svg {
+  width: 15px;
+  height: 15px;
+  display: block;
 }
 
-.team-presence[data-state="recent"]::before {
-  background: var(--accent);
-}
-
-.team-presence[data-state="shared"]::before {
-  background: var(--text-muted);
-}
-
-.team-small-empty {
-  border: 1px dashed var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  padding: var(--space-3);
-}
-
-.team-panel .settings-btn,
-.team-panel .ghost-button {
-  min-height: 1.9rem;
-  padding: 0.36rem 0.72rem;
+.team-editor-head__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 920px) {
-  .team-command-grid,
-  .team-form,
-  .team-form--join,
-  .team-pending-invite,
-  .team-selected,
-  .team-sharing,
-  .team-invite-form,
-  .team-invite-row {
+.team-editor-head__team {
+  color: var(--text-muted);
+  font-weight: 560;
+}
+
+.team-editor-head__sep {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.team-editor-head__x {
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.team-editor-head__x:hover {
+  background: color-mix(in srgb, var(--line) 46%, transparent);
+  color: var(--text);
+}
+
+.team-editor-head__x svg {
+  width: 15px;
+  height: 15px;
+}
+
+.team-editor-inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@media (max-width: 520px) {
+  .team-editor-inline {
     grid-template-columns: 1fr;
   }
-
-  .team-row-actions {
-    justify-content: flex-start;
-  }
-
-  .team-selected {
-    align-items: stretch;
-  }
-
-  .team-row {
-    grid-template-columns: 2rem minmax(0, 1fr);
-  }
-
-  .team-row em,
-  .team-row b,
-  .team-row small {
-    grid-column: 2;
-  }
 }
 
-@media (max-width: 640px) {
-  .team-section-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
+/* Collapsed color picker */
 
-  .team-requirement {
-    align-items: center;
-  }
-
-  .team-requirement__copy p {
-    display: none;
-  }
-
-  .team-period {
-    grid-auto-flow: row;
-    justify-content: stretch;
-  }
+.team-pick {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
 }
+
+.team-pick > .label-mono {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+}
+
+.team-pick__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 60%, var(--surface));
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.team-pick__trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line-strong));
+}
+
+.team-pick.is-open .team-pick__trigger {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line-strong));
+  background: var(--surface);
+}
+
+.team-pick__swatch {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 20%, transparent);
+}
+
+.team-pick__val {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-pick__chev {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.team-pick.is-open .team-pick__chev {
+  transform: rotate(180deg);
+}
+
+.team-pick__pop {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  padding: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 82%, var(--line));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.team-pick .team-swatch {
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 22%, transparent);
+  transition: transform 0.12s ease;
+}
+
+.team-pick .team-swatch:hover {
+  transform: scale(1.08);
+}
+
+.team-pick .team-swatch--on {
+  border-color: var(--text);
+}
+
+/* Colors already taken by another project — de-emphasized, still selectable. */
+.team-pick .team-swatch--used {
+  opacity: 0.35;
+}
+
+.team-pick .team-swatch--used:hover {
+  opacity: 0.65;
+}
+

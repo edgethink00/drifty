@@ -6,14 +6,12 @@ import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
-import { ANALYSIS_RECOMMENDED_MODELS, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_ANTHROPIC_MODEL, DEFAULT_ANALYSIS_OPENAI_MODEL } from "./analysisModelSetup";
+import { ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS, ANALYSIS_OPENAI_MODEL_SUGGESTIONS, ANALYSIS_RECOMMENDED_MODELS, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_ANTHROPIC_MODEL, DEFAULT_ANALYSIS_OPENAI_MODEL, analysisModelDisplayLabel } from "./analysisModelSetup";
 import type { AnalysisAiSetupState, AnalysisProvider } from "./analysisModelSetup";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 const CLOUD_MANAGED_MODEL_ID = "cloud_managed";
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
-const OPENAI_DIRECT_MODEL_ID = "openai_direct";
-const ANTHROPIC_DIRECT_MODEL_ID = "anthropic_direct";
 
 // Brand-recognizable accent tints for the provider dropdown dots (OpenAI teal,
 // Anthropic clay). The provider cards carry the full SVG brand marks below.
@@ -55,6 +53,8 @@ const CARD_FOR_PROVIDER: Record<AnalysisProvider, IntelligenceCardId> = {
 };
 
 const ANALYSIS_MODEL_DATALIST_ID = "intelligence-analysis-model-options";
+const OPENAI_MODEL_DATALIST_ID = "intelligence-openai-model-options";
+const ANTHROPIC_MODEL_DATALIST_ID = "intelligence-anthropic-model-options";
 
 type SummaryInfo = {
   readonly providerLabel: string;
@@ -69,21 +69,21 @@ function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected
     case "cloud":
       return { providerLabel: "Drifty Cloud", modelLabel: t("settings.intelligence.managedByDrifty"), statusLabel: t("settings.intelligence.available"), tone: "ok", ready: true };
     case "openrouter": {
-      const modelLabel = setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL;
+      const modelLabel = analysisModelDisplayLabel(setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL);
       return openRouterConnected
         ? { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.connected"), tone: "ok", ready: true }
         : { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "openai": {
       const configured = setup.openaiApiKey.trim().length > 0 && setup.openaiModel.trim().length > 0;
-      const modelLabel = setup.openaiModel.trim() || t("settings.intelligence.notSet");
+      const modelLabel = setup.openaiModel.trim() ? analysisModelDisplayLabel(setup.openaiModel) : t("settings.intelligence.notSet");
       return configured
         ? { providerLabel: "OpenAI", modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
         : { providerLabel: "OpenAI", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "anthropic": {
       const configured = setup.anthropicApiKey.trim().length > 0 && setup.anthropicModel.trim().length > 0;
-      const modelLabel = setup.anthropicModel.trim() || t("settings.intelligence.notSet");
+      const modelLabel = setup.anthropicModel.trim() ? analysisModelDisplayLabel(setup.anthropicModel) : t("settings.intelligence.notSet");
       return configured
         ? { providerLabel: "Anthropic", modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
         : { providerLabel: "Anthropic", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
@@ -108,9 +108,9 @@ function summaryModelValue(setup: AnalysisAiSetupState): string {
     case "openrouter":
       return setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL;
     case "openai":
-      return OPENAI_DIRECT_MODEL_ID;
+      return setup.openaiModel.trim() || DEFAULT_ANALYSIS_OPENAI_MODEL;
     case "anthropic":
-      return ANTHROPIC_DIRECT_MODEL_ID;
+      return setup.anthropicModel.trim() || DEFAULT_ANALYSIS_ANTHROPIC_MODEL;
     case "self_hosted":
       return CUSTOM_ENDPOINT_MODEL_ID;
     default:
@@ -130,13 +130,21 @@ function summaryModelOptions(setup: AnalysisAiSetupState, t: LocalizationControl
     case "openrouter": {
       const options: SettingsSelectOption<string>[] = ANALYSIS_RECOMMENDED_MODELS.map((model) => ({ value: model.id, label: model.label }));
       const current = setup.openRouterModel.trim();
-      if (current && !options.some((option) => option.value === current)) options.push({ value: current, label: current });
+      if (current && !options.some((option) => option.value === current)) options.push({ value: current, label: analysisModelDisplayLabel(current) });
       return options;
     }
-    case "openai":
-      return [{ value: OPENAI_DIRECT_MODEL_ID, label: setup.openaiModel.trim() || "OpenAI" }];
-    case "anthropic":
-      return [{ value: ANTHROPIC_DIRECT_MODEL_ID, label: setup.anthropicModel.trim() || "Anthropic" }];
+    case "openai": {
+      const options: SettingsSelectOption<string>[] = ANALYSIS_OPENAI_MODEL_SUGGESTIONS.map((model) => ({ value: model, label: analysisModelDisplayLabel(model) }));
+      const current = setup.openaiModel.trim();
+      if (current && !options.some((option) => option.value === current)) options.push({ value: current, label: analysisModelDisplayLabel(current) });
+      return options;
+    }
+    case "anthropic": {
+      const options: SettingsSelectOption<string>[] = ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS.map((model) => ({ value: model, label: analysisModelDisplayLabel(model) }));
+      const current = setup.anthropicModel.trim();
+      if (current && !options.some((option) => option.value === current)) options.push({ value: current, label: analysisModelDisplayLabel(current) });
+      return options;
+    }
     case "self_hosted":
       return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: setup.selfHostedModel.trim() || t("settings.ai.customEndpoint") }];
     default:
@@ -171,6 +179,8 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
     // cloud + custom expose a single, non-editable summary option; the custom
     // model id is edited inside the Custom endpoint card below.
     if (setup.provider === "openrouter") onChange({ ...setup, provider: "openrouter", openRouterModel: modelId });
+    else if (setup.provider === "openai") onChange({ ...setup, provider: "openai", openaiModel: modelId });
+    else if (setup.provider === "anthropic") onChange({ ...setup, provider: "anthropic", anthropicModel: modelId });
   };
 
   const handleToggle = (id: IntelligenceCardId) => {
@@ -291,10 +301,18 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
               <input
                 className="settings-input"
                 aria-label={t("settings.intelligence.openAiModelIdAria")}
+                list={OPENAI_MODEL_DATALIST_ID}
                 value={setup.openaiModel}
                 onChange={(event) => onChange({ ...setup, provider: "openai", openaiModel: event.target.value })}
                 placeholder={DEFAULT_ANALYSIS_OPENAI_MODEL}
               />
+              <datalist id={OPENAI_MODEL_DATALIST_ID}>
+                {ANALYSIS_OPENAI_MODEL_SUGGESTIONS.map((model) => (
+                  <option key={model} value={model}>
+                    {analysisModelDisplayLabel(model)}
+                  </option>
+                ))}
+              </datalist>
             </label>
             <p className="ai-setup-route-description">
               {t("settings.intelligence.openAiDescription")}
@@ -315,10 +333,18 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
               <input
                 className="settings-input"
                 aria-label={t("settings.intelligence.anthropicModelIdAria")}
+                list={ANTHROPIC_MODEL_DATALIST_ID}
                 value={setup.anthropicModel}
                 onChange={(event) => onChange({ ...setup, provider: "anthropic", anthropicModel: event.target.value })}
                 placeholder={DEFAULT_ANALYSIS_ANTHROPIC_MODEL}
               />
+              <datalist id={ANTHROPIC_MODEL_DATALIST_ID}>
+                {ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS.map((model) => (
+                  <option key={model} value={model}>
+                    {analysisModelDisplayLabel(model)}
+                  </option>
+                ))}
+              </datalist>
             </label>
             <p className="ai-setup-route-description">
               {t("settings.intelligence.anthropicDescription")}

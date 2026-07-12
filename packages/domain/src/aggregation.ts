@@ -491,6 +491,7 @@ function flowBlockDescriptorFromSegment(
   effectiveProductivity: EffectiveProductivityResolution,
   colorKey: string,
   projectColor: string | null = null,
+  projectId: string | null = null,
 ) {
   return {
     appName: segment.appName,
@@ -523,13 +524,14 @@ function flowBlockDescriptorFromSegment(
     aiClassification: classification.source === "llm",
     aiCachedClassification: classification.aiCached ?? null,
     classificationReason: classification.reason,
+    projectId,
     projectColor,
     deviceId: segment.deviceId ?? null,
     colorKey,
   } as const;
 }
 
-export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0, projectColorBySegment?: ReadonlyMap<string, string>): FlowBlock[] {
+export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0, projectColorBySegment?: ReadonlyMap<string, string>, projectIdBySegment?: ReadonlyMap<string, string>): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
   const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
@@ -547,7 +549,8 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
     const classification = classificationFor(segment);
     const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
     const projectColor = projectColorBySegment?.get(segment.id) ?? null;
-    const descriptor = flowBlockDescriptorFromSegment(segment, classification, effectiveProductivity, colorKey, projectColor);
+    const projectId = projectIdBySegment?.get(segment.id) ?? null;
+    const descriptor = flowBlockDescriptorFromSegment(segment, classification, effectiveProductivity, colorKey, projectColor, projectId);
     const existing = candidates.get(candidateKey);
 
     if (!existing) {

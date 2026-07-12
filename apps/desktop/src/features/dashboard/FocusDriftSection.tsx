@@ -17,8 +17,12 @@ import {
 import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
 
 type FocusDriftSectionProps = {
-  readonly activeHourCount: number;
   readonly appIcons: AppIconMap;
+  readonly chart: FocusDriftChart;
+};
+
+type FocusDriftSummaryTilesProps = {
+  readonly activeHourCount: number;
   readonly averageSessionMinutes: number;
   readonly chart: FocusDriftChart;
   readonly peakTrackedSeconds: number;
@@ -28,6 +32,31 @@ type FocusDriftSectionProps = {
   readonly totalSeconds: number;
   readonly uniqueAppsCount: number;
 };
+
+/** KPI tiles that used to sit beside the focus/drift chart; the 2026-07
+ *  redesign moves them into the Breakdown side panel. */
+export function FocusDriftSummaryTiles({
+  activeHourCount,
+  averageSessionMinutes,
+  chart,
+  peakTrackedSeconds,
+  peakWindowLabel,
+  sessionCount,
+  topAppLabel,
+  totalSeconds,
+  uniqueAppsCount,
+}: FocusDriftSummaryTilesProps) {
+  return (
+    <div className="kpi-row kpi-row--insights insight-summary" aria-label="Insight summary">
+      <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label="Tracked" value={formatDuration(totalSeconds)} detail={`${activeHourCount}h active`} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label="Sessions" value={String(sessionCount)} detail={averageSessionMinutes > 0 ? `${averageSessionMinutes}m avg` : "No sessions"} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--peak" label="Peak" value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatCompactDurationFromSeconds(peakTrackedSeconds) : "No peak"} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--apps" label="Apps" value={String(uniqueAppsCount)} detail={topAppLabel} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--focus" label="Focus" value={`${chart.focusConsistency}%`} detail="score" />
+      {chart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label="Drift" value={chart.peakDriftPoint.label} detail="peak" /> : null}
+    </div>
+  );
+}
 
 type FocusDriftScaleTickStyle = CSSProperties & {
   readonly "--focus-drift-scale-y": string;
@@ -76,16 +105,8 @@ function revealClipWidthForChart(chart: FocusDriftChart): number | null {
 }
 
 export const FocusDriftSection = memo(function FocusDriftSection({
-  activeHourCount,
   appIcons,
-  averageSessionMinutes,
   chart,
-  peakTrackedSeconds,
-  peakWindowLabel,
-  sessionCount,
-  topAppLabel,
-  totalSeconds,
-  uniqueAppsCount,
 }: FocusDriftSectionProps) {
   const [hover, setHover] = useState<FocusDriftHoverState | null>(null);
   const chartBoundsRef = useRef<DOMRect | null>(null);
@@ -166,8 +187,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
   }
 
   return (
-    <>
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel">
+    <section className="editorial-panel editorial-panel--soft insight-chart-panel">
         <div className="insight-panel-head">
           <span className="label-mono">Focus/drift score &middot; 30m windows</span>
           <div className="insight-panel-head__legend">
@@ -243,16 +263,6 @@ export const FocusDriftSection = memo(function FocusDriftSection({
             </div>
           </div>
         ) : <EmptyState title="No focus pattern yet" detail="Focus and drift curves appear after tracked category data is available." />}
-      </section>
-
-      <div className="kpi-row kpi-row--insights insight-summary" aria-label="Insight summary">
-        <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label="Tracked" value={formatDuration(totalSeconds)} detail={`${activeHourCount}h active`} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label="Sessions" value={String(sessionCount)} detail={averageSessionMinutes > 0 ? `${averageSessionMinutes}m avg` : "No sessions"} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--peak" label="Peak" value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatCompactDurationFromSeconds(peakTrackedSeconds) : "No peak"} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--apps" label="Apps" value={String(uniqueAppsCount)} detail={topAppLabel} />
-        <MetricTile className="insight-summary__tile insight-summary__tile--focus" label="Focus" value={`${chart.focusConsistency}%`} detail="score" />
-        {chart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label="Drift" value={chart.peakDriftPoint.label} detail="peak" /> : null}
-      </div>
-    </>
+    </section>
   );
 });

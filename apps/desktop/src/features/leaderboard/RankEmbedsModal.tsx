@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { formatRoundedDuration } from "../../lib/formatting";
 import { copyTextToClipboard } from "../profile/ProfileModals";
 import type { BadgeThemeOption } from "../share/embedSnippets";
 import type { LeaderboardPeriod } from "./leaderboardService";
-import { buildRankEmbedSnippet, buildRankEmbedUrl } from "./rankEmbedSnippets";
+import {
+  RANK_EMBED_DEFAULT_ACCENT,
+  buildRankEmbedSnippet,
+  buildRankEmbedUrl,
+  buildRankMarkdownSnippet,
+  type RankEmbedDesign,
+} from "./rankEmbedSnippets";
 
 type RankEmbedsModalProps = {
   readonly displayName: string;
@@ -22,6 +29,33 @@ const PERIOD_LABEL: Record<LeaderboardPeriod, string> = {
   monthly: "Monthly",
 };
 
+const FOCUS_LABEL: Record<LeaderboardPeriod, string> = {
+  daily: "Focus · today",
+  weekly: "Focus · this week",
+  monthly: "Focus · this month",
+};
+
+const DESIGN_OPTIONS: ReadonlyArray<{ readonly value: RankEmbedDesign; readonly label: string }> = [
+  { value: "card", label: "Card" },
+  { value: "compact", label: "Compact" },
+  { value: "minimal", label: "Minimal" },
+];
+
+const ACCENT_OPTIONS = [
+  { color: RANK_EMBED_DEFAULT_ACCENT, name: "Green" },
+  { color: "#6366f1", name: "Indigo" },
+  { color: "#3b82f6", name: "Blue" },
+  { color: "#ec4899", name: "Pink" },
+  { color: "#f59e0b", name: "Amber" },
+  { color: "#14b8a6", name: "Teal" },
+] as const;
+
+type AccentStyle = CSSProperties & { readonly "--rank-embed-accent": string };
+
+function accentStyle(accent: string): AccentStyle {
+  return { "--rank-embed-accent": accent };
+}
+
 export function RankEmbedsModal({
   displayName,
   focusSeconds,
@@ -32,9 +66,11 @@ export function RankEmbedsModal({
   rank,
   onClose,
 }: RankEmbedsModalProps) {
+  const [design, setDesign] = useState<RankEmbedDesign>("card");
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [theme, setTheme] = useState<BadgeThemeOption>("light");
-  const [copied, setCopied] = useState(false);
+  const [accent, setAccent] = useState<string>(RANK_EMBED_DEFAULT_ACCENT);
+  const [copied, setCopied] = useState<"html" | "markdown" | null>(null);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -45,21 +81,20 @@ export function RankEmbedsModal({
   }, [onClose]);
 
   const live = Boolean(publicId && isProfilePublic && isRanked);
-  const embedUrl = useMemo(
-    () => (publicId ? buildRankEmbedUrl(publicId, { period, theme }) : ""),
-    [period, publicId, theme],
-  );
-  const snippet = useMemo(
-    () => (publicId ? buildRankEmbedSnippet(publicId, { period, theme }) : ""),
-    [period, publicId, theme],
-  );
+  const options = useMemo(() => ({ period, theme, accent, design }), [accent, design, period, theme]);
+  const embedUrl = useMemo(() => (publicId ? buildRankEmbedUrl(publicId, options) : ""), [options, publicId]);
+  const htmlSnippet = useMemo(() => (publicId ? buildRankEmbedSnippet(publicId, options) : ""), [options, publicId]);
+  const markdownSnippet = useMemo(() => (publicId ? buildRankMarkdownSnippet(publicId, options) : ""), [options, publicId]);
 
-  const copy = async () => {
-    if (!live || !snippet) return;
-    await copyTextToClipboard(snippet);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+  const copy = async (kind: "html" | "markdown", text: string) => {
+    if (!live || !text) return;
+    await copyTextToClipboard(text);
+    setCopied(kind);
+    window.setTimeout(() => setCopied(null), 1600);
   };
+
+  const rankLabel = isRanked && rank !== null ? `#${rank}` : "—";
+  const focusLabel = isRanked ? formatRoundedDuration(focusSeconds) : "—";
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
@@ -70,44 +105,105 @@ export function RankEmbedsModal({
         aria-labelledby="rank-embeds-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <button type="button" className="profile-modal__x" aria-label="Close rank embed" onClick={onClose}>×</button>
-        <div className="profile-modal__header">
+        <button type="button" className="profile-modal__x" aria-label="Close embed" onClick={onClose}>×</button>
+        <div className="profile-modal__header rank-embeds-modal__header">
           <div className="profile-modal__avatar rank-embeds-modal__icon" aria-hidden="true">
             <RankIcon />
           </div>
           <div>
-            <span className="label-mono">Leaderboard</span>
-            <h2 id="rank-embeds-title">Rank embed</h2>
+            <h2 id="rank-embeds-title">Embed</h2>
             <p>Your current rank and period focus. Nothing else.</p>
           </div>
         </div>
 
         <div className="rank-embeds-modal__body">
-          <div className={`rank-embed-stage rank-embed-stage--${theme}`}>
-            <div className="rank-embed-preview">
-              <div className="rank-embed-preview__top">
-                <span className="rank-embed-preview__avatar" aria-hidden="true">{(displayName.charAt(0) || "D").toUpperCase()}</span>
-                <span className="rank-embed-preview__name">{displayName}</span>
-                <span className="rank-embed-preview__period">{PERIOD_LABEL[period]}</span>
+          <div className="rank-embeds-modal__main">
+            <div className={`rank-embed-stage rank-embed-stage--${theme}`} style={accentStyle(accent)}>
+              <div className="rank-embed-stage__group">
+                <span className="rank-embed-stage__caption">Website</span>
+                {design === "card" ? (
+                  <div className="rank-embed-preview">
+                    <div className="rank-embed-preview__top">
+                      <span className="rank-embed-preview__avatar" aria-hidden="true">{(displayName.charAt(0) || "D").toUpperCase()}</span>
+                      <span className="rank-embed-preview__name">{displayName}</span>
+                      <span className="rank-embed-preview__rank">{isRanked && rank !== null ? `#${rank} · ${PERIOD_LABEL[period]}` : PERIOD_LABEL[period]}</span>
+                    </div>
+                    <div className="rank-embed-preview__focus">
+                      <span className="rank-embed-preview__label">{FOCUS_LABEL[period]}</span>
+                      <strong className="rank-embed-preview__value">{focusLabel}</strong>
+                    </div>
+                    <div className="rank-embed-preview__foot">
+                      <span className="rank-embed-preview__dot" />
+                      <span>live ranking</span>
+                      <span className="rank-embed-preview__brand">powered by <b>drifty</b> ↗</span>
+                    </div>
+                  </div>
+                ) : design === "compact" ? (
+                  <div className="rank-embed-preview rank-embed-preview--compact">
+                    <span className="rank-embed-preview__avatar rank-embed-preview__avatar--sm" aria-hidden="true">{(displayName.charAt(0) || "D").toUpperCase()}</span>
+                    <span className="rank-embed-preview__name">{displayName}</span>
+                    <span className="rank-embed-preview__rank">{rankLabel}</span>
+                    <strong className="rank-embed-preview__value rank-embed-preview__value--sm">{focusLabel}</strong>
+                  </div>
+                ) : (
+                  <div className="rank-embed-preview rank-embed-preview--minimal">
+                    <span className="rank-embed-preview__label">{FOCUS_LABEL[period]}</span>
+                    <strong className="rank-embed-preview__value rank-embed-preview__value--lg">{focusLabel}</strong>
+                    <span className="rank-embed-preview__minimal-rank">
+                      {isRanked && rank !== null ? `rank #${rank}` : "unranked"} · <b>drifty</b>
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="rank-embed-preview__stats">
-                <div><span>Rank</span><strong>{isRanked && rank !== null ? `#${rank}` : "—"}</strong></div>
-                <div><span>Focus</span><strong>{isRanked ? formatRoundedDuration(focusSeconds) : "—"}</strong></div>
+              <div className="rank-embed-stage__group">
+                <span className="rank-embed-stage__caption">README badge</span>
+                <span className="rank-embed-badge" role="img" aria-label={`rank: ${rankLabel} · ${focusLabel}`}>
+                  <span className="rank-embed-badge__label">rank</span>
+                  <span className="rank-embed-badge__value">{isRanked ? `${rankLabel} · ${focusLabel}` : "—"}</span>
+                </span>
               </div>
-              <div className="rank-embed-preview__foot"><span className="rank-embed-preview__dot" /> live ranking <b>drifty</b></div>
             </div>
-            {!live ? (
-              <div className="rank-embed-stage__lock" role="note">
-                <strong>Rank embed is not public yet</strong>
-                <p>{!isProfilePublic ? "Turn on your public profile first." : !isRanked ? "Join the leaderboard first." : "Save your profile first."}</p>
+
+            <div className="rank-embed-snippets">
+              <div className="rank-embed-snippet">
+                <span className="label-mono">Website · HTML</span>
+                <div className="profile-copy-row profile-embed-card__variant-row">
+                  <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={htmlSnippet} onFocus={(event) => event.currentTarget.select()} />
+                  <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? "Copied" : "Copy"}</button>
+                </div>
               </div>
-            ) : null}
+              <div className="rank-embed-snippet">
+                <span className="label-mono">README · Markdown</span>
+                <div className="profile-copy-row profile-embed-card__variant-row">
+                  <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={markdownSnippet} onFocus={(event) => event.currentTarget.select()} />
+                  <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? "Copied" : "Copy"}</button>
+                </div>
+                {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">Open live preview ↗</a> : null}
+              </div>
+              {!live ? (
+                <div className="rank-embed-snippets__lock" role="note">
+                  <LockIcon />
+                  <strong>Embeds are not public yet</strong>
+                  <p>{!isProfilePublic ? "Turn on your public profile first." : !isRanked ? "Join the leaderboard first." : "Save your profile first."}</p>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="rank-embed-options">
+          <div className="rank-embed-options" aria-label="Embed options">
+            <div>
+              <span className="label-mono">Design</span>
+              <div className="leaderboard-period-control seg" role="group" aria-label="Embed design">
+                {DESIGN_OPTIONS.map((option) => (
+                  <button key={option.value} type="button" className={design === option.value ? "on" : ""} aria-pressed={design === option.value} onClick={() => setDesign(option.value)}>
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div>
               <span className="label-mono">Period</span>
-              <div className="leaderboard-period-control seg" role="group" aria-label="Rank embed period">
+              <div className="leaderboard-period-control seg" role="group" aria-label="Embed period">
                 {(["daily", "weekly", "monthly"] as const).map((option) => (
                   <button key={option} type="button" className={period === option ? "on" : ""} aria-pressed={period === option} onClick={() => setPeriod(option)}>
                     <span>{PERIOD_LABEL[option]}</span>
@@ -117,7 +213,7 @@ export function RankEmbedsModal({
             </div>
             <div>
               <span className="label-mono">Theme</span>
-              <div className="leaderboard-period-control seg" role="group" aria-label="Rank embed theme">
+              <div className="leaderboard-period-control seg" role="group" aria-label="Embed theme">
                 {(["light", "dark"] as const).map((option) => (
                   <button key={option} type="button" className={theme === option ? "on" : ""} aria-pressed={theme === option} onClick={() => setTheme(option)}>
                     <span>{option === "light" ? "Light" : "Dark"}</span>
@@ -125,19 +221,37 @@ export function RankEmbedsModal({
                 ))}
               </div>
             </div>
-          </div>
-
-          <div className="rank-embed-snippet">
-            <span className="label-mono">Website · iframe</span>
-            <div className="profile-copy-row profile-embed-card__variant-row">
-              <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={snippet} onFocus={(event) => event.currentTarget.select()} />
-              <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={!live} onClick={() => void copy()}>{copied ? "Copied" : "Copy"}</button>
+            <div>
+              <span className="label-mono">Accent</span>
+              <div className="rank-embed-accents" role="radiogroup" aria-label="Embed accent color">
+                {ACCENT_OPTIONS.map((option) => (
+                  <button
+                    key={option.color}
+                    type="button"
+                    className={`rank-embed-accent${accent === option.color ? " rank-embed-accent--on" : ""}`}
+                    style={{ background: option.color }}
+                    role="radio"
+                    aria-checked={accent === option.color}
+                    aria-label={`Accent ${option.name}`}
+                    title={option.name}
+                    onClick={() => setAccent(option.color)}
+                  />
+                ))}
+              </div>
             </div>
-            {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">Open live preview ↗</a> : null}
           </div>
         </div>
       </section>
     </div>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
   );
 }
 
