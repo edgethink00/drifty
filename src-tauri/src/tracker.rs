@@ -16,6 +16,7 @@ use tauri::{AppHandle, Manager};
 use thiserror::Error;
 
 use crate::app_icons::{app_identity_key, resolve_app_icon_data};
+mod mutation;
 mod query;
 
 #[cfg(target_os = "macos")]
@@ -271,18 +272,6 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_current_snapshot", json!({}))
     }
 
-    pub fn set_developer_diagnostics(
-        &self,
-        app: &AppHandle,
-        settings: DeveloperDiagnosticsSettings,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "set_developer_diagnostics",
-            build_developer_diagnostics_payload(&settings),
-        )
-    }
-
     pub fn preview_browser_history_import(
         &self,
         app: &AppHandle,
@@ -291,18 +280,6 @@ impl TrackerController {
         self.invoke::<Value>(
             app,
             "preview_browser_history_import",
-            build_browser_history_import_payload(lookback_days),
-        )
-    }
-
-    pub fn import_browser_history(
-        &self,
-        app: &AppHandle,
-        lookback_days: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "import_browser_history",
             build_browser_history_import_payload(lookback_days),
         )
     }
@@ -332,22 +309,6 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_sync_state", json!({}))
     }
 
-    pub fn set_sync_state(&self, app: &AppHandle, entries: Value) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "set_sync_state", json!({ "entries": entries }))
-    }
-
-    pub fn apply_synced_segments(
-        &self,
-        app: &AppHandle,
-        segments: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "apply_synced_segments",
-            json!({ "segments": segments }),
-        )
-    }
-
     pub fn get_pending_sync_deletions(
         &self,
         app: &AppHandle,
@@ -358,34 +319,6 @@ impl TrackerController {
             payload["limit"] = json!(limit);
         }
         self.invoke::<Value>(app, "get_pending_sync_deletions", payload)
-    }
-
-    pub fn mark_sync_deletions_pushed(
-        &self,
-        app: &AppHandle,
-        deletion_uids: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "mark_sync_deletions_pushed",
-            json!({ "deletionUids": deletion_uids }),
-        )
-    }
-
-    pub fn apply_synced_deletions(
-        &self,
-        app: &AppHandle,
-        deletions: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "apply_synced_deletions",
-            json!({ "deletions": deletions }),
-        )
-    }
-
-    pub fn purge_remote_segments(&self, app: &AppHandle) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "purge_remote_segments", json!({}))
     }
 
     pub fn get_reusable_ai_classifications(
@@ -404,60 +337,6 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_classification_rules", json!({}))
     }
 
-    pub fn save_classification_rule(
-        &self,
-        app: &AppHandle,
-        input: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "save_classification_rule", json!({ "input": input }))
-    }
-
-    pub fn delete_classification_rule(
-        &self,
-        app: &AppHandle,
-        id: String,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "delete_classification_rule", json!({ "id": id }))
-    }
-
-    pub fn delete_activity_segments(
-        &self,
-        app: &AppHandle,
-        ids: Vec<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "delete_activity_segments",
-            build_delete_activity_segments_payload(&ids),
-        )
-    }
-
-    // CLIPPY-ALLOW: this mirrors the Python command payload flags one-to-one.
-    #[allow(clippy::too_many_arguments)]
-    pub fn delete_history_range(
-        &self,
-        app: &AppHandle,
-        start: Option<String>,
-        end: Option<String>,
-        activity: bool,
-        ai_classifications: bool,
-        youtube_metadata: bool,
-        dry_run: bool,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "delete_history_range",
-            build_delete_history_range_payload(
-                start,
-                end,
-                activity,
-                ai_classifications,
-                youtube_metadata,
-                dry_run,
-            ),
-        )
-    }
-
     pub fn search_classification_rule_candidates(
         &self,
         app: &AppHandle,
@@ -471,82 +350,8 @@ impl TrackerController {
         )
     }
 
-    pub fn apply_classification_rules(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        let mut payload = build_period_payload(day, start, end);
-        if let Some(payload_object) = payload.as_object_mut() {
-            payload_object.insert("limit".into(), json!(limit));
-        }
-        self.invoke::<Value>(app, "apply_classification_rules", payload)
-    }
-
-    pub fn save_classifications(
-        &self,
-        app: &AppHandle,
-        classifications: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "save_classifications",
-            json!({ "classifications": classifications }),
-        )
-    }
-
     pub fn get_projects(&self, app: &AppHandle) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "get_projects", json!({}))
-    }
-
-    pub fn save_project(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "save_project", json!({ "input": input }))
-    }
-
-    pub fn delete_project(&self, app: &AppHandle, id: String) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "delete_project", json!({ "id": id }))
-    }
-
-    pub fn save_project_anchors(
-        &self,
-        app: &AppHandle,
-        project_id: String,
-        anchors: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "save_project_anchors",
-            json!({ "projectId": project_id, "anchors": anchors }),
-        )
-    }
-
-    pub fn delete_project_anchor(
-        &self,
-        app: &AppHandle,
-        project_id: String,
-        kind: String,
-        value: String,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "delete_project_anchor",
-            json!({ "projectId": project_id, "kind": kind, "value": value }),
-        )
-    }
-
-    pub fn save_project_assignments(
-        &self,
-        app: &AppHandle,
-        assignments: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "save_project_assignments",
-            json!({ "assignments": assignments }),
-        )
     }
 
     pub fn get_project_assignments(
@@ -567,31 +372,6 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_team_projects", json!({}))
     }
 
-    pub fn upsert_team_projects(
-        &self,
-        app: &AppHandle,
-        organization_id: String,
-        projects: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "upsert_team_projects",
-            json!({ "organizationId": organization_id, "projects": projects }),
-        )
-    }
-
-    pub fn save_team_project_assignments(
-        &self,
-        app: &AppHandle,
-        assignments: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "save_team_project_assignments",
-            json!({ "assignments": assignments }),
-        )
-    }
-
     pub fn get_team_project_assignments(
         &self,
         app: &AppHandle,
@@ -604,14 +384,6 @@ impl TrackerController {
             "get_team_project_assignments",
             build_period_payload(day, start, end),
         )
-    }
-
-    pub fn record_project_pass(
-        &self,
-        app: &AppHandle,
-        input: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "record_project_pass", json!({ "input": input }))
     }
 
     pub fn get_project_pass_runs(
@@ -628,14 +400,6 @@ impl TrackerController {
         )
     }
 
-    pub fn save_ai_review_events(
-        &self,
-        app: &AppHandle,
-        events: Value,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "save_ai_review_events", json!({ "events": events }))
-    }
-
     pub fn get_ai_review_events(
         &self,
         app: &AppHandle,
@@ -646,24 +410,6 @@ impl TrackerController {
         self.invoke::<Value>(
             app,
             "get_ai_review_events",
-            build_period_payload(day, start, end),
-        )
-    }
-
-    pub fn revert_ai_review_event(&self, app: &AppHandle, id: i64) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "revert_ai_review_event", json!({ "id": id }))
-    }
-
-    pub fn refresh_non_ai_classifications(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "refresh_non_ai_classifications",
             build_period_payload(day, start, end),
         )
     }
@@ -1092,10 +838,7 @@ fn serve_request_with_lock_mode(
     }
 
     // A retry is safe only for the explicitly whitelisted read commands.
-    let retry_attempts = match retry_safety {
-        SidecarCommandRetrySafety::SafeRead => 2,
-        SidecarCommandRetrySafety::Mutation => 1,
-    };
+    let retry_attempts = serve_retry_attempts(retry_safety);
     let mut last_err = TrackerError::CommandFailed("serve process unavailable".into());
     for _ in 0..retry_attempts {
         if guard.is_none() {
@@ -1136,6 +879,13 @@ fn serve_request_with_lock_mode(
     }
 
     Err(last_err)
+}
+
+fn serve_retry_attempts(retry_safety: SidecarCommandRetrySafety) -> usize {
+    match retry_safety {
+        SidecarCommandRetrySafety::SafeRead => 2,
+        SidecarCommandRetrySafety::Mutation => 1,
+    }
 }
 
 const EXIT_STOP_TRACKING_WAIT: Duration = Duration::from_secs(3);
@@ -1213,39 +963,6 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
     }
 
     Value::Object(payload)
-}
-
-fn build_delete_activity_segments_payload(ids: &[String]) -> Value {
-    json!({ "ids": ids })
-}
-
-fn build_delete_history_range_payload(
-    start: Option<String>,
-    end: Option<String>,
-    activity: bool,
-    ai_classifications: bool,
-    youtube_metadata: bool,
-    dry_run: bool,
-) -> Value {
-    let mut payload = build_period_payload(None, start, end);
-
-    if let Some(payload_object) = payload.as_object_mut() {
-        payload_object.insert(
-            "scopes".into(),
-            json!({
-                "activity": activity,
-                "aiClassifications": ai_classifications,
-                "youtubeMetadata": youtube_metadata,
-            }),
-        );
-        payload_object.insert("dryRun".into(), json!(dry_run));
-    }
-
-    payload
-}
-
-fn build_developer_diagnostics_payload(settings: &DeveloperDiagnosticsSettings) -> Value {
-    json!(settings)
 }
 
 fn build_browser_history_import_payload(lookback_days: Option<u32>) -> Value {
@@ -1461,6 +1178,34 @@ fn resolve_db_path(app: &AppHandle) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const MUTATING_COMMANDS: &[&str] = &[
+        "start_tracking",
+        "stop_tracking",
+        "set_developer_diagnostics",
+        "import_browser_history",
+        "set_sync_state",
+        "apply_synced_segments",
+        "mark_sync_deletions_pushed",
+        "apply_synced_deletions",
+        "purge_remote_segments",
+        "save_classification_rule",
+        "delete_classification_rule",
+        "delete_activity_segments",
+        "delete_history_range",
+        "apply_classification_rules",
+        "save_classifications",
+        "refresh_non_ai_classifications",
+        "save_project",
+        "delete_project",
+        "save_project_anchors",
+        "delete_project_anchor",
+        "save_project_assignments",
+        "upsert_team_projects",
+        "save_team_project_assignments",
+        "record_project_pass",
+        "save_ai_review_events",
+        "revert_ai_review_event",
+    ];
 
     #[test]
     fn stop_daemon_for_app_exit_reports_completed_fast_stop() {
@@ -1499,83 +1244,6 @@ mod tests {
     }
 
     #[test]
-    fn delete_activity_segments_payload_preserves_selected_ids() {
-        let payload = build_delete_activity_segments_payload(&["42".into(), "43".into()]);
-
-        assert_eq!(payload, json!({ "ids": ["42", "43"] }));
-    }
-
-    #[test]
-    fn delete_history_range_payload_preserves_range_scopes_and_dry_run() {
-        let payload = build_delete_history_range_payload(
-            Some("2026-04-01".into()),
-            Some("2026-04-06".into()),
-            true,
-            false,
-            true,
-            true,
-        );
-
-        assert_eq!(
-            payload,
-            json!({
-                "start": "2026-04-01",
-                "end": "2026-04-06",
-                "scopes": {
-                    "activity": true,
-                    "aiClassifications": false,
-                    "youtubeMetadata": true,
-                },
-                "dryRun": true,
-            })
-        );
-    }
-
-    #[test]
-    fn delete_history_range_payload_omits_missing_bounds_for_all_time() {
-        let payload = build_delete_history_range_payload(None, None, true, true, true, false);
-
-        assert_eq!(
-            payload,
-            json!({
-                "scopes": {
-                    "activity": true,
-                    "aiClassifications": true,
-                    "youtubeMetadata": true,
-                },
-                "dryRun": false,
-            })
-        );
-    }
-
-    #[test]
-    fn developer_diagnostics_payload_preserves_browser_history_fallback_flag() {
-        let payload = build_developer_diagnostics_payload(&DeveloperDiagnosticsSettings {
-            force_chromium_ax_capture: true,
-            force_frontmost_fallback_capture: false,
-            force_browser_history_url_fallback: true,
-            enhanced_context_enabled: true,
-            enhanced_context_capture_local: false,
-            enhanced_context_source_families: vec![
-                "document_knowledge".to_owned(),
-                "calendar_meeting".to_owned(),
-            ],
-        });
-
-        assert_eq!(
-            payload,
-            json!({
-                "forceChromiumAxCapture": true,
-                "forceFrontmostFallbackCapture": false,
-                "forceBrowserHistoryUrlFallback": true,
-                "enhancedContextEnabled": true,
-                "enhancedContextCaptureLocal": false,
-                "enhancedContextSourceFamilies": ["document_knowledge", "calendar_meeting"],
-            })
-        );
-    }
-
-    #[test]
     fn browser_history_import_payload_defaults_to_last_48_hours() {
         let payload = build_browser_history_import_payload(None);
 
@@ -1603,30 +1271,43 @@ mod tests {
 
     #[test]
     fn mutating_commands_return_serve_errors_without_one_shot_replay() {
-        for serve_error in [
-            TrackerError::ServeTimedOut(Duration::from_millis(10)),
-            TrackerError::CommandFailed("serve process closed its output".into()),
-        ] {
-            let expected_error = serve_error.to_string();
-            let fallback_invocations = std::cell::Cell::new(0);
+        for &command in MUTATING_COMMANDS {
+            for serve_error in [
+                TrackerError::ServeTimedOut(Duration::from_millis(10)),
+                TrackerError::CommandFailed("serve process closed its output".into()),
+            ] {
+                let expected_error = serve_error.to_string();
+                let fallback_invocations = std::cell::Cell::new(0);
 
-            let result = invoke_with_serve_fallback(
-                sidecar_command_retry_safety("save_project"),
-                || Err(serve_error),
-                || {
-                    fallback_invocations.set(fallback_invocations.get() + 1);
-                    Ok(b"one-shot response".to_vec())
-                },
-            );
+                let result = invoke_with_serve_fallback(
+                    sidecar_command_retry_safety(command),
+                    || Err(serve_error),
+                    || {
+                        fallback_invocations.set(fallback_invocations.get() + 1);
+                        Ok(b"one-shot response".to_vec())
+                    },
+                );
 
-            assert_eq!(
-                result
-                    .expect_err("mutations must return the serve error")
-                    .to_string(),
-                expected_error
-            );
-            assert_eq!(fallback_invocations.get(), 0);
+                assert_eq!(
+                    result
+                        .expect_err("mutations must return the serve error")
+                        .to_string(),
+                    expected_error,
+                    "{command} must return its serve error"
+                );
+                assert_eq!(
+                    fallback_invocations.get(),
+                    0,
+                    "{command} must not invoke the one-shot fallback"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn mutation_serve_path_allows_exactly_one_round_trip_attempt() {
+        assert_eq!(serve_retry_attempts(SidecarCommandRetrySafety::Mutation), 1);
+        assert_eq!(serve_retry_attempts(SidecarCommandRetrySafety::SafeRead), 2);
     }
 
     #[test]
@@ -1688,34 +1369,7 @@ mod tests {
             );
         }
 
-        for command in [
-            "start_tracking",
-            "stop_tracking",
-            "set_developer_diagnostics",
-            "import_browser_history",
-            "set_sync_state",
-            "apply_synced_segments",
-            "mark_sync_deletions_pushed",
-            "apply_synced_deletions",
-            "purge_remote_segments",
-            "save_classification_rule",
-            "delete_classification_rule",
-            "delete_activity_segments",
-            "delete_history_range",
-            "apply_classification_rules",
-            "save_classifications",
-            "refresh_non_ai_classifications",
-            "save_project",
-            "delete_project",
-            "save_project_anchors",
-            "delete_project_anchor",
-            "save_project_assignments",
-            "upsert_team_projects",
-            "save_team_project_assignments",
-            "record_project_pass",
-            "save_ai_review_events",
-            "revert_ai_review_event",
-        ] {
+        for &command in MUTATING_COMMANDS {
             assert_eq!(
                 sidecar_command_retry_safety(command),
                 SidecarCommandRetrySafety::Mutation,
