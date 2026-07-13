@@ -16,6 +16,7 @@ use tauri::{AppHandle, Manager};
 use thiserror::Error;
 
 use crate::app_icons::{app_identity_key, resolve_app_icon_data};
+mod query;
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -28,8 +29,7 @@ pub struct TrackerController;
 pub(crate) const TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS: usize = 160;
 pub(crate) const TRACKER_START_ERROR_MESSAGE: &str =
     "Activity tracking could not start. Try starting it again.";
-pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str =
-    "Activity tracking could not stop. Try again.";
+pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str = "Activity tracking could not stop. Try again.";
 pub(crate) const TRACKER_STATUS_ERROR_MESSAGE: &str =
     "Activity tracking status is unavailable. Try again.";
 
@@ -110,11 +110,7 @@ impl TrackerStartupState {
         lifecycle.generation
     }
 
-    pub(crate) fn record_start_failure(
-        &self,
-        generation: u64,
-        error: &TrackerError,
-    ) -> bool {
+    pub(crate) fn record_start_failure(&self, generation: u64, error: &TrackerError) -> bool {
         let mut lifecycle = self
             .lifecycle
             .lock()
@@ -271,88 +267,6 @@ impl TrackerController {
         self.invoke::<TrackerStatus>(app, "stop_tracking", json!({}))
     }
 
-    pub fn get_timeline(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "get_timeline", build_period_payload(day, start, end))
-    }
-
-    pub fn get_timeline_page(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-        before_segment_id: Option<String>,
-        before_ended_at: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "get_timeline_page",
-            build_timeline_page_payload(day, start, end, before_segment_id, before_ended_at, limit),
-        )
-    }
-
-    pub fn search_timeline(
-        &self,
-        app: &AppHandle,
-        query: String,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-        before_segment_id: Option<String>,
-        before_ended_at: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "search_timeline",
-            build_timeline_search_payload(
-                query,
-                day,
-                start,
-                end,
-                before_segment_id,
-                before_ended_at,
-                limit,
-            ),
-        )
-    }
-
-    pub fn get_dashboard_week_timeline(
-        &self,
-        app: &AppHandle,
-        start: Option<String>,
-        end: Option<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "get_dashboard_week_timeline",
-            build_dashboard_week_timeline_payload(start, end),
-        )
-    }
-
-    pub fn get_live_tail(
-        &self,
-        app: &AppHandle,
-        start: Option<String>,
-        end: Option<String>,
-        after_segment_id: Option<String>,
-        after_ended_at: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "get_live_tail",
-            build_live_tail_payload(start, end, after_segment_id, after_ended_at, limit),
-        )
-    }
-
     pub fn get_current_snapshot(&self, app: &AppHandle) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "get_current_snapshot", json!({}))
     }
@@ -427,7 +341,11 @@ impl TrackerController {
         app: &AppHandle,
         segments: Value,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "apply_synced_segments", json!({ "segments": segments }))
+        self.invoke::<Value>(
+            app,
+            "apply_synced_segments",
+            json!({ "segments": segments }),
+        )
     }
 
     pub fn get_pending_sync_deletions(
@@ -459,73 +377,15 @@ impl TrackerController {
         app: &AppHandle,
         deletions: Value,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "apply_synced_deletions", json!({ "deletions": deletions }))
+        self.invoke::<Value>(
+            app,
+            "apply_synced_deletions",
+            json!({ "deletions": deletions }),
+        )
     }
 
     pub fn purge_remote_segments(&self, app: &AppHandle) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "purge_remote_segments", json!({}))
-    }
-
-    pub fn get_hourly_summary(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "get_hourly_summary",
-            build_period_payload(day, start, end),
-        )
-    }
-
-    pub fn get_raw_events(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-        app_name: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        let mut payload = build_period_payload(day, start, end);
-        if let Some(payload_object) = payload.as_object_mut() {
-            payload_object.insert("appName".into(), json!(app_name));
-            payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
-        }
-        self.invoke::<Value>(app, "get_raw_events", payload)
-    }
-
-    pub fn get_top_sites(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-        limit: Option<u32>,
-    ) -> Result<Value, TrackerError> {
-        let mut payload = build_period_payload(day, start, end);
-        if let Some(payload_object) = payload.as_object_mut() {
-            payload_object.insert("limit".into(), json!(limit.unwrap_or(10)));
-        }
-        self.invoke::<Value>(app, "get_top_sites", payload)
-    }
-
-    pub fn get_unclassified_segments(
-        &self,
-        app: &AppHandle,
-        day: Option<String>,
-        start: Option<String>,
-        end: Option<String>,
-        limit: Option<u32>,
-        segment_ids: Option<Vec<String>>,
-    ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "get_unclassified_segments",
-            build_unclassified_segments_payload(day, start, end, limit, segment_ids),
-        )
     }
 
     pub fn get_reusable_ai_classifications(
@@ -746,7 +606,11 @@ impl TrackerController {
         )
     }
 
-    pub fn record_project_pass(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+    pub fn record_project_pass(
+        &self,
+        app: &AppHandle,
+        input: Value,
+    ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "record_project_pass", json!({ "input": input }))
     }
 
@@ -757,7 +621,11 @@ impl TrackerController {
         start: Option<String>,
         end: Option<String>,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "get_project_pass_runs", build_period_payload(day, start, end))
+        self.invoke::<Value>(
+            app,
+            "get_project_pass_runs",
+            build_period_payload(day, start, end),
+        )
     }
 
     pub fn save_ai_review_events(
@@ -782,11 +650,7 @@ impl TrackerController {
         )
     }
 
-    pub fn revert_ai_review_event(
-        &self,
-        app: &AppHandle,
-        id: i64,
-    ) -> Result<Value, TrackerError> {
+    pub fn revert_ai_review_event(&self, app: &AppHandle, id: i64) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "revert_ai_review_event", json!({ "id": id }))
     }
 
@@ -817,49 +681,6 @@ impl TrackerController {
             payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
         }
         self.invoke::<Value>(app, "get_classification_metrics", payload)
-    }
-
-    pub fn get_daily_stats(&self, app: &AppHandle) -> (f64, f64, f64) {
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let timeline = match self.get_timeline(app, Some(today), None, None) {
-            Ok(v) => v,
-            Err(_) => return (0.0, 0.0, 0.0),
-        };
-        let segments = match timeline.as_array() {
-            Some(v) => v,
-            None => return (0.0, 0.0, 0.0),
-        };
-
-        let mut focus_secs = 0.0f64;
-        let mut drift_secs = 0.0f64;
-        let mut neutral_secs = 0.0f64;
-
-        for seg in segments {
-            let duration = seg
-                .get("durationSeconds")
-                .or_else(|| seg.get("duration_seconds"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            let productivity = seg
-                .get("productivity")
-                .or_else(|| {
-                    seg.get("classification")
-                        .and_then(|c| c.get("productivity"))
-                })
-                .and_then(|v| v.as_str())
-                .unwrap_or("neutral");
-            match productivity {
-                "focus" => focus_secs += duration,
-                "drift" => drift_secs += duration,
-                _ => neutral_secs += duration,
-            }
-        }
-
-        let total = focus_secs + drift_secs + neutral_secs;
-        if total < 1.0 {
-            return (0.0, 0.0, 0.0);
-        }
-        (focus_secs / total, drift_secs / total, neutral_secs / total)
     }
 
     pub fn get_app_icons(
@@ -1394,91 +1215,6 @@ fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<
     Value::Object(payload)
 }
 
-fn build_dashboard_week_timeline_payload(start: Option<String>, end: Option<String>) -> Value {
-    build_period_payload(None, start, end)
-}
-
-fn build_timeline_page_payload(
-    day: Option<String>,
-    start: Option<String>,
-    end: Option<String>,
-    before_segment_id: Option<String>,
-    before_ended_at: Option<String>,
-    limit: Option<u32>,
-) -> Value {
-    let mut payload = build_period_payload(day, start, end);
-
-    if let Some(payload_object) = payload.as_object_mut() {
-        if let Some(before_segment_id) = before_segment_id {
-            payload_object.insert("beforeSegmentId".into(), json!(before_segment_id));
-        }
-        if let Some(before_ended_at) = before_ended_at {
-            payload_object.insert("beforeEndedAt".into(), json!(before_ended_at));
-        }
-        payload_object.insert("limit".into(), json!(limit.unwrap_or(200)));
-    }
-
-    payload
-}
-
-fn build_timeline_search_payload(
-    query: String,
-    day: Option<String>,
-    start: Option<String>,
-    end: Option<String>,
-    before_segment_id: Option<String>,
-    before_ended_at: Option<String>,
-    limit: Option<u32>,
-) -> Value {
-    let mut payload =
-        build_timeline_page_payload(day, start, end, before_segment_id, before_ended_at, limit);
-
-    if let Some(payload_object) = payload.as_object_mut() {
-        payload_object.insert("query".into(), json!(query));
-    }
-
-    payload
-}
-
-fn build_unclassified_segments_payload(
-    day: Option<String>,
-    start: Option<String>,
-    end: Option<String>,
-    limit: Option<u32>,
-    segment_ids: Option<Vec<String>>,
-) -> Value {
-    let mut payload = build_period_payload(day, start, end);
-    if let Some(payload_object) = payload.as_object_mut() {
-        payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
-        if let Some(segment_ids) = segment_ids {
-            payload_object.insert("segmentIds".into(), json!(segment_ids));
-        }
-    }
-    payload
-}
-
-fn build_live_tail_payload(
-    start: Option<String>,
-    end: Option<String>,
-    after_segment_id: Option<String>,
-    after_ended_at: Option<String>,
-    limit: Option<u32>,
-) -> Value {
-    let mut payload = build_period_payload(None, start, end);
-
-    if let Some(payload_object) = payload.as_object_mut() {
-        if let Some(after_segment_id) = after_segment_id {
-            payload_object.insert("afterSegmentId".into(), json!(after_segment_id));
-        }
-        if let Some(after_ended_at) = after_ended_at {
-            payload_object.insert("afterEndedAt".into(), json!(after_ended_at));
-        }
-        payload_object.insert("limit".into(), json!(limit.unwrap_or(8)));
-    }
-
-    payload
-}
-
 fn build_delete_activity_segments_payload(ids: &[String]) -> Value {
     json!({ "ids": ids })
 }
@@ -1859,118 +1595,6 @@ mod tests {
     }
 
     #[test]
-    fn live_tail_payload_preserves_range_cursor_and_default_limit() {
-        let payload = build_live_tail_payload(
-            Some("2026-04-06T00:00:00".into()),
-            Some("2026-04-06T23:59:59".into()),
-            Some("42".into()),
-            Some("2026-04-06T09:05:00+00:00".into()),
-            None,
-        );
-
-        assert_eq!(
-            payload,
-            json!({
-                "start": "2026-04-06T00:00:00",
-                "end": "2026-04-06T23:59:59",
-                "afterSegmentId": "42",
-                "afterEndedAt": "2026-04-06T09:05:00+00:00",
-                "limit": 8
-            })
-        );
-    }
-
-    #[test]
-    fn timeline_page_payload_preserves_range_cursor_and_default_limit() {
-        let payload = build_timeline_page_payload(
-            None,
-            Some("2026-04-06T00:00:00".into()),
-            Some("2026-04-06T23:59:59".into()),
-            Some("42".into()),
-            Some("2026-04-06T09:05:00+00:00".into()),
-            None,
-        );
-
-        assert_eq!(
-            payload,
-            json!({
-                "start": "2026-04-06T00:00:00",
-                "end": "2026-04-06T23:59:59",
-                "beforeSegmentId": "42",
-                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
-                "limit": 200
-            })
-        );
-    }
-
-    #[test]
-    fn timeline_page_payload_preserves_day_selector() {
-        let payload =
-            build_timeline_page_payload(Some("2026-04-06".into()), None, None, None, None, None);
-
-        assert_eq!(payload, json!({ "day": "2026-04-06", "limit": 200 }));
-    }
-
-    #[test]
-    fn unclassified_segments_payload_preserves_segment_ids() {
-        let payload = build_unclassified_segments_payload(
-            Some("2026-04-06".into()),
-            None,
-            None,
-            Some(20),
-            Some(vec!["42".into(), "43".into()]),
-        );
-
-        assert_eq!(
-            payload,
-            json!({ "day": "2026-04-06", "limit": 20, "segmentIds": ["42", "43"] })
-        );
-    }
-
-    #[test]
-    fn timeline_search_payload_preserves_query_range_cursor_and_default_limit() {
-        let payload = build_timeline_search_payload(
-            "github issue".into(),
-            None,
-            Some("2026-04-06T00:00:00".into()),
-            Some("2026-04-06T23:59:59".into()),
-            Some("42".into()),
-            Some("2026-04-06T09:05:00+00:00".into()),
-            None,
-        );
-
-        assert_eq!(
-            payload,
-            json!({
-                "query": "github issue",
-                "start": "2026-04-06T00:00:00",
-                "end": "2026-04-06T23:59:59",
-                "beforeSegmentId": "42",
-                "beforeEndedAt": "2026-04-06T09:05:00+00:00",
-                "limit": 200
-            })
-        );
-    }
-
-    #[test]
-    fn timeline_search_payload_preserves_day_selector() {
-        let payload = build_timeline_search_payload(
-            "github issue".into(),
-            Some("2026-04-06".into()),
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
-
-        assert_eq!(
-            payload,
-            json!({ "query": "github issue", "day": "2026-04-06", "limit": 200 })
-        );
-    }
-
-    #[test]
     fn only_timeline_page_uses_one_shot_when_serve_is_busy() {
         assert!(should_use_one_shot_when_serve_busy("get_timeline_page"));
         assert!(!should_use_one_shot_when_serve_busy("get_timeline"));
@@ -2102,22 +1726,6 @@ mod tests {
         assert_eq!(
             sidecar_command_retry_safety("future_command"),
             SidecarCommandRetrySafety::Mutation
-        );
-    }
-
-    #[test]
-    fn dashboard_week_timeline_payload_preserves_range() {
-        let payload = build_dashboard_week_timeline_payload(
-            Some("2026-04-01T00:00:00".into()),
-            Some("2026-04-07T23:59:59".into()),
-        );
-
-        assert_eq!(
-            payload,
-            json!({
-                "start": "2026-04-01T00:00:00",
-                "end": "2026-04-07T23:59:59",
-            })
         );
     }
 
