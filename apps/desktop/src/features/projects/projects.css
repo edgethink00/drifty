@@ -242,18 +242,6 @@
   max-width: 42rem;
 }
 
-/* Wide top row: name stretches, the color picker sits beside it. */
-.projects-editor__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: end;
-}
-
-.projects-editor__row .team-pick {
-  min-width: 11rem;
-}
-
 .projects-field {
   display: flex;
   flex-direction: column;

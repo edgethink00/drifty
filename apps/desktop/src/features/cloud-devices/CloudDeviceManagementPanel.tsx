@@ -5,6 +5,7 @@ import type { CloudDeviceRecord } from "./cloudDeviceService";
 import "./CloudDeviceManagementPanel.css";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 export type CloudDeviceManagementPanelProps = {
   readonly access: BillingEntitlement["deviceAccess"] | null;
@@ -29,6 +30,7 @@ export function CloudDeviceManagementPanel({
   const refreshLabel = isRefreshing ? t("settings.cloudDevices.refreshingAria") : t("settings.cloudDevices.refreshAria");
   const [pendingRemovalDevice, setPendingRemovalDevice] = useState<CloudDeviceRecord | null>(null);
   const accessMessage = access && !access.allowed && access.message ? access.message : null;
+  useModalDismiss(() => setPendingRemovalDevice(null), { disabled: pendingRemovalDevice === null || revokingId !== null });
 
   function confirmDeviceRemoval() {
     if (pendingRemovalDevice === null) return;
@@ -114,12 +116,12 @@ export function CloudDeviceManagementPanel({
               <small>{formatCloudDeviceLastSeen(pendingRemovalDevice.lastSeenAt, effectiveLanguage, t)}</small>
             </div>
             <div className="cloud-device-confirm__actions">
-              <button type="button" className="settings-btn" onClick={() => setPendingRemovalDevice(null)}>
+              <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setPendingRemovalDevice(null)}>
                 {t("settings.cloudDevices.cancel")}
               </button>
               <button
                 type="button"
-                className="settings-btn cloud-device-confirm__remove"
+                className="modal-btn modal-btn--danger"
                 disabled={revokingId !== null}
                 onClick={confirmDeviceRemoval}
               >

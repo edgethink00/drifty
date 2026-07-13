@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { formatRoundedDuration } from "../../lib/formatting";
 import { copyTextToClipboard } from "../profile/ProfileModals";
@@ -12,6 +12,7 @@ import {
   type RankEmbedDesign,
 } from "./rankEmbedSnippets";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type RankEmbedsModalProps = {
   readonly displayName: string;
@@ -73,13 +74,7 @@ export function RankEmbedsModal({
   const [accent, setAccent] = useState<string>(RANK_EMBED_DEFAULT_ACCENT);
   const [copied, setCopied] = useState<"html" | "markdown" | null>(null);
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useModalDismiss(onClose);
 
   const live = Boolean(publicId && isProfilePublic && isRanked);
   const options = useMemo(() => ({ period, theme, accent, design }), [accent, design, period, theme]);
@@ -167,14 +162,14 @@ export function RankEmbedsModal({
                 <span className="label-mono">Website · HTML</span>
                 <div className="profile-copy-row profile-embed-card__variant-row">
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={htmlSnippet} onFocus={(event) => event.currentTarget.select()} />
-                  <button type="button" className="modal-btn modal-btn--secondary profile-btn" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? "Copied" : "Copy"}</button>
+                  <button type="button" className="modal-btn modal-btn--secondary" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? "Copied" : "Copy"}</button>
                 </div>
               </div>
               <div className="rank-embed-snippet">
                 <span className="label-mono">README · Markdown</span>
                 <div className="profile-copy-row profile-embed-card__variant-row">
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={markdownSnippet} onFocus={(event) => event.currentTarget.select()} />
-                  <button type="button" className="modal-btn modal-btn--secondary profile-btn" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? "Copied" : "Copy"}</button>
+                  <button type="button" className="modal-btn modal-btn--secondary" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? "Copied" : "Copy"}</button>
                 </div>
                 {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">Open live preview ↗</a> : null}
               </div>

@@ -11,6 +11,8 @@ import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeTo
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type AlarmPreviewSectionKey = Extract<DriftAlarmCopySectionKey, "drift" | "breakReturn">;
 
@@ -76,6 +78,8 @@ export function DriftAlarmCopySettings({
     setDraftCopy((currentValue) => ({ ...currentValue, [key]: nextValue }));
   };
 
+  useModalDismiss(cancelEditor, { disabled: !isEditorOpen });
+
   return (
     <div className="settings-row settings-row--drift-copy" role="group" aria-label={t("settings.alarmCopy.label")}>
       <div>
@@ -96,20 +100,12 @@ export function DriftAlarmCopySettings({
             aria-labelledby="drift-copy-modal-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="auth-modal__header drift-copy-modal__header">
-              <div>
+            <ModalCloseButton label={t("settings.alarmCopy.close")} onClick={cancelEditor} />
+            <div className="modal-head drift-copy-modal__header">
+              <div className="modal-head__copy">
                 <h2 id="drift-copy-modal-title">{t("settings.alarmCopy.edit")}</h2>
                 <p>{localizedCopySectionDescription(activeSectionKey, t)}</p>
               </div>
-              <button
-                type="button"
-                className="settings-btn auth-modal__close"
-                onClick={cancelEditor}
-                aria-label={t("settings.alarmCopy.close")}
-                title={t("settings.alarmCopy.close")}
-              >
-                x
-              </button>
             </div>
             <div className="drift-copy-modal__body">
               <div className="drift-copy-editor">
@@ -147,14 +143,14 @@ export function DriftAlarmCopySettings({
                   </div>
                 </section>
                 <div className="drift-copy-editor__actions">
-                  <button type="button" className="settings-btn" onClick={() => setDraftCopy(buildDefaultDriftAlarmCopy())}>
+                  <button type="button" className="modal-btn modal-btn--secondary" onClick={() => setDraftCopy(buildDefaultDriftAlarmCopy())}>
                     {t("settings.alarmCopy.reset")}
                   </button>
                   <div className="drift-copy-editor__commit-actions">
-                    <button type="button" className="settings-btn" onClick={cancelEditor}>
+                    <button type="button" className="modal-btn modal-btn--ghost" onClick={cancelEditor}>
                       {t("settings.alarmCopy.cancel")}
                     </button>
-                    <button type="button" className="settings-btn settings-btn--primary" onClick={saveEditor}>
+                    <button type="button" className="modal-btn modal-btn--primary" onClick={saveEditor}>
                       {t("settings.alarmCopy.save")}
                     </button>
                   </div>

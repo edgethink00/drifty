@@ -1,14 +1,18 @@
 import type { MouseEvent } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type DebugLogModalProps = {
   readonly text: string;
+  /** Footer note, e.g. "Generated 14:20:06 · v1.8.2". */
+  readonly note?: string;
   readonly onClose: () => void;
   readonly onCopy: () => void;
   readonly onDownload: () => void;
 };
 
-export function DebugLogModal({ text, onClose, onCopy, onDownload }: DebugLogModalProps) {
+export function DebugLogModal({ text, note, onClose, onCopy, onDownload }: DebugLogModalProps) {
+  useModalDismiss(onClose);
   return (
     <div className="auth-modal__overlay debug-log-modal__overlay" onClick={onClose}>
       <section
@@ -26,6 +30,7 @@ export function DebugLogModal({ text, onClose, onCopy, onDownload }: DebugLogMod
         </div>
         <pre className="debug-log-modal__text" aria-label="Debug log JSON">{text}</pre>
         <div className="modal-foot debug-log-modal__actions">
+          {note ? <span className="modal-foot__note">{note}</span> : null}
           <button type="button" className="modal-btn modal-btn--secondary debug-log-modal__action" onClick={onCopy}>Copy</button>
           <button type="button" className="modal-btn modal-btn--primary debug-log-modal__action" onClick={onDownload}>Download</button>
         </div>

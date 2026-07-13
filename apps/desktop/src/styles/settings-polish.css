@@ -881,26 +881,8 @@
   padding: var(--space-5);
 }
 
-.drift-copy-modal__header {
-  align-items: flex-start;
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
+.drift-copy-modal .drift-copy-modal__header {
   margin-bottom: 0;
-}
-
-.drift-copy-modal .auth-modal__close {
-  align-items: center;
-  display: inline-grid;
-  flex: 0 0 auto;
-  font-size: 1.25rem;
-  height: 2.25rem;
-  justify-content: center;
-  line-height: 1;
-  margin-top: 0;
-  min-width: 0;
-  padding: 0;
-  width: 2.25rem;
 }
 
 .drift-copy-modal__tabs {

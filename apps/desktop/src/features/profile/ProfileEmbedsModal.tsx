@@ -4,7 +4,7 @@
 //
 // Everything here is wired to real presentation capabilities only: theme (light/dark),
 // card range (7/30), and the four working formats (badge/card/chart/data).
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { formatFocusDuration, renderFocusBadgeSvg, FOCUS_GREEN, AWAY_GREY } from "../share/badgeSvg";
 import { buildEmbedSnippets } from "../share/embedSnippets";
 import type { BadgeThemeOption, CardRangeOption } from "../share/embedSnippets";
@@ -13,6 +13,7 @@ import type { FocusCardControls } from "../share/useFocusCard";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "./ProfileModals";
 import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./ProfileEmbedGroups";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 export type ProfileEmbedFormat = "badge" | "card" | "chart" | "data";
 
@@ -55,13 +56,7 @@ export function ProfileEmbedsModal({
   const [cardRange, setCardRange] = useState<CardRangeOption>(7);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useModalDismiss(onClose);
 
   const cardLocked = card.enabled !== true || !isProfilePublic;
   const chartStats = useMemo(() => summarizeDailyProductivity(dailyProductivity), [dailyProductivity]);
@@ -125,8 +120,8 @@ export function ProfileEmbedsModal({
 
   const copyInputClassName = "settings-input profile-field profile-field--code profile-embed-card__code";
   const copyRowClassName = "profile-copy-row profile-embed-card__variant-row";
-  const primaryButtonClassName = "modal-btn modal-btn--primary profile-btn";
-  const copyButtonClassName = "modal-btn modal-btn--secondary profile-btn";
+  const primaryButtonClassName = "modal-btn modal-btn--primary";
+  const copyButtonClassName = "modal-btn modal-btn--secondary";
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>

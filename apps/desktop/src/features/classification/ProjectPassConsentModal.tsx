@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 export interface ProjectPassConsentModalProps {
   readonly open: boolean;
@@ -19,14 +19,7 @@ export function ProjectPassConsentModal({
   onConfirm,
   onCancel,
 }: ProjectPassConsentModalProps): JSX.Element | null {
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+  useModalDismiss(onCancel, { disabled: !open });
 
   if (!open) return null;
 
@@ -48,10 +41,7 @@ export function ProjectPassConsentModal({
           </div>
         </div>
 
-        <ul
-          className="project-pass-consent-modal__points"
-          style={{ margin: "0 0 var(--space-4)", paddingLeft: "1.15rem", display: "grid", gap: "var(--space-2)" }}
-        >
+        <ul className="project-pass-consent-modal__points">
           <li>
             A compacted 3-minute activity-window summary — app, site, time, duration, plus your
             project descriptions and work profile — is sent to <strong>{providerLabel}</strong>.

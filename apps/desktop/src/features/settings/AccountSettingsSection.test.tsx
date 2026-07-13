@@ -186,7 +186,6 @@ describe("AccountSettingsSection", () => {
     const refreshRule = cssRule(styles, ".content--settings .settings-btn.cloud-device-management__refresh");
     const removeRule = cssRule(styles, ".content--settings .settings-btn.cloud-device-row__remove");
     const confirmOverlayRule = cssRule(styles, ".cloud-device-confirm");
-    const confirmRemoveRule = cssRule(styles, ".content--settings .settings-btn.cloud-device-confirm__remove");
 
     expect(badgeRule).toContain("border-radius: var(--radius-pill);");
     expect(badgeRule).not.toContain("border-radius: 999px;");
@@ -197,8 +196,9 @@ describe("AccountSettingsSection", () => {
     expect(removeRule).toContain("var(--warn)");
     expect(confirmOverlayRule).toContain("position: fixed;");
     expect(confirmOverlayRule).toContain("z-index: var(--z-settings-popover);");
-    expect(confirmRemoveRule).toContain("background: var(--warn);");
-    expect(confirmRemoveRule).toContain("color: var(--canvas);");
+    // The confirm's danger button now uses the shared modal-btn--danger chrome
+    // (styles/modal-chrome.css), so this stylesheet carries no per-button rule.
+    expect(styles).not.toContain(".cloud-device-confirm__remove");
   });
 
   it("keeps consistent spacing between Account settings sections", () => {

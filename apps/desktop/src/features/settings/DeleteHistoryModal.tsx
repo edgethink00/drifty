@@ -8,6 +8,7 @@ import { localDateKey } from "../../lib/formatting";
 import { SettingsSelect } from "./SettingsSelect";
 import type { SettingsSelectOption } from "./SettingsSelect";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 import "./DeleteHistoryModal.css";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
@@ -56,13 +57,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  useModalDismiss(onClose, { disabled: deleting });
 
   useEffect(() => {
     setArmed(false);
@@ -149,6 +144,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
             ) : null}
 
             <div className="modal-foot">
+              <span className="modal-foot__note">{t("settings.deleteHistory.note")}</span>
               <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
                 {t("settings.deleteHistory.cancel")}
               </button>

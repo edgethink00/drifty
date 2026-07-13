@@ -1,5 +1,6 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 import { FEEDBACK_CATEGORY_OPTIONS, submitFeedback, type FeedbackAttachment, type FeedbackCategory } from "./feedbackService";
 
 const MESSAGE_MAX_LENGTH = 3_000;
@@ -37,6 +38,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   const [isSent, setIsSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewUrlsRef = useRef<string[]>([]);
+  useModalDismiss(onClose, { disabled: isSending });
 
   useEffect(() => {
     return () => revokeAllPreviewUrls(previewUrlsRef);

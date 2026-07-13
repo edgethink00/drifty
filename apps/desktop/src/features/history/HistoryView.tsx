@@ -3,6 +3,7 @@ import type { ActivitySegment, AppIconMap } from "@drifty/domain";
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -44,6 +45,7 @@ export function HistoryView({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
+  useModalDismiss(() => setConfirmOpen(false), { disabled: !confirmOpen || deleting });
   const query = searchQuery ?? uncontrolledQuery;
   const normalizedQuery = query.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
@@ -228,10 +230,10 @@ export function HistoryView({
               This removes {selectedCount} local activity {selectedCount === 1 ? "record" : "records"} from this Mac.
             </p>
             <div className="history-confirm__actions">
-              <button type="button" className="settings-btn" disabled={deleting} onClick={() => setConfirmOpen(false)}>
+              <button type="button" className="modal-btn modal-btn--ghost" disabled={deleting} onClick={() => setConfirmOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className="settings-btn settings-btn--danger" disabled={deleting} onClick={() => void confirmDelete()}>
+              <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={() => void confirmDelete()}>
                 Delete records
               </button>
             </div>

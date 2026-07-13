@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { GoogleMark } from "../onboarding/components/GoogleMark";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type AuthMode = "sign-in" | "sign-up";
 
@@ -23,6 +24,7 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  useModalDismiss(() => onClose?.(), { disabled: !onClose || isSubmitting || isGoogleSubmitting });
 
   if (!isEnabled) {
     return (

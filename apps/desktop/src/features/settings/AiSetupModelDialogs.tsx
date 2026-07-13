@@ -1,5 +1,7 @@
 import type { FormEvent } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 export type AiModelOption = {
   readonly id: string;
@@ -32,12 +34,16 @@ export function OpenRouterModelDialog({
   onToggleModel,
 }: OpenRouterModelDialogProps) {
   const { t } = useLocalization();
+  useModalDismiss(onClose);
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
-        <div className="auth-modal__header">
-          <h2 id="openrouter-model-picker-title">{t("settings.ai.openRouterModels")}</h2>
-          <p>{t("settings.ai.openRouterModelsDescription")}</p>
+        <ModalCloseButton label={t("settings.ai.close")} onClick={onClose} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id="openrouter-model-picker-title">{t("settings.ai.openRouterModels")}</h2>
+            <p>{t("settings.ai.openRouterModelsDescription")}</p>
+          </div>
         </div>
         <div className="model-picker-list" role="group" aria-label={t("settings.ai.openRouterModelChoicesAria")}>
           {options.map((option) => {
@@ -71,11 +77,10 @@ export function OpenRouterModelDialog({
         <form className="model-picker-custom" onSubmit={onAddCustomModel}>
           <label htmlFor="openrouter-custom-model">{t("settings.ai.otherModel")}</label>
           <div>
-            <input id="openrouter-custom-model" className="settings-input" aria-label={t("settings.ai.otherOpenRouterModelAria")} value={customModel} onChange={(event) => onCustomModelChange(event.target.value)} placeholder="provider/model-name" />
-            <button type="submit" className="settings-btn">{t("settings.ai.addModel")}</button>
+            <input id="openrouter-custom-model" className="settings-input modal-code" aria-label={t("settings.ai.otherOpenRouterModelAria")} value={customModel} onChange={(event) => onCustomModelChange(event.target.value)} placeholder="provider/model-name" />
+            <button type="submit" className="modal-btn modal-btn--secondary">{t("settings.ai.addModel")}</button>
           </div>
         </form>
-        <button type="button" className="settings-btn auth-modal__close" onClick={onClose}>{t("settings.ai.close")}</button>
       </section>
     </div>
   );

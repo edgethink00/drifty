@@ -4,6 +4,8 @@ import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { ProjectColorToken } from "../../components/ProjectColorToken";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 
@@ -77,17 +79,9 @@ function ProjectEditorModal({
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [color, setColor] = useState(project?.color || COLOR_SWATCHES[0].color);
-  const [colorOpen, setColorOpen] = useState(false);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useModalDismiss(onClose, { disabled: actionLoading });
 
-  const colorName = COLOR_SWATCHES.find((swatch) => swatch.color === color)?.name ?? "Custom";
 
   // The editor is deliberately signal-free — the description is the project's
   // definition. Signals keep whatever the project already has (harvested/auto).
@@ -142,34 +136,14 @@ function ProjectEditorModal({
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
-          <div className="team-editor-inline">
-            <div className={`team-pick${colorOpen ? " is-open" : ""}`}>
-              <span className="label-mono">Color</span>
-              <button type="button" className="team-pick__trigger" aria-expanded={colorOpen} onClick={() => setColorOpen((open) => !open)}>
-                <span className="team-pick__swatch" style={{ background: color }} />
-                <span className="team-pick__val">{colorName}</span>
-                <svg className="team-pick__chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
-              </button>
-              {colorOpen ? (
-                <div className="team-pick__pop" role="radiogroup" aria-label="Project color">
-                  {COLOR_SWATCHES.map((swatch) => (
-                    <button
-                      type="button"
-                      className={swatch.color === color ? "team-swatch team-swatch--on" : "team-swatch"}
-                      style={{ background: swatch.color }}
-                      role="radio"
-                      aria-checked={swatch.color === color}
-                      aria-label={`Color ${swatch.name}`}
-                      key={swatch.color}
-                      onClick={() => {
-                        setColor(swatch.color);
-                        setColorOpen(false);
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
+          <div className="team-modal__field">
+            <span className="label-mono" id="team-editor-color-label">Color</span>
+            <ProjectColorToken
+              value={color}
+              swatches={COLOR_SWATCHES}
+              ariaLabel="Project color"
+              onPick={setColor}
+            />
           </div>
           {actionError ? <p className="team-message team-message--error">{actionError}</p> : null}
           <div className="modal-foot team-modal__actions">

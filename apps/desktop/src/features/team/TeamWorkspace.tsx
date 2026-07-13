@@ -10,6 +10,7 @@ import type { TeamPeriod } from "./teamTypes";
 import { useTeamProjects, type TeamProjectsSubView } from "./useTeamProjects";
 import type { UseTeamControllerResult } from "./useTeamController";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 import "./team.css";
 
 /** Sidebar-initiated actions that open a workspace modal (see App's team nav menu). */
@@ -80,6 +81,11 @@ export function TeamWorkspace({
   const copyTimerRef = useRef<number | null>(null);
   const addSubmittedRef = useRef(false);
   const inviteRequestedRef = useRef(false);
+  useModalDismiss(() => {
+    if (inviteOpen) setInviteOpen(false);
+    else if (settingsOpen) setSettingsOpen(false);
+    else if (addOpen) setAddOpen(false);
+  }, { disabled: !inviteOpen && !settingsOpen && !addOpen });
 
   const {
     teams,
@@ -413,7 +419,7 @@ export function TeamWorkspace({
                   <span className="label-mono">Invite link</span>
                   <div className="team-copy-row">
                     <input
-                      className="settings-input"
+                      className="settings-input modal-code"
                       readOnly
                       value={inviteUrl || inviteCode}
                       aria-label="Invite link"
@@ -556,7 +562,7 @@ export function TeamWorkspace({
             </div>
           </div>
           <div className="team-modal__body">
-            <div className="team-seg" role="tablist" aria-label="Add team mode" style={{ justifySelf: "start" }}>
+            <div className="team-seg" role="tablist" aria-label="Add team mode">
               <button
                 type="button"
                 role="tab"

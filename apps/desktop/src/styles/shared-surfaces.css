@@ -675,11 +675,6 @@
   color: var(--accent);
 }
 
-.auth-modal__close {
-  width: 100%;
-  margin-top: var(--space-3);
-}
-
 .debug-log-modal__overlay {
   padding: clamp(var(--space-3), 2vw, var(--space-6));
 }
@@ -1010,18 +1005,6 @@
 
 .feedback-modal__sent + .feedback-modal__actions {
   margin-top: var(--space-4);
-}
-
-.feedback-modal__primary {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--canvas);
-}
-
-.feedback-modal__primary:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
 }
 
 .feedback-modal__sent {

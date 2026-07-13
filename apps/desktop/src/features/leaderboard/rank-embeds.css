@@ -4,16 +4,11 @@
   width: min(860px, calc(100vw - 32px));
 }
 
-/* Compact header: small inline icon + title/sub on one tight block. */
+/* Compact header: title/sub on one tight block (icon tile removed in v1.2). */
 .rank-embeds-modal__header {
   align-items: center;
   gap: var(--space-2);
   margin-bottom: 0;
-}
-
-.rank-embeds-modal__header .profile-modal__avatar {
-  height: 34px;
-  width: 34px;
 }
 
 .rank-embeds-modal__header h2 {

@@ -369,7 +369,12 @@ describe("App auth modal", () => {
     expect(Object.keys(payload).sort()).toEqual(["attachments", "category", "email", "message"]);
     expect((await within(dialog).findByRole("status")).textContent).toMatch(/we got your feedback/i);
     expect(within(dialog).queryByRole("button", { name: /^sent$/i })).toBeNull();
-    expect((within(dialog).getByRole("button", { name: /^close$/i }) as HTMLButtonElement).disabled).toBe(false);
+    // Two accessible "Close" controls exist after sending: the circular modal-x
+    // and the footer pill — assert on the footer action.
+    const closeButtons = within(dialog).getAllByRole("button", { name: /^close$/i }) as HTMLButtonElement[];
+    const footerClose = closeButtons.find((button) => button.classList.contains("modal-btn"));
+    expect(footerClose).toBeTruthy();
+    expect(footerClose!.disabled).toBe(false);
   });
 
   it("closes sign-in when authentication completes", async () => {

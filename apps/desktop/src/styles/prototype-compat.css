@@ -852,7 +852,7 @@
   overflow-y: auto;
 }
 
-.model-picker-modal .auth-modal__header {
+.model-picker-modal .modal-head {
   margin-bottom: 0;
 }
 

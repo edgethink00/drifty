@@ -4,6 +4,7 @@ import type { PublicProfile } from "./profileService";
 import { formatCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
 import { MetricTile } from "../../components/MetricTile";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 import type { ChangeEvent } from "react";
 
 export type ProfileDraft = {
@@ -34,6 +35,7 @@ export function ProfileModal({
   const focusSeconds = row.focus_seconds;
   const rank = row.rank;
   const periodFocusLabel = getLeaderboardPeriodFocusLabel(row.period);
+  useModalDismiss(onClose);
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
@@ -54,7 +56,7 @@ export function ProfileModal({
           <MetricTile label="Focus" value={formatCompactDurationFromSeconds(focusSeconds)} detail={periodFocusLabel} />
           <MetricTile label="Updated" value={formatRelativeTime(row.updated_at)} />
         </div>
-        <p className="profile-modal__privacy" style={{ marginBottom: 0 }}>Only public profile fields and aggregate leaderboard totals are shown. Raw app, site, window, and session history is not shown on your public profile.</p>
+        <p className="profile-modal__privacy">Only public profile fields and aggregate leaderboard totals are shown. Raw app, site, window, and session history is not shown on your public profile.</p>
       </section>
     </div>
   );
@@ -89,6 +91,7 @@ export function EditProfileModal({
 }) {
   const trimmedAvatarUrl = avatarUrl.trim();
   const bioLength = profileDraft.bio.length;
+  useModalDismiss(onClose, { disabled: profileSaving });
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
@@ -137,9 +140,9 @@ export function EditProfileModal({
             </label>
             <fieldset className="profile-editor-links">
               <legend>Public links</legend>
-              <label><span>Website</span><input className="settings-input" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-              <label><span>GitHub</span><input className="settings-input" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
-              <label><span>LinkedIn</span><input className="settings-input" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+              <label><span>Website</span><input className="settings-input modal-code" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+              <label><span>GitHub</span><input className="settings-input modal-code" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+              <label><span>LinkedIn</span><input className="settings-input modal-code" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             </fieldset>
             <PublicProfileToggle
               checked={profileDraft.isPublic}

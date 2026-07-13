@@ -17,7 +17,7 @@ describe("DriftAlarmCopySettings", () => {
     const tablist = within(dialog).getByRole("tablist", { name: "Alarm copy sections" });
     expect(tablist.closest(".drift-copy-editor")).not.toBeNull();
     expect(tablist.closest(".drift-copy-preview")).toBeNull();
-    expect(within(dialog).getByRole("button", { name: "Close" }).textContent).toBe("x");
+    expect(within(dialog).getByRole("button", { name: "Close" }).classList.contains("modal-x")).toBe(true);
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();
     expect(within(dialog).queryByLabelText("Current context pill")).toBeNull();
     expect(within(dialog).queryByLabelText("Latest focus pill")).toBeNull();

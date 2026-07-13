@@ -5,6 +5,8 @@ import {
   type DashboardAiUnavailableState,
   type DashboardAiUnavailableVariant,
 } from "./DashboardAiUnavailableNotice";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type DashboardAiRecoveryOverlayProps = {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
@@ -25,12 +27,11 @@ export function DashboardAiRecoveryOverlay({
   onRetryAi,
   onSelectBillingPlan,
 }: DashboardAiRecoveryOverlayProps) {
+  useModalDismiss(onClose, { disabled: retrying });
   return (
     <div className={`dashboard-ai-recovery dashboard-ai-recovery--${state.variant}`}>
       <section className="dashboard-ai-recovery__panel" role="dialog" aria-label="Restore AI analysis">
-        <button type="button" className="dashboard-ai-recovery__close" aria-label="Dismiss AI recovery" onClick={onClose}>
-          x
-        </button>
+        <ModalCloseButton label="Dismiss AI recovery" onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">
           <span className="label-mono">{isCloudBillingVariant(state.variant) ? "Cloud AI paused" : "AI disconnected"}</span>
           <h2>{state.title}</h2>
@@ -46,10 +47,10 @@ export function DashboardAiRecoveryOverlay({
           </div>
         ) : (
           <div className="dashboard-ai-recovery__actions">
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onRetryAi} disabled={retrying}>
+            <button type="button" className="modal-btn modal-btn--primary" onClick={onRetryAi} disabled={retrying}>
               {retrying ? "Retrying AI..." : "Retry AI"}
             </button>
-            <button type="button" className="settings-btn" onClick={onOpenAiSetup}>
+            <button type="button" className="modal-btn modal-btn--secondary" onClick={onOpenAiSetup}>
               Open AI setup
             </button>
           </div>

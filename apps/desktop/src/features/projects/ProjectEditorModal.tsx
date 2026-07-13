@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Project, ProjectInput } from "@drifty/domain";
 import { firstUnusedProjectColor } from "../settings/projectPalette";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { ProjectColorToken } from "../../components/ProjectColorToken";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 const COLOR_SWATCHES = [
   { color: "#6366f1", name: "Indigo" },
@@ -29,7 +31,8 @@ export interface ProjectEditorModalProps {
 /**
  * Create/edit project modal (name, description, color) shared by the table
  * manager and the project detail view. Same layout language as the team
- * project editor: X-close head, wide two-column top row, named color picker.
+ * project editor: X-close head, stacked name → description → color fields,
+ * named color picker ("Drifty Modals" v1.3 §13).
  */
 export function ProjectEditorModal({ project, projects, busy = false, onSave, onClose }: ProjectEditorModalProps): JSX.Element {
   const isEditing = Boolean(project);
@@ -37,7 +40,6 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const [description, setDescription] = useState(project?.description ?? "");
   const [color, setColor] = useState(project?.color || COLOR_SWATCHES[0].color);
   const [colorTouched, setColorTouched] = useState(isEditing);
-  const [colorOpen, setColorOpen] = useState(false);
 
   const usedColors = useMemo(
     () => new Set(
@@ -49,16 +51,9 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   );
   const suggestedColor = useMemo(() => firstUnusedProjectColor([...usedColors]), [usedColors]);
   const effectiveColor = colorTouched ? color : suggestedColor;
-  const colorName = COLOR_SWATCHES.find((swatch) => swatch.color === effectiveColor)?.name ?? "Custom";
   const canSave = name.trim().length > 0 && !busy;
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  useModalDismiss(onClose, { disabled: busy });
 
   const handleSave = () => {
     const trimmedName = name.trim();
@@ -90,60 +85,17 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
           </div>
         </div>
         <div className="projects-editor__card">
-          <div className="projects-editor__row">
-            <div className="projects-field projects-field--name">
-              <label className="projects-field__label" htmlFor="projects-name-input">Project name</label>
-              <input
-                id="projects-name-input"
-                className="settings-input projects-field__input"
-                type="text"
-                value={name}
-                autoFocus
-                placeholder="Project name"
-                onChange={(event) => setName(event.target.value)}
-              />
-            </div>
-            <div className="projects-field projects-field--color">
-              <span className="projects-field__label" id="projects-color-label">Color</span>
-              <div className={`team-pick${colorOpen ? " is-open" : ""}`}>
-                <button
-                  type="button"
-                  className="team-pick__trigger"
-                  aria-labelledby="projects-color-label"
-                  aria-expanded={colorOpen}
-                  onClick={() => setColorOpen((open) => !open)}
-                >
-                  <span className="team-pick__swatch" style={{ background: effectiveColor }} />
-                  <span className="team-pick__val">{colorName}</span>
-                  <svg className="team-pick__chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
-                </button>
-                {colorOpen ? (
-                  <div className="team-pick__pop" role="radiogroup" aria-label="Project color">
-                    {COLOR_SWATCHES.map((swatch) => {
-                      const isSelected = swatch.color === effectiveColor;
-                      const isUsed = !isSelected && usedColors.has(swatch.color);
-                      return (
-                        <button
-                          type="button"
-                          className={`team-swatch${isSelected ? " team-swatch--on" : ""}${isUsed ? " team-swatch--used" : ""}`}
-                          style={{ background: swatch.color }}
-                          role="radio"
-                          aria-checked={isSelected}
-                          aria-label={`Color ${swatch.name}${isUsed ? " (already used)" : ""}`}
-                          title={isUsed ? "Already used by another project" : swatch.name}
-                          key={swatch.color}
-                          onClick={() => {
-                            setColor(swatch.color);
-                            setColorTouched(true);
-                            setColorOpen(false);
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+          <div className="projects-field projects-field--name">
+            <label className="projects-field__label" htmlFor="projects-name-input">Project name</label>
+            <input
+              id="projects-name-input"
+              className="settings-input projects-field__input"
+              type="text"
+              value={name}
+              autoFocus
+              placeholder="Project name"
+              onChange={(event) => setName(event.target.value)}
+            />
           </div>
           <div className="projects-field">
             <label className="projects-field__label" htmlFor="projects-description-input">Description</label>
@@ -154,6 +106,19 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
               value={description}
               placeholder="e.g. Everything for the Q3 marketing site redesign — Figma mockups, the Next.js repo, and launch-planning docs."
               onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+          <div className="projects-field projects-field--color">
+            <span className="projects-field__label" id="projects-color-label">Color</span>
+            <ProjectColorToken
+              value={effectiveColor}
+              swatches={COLOR_SWATCHES}
+              usedColors={usedColors}
+              ariaLabel="Project color"
+              onPick={(picked) => {
+                setColor(picked);
+                setColorTouched(true);
+              }}
             />
           </div>
         </div>

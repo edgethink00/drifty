@@ -238,18 +238,6 @@
   justify-content: flex-end;
 }
 
-.content--settings .settings-btn.cloud-device-confirm__remove {
-  background: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 82%, var(--line-strong));
-  color: var(--canvas);
-}
-
-.content--settings .settings-btn.cloud-device-confirm__remove:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn) 88%, var(--text));
-  border-color: var(--warn);
-  color: var(--canvas);
-}
-
 @keyframes cloud-device-refresh-spin {
   to {
     transform: rotate(360deg);

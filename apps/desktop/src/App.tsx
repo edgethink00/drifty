@@ -83,6 +83,7 @@ import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus"
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
+import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
@@ -6519,6 +6520,7 @@ export default function App() {
       {debugLogPreview ? (
         <DebugLogModal
           text={debugLogPreview.text}
+          note={`Generated ${new Date(debugLogPreview.exportedAt).toLocaleTimeString()} · v${BUILD_INFO.version}`}
           onClose={() => setDebugLogPreview(null)}
           onCopy={() => void handleCopyDebugLogs()}
           onDownload={handleDownloadDebugLogs}
