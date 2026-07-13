@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
 import type { TeamProjectsWindow } from "./useTeamProjects";
 
@@ -109,18 +110,12 @@ function ProjectEditorModal({
         aria-labelledby="team-editor-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="team-editor-head">
-          <span className="team-editor-head__badge" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></svg>
-          </span>
-          <h2 id="team-editor-title" className="team-editor-head__title">
-            <span className="team-editor-head__team">{teamName}</span>
-            <span className="team-editor-head__sep">/</span>
-            {state.mode === "edit" ? "Edit project" : "New shared project"}
-          </h2>
-          <button type="button" className="team-editor-head__x" aria-label="Close project editor" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-          </button>
+        <ModalCloseButton label="Close project editor" onClick={onClose} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id="team-editor-title">{state.mode === "edit" ? "Edit project" : "New shared project"}</h2>
+            <p>{teamName} · shared project</p>
+          </div>
         </div>
         <div className="team-modal__body">
           <div className="team-modal__field">
@@ -177,8 +172,9 @@ function ProjectEditorModal({
             </div>
           </div>
           {actionError ? <p className="team-message team-message--error">{actionError}</p> : null}
-          <div className="team-modal__actions">
-            <button type="button" className="settings-btn settings-btn--primary" disabled={actionLoading || !name.trim()} onClick={submit}>
+          <div className="modal-foot team-modal__actions">
+            <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="modal-btn modal-btn--primary" disabled={actionLoading || !name.trim()} onClick={submit}>
               {state.mode === "edit" ? "Save changes" : "Create project"}
             </button>
           </div>

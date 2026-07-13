@@ -9,6 +9,7 @@ import type { AcceptTeamInviteInput } from "./teamService";
 import type { TeamPeriod } from "./teamTypes";
 import { useTeamProjects, type TeamProjectsSubView } from "./useTeamProjects";
 import type { UseTeamControllerResult } from "./useTeamController";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 import "./team.css";
 
 /** Sidebar-initiated actions that open a workspace modal (see App's team nav menu). */
@@ -398,14 +399,10 @@ export function TeamWorkspace({
           aria-labelledby="team-invite-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" className="profile-modal__x" aria-label="Close invite dialog" onClick={() => setInviteOpen(false)}>&times;</button>
-          <div className="team-modal__header">
-            <div className="team-modal__avatar" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
-            </div>
-            <div>
-              <span className="label-mono">{selectedTeam?.organization_name}</span>
-              <h2 id="team-invite-title">Invite a member</h2>
+          <ModalCloseButton label="Close invite dialog" onClick={() => setInviteOpen(false)} />
+          <div className="modal-head">
+            <div className="modal-head__copy">
+              <h2 id="team-invite-title">Invite to {selectedTeam?.organization_name ?? "your team"}</h2>
               <p>Share one link or code — data stays aggregate-only.</p>
             </div>
           </div>
@@ -422,7 +419,7 @@ export function TeamWorkspace({
                       aria-label="Invite link"
                       onFocus={(event) => event.target.select()}
                     />
-                    <button type="button" className="settings-btn settings-btn--primary" onClick={() => copyValue("link", inviteUrl || inviteCode)}>
+                    <button type="button" className="modal-btn modal-btn--primary" onClick={() => copyValue("link", inviteUrl || inviteCode)}>
                       {copiedKey === "link" ? "Copied ✓" : "Copy link"}
                     </button>
                   </div>
@@ -442,7 +439,7 @@ export function TeamWorkspace({
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.2 12a7.8 7.8 0 0 1 13.2-5.6L20 8.6" /><path d="M19.8 12a7.8 7.8 0 0 1-13.2 5.6L4 15.4" /><path d="M20 4v4.6h-4.6M4 20v-4.6h4.6" /></svg>
                       </button>
-                      <button type="button" className="ghost-button" onClick={() => copyValue("code", inviteCode)}>
+                      <button type="button" className="modal-btn modal-btn--ghost" onClick={() => copyValue("code", inviteCode)}>
                         {copiedKey === "code" ? "Copied ✓" : "Copy"}
                       </button>
                     </div>
@@ -470,13 +467,11 @@ export function TeamWorkspace({
           aria-labelledby="team-settings-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" className="profile-modal__x" aria-label="Close" onClick={() => setSettingsOpen(false)}>&times;</button>
-          <div className="team-modal__header">
-            <div className="team-modal__avatar" aria-hidden="true"><TeamBadgeIcon /></div>
-            <div>
-              <span className="label-mono">{selectedTeam?.organization_name}</span>
+          <ModalCloseButton label="Close" onClick={() => setSettingsOpen(false)} />
+          <div className="modal-head">
+            <div className="modal-head__copy">
               <h2 id="team-settings-title">Team settings</h2>
-              <p>Your membership and sharing controls for this team.</p>
+              <p>{selectedTeam?.organization_name ?? "Your team"} — membership and sharing.</p>
             </div>
           </div>
           <div className="team-modal__body team-settings">
@@ -494,7 +489,7 @@ export function TeamWorkspace({
                 <span className="label-mono">Invites</span>
                 <button
                   type="button"
-                  className="settings-btn team-set-invite"
+                  className="modal-btn modal-btn--secondary team-set-invite"
                   onClick={() => {
                     setSettingsOpen(false);
                     setInviteOpen(true);
@@ -519,7 +514,7 @@ export function TeamWorkspace({
               <div className="team-set-share">
                 <button
                   type="button"
-                  className="settings-btn settings-btn--primary"
+                  className="modal-btn modal-btn--primary"
                   disabled={projects.publishing}
                   aria-label="Share my project time with the team"
                   onClick={() => void projects.publishMyTime()}
@@ -529,7 +524,7 @@ export function TeamWorkspace({
                 </button>
                 <button
                   type="button"
-                  className="ghost-button"
+                  className="modal-btn modal-btn--ghost"
                   aria-label="Stop sharing my project time"
                   onClick={() => void projects.stopSharing()}
                 >
@@ -554,14 +549,14 @@ export function TeamWorkspace({
           aria-labelledby="team-add-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="team-editor-head">
-            <span className="team-editor-head__badge" aria-hidden="true"><TeamBadgeIcon /></span>
-            <h2 id="team-add-title" className="team-editor-head__title">
-              <span className="team-editor-head__team">Teams</span>
-              <span className="team-editor-head__sep">/</span>
-              Add a team
-            </h2>
-            <div className="team-seg team-seg--head" role="tablist" aria-label="Add team mode">
+          <ModalCloseButton label="Close" onClick={() => setAddOpen(false)} />
+          <div className="modal-head">
+            <div className="modal-head__copy">
+              <h2 id="team-add-title">Add a team</h2>
+            </div>
+          </div>
+          <div className="team-modal__body">
+            <div className="team-seg" role="tablist" aria-label="Add team mode" style={{ justifySelf: "start" }}>
               <button
                 type="button"
                 role="tab"
@@ -581,11 +576,6 @@ export function TeamWorkspace({
                 <span>Join</span>
               </button>
             </div>
-            <button type="button" className="team-editor-head__x" aria-label="Close" onClick={() => setAddOpen(false)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-            </button>
-          </div>
-          <div className="team-modal__body">
             {addTab === "create" ? (
               <>
                 <div className="team-modal__field">
@@ -604,9 +594,9 @@ export function TeamWorkspace({
                   <p className="team-modal__hint">You'll manage this team as its admin.</p>
                 </div>
                 {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
-                <div className="team-modal__actions">
-                  <button type="button" className="settings-btn" onClick={() => setAddOpen(false)}>Cancel</button>
-                  <button type="button" className="settings-btn settings-btn--primary" disabled={teamActionLoading || !teamName.trim()} onClick={submitCreateTeam}>
+                <div className="modal-foot team-modal__actions">
+                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>Cancel</button>
+                  <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !teamName.trim()} onClick={submitCreateTeam}>
                     Create team
                   </button>
                 </div>
@@ -629,9 +619,9 @@ export function TeamWorkspace({
                   <p className="team-modal__hint">Joining shares nothing until your first Share my time.</p>
                 </div>
                 {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
-                <div className="team-modal__actions">
-                  <button type="button" className="settings-btn" onClick={() => setAddOpen(false)}>Cancel</button>
-                  <button type="button" className="settings-btn settings-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} onClick={submitJoin}>
+                <div className="modal-foot team-modal__actions">
+                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>Cancel</button>
+                  <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} onClick={submitJoin}>
                     Join team
                   </button>
                 </div>

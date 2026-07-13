@@ -1,4 +1,5 @@
 import type { MouseEvent } from "react";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 
 type DebugLogModalProps = {
   readonly text: string;
@@ -17,13 +18,16 @@ export function DebugLogModal({ text, onClose, onCopy, onDownload }: DebugLogMod
         aria-label="Debug log"
         onClick={(event: MouseEvent<HTMLElement>) => event.stopPropagation()}
       >
-        <button type="button" className="debug-log-modal__close" aria-label="Close debug log" onClick={onClose}>
-          X
-        </button>
+        <ModalCloseButton label="Close debug log" onClick={onClose} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2>Debug log</h2>
+          </div>
+        </div>
         <pre className="debug-log-modal__text" aria-label="Debug log JSON">{text}</pre>
-        <div className="debug-log-modal__actions">
-          <button type="button" className="settings-btn debug-log-modal__action" onClick={onCopy}>Copy</button>
-          <button type="button" className="settings-btn settings-btn--primary debug-log-modal__action" onClick={onDownload}>Download</button>
+        <div className="modal-foot debug-log-modal__actions">
+          <button type="button" className="modal-btn modal-btn--secondary debug-log-modal__action" onClick={onCopy}>Copy</button>
+          <button type="button" className="modal-btn modal-btn--primary debug-log-modal__action" onClick={onDownload}>Download</button>
         </div>
       </section>
     </div>

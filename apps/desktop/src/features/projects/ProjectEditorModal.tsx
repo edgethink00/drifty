@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Project, ProjectInput } from "@drifty/domain";
 import { firstUnusedProjectColor } from "../settings/projectPalette";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 
 const COLOR_SWATCHES = [
   { color: "#6366f1", name: "Indigo" },
@@ -82,11 +83,11 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
         aria-labelledby="projects-editor-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="projects-editor__head">
-          <h2 id="projects-editor-title">{isEditing ? "Edit project" : "New project"}</h2>
-          <button type="button" className="projects-editor__close" aria-label="Close project editor" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-          </button>
+        <ModalCloseButton label="Close project editor" onClick={onClose} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id="projects-editor-title">{isEditing ? "Edit project" : "New project"}</h2>
+          </div>
         </div>
         <div className="projects-editor__card">
           <div className="projects-editor__row">
@@ -156,8 +157,9 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
             />
           </div>
         </div>
-        <div className="projects-editor__actions">
-          <button type="button" className="settings-btn settings-btn--primary" onClick={handleSave} disabled={!canSave}>
+        <div className="modal-foot">
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={handleSave} disabled={!canSave}>
             {isEditing ? "Save changes" : "Create project"}
           </button>
         </div>

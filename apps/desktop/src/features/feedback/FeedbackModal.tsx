@@ -1,4 +1,5 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { FEEDBACK_CATEGORY_OPTIONS, submitFeedback, type FeedbackAttachment, type FeedbackCategory } from "./feedbackService";
 
 const MESSAGE_MAX_LENGTH = 3_000;
@@ -168,8 +169,11 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
         aria-labelledby="feedback-modal-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="auth-modal__header feedback-modal__header">
-          <h2 id="feedback-modal-title">{isSent ? "Feedback sent" : "Send feedback"}</h2>
+        <ModalCloseButton label="Close" onClick={() => { if (!isSending) onClose(); }} />
+        <div className="modal-head feedback-modal__header">
+          <div className="modal-head__copy">
+            <h2 id="feedback-modal-title">{isSent ? "Feedback sent" : "Send feedback"}</h2>
+          </div>
         </div>
 
         {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
@@ -273,11 +277,11 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
               />
             </label>
 
-            <div className="feedback-modal__actions">
-              <button type="button" className="ghost-button" onClick={onClose} disabled={isSending}>
+            <div className="modal-foot feedback-modal__actions">
+              <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
                 Cancel
               </button>
-              <button type="submit" className="settings-btn feedback-modal__primary" disabled={isSending}>
+              <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending}>
                 {isSending ? "Sending…" : "Send feedback"}
               </button>
             </div>
@@ -285,11 +289,11 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
         )}
 
         {isSent ? (
-          <div className="feedback-modal__actions">
-            <button type="button" className="ghost-button" onClick={handleSendAnother}>
+          <div className="modal-foot feedback-modal__actions">
+            <button type="button" className="modal-btn modal-btn--ghost" onClick={handleSendAnother}>
               Send another
             </button>
-            <button type="button" className="settings-btn feedback-modal__primary" onClick={onClose} autoFocus>
+            <button type="button" className="modal-btn modal-btn--primary" onClick={onClose} autoFocus>
               Close
             </button>
           </div>

@@ -12,6 +12,7 @@ import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "./ProfileModals";
 import { buildEmbedGroups, SnippetCopyRow, summarizeDailyProductivity } from "./ProfileEmbedGroups";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 
 export type ProfileEmbedFormat = "badge" | "card" | "chart" | "data";
 
@@ -124,7 +125,8 @@ export function ProfileEmbedsModal({
 
   const copyInputClassName = "settings-input profile-field profile-field--code profile-embed-card__code";
   const copyRowClassName = "profile-copy-row profile-embed-card__variant-row";
-  const primaryButtonClassName = "settings-btn settings-btn--primary profile-btn";
+  const primaryButtonClassName = "modal-btn modal-btn--primary profile-btn";
+  const copyButtonClassName = "modal-btn modal-btn--secondary profile-btn";
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
@@ -135,17 +137,9 @@ export function ProfileEmbedsModal({
         aria-labelledby="embeds-modal-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <button type="button" className="profile-modal__x" aria-label="Close embeds" onClick={onClose}>×</button>
+        <ModalCloseButton label="Close embeds" onClick={onClose} />
         <div className="profile-modal__header">
-          <div className="profile-modal__avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
-              <path d="m8 8-4.5 4L8 16" />
-              <path d="m16 8 4.5 4L16 16" />
-              <path d="m13.2 5.5-2.4 13" />
-            </svg>
-          </div>
           <div>
-            <span className="label-mono">Share</span>
             <h2 id="embeds-modal-title">Profile embed</h2>
             <p>Choose a format for the aggregate data shared from Profile.</p>
           </div>
@@ -183,7 +177,7 @@ export function ProfileEmbedsModal({
                         value={publicProfileUrl}
                         onFocus={(event) => event.currentTarget.select()}
                       />
-                      <button type="button" className={primaryButtonClassName} aria-label="Copy profile link" onClick={onCopyProfileLink}>
+                      <button type="button" className={copyButtonClassName} aria-label="Copy profile link" onClick={onCopyProfileLink}>
                         Copy
                       </button>
                     </div>
@@ -208,7 +202,7 @@ export function ProfileEmbedsModal({
                       <div key={variant.key} className="profile-embed-card__variant" style={{ display: "grid", gap: 6 }}>
                         <span className="label-mono profile-embed-card__variant-label">{variant.label}</span>
                         <SnippetCopyRow
-                          buttonClassName={primaryButtonClassName}
+                          buttonClassName={copyButtonClassName}
                           cardLocked={cardLocked}
                           copied={copiedKey === variant.key}
                           inputClassName={copyInputClassName}

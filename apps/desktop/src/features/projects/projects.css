@@ -242,46 +242,6 @@
   max-width: 42rem;
 }
 
-.projects-editor__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-
-.projects-editor__head h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.18rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.projects-editor__close {
-  flex: 0 0 auto;
-  width: 1.9rem;
-  height: 1.9rem;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.projects-editor__close:hover {
-  background: color-mix(in srgb, var(--line) 46%, transparent);
-  color: var(--text);
-}
-
-.projects-editor__close svg {
-  width: 15px;
-  height: 15px;
-}
-
 /* Wide top row: name stretches, the color picker sits beside it. */
 .projects-editor__row {
   display: grid;

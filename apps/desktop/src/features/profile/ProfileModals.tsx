@@ -3,6 +3,7 @@ import { getLeaderboardPeriodFocusLabel } from "../leaderboard/leaderboardWindow
 import type { PublicProfile } from "./profileService";
 import { formatCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
 import { MetricTile } from "../../components/MetricTile";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 import type { ChangeEvent } from "react";
 
 export type ProfileDraft = {
@@ -37,10 +38,10 @@ export function ProfileModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
+        <ModalCloseButton label="Close profile" onClick={onClose} />
         <div className="profile-modal__header">
           {profile?.avatar_url ? <img className="profile-modal__avatar" src={profile.avatar_url} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
           <div>
-            <span className="label-mono">Leaderboard profile</span>
             <h2 id="public-profile-title">{displayName}</h2>
           </div>
         </div>
@@ -53,8 +54,7 @@ export function ProfileModal({
           <MetricTile label="Focus" value={formatCompactDurationFromSeconds(focusSeconds)} detail={periodFocusLabel} />
           <MetricTile label="Updated" value={formatRelativeTime(row.updated_at)} />
         </div>
-        <p className="profile-modal__privacy">Only public profile fields and aggregate leaderboard totals are shown. Raw app, site, window, and session history is not shown on your public profile.</p>
-        <button type="button" className="settings-btn auth-modal__close" onClick={onClose}>Close</button>
+        <p className="profile-modal__privacy" style={{ marginBottom: 0 }}>Only public profile fields and aggregate leaderboard totals are shown. Raw app, site, window, and session history is not shown on your public profile.</p>
       </section>
     </div>
   );
@@ -93,12 +93,10 @@ export function EditProfileModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal profile-modal profile-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="profile-modal__x" aria-label="Close profile editor" onClick={onClose}>×</button>
-        <div className="profile-modal__header">
-          {trimmedAvatarUrl ? <img className="profile-modal__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
-          <div>
-            <span id="edit-profile-dialog-title" className="label-mono">Edit profile</span>
-            <h2>{displayName}</h2>
+        <ModalCloseButton label="Close profile editor" onClick={onClose} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id="edit-profile-dialog-title">Edit profile</h2>
           </div>
         </div>
 
@@ -154,9 +152,9 @@ export function EditProfileModal({
         {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
         {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
 
-        <div className="profile-editor-modal__actions">
-          <button type="button" className="ghost-button" onClick={onClose}>Cancel</button>
-          <button type="button" className="settings-btn" onClick={onSave} disabled={profileLoading || profileSaving}>{profileSaving ? "Saving…" : "Save profile"}</button>
+        <div className="modal-foot profile-editor-modal__actions">
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving}>{profileSaving ? "Saving…" : "Save profile"}</button>
         </div>
       </section>
     </div>
@@ -179,7 +177,7 @@ export function PublicProfileToggle({
   return (
     <label className="profile-visibility-toggle">
       <input
-        className="drifty-checkbox"
+        className="modal-switch"
         type="checkbox"
         role="switch"
         aria-label="Public profile"

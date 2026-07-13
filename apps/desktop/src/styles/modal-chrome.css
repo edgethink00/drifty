@@ -1,0 +1,458 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Shared modal chrome (redesign — "Drifty Modals" v1.3)
+
+   One unified chrome for every app dialog: a circular top-right close button,
+   a single-title header (no mono eyebrow / icon tile), and a standardized
+   footer of pill buttons. Ported from the design-system gallery
+   (Drifty Modals.dc.html), with the v1.2 header-unification and v1.3 UI/UX
+   polish folded in as the default. Every modal already carries `.auth-modal`,
+   so overrides here are scoped under it to leave settings pages untouched.
+
+   Loaded last in main.tsx so these win the cascade over the base + feature
+   stylesheets (shared-surfaces, leaderboard, team, projects, rank-embeds).
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Shell polish — softer radius + a two-layer shadow (v1.3). The circular close
+   button is absolutely positioned, so the shell must be a positioning context. */
+.auth-modal {
+  position: relative;
+  border-radius: 16px;
+  border-color: var(--line);
+  box-shadow:
+    0 1px 2px rgba(28, 28, 25, 0.05),
+    0 24px 56px color-mix(in srgb, #1c1c19 10%, transparent);
+}
+
+/* ── Circular close button (replaces text "X", bottom Cancel/Close rows) ─── */
+.modal-x {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.modal-x:hover {
+  background: var(--bg-2);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.modal-x:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+}
+
+.modal-x svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+/* ── Unified header: title + optional one-line subtitle ─────────────────── */
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding-right: 2.5rem;
+}
+
+.modal-head__copy {
+  min-width: 0;
+}
+
+.modal-head__copy h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.modal-head__copy p {
+  margin: 0.22rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* profile-family headers (avatar + title) need room for the circular X too */
+.profile-modal__header {
+  padding-right: 2.6rem;
+}
+
+/* ── Standardized footer: right-aligned pill buttons + optional note ─────── */
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+}
+
+.modal-foot__note {
+  margin: 0 auto 0 0;
+  font-size: 0.66rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  padding-right: var(--space-3);
+}
+
+/* ── Pill button system (footer + inline modal actions) ─────────────────── */
+.modal-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.48rem 1.02rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.modal-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.modal-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.modal-btn--ghost {
+  color: var(--text-soft);
+}
+
+.modal-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+.modal-btn--secondary {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface-strong) 55%, transparent);
+}
+
+.modal-btn--secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+  background: var(--surface-strong);
+}
+
+.modal-btn--primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.modal-btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.modal-btn--danger {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: #fff;
+}
+
+.modal-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn) 85%, black);
+  border-color: color-mix(in srgb, var(--warn) 85%, black);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+/* Armed (second-click confirmation) danger state — darker fill + pulsing ring. */
+.modal-btn--danger.is-armed {
+  background: color-mix(in srgb, var(--warn) 82%, black);
+  border-color: color-mix(in srgb, var(--warn) 82%, black);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 26%, transparent);
+  animation: modal-btn-arm-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes modal-btn-arm-pulse {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 22%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-btn--danger.is-armed {
+    animation: none;
+  }
+}
+
+.modal-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.modal-btn--block {
+  width: 100%;
+}
+
+/* ── Toggle switch (edit-profile public visibility) ─────────────────────── */
+.modal-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 auto;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: var(--line-strong);
+  border: none;
+  cursor: pointer;
+  margin: 0;
+  transition: background 0.15s ease;
+}
+
+.modal-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: transform 0.15s ease;
+}
+
+.modal-switch:checked {
+  background: var(--accent);
+}
+
+.modal-switch:checked::after {
+  transform: translateX(14px);
+}
+
+/* ── Form language inside modals ────────────────────────────────────────── */
+/* Field labels read as mono eyebrows; inputs use the body font, mono only for
+   code / URLs (opt in with .modal-code). Scoped to .auth-modal so the settings
+   pages keep their own input styling. */
+.auth-modal .auth-modal__field > span,
+.auth-modal .feedback-modal__field > span,
+.auth-modal .projects-field__label,
+.auth-modal fieldset.feedback-modal__categories > legend {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.auth-modal .settings-input {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+}
+
+.auth-modal .settings-input.modal-code,
+.auth-modal .profile-embed-card__code {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.auth-modal .settings-input:focus-visible,
+.auth-modal .auth-modal__field input:focus-visible,
+.auth-modal .feedback-modal__textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+/* Sign-in inputs run a touch shorter vertically to balance the taller shell. */
+.auth-modal .auth-modal__field input {
+  padding-top: 0.34rem;
+  padding-bottom: 0.34rem;
+}
+
+/* ── Public-profile / edit-preview social links as chips ────────────────── */
+.profile-modal > .profile-socials,
+.profile-editor-preview .profile-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.profile-editor-preview .profile-socials {
+  margin-bottom: 0;
+}
+
+.profile-modal > .profile-socials a,
+.profile-editor-preview .profile-socials a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.34rem 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-strong) 46%, var(--surface));
+  color: var(--text);
+  font-size: 0.76rem;
+  font-family: var(--font-sans);
+  text-decoration: none;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.profile-editor-preview .profile-socials a {
+  padding: 0.24rem 0.6rem;
+  font-size: 0.68rem;
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
+}
+
+.profile-modal > .profile-socials a::before,
+.profile-editor-preview .profile-socials a::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 62%, var(--line-strong));
+  flex: 0 0 auto;
+}
+
+.profile-modal > .profile-socials a:hover,
+.profile-editor-preview .profile-socials a:hover {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: var(--accent-soft);
+}
+
+/* ── Public-visibility toggle copy (reset sidebar-form label cascade) ────── */
+.profile-editor-modal .profile-visibility-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
+.profile-editor-modal .profile-visibility-toggle__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.profile-editor-modal .profile-visibility-toggle__copy strong {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.profile-editor-modal .profile-visibility-toggle__copy small {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.5;
+  color: var(--text-soft);
+  justify-self: start;
+}
+
+/* ── Debug log — flatten the legacy grid into the shared flex layout ────── */
+.debug-log-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(960px, calc(100vw - var(--space-6)));
+  height: min(720px, calc(100vh - var(--space-6)));
+  padding: var(--space-6);
+}
+
+.debug-log-modal__text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 72%, var(--surface));
+  font-size: 0.64rem;
+  line-height: 1.6;
+  white-space: pre;
+  word-break: normal;
+  color: var(--text-soft);
+}
+
+/* ── Team segmented control + color picker polish ───────────────────────── */
+.auth-modal .team-seg {
+  flex-wrap: nowrap;
+  width: max-content;
+}
+
+.auth-modal .team-seg button {
+  padding: 0.32rem 0.9rem;
+  flex: 0 0 auto;
+}
+
+.team-pick__pop {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.team-pick .team-swatch {
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.team-pick .team-swatch:hover {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.team-pick .team-swatch--on {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 14%, transparent);
+}

@@ -7,6 +7,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { localDateKey } from "../../lib/formatting";
 import { SettingsSelect } from "./SettingsSelect";
 import type { SettingsSelectOption } from "./SettingsSelect";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 import "./DeleteHistoryModal.css";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
@@ -105,12 +106,15 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
         role="dialog"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="auth-modal__header">
-          <h2 id="delete-history-modal-title">{t("settings.deleteHistory.title")}</h2>
-          <p>
-            {t("settings.deleteHistory.description")}
-            {deviceSyncEnabled ? ` ${t("settings.deleteHistory.syncDescription")}` : ""}
-          </p>
+        <ModalCloseButton label={t("settings.deleteHistory.cancel")} onClick={onClose} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id="delete-history-modal-title">{t("settings.deleteHistory.title")}</h2>
+            <p>
+              {t("settings.deleteHistory.description")}
+              {deviceSyncEnabled ? ` ${t("settings.deleteHistory.syncDescription")}` : ""}
+            </p>
+          </div>
         </div>
 
         {error ? <p className="auth-modal__error" role="alert">{localizeSettingsError(error, effectiveLanguage, t)}</p> : null}
@@ -144,12 +148,12 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
               </div>
             ) : null}
 
-            <div className="delete-history-modal__actions">
-              <button className="settings-btn" disabled={deleting} type="button" onClick={onClose}>
+            <div className="modal-foot">
+              <button className="modal-btn modal-btn--ghost" disabled={deleting} type="button" onClick={onClose}>
                 {t("settings.deleteHistory.cancel")}
               </button>
               <button
-                className={`settings-btn danger${armed ? " is-armed" : ""}`}
+                className={`modal-btn modal-btn--danger${armed ? " is-armed" : ""}`}
                 disabled={!canDelete}
                 type="button"
                 onClick={handleDelete}

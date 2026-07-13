@@ -11,6 +11,7 @@ import {
   buildRankMarkdownSnippet,
   type RankEmbedDesign,
 } from "./rankEmbedSnippets";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 
 type RankEmbedsModalProps = {
   readonly displayName: string;
@@ -105,13 +106,10 @@ export function RankEmbedsModal({
         aria-labelledby="rank-embeds-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <button type="button" className="profile-modal__x" aria-label="Close embed" onClick={onClose}>×</button>
+        <ModalCloseButton label="Close embed" onClick={onClose} />
         <div className="profile-modal__header rank-embeds-modal__header">
-          <div className="profile-modal__avatar rank-embeds-modal__icon" aria-hidden="true">
-            <RankIcon />
-          </div>
           <div>
-            <h2 id="rank-embeds-title">Embed</h2>
+            <h2 id="rank-embeds-title">Rank embed</h2>
             <p>Your current rank and period focus. Nothing else.</p>
           </div>
         </div>
@@ -169,14 +167,14 @@ export function RankEmbedsModal({
                 <span className="label-mono">Website · HTML</span>
                 <div className="profile-copy-row profile-embed-card__variant-row">
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={htmlSnippet} onFocus={(event) => event.currentTarget.select()} />
-                  <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? "Copied" : "Copy"}</button>
+                  <button type="button" className="modal-btn modal-btn--secondary profile-btn" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? "Copied" : "Copy"}</button>
                 </div>
               </div>
               <div className="rank-embed-snippet">
                 <span className="label-mono">README · Markdown</span>
                 <div className="profile-copy-row profile-embed-card__variant-row">
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={markdownSnippet} onFocus={(event) => event.currentTarget.select()} />
-                  <button type="button" className="settings-btn settings-btn--primary profile-btn" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? "Copied" : "Copy"}</button>
+                  <button type="button" className="modal-btn modal-btn--secondary profile-btn" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? "Copied" : "Copy"}</button>
                 </div>
                 {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">Open live preview ↗</a> : null}
               </div>
@@ -251,16 +249,6 @@ function LockIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="5" y="11" width="14" height="9" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-    </svg>
-  );
-}
-
-function RankIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 21h8M12 17v4" />
-      <path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" />
-      <path d="M7 5H5a2 2 0 0 0 2 4M17 5h2a2 2 0 0 1-2 4" />
     </svg>
   );
 }

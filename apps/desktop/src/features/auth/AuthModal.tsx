@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { GoogleMark } from "../onboarding/components/GoogleMark";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 
 type AuthMode = "sign-in" | "sign-up";
 
@@ -27,13 +28,13 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
     return (
       <div className="auth-modal__overlay">
         <div className="auth-modal">
-          <div className="auth-modal__header">
-            <h2>Cloud sync disabled</h2>
-            <p>Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.</p>
+          {onClose ? <ModalCloseButton label="Close" onClick={onClose} /> : null}
+          <div className="modal-head">
+            <div className="modal-head__copy">
+              <h2>Cloud sync disabled</h2>
+              <p>Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.</p>
+            </div>
           </div>
-          {onClose ? (
-            <button className="secondary-button" onClick={onClose}>Close</button>
-          ) : null}
         </div>
       </div>
     );
@@ -106,9 +107,12 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
   return (
     <div className="auth-modal__overlay">
       <div className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        <div className="auth-modal__header">
-          <h2 id="auth-modal-title">{isSignUp ? "Create your account" : "Sign in to Drifty"}</h2>
-          <p>{isSignUp ? "Create a drifty account with email and password." : "Use your drifty account to sync and publish."}</p>
+        {onClose ? <ModalCloseButton label="Close" onClick={onClose} /> : null}
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id="auth-modal-title">{isSignUp ? "Create your account" : "Sign in to Drifty"}</h2>
+            <p>{isSignUp ? "Create a drifty account with email and password." : "Use your drifty account to sync and publish."}</p>
+          </div>
         </div>
 
         {error ? (
@@ -167,7 +171,7 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
           </label>
           <button
             type="submit"
-            className="secondary-button auth-modal__submit"
+            className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
             disabled={isBusy}
           >
             {isSubmitting ? (isSignUp ? "Creating…" : "Signing in…") : submitLabel}
@@ -210,15 +214,6 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
           </span>
         </div>
 
-        {onClose ? (
-          <button
-            type="button"
-            className="ghost-button auth-modal__close"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-        ) : null}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { ModalCloseButton } from "../../components/ModalCloseButton";
 
 export interface ProjectPassConsentModalProps {
   readonly open: boolean;
@@ -39,17 +40,17 @@ export function ProjectPassConsentModal({
         role="dialog"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="auth-modal__header">
-          <h2 id={TITLE_ID}>Turn on project analysis</h2>
-          <p id={DESCRIPTION_ID}>
-            Project analysis sorts each day into your projects. To do that it sends a broader summary
-            than everyday classification does, so here is exactly what leaves your Mac before you turn it on.
-          </p>
+        <ModalCloseButton label="Close" onClick={onCancel} />
+        <div className="modal-head">
+          <div className="modal-head__copy">
+            <h2 id={TITLE_ID}>Turn on project analysis</h2>
+            <p id={DESCRIPTION_ID}>Exactly what leaves your Mac before you turn it on.</p>
+          </div>
         </div>
 
         <ul
           className="project-pass-consent-modal__points"
-          style={{ margin: "0 0 var(--space-5)", paddingLeft: "1.15rem", display: "grid", gap: "var(--space-2)" }}
+          style={{ margin: "0 0 var(--space-4)", paddingLeft: "1.15rem", display: "grid", gap: "var(--space-2)" }}
         >
           <li>
             A compacted 3-minute activity-window summary — app, site, time, duration, plus your
@@ -64,14 +65,11 @@ export function ProjectPassConsentModal({
           )}
         </ul>
 
-        <div
-          className="project-pass-consent-modal__actions"
-          style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-3)" }}
-        >
-          <button className="ghost-button" type="button" onClick={onCancel}>
+        <div className="modal-foot project-pass-consent-modal__actions">
+          <button className="modal-btn modal-btn--ghost" type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button className="settings-btn" type="button" onClick={onConfirm}>
+          <button className="modal-btn modal-btn--primary" type="button" onClick={onConfirm}>
             Turn on
           </button>
         </div>

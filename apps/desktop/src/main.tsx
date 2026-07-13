@@ -23,6 +23,7 @@ import "./features/leaderboard/rank-embeds.css";
 import "./features/profile/profile-page.css";
 import "./features/social/social.css";
 import "./styles/chartHoverMotion.css";
+import "./styles/modal-chrome.css";
 
 declare global {
   interface Window {
