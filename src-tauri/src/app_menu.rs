@@ -1,17 +1,9 @@
 use tauri::menu::{
     AboutMetadata, CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu,
 };
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
-use crate::{reveal_main_window, MAIN_WINDOW_LABEL};
-
-const MENU_CHECK_FOR_UPDATES: &str = "drifty-app-menu-check-for-updates";
-const MENU_SETTINGS: &str = "drifty-app-menu-settings";
-const MENU_DEV_MODE: &str = "drifty-app-menu-dev-mode";
-const MENU_CHECK_LATEST_BUILD: &str = "drifty-app-menu-check-latest-build";
-const MENU_BUILD_INFO: &str = "drifty-app-menu-build-info";
-const EVENT_TOGGLE_DEV_MODE: &str = "app-menu-toggle-dev-mode";
-const EVENT_CHECK_LATEST_BUILD: &str = "app-menu-check-latest-build";
+use crate::shell_action::{self, app_menu_id, ShellAction};
 
 pub(crate) fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::default(app)?;
@@ -24,14 +16,12 @@ pub(crate) fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-pub(crate) fn handle_app_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
-    match id {
-        MENU_CHECK_FOR_UPDATES => emit_main_window_event(app, "tray-check-for-updates"),
-        MENU_SETTINGS => emit_main_window_event(app, "tray-open-settings"),
-        MENU_DEV_MODE => emit_main_window_event(app, EVENT_TOGGLE_DEV_MODE),
-        MENU_CHECK_LATEST_BUILD => emit_main_window_event(app, EVENT_CHECK_LATEST_BUILD),
-        _ => {}
-    }
+pub(crate) fn handle_app_menu_event(app: &AppHandle, id: &str) {
+    let Some(action) = ShellAction::from_app_menu_id(id) else {
+        return;
+    };
+
+    shell_action::dispatch(app, action);
 }
 
 #[tauri::command]
@@ -41,7 +31,7 @@ pub(crate) fn app_menu_set_dev_mode_checked(app: AppHandle, checked: bool) -> Re
     };
     let Some(dev_mode) = find_check_menu_item(
         menu.items().map_err(|error| error.to_string())?,
-        MENU_DEV_MODE,
+        app_menu_id::DEV_MODE,
     )
     .map_err(|error| error.to_string())?
     else {
@@ -84,24 +74,36 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     )?;
     let check_updates = MenuItem::with_id(
         app,
-        MENU_CHECK_FOR_UPDATES,
+        app_menu_id::CHECK_FOR_UPDATES,
         "Check for Updates...",
         true,
         None::<&str>,
     )?;
-    let settings = MenuItem::with_id(app, MENU_SETTINGS, "Settings...", true, Some("CmdOrCtrl+,"))?;
-    let dev_mode =
-        CheckMenuItem::with_id(app, MENU_DEV_MODE, "Dev Mode", true, false, None::<&str>)?;
+    let settings = MenuItem::with_id(
+        app,
+        app_menu_id::SETTINGS,
+        "Settings...",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+    let dev_mode = CheckMenuItem::with_id(
+        app,
+        app_menu_id::DEV_MODE,
+        "Dev Mode",
+        true,
+        false,
+        None::<&str>,
+    )?;
     let latest_build = MenuItem::with_id(
         app,
-        MENU_CHECK_LATEST_BUILD,
+        app_menu_id::CHECK_LATEST_BUILD,
         "Check Latest Build...",
         true,
         None::<&str>,
     )?;
     let build_info = MenuItem::with_id(
         app,
-        MENU_BUILD_INFO,
+        app_menu_id::BUILD_INFO,
         format!("Build: {}", build_short_commit()),
         false,
         None::<&str>,
@@ -109,7 +111,7 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let developer_separator = PredefinedMenuItem::separator(app)?;
     let developer = Submenu::with_id_and_items(
         app,
-        "drifty-app-menu-developer",
+        app_menu_id::DEVELOPER_SUBMENU,
         "Developer",
         true,
         &[&dev_mode, &latest_build, &developer_separator, &build_info],
@@ -126,7 +128,7 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
 
     Submenu::with_id_and_items(
         app,
-        "drifty-app-menu",
+        app_menu_id::ROOT,
         "Drifty",
         true,
         &[
@@ -156,11 +158,4 @@ fn build_short_commit() -> String {
         return "unknown".to_string();
     }
     commit.chars().take(12).collect()
-}
-
-fn emit_main_window_event<R: Runtime>(app: &AppHandle<R>, event: &str) {
-    reveal_main_window(app);
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        let _ = window.emit(event, ());
-    }
 }

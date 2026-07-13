@@ -16,7 +16,7 @@ use std::{
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use self::drift_alarm_status::{
     drift_alerts_status_label, drift_detail_label, drift_last_check_label, drift_result_label,
@@ -28,21 +28,10 @@ use self::productivity_icon::{
 
 pub use self::productivity_icon::TrayProductivityState;
 use crate::donut_icon::{self, DonutIconRenderInput, TrayIconStyle};
+use crate::shell_action::{self, tray_menu_id, ShellAction};
 use crate::tracker::TrackerController;
-use crate::{reveal_main_window, MAIN_WINDOW_LABEL};
 
 const TRAY_ID: &str = "drifty-menu";
-const MENU_APP_INFO: &str = "menu-app-info";
-const MENU_UPDATE_STATUS: &str = "menu-update-status";
-const MENU_OPEN: &str = "menu-open-dashboard";
-const MENU_TRACKING_TOGGLE: &str = "menu-tracking-toggle";
-const MENU_DRIFT_ALERTS_STATUS: &str = "menu-drift-alerts-status";
-const MENU_DRIFT_LAST_CHECK: &str = "menu-drift-last-check";
-const MENU_DRIFT_RESULT: &str = "menu-drift-result";
-const MENU_DRIFT_DETAIL: &str = "menu-drift-detail";
-const MENU_TOGGLE_THEME: &str = "menu-toggle-theme";
-const MENU_SETTINGS: &str = "menu-settings";
-const MENU_QUIT: &str = "menu-quit";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 const TRAY_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -240,49 +229,12 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("Drifty")
         .show_menu_on_left_click(true)
         .menu(&menu)
-        .on_menu_event(|app, event| match event.id() {
-            id if id == MENU_OPEN => {
-                reveal_main_window(app);
-            }
-            id if id == MENU_TRACKING_TOGGLE => {
-                let controller = app.state::<TrackerController>();
-                let is_running = controller
-                    .get_status(app)
-                    .map(|status| status.running)
-                    .unwrap_or(false);
-                let next_status = if is_running {
-                    controller.stop(app)
-                } else {
-                    controller.start(app)
-                };
-                if let Ok(status) = next_status {
-                    update_cached_tracker_running(app, Some(status.running));
-                }
-                let _ = refresh_tray_menu(app);
-                update_tray_icon(app);
-            }
-            id if id == MENU_TOGGLE_THEME => {
-                reveal_main_window(app);
-                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                    let _ = window.emit("tray-toggle-theme", ());
-                }
-            }
-            id if id == MENU_SETTINGS => {
-                reveal_main_window(app);
-                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                    let _ = window.emit("tray-open-settings", ());
-                }
-            }
-            id if id == MENU_UPDATE_STATUS => {
-                reveal_main_window(app);
-                if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                    let _ = window.emit("tray-check-for-updates", ());
-                }
-            }
-            id if id == MENU_QUIT => {
-                app.exit(0);
-            }
-            _ => {}
+        .on_menu_event(|app, event| {
+            let Some(action) = ShellAction::from_tray_menu_id(event.id().as_ref()) else {
+                return;
+            };
+
+            shell_action::dispatch(app, action);
         })
         .build(app)?;
 
@@ -299,47 +251,47 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let drift_status = latest_tray_drift_alarm_status(app);
     let app_info = MenuItem::with_id(
         app,
-        MENU_APP_INFO,
+        tray_menu_id::APP_INFO,
         app_version_label(&version),
         false,
         None::<&str>,
     )?;
     let update_status = MenuItem::with_id(
         app,
-        MENU_UPDATE_STATUS,
+        tray_menu_id::UPDATE_STATUS,
         update_status_label(),
         true,
         None::<&str>,
     )?;
     let drift_alerts_status = MenuItem::with_id(
         app,
-        MENU_DRIFT_ALERTS_STATUS,
+        tray_menu_id::DRIFT_ALERTS_STATUS,
         drift_alerts_status_label(&drift_status),
         false,
         None::<&str>,
     )?;
     let drift_last_check = MenuItem::with_id(
         app,
-        MENU_DRIFT_LAST_CHECK,
+        tray_menu_id::DRIFT_LAST_CHECK,
         drift_last_check_label(&drift_status),
         false,
         None::<&str>,
     )?;
     let drift_result = MenuItem::with_id(
         app,
-        MENU_DRIFT_RESULT,
+        tray_menu_id::DRIFT_RESULT,
         drift_result_label(&drift_status),
         false,
         None::<&str>,
     )?;
     let drift_detail = drift_detail_label(&drift_status)
-        .map(|label| MenuItem::with_id(app, MENU_DRIFT_DETAIL, label, false, None::<&str>))
+        .map(|label| MenuItem::with_id(app, tray_menu_id::DRIFT_DETAIL, label, false, None::<&str>))
         .transpose()?;
 
     let mut builder = MenuBuilder::new(app)
-        .text(MENU_OPEN, "Open Dashboard")
+        .text(tray_menu_id::OPEN_DASHBOARD, "Open Dashboard")
         .text(
-            MENU_TRACKING_TOGGLE,
+            tray_menu_id::TRACKING_TOGGLE,
             tracking_action_label(drift_status.tracker_running()),
         )
         .separator()
@@ -351,12 +303,12 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     builder
         .separator()
-        .text(MENU_TOGGLE_THEME, "Toggle Theme")
-        .text(MENU_SETTINGS, "Settings")
+        .text(tray_menu_id::TOGGLE_THEME, "Toggle Theme")
+        .text(tray_menu_id::SETTINGS, "Settings")
         .separator()
         .items(&[&app_info, &update_status])
         .separator()
-        .text(MENU_QUIT, "Quit")
+        .text(tray_menu_id::QUIT, "Quit")
         .build()
 }
 
@@ -384,6 +336,23 @@ fn tracking_action_label(running: Option<bool>) -> &'static str {
     }
 }
 
+pub(crate) fn toggle_tracking(app: &AppHandle) {
+    let controller = app.state::<TrackerController>();
+    let is_running = controller
+        .get_status(app)
+        .map(|status| status.running)
+        .unwrap_or(false);
+    let next_status = if is_running {
+        controller.stop(app)
+    } else {
+        controller.start(app)
+    };
+    if let Ok(status) = next_status {
+        update_cached_tracker_running(app, Some(status.running));
+    }
+    let _ = refresh_tray_menu(app);
+    update_tray_icon(app);
+}
 fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
     if let Some(state) = app.try_state::<TrayDriftAlarmState>() {
         if let Ok(mut latest) = state.0.lock() {

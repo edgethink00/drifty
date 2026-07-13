@@ -6,6 +6,7 @@ mod commands;
 mod donut_icon;
 mod openrouter_key_store;
 mod observability;
+mod shell_action;
 mod tracker;
 mod tray;
 
