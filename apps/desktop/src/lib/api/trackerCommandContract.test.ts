@@ -1,0 +1,70 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { trackerClientInvokeCommands, type TrackerClientInvoke } from "@drifty/domain";
+
+const rustLibSource = readFileSync(
+  new URL("../../../../../src-tauri/src/lib.rs", import.meta.url),
+  "utf8",
+);
+
+function registeredTrackerClientCommands(source: string): string[] {
+  const handlerBlock = source.match(
+    /\.invoke_handler\s*\(\s*tauri::generate_handler!\s*\[([\s\S]*?)\]\s*\)/,
+  )?.[1];
+
+  if (!handlerBlock) {
+    throw new Error("Unable to locate tauri::generate_handler! registration in src-tauri/src/lib.rs");
+  }
+
+  const uncommentedHandlerBlock = handlerBlock
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+
+  return [...uncommentedHandlerBlock.matchAll(/\b(?:tracker|tray)_[a-z0-9_]+\b/g)]
+    .map(([command]) => command)
+    .sort();
+}
+
+function assertTypedInvokeContract(invokeCommand: TrackerClientInvoke) {
+  // @ts-expect-error Command names must be registered.
+  void invokeCommand("tracker_get_stauts");
+  // @ts-expect-error Tracker payloads use the exact top-level query key.
+  void invokeCommand("tracker_get_timeline", { queryy: { day: "2026-07-13" } });
+  // @ts-expect-error Commands with required payloads cannot omit them.
+  void invokeCommand("tracker_get_timeline");
+  // @ts-expect-error No-argument commands cannot receive a payload.
+  void invokeCommand("tracker_get_status", { query: {} });
+}
+void assertTypedInvokeContract;
+
+describe("tracker client native command contract", () => {
+  it("matches the tracker and tray commands registered by Rust", () => {
+    expect(registeredTrackerClientCommands(rustLibSource)).toEqual(
+      [...trackerClientInvokeCommands].sort(),
+    );
+  });
+
+  it("ignores commented command names and harmless macro spacing", () => {
+    const source = `
+      .invoke_handler (
+        tauri::generate_handler! [
+          tracker_get_status,
+          // tracker_commented_out,
+          /* tray_commented_out, */
+          tray_update_icon_style,
+        ]
+      )
+    `;
+
+    expect(registeredTrackerClientCommands(source)).toEqual([
+      "tracker_get_status",
+      "tray_update_icon_style",
+    ]);
+  });
+
+  it("fails clearly when the Rust handler registration cannot be found", () => {
+    expect(() => registeredTrackerClientCommands("fn main() {}")).toThrow(
+      "Unable to locate tauri::generate_handler! registration",
+    );
+  });
+});

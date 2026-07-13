@@ -56,23 +56,152 @@ export const trackerInvokeCommands = [
   "tracker_apply_synced_deletions",
   "tracker_purge_remote_segments",
 ] as const;
-
-export type TrackerCommand = (typeof trackerInvokeCommands)[number];
-
 export const trayInvokeCommands = [
   "tray_update_productivity_icon",
   "tray_update_icon_style",
   "tray_update_drift_alarm_status",
 ] as const;
 
-export type TrayCommand = (typeof trayInvokeCommands)[number];
-
 export const trackerClientInvokeCommands = [
   ...trackerInvokeCommands,
   ...trayInvokeCommands,
 ] as const;
 
-export type TrackerClientCommand = (typeof trackerClientInvokeCommands)[number];
+
+export type TrackerCommandMap = {
+  tracker_get_status: { args: undefined; result: Record<string, unknown> };
+  tracker_start: { args: undefined; result: Record<string, unknown> };
+  tracker_stop: { args: undefined; result: Record<string, unknown> };
+  tracker_get_timeline: { args: { query: TimelineQuery }; result: ActivitySegment[] };
+  tracker_get_timeline_page: { args: { query: TimelinePageQuery }; result: TimelinePage };
+  tracker_search_timeline: { args: { query: TimelineSearchQuery }; result: TimelinePage };
+  tracker_get_dashboard_week_timeline: { args: { query: DateRangeQuery }; result: ActivitySegment[] };
+  tracker_get_live_tail: { args: { query: LiveTailQuery }; result: TrackerLiveTail };
+  tracker_get_current_snapshot: { args: undefined; result: CurrentActivitySnapshot | null };
+  tracker_get_hourly_summary: { args: { query: TimelineQuery }; result: HourlySummaryWireBucket[] };
+  tracker_get_raw_events: { args: { query: RawEventsQuery }; result: ActivitySegment[] };
+  tracker_get_top_sites: { args: { query: TopSitesQuery }; result: SiteDuration[] };
+  tracker_set_developer_diagnostics: { args: { query: DeveloperDiagnosticsSettings }; result: unknown };
+  tracker_get_app_icons: { args: { query: { apps: AppIdentity[] } }; result: AppIconMap };
+  tracker_get_unclassified_segments: { args: { query: UnclassifiedSegmentsQuery }; result: ActivitySegment[] };
+  tracker_get_reusable_ai_classifications: {
+    args: { query: { inputFingerprints: string[] } };
+    result: Record<string, ActivityClassificationRecord>;
+  };
+  tracker_get_classification_rules: { args: undefined; result: ClassificationRule[] };
+  tracker_save_classification_rule: { args: { query: { input: ClassificationRuleInput } }; result: ClassificationRule };
+  tracker_delete_classification_rule: { args: { query: { id: string } }; result: { deleted: number } };
+  tracker_delete_activity_segments: { args: { query: { ids: readonly string[] } }; result: { deleted: number } };
+  tracker_delete_history_range: { args: { query: DeleteHistoryRangeQuery }; result: DeleteHistoryRangeResult };
+  tracker_search_classification_rule_candidates: {
+    args: { query: ClassificationRuleCandidateQuery };
+    result: ClassificationRuleCandidate[];
+  };
+  tracker_apply_classification_rules: {
+    args: { query: ClassificationQuery | undefined };
+    result: ClassificationRuleApplyResult;
+  };
+  tracker_save_classifications: {
+    args: { query: { classifications: ActivityClassificationRecord[] } };
+    result: { saved: number };
+  };
+  tracker_refresh_non_ai_classifications: { args: { query: ClassificationQuery }; result: { deleted: number } };
+  tracker_get_classification_metrics: { args: { query: ClassificationQuery }; result: ClassificationMetrics };
+  tracker_get_projects: { args: undefined; result: Project[] };
+  tracker_save_project: { args: { query: { input: ProjectInput } }; result: Project };
+  tracker_delete_project: { args: { query: { id: string } }; result: { deleted: number } };
+  tracker_save_project_anchors: {
+    args: { query: { projectId: string; anchors: ProjectAnchor[] } };
+    result: ProjectAnchor[];
+  };
+  tracker_delete_project_anchor: {
+    args: { query: { projectId: string; kind: ProjectAnchorKind; value: string } };
+    result: { deleted: number };
+  };
+  tracker_save_project_assignments: {
+    args: { query: { assignments: ProjectAssignmentRecord[] } };
+    result: ProjectAssignmentsSaveResult;
+  };
+  tracker_get_project_assignments: { args: { query: TimelineQuery }; result: ProjectAssignmentRecord[] };
+  tracker_get_team_projects: { args: undefined; result: TeamProject[] };
+  tracker_upsert_team_projects: {
+    args: { query: { organizationId: string; projects: TeamProjectInput[] } };
+    result: TeamProject[];
+  };
+  tracker_save_team_project_assignments: {
+    args: { query: { assignments: TeamProjectAssignmentRecord[] } };
+    result: ProjectAssignmentsSaveResult;
+  };
+  tracker_get_team_project_assignments: { args: { query: TimelineQuery }; result: TeamProjectAssignmentRecord[] };
+  tracker_record_project_pass: { args: { query: { input: ProjectPassRunInput } }; result: ProjectPassRunRecord };
+  tracker_get_project_pass_runs: { args: { query: TimelineQuery }; result: ProjectPassRun[] };
+  tracker_save_ai_review_events: { args: { query: { events: AiReviewEventInput[] } }; result: { saved: number } };
+  tracker_get_ai_review_events: { args: { query: TimelineQuery }; result: AiReviewEvent[] };
+  tracker_revert_ai_review_event: { args: { query: { id: number } }; result: AiReviewEventRevertResult };
+  tracker_preview_browser_history_import: {
+    args: { query: BrowserHistoryImportQuery };
+    result: BrowserHistoryImportPreview;
+  };
+  tracker_import_browser_history: { args: { query: BrowserHistoryImportQuery }; result: BrowserHistoryImportResult };
+  tracker_get_browser_history_environment: { args: undefined; result: BrowserHistoryEnvironment };
+  tracker_get_sync_outbox: { args: { query: SyncOutboxQuery }; result: SyncOutboxPage };
+  tracker_get_sync_state: { args: undefined; result: SyncStateSnapshot };
+  tracker_set_sync_state: { args: { query: { entries: Record<string, string | null> } }; result: { written: number } };
+  tracker_apply_synced_segments: { args: { query: { segments: SyncedSegmentInput[] } }; result: SyncApplyResult };
+  tracker_get_pending_sync_deletions: {
+    args: { query: { limit?: number } };
+    result: SyncDeletionRecord[];
+  };
+  tracker_mark_sync_deletions_pushed: {
+    args: { query: { deletionUids: readonly string[] } };
+    result: { marked: number };
+  };
+  tracker_apply_synced_deletions: {
+    args: { query: { deletions: SyncDeletionRecord[] } };
+    result: SyncDeletionsApplyResult;
+  };
+  tracker_purge_remote_segments: { args: undefined; result: { purged: number } };
+};
+
+export type TrayCommandMap = {
+  tray_update_productivity_icon: {
+    args: { focus: number; drift: number; neutral: number };
+    result: void;
+  };
+  tray_update_icon_style: { args: { style: TrayIconStyle }; result: void };
+  tray_update_drift_alarm_status: { args: { status: DriftAlarmTrayStatus }; result: void };
+};
+
+export type TrackerCommand = keyof TrackerCommandMap;
+export type TrayCommand = keyof TrayCommandMap;
+export type TrackerClientCommandMap = TrackerCommandMap & TrayCommandMap;
+export type TrackerClientCommand = keyof TrackerClientCommandMap;
+
+export type TrackerCommandArgs<C extends TrackerCommand> = TrackerCommandMap[C]["args"];
+export type TrackerCommandResult<C extends TrackerCommand> = TrackerCommandMap[C]["result"];
+export type TrayCommandArgs<C extends TrayCommand> = TrayCommandMap[C]["args"];
+export type TrayCommandResult<C extends TrayCommand> = TrayCommandMap[C]["result"];
+export type TrackerClientCommandArgs<C extends TrackerClientCommand> = TrackerClientCommandMap[C]["args"];
+export type TrackerClientCommandResult<C extends TrackerClientCommand> = TrackerClientCommandMap[C]["result"];
+export type TrackerClientInvoke = <C extends TrackerClientCommand>(
+  command: C,
+  ...args: TrackerClientCommandArgs<C> extends undefined ? [] : [args: TrackerClientCommandArgs<C>]
+) => Promise<TrackerClientCommandResult<C> | null>;
+
+type ExactCommandRegistry<Commands extends readonly string[], CommandMap> =
+  Exclude<Commands[number], keyof CommandMap> extends never
+    ? Exclude<keyof CommandMap, Commands[number]> extends never
+      ? true
+      : false
+    : false;
+
+type Assert<T extends true> = T;
+
+type TrackerCommandRegistryIsExact = Assert<ExactCommandRegistry<typeof trackerInvokeCommands, TrackerCommandMap>>;
+type TrayCommandRegistryIsExact = Assert<ExactCommandRegistry<typeof trayInvokeCommands, TrayCommandMap>>;
+type TrackerClientCommandRegistryIsExact = Assert<
+  ExactCommandRegistry<typeof trackerClientInvokeCommands, TrackerClientCommandMap>
+>;
 
 export interface DayQuery {
   day: string;
@@ -123,6 +252,14 @@ export type RawEventsQuery = (DayQuery | DateRangeQuery) & {
 
 export type TopSitesQuery = (DayQuery | DateRangeQuery) & {
   limit?: number;
+};
+export type HourlySummaryWireBucket = {
+  hour?: string;
+  hourLabel?: string;
+  totalSeconds?: number;
+  durationSeconds?: number;
+  appBreakdown?: Array<{ appName: string; totalSeconds: number }>;
+  topApps?: Array<{ appName: string; durationSeconds: number }>;
 };
 
 export interface AppIdentity {

@@ -53,6 +53,8 @@ import type {
   TeamProjectAssignmentRecord,
   TrackerApi,
   TrackerClientCommand,
+  TrackerClientCommandArgs,
+  TrackerClientCommandResult,
   TrackerLiveTail,
   TrackerStatus,
   TrayIconStyle,
@@ -128,12 +130,15 @@ function emptyBrowserHistoryImportResult(query?: BrowserHistoryImportQuery): Bro
   };
 }
 
-async function safeInvoke<T>(cmd: TrackerClientCommand, args?: Record<string, unknown>): Promise<T | null> {
+async function safeInvoke<C extends TrackerClientCommand>(
+  cmd: C,
+  ...args: TrackerClientCommandArgs<C> extends undefined ? [] : [args: TrackerClientCommandArgs<C>]
+): Promise<TrackerClientCommandResult<C> | null> {
   if (!isTauriRuntime()) {
     return null;
   }
   try {
-    return await invoke<T>(cmd, args);
+    return await invoke<TrackerClientCommandResult<C>>(cmd, args[0] as Record<string, unknown> | undefined);
   } catch (error) {
     throw new TrackerInvokeError(cmd, error);
   }
@@ -143,7 +148,7 @@ export const trackerClient: TrackerApi = {
   async getStatus() {
     if (shouldUsePreviewData()) return previewStatus();
     try {
-      const status = await safeInvoke<Record<string, unknown>>("tracker_get_status");
+      const status = await safeInvoke("tracker_get_status");
       if (!status) {
         return getTrackerUnavailableStatus("Tracker not available in this environment");
       }
@@ -155,7 +160,7 @@ export const trackerClient: TrackerApi = {
   },
   async start() {
     if (shouldUsePreviewData()) return previewStatus();
-    const status = await safeInvoke<Record<string, unknown>>("tracker_start");
+    const status = await safeInvoke("tracker_start");
     if (!status) {
       throw new Error("Tracker is not available. Please run the desktop app.");
     }
@@ -163,7 +168,7 @@ export const trackerClient: TrackerApi = {
   },
   async stop() {
     if (shouldUsePreviewData()) return { ...previewStatus(), running: false };
-    const status = await safeInvoke<Record<string, unknown>>("tracker_stop");
+    const status = await safeInvoke("tracker_stop");
     if (!status) {
       throw new Error("Tracker is not available. Please run the desktop app.");
     }
@@ -171,22 +176,22 @@ export const trackerClient: TrackerApi = {
   },
   async getTimeline(query: TimelineQuery) {
     if (shouldUsePreviewData()) return previewTimeline(query);
-    const result = await safeInvoke<ActivitySegment[]>("tracker_get_timeline", { query });
+    const result = await safeInvoke("tracker_get_timeline", { query });
     return result ?? [];
   },
   async getTimelinePage(query: TimelinePageQuery) {
     if (shouldUsePreviewData()) return previewTimelinePage(query);
-    const result = await safeInvoke<TimelinePage>("tracker_get_timeline_page", { query });
+    const result = await safeInvoke("tracker_get_timeline_page", { query });
     return result ?? { items: [], hasMore: false, nextCursor: null };
   },
   async searchTimeline(query: TimelineSearchQuery) {
     if (shouldUsePreviewData()) return previewTimelineSearch(query);
-    const result = await safeInvoke<TimelinePage>("tracker_search_timeline", { query });
+    const result = await safeInvoke("tracker_search_timeline", { query });
     return result ?? { items: [], hasMore: false, nextCursor: null };
   },
   async getDashboardWeekTimeline(query) {
     if (shouldUsePreviewData()) return previewTimeline(query);
-    const result = await safeInvoke<ActivitySegment[]>("tracker_get_dashboard_week_timeline", { query });
+    const result = await safeInvoke("tracker_get_dashboard_week_timeline", { query });
     return result ?? [];
   },
   async getLiveTail(query: LiveTailQuery) {
@@ -215,7 +220,7 @@ export const trackerClient: TrackerApi = {
         segments,
       };
     }
-    const result = await safeInvoke<TrackerLiveTail>("tracker_get_live_tail", { query });
+    const result = await safeInvoke("tracker_get_live_tail", { query });
     return result ?? {
       running: false,
       trackerMode: "unavailable",
@@ -224,20 +229,11 @@ export const trackerClient: TrackerApi = {
     };
   },
   async getCurrentSnapshot() {
-    return await safeInvoke<CurrentActivitySnapshot>("tracker_get_current_snapshot");
+    return await safeInvoke("tracker_get_current_snapshot");
   },
   async getHourlySummary(query: TimelineQuery) {
     if (shouldUsePreviewData()) return previewHourlySummary(query);
-    const buckets = await safeInvoke<
-      Array<{
-        hour?: string;
-        hourLabel?: string;
-        totalSeconds?: number;
-        durationSeconds?: number;
-        appBreakdown?: Array<{ appName: string; totalSeconds: number }>;
-        topApps?: Array<{ appName: string; durationSeconds: number }>;
-      }>
-    >("tracker_get_hourly_summary", { query });
+    const buckets = await safeInvoke("tracker_get_hourly_summary", { query });
 
     if (!buckets) return [];
 
@@ -253,12 +249,12 @@ export const trackerClient: TrackerApi = {
     }));
   },
   async getRawEvents(query: RawEventsQuery) {
-    const result = await safeInvoke<ActivitySegment[]>("tracker_get_raw_events", { query });
+    const result = await safeInvoke("tracker_get_raw_events", { query });
     return result ?? [];
   },
   async getTopSites(query: import("@drifty/domain").TopSitesQuery) {
     if (shouldUsePreviewData()) return previewTopSites(query);
-    const result = await safeInvoke<SiteDuration[]>("tracker_get_top_sites", { query });
+    const result = await safeInvoke("tracker_get_top_sites", { query });
     return result ?? [];
   },
   async setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings) {
@@ -267,25 +263,25 @@ export const trackerClient: TrackerApi = {
   },
   async getAppIcons(apps: AppIdentity[]) {
     if (shouldUsePreviewData()) return previewAppIcons(apps);
-    const result = await safeInvoke<AppIconMap>("tracker_get_app_icons", { query: { apps } });
+    const result = await safeInvoke("tracker_get_app_icons", { query: { apps } });
     return result ?? {};
   },
   async getUnclassifiedSegments(query: UnclassifiedSegmentsQuery) {
     if (shouldUsePreviewData()) return [];
-    const result = await safeInvoke<ActivitySegment[]>("tracker_get_unclassified_segments", { query });
+    const result = await safeInvoke("tracker_get_unclassified_segments", { query });
     return result ?? [];
   },
   async getReusableAiClassifications(inputFingerprints: string[]) {
     if (shouldUsePreviewData()) return {};
-    const result = await safeInvoke<Record<string, ActivityClassificationRecord>>("tracker_get_reusable_ai_classifications", { query: { inputFingerprints } });
+    const result = await safeInvoke("tracker_get_reusable_ai_classifications", { query: { inputFingerprints } });
     return result ?? {};
   },
   async getClassificationRules() {
-    const result = await safeInvoke<ClassificationRule[]>("tracker_get_classification_rules");
+    const result = await safeInvoke("tracker_get_classification_rules");
     return result ?? [];
   },
   async saveClassificationRule(input: ClassificationRuleInput) {
-    const result = await safeInvoke<ClassificationRule>("tracker_save_classification_rule", { query: { input } });
+    const result = await safeInvoke("tracker_save_classification_rule", { query: { input } });
     return result ?? {
       id: "",
       targetKind: input.targetKind,
@@ -300,15 +296,15 @@ export const trackerClient: TrackerApi = {
     };
   },
   async deleteClassificationRule(id: string) {
-    const result = await safeInvoke<{ deleted: number }>("tracker_delete_classification_rule", { query: { id } });
+    const result = await safeInvoke("tracker_delete_classification_rule", { query: { id } });
     return result ?? { deleted: 0 };
   },
   async deleteActivitySegments(ids: readonly string[]) {
-    const result = await safeInvoke<{ deleted: number }>("tracker_delete_activity_segments", { query: { ids } });
+    const result = await safeInvoke("tracker_delete_activity_segments", { query: { ids } });
     return result ?? { deleted: 0 };
   },
   async deleteHistoryRange(query: DeleteHistoryRangeQuery) {
-    const result = await safeInvoke<DeleteHistoryRangeResult>("tracker_delete_history_range", { query });
+    const result = await safeInvoke("tracker_delete_history_range", { query });
     return result ?? {
       activitySegments: 0,
       classifications: 0,
@@ -317,23 +313,23 @@ export const trackerClient: TrackerApi = {
     };
   },
   async searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery) {
-    const result = await safeInvoke<ClassificationRuleCandidate[]>("tracker_search_classification_rule_candidates", { query });
+    const result = await safeInvoke("tracker_search_classification_rule_candidates", { query });
     return result ?? [];
   },
   async applyClassificationRules(query?: ClassificationQuery) {
-    const result = await safeInvoke<ClassificationRuleApplyResult>("tracker_apply_classification_rules", { query });
+    const result = await safeInvoke("tracker_apply_classification_rules", { query });
     return result ?? { matchedCount: 0, appliedCount: 0, skippedCount: 0 };
   },
   async saveClassifications(classifications: ActivityClassificationRecord[]) {
-    const result = await safeInvoke<{ saved: number }>("tracker_save_classifications", { query: { classifications } });
+    const result = await safeInvoke("tracker_save_classifications", { query: { classifications } });
     return result ?? { saved: 0 };
   },
   async refreshNonAiClassifications(query: ClassificationQuery) {
-    const result = await safeInvoke<{ deleted: number }>("tracker_refresh_non_ai_classifications", { query });
+    const result = await safeInvoke("tracker_refresh_non_ai_classifications", { query });
     return result ?? { deleted: 0 };
   },
   async getClassificationMetrics(query: ClassificationQuery) {
-    const result = await safeInvoke<ClassificationMetrics>("tracker_get_classification_metrics", { query });
+    const result = await safeInvoke("tracker_get_classification_metrics", { query });
     return result ?? {
       totalSegments: 0,
       classifiedSegments: 0,
@@ -343,11 +339,11 @@ export const trackerClient: TrackerApi = {
     };
   },
   async getProjects() {
-    const result = await safeInvoke<Project[]>("tracker_get_projects");
+    const result = await safeInvoke("tracker_get_projects");
     return result ?? [];
   },
   async saveProject(input: ProjectInput) {
-    const result = await safeInvoke<Project>("tracker_save_project", { query: { input } });
+    const result = await safeInvoke("tracker_save_project", { query: { input } });
     return result ?? {
       id: input.id ?? "",
       name: input.name,
@@ -360,124 +356,124 @@ export const trackerClient: TrackerApi = {
     };
   },
   async deleteProject(id: string) {
-    const result = await safeInvoke<{ deleted: number }>("tracker_delete_project", { query: { id } });
+    const result = await safeInvoke("tracker_delete_project", { query: { id } });
     return result ?? { deleted: 0 };
   },
   async saveProjectAnchors(projectId: string, anchors: ProjectAnchor[]) {
-    const result = await safeInvoke<ProjectAnchor[]>("tracker_save_project_anchors", { query: { projectId, anchors } });
+    const result = await safeInvoke("tracker_save_project_anchors", { query: { projectId, anchors } });
     return result ?? [];
   },
   async deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string) {
-    const result = await safeInvoke<{ deleted: number }>("tracker_delete_project_anchor", { query: { projectId, kind, value } });
+    const result = await safeInvoke("tracker_delete_project_anchor", { query: { projectId, kind, value } });
     return result ?? { deleted: 0 };
   },
   async saveProjectAssignments(assignments: ProjectAssignmentRecord[]) {
-    const result = await safeInvoke<ProjectAssignmentsSaveResult>("tracker_save_project_assignments", { query: { assignments } });
+    const result = await safeInvoke("tracker_save_project_assignments", { query: { assignments } });
     return result ?? { saved: 0, skippedManual: 0 };
   },
   async getProjectAssignments(query: TimelineQuery) {
-    const result = await safeInvoke<ProjectAssignmentRecord[]>("tracker_get_project_assignments", { query });
+    const result = await safeInvoke("tracker_get_project_assignments", { query });
     return result ?? [];
   },
   async getTeamProjects() {
-    const result = await safeInvoke<TeamProject[]>("tracker_get_team_projects");
+    const result = await safeInvoke("tracker_get_team_projects");
     return result ?? [];
   },
   async upsertTeamProjects(organizationId: string, projects: TeamProjectInput[]) {
-    const result = await safeInvoke<TeamProject[]>("tracker_upsert_team_projects", { query: { organizationId, projects } });
+    const result = await safeInvoke("tracker_upsert_team_projects", { query: { organizationId, projects } });
     return result ?? [];
   },
   async saveTeamProjectAssignments(assignments: TeamProjectAssignmentRecord[]) {
-    const result = await safeInvoke<ProjectAssignmentsSaveResult>("tracker_save_team_project_assignments", { query: { assignments } });
+    const result = await safeInvoke("tracker_save_team_project_assignments", { query: { assignments } });
     return result ?? { saved: 0, skippedManual: 0 };
   },
   async getTeamProjectAssignments(query: TimelineQuery) {
-    const result = await safeInvoke<TeamProjectAssignmentRecord[]>("tracker_get_team_project_assignments", { query });
+    const result = await safeInvoke("tracker_get_team_project_assignments", { query });
     return result ?? [];
   },
   async recordProjectPass(input: ProjectPassRunInput) {
-    const result = await safeInvoke<ProjectPassRunRecord>("tracker_record_project_pass", { query: { input } });
+    const result = await safeInvoke("tracker_record_project_pass", { query: { input } });
     return result ?? { id: 0, ranAt: "" };
   },
   async getProjectPassRuns(query: TimelineQuery) {
-    const result = await safeInvoke<ProjectPassRun[]>("tracker_get_project_pass_runs", { query });
+    const result = await safeInvoke("tracker_get_project_pass_runs", { query });
     return result ?? [];
   },
   async saveAiReviewEvents(events: AiReviewEventInput[]) {
-    const result = await safeInvoke<{ saved: number }>("tracker_save_ai_review_events", { query: { events } });
+    const result = await safeInvoke("tracker_save_ai_review_events", { query: { events } });
     return result ?? { saved: 0 };
   },
   async getAiReviewEvents(query: TimelineQuery) {
-    const result = await safeInvoke<AiReviewEvent[]>("tracker_get_ai_review_events", { query });
+    const result = await safeInvoke("tracker_get_ai_review_events", { query });
     return result ?? [];
   },
   async revertAiReviewEvent(id: number) {
-    const result = await safeInvoke<AiReviewEventRevertResult>("tracker_revert_ai_review_event", { query: { id } });
+    const result = await safeInvoke("tracker_revert_ai_review_event", { query: { id } });
     return result ?? { reverted: false, restored: false };
   },
   async previewBrowserHistoryImport(query?: BrowserHistoryImportQuery) {
     if (shouldUsePreviewData()) return emptyBrowserHistoryImportPreview(query);
-    const result = await safeInvoke<BrowserHistoryImportPreview>("tracker_preview_browser_history_import", { query: query ?? {} });
+    const result = await safeInvoke("tracker_preview_browser_history_import", { query: query ?? {} });
     return result ?? emptyBrowserHistoryImportPreview(query);
   },
   async importBrowserHistory(query?: BrowserHistoryImportQuery) {
     if (shouldUsePreviewData()) return emptyBrowserHistoryImportResult(query);
-    const result = await safeInvoke<BrowserHistoryImportResult>("tracker_import_browser_history", { query: query ?? {} });
+    const result = await safeInvoke("tracker_import_browser_history", { query: query ?? {} });
     return result ?? emptyBrowserHistoryImportResult(query);
   },
   async getBrowserHistoryEnvironment(): Promise<BrowserHistoryEnvironment> {
     const fallback: BrowserHistoryEnvironment = { safariHistoryReadable: false, defaultBrowserIsSafari: false };
     if (shouldUsePreviewData()) return fallback;
-    const result = await safeInvoke<BrowserHistoryEnvironment>("tracker_get_browser_history_environment");
+    const result = await safeInvoke("tracker_get_browser_history_environment");
     return result ?? fallback;
   },
   async getSyncOutbox(query: SyncOutboxQuery): Promise<SyncOutboxPage> {
     const fallback: SyncOutboxPage = { items: [], batchMaxSeq: query.afterSeq, counterSeq: query.afterSeq, pendingCount: 0 };
     if (shouldUsePreviewData()) return fallback;
-    const result = await safeInvoke<SyncOutboxPage>("tracker_get_sync_outbox", { query });
+    const result = await safeInvoke("tracker_get_sync_outbox", { query });
     return result ?? fallback;
   },
   async getSyncState(): Promise<SyncStateSnapshot> {
     const fallback: SyncStateSnapshot = { state: {}, counterSeq: 0, pendingDeletions: 0 };
     if (shouldUsePreviewData()) return fallback;
-    const result = await safeInvoke<SyncStateSnapshot>("tracker_get_sync_state");
+    const result = await safeInvoke("tracker_get_sync_state");
     return result ?? fallback;
   },
   async setSyncState(entries: Record<string, string | null>) {
     if (shouldUsePreviewData()) return { written: 0 };
-    const result = await safeInvoke<{ written: number }>("tracker_set_sync_state", { query: { entries } });
+    const result = await safeInvoke("tracker_set_sync_state", { query: { entries } });
     return result ?? { written: 0 };
   },
   async applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult> {
     const fallback: SyncApplyResult = { inserted: 0, updated: 0, skipped: segments.length };
     if (shouldUsePreviewData()) return fallback;
-    const result = await safeInvoke<SyncApplyResult>("tracker_apply_synced_segments", { query: { segments } });
+    const result = await safeInvoke("tracker_apply_synced_segments", { query: { segments } });
     return result ?? fallback;
   },
   async getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]> {
     if (shouldUsePreviewData()) return [];
-    const result = await safeInvoke<SyncDeletionRecord[]>("tracker_get_pending_sync_deletions", { query: { limit } });
+    const result = await safeInvoke("tracker_get_pending_sync_deletions", { query: { limit } });
     return result ?? [];
   },
   async markSyncDeletionsPushed(deletionUids: readonly string[]) {
     if (shouldUsePreviewData()) return { marked: 0 };
-    const result = await safeInvoke<{ marked: number }>("tracker_mark_sync_deletions_pushed", { query: { deletionUids } });
+    const result = await safeInvoke("tracker_mark_sync_deletions_pushed", { query: { deletionUids } });
     return result ?? { marked: 0 };
   },
   async applySyncedDeletions(deletions: SyncDeletionRecord[]): Promise<SyncDeletionsApplyResult> {
     const fallback: SyncDeletionsApplyResult = { applied: 0, skipped: deletions.length };
     if (shouldUsePreviewData()) return fallback;
-    const result = await safeInvoke<SyncDeletionsApplyResult>("tracker_apply_synced_deletions", { query: { deletions } });
+    const result = await safeInvoke("tracker_apply_synced_deletions", { query: { deletions } });
     return result ?? fallback;
   },
   async purgeRemoteSegments() {
     if (shouldUsePreviewData()) return { purged: 0 };
-    const result = await safeInvoke<{ purged: number }>("tracker_purge_remote_segments");
+    const result = await safeInvoke("tracker_purge_remote_segments");
     return result ?? { purged: 0 };
   },
   async updateTrayProductivityIcon(mix: ProductivityShareMix) {
     if (shouldUsePreviewData()) return;
-    await safeInvoke<void>("tray_update_productivity_icon", {
+    await safeInvoke("tray_update_productivity_icon", {
       focus: mix.focus,
       drift: mix.drift,
       neutral: mix.neutral,
@@ -485,10 +481,10 @@ export const trackerClient: TrackerApi = {
   },
   async updateTrayIconStyle(style: TrayIconStyle) {
     if (shouldUsePreviewData()) return;
-    await safeInvoke<void>("tray_update_icon_style", { style });
+    await safeInvoke("tray_update_icon_style", { style });
   },
   async updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus) {
     if (shouldUsePreviewData()) return;
-    await safeInvoke<void>("tray_update_drift_alarm_status", { status });
+    await safeInvoke("tray_update_drift_alarm_status", { status });
   },
 };
