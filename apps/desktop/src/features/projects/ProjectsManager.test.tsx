@@ -58,11 +58,23 @@ describe("ProjectsManager", () => {
     expect(screen.queryByRole("group", { name: "Details for Drifty" })).toBeNull();
   });
 
+  it("exposes project details as a native primary action", () => {
+    const props = baseProps();
+    render(<ProjectsManager {...props} />);
+
+    const openProject = screen.getByRole("button", { name: "Open Drifty project" });
+    openProject.focus();
+    expect(document.activeElement).toBe(openProject);
+    fireEvent.click(openProject);
+    expect(props.onOpenProject).toHaveBeenCalledWith("p1");
+  });
+
   it("opens the row menu and edits the project through the modal", () => {
     const props = baseProps();
     render(<ProjectsManager {...props} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
+    expect(props.onOpenProject).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
 
     const dialog = screen.getByRole("dialog", { name: "Edit project" });

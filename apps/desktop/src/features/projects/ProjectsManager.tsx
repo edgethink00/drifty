@@ -161,10 +161,18 @@ export function ProjectsManager({
               <div className="projects-table__row" role="row" onClick={() => onOpenProject(project.id)}>
                 <div className="pt-proj">
                   <span className="pt-swatch" style={{ background: project.color || DEFAULT_PROJECT_COLOR }} />
-                  <div>
+                  <button
+                    type="button"
+                    className="projects-table__open"
+                    aria-label={`Open ${project.name} project`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenProject(project.id);
+                    }}
+                  >
                     <strong>{project.name}</strong>
                     <small>{truncateDescription(project.description)}</small>
-                  </div>
+                  </button>
                 </div>
                 <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id))}</span>
                 <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
