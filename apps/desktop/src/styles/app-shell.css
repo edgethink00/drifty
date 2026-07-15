@@ -683,6 +683,14 @@
   white-space: nowrap;
 }
 
+.app-shell:not(.app-shell--sidebar-collapsed)
+  .tracker-control[data-state="unavailable"]
+  .live-pill__summary-app {
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .live-pill__summary-site {
   flex: 1 1 0;
   min-width: 0;
