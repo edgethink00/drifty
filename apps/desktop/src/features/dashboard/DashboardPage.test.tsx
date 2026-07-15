@@ -8,10 +8,15 @@ const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
   readonly browserHistoryBootstrapNotice?: ComponentProps<typeof DashboardPage>["browserHistoryBootstrapNotice"];
+  readonly dashboardEffectiveProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardEffectiveProductivityTotals"];
   readonly dashboardDateNavigator?: ComponentProps<typeof DashboardPage>["dashboardDateNavigator"];
+  readonly dashboardProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardProductivityTotals"];
   readonly dashboardReplay?: ComponentProps<typeof DashboardPage>["dashboardReplay"];
+  readonly dashboardTitleDuration?: string;
   readonly dashPeriod?: ComponentProps<typeof DashboardPage>["dashPeriod"];
+  readonly hasTimelineData?: boolean;
   readonly initialDataLoading?: boolean;
+  readonly totalSeconds?: number;
 };
 
 function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
@@ -27,19 +32,19 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={[]}
       dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}
-      dashboardEffectiveProductivityTotals={[]}
-      dashboardProductivityTotals={[]}
+      dashboardEffectiveProductivityTotals={options.dashboardEffectiveProductivityTotals ?? []}
+      dashboardProductivityTotals={options.dashboardProductivityTotals ?? []}
       dashboardReplay={options.dashboardReplay === undefined ? { phase: "playing", progress: 0, onRestart: noop, onStop: noop } : options.dashboardReplay}
       dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
       dashboardTitle="Today"
-      dashboardTitleDuration="0m"
+      dashboardTitleDuration={options.dashboardTitleDuration ?? "0m"}
       dashPeriod={options.dashPeriod ?? "Today"}
       flowBlocks={[]}
       flowIntervalMinutes={3}
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
       dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
       dayFocusDeltaPercent={null}
-      hasTimelineData={false}
+      hasTimelineData={options.hasTimelineData ?? false}
       historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       historySegments={[]}
       initialDataLoading={options.initialDataLoading ?? false}
@@ -48,7 +53,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       selectedDayLabel="Mon, Jun 29"
       startOfDayMinutes={4 * 60}
       statusRunning={true}
-      totalSeconds={0}
+      totalSeconds={options.totalSeconds ?? 0}
       weekCalendarEvents={new Map()}
       weekCurrentCalendarDay={null}
       weekCurrentMinuteOfDay={null}
@@ -110,7 +115,35 @@ describe("DashboardPage demo replay empty data", () => {
 
     expect(screen.getByText("Not enough data yet")).toBeTruthy();
     expect(screen.getByText("Importing from browser history (last 48 hours).")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toBe("3 visits summarized locally.");
+    expect(screen.getByText("3 visits summarized locally.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /last 48 hours|add estimates/i })).toBeNull();
+  });
+});
+
+describe("DashboardPage day metrics without measured activity", () => {
+  it("uses an unavailable treatment instead of measured zeros", () => {
+    renderDashboardWithNoData({ dashboardReplay: null });
+
+    expect(screen.getByRole("heading", { name: "Today —" })).toBeTruthy();
+    expect(screen.getByLabelText("Focus total today").textContent).toContain("Focus today—");
+    expect(screen.getByRole("status", { name: "Breakdown availability" }).textContent).toContain("No activity data");
+    expect(screen.queryByText("Productivity")).toBeNull();
+    expect(screen.queryByText("Categories")).toBeNull();
+  });
+
+  it("preserves a measured zero focus value when other activity exists", () => {
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      dashboardEffectiveProductivityTotals: [{ productivity: "drift", totalSeconds: 1_800, segments: 1, ratio: 1 }],
+      dashboardProductivityTotals: [{ productivity: "drift", totalSeconds: 1_800, segments: 1, ratio: 1 }],
+      dashboardTitleDuration: "30m",
+      hasTimelineData: true,
+      totalSeconds: 1_800,
+    });
+
+    expect(screen.getByRole("heading", { name: "Today 30m" })).toBeTruthy();
+    expect(screen.getByLabelText("Focus total today").textContent).toContain("Focus today0m");
+    expect(screen.queryByText("No activity data")).toBeNull();
+    expect(screen.getByText("Productivity")).toBeTruthy();
   });
 });

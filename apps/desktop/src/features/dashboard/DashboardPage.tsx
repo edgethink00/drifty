@@ -161,6 +161,7 @@ export function DashboardPage({
     initialDataLoading ? "page--loading-skeleton" : null,
   ].filter(Boolean).join(" ");
   const isDashboardReplayActive = dashboardReplay !== null;
+  const hasMeasuredDayActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
     ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused or unavailable. Start the tracker, then activity will appear here.");
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
@@ -169,6 +170,7 @@ export function DashboardPage({
     ? "This week"
     : `Week of ${new Date(`${dashboardRange.startDay}T12:00:00`).toLocaleDateString(UI_LOCALE, { month: "short", day: "numeric" })}`;
   const headTitle = dashPeriod === "Week" ? weekTitle : dashboardTitle;
+  const headDuration = dashPeriod === "Today" && !hasMeasuredDayActivity ? "—" : dashboardTitleDuration;
   const dayFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
   const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals);
@@ -199,12 +201,12 @@ export function DashboardPage({
           <div className="dashboard-page-head__row">
             <div>
               <h1
-                aria-label={initialDataLoading ? "Loading dashboard data" : `${headTitle} ${dashboardTitleDuration}`}
+                aria-label={initialDataLoading ? "Loading dashboard data" : `${headTitle} ${headDuration}`}
                 className="dashboard-page-head__title"
               >
                 <span className="dashboard-page-head__title-value">{headTitle}</span>
                 <span className={`dashboard-page-head__title-value dashboard-page-head__title-duration${initialDataLoading ? " dashboard-page-head__title-duration--loading" : ""}`}>
-                  {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : dashboardTitleDuration}
+                  {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : headDuration}
                 </span>
               </h1>
             </div>
@@ -325,43 +327,57 @@ export function DashboardPage({
             <BreakdownHeroCard
               ariaLabel="Focus total today"
               eyebrow={dashboardTitle === "Today" ? "Focus today" : "Focus"}
-              value={dayFocusSeconds > 0 ? formatCompactDurationFromSeconds(dayFocusSeconds) : "0m"}
-              deltaPercent={dayFocusDeltaPercent}
+              value={hasMeasuredDayActivity
+                ? dayFocusSeconds > 0
+                  ? formatCompactDurationFromSeconds(dayFocusSeconds)
+                  : "0m"
+                : "—"}
+              deltaPercent={hasMeasuredDayActivity ? dayFocusDeltaPercent : null}
               deltaComparisonLabel={dashboardTitle === "Today" ? "vs yesterday" : "vs previous day"}
             />
-            {showProjectDonut ? (
-              <CompactRingChart
-                title="Projects"
-                entries={flowProjectRingEntries ?? []}
-                totalSeconds={totalSeconds}
-                centerPercent={flowProjectCenterPercent ?? 0}
-                flowBlocks={flowBlocks}
-                appIcons={appIcons}
-              />
+            {!hasMeasuredDayActivity ? (
+              <div className="empty-state" role="status" aria-label="Breakdown availability">
+                <span className="eyebrow">No activity data</span>
+                <strong>Breakdown unavailable</strong>
+                <p>Breakdown metrics appear after activity is recorded for this day.</p>
+              </div>
             ) : (
-              <CompactRingChart
-                title="Productivity"
-                entries={dayProductivityRingEntries}
-                totalSeconds={totalSeconds}
-                centerPercent={dayProductivityCenterPercent}
-                flowBlocks={flowBlocks}
-                appIcons={appIcons}
-              />
+              <>
+                {showProjectDonut ? (
+                  <CompactRingChart
+                    title="Projects"
+                    entries={flowProjectRingEntries ?? []}
+                    totalSeconds={totalSeconds}
+                    centerPercent={flowProjectCenterPercent ?? 0}
+                    flowBlocks={flowBlocks}
+                    appIcons={appIcons}
+                  />
+                ) : (
+                  <CompactRingChart
+                    title="Productivity"
+                    entries={dayProductivityRingEntries}
+                    totalSeconds={totalSeconds}
+                    centerPercent={dayProductivityCenterPercent}
+                    flowBlocks={flowBlocks}
+                    appIcons={appIcons}
+                  />
+                )}
+                <CompactClassificationBar<CategoryDuration>
+                  title="Categories"
+                  ariaLabel="Category compact classification"
+                  entries={dayActiveCategoryEntries}
+                  totalSeconds={totalSeconds}
+                  getKey={(entry) => entry.category}
+                  getLabel={(entry) => categoryLabel(entry.category)}
+                  getColor={(entry) => CATEGORY_COLORS[entry.category]}
+                  getDotClassName={(entry) => `category-dot--${entry.category}`}
+                  getAppBreakdown={(entry) => buildCompactClassificationBreakdown(flowBlocks, (block) => block.category === entry.category)}
+                  appIcons={appIcons}
+                  visibleLimit={5}
+                />
+                {dayBreakdownTiles}
+              </>
             )}
-            <CompactClassificationBar<CategoryDuration>
-              title="Categories"
-              ariaLabel="Category compact classification"
-              entries={dayActiveCategoryEntries}
-              totalSeconds={totalSeconds}
-              getKey={(entry) => entry.category}
-              getLabel={(entry) => categoryLabel(entry.category)}
-              getColor={(entry) => CATEGORY_COLORS[entry.category]}
-              getDotClassName={(entry) => `category-dot--${entry.category}`}
-              getAppBreakdown={(entry) => buildCompactClassificationBreakdown(flowBlocks, (block) => block.category === entry.category)}
-              appIcons={appIcons}
-              visibleLimit={5}
-            />
-            {dayBreakdownTiles}
           </BreakdownSidePanel>
         </div>
       )}
