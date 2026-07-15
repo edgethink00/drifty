@@ -227,6 +227,7 @@ import type { ClassificationPanelStyle } from "./features/classification/Classif
 import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { useStickyDuringLoad } from "./features/dashboard/useStickyDuringLoad";
 import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
@@ -5488,6 +5489,29 @@ export default function App() {
     />
   );
 
+  // Day-nav transient: the visible range jumps to the new day before its
+  // segments load, so for that gap the breakdown collapses to zeros and the
+  // donut/bar tween snaps A→empty→B. Hold the previous day's breakdown while the
+  // new day's segments are still loading so the charts morph straight A→B. The
+  // flow chart keeps its own empty frame (legend + axis) — only the breakdown
+  // side panel inputs are held. A genuinely data-less day is unaffected: once its
+  // empty segments finish loading the guard clears and the real zeros show.
+  // Stale whenever the loaded segments don't match the selected day — this is
+  // true from the very first render after a date click (when the range has moved
+  // but the new day's segments haven't loaded yet), NOT only once `loading` flips
+  // on in a later effect. Gating on `loading` missed that first render, which both
+  // flashed empty AND poisoned the sticky cache with the empty value, so
+  // yesterday→older navigations still snapped. `segmentsLoadedDay` catching up to
+  // `selectedDay` (after setSegments) clears it.
+  const isDayBreakdownLoading = dashPeriod === "Today" && hasLoadedOnce && segmentsLoadedDay !== selectedDay;
+  const stickyDashboardCategoryTotals = useStickyDuringLoad(dashboardCategoryTotals, isDayBreakdownLoading);
+  const stickyDashboardProductivityTotals = useStickyDuringLoad(dashboardProductivityTotals, isDayBreakdownLoading);
+  const stickyDashboardEffectiveProductivityTotals = useStickyDuringLoad(dashboardEffectiveProductivityTotals, isDayBreakdownLoading);
+  const stickyDashboardAppUsage = useStickyDuringLoad(dashboardAppUsage, isDayBreakdownLoading);
+  const stickyTotalSeconds = useStickyDuringLoad(totalSeconds, isDayBreakdownLoading);
+  const stickyDayFocusDeltaPercent = useStickyDuringLoad(dayFocusDeltaPercent, isDayBreakdownLoading);
+  const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
+
   const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;
   const effectiveBillingEntitlementError = activeDashboardAiUnavailablePreviewInput?.billingEntitlementError ?? billingEntitlementError;
   const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
@@ -5959,12 +5983,12 @@ export default function App() {
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAiUnavailableState={dashboardAiUnavailableState}
-            dashboardAppUsage={dashboardAppUsage}
+            dashboardAppUsage={stickyDashboardAppUsage}
             browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
-            dashboardCategoryTotals={dashboardCategoryTotals}
+            dashboardCategoryTotals={stickyDashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
-            dashboardEffectiveProductivityTotals={dashboardEffectiveProductivityTotals}
-            dashboardProductivityTotals={dashboardProductivityTotals}
+            dashboardEffectiveProductivityTotals={stickyDashboardEffectiveProductivityTotals}
+            dashboardProductivityTotals={stickyDashboardProductivityTotals}
             dashboardReplay={dashboardReplay}
             dashboardRange={effectiveDashboardRange}
             dashboardTitle={dashboardTitle}
@@ -5980,8 +6004,8 @@ export default function App() {
             flowProjectRingEntries={dashboardProjectRing.entries}
             flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
-            dayBreakdownTiles={dayBreakdownTiles}
-            dayFocusDeltaPercent={isPreviewSurface ? 12 : dayFocusDeltaPercent}
+            dayBreakdownTiles={stickyDayBreakdownTiles}
+            dayFocusDeltaPercent={isPreviewSurface ? 12 : stickyDayFocusDeltaPercent}
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
@@ -5991,7 +6015,7 @@ export default function App() {
             selectedDayLabel={selectedDayLabel}
             startOfDayMinutes={startOfDayMinutes}
             statusRunning={status?.running === true}
-            totalSeconds={totalSeconds}
+            totalSeconds={stickyTotalSeconds}
             weekCalendarEvents={weekCalendarEvents}
             weekFocusDeltaPercent={weekFocusDeltaPercent}
             weekRefreshStatus={weekRefreshStatus}
