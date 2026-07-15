@@ -141,6 +141,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* Optical centering in the 32px chrome: the whole cluster sits 1px high. */
+  transform: translateY(-1px);
   margin-left: auto;
   padding-left: 12px;
 }
@@ -151,7 +153,9 @@
   align-items: center;
   appearance: none;
   align-self: center;
-  background: var(--ai-connection-bg);
+  /* ~38% translucent (matching the update pill's 62%-opaque fill); the
+     backdrop blur below keeps text readable over the glass. */
+  background: color-mix(in srgb, var(--ai-connection-bg) 62%, transparent);
   border: 0;
   border-radius: 999px;
   color: var(--window-chrome-icon);
@@ -159,7 +163,7 @@
   display: inline-grid;
   font: inherit;
   gap: 7px;
-  grid-template-columns: 8px auto minmax(0, auto) auto;
+  grid-template-columns: 8px auto minmax(0, auto);
   height: 24.5px;
   max-width: min(40vw, 340px);
   min-width: 0;
@@ -170,8 +174,11 @@
 }
 
 .ai-connection-status:hover {
-  background: var(--shell-glass-control-strong);
+  /* Update-button-like hover: deepen the pill's own tone in place — the
+     transform pins the base 0.5px offset against the global button lift. */
+  background: color-mix(in srgb, color-mix(in srgb, var(--ai-connection-dot) 12%, var(--ai-connection-bg)) 82%, transparent);
   box-shadow: none;
+  transform: translateY(0.5px);
 }
 
 .ai-connection-status:focus-visible {
@@ -259,6 +266,13 @@
 .ai-connection-status[data-tone="error"] .ai-connection-status__provider {
   color: var(--ai-connection-dot);
   font-weight: 650;
+}
+
+/* Memory readout sits in the chrome just before the pill, not inside it. */
+.ai-connection-status__memory--outside {
+  align-self: center;
+  color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .window-theme-toggle {

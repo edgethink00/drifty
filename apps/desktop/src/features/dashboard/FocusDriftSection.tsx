@@ -218,9 +218,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                   </linearGradient>
                 </defs>
                 <path className="focus-drift__grid" d={FOCUS_DRIFT_GRID_PATH} />
-                {chart.hasData && chart.currentX !== null ? (
-                  <rect className="focus-drift__future-region" x={chart.currentX} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - chart.currentX} height={FOCUS_DRIFT_CHART_BOUNDS.bottom - FOCUS_DRIFT_CHART_BOUNDS.top} aria-hidden="true" />
-                ) : null}
+                {/* The "future / pending" shaded region (a box from now to the
+                    day's end that only appeared on today) was removed — it read
+                    as a stray box and the now-marker + curve already convey the
+                    current time, keeping every day visually consistent. */}
                 {shouldRenderSeries ? (
                   <g clipPath={chartClipPath}>
                     <path className="focus-drift__area" d={chart.focusAreaPath} />

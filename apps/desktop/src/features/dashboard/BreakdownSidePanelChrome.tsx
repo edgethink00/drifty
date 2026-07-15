@@ -46,17 +46,21 @@ type BreakdownHeroCardProps = {
 
 /** "Focus today / this week" hero card with the vs-previous-period badge. */
 export function BreakdownHeroCard({ ariaLabel, eyebrow, value, deltaPercent, deltaComparisonLabel }: BreakdownHeroCardProps) {
+  const hasDelta = deltaPercent !== null;
   return (
     <section className="week-v2-side-card week-v2-side__hero" aria-label={ariaLabel}>
       <span className="label-mono">{eyebrow}</span>
       <div className="week-v2-side__hero-row">
         <strong className="week-v2-side__hero-value">{value}</strong>
       </div>
-      {deltaPercent !== null ? (
-        <p className="week-v2-side__hero-sub">
-          <span className="week-v2-side__hero-badge">{deltaPercent >= 0 ? "↑" : "↓"} {Math.abs(deltaPercent)}%</span> {deltaComparisonLabel}
-        </p>
-      ) : null}
+      {/* Always render the delta line so the charts below keep a consistent
+          position; before the comparison is available it shows a "—%"
+          placeholder instead of collapsing the row. */}
+      <p className="week-v2-side__hero-sub">
+        <span className={`week-v2-side__hero-badge${hasDelta ? "" : " week-v2-side__hero-badge--empty"}`}>
+          {hasDelta ? `${deltaPercent >= 0 ? "↑" : "↓"} ${Math.abs(deltaPercent)}%` : "— %"}
+        </span> {deltaComparisonLabel}
+      </p>
     </section>
   );
 }

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
+
+// Auto-cleanup isn't unmounting between cases here, so broad role/text queries
+// otherwise collide with a prior render's DOM. Tear down explicitly.
+afterEach(cleanup);
 
 const noop = vi.fn();
 
@@ -113,7 +117,10 @@ describe("DashboardPage demo replay empty data", () => {
       },
     });
 
-    expect(screen.getByText("Not enough data yet")).toBeTruthy();
+    // The flow chart now keeps its real empty frame (legend + time axis) instead
+    // of collapsing to an empty-state card; the bootstrap status renders below it.
+    expect(screen.getByLabelText("3-minute flow chart")).toBeTruthy();
+    expect(screen.queryByText("No timeline yet")).toBeNull();
     expect(screen.getByText("Importing from browser history (last 48 hours).")).toBeTruthy();
     expect(screen.getByText("3 visits summarized locally.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /last 48 hours|add estimates/i })).toBeNull();
@@ -127,8 +134,10 @@ describe("DashboardPage day metrics without measured activity", () => {
     expect(screen.getByRole("heading", { name: "Today —" })).toBeTruthy();
     expect(screen.getByLabelText("Focus total today").textContent).toContain("Focus today—");
     expect(screen.getByRole("status", { name: "Breakdown availability" }).textContent).toContain("No activity data");
-    expect(screen.queryByText("Productivity")).toBeNull();
-    expect(screen.queryByText("Categories")).toBeNull();
+    // The breakdown donut/bar are absent (the flow chart's own Category/Productivity
+    // colour toggle renders regardless, so assert on the breakdown panels' labels).
+    expect(screen.queryByLabelText("Productivity compact classification")).toBeNull();
+    expect(screen.queryByLabelText("Category compact classification")).toBeNull();
   });
 
   it("preserves a measured zero focus value when other activity exists", () => {
@@ -144,6 +153,8 @@ describe("DashboardPage day metrics without measured activity", () => {
     expect(screen.getByRole("heading", { name: "Today 30m" })).toBeTruthy();
     expect(screen.getByLabelText("Focus total today").textContent).toContain("Focus today0m");
     expect(screen.queryByText("No activity data")).toBeNull();
-    expect(screen.getByText("Productivity")).toBeTruthy();
+    // The breakdown Productivity donut is shown (measured activity exists); scope
+    // to its panel label so it isn't confused with the flow chart's colour toggle.
+    expect(screen.getByLabelText("Productivity compact classification")).toBeTruthy();
   });
 });

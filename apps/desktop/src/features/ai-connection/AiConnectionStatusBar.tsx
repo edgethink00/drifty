@@ -127,19 +127,25 @@ export function AiConnectionStatusBar({
   const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
 
   return (
-    <button
-      type="button"
-      className="ai-connection-status"
-      aria-label={t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
-      data-tone={status.tone}
-      data-activity={status.activity ?? undefined}
-      onClick={onOpenSettings}
-    >
-      <span className="ai-connection-status__dot" aria-hidden="true" />
-      <span className="ai-connection-status__label">{statusLabel}</span>
-      <span className="ai-connection-status__provider">{providerLabel}</span>
-      {status.memoryLabel ? <span className="ai-connection-status__memory" title={t("ai.connection.memoryTitle", { memory: status.memoryLabel })}>{status.memoryLabel}</span> : null}
-    </button>
+    <>
+      {status.memoryLabel ? (
+        <span className="ai-connection-status__memory ai-connection-status__memory--outside" title={t("ai.connection.memoryTitle", { memory: status.memoryLabel })}>
+          {status.memoryLabel}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className="ai-connection-status"
+        aria-label={t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
+        data-tone={status.tone}
+        data-activity={status.activity ?? undefined}
+        onClick={onOpenSettings}
+      >
+        <span className="ai-connection-status__dot" aria-hidden="true" />
+        <span className="ai-connection-status__label">{statusLabel}</span>
+        <span className="ai-connection-status__provider">{providerLabel}</span>
+      </button>
+    </>
   );
 }
 

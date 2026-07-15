@@ -855,20 +855,10 @@
   margin-left: calc(0px - var(--focus-drift-left-bleed));
 }
 
-.focus-drift--live .focus-drift__plot::after,
-.focus-drift--reveal .focus-drift__plot::after {
-  content: "";
-  position: absolute;
-  top: 8%;
-  right: calc(var(--focus-drift-right-bleed) - var(--space-2));
-  bottom: 8%;
-  left: var(--focus-drift-chart-right, 95.5%);
-  z-index: 0;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: color-mix(in srgb, var(--surface-strong) 72%, var(--bg-2));
-  opacity: 0.58;
-  pointer-events: none;
-}
+/* The live/reveal "future / pending" shaded box on the right edge was removed —
+   it only appeared on today (and during replay), read as a stray box, and the
+   now-marker + curve already convey the current time. Keeping every day visually
+   consistent. */
 
 .focus-drift__svg {
   width: 100%;
@@ -900,6 +890,12 @@
 
 .dashboard-insight-stack .insight-chart-panel.editorial-panel {
   margin-top: 0;
+  /* Trim 3px off each side (12px → 9px) so the focus/drift plot's inner frame
+     lines up horizontally with the flow chart's grid above (230→1511), keeping
+     both time axes vertically aligned. Scoped to the dashboard so Trends/Insights
+     chart panels keep their original inset. */
+  padding-left: 9px;
+  padding-right: 9px;
 }
 
 .insight-chart-panel.editorial-panel .insight-panel-head {

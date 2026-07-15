@@ -8,6 +8,7 @@ import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
 import { formatCompactBarLabel } from "./compactChartLabels";
+import { useAnimatedDonutRatios } from "./compactChartTween";
 
 export interface CompactRingEntry {
   readonly key: string;
@@ -45,14 +46,26 @@ export function CompactRingChart({
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0 && entry.ratio > 0);
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;
-  // Entries carry classified time only; the remainder up to totalSeconds is
-  // unclassified (pending AI, blank screens) and stays out of the percent.
+  // Entries carry classified time only; hover shares are a percentage of that
+  // classified total (the unclassified remainder is intentionally not shown).
   const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
-  const unclassifiedSeconds = Math.max(0, totalSeconds - classifiedSeconds);
-  const hasPendingClassification = flowBlocks.some((block) => block.category === "unknown" && block.classificationSource === "unknown");
   const circleLabel = formatCompactBarLabel(title, entries, (entry) => entry.label);
   const gap = activeEntries.length > 1 ? 1.6 : 0;
-  const circleSegments = buildDonutArcSegments(activeEntries, (entry) => entry.ratio, 50, 50, 40, gap / DONUT_CIRCUMFERENCE);
+  // Morph the arcs from the previous render's ratios (keyed by title so the Day
+  // and Week productivity donuts share one memory); arcs are built from the
+  // animating ratios so React paints every frame. See compactChartTween.
+  const animatedRatios = useAnimatedDonutRatios(
+    `compact-donut:${title}`,
+    new Map(activeEntries.map((entry) => [entry.key, entry.ratio])),
+  );
+  const circleSegments = buildDonutArcSegments(
+    activeEntries,
+    (entry) => animatedRatios.get(entry.key) ?? entry.ratio,
+    50,
+    50,
+    40,
+    gap / DONUT_CIRCUMFERENCE,
+  );
 
   function showSegmentHover(entry: CompactRingEntry, x: number, y: number) {
     setHoveredSegment({
@@ -103,11 +116,6 @@ export function CompactRingChart({
           ))}
         </div>
       </div>
-      {unclassifiedSeconds >= 60 ? (
-        <div className="flow-compact-productivity-circle__note">
-          {formatCompactDurationFromSeconds(unclassifiedSeconds)} {hasPendingClassification ? "classifying…" : "unclassified"}
-        </div>
-      ) : null}
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
     </div>
   );

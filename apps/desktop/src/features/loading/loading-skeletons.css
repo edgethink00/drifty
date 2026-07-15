@@ -184,7 +184,10 @@
 
 .dashboard-skeleton-panel-bed--score {
   height: 100%;
-  min-height: 6.725rem;
+  /* Match the populated focus/drift panel height (159px) exactly so navigating
+     between a loaded day and the loading skeleton doesn't visibly resize this
+     block. 6.725rem made the skeleton panel 10px taller than the real one. */
+  min-height: 6.1rem;
 }
 
 .app-usage-panel--loading .app-usage-feature,
