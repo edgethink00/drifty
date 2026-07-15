@@ -589,7 +589,7 @@ fn invoke_one_shot(
 
 /// A long-lived tracker `serve` process. Requests and responses are
 /// newline-delimited JSON; access is serialized through a mutex so request and
-/// response order always match (the server processes one line at a time).
+/// response order always matches (the server processes one line at a time).
 /// Responses arrive through a dedicated reader thread so a wedged sidecar can
 /// be bounded by a timeout instead of pinning the mutex forever.
 struct ServeProcess {
