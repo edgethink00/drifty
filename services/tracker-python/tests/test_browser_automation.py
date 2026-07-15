@@ -48,8 +48,8 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertIn("property foundAddress : false", script)
         self.assertIn("on scanToolbarFirst(theElement)", script)
         self.assertLess(
-            script.index("my scanToolbarFirst(front window)"),
-            script.index("my scanElement(front window)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
+            script.index("my scanElement(targetWindow)"),
         )
         self.assertIn("if foundAddress is true then return", script)
         self.assertIn("if foundAddress is true then exit repeat", script)
@@ -62,9 +62,29 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertIn("set addressFieldGroup to UI element 4 of addressToolbar", script)
         self.assertIn("my considerAddressCandidate(UI element 2 of addressFieldGroup)", script)
         self.assertLess(
-            script.index("my scanKnownChromiumAddressBar(front window)"),
-            script.index("my scanToolbarFirst(front window)"),
+            script.index("my scanKnownChromiumAddressBar(targetWindow)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
         )
+
+    def test_accessibility_address_bar_script_targets_main_window_not_front_window(self) -> None:
+        script = accessibility_address_bar_script("Aside")
+
+        # The real omnibox lives in the main / standard window. Aside keeps a
+        # synthetic contentless overlay ahead of it in the window order, so the
+        # scan must target the main window rather than "front window".
+        self.assertIn('first window whose value of attribute "AXMain" is true', script)
+        self.assertIn('first window whose subrole is "AXStandardWindow"', script)
+        self.assertIn("set axTitle to name of targetWindow", script)
+        for call in (
+            "my scanKnownChromiumAddressBar(targetWindow)",
+            "my scanToolbarFirst(targetWindow)",
+            "my scanElement(targetWindow)",
+        ):
+            self.assertIn(call, script)
+        # No scan should be run directly against the raw front window.
+        self.assertNotIn("scanKnownChromiumAddressBar(front window)", script)
+        self.assertNotIn("scanToolbarFirst(front window)", script)
+        self.assertNotIn("scanElement(front window)", script)
 
     def test_run_osascript_uses_timeout(self) -> None:
         with patch("app.tracker.macos_workspace.subprocess.run") as mock_run:

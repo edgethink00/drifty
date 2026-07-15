@@ -150,7 +150,21 @@ def accessibility_address_bar_script(app_name: str) -> str:
           if not (exists process "{app_name}") then return "{AX_NO_PROCESS}"
           tell process "{app_name}"
             if not (exists front window) then return "{AX_NO_FRONT_WINDOW}"
-            set axTitle to name of front window
+            -- Prefer the browser's main standard window. Some Chromium browsers
+            -- (e.g. Aside) keep a synthetic, contentless overlay window
+            -- (subrole AXUnknown, 0 children) ahead of the real window in the
+            -- window order, so "front window" would scan an empty shell and
+            -- report no address field. The main / standard window is the one
+            -- that actually holds the omnibox.
+            set targetWindow to front window
+            try
+              set targetWindow to first window whose value of attribute "AXMain" is true
+            on error
+              try
+                set targetWindow to first window whose subrole is "AXStandardWindow"
+              end try
+            end try
+            set axTitle to name of targetWindow
             set bestValue to ""
             set bestLength to -1
             set bestPriority to -1
@@ -158,10 +172,10 @@ def accessibility_address_bar_script(app_name: str) -> str:
             set visitedCount to 0
             set toolbarVisitedCount to 0
             set foundAddress to false
-            my scanKnownChromiumAddressBar(front window)
-            my scanToolbarFirst(front window)
+            my scanKnownChromiumAddressBar(targetWindow)
+            my scanToolbarFirst(targetWindow)
             if foundAddress is false then
-              my scanElement(front window)
+              my scanElement(targetWindow)
             end if
             if readableCount is 0 then return "{AX_NO_ADDRESS_FIELD}"
             return bestValue & linefeed & axTitle
