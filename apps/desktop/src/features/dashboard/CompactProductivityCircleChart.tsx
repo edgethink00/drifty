@@ -9,6 +9,7 @@ import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
 import { formatCompactBarLabel } from "./compactChartLabels";
+import { useAnimatedDonutRatios } from "./compactChartTween";
 
 type CompactProductivityCircleChartProps = {
   readonly entries: ProductivityDuration[];
@@ -33,15 +34,27 @@ export function CompactProductivityCircleChart({
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;
   const focusEntry = entries.find((entry) => entry.productivity === "focus");
   const focusSeconds = focusEntry?.totalSeconds ?? 0;
-  // Entries carry classified time only; the remainder up to totalSeconds is
-  // unclassified (pending AI, blank screens) and stays out of the percent.
+  // Entries carry classified time only; the percent is a share of that classified
+  // total (the unclassified remainder up to totalSeconds is intentionally not shown).
   const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
-  const unclassifiedSeconds = Math.max(0, totalSeconds - classifiedSeconds);
-  const hasPendingClassification = flowBlocks.some((block) => block.category === "unknown" && block.classificationSource === "unknown");
   const focusPercent = classifiedSeconds > 0 ? Math.round((focusSeconds / classifiedSeconds) * 100) : 0;
   const circleLabel = formatCompactBarLabel("Productivity", entries, (entry) => productivityLabel(entry.productivity));
   const gap = activeEntries.length > 1 ? 1.6 : 0;
-  const circleSegments = buildDonutArcSegments(activeEntries, (entry) => entry.ratio, 50, 50, 40, gap / DONUT_CIRCUMFERENCE);
+  // Morph the arcs from the previous period's ratios across the Day↔Week remount
+  // (shared cache key); arcs are built from the animating ratios so React paints
+  // every frame. See compactChartTween.
+  const animatedRatios = useAnimatedDonutRatios(
+    "compact-donut:productivity",
+    new Map(activeEntries.map((entry) => [entry.productivity, entry.ratio])),
+  );
+  const circleSegments = buildDonutArcSegments(
+    activeEntries,
+    (entry) => animatedRatios.get(entry.productivity) ?? entry.ratio,
+    50,
+    50,
+    40,
+    gap / DONUT_CIRCUMFERENCE,
+  );
 
   function showSegmentHover(entry: ProductivityDuration, x: number, y: number) {
     setHoveredSegment({
@@ -92,11 +105,6 @@ export function CompactProductivityCircleChart({
           ))}
         </div>
       </div>
-      {unclassifiedSeconds >= 60 ? (
-        <div className="flow-compact-productivity-circle__note">
-          {formatCompactDurationFromSeconds(unclassifiedSeconds)} {hasPendingClassification ? "classifying…" : "unclassified"}
-        </div>
-      ) : null}
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
     </div>
   );

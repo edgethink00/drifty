@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationBreakdownRow, CompactClassificationHoverState } from "./HoverCards";
 import { formatCompactBarLabel } from "./compactChartLabels";
+import { tweenCompactBar } from "./compactChartTween";
 
 type CompactClassificationEntry = {
   readonly totalSeconds: number;
@@ -43,6 +44,21 @@ export function CompactClassificationBar<TEntry extends CompactClassificationEnt
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;
   const barLabel = formatCompactBarLabel(title, entries, getLabel);
 
+  // Tween each segment's width from the previous period's share (see
+  // compactChartTween). Keyed by title so the Day and Week category bars share
+  // one memory and morph into each other across the remount on period switch.
+  const segmentEls = useRef(new Map<string, HTMLSpanElement | null>());
+  useLayoutEffect(() => {
+    tweenCompactBar(
+      `compact-bar:${title}`,
+      entries.map((entry) => ({
+        key: getKey(entry),
+        el: segmentEls.current.get(getKey(entry)) ?? null,
+        value: `${entry.ratio * 100}%`,
+      })),
+    );
+  });
+
   function showSegmentHover(entry: TEntry, x: number, y: number) {
     setHoveredSegment({
       label: getLabel(entry),
@@ -66,6 +82,7 @@ export function CompactClassificationBar<TEntry extends CompactClassificationEnt
         {entries.map((entry) => (
           <span
             key={getKey(entry)}
+            ref={(el) => { segmentEls.current.set(getKey(entry), el); }}
             className="flow-compact-split-chart__segment"
             style={{ width: `${entry.ratio * 100}%`, background: getColor(entry) }}
             title={`${getLabel(entry)} · ${formatCompactDurationFromSeconds(entry.totalSeconds)} · ${Math.round(entry.ratio * 100)}%`}

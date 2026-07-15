@@ -133,7 +133,7 @@ describe("CompactRingChart", () => {
     expect(panel.querySelector(".flow-compact-productivity-circle__note")).toBeNull();
   });
 
-  it("keeps unclassified remainder out of the ring and reports it in a note", () => {
+  it("keeps unclassified remainder out of the ring without rendering a note", () => {
     const totalSeconds = 4 * 3600;
     const classifiedSeconds = 2 * 3600;
     const entries: CompactRingEntry[] = [
@@ -166,8 +166,11 @@ describe("CompactRingChart", () => {
       />,
     );
 
-    const note = container.querySelector(".flow-compact-productivity-circle__note");
-    expect(note?.textContent).toBe("2h unclassified");
+    // The unclassified remainder is intentionally not surfaced as a note anymore;
+    // it simply stays out of the ring and the percent.
+    expect(container.querySelector(".flow-compact-productivity-circle__note")).toBeNull();
+    const segments = container.querySelectorAll(".flow-compact-productivity-circle__segment");
+    expect(segments).toHaveLength(2);
   });
 
   it("opens a hover card with the entry label and app breakdown on segment hover", () => {
