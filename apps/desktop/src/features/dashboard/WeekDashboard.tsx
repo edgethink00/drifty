@@ -14,7 +14,7 @@ import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
 import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
 const WEEK_CALENDAR_TIME_RAIL_PX = 40;
@@ -152,6 +152,9 @@ function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardCol
 }
 
 type WeekDashboardProps = {
+  /** Page header (title + date navigator) rendered inside the calendar block
+   *  for the 2026-07 dashboard redesign. */
+  readonly header?: ReactNode;
   readonly rows: WeekDayRow[];
   readonly calendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly appIcons: AppIconMap;
@@ -183,6 +186,7 @@ export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: Wee
 }
 
 export function WeekDashboard({
+  header,
   rows,
   calendarEvents,
   appIcons,
@@ -334,6 +338,7 @@ export function WeekDashboard({
     <section className="week-v2" aria-label="Your week overview" data-week-axis-scale-percent={effectiveAxisScalePercent}>
       <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
         <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label="Week calendar schedule">
+          {header}
           <div className="week-v2-calendar__legend" aria-label="Week legend">
             <div className="flow-chart-head__actions">
               <div className="seg flow-color-mode-control" aria-label="Week color mode">

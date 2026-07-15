@@ -6,7 +6,6 @@ import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
 import { FlowChartView } from "../flow-chart/FlowChartView";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
-import { EmptyState } from "../../components/EmptyState";
 import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
 import { UI_LOCALE, formatCompactDurationFromSeconds, logicalTodayIsoDate } from "../../lib/formatting";
 import { CompactRingChart } from "./CompactRingChart";
@@ -176,6 +175,28 @@ export function DashboardPage({
   const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals);
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardEffectiveProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
+  // 2026-07 dashboard redesign: on Day/Week the header lives inside the main
+  // content column (day-split__main / week-v2-calendar) instead of on top of
+  // the page. Loading and Month keep the classic top placement.
+  const headInsideBlock = !initialDataLoading && (dashPeriod === "Today" || dashPeriod === "Week");
+  const pageHead = (
+    <div className={`pg-head dashboard-page-head${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
+        <div className="dashboard-page-head__row">
+          <div>
+            <h1
+              aria-label={initialDataLoading ? "Loading dashboard data" : `${headTitle} ${headDuration}`}
+              className="dashboard-page-head__title"
+            >
+              <span className="dashboard-page-head__title-value">{headTitle}</span>
+              <span className={`dashboard-page-head__title-value dashboard-page-head__title-duration${initialDataLoading ? " dashboard-page-head__title-duration--loading" : ""}`}>
+                {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : headDuration}
+              </span>
+            </h1>
+          </div>
+          {dashboardDateNavigator}
+        </div>
+    </div>
+  );
 
   return (
     <div className={pageClassName}>
@@ -197,22 +218,7 @@ export function DashboardPage({
         />
       ) : null}
 
-      <div className={`pg-head dashboard-page-head${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
-          <div className="dashboard-page-head__row">
-            <div>
-              <h1
-                aria-label={initialDataLoading ? "Loading dashboard data" : `${headTitle} ${headDuration}`}
-                className="dashboard-page-head__title"
-              >
-                <span className="dashboard-page-head__title-value">{headTitle}</span>
-                <span className={`dashboard-page-head__title-value dashboard-page-head__title-duration${initialDataLoading ? " dashboard-page-head__title-duration--loading" : ""}`}>
-                  {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : headDuration}
-                </span>
-              </h1>
-            </div>
-            {dashboardDateNavigator}
-          </div>
-      </div>
+      {headInsideBlock ? null : pageHead}
 
       <DashboardDemoReplayBanner replay={dashboardReplay} />
 
@@ -249,6 +255,7 @@ export function DashboardPage({
         <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={null} />
       ) : dashPeriod === "Week" ? (
         <WeekDashboard
+          header={headInsideBlock ? pageHead : null}
           rows={weekRows}
           calendarEvents={weekCalendarEvents}
           appIcons={appIcons}
@@ -278,32 +285,41 @@ export function DashboardPage({
       ) : (
         <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
           <div className="day-split__main">
-            {hasTimelineData || isDashboardReplayActive ? (
-              <div className="flow-breakdown-layout flow-breakdown-layout--full">
-                <div className="flow-breakdown-layout__chart">
-                  <FlowChartView
-                    blocks={flowBlocks}
-                    appIcons={appIcons}
-                    currentMinuteOfDay={currentMinuteOfDay}
-                    intervalMinutes={flowIntervalMinutes}
-                    startOfDayMinutes={startOfDayMinutes}
-                    onIntervalChange={onFlowIntervalChange}
-                    showEmptyGrid={isDashboardReplayActive}
-                    projectModeAvailable={projectModeAvailable}
-                    projectLegend={projectLegend}
-                    colorMode={flowColorMode}
-                    onColorModeChange={setFlowColorMode}
-                    deviceLabelById={deviceLabelById}
-                  />
-                </div>
+            {headInsideBlock ? pageHead : null}
+            {/* Always render the flow chart frame — with the fixed legend and
+                time axis and an empty grid when there's no data — so a data-less
+                day (or a brief load) keeps the same block instead of collapsing
+                to a bare card. */}
+            <div className="flow-breakdown-layout flow-breakdown-layout--full">
+              <div className="flow-breakdown-layout__chart">
+                <FlowChartView
+                  blocks={flowBlocks}
+                  appIcons={appIcons}
+                  currentMinuteOfDay={currentMinuteOfDay}
+                  intervalMinutes={flowIntervalMinutes}
+                  startOfDayMinutes={startOfDayMinutes}
+                  onIntervalChange={onFlowIntervalChange}
+                  /* Keep the frame (legend + axis + empty grid) whenever there
+                     are no blocks — an empty day, replay, OR the brief moment
+                     mid day-navigation before the next day's blocks arrive —
+                     so the chart never blanks out to nothing. */
+                  showEmptyGrid={flowBlocks.length === 0 || isDashboardReplayActive}
+                  projectModeAvailable={projectModeAvailable}
+                  projectLegend={projectLegend}
+                  colorMode={flowColorMode}
+                  onColorModeChange={setFlowColorMode}
+                  deviceLabelById={deviceLabelById}
+                />
               </div>
-            ) : (
-              <EmptyState title="No timeline yet" detail={emptyTimelineDetail}>
+            </div>
+            {!hasTimelineData && !isDashboardReplayActive ? (
+              <div className="dashboard-flow-empty-note" role="note">
+                <p>{emptyTimelineDetail}</p>
                 {browserHistoryBootstrapNotice ? (
                   <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />
                 ) : null}
-              </EmptyState>
-            )}
+              </div>
+            ) : null}
 
             <div className="dashboard-insight-stack">
               {focusDriftSection}

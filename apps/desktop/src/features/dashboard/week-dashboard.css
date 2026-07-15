@@ -1631,7 +1631,8 @@
    full-width layout (which hid the side panel entirely). */
 
 .week-v2-grid--calendar {
-  grid-template-columns: minmax(0, 1fr) 2.4rem;
+  /* Collapsed rail column: 10% under the previous 2.4rem. */
+  grid-template-columns: minmax(0, 1fr) 2.16rem;
   gap: calc(var(--block-gap-compact) * 2);
   transition: grid-template-columns 340ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1730,21 +1731,46 @@
   align-items: center;
   justify-content: flex-start;
   gap: 0;
-  padding: 5px 10px 5px 2px;
-  margin-bottom: calc(3px - var(--block-gap));
+  /* Wide rounded hover row: fills most of the block width but keeps an even
+     6px breathing margin on top/left/right, so nothing looks clipped and all
+     four corners stay round. */
+  /* The pill must live entirely INSIDE the scroll container: WebKit clips
+     anything (negative margins included) that pokes past a scroller's box,
+     which flattened the pill's ends in the real app. */
   width: 100%;
+  margin: 2px 0 var(--space-3);
+  /* ~15% shorter row, then 10% more: vertical padding 8px → 5px → 3px. */
+  padding: 3px 10px 3px 0;
   box-sizing: border-box;
   border: 0;
-  background: transparent;
-  border-radius: 8px;
+  /* Sticky inside the scrollable panel: the pill can never scroll half-out
+     and get its top clipped flat. The surface-tinted backdrop masks content
+     sliding underneath while staying invisible at rest. */
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  /* App-standard card radius — consistent with every other surface. */
+  border-radius: var(--radius-md);
   cursor: pointer;
   color: inherit;
   text-align: left;
   transition: background var(--transition-fast);
 }
 
+/* Hover mirrors the collapsed rail: a faint accent wash that fades out
+   toward the content below (no hard bottom edge), with the chevron nudging
+   toward the collapse direction. */
 .week-v2-side__headbtn:hover {
-  background: var(--bg-2);
+  /* Mixed over the opaque surface so the sticky pill still masks content
+     scrolling underneath while hovered. */
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.week-v2-side__headbtn:hover .week-v2-side__collapse {
+  color: var(--accent-strong);
+  transform: translateX(2px);
 }
 
 .week-v2-side__collapse {
@@ -1759,11 +1785,13 @@
   border-radius: var(--radius-sm);
   color: var(--text-soft);
   line-height: 1;
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 
 .week-v2-side__collapse svg {
-  width: 14px;
-  height: 14px;
+  /* 5% under the old 14px */
+  width: 13.3px;
+  height: 13.3px;
 }
 
 .week-v2-side__head .week-v2-side__collapse {
@@ -1771,8 +1799,14 @@
   z-index: 1;
   margin-left: 0;
   min-width: 1.6rem;
-  min-height: 1.6rem;
+  /* Shorter than 1.6rem so the row can actually get 10% smaller (the button's
+     min-height, not the padding, was setting the row height). */
+  min-height: 1.4rem;
   border-radius: 7px;
+  /* Nudge the chevron right within its fixed-width button; the button width
+     is pinned by min-width so the title after it doesn't move. */
+  justify-content: flex-start;
+  padding-left: 4px;
 }
 
 .week-v2-side__collapse:hover {
@@ -1782,7 +1816,8 @@
 
 .week-v2-side__title {
   font-family: var(--font-display);
-  font-size: 14px;
+  /* 15% under the old 14px */
+  font-size: 11.9px;
   font-weight: 620;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -1832,6 +1867,13 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
+}
+
+/* Placeholder shown before the vs-previous-period delta is available: neutral
+   tone so it reads as "pending", while reserving the row's height. */
+.week-v2-side__hero-badge--empty {
+  border-color: var(--line);
+  color: var(--text-soft);
 }
 
 .week-v2-side__hero-sub {
@@ -1958,9 +2000,9 @@
   max-width: none;
 }
 
-/* Match the Day flow chart's subtly inset plot surface */
+/* Day columns are white now that the breakdown is its own separate block */
 .week-v2-calendar__day-column {
-  background: color-mix(in srgb, var(--bg-2) 62%, var(--surface));
+  background: var(--surface);
 }
 
 /* ── Your Day split layout ── */
@@ -2004,3 +2046,314 @@
   margin-bottom: var(--block-gap);
 }
 
+
+/* ── Breakdown as an inner block (2026-07 dashboard redesign, phase 2) ──────
+   The single white `.content` panel is preserved. The MAIN column (day split
+   / week calendar) is flat content inside it, and the Breakdown renders as a
+   bordered inner block — like the week calendar's own bordered inner block —
+   rather than floating on glass. The whole panel scrolls as one.
+   Month and the loading skeleton keep the classic one-panel content. */
+.content--dashboard:has(.day-split__main),
+.content--dashboard:has(.page--week-dashboard) {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  border-radius: var(--content-panel-radius);
+}
+
+/* Collapsed breakdown: the pre-redesign dashed pill — no inner-block chrome. */
+.content--dashboard .week-v2-grid--calendar:not(.week-v2-grid--side-open) .week-v2-side {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+/* ── Your Day: header inside the left main block ── */
+.day-split__main > .pg-head {
+  padding: 2px 2px 0;
+  margin: 0 0 var(--space-2);
+}
+
+.day-split__main > .pg-head .dashboard-page-head__row {
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+}
+
+.day-split__main > .pg-head .dashboard-page-head__title {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.day-split__main > .pg-head .dashboard-page-head__title-duration {
+  white-space: nowrap;
+}
+
+.day-split__main > .pg-head .day-nav {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.week-v2-grid--day.week-v2-grid--calendar {
+  align-items: stretch;
+  gap: calc(var(--space-4) * 0.5);
+}
+
+.day-split__main {
+  align-self: stretch;
+  /* Flat content inside the single white panel — no own block chrome. */
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.week-v2-grid--day .week-v2-side {
+  align-self: start;
+  /* Bordered inner block inside the white panel. */
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  margin-right: 0;
+  padding: 4px var(--space-3) var(--space-3);
+}
+
+/* Whole panel scrolls as one — the breakdown flows with the page. */
+.week-v2-grid--day .week-v2-side__content {
+  max-height: none;
+  overflow-y: visible;
+  gap: 0;
+}
+
+/* Panel padding narrows the content; drop the 15rem child min-width so
+   legend values ("4h 52m") don't overflow and clip */
+.week-v2-grid--day .week-v2-side__content > * {
+  min-width: 0;
+}
+
+/* Breakdown sections render flat, split by hairline dividers */
+.week-v2-grid--day .week-v2-side__content > .week-v2-side-card,
+.week-v2-grid--day .week-v2-side__content > .flow-compact-split-chart__panel {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 13px 2px;
+}
+
+.week-v2-grid--day .week-v2-side__content > .week-v2-side__hero {
+  padding-top: 2px;
+}
+
+.week-v2-grid--day .week-v2-side__content > .kpi-row--insights {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--line);
+  gap: 1px;
+  padding: 0;
+  margin-top: 16px;
+  overflow: hidden;
+  align-self: start;
+  grid-auto-rows: min-content;
+}
+
+.week-v2-grid--day .week-v2-side__content .kpi-row--insights .metric-tile {
+  background: var(--surface);
+  border: 0;
+  padding: 8px 12px 9px;
+}
+
+/* ── Your Week: flat calendar content inside the white panel; its legend +
+   scroller form their own bordered inner block (below), and the breakdown is
+   a second bordered inner block. */
+.page--week-dashboard .week-v2-calendar {
+  gap: 0;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.page--week-dashboard .week-v2-calendar > .pg-head {
+  grid-row: 1;
+  padding: 2px 2px 0;
+  margin: 0 0 var(--space-2);
+}
+
+.page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__row {
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+}
+
+.page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__title {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__title-duration {
+  white-space: nowrap;
+}
+
+.page--week-dashboard .week-v2-calendar > .pg-head .day-nav {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.page--week-dashboard .week-v2-grid--calendar {
+  gap: calc(var(--space-4) * 0.5);
+}
+
+.page--week-dashboard .week-v2-side {
+  align-self: stretch;
+  /* Bordered inner block inside the white panel (matches Day). The week
+     calendar stays fixed-height with its own scroll, so the breakdown inner
+     block matches that height and scrolls internally. */
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  padding: 4px var(--space-3) var(--space-3);
+  margin-right: 0;
+}
+
+.page--week-dashboard .week-v2-side__content {
+  gap: 0;
+  height: auto;
+  min-height: 0;
+  max-height: calc(100vh - 116px);
+  align-content: start;
+  overflow-y: auto;
+}
+
+.page--week-dashboard .week-v2-side__content > * {
+  min-width: 0;
+}
+
+.page--week-dashboard .week-v2-side__content > .week-v2-side-card,
+.page--week-dashboard .week-v2-side__content > .flow-compact-split-chart__panel {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 13px 2px;
+}
+
+.page--week-dashboard .week-v2-side__content > .week-v2-side__hero {
+  padding-top: 2px;
+}
+
+.page--week-dashboard .week-v2-side__content > :last-child {
+  border-bottom: 0;
+}
+
+.page--week-dashboard .week-v2-side__content .week-v2-side-card--weekly-breakdown {
+  padding: 13px 2px;
+}
+
+.page--week-dashboard .week-v2-side__content .week-v2-side-card--weekly-breakdown > .label-mono {
+  padding-left: 0;
+}
+
+/* Week calendar = one rounded white bordered inner block that includes the
+   legend (control row) AND the grid, like Day's flow-chart card. */
+.page--week-dashboard .week-v2-calendar__legend {
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--surface);
+}
+
+.page--week-dashboard .week-v2-calendar__scroller {
+  border: 1px solid var(--line);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--surface);
+  /* Slim scrollbar (~30% under the default width), styled like .content's. */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-soft) 34%, transparent) transparent;
+}
+
+.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-soft) 34%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+/* Plain date header row: no frame, no per-day separators, no today tint —
+   just the day names/numbers on the card surface (today keeps accent text). */
+.page--week-dashboard .week-v2-calendar__day-head {
+  border: 0;
+  border-radius: 0;
+  /* Sticky header keeps its original translucency: events scrolling
+     underneath shimmer through slightly. */
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.page--week-dashboard .week-v2-calendar__day-head > span {
+  border-left: 0;
+}
+
+.page--week-dashboard .week-v2-calendar__day-head > span.is-today {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Empty-day left column: make the remaining empty blocks (focus-drift, app
+   usage) read as "the real chart block, just without data" rather than a
+   distinct dashed placeholder — same solid surface, hairline border and radius
+   as the populated cards, and the same height, so navigating between a tracked
+   day and an empty one doesn't jolt or restyle the layout. (The flow chart
+   itself now renders its real empty frame — legend + time axis — via
+   showEmptyGrid, so it needs no card here.) Populated days are unaffected. */
+.day-split__main .dashboard-insight-stack .empty-state,
+.day-split__main .app-usage-empty.empty-state {
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.day-split__main .dashboard-insight-stack .empty-state {
+  /* Match the focus/drift chart body's height (plot + axis = 112px) so the panel
+     stays the exact same 159px whether the day has data (chart) or not (this empty
+     card) — a data-less day no longer reads as a taller block. A fixed height with
+     trimmed vertical padding keeps the three centered lines from pushing it taller. */
+  min-height: 0;
+  height: 112px;
+  padding-block: var(--space-2);
+}
+
+.day-split__main .app-usage-empty.empty-state {
+  min-height: 190px;
+}
+
+/* Guidance shown under the flow chart's empty frame on a data-less day (the
+   frame itself — legend + time axis — stays, this explains why it's empty). */
+.day-split__main .dashboard-flow-empty-note {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  margin-top: calc(-1 * var(--space-2));
+  padding: 2px 0 var(--space-2);
+  text-align: center;
+}
+
+.day-split__main .dashboard-flow-empty-note > p {
+  margin: 0;
+  max-width: 28rem;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
