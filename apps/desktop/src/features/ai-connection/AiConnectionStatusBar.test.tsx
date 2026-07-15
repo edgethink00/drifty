@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Auto-cleanup isn't unmounting between cases here, so the broad "open ai
+// settings" / "ai connection" role queries otherwise match a prior render's
+// leftover pill. Tear down explicitly.
+afterEach(cleanup);
 import {
   AiConnectionStatusBar,
   resolveAiConnectionStatus,
@@ -82,14 +87,14 @@ describe("resolveAiConnectionStatus", () => {
   it("returns checking with actual local memory usage while local provider settings are being verified", () => {
     const status = resolveAiConnectionStatus(statusInput({
       localProviderStatus: { kind: "checking" },
-      localProviderLabel: "Gemma 4 12B local",
+      localProviderLabel: "Gemma 4 12B",
       localMemoryUsageBytes: 2_684_354_560,
     }));
 
     expect(status).toMatchObject({
       tone: "neutral",
       label: "Checking",
-      providerLabel: "Gemma 4 12B local",
+      providerLabel: "Gemma 4 12B",
       memoryLabel: "2.5 GB RAM",
     });
   });
@@ -142,7 +147,7 @@ describe("AiConnectionStatusBar", () => {
         status={{
           tone: "error",
           label: "Issue",
-          providerLabel: "Gemma 4 12B local",
+          providerLabel: "Gemma 4 12B",
           memoryLabel: null,
         }}
         onOpenSettings={onOpenSettings}
@@ -152,7 +157,7 @@ describe("AiConnectionStatusBar", () => {
     const status = screen.getByRole("button", { name: /ai connection/i });
 
     expect(status.textContent).toContain("Issue");
-    expect(status.textContent).toContain("Gemma 4 12B local");
+    expect(status.textContent).toContain("Gemma 4 12B");
     expect(status.getAttribute("data-tone")).toBe("error");
   });
 
@@ -210,7 +215,9 @@ describe("AiConnectionStatusBar", () => {
 
     const status = screen.getByRole("button", { name: /memory in use 2\.5 gb ram/i });
 
-    expect(status.textContent).toContain("2.5 GB RAM");
+    // The memory readout renders in the chrome just before the pill.
+    expect(status.textContent).not.toContain("2.5 GB RAM");
+    expect(screen.getByText("2.5 GB RAM")).toBeTruthy();
   });
 });
 

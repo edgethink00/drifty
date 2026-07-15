@@ -5610,10 +5610,10 @@ export default function App() {
           <button type="button" className="window-nav-button" onClick={navigateForward} disabled={!canNavigateForward} aria-label="Go forward">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" /></svg>
           </button>
+          <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
           <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
           {titlebarUpdate ? (
             <TopbarUpdateButton

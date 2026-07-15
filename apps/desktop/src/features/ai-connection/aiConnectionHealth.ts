@@ -100,7 +100,7 @@ function hashSecretForFingerprint(value: string): string {
 function managedLocalModelStatusLabel(setup: LocalAiSetupState): string {
   const catalogModel = MANAGED_LOCAL_AI_FALLBACK_CATALOG.find((model) => model.id === setup.managedLocalModelId);
   const modelLabel = catalogModel?.label ?? setup.managedLocalModel.trim();
-  return modelLabel ? `${modelLabel} local` : "Local AI";
+  return modelLabel || "Local AI";
 }
 
 function openRouterModelStatusLabel(setup: LocalAiSetupState): string {
@@ -110,7 +110,7 @@ function openRouterModelStatusLabel(setup: LocalAiSetupState): string {
 
 function selfHostedModelStatusLabel(setup: LocalAiSetupState): string {
   const model = setup.selfHostedModel.trim();
-  return model ? `${model} local` : "Local AI";
+  return model || "Local AI";
 }
 
 class AiConnectionHealthError extends Error {

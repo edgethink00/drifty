@@ -49,7 +49,7 @@ describe("localAiProviderLabel", () => {
       managedLocalModelId: "drifty-gemma-4-12b-local",
       managedLocalBaseUrl: "http://127.0.0.1:39217/v1",
       managedLocalModel: "drifty-gemma-4-12b-local",
-    })).toBe("Gemma 4 12B local");
+    })).toBe("Gemma 4 12B");
   });
 
   it("uses Drifty Cloud when the managed provider routes to cloud", () => {
@@ -65,7 +65,7 @@ describe("localAiProviderLabel", () => {
       ...DEFAULT_LOCAL_AI_SETUP,
       provider: "self_hosted",
       selfHostedModel: "llama3.2",
-    })).toBe("llama3.2 local");
+    })).toBe("llama3.2");
   });
 
   it("uses the recommended OpenRouter model label for BYOK routing", () => {
