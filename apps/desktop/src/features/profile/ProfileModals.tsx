@@ -5,7 +5,8 @@ import { formatCompactDurationFromSeconds, formatRelativeTime } from "../../lib/
 import { MetricTile } from "../../components/MetricTile";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
-import type { ChangeEvent } from "react";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useRef, type ChangeEvent } from "react";
 
 export type ProfileDraft = {
   displayName: string;
@@ -89,13 +90,15 @@ export function EditProfileModal({
   onChange: (updater: Partial<ProfileDraft>) => void;
   onSave: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement | null>(null);
   const trimmedAvatarUrl = avatarUrl.trim();
   const bioLength = profileDraft.bio.length;
   useModalDismiss(onClose, { disabled: profileSaving });
+  useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-modal-initial-focus]" });
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal profile-modal profile-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" onClick={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="auth-modal profile-modal profile-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label="Close profile editor" onClick={onClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
@@ -132,7 +135,7 @@ export function EditProfileModal({
           </aside>
 
           <div className="leaderboard-profile-sidebar__form">
-            <label><span>Display name</span><input className="settings-input" value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label><span>Display name</span><input className="settings-input" data-modal-initial-focus value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             <label>
               <span>Bio</span>
               <textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} />
