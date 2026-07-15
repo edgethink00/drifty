@@ -113,6 +113,7 @@ export function HistoryView({
   const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
   const selectedCount = selectedIds.size;
   const hasAnySegments = segments.length > 0;
+  const showToolbar = hasAnySegments || isSearching;
   const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
 
   const toggleRow = useCallback((segmentIds: readonly string[], selected: boolean) => {
@@ -134,42 +135,44 @@ export function HistoryView({
   }
 
   return (
-    <section className="history-view" aria-label="History">
-      <div className="history-view__toolbar">
-        <label className="history-search">
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-            <circle cx="11" cy="11" r="6" />
-            <path d="m16 16 4 4" />
-          </svg>
-          <input
-            type="search"
-            aria-label="Search history"
-            value={query}
-            onChange={(event) => {
-              updateQuery(event.target.value);
-            }}
-            placeholder="Search history"
-          />
-        </label>
-        <button
-          type="button"
-          className="settings-btn settings-btn--danger"
-          disabled={selectedCount === 0 || deleting}
-          onClick={() => setConfirmOpen(true)}
-        >
-          {selectedCount === 0 ? "Delete selected" : deleteLabel}
-        </button>
-        {onOpenDeleteHistory ? (
+    <section className={`history-view${showToolbar ? "" : " history-view--empty"}`} aria-label="History">
+      {showToolbar ? (
+        <div className="history-view__toolbar">
+          <label className="history-search">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+              <circle cx="11" cy="11" r="6" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input
+              type="search"
+              aria-label="Search history"
+              value={query}
+              onChange={(event) => {
+                updateQuery(event.target.value);
+              }}
+              placeholder="Search history"
+            />
+          </label>
           <button
             type="button"
             className="settings-btn settings-btn--danger"
-            disabled={!hasAnySegments || deleting}
-            onClick={onOpenDeleteHistory}
+            disabled={selectedCount === 0 || deleting}
+            onClick={() => setConfirmOpen(true)}
           >
-            Delete history…
+            {selectedCount === 0 ? "Delete selected" : deleteLabel}
           </button>
-        ) : null}
-      </div>
+          {onOpenDeleteHistory ? (
+            <button
+              type="button"
+              className="settings-btn settings-btn--danger"
+              disabled={!hasAnySegments || deleting}
+              onClick={onOpenDeleteHistory}
+            >
+              Delete history…
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {groups.length === 0 ? (
         <div className="history-empty" role="status">

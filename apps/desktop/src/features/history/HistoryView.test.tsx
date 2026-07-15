@@ -164,10 +164,10 @@ describe("HistoryView", () => {
     expect(deleteButton.disabled).toBe(true);
   });
 
-  it("de-emphasizes destructive history actions when there are no records", () => {
+  it("hides row-management controls in the initial empty state", () => {
     const onOpenDeleteHistory = vi.fn();
 
-    render(
+    const { container } = render(
       <HistoryView
         appIcons={{}}
         deleting={false}
@@ -177,15 +177,33 @@ describe("HistoryView", () => {
       />,
     );
 
-    const deleteSelectedButton = screen.getByRole("button", { name: /^delete selected$/i });
-    const deleteHistoryButton = screen.getByRole("button", { name: /^delete history/i });
-    if (!(deleteSelectedButton instanceof HTMLButtonElement) || !(deleteHistoryButton instanceof HTMLButtonElement)) {
-      throw new Error("History delete controls were not buttons");
-    }
+    expect(container.querySelector(".history-view__toolbar")).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: /search history/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^delete selected$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^delete history/i })).toBeNull();
+    expect(screen.getByText("No history records found.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "History" }).className).toContain("history-view--empty");
+  });
 
-    expect(deleteSelectedButton.disabled).toBe(true);
-    expect(deleteHistoryButton.disabled).toBe(true);
-    expect(cssRule(".history-view .settings-btn--danger:disabled")).toContain("background: transparent;");
+  it("keeps row-management controls when an existing history search has no matches", () => {
+    render(
+      <HistoryView
+        appIcons={{}}
+        deleting={false}
+        onDeleteSelected={vi.fn()}
+        onOpenDeleteHistory={vi.fn()}
+        segments={historySegments}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("searchbox", { name: /search history/i }), {
+      target: { value: "no matching activity" },
+    });
+
+    expect(screen.getByRole("searchbox", { name: /search history/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^delete selected$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^delete history/i })).toBeTruthy();
+    expect(screen.getByText("Try another search.")).toBeTruthy();
   });
 
   it("keeps History search controls fixed while records scroll independently", () => {
