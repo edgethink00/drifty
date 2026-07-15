@@ -567,7 +567,9 @@
   position: relative;
   isolation: isolate;
   overflow: visible;
-  border-radius: var(--radius-sm);
+  /* Square inner block corners (the shaded ::before frame inherits this) so the
+     focus/drift plot reads as a clean rectangle aligned with the flow chart. */
+  border-radius: 0;
 }
 
 .focus-drift__plot::before {
