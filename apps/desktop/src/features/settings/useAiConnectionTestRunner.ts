@@ -23,6 +23,8 @@ export type UseAiConnectionTestRunnerResult = {
   readonly runningFingerprint: string | null;
   readonly clearResult: () => void;
   readonly run: () => Promise<void>;
+  /** Background re-test: no analytics, bypasses the once-per-fingerprint gate. */
+  readonly runAuto: () => Promise<void>;
 };
 
 export function useAiConnectionTestRunner({
@@ -84,16 +86,31 @@ export function useAiConnectionTestRunner({
   useEffect(() => {
     if (!autoFingerprint || running) return;
     if (completedAutoFingerprintRef.current === autoFingerprint) return;
+    // Claim the fingerprint before the async run: effects can re-fire while the
+    // test is still in flight, and a late `.then` would let a duplicate probe
+    // start — double-counting one outage in the connection failure tally.
+    completedAutoFingerprintRef.current = autoFingerprint;
+    const releaseClaim = () => {
+      if (completedAutoFingerprintRef.current === autoFingerprint) {
+        completedAutoFingerprintRef.current = null;
+      }
+    };
     void runForSetup(localAiSetup, { captureAnalytics: false }).then((applied) => {
-      if (applied) completedAutoFingerprintRef.current = autoFingerprint;
-    });
+      if (!applied) releaseClaim();
+    }, releaseClaim);
   }, [autoFingerprint, localAiSetup, runForSetup, running]);
 
   const run = useCallback(async () => {
     await runForSetup(localAiSetup, { captureAnalytics: true });
   }, [localAiSetup, runForSetup]);
 
-  return { result, running, runningFingerprint, clearResult, run };
+  const runAuto = useCallback(async () => {
+    const setupSnapshot = latestSetupRef.current;
+    if (!isActiveProviderTestable(setupSnapshot)) return;
+    await runForSetup(setupSnapshot, { captureAnalytics: false });
+  }, [runForSetup]);
+
+  return { result, running, runningFingerprint, clearResult, run, runAuto };
 }
 
 function toAiSetupProviderAnalytics(setup: LocalAiSetupState): AiSetupProviderAnalyticsValue {

@@ -24,6 +24,7 @@ vi.mock("./useAiConnectionTestRunner", () => ({
     runningFingerprint: null,
     clearResult: () => undefined,
     run: async () => undefined,
+    runAuto: async () => undefined,
   }),
 }));
 
