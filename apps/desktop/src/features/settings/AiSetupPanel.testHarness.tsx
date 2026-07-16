@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { vi } from "vitest";
 
-import { AiSetupPanel, type AiSetupPanelProps } from "./AiSetupPanel";
+import { AiSetupPanel } from "./AiSetupPanel";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import { DEFAULT_ANALYSIS_AI_SETUP } from "./analysisModelSetup";
@@ -131,22 +131,15 @@ export function renderPanel({
   connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null },
   currentBillingPlan = "individual",
   billingEntitlementStatus = "active",
-  billingEntitlementLockedReason = null,
-  cloudTrialEndsAt = null,
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
-  userEmail = null,
   workProfileUserId = "local",
 }: {
   readonly connectionStatus?: AiConnectionStatus;
   readonly currentBillingPlan?: "free" | "individual";
   readonly billingEntitlementStatus?: "trialing" | "active" | "locked" | null;
-  readonly billingEntitlementLockedReason?: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached" | null;
-  readonly cloudTrialEndsAt?: string | null;
   readonly initialSetup?: LocalAiSetupState;
-  readonly userEmail?: string | null;
   readonly workProfileUserId?: string;
 } = {}) {
-  const onRefreshCloudStatus = vi.fn();
   const onStartCloudSetup = vi.fn();
   const onManageCloudBilling = vi.fn();
   const onManageCloudDevices = vi.fn();
@@ -164,23 +157,15 @@ export function renderPanel({
 
     return (
       <AiSetupPanel
-        aiServerStatusLabel="Available"
         billingCheckoutLoadingInterval={null}
-        billingEntitlementError={null}
-        billingEntitlementLockedReason={billingEntitlementLockedReason}
         billingEntitlementStatus={billingEntitlementStatus}
         billingPlansDisabled={false}
-        billingPortalLoading={false}
         cloudStatusRefreshing={false}
-        cloudStatusLabel="Cloud AI available"
-        cloudTrialEndsAt={cloudTrialEndsAt}
         connectionStatus={currentConnectionStatus}
         connectionTest={connectionTest}
         currentBillingPlan={currentBillingPlan}
-        isSupabaseConfigured={true}
         localAiSetup={localAiSetup}
         shouldShowCloudCheckoutPlans={false}
-        userEmail={userEmail}
         workProfileUserId={workProfileUserId}
         analysisSetup={DEFAULT_ANALYSIS_AI_SETUP}
         analysisOpenRouterConnected={false}
@@ -189,7 +174,6 @@ export function renderPanel({
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
-        onRefreshCloudStatus={onRefreshCloudStatus}
         onStartCloudSetup={onStartCloudSetup}
       />
     );
@@ -200,7 +184,6 @@ export function renderPanel({
     onLocalAiConnectionTestResult,
     onManageCloudBilling,
     onManageCloudDevices,
-    onRefreshCloudStatus,
     onStartCloudSetup,
     setConnectionStatus: (nextConnectionStatus: AiConnectionStatus) => {
       if (!setConnectionStatus) throw new AiSetupPanelTestHarnessError("AI setup panel test harness is not mounted.");

@@ -24,6 +24,7 @@ export type ModelBeingUsedCardProps = {
   readonly modelAriaLabel: string;
   readonly modelValue: string;
   readonly modelOptions: readonly SettingsSelectOption<string>[];
+  readonly modelPlaceholder?: string;
   readonly onModelChange: (value: string) => void;
   readonly statusMessage?: string | null;
   readonly statusMessageKind?: "success" | "error" | null;
@@ -44,6 +45,7 @@ export function ModelBeingUsedCard({
   modelAriaLabel,
   modelValue,
   modelOptions,
+  modelPlaceholder,
   onModelChange,
   statusMessage,
   statusMessageKind,
@@ -79,6 +81,7 @@ export function ModelBeingUsedCard({
             className="ai-setup-select-control ai-setup-select-control--model"
             value={modelValue}
             options={modelOptions}
+            placeholder={modelPlaceholder}
             onChange={onModelChange}
           />
         </div>

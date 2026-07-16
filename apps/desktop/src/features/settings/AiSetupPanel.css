@@ -103,27 +103,13 @@
   margin-top: var(--space-4);
 }
 
+/* The Model-being-used selector reads as bare controls — no card chrome — so it
+   sits flush under its heading. Connection tone is conveyed by the top chrome
+   status bar and by the inline test-connection message below. */
 .ai-setup-current-model {
-  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
-  border: 1px solid var(--line);
-  border-radius: 14px;
   display: grid;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-3) 1rem;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.ai-setup-current-model.is-error {
-  background: color-mix(in srgb, var(--warn-soft) 24%, var(--surface));
-  border-color: color-mix(in srgb, var(--warn) 16%, var(--line));
-}
-
-.ai-setup-current-model.is-success {
-  border-color: color-mix(in srgb, var(--productivity-focus) 22%, var(--line));
 }
 
 .ai-setup-model-zone {
@@ -148,52 +134,10 @@
   flex: 0 0 auto;
 }
 
+/* The in-card connection pill is redundant with the top chrome status bar and
+   the inline test-connection message, so the redesigned selector hides it. */
 .ai-setup-current-model__ai-status {
-  --ai-current-model-status-tone: var(--text-soft);
-  align-items: center;
-  color: var(--text-soft);
-  display: grid;
-  font-size: var(--type-setting-desc-size);
-  gap: var(--space-1);
-  grid-template-columns: auto auto minmax(0, 1fr);
-  line-height: 1.35;
-  min-width: 0;
-}
-
-.ai-setup-current-model__ai-status[data-tone="ok"] {
-  --ai-current-model-status-tone: var(--productivity-focus);
-  color: var(--productivity-focus);
-}
-
-.ai-setup-current-model__ai-status[data-tone="warning"] {
-  --ai-current-model-status-tone: var(--warning, var(--text-soft));
-  color: var(--warning, var(--text-soft));
-}
-
-.ai-setup-current-model__ai-status[data-tone="error"] {
-  --ai-current-model-status-tone: var(--warn);
-  color: var(--warn);
-}
-
-.ai-setup-current-model__ai-status-dot {
-  background: var(--ai-current-model-status-tone);
-  border-radius: 999px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ai-current-model-status-tone) 14%, transparent);
-  height: 0.45rem;
-  width: 0.45rem;
-}
-
-.ai-setup-current-model__ai-status-label {
-  color: inherit;
-  font-weight: 650;
-}
-
-.ai-setup-current-model__ai-status-provider {
-  color: var(--text-soft);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .ai-setup-current-model__status {
@@ -252,64 +196,245 @@
   min-height: 2.28rem;
 }
 
+.ai-setup-select-control .settings-select-control__trigger .settings-select-control__value {
+  gap: 0.6rem;
+}
+
+.ai-setup-select-control .settings-select-control__trigger .settings-select-control__icon {
+  height: 1.15rem;
+  object-fit: contain;
+  width: 1.15rem;
+}
+
+/* Grey placeholder text when nothing is selected yet. */
+.ai-setup-select-control[data-placeholder="true"] .settings-select-control__trigger .settings-select-control__value {
+  color: var(--text-soft);
+}
+
+/* Locked selector (provider not configured yet). */
+.ai-setup-select-control[data-disabled="true"] .settings-select-control__trigger {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.ai-setup-select-control[data-disabled="true"] .settings-select-control__chevron {
+  opacity: 0.4;
+}
+
+/* Full-width menu so each option can carry a block-level hover fill. */
 .ai-setup-select-control .settings-select-control__menu {
+  box-sizing: border-box;
+  left: 0;
   max-height: 16rem;
-  width: max(100%, 15rem);
+  min-width: 100%;
+  padding: 4px;
+  right: auto;
+  width: 100%;
+}
+
+.ai-setup-select-control .settings-select-control__menu .settings-select-control__option-row {
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .ai-setup-select-control .settings-select-control__option-row.has-action {
-  grid-template-columns: minmax(0, 1fr);
   position: relative;
 }
 
+/* Uniform leading-icon column so every label starts at the same x. */
 .ai-setup-select-control .settings-select-control__option {
-  display: grid;
+  align-items: center;
+  border-radius: 8px;
+  box-sizing: border-box;
+  display: flex;
   font-family: var(--font-display);
   font-size: 0.9rem;
   font-weight: 500;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  justify-content: start;
+  gap: 0.55rem;
   min-height: 2.08rem;
+  padding-left: 7px;
+  padding-right: 10px;
   text-align: left;
+  transition: background 90ms ease;
+  width: 100%;
 }
 
-.ai-setup-select-control .settings-select-control__option.is-selected {
-  font-weight: 500;
+.ai-setup-select-control .settings-select-control__option .settings-select-control__option-label {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.ai-setup-select-control .settings-select-control__check {
-  justify-self: end;
+.ai-setup-select-control .settings-select-control__option .settings-select-control__check {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option {
   padding-right: 6.7rem;
 }
 
-.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action {
-  background: var(--cloud-action);
-  border-color: var(--cloud-action);
-  border-radius: var(--radius-pill);
-  box-shadow: 0 5px 12px color-mix(in srgb, var(--cloud-action) 22%, transparent);
-  color: #fff;
-  font-family: var(--font-display);
-  font-weight: 650;
-  min-height: 1.58rem;
-  padding: 0 0.68rem;
+/* Icon-action rows (installed local models) are far narrower than a text pill, so
+   reserve only enough room to sit the selected-check right beside the icons. */
+.ai-setup-select-control .settings-select-control__option-row--icon-actions.has-action .settings-select-control__option {
+  padding-right: 4.6rem;
+}
+
+.ai-setup-select-control .settings-select-control__option.is-selected {
+  font-weight: 500;
+}
+
+/* Providers that still need API keys / config read as "not ready" but stay clickable
+   (clicking one expands its Configure card below rather than committing to it). */
+.ai-setup-select-control .settings-select-control__option.is-muted .settings-select-control__option-label {
+  color: var(--text-soft);
+}
+
+/* Block-level hover / keyboard-active fill on each option. */
+.ai-setup-select-control .settings-select-control__option:hover,
+.ai-setup-select-control .settings-select-control__option.is-active,
+.ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option,
+.ai-setup-select-control .settings-select-control__option-row:focus-within .settings-select-control__option {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.ai-setup-select-control .settings-select-control__option.is-disabled:hover,
+.ai-setup-select-control .settings-select-control__option:disabled:hover {
+  background: transparent;
+}
+
+.ai-setup-select-control img.settings-select-control__icon {
+  height: 1.15rem;
+  object-fit: contain;
+  width: 1.15rem;
+}
+
+/* Card-style tinted brand-mark badges reused as the dropdown leading icon. */
+.ai-setup-select-control .ai-setup-brand-mark--pick {
+  align-items: center;
+  border-radius: 7px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.4rem;
+  justify-content: center;
+  min-width: 1.4rem;
+  width: 1.4rem;
+}
+
+.ai-setup-select-control .ai-setup-brand-mark--pick img,
+.ai-setup-select-control .ai-setup-brand-mark--pick svg {
+  height: 0.98rem;
+  width: 0.98rem;
+}
+
+.ai-setup-select-control .ai-setup-brand-mark--drifty.ai-setup-brand-mark--pick img {
+  height: 1.08rem;
+  width: 1.08rem;
+}
+
+.ai-setup-select-control .ai-setup-brand-mark--anthropic.ai-setup-brand-mark--pick svg {
+  height: 0.75rem;
+  width: 1.08rem;
+}
+
+/* Drifty badge uses a neutral tint (no mint) inside the dropdown. */
+.ai-setup-select-control .ai-setup-brand-mark--drifty.ai-setup-brand-mark--pick {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+}
+
+/* Download / Upgrade action button → soft charcoal. */
+/* One or more trailing action buttons, pinned to the right edge of the row. */
+.ai-setup-select-control .settings-select-control__option-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
   position: absolute;
   right: var(--space-2);
   top: 50%;
-  transform: translateY(-50%) translateX(0.18rem);
+  transform: translateY(-50%);
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action {
+  align-items: center;
+  background: #5b6068;
+  border-color: #5b6068;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 5px 12px color-mix(in srgb, #5b6068 20%, transparent);
+  color: #fff;
+  display: inline-flex;
+  font-family: var(--font-display);
+  font-weight: 650;
+  justify-content: center;
+  min-height: 1.58rem;
+  padding: 0 0.68rem;
 }
 
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action:hover {
-  background: color-mix(in srgb, var(--cloud-action) 90%, black);
-  border-color: color-mix(in srgb, var(--cloud-action) 90%, black);
+  background: #4b5058;
+  border-color: #4b5058;
   color: #fff;
 }
 
-.ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option-action,
-.ai-setup-select-control .settings-select-control__option-row:focus-within .settings-select-control__option-action {
-  transform: translateY(-50%);
+/* Manage-style actions (Delete an installed model, Manage billing) reveal only on
+   row hover / keyboard focus so the dropdown stays uncluttered. */
+.ai-setup-select-control .settings-select-control__option-action--hover {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease;
+}
+
+.ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option-action--hover,
+.ai-setup-select-control .settings-select-control__option-row:focus-within .settings-select-control__option-action--hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Danger tone for the Delete action on an installed local model. */
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--danger {
+  background: color-mix(in srgb, var(--warn) 82%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 82%, var(--surface));
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--warn) 20%, transparent);
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--danger:hover {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+
+/* Compact icon action buttons (Show in Finder, Delete) for installed local models. */
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: none;
+  color: var(--text-soft);
+  padding: 0;
+  width: 1.58rem;
+}
+
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon:hover {
+  background: color-mix(in srgb, var(--text) 14%, var(--surface));
+  color: var(--text);
+}
+
+/* Danger-tone icon (Delete) keeps the warn fill from --danger but a soft-white glyph. */
+.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon.settings-select-control__option-action--danger {
+  color: #fff;
+}
+
+.ai-setup-select-control .settings-select-control__option-action--icon svg {
+  height: 0.92rem;
+  width: 0.92rem;
+}
+
+/* Delete-managed-model confirmation dialog (reuses the shared .auth-modal shell). */
+.ai-delete-model-modal {
+  max-width: 26rem;
+}
+
+.ai-delete-model-modal__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
 }
 
 .ai-setup-select-control--model .settings-select-control__menu {

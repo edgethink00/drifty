@@ -280,7 +280,7 @@
 }
 
 .ai-setup-detail--custom .ai-setup-field {
-  max-width: min(100%, 28rem);
+  max-width: 100%;
 }
 
 .ai-setup-detail--custom .settings-input {

@@ -80,7 +80,6 @@ export function AiPrivacyReview() {
 
   return (
     <section className="ai-privacy-review" aria-label={t("settings.aiPrivacy.reviewAria")}>
-      <p className="ai-privacy-review__intro">{t("settings.aiPrivacy.intro")}</p>
       <div className="ai-privacy-review__chips" aria-label={t("settings.aiPrivacy.safeguardsAria")}>
         <span className="chip green">{t("settings.aiPrivacy.rawLocal")}</span>
         <span className="chip gray">{t("settings.aiPrivacy.keysLocal")}</span>

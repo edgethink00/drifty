@@ -152,9 +152,10 @@ describe("Settings content styles", () => {
     const selectActionRowRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action");
     const selectOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option");
     const selectSelectedOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option.is-selected");
-    const selectCheckRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__check");
+    const selectCheckRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option .settings-select-control__check");
     const selectActionOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option");
     const selectActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action");
+    const selectActionsContainerRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-actions");
 
     expectRuleToContain(tabListRule, ["background: color-mix(in srgb, var(--bg-2) 38%, transparent);", "gap: 0.16rem;", "padding: 0.16rem;", "width: fit-content;"]);
     expectRuleToContain(tabRule, ["border: 1px solid transparent;", "border-radius: 9px;", "font-size: 0.76rem;", "min-height: 1.66rem;"]);
@@ -164,18 +165,21 @@ describe("Settings content styles", () => {
     expect(panelDarkRule).toContain("--cloud-action: #5a7042;");
     expect(modelSelectRule).toContain("font-weight: 500;");
     expect(selectMenuRule).toContain("max-height: 16rem;");
-    expect(selectActionRowRule).toContain("grid-template-columns: minmax(0, 1fr);");
+    // Redesigned dropdown: full-width block-level options with a flex icon column.
+    expect(selectMenuRule).toContain("width: 100%;");
     expect(selectActionRowRule).toContain("position: relative;");
-    expect(selectOptionRule).toContain("display: grid;");
+    expect(selectOptionRule).toContain("display: flex;");
+    expect(selectOptionRule).toContain("align-items: center;");
     expect(selectOptionRule).toContain("font-family: var(--font-display);");
     expect(selectOptionRule).toContain("font-size: 0.9rem;");
-    expect(selectOptionRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto;");
-    expect(selectOptionRule).toContain("justify-content: start;");
+    expect(selectOptionRule).toContain("gap: 0.55rem;");
     expect(selectOptionRule).toContain("min-height: 2.08rem;");
     expect(selectSelectedOptionRule).toContain("font-weight: 500;");
-    expect(selectCheckRule).toContain("justify-self: end;");
+    expect(selectCheckRule).toContain("margin-left: auto;");
     expect(selectActionOptionRule).toContain("padding-right: 6.7rem;");
-    expectRuleToContain(selectActionRule, ["background: var(--cloud-action);", "border-radius: var(--radius-pill);", "color: #fff;", "position: absolute;"]);
+    expectRuleToContain(selectActionRule, ["background: #5b6068;", "border-radius: var(--radius-pill);", "color: #fff;"]);
+    // The action buttons live in an absolutely-pinned flex container so a row can carry more than one.
+    expectRuleToContain(selectActionsContainerRule, ["display: flex;", "position: absolute;"]);
   });
 
   it("places managed local model specs on the right with actions under the copy", () => {
@@ -207,15 +211,15 @@ describe("Settings content styles", () => {
     expect(deleteActionRule).toContain("width: 2rem;");
   });
 
-  it("keeps the AI connection error panel visible without heavy red fill", () => {
+  it("carries AI connection error tone on the inline message, not a card fill", () => {
     const aiSetupStyles = readAiSetupStyles();
-    const currentModelErrorRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error");
-    const currentModelErrorStatusRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error .ai-setup-current-model__status");
+    const currentModelStatusRule = cssRule(aiSetupStyles, ".ai-setup-current-model.is-error .ai-setup-current-model__status");
 
-    expect(currentModelErrorRule).toContain("background: color-mix(in srgb, var(--warn-soft) 24%, var(--surface));");
-    expect(currentModelErrorRule).toContain("border-color: color-mix(in srgb, var(--warn) 16%, var(--line));");
-    expect(currentModelErrorStatusRule).not.toContain("border-top");
-    expect(currentModelErrorStatusRule).toContain("color: var(--warn);");
+    // The redesigned selector drops the card chrome, so there is no red card
+    // fill — error tone is carried by the inline test-connection message.
+    expect(cssRule(aiSetupStyles, ".ai-setup-current-model.is-error")).toBe("");
+    expect(currentModelStatusRule).not.toContain("border-top");
+    expect(currentModelStatusRule).toContain("color: var(--warn);");
   });
 
   it("keeps the managed local runtime status as a compact message strip", () => {
@@ -233,13 +237,11 @@ describe("Settings content styles", () => {
 
   it("keeps the Cloud setup CTA compact and visually quiet", () => {
     const aiSetupStyles = readAiSetupStyles();
-    const cloudSource = readFileSync("src/features/settings/CloudSetupPanel.tsx", "utf8");
     const cloudRouteRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route");
     const cloudRouteDarkRule = cssRule(aiSetupStyles, ':root[data-theme="dark"] .ai-setup-cloud-route');
     const cloudRouteTitleRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route strong");
     const cloudActionRule = cssRule(aiSetupStyles, ".ai-setup-cloud-route .settings-btn.ai-setup-cloud-route__action");
 
-    expect(cloudSource).toContain("settings-btn settings-btn--primary ai-setup-cloud-route__action");
     expect(cloudRouteRule).toContain("--cloud-action: #344622;");
     expect(cloudRouteDarkRule).toContain("--cloud-action: #5a7042;");
     expect(cloudRouteTitleRule).toContain("font-weight: 520;");

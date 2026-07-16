@@ -1,8 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import driftyLogoUrl from "../../assets/drifty-icon.png";
-import openRouterLogoUrl from "../../assets/openrouter-logo.png";
+import { aiProviderBrandMark } from "./AiProviderBrandMark";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
@@ -13,17 +12,31 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 const CLOUD_MANAGED_MODEL_ID = "cloud_managed";
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 
-// Brand-recognizable accent tints for the provider dropdown dots (OpenAI teal,
-// Anthropic clay). The provider cards carry the full SVG brand marks below.
-const OPENAI_BRAND_COLOR = "#10a37f";
-const ANTHROPIC_BRAND_COLOR = "#d97757";
-
 export interface IntelligenceSetupPanelProps {
   readonly setup: AnalysisAiSetupState;
   readonly onChange: (next: AnalysisAiSetupState) => void;
   readonly openRouterConnected: boolean;
   readonly onConnectOpenRouter: () => void;
+  /** Whether the Drifty Cloud analysis model can be selected (active OR trialing plan). */
+  readonly cloudSelectable: boolean;
+  /** "Upgrade"/"Opening" label when the cloud plan needs upgrading (trialing OR no-sub); null for active/locked. */
+  readonly cloudSubscribeActionLabel: string | null;
+  readonly cloudSubscribeActionDisabled: boolean;
+  /** True when there's a subscription whose billing can be managed (active OR locked). */
+  readonly canManageBilling: boolean;
+  readonly onStartCloudSetup: () => void | Promise<void>;
+  readonly onManageCloudBilling: () => void | Promise<void>;
 }
+
+/** Drifty Cloud billing state the analysis summary needs to gate the cloud model row. */
+type CloudBilling = {
+  readonly selectable: boolean;
+  readonly upgradeLabel: string | null;
+  readonly upgradeDisabled: boolean;
+  readonly canManageBilling: boolean;
+  readonly onStartCloudSetup: () => void | Promise<void>;
+  readonly onManageCloudBilling: () => void | Promise<void>;
+};
 
 /**
  * "Intelligence" tab of the AI setup panel — configures the heavy analysis
@@ -64,10 +77,14 @@ type SummaryInfo = {
   readonly ready: boolean;
 };
 
-function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean, t: LocalizationController["t"]): SummaryInfo {
+function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean, cloud: CloudBilling, t: LocalizationController["t"]): SummaryInfo {
   switch (setup.provider) {
     case "cloud":
-      return { providerLabel: "Drifty Cloud", modelLabel: t("settings.intelligence.managedByDrifty"), statusLabel: t("settings.intelligence.available"), tone: "ok", ready: true };
+      // Not subscribed (nor trialing) → the cloud model isn't usable yet: surface a
+      // needs-setup state rather than a committed "Drifty Cloud" selection.
+      return cloud.selectable
+        ? { providerLabel: "Drifty Cloud", modelLabel: t("settings.intelligence.managedByDrifty"), statusLabel: t("settings.intelligence.available"), tone: "ok", ready: true }
+        : { providerLabel: "Drifty Cloud", modelLabel: t("settings.intelligence.notSet"), statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     case "openrouter": {
       const modelLabel = analysisModelDisplayLabel(setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL);
       return openRouterConnected
@@ -100,11 +117,11 @@ function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected
   }
 }
 
-/** The summary model dropdown's current value for each provider. */
-function summaryModelValue(setup: AnalysisAiSetupState): string {
+/** The summary model dropdown's current value for each provider. Empty string → placeholder. */
+function summaryModelValue(setup: AnalysisAiSetupState, cloud: CloudBilling): string {
   switch (setup.provider) {
     case "cloud":
-      return CLOUD_MANAGED_MODEL_ID;
+      return cloud.selectable ? CLOUD_MANAGED_MODEL_ID : "";
     case "openrouter":
       return setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL;
     case "openai":
@@ -123,10 +140,36 @@ function summaryModelValue(setup: AnalysisAiSetupState): string {
  * here; the direct-key + custom providers surface a single read-only entry and
  * edit their model id inside the provider card below.
  */
-function summaryModelOptions(setup: AnalysisAiSetupState, t: LocalizationController["t"]): SettingsSelectOption<string>[] {
+function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t: LocalizationController["t"]): SettingsSelectOption<string>[] {
   switch (setup.provider) {
     case "cloud":
-      return [{ value: CLOUD_MANAGED_MODEL_ID, label: t("settings.intelligence.managedByDrifty") }];
+      // Mirror the Classification tab: no-sub/trialing show Upgrade (trialing stays
+      // selectable); active/locked show Manage billing (locked stays disabled so a
+      // blocked subscription routes to the portal, never a second checkout).
+      return [{
+        value: CLOUD_MANAGED_MODEL_ID,
+        label: t("settings.intelligence.managedByDrifty"),
+        disabled: !cloud.selectable,
+        ...(cloud.upgradeLabel !== null
+          ? {
+            actionLabel: cloud.upgradeLabel,
+            actionAriaLabel: cloud.upgradeLabel,
+            actionDisabled: cloud.upgradeDisabled,
+            onAction: () => {
+              void cloud.onStartCloudSetup();
+            },
+          }
+          : cloud.canManageBilling
+            ? {
+              actionLabel: t("settings.account.manageBilling"),
+              actionAriaLabel: t("settings.account.manageBilling"),
+              actionOnHover: cloud.selectable,
+              onAction: () => {
+                void cloud.onManageCloudBilling();
+              },
+            }
+            : {}),
+      }];
     case "openrouter": {
       const options: SettingsSelectOption<string>[] = ANALYSIS_RECOMMENDED_MODELS.map((model) => ({ value: model.id, label: model.label }));
       const current = setup.openRouterModel.trim();
@@ -152,28 +195,51 @@ function summaryModelOptions(setup: AnalysisAiSetupState, t: LocalizationControl
   }
 }
 
-export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, onConnectOpenRouter }: IntelligenceSetupPanelProps): JSX.Element {
+export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, onConnectOpenRouter, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
   const { t } = useLocalization();
+  const cloud: CloudBilling = { selectable: cloudSelectable, upgradeLabel: cloudSubscribeActionLabel, upgradeDisabled: cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling };
+  // Whether a provider is ready to be the active analysis provider. Key-based
+  // providers need their credentials first; Drifty Cloud is gated by subscription
+  // in the model dropdown, so it always counts as "reachable" here.
+  const providerReady = (provider: AnalysisProvider): boolean => {
+    switch (provider) {
+      case "cloud":
+        return true;
+      case "openrouter":
+        return openRouterConnected;
+      case "openai":
+        return setup.openaiApiKey.trim().length > 0;
+      case "anthropic":
+        return setup.anthropicApiKey.trim().length > 0;
+      case "self_hosted":
+        return setup.selfHostedBaseUrl.trim().length > 0 && setup.selfHostedModel.trim().length > 0;
+      default:
+        return true;
+    }
+  };
   const providerOptions = [
-    { value: "cloud", label: "Drifty Cloud", iconSrc: driftyLogoUrl },
-    { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
-    { value: "openai", label: "OpenAI", accentColor: OPENAI_BRAND_COLOR },
-    { value: "anthropic", label: "Anthropic", accentColor: ANTHROPIC_BRAND_COLOR },
-    { value: "self_hosted", label: t("settings.ai.customEndpoint"), accentColor: "var(--accent)" },
+    { value: "cloud", label: "Drifty Cloud", icon: aiProviderBrandMark("drifty", { pick: true }) },
+    { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: !providerReady("openrouter") },
+    { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !providerReady("openai") },
+    { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !providerReady("anthropic") },
+    { value: "self_hosted", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !providerReady("self_hosted") },
   ] satisfies readonly SettingsSelectOption<AnalysisProvider>[];
   // Which provider card is expanded. Defaults to the active provider so the tab
   // opens focused on whatever analysis model is currently in use.
   const [expandedCard, setExpandedCard] = useState<IntelligenceCardId | null>(() => CARD_FOR_PROVIDER[setup.provider]);
-  const summary = summarizeAnalysisSetup(setup, openRouterConnected, t);
+  const summary = summarizeAnalysisSetup(setup, openRouterConnected, cloud, t);
 
   // The "Model being used" summary is directly selectable (like the Classification
   // tab): a provider dropdown + a model dropdown that write straight to setup.
-  const selectedModelValue = summaryModelValue(setup);
-  const modelOptions = summaryModelOptions(setup, t);
+  const selectedModelValue = summaryModelValue(setup, cloud);
+  const modelOptions = summaryModelOptions(setup, cloud, t);
 
   const handleProviderChange = (provider: AnalysisProvider) => {
+    // Always reveal the provider's Configure card. Only commit to it as the active
+    // provider once it's ready — an unconfigured provider just expands its card so
+    // the user can enter its API key / settings first.
     setExpandedCard(CARD_FOR_PROVIDER[provider]);
-    if (provider !== setup.provider) onChange({ ...setup, provider });
+    if (providerReady(provider) && provider !== setup.provider) onChange({ ...setup, provider });
   };
   const handleModelChange = (modelId: string) => {
     // cloud + custom expose a single, non-editable summary option; the custom
@@ -187,10 +253,11 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
     const willExpand = expandedCard !== id;
     setExpandedCard(willExpand ? id : null);
     if (!willExpand) return;
-    // Selecting (opening) a real provider card sets it as the analysis provider.
-    // Mockup cards have no provider mapping, so they never mutate setup.
+    // Opening a card only commits to that provider once it's ready (has its keys /
+    // config) — same rule as the summary dropdown, so an unconfigured provider is
+    // never made active just by expanding its card to set it up.
     const provider = PROVIDER_FOR_CARD[id];
-    if (provider && provider !== setup.provider) {
+    if (provider && providerReady(provider) && provider !== setup.provider) {
       onChange({ ...setup, provider });
     }
   };
@@ -211,6 +278,7 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
         modelAriaLabel={t("settings.intelligence.modelAria")}
         modelValue={selectedModelValue}
         modelOptions={modelOptions}
+        modelPlaceholder={t("settings.intelligence.selectModel")}
         onModelChange={handleModelChange}
       />
       <p className="ai-setup-route-description intelligence-setup-panel__hint">
@@ -220,13 +288,7 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
       <h4 className="ai-setup-provider-heading">{t("settings.ai.configureProviders")}</h4>
 
       <div className="ai-setup-choices" role="group" aria-label={t("settings.intelligence.providersAria")}>
-        <IntelligenceProviderCard id="drifty" title="Drifty Cloud" brandMark={<DriftyBrandMark />} expanded={expandedCard === "drifty"} onToggle={handleToggle}>
-          <div className="ai-setup-detail" role="group" aria-label={t("settings.intelligence.cloudModelAria")}>
-            <p className="ai-setup-route-description">{t("settings.intelligence.cloudDescription")}</p>
-          </div>
-        </IntelligenceProviderCard>
-
-        <IntelligenceProviderCard id="openrouter" title="OpenRouter" brandMark={<OpenRouterBrandMark />} expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
+        <IntelligenceProviderCard id="openrouter" title="OpenRouter" brandMark={aiProviderBrandMark("openrouter")} expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
           <div className="ai-setup-detail" role="group" aria-label={t("settings.intelligence.openRouterModelAria")}>
             <div className="ai-setup-key-row">
               <label className="ai-setup-field">
@@ -257,38 +319,7 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
           </div>
         </IntelligenceProviderCard>
 
-        <IntelligenceProviderCard id="custom" title={t("settings.ai.customEndpoint")} brandMark={<CustomBrandMark />} expanded={expandedCard === "custom"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.customModelAria")}>
-            <label className="ai-setup-field">
-              <span>{t("settings.ai.baseUrl")}</span>
-              <input
-                className="settings-input"
-                aria-label={t("settings.intelligence.endpointBaseUrlAria")}
-                value={setup.selfHostedBaseUrl}
-                onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl: event.target.value })}
-                placeholder="https://api.openai.com/v1"
-              />
-            </label>
-            <label className="ai-setup-field">
-              <span>{t("settings.ai.model")}</span>
-              <input
-                className="settings-input"
-                aria-label={t("settings.intelligence.endpointModelAria")}
-                value={setup.selfHostedModel}
-                onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedModel: event.target.value })}
-                placeholder="gpt-5-mini"
-              />
-            </label>
-            <ApiKeyField
-              ariaLabel={t("settings.intelligence.customApiKeyAria")}
-              value={setup.selfHostedApiKey}
-              placeholder="sk-... (optional)"
-              onValueChange={(value) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey: value })}
-            />
-          </div>
-        </IntelligenceProviderCard>
-
-        <IntelligenceProviderCard id="chatgpt" title="OpenAI" brandMark={<OpenAiBrandMark />} expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
+        <IntelligenceProviderCard id="chatgpt" title="OpenAI" brandMark={aiProviderBrandMark("openai")} expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
           <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.openAiModelAria")}>
             <ApiKeyField
               ariaLabel={t("settings.intelligence.openAiApiKeyAria")}
@@ -320,7 +351,7 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
           </div>
         </IntelligenceProviderCard>
 
-        <IntelligenceProviderCard id="anthropic" title="Anthropic" brandMark={<AnthropicBrandMark />} expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
+        <IntelligenceProviderCard id="anthropic" title="Anthropic" brandMark={aiProviderBrandMark("anthropic")} expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
           <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.anthropicModelAria")}>
             <ApiKeyField
               ariaLabel={t("settings.intelligence.anthropicApiKeyAria")}
@@ -349,6 +380,37 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
             <p className="ai-setup-route-description">
               {t("settings.intelligence.anthropicDescription")}
             </p>
+          </div>
+        </IntelligenceProviderCard>
+
+        <IntelligenceProviderCard id="custom" title={t("settings.ai.customEndpoint")} brandMark={aiProviderBrandMark("custom")} expanded={expandedCard === "custom"} onToggle={handleToggle}>
+          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.customModelAria")}>
+            <label className="ai-setup-field">
+              <span>{t("settings.ai.baseUrl")}</span>
+              <input
+                className="settings-input"
+                aria-label={t("settings.intelligence.endpointBaseUrlAria")}
+                value={setup.selfHostedBaseUrl}
+                onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl: event.target.value })}
+                placeholder="https://api.openai.com/v1"
+              />
+            </label>
+            <label className="ai-setup-field">
+              <span>{t("settings.ai.model")}</span>
+              <input
+                className="settings-input"
+                aria-label={t("settings.intelligence.endpointModelAria")}
+                value={setup.selfHostedModel}
+                onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedModel: event.target.value })}
+                placeholder="gpt-5-mini"
+              />
+            </label>
+            <ApiKeyField
+              ariaLabel={t("settings.intelligence.customApiKeyAria")}
+              value={setup.selfHostedApiKey}
+              placeholder="sk-... (optional)"
+              onValueChange={(value) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey: value })}
+            />
           </div>
         </IntelligenceProviderCard>
       </div>
@@ -427,56 +489,6 @@ function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }
         placeholder={placeholder}
       />
     </label>
-  );
-}
-
-function DriftyBrandMark(): JSX.Element {
-  return (
-    <span className="ai-setup-brand-mark ai-setup-brand-mark--drifty" aria-hidden="true">
-      <img src={driftyLogoUrl} alt="" />
-    </span>
-  );
-}
-
-function OpenRouterBrandMark(): JSX.Element {
-  return (
-    <span className="ai-setup-brand-mark ai-setup-brand-mark--openrouter" aria-hidden="true">
-      <img src={openRouterLogoUrl} alt="" />
-    </span>
-  );
-}
-
-function CustomBrandMark(): JSX.Element {
-  return (
-    <span className="ai-setup-brand-mark ai-setup-brand-mark--custom" aria-hidden="true">
-      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-        <path d="M5 6.4h6.8a3.6 3.6 0 0 1 0 7.2H8.2" />
-        <path d="M8.2 9.9h6.8" />
-        <path d="M8.2 13.6a3.6 3.6 0 0 1 0-7.2h3.6" />
-      </svg>
-    </span>
-  );
-}
-
-function OpenAiBrandMark(): JSX.Element {
-  // OpenAI's six-fold interlocking knot/flower mark (official logo path).
-  return (
-    <span className="ai-setup-brand-mark ai-setup-brand-mark--openai" aria-hidden="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9a6.0651 6.0651 0 0 0-4.5972-2.9088 5.9847 5.9847 0 0 0-3.9977 2.9A6.0462 6.0462 0 0 0 1.8853 6.4939a5.9847 5.9847 0 0 0 .7367 7.0965 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5142 2.9002A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997z" />
-      </svg>
-    </span>
-  );
-}
-
-function AnthropicBrandMark(): JSX.Element {
-  // Anthropic's angular "A" burst mark (official corporate logo path).
-  return (
-    <span className="ai-setup-brand-mark ai-setup-brand-mark--anthropic" aria-hidden="true">
-      <svg viewBox="0 0 46 32" aria-hidden="true" focusable="false">
-        <path d="M32.73 0h-6.94l12.65 32h6.94L32.73 0ZM12.65 0 0 32h7.08l2.59-6.71h13.23L25.49 32h7.08L19.92 0h-7.27Zm-.65 19.34 4.32-11.22 4.33 11.22H12Z" />
-      </svg>
-    </span>
   );
 }
 

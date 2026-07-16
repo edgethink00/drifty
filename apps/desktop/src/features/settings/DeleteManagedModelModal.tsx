@@ -1,0 +1,52 @@
+import { useEffect } from "react";
+
+import { useLocalization } from "../localization/LocalizationContext";
+
+type DeleteManagedModelModalProps = {
+  readonly modelLabel: string;
+  readonly deleting: boolean;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+};
+
+/**
+ * Confirmation dialog for deleting an installed managed local model. Mirrors the
+ * app's other settings dialogs (auth-modal shell + a danger confirm button) so the
+ * destructive action can't fire from a single dropdown click.
+ */
+export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConfirm }: DeleteManagedModelModalProps) {
+  const { t } = useLocalization();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !deleting) onCancel();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel, deleting]);
+
+  return (
+    <div className="auth-modal__overlay" onClick={() => (deleting ? undefined : onCancel())}>
+      <section
+        className="auth-modal ai-delete-model-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-delete-model-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="auth-modal__header">
+          <h2 id="ai-delete-model-title">{t("settings.ai.deleteModelConfirmTitle")}</h2>
+          <p>{t("settings.ai.deleteModelConfirmBody", { model: modelLabel })}</p>
+        </div>
+        <div className="ai-delete-model-modal__actions">
+          <button type="button" className="settings-btn" disabled={deleting} onClick={onCancel}>
+            {t("settings.ai.deleteModelConfirmCancel")}
+          </button>
+          <button type="button" className="settings-btn danger" disabled={deleting} onClick={onConfirm}>
+            {deleting ? t("settings.ai.deleteModelDeleting") : t("settings.ai.deleteModel")}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}

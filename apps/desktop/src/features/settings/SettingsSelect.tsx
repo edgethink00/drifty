@@ -1,17 +1,58 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+
+/** A trailing action button rendered inside an option row (e.g. Download, Delete, Show in Finder). */
+export type SettingsSelectRowAction = {
+  readonly key: string;
+  /** Accessible name (aria-label + title). */
+  readonly label: string;
+  /** Visible text for a pill button (ignored when `icon` is set). */
+  readonly text?: string;
+  /** Visible compact icon; renders an icon button instead of a text pill. */
+  readonly icon?: ReactNode;
+  /** Reveal only on hover / focus (used for manage-style actions like Delete). */
+  readonly onHover?: boolean;
+  readonly tone?: "danger";
+  readonly disabled?: boolean;
+  readonly onAction: () => void;
+};
 
 export type SettingsSelectOption<TValue extends string> = {
   readonly value: TValue;
   readonly label: string;
   readonly accentColor?: string;
   readonly disabled?: boolean;
+  /** Greyed as "not ready" but still clickable (e.g. a provider that needs API keys). */
+  readonly muted?: boolean;
   readonly iconSrc?: string;
+  /** Custom leading element (e.g. a tinted brand-mark badge). Takes precedence over iconSrc/dot. */
+  readonly icon?: ReactNode;
   readonly actionLabel?: string;
   readonly actionAriaLabel?: string;
   readonly actionDisabled?: boolean;
+  /** Reveal the row action only on hover / focus (used for manage-style actions like Delete). */
+  readonly actionOnHover?: boolean;
+  /** Visual tone for the row action button. */
+  readonly actionTone?: "danger";
   readonly onAction?: (value: TValue) => void;
+  /** Multiple trailing actions. Takes precedence over the single actionLabel/onAction pair. */
+  readonly actions?: readonly SettingsSelectRowAction[];
 };
+
+function rowActionsFor<TValue extends string>(option: SettingsSelectOption<TValue>): readonly SettingsSelectRowAction[] {
+  if (option.actions) return option.actions;
+  if (!option.onAction) return [];
+  const onAction = option.onAction;
+  return [{
+    key: "action",
+    label: option.actionAriaLabel ?? option.actionLabel ?? "",
+    text: option.actionLabel,
+    onHover: option.actionOnHover,
+    tone: option.actionTone,
+    disabled: option.actionDisabled,
+    onAction: () => onAction(option.value),
+  }];
+}
 
 type SettingsSelectProps<TValue extends string> = {
   readonly ariaLabel: string;
@@ -19,6 +60,8 @@ type SettingsSelectProps<TValue extends string> = {
   readonly options: readonly SettingsSelectOption<TValue>[];
   readonly onChange: (value: TValue) => void;
   readonly className?: string;
+  /** Shown (greyed) in the trigger when `value` matches no option — a "nothing selected yet" state. */
+  readonly placeholder?: string;
 };
 
 type SettingsSelectStyle = CSSProperties & {
@@ -35,12 +78,15 @@ export function SettingsSelect<TValue extends string>({
   options,
   onChange,
   className,
+  placeholder,
 }: SettingsSelectProps<TValue>) {
   const controlId = useId();
   const listboxId = `${controlId}-listbox`;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
-  const selectedOption = options.find((option) => option.value === value) ?? options[0];
+  const matchedOption = options.find((option) => option.value === value);
+  const showPlaceholder = !matchedOption && placeholder != null;
+  const selectedOption = matchedOption ?? options[0];
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(() => activeIndexForOptions(options, selectedIndex));
 
@@ -127,6 +173,7 @@ export function SettingsSelect<TValue extends string>({
       className={rootClassName}
       data-open={isOpen ? "true" : undefined}
       data-has-accent={selectedOption.accentColor ? "true" : undefined}
+      data-placeholder={showPlaceholder ? "true" : undefined}
       style={optionStyle(selectedOption.accentColor)}
       onKeyDown={handleKeyDown}
     >
@@ -142,8 +189,8 @@ export function SettingsSelect<TValue extends string>({
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
       >
         <span className="settings-select-control__value">
-          <OptionIcon option={selectedOption} />
-          <span>{selectedOption.label}</span>
+          {showPlaceholder ? null : <OptionIcon option={selectedOption} />}
+          <span>{showPlaceholder ? placeholder : selectedOption.label}</span>
         </span>
         <span className="settings-select-control__chevron" aria-hidden="true" />
       </button>
@@ -153,10 +200,12 @@ export function SettingsSelect<TValue extends string>({
             const optionDisabled = option.disabled === true;
             const showsSelectedState = option.value === value && !optionDisabled;
             const isActive = index === activeIndex;
+            const rowActions = rowActionsFor(option);
+            const iconActionsOnly = rowActions.length > 0 && rowActions.every((action) => action.icon != null);
             return (
               <div
                 key={option.value}
-                className={`settings-select-control__option-row${option.onAction ? " has-action" : ""}`}
+                className={`settings-select-control__option-row${rowActions.length > 0 ? " has-action" : ""}${iconActionsOnly ? " settings-select-control__option-row--icon-actions" : ""}`}
                 data-disabled={optionDisabled ? "true" : undefined}
               >
                 <button
@@ -165,7 +214,7 @@ export function SettingsSelect<TValue extends string>({
                   role="option"
                   aria-selected={showsSelectedState}
                   aria-disabled={optionDisabled}
-                  className={`settings-select-control__option${showsSelectedState ? " is-selected" : ""}${isActive ? " is-active" : ""}${optionDisabled ? " is-disabled" : ""}`}
+                  className={`settings-select-control__option${showsSelectedState ? " is-selected" : ""}${isActive ? " is-active" : ""}${optionDisabled ? " is-disabled" : ""}${option.muted ? " is-muted" : ""}`}
                   data-has-accent={option.accentColor ? "true" : undefined}
                   disabled={optionDisabled}
                   style={optionStyle(option.accentColor)}
@@ -178,19 +227,25 @@ export function SettingsSelect<TValue extends string>({
                   <span className="settings-select-control__option-label">{option.label}</span>
                   <span className="settings-select-control__check" aria-hidden="true" />
                 </button>
-                {option.onAction ? (
-                  <button
-                    type="button"
-                    className="settings-select-control__option-action"
-                    aria-label={option.actionAriaLabel ?? option.actionLabel}
-                    disabled={option.actionDisabled}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      option.onAction?.(option.value);
-                    }}
-                  >
-                    {option.actionLabel}
-                  </button>
+                {rowActions.length > 0 ? (
+                  <span className="settings-select-control__option-actions">
+                    {rowActions.map((action) => (
+                      <button
+                        key={action.key}
+                        type="button"
+                        className={`settings-select-control__option-action${action.icon ? " settings-select-control__option-action--icon" : ""}${action.onHover ? " settings-select-control__option-action--hover" : ""}${action.tone === "danger" ? " settings-select-control__option-action--danger" : ""}`}
+                        aria-label={action.label}
+                        title={action.label}
+                        disabled={action.disabled}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          action.onAction();
+                        }}
+                      >
+                        {action.icon ?? action.text}
+                      </button>
+                    ))}
+                  </span>
                 ) : null}
               </div>
             );
@@ -202,6 +257,9 @@ export function SettingsSelect<TValue extends string>({
 }
 
 function OptionIcon<TValue extends string>({ option }: { readonly option: SettingsSelectOption<TValue> }) {
+  if (option.icon) {
+    return <>{option.icon}</>;
+  }
   if (option.iconSrc) {
     return <img className="settings-select-control__icon" src={option.iconSrc} alt="" aria-hidden="true" />;
   }

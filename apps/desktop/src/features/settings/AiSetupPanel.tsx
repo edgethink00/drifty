@@ -13,9 +13,8 @@ import {
 } from "./AiSetupSectionCards";
 import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
-import { DriftySetupPanel, type DriftyRoute } from "./DriftySetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
-import type { LocalAiSetupState } from "./localAiSetup";
+import type { DriftyAiRoute, LocalAiSetupState } from "./localAiSetup";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
@@ -30,23 +29,15 @@ import { useLocalization } from "../localization/LocalizationContext";
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
 export type AiSetupPanelProps = {
-  readonly aiServerStatusLabel: string;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
-  readonly billingEntitlementError: string | null;
-  readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
-  readonly billingPortalLoading: boolean;
   readonly cloudStatusRefreshing: boolean;
-  readonly cloudStatusLabel: string;
-  readonly cloudTrialEndsAt: string | null;
   readonly connectionStatus: AiConnectionStatus;
   readonly currentBillingPlan: BillingPlanId | null;
-  readonly isSupabaseConfigured: boolean;
   readonly localAiSetup: LocalAiSetupState;
   readonly connectionTest: UseAiConnectionTestRunnerResult;
   readonly shouldShowCloudCheckoutPlans: boolean;
-  readonly userEmail: string | null;
   readonly workProfileUserId: string;
   readonly analysisSetup: AnalysisAiSetupState;
   readonly analysisOpenRouterConnected: boolean;
@@ -59,28 +50,19 @@ export type AiSetupPanelProps = {
   readonly onDialogOpenChange: (open: boolean) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
-  readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onStartCloudSetup: CloudSetupHandler;
 };
 
 export function AiSetupPanel({
-  aiServerStatusLabel,
   billingCheckoutLoadingInterval,
-  billingEntitlementError,
-  billingEntitlementLockedReason,
   billingEntitlementStatus,
   billingPlansDisabled,
-  billingPortalLoading,
   cloudStatusRefreshing,
-  cloudStatusLabel,
-  cloudTrialEndsAt,
   connectionStatus,
   currentBillingPlan,
-  isSupabaseConfigured,
   localAiSetup,
   connectionTest,
   shouldShowCloudCheckoutPlans,
-  userEmail,
   workProfileUserId,
   analysisSetup,
   analysisOpenRouterConnected,
@@ -91,7 +73,6 @@ export function AiSetupPanel({
   onDialogOpenChange,
   onLocalAiSetupChange,
   onManageCloudBilling,
-  onRefreshCloudStatus,
   onStartCloudSetup,
 }: AiSetupPanelProps) {
   const { t } = useLocalization();
@@ -102,16 +83,29 @@ export function AiSetupPanel({
   const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
   const driftyRoute = localAiSetup.driftyRoute;
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
-  const managedLocalAi = useManagedLocalAiSetup(expandedSection === "drifty", onLocalAiSetupChange);
+  // The Drifty provider has no card any more — its cloud/local models are managed
+  // entirely from the Model-being-used dropdown, so load the managed-local catalog
+  // whenever Drifty is the active provider (rather than when a card is expanded).
+  const managedLocalAi = useManagedLocalAiSetup(selectedSection === "drifty", onLocalAiSetupChange);
   const workProfileSettings = useWorkProfileSettings(workProfileUserId);
   const canUseCloudModel = currentBillingPlan === "individual"
     && !shouldShowCloudCheckoutPlans
     && (billingEntitlementStatus === "active" || billingEntitlementStatus === "trialing");
-  const cloudSubscribeActionLabel = canUseCloudModel
-    ? null
-    : billingCheckoutLoadingInterval === null
-      ? t("settings.ai.upgrade")
-      : t("settings.ai.opening");
+  const cloudIsTrialing = billingEntitlementStatus === "trialing";
+  // A "locked" entitlement means the user HAS a subscription that's currently blocked
+  // (device limit reached, payment required, …). Those states must route to Manage
+  // billing (Stripe portal) to recover — never to a fresh checkout, which would sell
+  // them a second subscription.
+  const cloudLocked = billingEntitlementStatus === "locked" && currentBillingPlan === "individual";
+  // Manage-billing states = fully active (secondary, hover action) OR locked (primary
+  // recovery action). Upgrade/checkout states = trialing (convert the trial) OR a
+  // genuine no-subscription. `canManageBilling` covers active + locked; the Upgrade
+  // label is shown only for the trialing / no-sub states.
+  const cloudCanManageBilling = (canUseCloudModel && !cloudIsTrialing) || cloudLocked;
+  const cloudShowsUpgrade = cloudIsTrialing || (!canUseCloudModel && !cloudLocked);
+  const cloudSubscribeActionLabel = cloudShowsUpgrade
+    ? (billingCheckoutLoadingInterval === null ? t("settings.ai.upgrade") : t("settings.ai.opening"))
+    : null;
   const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || billingCheckoutLoadingInterval !== null;
   const connectionTestKind = connectionTest.result?.kind ?? null;
   const isCloudRouteSelected = localAiSetup.provider === "managed_local" && driftyRoute === "cloud";
@@ -155,16 +149,31 @@ export function AiSetupPanel({
     onLocalAiSetupChange((current) => ({ ...current, provider: providerForSection(section) }));
   };
 
-  const handleDriftyRouteChange = (route: DriftyRoute) => {
+  const handleDriftyRouteChange = (route: DriftyAiRoute) => {
     setExpandedSection("drifty");
     clearConnectionTestResult();
     onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: route }));
   };
 
+  // A provider is ready to become active once its credentials/config are set. Drifty
+  // is always reachable (cloud upgrade / local download live in the model dropdown).
+  const sectionReady = (section: AiSetupSection): boolean => {
+    switch (section) {
+      case "openrouter":
+        return localAiSetup.openRouterApiKey.trim().length > 0;
+      case "custom":
+        return localAiSetup.selfHostedBaseUrl.trim().length > 0 && localAiSetup.selfHostedModel.trim().length > 0;
+      default:
+        return true;
+    }
+  };
+
   const handleProviderChange = (section: AiSetupSection) => {
     clearConnectionTestResult();
+    // Always reveal the provider's Configure card; only commit to it once it's ready.
+    // Picking an unconfigured provider just expands its card so it can be set up first.
     setExpandedSection(section);
-    selectProvider(section);
+    if (sectionReady(section)) selectProvider(section);
   };
 
   const handleToggleSection = (section: AiSetupSection) => {
@@ -204,9 +213,13 @@ export function AiSetupPanel({
             selectedProvider={selectedSection}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
+            cloudSelectable={canUseCloudModel}
+            canManageBilling={cloudCanManageBilling}
             onDriftyRouteChange={handleDriftyRouteChange}
             onInstallModel={managedLocalAi.installModel}
+            onDeleteModel={managedLocalAi.deleteModel}
             onLocalAiSetupChange={onLocalAiSetupChange}
+            onManageCloudBilling={onManageCloudBilling}
             onOpenRouterPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
             onProviderChange={handleProviderChange}
             onStartCloudSetup={onStartCloudSetup}
@@ -216,35 +229,6 @@ export function AiSetupPanel({
           <h4 className="ai-setup-provider-heading">{t("settings.ai.configureProviders")}</h4>
 
           <div className="ai-setup-choices" role="group" aria-label={t("settings.ai.setupChoicesAria")}>
-            <AiSetupSectionCard section={AI_SETUP_SECTIONS[0]} expanded={expandedSection === "drifty"} onToggle={handleToggleSection}>
-              <DriftySetupPanel
-                actionModelId={managedLocalAi.actionModelId}
-                aiServerStatusLabel={aiServerStatusLabel}
-                billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                billingEntitlementError={billingEntitlementError}
-                billingEntitlementLockedReason={billingEntitlementLockedReason}
-                billingEntitlementStatus={billingEntitlementStatus}
-                billingPlansDisabled={billingPlansDisabled}
-                billingPortalLoading={billingPortalLoading}
-                catalog={managedLocalAi.catalog}
-                cloudStatusRefreshing={cloudStatusRefreshing}
-                cloudStatusLabel={cloudStatusLabel}
-                cloudTrialEndsAt={cloudTrialEndsAt}
-                currentBillingPlan={currentBillingPlan}
-                isSupabaseConfigured={isSupabaseConfigured}
-                loading={managedLocalAi.loading}
-                localAiSetup={localAiSetup}
-                selectedRoute={driftyRoute}
-                shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
-                status={managedLocalAi.status}
-                userEmail={userEmail}
-                onDeleteModel={managedLocalAi.deleteModel}
-                onInstallModel={managedLocalAi.installModel}
-                onManageCloudBilling={onManageCloudBilling}
-                onRefreshCloudStatus={onRefreshCloudStatus}
-                onStartCloudSetup={onStartCloudSetup}
-              />
-            </AiSetupSectionCard>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
                 localAiSetup={localAiSetup}
@@ -270,6 +254,12 @@ export function AiSetupPanel({
               setExpandedSection("openrouter");
             }}
             openRouterConnected={analysisOpenRouterConnected}
+            cloudSelectable={canUseCloudModel}
+            cloudSubscribeActionLabel={cloudSubscribeActionLabel}
+            cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
+            canManageBilling={cloudCanManageBilling}
+            onStartCloudSetup={onStartCloudSetup}
+            onManageCloudBilling={onManageCloudBilling}
           />
         </section>
       ) : (

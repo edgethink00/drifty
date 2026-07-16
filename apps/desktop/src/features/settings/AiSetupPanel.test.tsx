@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
+import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 import { PrivacySettingsSection } from "./PrivacySettingsSection";
 
 const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
@@ -30,71 +31,57 @@ describe("AiSetupPanel", () => {
     testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
   });
 
-  it("switches between Drifty, OpenRouter, and custom endpoint setup rows", async () => {
-    renderPanel();
+  it("switches between the OpenRouter and custom endpoint setup rows", () => {
+    // Pre-configure OpenRouter + Custom so both are ready to become the active provider
+    // (an unready provider only expands its card — covered by the test below).
+    renderPanel({
+      initialSetup: {
+        ...DEFAULT_LOCAL_AI_SETUP,
+        openRouterApiKey: "sk-or-test-key",
+        selfHostedBaseUrl: "https://api.openai.com/v1",
+        selfHostedModel: "gpt-5-mini",
+      },
+    });
 
     const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
     expect(within(setupTabs).getByRole("tab", { name: /^Classification$/i }).getAttribute("aria-selected")).toBe("true");
     expect(within(setupTabs).getByRole("tab", { name: /^Intelligence$/i }).getAttribute("aria-selected")).toBe("false");
     expect(within(setupTabs).getByRole("tab", { name: /^Profile & info$/i }).getAttribute("aria-selected")).toBe("false");
     expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
-    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
-    expect(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }).getAttribute("aria-expanded")).toBe("true");
+
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     const providerSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i });
     const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
     expect(providerSelect.textContent).toContain("Drifty");
     expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
 
-    const driftySettings = await screen.findByRole("group", { name: /^Drifty settings$/i });
-    chooseOption(modelBeingUsed, /^AI model$/i, /^Drifty Individual \(Cloud\)$/i);
-    expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
-
-    fireEvent.click(modelSelect);
-    const gemmaOption = within(modelBeingUsed).getByRole("option", { name: /^Gemma 4 12B$/i });
-    if (!(gemmaOption instanceof HTMLButtonElement)) throw new Error("Disabled managed model option should be a button.");
-    expect(gemmaOption.disabled).toBe(true);
-    expect(modelBeingUsed.textContent).not.toMatch(/download required/i);
-    fireEvent.click(gemmaOption);
-    expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
-    fireEvent.click(modelSelect);
-
-    const localSettings = within(driftySettings).getByRole("group", { name: /Local AI settings/i });
-    const cloudSettings = within(driftySettings).getByRole("group", { name: /Drifty Cloud settings/i });
-    const cloudDescription = within(driftySettings).getByText("Access powerful AI models managed by Drifty, no local setup required.");
-    expect(cloudSettings).toBeTruthy();
-    expect(cloudDescription.compareDocumentPosition(cloudSettings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i })).toBeTruthy();
-    expect(within(localSettings).getByRole("article", { name: /Gemma 4 12B managed local model/i })).toBeTruthy();
-    expect(within(localSettings).getByRole("article", { name: /Qwen 3\.6 27B managed local model/i })).toBeTruthy();
-    expect(within(driftySettings).queryByLabelText(/Drifty Cloud selected/i)).toBeNull();
-    expect(within(driftySettings).queryByLabelText(/Managed local model selected/i)).toBeNull();
-    // Per-model radio selectors were removed; the active model is chosen from the
-    // "Model being used" dropdown, so the cards carry no select input.
-    expect(within(localSettings).queryByLabelText(/Select Gemma 4 12B managed local model/i)).toBeNull();
-    expect(within(localSettings).queryByLabelText(/Select Qwen 3\.5 4B managed local model/i)).toBeNull();
+    // The Drifty provider is managed entirely from the dropdown; only OpenRouter and
+    // Custom endpoint have provider cards, and neither is expanded on a fresh setup.
+    const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
+    expect(within(sectionChoices).queryByRole("button", { name: /^Drifty setup row$/i })).toBeNull();
+    const openRouterRow = within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i });
+    const customRow = within(sectionChoices).getByRole("button", { name: /^Custom endpoint setup row$/i });
+    expect(openRouterRow.getAttribute("aria-expanded")).toBe("false");
+    expect(customRow.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
     expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i }));
-    expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
+    fireEvent.click(openRouterRow);
+    expect(openRouterRow.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
-    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
 
     chooseOption(modelBeingUsed, /^AI provider$/i, /^OpenRouter$/i);
     expect(providerSelect.textContent).toContain("OpenRouter");
     expect(modelSelect.textContent).toContain("DeepSeek V4 Flash");
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
     expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
 
     chooseOption(modelBeingUsed, /^AI model$/i, /^MiMo V2\.5$/i);
     expect(modelSelect.textContent).toContain("MiMo V2.5");
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Custom endpoint setup row$/i }));
+    fireEvent.click(customRow);
+    expect(customRow.getAttribute("aria-expanded")).toBe("true");
     expect(providerSelect.textContent).toContain("OpenRouter");
     expect(modelSelect.textContent).toContain("MiMo V2.5");
     expect(screen.getByRole("group", { name: /Custom endpoint settings/i })).toBeTruthy();
@@ -104,31 +91,40 @@ describe("AiSetupPanel", () => {
     expect(providerSelect.textContent).toContain("Custom endpoint");
     expect(modelSelect.textContent).toContain("Custom endpoint");
     expect(screen.getByRole("group", { name: /Custom endpoint settings/i })).toBeTruthy();
+  });
 
-    fireEvent.click(within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i }));
-    expect(providerSelect.textContent).toContain("Custom endpoint");
-    expect(modelSelect.textContent).toContain("Custom endpoint");
-    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
-    expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /Custom endpoint settings/i })).toBeNull();
+  it("expands an unconfigured provider's card from the dropdown without committing to it", () => {
+    renderPanel();
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    const providerSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i });
+    expect(providerSelect.textContent).toContain("Drifty");
+
+    chooseOption(modelBeingUsed, /^AI provider$/i, /^OpenRouter$/i);
+
+    // OpenRouter has no key yet → stay on Drifty, just expand its Configure card.
+    expect(providerSelect.textContent).toContain("Drifty");
+    expect(providerSelect.textContent).not.toContain("OpenRouter");
+    expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
   });
 
   it("collapses the expanded provider when its bar is clicked again", () => {
     renderPanel();
 
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
-    const driftyRow = within(sectionChoices).getByRole("button", { name: /^Drifty setup row$/i });
-    // Drifty is expanded by default on a fresh (managed local) setup.
-    expect(driftyRow.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
+    const openRouterRow = within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i });
+    // No provider card is expanded by default on a fresh (managed local) setup, so
+    // expand OpenRouter first, then toggle it closed again.
+    expect(openRouterRow.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
 
-    fireEvent.click(driftyRow);
-    expect(driftyRow.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByRole("group", { name: /^Drifty settings$/i })).toBeNull();
+    fireEvent.click(openRouterRow);
+    expect(openRouterRow.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
 
-    fireEvent.click(driftyRow);
-    expect(driftyRow.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("group", { name: /^Drifty settings$/i })).toBeTruthy();
+    fireEvent.click(openRouterRow);
+    expect(openRouterRow.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("group", { name: /OpenRouter BYOK settings/i })).toBeNull();
   });
 
   it("lets users edit the work profile selections used by AI classification", async () => {

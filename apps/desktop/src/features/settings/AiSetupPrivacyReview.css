@@ -8,14 +8,6 @@
   padding: 0;
 }
 
-.ai-privacy-review__intro {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.4;
-  margin: 0;
-  max-width: 34rem;
-}
-
 .ai-privacy-review__chips {
   align-items: center;
   display: flex;

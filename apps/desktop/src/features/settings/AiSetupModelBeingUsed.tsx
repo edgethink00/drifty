@@ -1,15 +1,15 @@
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
-import driftyLogoUrl from "../../assets/drifty-icon.png";
-import openRouterLogoUrl from "../../assets/openrouter-logo.png";
+import { aiProviderBrandMark } from "./AiProviderBrandMark";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DRIFTY_CLOUD_MODEL_ID, driftyModelOptions, isSelectableManagedModel } from "./AiSetupDriftyModelOptions";
+import { DeleteManagedModelModal } from "./DeleteManagedModelModal";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
-import type { DriftyRoute } from "./DriftySetupPanel";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
-import type { LocalAiSetupState } from "./localAiSetup";
+import type { DriftyAiRoute, LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../localization/aiStatusTranslations";
@@ -17,7 +17,7 @@ import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../local
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {
   readonly catalog: readonly ManagedLocalAiModel[];
-  readonly driftyRoute: DriftyRoute;
+  readonly driftyRoute: DriftyAiRoute;
   readonly localAiSetup: LocalAiSetupState;
   readonly managedLocalStatus: ManagedLocalAiStatus | null;
   readonly openRouterModelOptions: readonly AiModelOption[];
@@ -31,9 +31,13 @@ type AiSetupModelBeingUsedProps = {
   readonly connectionTestDisabled: boolean;
   readonly cloudSubscribeActionDisabled: boolean;
   readonly cloudSubscribeActionLabel: string | null;
-  readonly onDriftyRouteChange: (route: DriftyRoute) => void;
+  readonly cloudSelectable: boolean;
+  readonly canManageBilling: boolean;
+  readonly onDriftyRouteChange: (route: DriftyAiRoute) => void;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
+  readonly onDeleteModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
+  readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onOpenRouterPrimaryModelChange: (modelId: string) => void;
   readonly onProviderChange: (provider: AiSetupSection) => void;
   readonly onTestConnection: () => void | Promise<void>;
@@ -56,23 +60,45 @@ export function AiSetupModelBeingUsed({
   connectionTestDisabled,
   cloudSubscribeActionDisabled,
   cloudSubscribeActionLabel,
+  cloudSelectable,
+  canManageBilling,
   onDriftyRouteChange,
   onInstallModel,
+  onDeleteModel,
   onLocalAiSetupChange,
+  onManageCloudBilling,
   onOpenRouterPrimaryModelChange,
   onProviderChange,
   onTestConnection,
   onStartCloudSetup,
 }: AiSetupModelBeingUsedProps) {
   const { effectiveLanguage, t } = useLocalization();
+  // Deleting an installed local model is destructive, so a dropdown click only
+  // *requests* deletion — the actual delete runs after a confirmation dialog.
+  const [pendingDelete, setPendingDelete] = useState<{ readonly id: string; readonly label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const requestDeleteModel = (modelId: string) => {
+    const model = catalog.find((item) => item.id === modelId);
+    setPendingDelete({ id: modelId, label: model?.label ?? modelId });
+  };
+  const confirmDeleteModel = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await onDeleteModel(pendingDelete.id);
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
+  };
   const localizedConnectionStatus = {
     label: localizeAiStatusLabel(connectionStatus.label, t),
     providerLabel: localizeAiStatusLabel(connectionStatus.providerLabel, t),
   };
   const providerOptions = [
-    { value: "drifty", label: "Drifty", iconSrc: driftyLogoUrl },
-    { value: "openrouter", label: "OpenRouter", iconSrc: openRouterLogoUrl },
-    { value: "custom", label: t("settings.ai.customEndpoint"), accentColor: "var(--accent)" },
+    { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
+    { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
+    { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(localAiSetup.selfHostedBaseUrl.trim().length > 0 && localAiSetup.selfHostedModel.trim().length > 0) },
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
   const selectedModelValue = (() => {
     switch (selectedProvider) {
@@ -89,16 +115,21 @@ export function AiSetupModelBeingUsed({
   const modelOptions = (() => {
     switch (selectedProvider) {
       case "drifty":
-        return driftyModelOptions(
+        return driftyModelOptions({
           catalog,
-          managedLocalStatus,
+          status: managedLocalStatus,
           actionModelId,
           cloudSubscribeActionDisabled,
           cloudSubscribeActionLabel,
+          cloudSelectable,
+          canManageBilling,
           onInstallModel,
           onStartCloudSetup,
+          onManageCloudBilling,
+          onDeleteModel: requestDeleteModel,
+          onRevealArtifact: revealManagedModelArtifact,
           t,
-        );
+        });
       case "openrouter":
         return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
       case "custom":
@@ -116,7 +147,9 @@ export function AiSetupModelBeingUsed({
     switch (selectedProvider) {
       case "drifty":
         if (modelId === DRIFTY_CLOUD_MODEL_ID) {
-          if (cloudSubscribeActionLabel !== null) return;
+          // Cloud is selectable on active AND trialing plans (trialing still shows an
+          // Upgrade action). Only bail when it genuinely can't be used yet.
+          if (!cloudSelectable) return;
           onDriftyRouteChange("cloud");
           onProviderChange("drifty");
           return;
@@ -141,6 +174,7 @@ export function AiSetupModelBeingUsed({
   };
 
   return (
+    <>
     <ModelBeingUsedCard
       regionAriaLabel={t("settings.ai.modelBeingUsed")}
       heading={t("settings.ai.modelBeingUsed")}
@@ -175,7 +209,22 @@ export function AiSetupModelBeingUsed({
         : connectionTestMessage}
       statusMessageKind={connectionTestKind}
     />
+    {pendingDelete ? (
+      <DeleteManagedModelModal
+        modelLabel={pendingDelete.label}
+        deleting={deleting}
+        onCancel={() => (deleting ? undefined : setPendingDelete(null))}
+        onConfirm={() => void confirmDeleteModel()}
+      />
+    ) : null}
+    </>
   );
+}
+
+/** Reveal an installed managed-model's on-disk directory in Finder. */
+async function revealManagedModelArtifact(artifactDir: string): Promise<void> {
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealItemInDir(artifactDir);
 }
 
 class AiSetupModelProviderError extends Error {

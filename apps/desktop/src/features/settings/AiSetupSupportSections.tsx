@@ -46,6 +46,7 @@ export function AiSetupSupportSections({
       <AiSetupSupportSection
         id="privacyReview"
         expanded={expandedSection === "privacyReview"}
+        subtitle={t("settings.aiPrivacy.intro")}
         title={t("settings.ai.privacyReview")}
         onToggle={setExpandedSection}
       >

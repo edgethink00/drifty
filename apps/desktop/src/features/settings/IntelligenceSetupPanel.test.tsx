@@ -16,6 +16,13 @@ function renderPanel(overrides: Partial<IntelligenceSetupPanelProps> = {}) {
     onChange: vi.fn(),
     openRouterConnected: false,
     onConnectOpenRouter: vi.fn(),
+    // Default to a subscribed (active) plan so the Drifty Cloud model is selectable.
+    cloudSelectable: true,
+    cloudSubscribeActionLabel: null,
+    cloudSubscribeActionDisabled: false,
+    canManageBilling: true,
+    onStartCloudSetup: vi.fn(),
+    onManageCloudBilling: vi.fn(),
     ...overrides,
   };
   return { props, ...render(<IntelligenceSetupPanel {...props} />) };
@@ -42,12 +49,35 @@ describe("IntelligenceSetupPanel", () => {
     expect(within(summary).getAllByText("Drifty Cloud")[0]).toBeTruthy();
     expect(within(summary).getByText("Available")).toBeTruthy();
 
-    // The expanded Drifty Cloud card explains no configuration is needed.
-    expect(screen.getByText(/Drifty Cloud provides the analysis model/i)).toBeTruthy();
-
-    // Other providers' fields stay collapsed / unmounted.
+    // Drifty Cloud needs no configuration, so it has no provider card and
+    // nothing is expanded — other providers' fields stay collapsed / unmounted.
+    expect(screen.queryByRole("button", { name: /^Drifty Cloud setup row$/i })).toBeNull();
     expect(screen.queryByLabelText("OpenRouter model id")).toBeNull();
     expect(screen.queryByLabelText("Analysis endpoint base URL")).toBeNull();
+  });
+
+  it("gates the Drifty Cloud analysis model behind Upgrade when the plan is not subscribed", () => {
+    const onStartCloudSetup = vi.fn();
+    renderPanel({
+      setup: buildSetup({ provider: "cloud" }),
+      cloudSelectable: false,
+      cloudSubscribeActionLabel: "Upgrade",
+      onStartCloudSetup,
+    });
+
+    const summary = summaryRegion();
+    // Not subscribed → placeholder + needs-setup, not a committed "Drifty Cloud" selection.
+    expect(within(summary).getByText("Needs setup")).toBeTruthy();
+    const modelCombobox = within(summary).getByRole("combobox", { name: "Analysis model" });
+    expect(modelCombobox.textContent).toContain("Select a model");
+
+    // Expanding the model dropdown surfaces a disabled cloud option + an Upgrade action.
+    fireEvent.click(modelCombobox);
+    const cloudOption = within(summary).getByRole("option", { name: /Drifty Cloud/i });
+    if (!(cloudOption instanceof HTMLButtonElement)) throw new Error("Cloud model option should render as a button.");
+    expect(cloudOption.disabled).toBe(true);
+    fireEvent.click(within(summary).getByRole("button", { name: /^Upgrade$/i }));
+    expect(onStartCloudSetup).toHaveBeenCalledTimes(1);
   });
 
   it("shows the OpenRouter model picker seeded with the recommended default and never exposes a raw key", () => {
@@ -86,9 +116,9 @@ describe("IntelligenceSetupPanel", () => {
     expect(screen.queryByRole("button", { name: /Connect OpenRouter/i })).toBeNull();
   });
 
-  it("selects a real provider by opening its card, calling onChange with the new provider", () => {
+  it("commits to a configured provider when its card is opened", () => {
     const onChange = vi.fn();
-    renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
+    renderPanel({ setup: buildSetup({ provider: "cloud" }), openRouterConnected: true, onChange });
 
     fireEvent.click(screen.getByRole("button", { name: /^OpenRouter setup row$/i }));
 
@@ -96,7 +126,18 @@ describe("IntelligenceSetupPanel", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter" }));
   });
 
-  it("switches provider directly from the selectable Model-being-used summary", () => {
+  it("does not commit to an unconfigured provider when its card is opened", () => {
+    const onChange = vi.fn();
+    renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
+
+    fireEvent.click(screen.getByRole("button", { name: /^OpenAI setup row$/i }));
+
+    // No key yet → opening the card only reveals its config, never makes it the active provider.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("OpenAI API key")).toBeTruthy();
+  });
+
+  it("expands an unconfigured provider's card from the summary dropdown without committing to it", () => {
     const onChange = vi.fn();
     renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
 
@@ -104,7 +145,22 @@ describe("IntelligenceSetupPanel", () => {
     fireEvent.click(within(summary).getByRole("combobox", { name: "Analysis provider" }));
     fireEvent.click(within(summary).getByRole("option", { name: "OpenRouter" }));
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter" }));
+    // OpenRouter isn't connected → don't switch the active provider; just expand its
+    // Configure card so the user can set it up first.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("OpenRouter model id")).toBeTruthy();
+  });
+
+  it("switches to a configured provider directly from the summary dropdown", () => {
+    const onChange = vi.fn();
+    renderPanel({ setup: buildSetup({ provider: "openrouter" }), openRouterConnected: true, onChange });
+
+    const summary = summaryRegion();
+    // Drifty Cloud is always reachable (subscription is gated in the model dropdown).
+    fireEvent.click(within(summary).getByRole("combobox", { name: "Analysis provider" }));
+    fireEvent.click(within(summary).getByRole("option", { name: "Drifty Cloud" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "cloud" }));
   });
 
   it("picks a recommended model from the summary model dropdown", () => {
@@ -141,24 +197,6 @@ describe("IntelligenceSetupPanel", () => {
 
     expect(screen.queryByText("Preview")).toBeNull();
     expect(screen.queryByText(/coming soon/i)).toBeNull();
-  });
-
-  it("selects OpenAI as a real provider when its card is opened", () => {
-    const onChange = vi.fn();
-    renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
-
-    fireEvent.click(screen.getByRole("button", { name: /^OpenAI setup row$/i }));
-
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openai" }));
-  });
-
-  it("selects Anthropic as a real provider when its card is opened", () => {
-    const onChange = vi.fn();
-    renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
-
-    fireEvent.click(screen.getByRole("button", { name: /^Anthropic setup row$/i }));
-
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic" }));
   });
 
   it("exposes a real API key + model input for the OpenAI provider seeded with the default model", () => {
@@ -204,17 +242,19 @@ describe("IntelligenceSetupPanel", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", anthropicModel: "claude-opus-5" }));
   });
 
-  it("switches to OpenAI and Anthropic directly from the selectable summary provider dropdown", () => {
+  it("expands the OpenAI and Anthropic cards from the summary dropdown without committing when unconfigured", () => {
     const onChange = vi.fn();
     renderPanel({ setup: buildSetup({ provider: "cloud" }), onChange });
 
     const summary = summaryRegion();
     fireEvent.click(within(summary).getByRole("combobox", { name: "Analysis provider" }));
     fireEvent.click(within(summary).getByRole("option", { name: "OpenAI" }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openai" }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("OpenAI API key")).toBeTruthy();
 
     fireEvent.click(within(summary).getByRole("combobox", { name: "Analysis provider" }));
     fireEvent.click(within(summary).getByRole("option", { name: "Anthropic" }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic" }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Anthropic API key")).toBeTruthy();
   });
 });
