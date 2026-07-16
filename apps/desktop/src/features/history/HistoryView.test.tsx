@@ -276,6 +276,58 @@ describe("HistoryView", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
   });
 
+  it("owns focus while confirming selected-history deletion", async () => {
+    const onDeleteSelected = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting={false}
+        onDeleteSelected={onDeleteSelected}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /select api reference/i }));
+    const opener = screen.getByRole("button", { name: /delete 1 selected/i });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = screen.getByRole("dialog", { name: /delete history records/i });
+    const cancel = within(dialog).getByRole("button", { name: /^cancel$/i });
+    const confirm = within(dialog).getByRole("button", { name: /^delete records$/i });
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+
+    confirm.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(cancel);
+
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(confirm);
+
+    rerender(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting
+        onDeleteSelected={onDeleteSelected}
+      />,
+    );
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: /delete history records/i })).toBeTruthy();
+
+    rerender(
+      <HistoryView
+        appIcons={{}}
+        segments={historySegments}
+        deleting={false}
+        onDeleteSelected={onDeleteSelected}
+      />,
+    );
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("renders adjacent matching app and window records as one selectable row", async () => {
     const deleteSelected = vi.fn().mockResolvedValue(undefined);
     render(
