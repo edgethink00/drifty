@@ -446,6 +446,7 @@ export default function App() {
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionProviderLabel,
+    localAiConnectionPersistentFailure,
     localAiMemoryUsageBytes,
     localAiProviderStatus,
     localAiSetup,
@@ -719,7 +720,6 @@ export default function App() {
   const [aiClassificationUsageDay, setAiClassificationUsageDay] = useState<string | null>(null);
   const [classificationActionLoading, setClassificationActionLoading] = useState(false);
   const [classificationSummary, setClassificationSummary] = useState<AiClassificationSummary | null>(null);
-  const [observedAiClassificationFailure, setObservedAiClassificationFailure] = useState(false);
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
   const [compactHistoryCacheRevision, setCompactHistoryCacheRevision] = useState(0);
@@ -1036,7 +1036,12 @@ export default function App() {
     localMemoryUsageBytes: localAiMemoryUsageBytes,
     classificationRunning: classificationActivity.running || classificationActionLoading || classificationSummary?.status === "running",
     classificationRemaining: classificationActivity.remaining,
-    classificationIssueKind: classificationSummary?.status === "error" ? aiConnectionIssueKindFromMessage(classificationSummary.message) : null,
+    // Local providers report connectivity through localProviderStatus (with
+    // failure hysteresis); only cloud runs surface summary errors here, and
+    // content-level failures (provider answered, output unusable) never do.
+    classificationIssueKind: !localAiClassificationOptions && classificationSummary?.status === "error" && classificationSummary.failureKind !== "content"
+      ? aiConnectionIssueKindFromMessage(classificationSummary.message)
+      : null,
     cloudIssueKind: billingEntitlementError
       ? aiConnectionIssueKindFromMessage(billingEntitlementError)
       : billingEntitlement?.lockedReason === "device_limit_reached"
@@ -1052,7 +1057,6 @@ export default function App() {
       return current?.status === "error" ? null : current;
     });
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
-    setObservedAiClassificationFailure(false);
   }, [aiClassificationProviderKey]);
   const isSettingsTab = activeTab === "settings";
   const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
@@ -4198,7 +4202,10 @@ export default function App() {
         hasRequiredAccountAuth,
         isSupabaseConfigured,
         localAiReady: Boolean(localAiClassificationOptions),
-        observedAiClassificationFailure,
+        // Only a failure confirmed by repeated probes may summon the
+        // "AI provider disconnected" notice; single transient errors stay off
+        // the dashboard while the automatic re-test recovers in the background.
+        observedAiClassificationFailure: localAiConnectionPersistentFailure,
       })
       : null;
   const dashboardAiRecoveryKey = dashboardAiUnavailableState && isDashboardAiRecoveryOverlayVariant(dashboardAiUnavailableState.variant)
@@ -4812,9 +4819,6 @@ export default function App() {
         ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
         : await runAiClassificationForUnknownThreshold(query, threshold);
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
-      if (selectedDayRef.current === today) {
-        setObservedAiClassificationFailure(summary.status === "error");
-      }
       if (summary.status === "empty" && summary.savedRecords === 0) return;
       if (selectedDayRef.current === today) {
         setClassificationSummary(summary);
@@ -4845,8 +4849,7 @@ export default function App() {
         message,
       });
       if (selectedDayRef.current === today) {
-        setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
-        setObservedAiClassificationFailure(true);
+        setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
       }
     } finally {
       aiClassificationInFlightRef.current = false;
@@ -5171,7 +5174,6 @@ export default function App() {
         : await runAiClassification(toClassificationQueryForDay(selectedDay));
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       setClassificationSummary(summary);
-      setObservedAiClassificationFailure(summary.status === "error");
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
@@ -5184,8 +5186,7 @@ export default function App() {
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
-      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
-      setObservedAiClassificationFailure(true);
+      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
         selectedSegments: 0,
@@ -5225,7 +5226,6 @@ export default function App() {
         ...summary,
         message: `${summary.message} Target: ${formatDayLabel(targetDay)}.`,
       });
-      setObservedAiClassificationFailure(summary.status === "error");
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
@@ -5238,8 +5238,7 @@ export default function App() {
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
-      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message });
-      setObservedAiClassificationFailure(true);
+      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
         selectedSegments: 0,
@@ -5386,7 +5385,7 @@ export default function App() {
         classification: {
           actionLoading: classificationActionLoading,
           summary: classificationSummary,
-          observedFailure: observedAiClassificationFailure,
+          observedFailure: localAiConnectionPersistentFailure,
         },
         usage: {
           day: aiClassificationUsageDay,
@@ -5396,7 +5395,7 @@ export default function App() {
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionProviderLabel, localAiProviderStatus, observedAiClassificationFailure, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -6027,7 +6026,18 @@ export default function App() {
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}
-            onRetrySelectedDayAiClassification={() => void handleRunSelectedDayAiClassification()}
+            onRetrySelectedDayAiClassification={() => {
+              void (async () => {
+                // Probe the provider before the classification retry: when
+                // nothing is left to classify, the run alone yields no
+                // connectivity evidence and the disconnect state would
+                // linger. Sequential, so one click never races two provider
+                // round-trips (managed local runtime starts are heavy) and
+                // the classification verdict lands last as freshest evidence.
+                await aiConnectionTest.runAuto();
+                await handleRunSelectedDayAiClassification();
+              })();
+            }}
             onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
             onSelectDay={selectDay}
           />

@@ -3,9 +3,12 @@ import type { Dispatch, SetStateAction } from "react";
 import type { LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
 import {
   aiConnectionIssueKindFromMessage,
+  isEstablishedLocalAiDisconnect,
   localAiProviderLabel,
   localAiSetupFingerprint,
+  nextLocalAiConnectionCheck,
   type LocalAiConnectionCheck,
+  type LocalAiConnectionEvent,
 } from "../ai-connection/aiConnectionHealth";
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
 import { localAiProviderConfigFromSetup } from "./localAiClassificationOptions";
@@ -25,6 +28,11 @@ import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from 
 
 const MANAGED_LOCAL_MEMORY_POLL_MS = 5_000;
 const OPENROUTER_KEY_SAVE_DELAY_MS = 400;
+// Automatic recovery probe while the provider check is failed: back off
+// 30s → 1m → 2m → 4m, capped at 5 minutes between attempts. Each probe is a
+// single ~1-token chat completion, so even a day-long outage stays negligible.
+const AI_CONNECTION_RETEST_BASE_DELAY_MS = 30_000;
+const AI_CONNECTION_RETEST_MAX_DELAY_MS = 5 * 60_000;
 
 type UseAiSetupControllerResult = {
   readonly aiConnectionTest: UseAiConnectionTestRunnerResult;
@@ -32,6 +40,8 @@ type UseAiSetupControllerResult = {
   readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
   readonly localAiConnectionFingerprint: string | null;
   readonly localAiConnectionProviderLabel: ReturnType<typeof localAiProviderLabel>;
+  /** True once the failure is confirmed by repeated probes — gates the heavy "AI provider disconnected" dashboard surfaces. */
+  readonly localAiConnectionPersistentFailure: boolean;
   readonly localAiMemoryUsageBytes: number | null;
   readonly localAiProviderStatus: LocalAiProviderStatus;
   readonly localAiSetup: LocalAiSetupState;
@@ -53,83 +63,135 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
   const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
 
+  const applyLocalAiConnectionEvent = useCallback((provider: LocalAiSetupState["provider"], fingerprint: string, event: LocalAiConnectionEvent) => {
+    setLocalAiConnectionCheck((previous) => nextLocalAiConnectionCheck(previous, { provider, fingerprint }, event, Date.now()));
+  }, []);
+
   const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
     const fingerprint = localAiSetupFingerprint(testedSetup);
     if (!fingerprint) {
       setLocalAiConnectionCheck(null);
       return;
     }
-    setLocalAiConnectionCheck({
-      provider: testedSetup.provider,
-      fingerprint,
-      status: result.kind === "success" ? "connected" : "failed",
-      issueKind: result.kind === "success" ? null : aiConnectionIssueKindFromMessage(result.message),
+    applyLocalAiConnectionEvent(testedSetup.provider, fingerprint, {
+      kind: result.kind === "success" ? "connection_test_success" : "connection_test_failure",
       message: result.message,
-      checkedAt: Date.now(),
     });
-  }, []);
+  }, [applyLocalAiConnectionEvent]);
 
   const aiConnectionTest = useAiConnectionTestRunner({
     localAiSetup,
     onLocalAiConnectionTestResult: recordLocalAiConnectionTestResult,
   });
 
+  const currentLocalAiConnectionCheck = useMemo(() => (
+    localAiConnectionCheck
+    && localAiConnectionCheck.provider === localAiSetup.provider
+    && localAiConnectionCheck.fingerprint === localAiConnectionFingerprint
+  )
+    ? localAiConnectionCheck
+    : null, [localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup.provider]);
+
   const localAiProviderStatus = useMemo<LocalAiProviderStatus>(() => {
     if (!localAiConnectionFingerprint) return { kind: "unconfigured" };
     if (aiConnectionTest.runningFingerprint === localAiConnectionFingerprint) return { kind: "checking" };
 
-    const currentConnectionCheck = (
-      localAiConnectionCheck
-      && localAiConnectionCheck.provider === localAiSetup.provider
-      && localAiConnectionCheck.fingerprint === localAiConnectionFingerprint
-    )
-      ? localAiConnectionCheck
-      : null;
-    if (!currentConnectionCheck) {
+    if (!currentLocalAiConnectionCheck) {
       return isActiveProviderTestable(localAiSetup) ? { kind: "checking" } : { kind: "unconfigured" };
     }
-    if (currentConnectionCheck.status === "connected") return { kind: "connected" };
+    if (currentLocalAiConnectionCheck.status === "connected") return { kind: "connected" };
     return {
       kind: "failed",
-      issueKind: currentConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(currentConnectionCheck.message),
+      issueKind: currentLocalAiConnectionCheck.issueKind ?? aiConnectionIssueKindFromMessage(currentLocalAiConnectionCheck.message),
     };
-  }, [aiConnectionTest.runningFingerprint, localAiConnectionCheck, localAiConnectionFingerprint, localAiSetup]);
+  }, [aiConnectionTest.runningFingerprint, currentLocalAiConnectionCheck, localAiConnectionFingerprint, localAiSetup]);
+
+  const localAiConnectionPersistentFailure = isEstablishedLocalAiDisconnect(currentLocalAiConnectionCheck);
 
   const recordLocalAiClassificationSummary = useCallback((summary: AiClassificationSummary) => {
     if (!localAiConnectionFingerprint) return;
     if (summary.status === "error") {
-      setLocalAiConnectionCheck({
-        provider: localAiSetup.provider,
-        fingerprint: localAiConnectionFingerprint,
-        status: "failed",
-        issueKind: aiConnectionIssueKindFromMessage(summary.message),
+      if (summary.failureKind === "content") {
+        // Content-level failures mean the provider answered — proof the
+        // connection works even though the run produced nothing usable. But
+        // only when a round-trip actually happened: aggregated runs can end
+        // content-tagged without ever reaching the provider.
+        if (summary.usedAiProvider !== true) return;
+        applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
+          kind: "provider_contact_ok",
+          message: summary.message,
+        });
+        return;
+      }
+      applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
+        kind: "classification_transport_failure",
         message: summary.message,
-        checkedAt: Date.now(),
       });
       return;
     }
     if (summary.status !== "saved") return;
-    setLocalAiConnectionCheck({
-      provider: localAiSetup.provider,
-      fingerprint: localAiConnectionFingerprint,
-      status: "connected",
-      issueKind: null,
+    // A run satisfied by deterministic rules or reused classifications never
+    // reached the provider, so it is no evidence of connectivity either way.
+    if (summary.usedAiProvider !== true) return;
+    applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
+      kind: "provider_contact_ok",
       message: summary.message,
-      checkedAt: Date.now(),
     });
-  }, [localAiConnectionFingerprint, localAiSetup.provider]);
+  }, [applyLocalAiConnectionEvent, localAiConnectionFingerprint, localAiSetup.provider]);
 
   const recordLocalAiClassificationError = useCallback((message: string) => {
     if (!localAiConnectionFingerprint) return;
-    setLocalAiConnectionCheck({
-      provider: localAiSetup.provider,
-      fingerprint: localAiConnectionFingerprint,
-      status: "failed",
-      issueKind: aiConnectionIssueKindFromMessage(message),
+    applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
+      kind: "classification_transport_failure",
       message,
-      checkedAt: Date.now(),
     });
-  }, [localAiConnectionFingerprint, localAiSetup.provider]);
+  }, [applyLocalAiConnectionEvent, localAiConnectionFingerprint, localAiSetup.provider]);
+
+  const retestAttemptRef = useRef(0);
+  useEffect(() => {
+    retestAttemptRef.current = 0;
+  }, [localAiConnectionFingerprint]);
+
+  const { runAuto: runAutoConnectionTest } = aiConnectionTest;
+  useEffect(() => {
+    // "checking" means a probe is already in flight — keep the backoff level.
+    if (localAiProviderStatus.kind === "checking") return;
+    if (localAiProviderStatus.kind !== "failed") {
+      retestAttemptRef.current = 0;
+      return;
+    }
+    // While the setup dialog is open the user is driving tests by hand; an
+    // automatic probe would overwrite the result they are looking at.
+    if (aiSetupDialogOpen) return;
+    const delayMs = Math.min(AI_CONNECTION_RETEST_BASE_DELAY_MS * 2 ** retestAttemptRef.current, AI_CONNECTION_RETEST_MAX_DELAY_MS);
+    const timeoutId = window.setTimeout(() => {
+      retestAttemptRef.current += 1;
+      void runAutoConnectionTest();
+    }, delayMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [aiSetupDialogOpen, localAiProviderStatus, runAutoConnectionTest]);
+
+  const localAiProviderStatusKind = localAiProviderStatus.kind;
+  const aiSetupDialogOpenRef = useRef(aiSetupDialogOpen);
+  useEffect(() => {
+    aiSetupDialogOpenRef.current = aiSetupDialogOpen;
+  }, [aiSetupDialogOpen]);
+  const lastOnlineProbeAtRef = useRef(0);
+  useEffect(() => {
+    if (localAiProviderStatusKind !== "failed") return;
+    const handleOnline = () => {
+      // Same manual-testing guard as the backoff loop, and a floor between
+      // probes so a flapping connection (VPN reconnects, Wi-Fi roaming)
+      // cannot hammer the provider faster than the base backoff delay.
+      if (aiSetupDialogOpenRef.current) return;
+      const now = Date.now();
+      if (now - lastOnlineProbeAtRef.current < AI_CONNECTION_RETEST_BASE_DELAY_MS) return;
+      lastOnlineProbeAtRef.current = now;
+      void runAutoConnectionTest();
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [localAiProviderStatusKind, runAutoConnectionTest]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedLocalAiSetup(localAiSetup)));
@@ -211,6 +273,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionProviderLabel,
+    localAiConnectionPersistentFailure,
     localAiMemoryUsageBytes,
     localAiProviderStatus,
     localAiSetup,

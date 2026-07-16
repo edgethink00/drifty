@@ -16,7 +16,88 @@ export type LocalAiConnectionCheck = {
   readonly issueKind: AiConnectionIssueKind | null;
   readonly message: string;
   readonly checkedAt: number;
+  readonly consecutiveFailures: number;
 };
+
+export type LocalAiConnectionEvent =
+  | { readonly kind: "connection_test_success"; readonly message: string }
+  | { readonly kind: "connection_test_failure"; readonly message: string }
+  // A provider round-trip completed (classifications saved, or the provider
+  // responded with unusable content) — proof the connection itself works.
+  | { readonly kind: "provider_contact_ok"; readonly message: string }
+  // A classification run failed at the transport layer (fetch/HTTP/timeout).
+  | { readonly kind: "classification_transport_failure"; readonly message: string };
+
+// A lone transport failure from a background classification run is weak
+// evidence (rate limits, wake-from-sleep blips); require this many consecutive
+// failures before tearing down an established "connected" state.
+export const CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD = 2;
+
+// The dashboard "AI provider disconnected" overlay is reserved for failures
+// confirmed by more than one probe, so a single failed launch test cannot
+// summon it before the automatic re-test has a chance to run.
+export const ESTABLISHED_DISCONNECT_FAILURE_THRESHOLD = 2;
+
+export function nextLocalAiConnectionCheck(
+  previousCheck: LocalAiConnectionCheck | null,
+  target: { readonly provider: LocalAiProvider; readonly fingerprint: string },
+  event: LocalAiConnectionEvent,
+  checkedAt: number,
+): LocalAiConnectionCheck | null {
+  const matchingPrevious = previousCheck
+    && previousCheck.provider === target.provider
+    && previousCheck.fingerprint === target.fingerprint
+    ? previousCheck
+    : null;
+  const priorFailures = matchingPrevious?.consecutiveFailures ?? 0;
+
+  switch (event.kind) {
+    case "connection_test_success":
+    case "provider_contact_ok":
+      return {
+        provider: target.provider,
+        fingerprint: target.fingerprint,
+        status: "connected",
+        issueKind: null,
+        message: event.message,
+        checkedAt,
+        consecutiveFailures: 0,
+      };
+    case "connection_test_failure":
+      // A connection test is a direct probe of the provider, so its verdict
+      // lands immediately instead of accumulating toward the threshold.
+      return {
+        provider: target.provider,
+        fingerprint: target.fingerprint,
+        status: "failed",
+        issueKind: aiConnectionIssueKindFromMessage(event.message),
+        message: event.message,
+        checkedAt,
+        consecutiveFailures: priorFailures + 1,
+      };
+    case "classification_transport_failure": {
+      const consecutiveFailures = priorFailures + 1;
+      if (matchingPrevious?.status === "connected" && consecutiveFailures < CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD) {
+        return { ...matchingPrevious, consecutiveFailures };
+      }
+      return {
+        provider: target.provider,
+        fingerprint: target.fingerprint,
+        status: "failed",
+        issueKind: aiConnectionIssueKindFromMessage(event.message),
+        message: event.message,
+        checkedAt,
+        consecutiveFailures,
+      };
+    }
+    default:
+      return assertNever(event);
+  }
+}
+
+export function isEstablishedLocalAiDisconnect(check: LocalAiConnectionCheck | null): boolean {
+  return check?.status === "failed" && check.consecutiveFailures >= ESTABLISHED_DISCONNECT_FAILURE_THRESHOLD;
+}
 
 const NETWORK_ERROR_PATTERNS = [
   "failed to fetch",
