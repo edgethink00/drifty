@@ -675,6 +675,9 @@ where
 {
     match serve() {
         Ok(raw) => Ok(raw),
+        // A serve timeout has already consumed the configured request budget.
+        // Do not enter the unbounded one-shot path for the same invocation.
+        Err(err @ TrackerError::ServeTimedOut(_)) => Err(err),
         Err(_) if retry_safety == SidecarCommandRetrySafety::SafeRead => one_shot(),
         // A failed write/flush or a missing serve response is ambiguous: the
         // sidecar may have already completed a mutating request.
@@ -1330,6 +1333,31 @@ mod tests {
 
         assert_eq!(raw, b"one-shot response");
         assert_eq!(fallback_invocations.get(), 1);
+    }
+
+    #[test]
+    fn safe_read_returns_serve_timeout_without_unbounded_one_shot_fallback() {
+        let fallback_invocations = std::cell::Cell::new(0);
+        let timeout = Duration::from_millis(10);
+
+        let result = invoke_with_serve_fallback(
+            sidecar_command_retry_safety("get_status"),
+            || Err(TrackerError::ServeTimedOut(timeout)),
+            || {
+                fallback_invocations.set(fallback_invocations.get() + 1);
+                Ok(b"one-shot response".to_vec())
+            },
+        );
+
+        assert!(matches!(
+            result,
+            Err(TrackerError::ServeTimedOut(duration)) if duration == timeout
+        ));
+        assert_eq!(
+            fallback_invocations.get(),
+            0,
+            "a timed-out serve request must not enter the unbounded one-shot path"
+        );
     }
 
     #[test]
