@@ -5434,25 +5434,6 @@ export default function App() {
     (latestBuildStatusNotice && !latestBuildStatusRenderedInSettings ? latestBuildStatusNotice : null)
     ?? (manualUpdateStatusNotice && !manualUpdateStatusRenderedInSettings ? manualUpdateStatusNotice : null);
 
-  if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
-    return (
-      <>
-        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
-        <AuthConfigurationGate />
-      </>
-    );
-  }
-
-  if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {
-    return (
-      <>
-        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
-        <AuthRequiredGate onSignIn={() => setAuthModalOpen(true)} />
-        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
-      </>
-    );
-  }
-
   const dashboardDateNavigator = (
     <DateNavigator
       ariaLabel={`${dashPeriod} date selector`}
@@ -5511,6 +5492,25 @@ export default function App() {
   const stickyTotalSeconds = useStickyDuringLoad(totalSeconds, isDayBreakdownLoading);
   const stickyDayFocusDeltaPercent = useStickyDuringLoad(dayFocusDeltaPercent, isDayBreakdownLoading);
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
+
+  if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
+    return (
+      <>
+        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
+        <AuthConfigurationGate />
+      </>
+    );
+  }
+
+  if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {
+    return (
+      <>
+        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
+        <AuthRequiredGate onSignIn={() => setAuthModalOpen(true)} />
+        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
+      </>
+    );
+  }
 
   const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;
   const effectiveBillingEntitlementError = activeDashboardAiUnavailablePreviewInput?.billingEntitlementError ?? billingEntitlementError;

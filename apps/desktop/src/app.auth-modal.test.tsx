@@ -16,6 +16,7 @@ const {
   fetchPublicProfile,
   submitFeedback,
   billingMocks,
+  appFeatureSwitches,
 } = vi.hoisted(() => {
   return {
     authState: {
@@ -75,8 +76,16 @@ const {
       createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
       createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
     },
+    appFeatureSwitches: {
+      devOnboardingBypassEnabled: false,
+    },
   };
 });
+
+vi.mock("./appFeatureSwitches", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./appFeatureSwitches")>()),
+  isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
+}));
 
 vi.mock("./features/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
@@ -164,6 +173,7 @@ describe("App auth modal", () => {
     authState.allowsAnonymousAuth = true;
     authState.hasRequiredAccountAuth = false;
     authState.hasBlockingAuthConfigurationError = false;
+    appFeatureSwitches.devOnboardingBypassEnabled = false;
     authState.clearCallbackStatus.mockImplementation(() => {
       authState.callbackStatus = null;
     });
@@ -268,6 +278,50 @@ describe("App auth modal", () => {
     expect(await screen.findByRole("main", { name: /authentication configuration required/i })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /authentication setup required/i })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
+  });
+
+  it("keeps hook order stable when required authentication resolves", async () => {
+    authState.isEnabled = false;
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.hasRequiredAccountAuth = false;
+    authState.hasBlockingAuthConfigurationError = true;
+
+    const { rerender } = render(<App />);
+
+    expect(await screen.findByRole("main", { name: /authentication configuration required/i })).toBeTruthy();
+
+    authState.isEnabled = true;
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+    authState.hasBlockingAuthConfigurationError = false;
+
+    rerender(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: /authentication configuration required/i })).toBeNull();
+  });
+
+  it("keeps hook order stable when required account access resolves", async () => {
+    appFeatureSwitches.devOnboardingBypassEnabled = true;
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    authState.status = "authenticated";
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.hasRequiredAccountAuth = false;
+
+    const { rerender } = render(<App />);
+
+    expect(await screen.findByRole("main", { name: /sign in required/i })).toBeTruthy();
+
+    authState.hasRequiredAccountAuth = true;
+    rerender(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
   });
 
   it("opens sign-in directly from the local account menu", async () => {
@@ -407,7 +461,8 @@ describe("App auth modal", () => {
     await openAuthModalFromAccountMenu();
 
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(/sign-in link was incomplete or expired/i);
+    const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
+    expect(within(dialog).getByRole("status").textContent).toMatch(/sign-in link was incomplete or expired/i);
     expect(screen.queryByRole("alert")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /dismiss callback notice/i }));
@@ -427,7 +482,8 @@ describe("App auth modal", () => {
     await openAuthModalFromAccountMenu();
 
     expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(/sign in again on drifty\.so/i);
+    const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
+    expect(within(dialog).getByRole("status").textContent).toMatch(/sign in again on drifty\.so/i);
     expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
   });
 
@@ -454,7 +510,8 @@ describe("App auth modal", () => {
     rerender(<App />);
 
     expect(screen.queryByText(/sign-in link was incomplete or expired/i)).toBeNull();
-    expect(screen.getByRole("status").textContent).toMatch(/browser opened/i);
+    const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
+    expect(within(dialog).getByRole("status").textContent).toMatch(/browser opened/i);
     expect(screen.queryByRole("button", { name: /dismiss callback notice/i })).toBeNull();
   });
 });
