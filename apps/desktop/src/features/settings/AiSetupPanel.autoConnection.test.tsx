@@ -13,18 +13,21 @@ describe("AiSetupPanel automatic local connection test", () => {
   it("tests an installed managed local model selected from the global model picker", async () => {
     const { onLocalAiConnectionTestResult } = renderPanel();
 
-    const localSettings = await screen.findByRole("group", { name: /Local AI settings/i });
-    const qwenDefault = within(localSettings).getByRole("article", { name: /Qwen 3\.5 4B managed local model/i });
-    fireEvent.click(within(qwenDefault).getByRole("button", { name: /^Download$/i }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
-
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
     const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
     fireEvent.click(modelSelect);
-    const qwenOption = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i });
-    if (!(qwenOption instanceof HTMLButtonElement)) throw new Error("Installed managed model option should be a button.");
-    expect(qwenOption.disabled).toBe(false);
-    fireEvent.click(qwenOption);
+
+    // Download the managed model from the dropdown action; the menu stays open across
+    // the install so the now-selectable option can be chosen without reopening it.
+    fireEvent.click(within(modelBeingUsed).getByRole("button", { name: /^Download Qwen 3\.5 4B managed local model$/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+
+    await waitFor(() => {
+      const option = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i });
+      if (!(option instanceof HTMLButtonElement)) throw new Error("Installed managed model option should be a button.");
+      expect(option.disabled).toBe(false);
+    });
+    fireEvent.click(within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i }));
 
     expect(modelSelect.textContent).toContain("Qwen 3.5 4B");
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", expect.objectContaining({

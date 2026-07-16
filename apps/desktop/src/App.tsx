@@ -6375,23 +6375,15 @@ export default function App() {
                 )}
                 {settingsSection === "aiSetup" && (
                   <AiSetupSettingsSection
-                    aiServerStatusLabel={aiServerStatusLabel}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                    billingEntitlementError={effectiveBillingEntitlementError}
-                    billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
-                    billingPortalLoading={billingPortalLoading}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
-                    cloudStatusLabel={cloudStatusLabel}
-                    cloudTrialEndsAt={effectiveBillingEntitlement?.trialEndsAt ?? null}
                     connectionStatus={aiConnectionStatus}
                     connectionTest={aiConnectionTest}
                     currentBillingPlan={currentBillingPlan}
-                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
                     localAiSetup={localAiSetup}
                     shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
-                    userEmail={user?.email ?? null}
                     workProfileUserId={user?.id ?? "local"}
                     analysisSetup={analysisModel.analysisSetup}
                     analysisOpenRouterConnected={analysisModel.openRouterConnected}
@@ -6402,7 +6394,6 @@ export default function App() {
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}
-                    onRefreshCloudStatus={refreshBillingEntitlement}
                     onStartCloudSetup={handleStartDriftyCloudSetup}
                   />
                 )}
