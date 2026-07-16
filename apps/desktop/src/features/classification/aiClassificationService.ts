@@ -196,12 +196,24 @@ type AiClassificationUsageRow = {
 
 export type AiClassificationStatus = "disabled" | "idle" | "running" | "saved" | "empty" | "error";
 
+// "transport" — the provider was unreachable (fetch/HTTP/timeout failures).
+// "content" — the provider responded but the result was unusable; the
+// connection itself is fine, so connection status must not treat it as a
+// disconnect. Error summaries returned (not thrown) by this service are
+// always content-level; transport failures propagate as thrown errors.
+export type AiClassificationFailureKind = "transport" | "content";
+
 export interface AiClassificationSummary {
   status: AiClassificationStatus;
   selectedSegments: number;
   savedRecords: number;
   message: string;
   metrics?: ClassificationMetrics;
+  failureKind?: AiClassificationFailureKind;
+  // True only when this run completed a real provider round-trip; summaries
+  // satisfied purely by deterministic rules or reused classifications carry no
+  // evidence about provider connectivity.
+  usedAiProvider?: boolean;
 }
 
 export interface AiClassificationUsageSummary {
@@ -392,6 +404,8 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
       savedRecords: preAiSavedRecords + reusableResult.saved,
       message: `AI classification returned no usable classifications for ${representatives.length} unknown ${representatives.length === 1 ? "segment" : "segments"}.`,
       metrics,
+      failureKind: "content",
+      usedAiProvider: true,
     };
   }
 
@@ -404,6 +418,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     savedRecords,
     message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
+    usedAiProvider: true,
   };
 }
 
@@ -509,6 +524,8 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
       savedRecords: preAiSavedRecords + reusableResult.saved,
       message: `AI classification returned no usable classifications for ${reusableResult.misses.length} unknown ${reusableResult.misses.length === 1 ? "segment" : "segments"}.`,
       metrics,
+      failureKind: "content",
+      usedAiProvider: true,
     };
   }
 
@@ -521,6 +538,7 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     savedRecords,
     message: `Saved ${aiSaveResult.saved} AI, ${reusableResult.saved} reused AI, and ${preAiSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
+    usedAiProvider: true,
   };
 }
 
@@ -575,6 +593,7 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
   let selectedSegments = 0;
   let savedRecords = 0;
   let processedBatches = 0;
+  let usedAiProvider = false;
   let latestMetrics: ClassificationMetrics | undefined;
 
   for (let batchIndex = 0; batchIndex < MAX_CLASSIFY_ALL_BATCHES; batchIndex += 1) {
@@ -582,10 +601,11 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
     latestMetrics = summary.metrics ?? latestMetrics;
     selectedSegments += summary.selectedSegments;
     savedRecords += summary.savedRecords;
+    usedAiProvider ||= summary.usedAiProvider === true;
 
     if (summary.selectedSegments === 0 || summary.status === "empty") break;
     if (summary.status === "disabled" || summary.status === "error") {
-      return { ...summary, selectedSegments, savedRecords, metrics: latestMetrics ?? summary.metrics };
+      return { ...summary, selectedSegments, savedRecords, usedAiProvider, metrics: latestMetrics ?? summary.metrics };
     }
 
     processedBatches += 1;
@@ -598,6 +618,8 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
           ? `Saved ${savedRecords} AI ${savedRecords === 1 ? "classification" : "classifications"}. Stopped because the next batch returned no saved records.`
           : summary.message,
         metrics: latestMetrics,
+        ...(savedRecords > 0 ? {} : { failureKind: "content" as const }),
+        usedAiProvider,
       };
     }
   }
@@ -610,6 +632,7 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
       savedRecords,
       message: "No unclassified activity segments found.",
       metrics,
+      usedAiProvider,
     };
   }
 
@@ -622,6 +645,7 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
       ? `Saved ${savedRecords} AI ${savedRecords === 1 ? "classification" : "classifications"} across ${processedBatches} batches. Run again to continue.`
       : `Classified all available activity: saved ${savedRecords} AI ${savedRecords === 1 ? "classification" : "classifications"} across ${processedBatches} ${processedBatches === 1 ? "batch" : "batches"}.`,
     metrics,
+    usedAiProvider,
   };
 }
 
@@ -1331,6 +1355,8 @@ async function runLocalAiClassification(
       savedRecords: deterministicSavedRecords,
       message: `AI classification returned no usable classifications for ${representatives.length} unknown ${representatives.length === 1 ? "segment" : "segments"}.`,
       metrics,
+      failureKind: "content",
+      usedAiProvider: true,
     };
   }
 
@@ -1343,6 +1369,7 @@ async function runLocalAiClassification(
     savedRecords,
     message: `Saved ${aiSaveResult.saved} AI and ${deterministicSavedRecords} local ${savedRecords === 1 ? "classification" : "classifications"}.`,
     metrics,
+    usedAiProvider: true,
   };
 }
 
