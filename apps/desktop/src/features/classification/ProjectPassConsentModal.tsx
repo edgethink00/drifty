@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 
 export interface ProjectPassConsentModalProps {
   readonly open: boolean;
@@ -24,13 +26,34 @@ export function ProjectPassConsentModal({
   if (!open) return null;
 
   return (
+    <ProjectPassConsentDialog
+      providerLabel={providerLabel}
+      includesTitles={includesTitles}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
+  );
+}
+
+function ProjectPassConsentDialog({
+  providerLabel,
+  includesTitles,
+  onConfirm,
+  onCancel,
+}: Omit<ProjectPassConsentModalProps, "open">): JSX.Element {
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-modal-initial-focus]" });
+
+  return (
     <div className="auth-modal__overlay" onClick={onCancel}>
       <section
         aria-describedby={DESCRIPTION_ID}
         aria-labelledby={TITLE_ID}
         aria-modal="true"
         className="auth-modal project-pass-consent-modal"
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <ModalCloseButton label="Close" onClick={onCancel} />
@@ -56,7 +79,12 @@ export function ProjectPassConsentModal({
         </ul>
 
         <div className="modal-foot project-pass-consent-modal__actions">
-          <button className="modal-btn modal-btn--ghost" type="button" onClick={onCancel}>
+          <button
+            className="modal-btn modal-btn--ghost"
+            data-modal-initial-focus
+            type="button"
+            onClick={onCancel}
+          >
             Cancel
           </button>
           <button className="modal-btn modal-btn--primary" type="button" onClick={onConfirm}>
