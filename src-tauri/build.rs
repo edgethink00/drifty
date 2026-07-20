@@ -39,6 +39,7 @@ fn main() {
             "tracker_get_classification_rules",
             "tracker_save_classification_rule",
             "tracker_delete_classification_rule",
+            "tracker_delete_history_range",
             "tracker_search_classification_rule_candidates",
             "tracker_apply_classification_rules",
             "tracker_save_classifications",

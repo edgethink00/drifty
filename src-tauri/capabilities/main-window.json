@@ -48,6 +48,7 @@
     "allow-tracker-save-classification-rule",
     "allow-tracker-delete-classification-rule",
     "allow-tracker-delete-activity-segments",
+    "allow-tracker-delete-history-range",
     "allow-tracker-search-classification-rule-candidates",
     "allow-tracker-apply-classification-rules",
     "allow-tracker-save-classifications",
