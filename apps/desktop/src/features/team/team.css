@@ -685,10 +685,23 @@
   border-radius: 999px;
 }
 
-.content--team .pt-proj > div {
+.content--team .pt-proj > .projects-table__open {
   min-width: 0;
   display: grid;
   gap: 0.04rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.content--team .pt-proj > .projects-table__open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .content--team .pt-proj strong {

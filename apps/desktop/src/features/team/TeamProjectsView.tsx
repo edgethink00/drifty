@@ -347,10 +347,18 @@ export function TeamProjectsView({
                 <div className="projects-table__row" role="row" onClick={() => setSelectedProjectId(project.id)}>
                   <div className="pt-proj">
                     <span className="pt-swatch" style={{ background: project.color }} />
-                    <div>
+                    <button
+                      type="button"
+                      className="projects-table__open"
+                      aria-label={`Open ${project.name || "Untitled project"} project`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedProjectId(project.id);
+                      }}
+                    >
                       <strong>{project.name || "Untitled project"}</strong>
                       <small>{descShort}</small>
-                    </div>
+                    </button>
                   </div>
                   <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
                   <div className="pt-total">
