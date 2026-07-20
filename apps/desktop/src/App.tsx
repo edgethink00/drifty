@@ -5694,6 +5694,7 @@ export default function App() {
               key={item.period}
               type="button"
               className={activeTab === "dashboard" && dashPeriod === item.period ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
+              aria-current={activeTab === "dashboard" && dashPeriod === item.period ? "page" : undefined}
               onClick={() => navigateToTab("dashboard", item.period)}
             >
               <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
@@ -5706,7 +5707,7 @@ export default function App() {
         <div className="nav-label">Activity</div>
         <nav className="sidebar-nav" aria-label="Primary navigation">
           {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => (
-            <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} onClick={() => navigateToTab(item.id)}>
+            <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} aria-current={activeTab === item.id ? "page" : undefined} onClick={() => navigateToTab(item.id)}>
               <NavIcon type={item.icon} /><span>{item.label}</span>
               {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
             </button>
@@ -5719,6 +5720,7 @@ export default function App() {
             <button
               type="button"
               className={activeTab === "leaderboard" && socialSection === "profile" ? "nav-item active" : "nav-item"}
+              aria-current={activeTab === "leaderboard" && socialSection === "profile" ? "page" : undefined}
               onClick={() => navigateToTab("profile")}
             >
               <NavIcon type="profile" /><span>Profile</span>
@@ -5728,6 +5730,7 @@ export default function App() {
           <button
             type="button"
             className={activeTab === "leaderboard" && socialSection === "leaderboard" ? "nav-item active" : "nav-item"}
+            aria-current={activeTab === "leaderboard" && socialSection === "leaderboard" ? "page" : undefined}
             onClick={() => navigateToTab("leaderboard")}
           >
             <NavIcon type="leaderboard" /><span>Leaderboard</span>
@@ -5753,7 +5756,7 @@ export default function App() {
             </div>
             <nav className="sidebar-nav sidebar-nav--teams" aria-label="Your teams">
               {teamController.teams.length === 0 ? (
-                <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} onClick={() => navigateToTab("team")}>
+                <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} aria-current={activeTab === "team" ? "page" : undefined} onClick={() => navigateToTab("team")}>
                   <NavIcon type="team" /><span>Teams</span>
                   {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Teams</span> : null}
                 </button>
@@ -5838,6 +5841,7 @@ export default function App() {
                             type="button"
                             aria-label="Team dashboards"
                             className={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
+                            aria-current={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "page" : undefined}
                             onClick={() => {
                               teamController.selectTeam(team.organization_id);
                               setTeamSubView("dashboards");
@@ -5851,6 +5855,7 @@ export default function App() {
                             type="button"
                             aria-label="Team projects"
                             className={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
+                            aria-current={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "page" : undefined}
                             onClick={() => {
                               teamController.selectTeam(team.organization_id);
                               setTeamSubView("projects");
