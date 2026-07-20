@@ -73,7 +73,7 @@ export function MainContentShell({ activeTab, loading, hasLoadedOnce, error, con
       <div className="refresh-indicator" data-active={isRefreshing} aria-live="polite" aria-hidden={!isRefreshing}>
         Refreshing tracker data&hellip;
       </div>
-      {error ? <div className="notice notice--error">Error: {error}</div> : null}
+      {error ? <div className="notice notice--error" role="alert">Error: {error}</div> : null}
       {children}
     </main>
   );
