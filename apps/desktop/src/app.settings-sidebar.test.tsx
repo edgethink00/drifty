@@ -164,7 +164,7 @@ describe("App settings sidebar", () => {
     accessibilityClient.requestAccess.mockResolvedValue({ granted: true });
   });
 
-  it("shows dashboard period sidebar labels without secondary copy", async () => {
+  it("exposes the current dashboard and primary destinations without secondary copy", async () => {
     render(<App />);
 
     const dashboardNav = await screen.findByRole("navigation", { name: /dashboard views/i });
@@ -175,6 +175,33 @@ describe("App settings sidebar", () => {
     expect(weekButton.querySelector("small")).toBeNull();
     expect(within(dashboardNav).queryByText(/live timeline/i)).toBeNull();
     expect(within(dashboardNav).queryByText(/calendar week/i)).toBeNull();
+    expect(dayButton.getAttribute("aria-current")).toBe("page");
+    expect(weekButton.getAttribute("aria-current")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(weekButton);
+    });
+    expect(weekButton.getAttribute("aria-current")).toBe("page");
+    expect(dayButton.getAttribute("aria-current")).toBeNull();
+
+    const primaryNav = screen.getByRole("navigation", { name: /primary navigation/i });
+    const classificationButton = within(primaryNav).getByRole("button", { name: /^Classification$/i });
+    expect(classificationButton.getAttribute("aria-current")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(classificationButton);
+    });
+    expect(classificationButton.getAttribute("aria-current")).toBe("page");
+    expect(within(primaryNav).getAllByRole("button").filter((button) => button.getAttribute("aria-current") === "page")).toHaveLength(1);
+
+    const socialNav = screen.getByRole("navigation", { name: /social navigation/i });
+    const leaderboardButton = within(socialNav).getByRole("button", { name: /^Leaderboard$/i });
+
+    await act(async () => {
+      fireEvent.click(leaderboardButton);
+    });
+    expect(leaderboardButton.getAttribute("aria-current")).toBe("page");
+    expect(classificationButton.getAttribute("aria-current")).toBeNull();
   });
 
   it("replaces the app sidebar with settings navigation and returns with Back", async () => {
