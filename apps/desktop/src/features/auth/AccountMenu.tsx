@@ -1,5 +1,5 @@
 import { getAccountDisplayName } from "./accountDisplay";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, SVGProps } from "react";
 import { createPortal } from "react-dom";
 
@@ -143,6 +143,7 @@ export function AccountMenu({
   onSignOut,
 }: AccountMenuProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : SIGNED_OUT_TRIGGER_LABEL;
@@ -189,8 +190,33 @@ export function AccountMenu({
     };
   }, [isOpen, updatePopoverPosition]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      onToggle();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onToggle();
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onToggle]);
+
   const popover = isOpen && popoverStyle ? createPortal(
     <div
+      ref={menuRef}
       className={isSidebarCollapsed ? "account-popover account-popover--collapsed" : "account-popover"}
       style={popoverStyle}
       role="menu"

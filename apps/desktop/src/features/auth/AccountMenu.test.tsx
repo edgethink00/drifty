@@ -123,4 +123,31 @@ describe("AccountMenu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^Settings$/ }));
     expect(handlers.onSettings).toHaveBeenCalledTimes(1);
   });
+
+  it("dismisses with Escape and restores focus to the trigger", () => {
+    renderAccountMenu();
+    const trigger = screen.getByRole("button", { name: /^unknown$/i });
+    fireEvent.click(trigger);
+
+    const settingsItem = screen.getByRole("menuitem", { name: /^Settings$/ });
+    settingsItem.focus();
+    expect(document.activeElement).toBe(settingsItem);
+
+    fireEvent.keyDown(settingsItem, { key: "Escape" });
+
+    expect(screen.queryByRole("menu", { name: /account menu/i })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("dismisses on outside pointer input but not interaction inside the menu", () => {
+    renderAccountMenu();
+    fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
+
+    const settingsItem = screen.getByRole("menuitem", { name: /^Settings$/ });
+    fireEvent.pointerDown(settingsItem);
+    expect(screen.getByRole("menu", { name: /account menu/i })).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu", { name: /account menu/i })).toBeNull();
+  });
 });
