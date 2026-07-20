@@ -4,6 +4,7 @@ import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from 
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -24,6 +25,50 @@ type HistoryViewProps = {
 
 const HISTORY_RENDER_STEP = 200;
 const EMPTY_HISTORY_ROWS: readonly HistoryRowModel[] = [];
+
+type HistoryDeleteConfirmationProps = {
+  readonly deleting: boolean;
+  readonly recordCount: number;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+};
+
+function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm }: HistoryDeleteConfirmationProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-history-confirm-cancel]" });
+
+  return (
+    <div
+      ref={dialogRef}
+      className="history-confirm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="history-confirm-title"
+      tabIndex={-1}
+    >
+      <div className="history-confirm__panel">
+        <h2 id="history-confirm-title">Delete history records?</h2>
+        <p>
+          This removes {recordCount} local activity {recordCount === 1 ? "record" : "records"} from this Mac.
+        </p>
+        <div className="history-confirm__actions">
+          <button
+            type="button"
+            className="modal-btn modal-btn--ghost"
+            data-history-confirm-cancel
+            disabled={deleting}
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={onConfirm}>
+            Delete records
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function HistoryView({
   appIcons,
@@ -226,22 +271,12 @@ export function HistoryView({
       )}
 
       {confirmOpen ? (
-        <div className="history-confirm" role="dialog" aria-modal="true" aria-labelledby="history-confirm-title">
-          <div className="history-confirm__panel">
-            <h2 id="history-confirm-title">Delete history records?</h2>
-            <p>
-              This removes {selectedCount} local activity {selectedCount === 1 ? "record" : "records"} from this Mac.
-            </p>
-            <div className="history-confirm__actions">
-              <button type="button" className="modal-btn modal-btn--ghost" disabled={deleting} onClick={() => setConfirmOpen(false)}>
-                Cancel
-              </button>
-              <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={() => void confirmDelete()}>
-                Delete records
-              </button>
-            </div>
-          </div>
-        </div>
+        <HistoryDeleteConfirmation
+          deleting={deleting}
+          recordCount={selectedCount}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => void confirmDelete()}
+        />
       ) : null}
     </section>
   );
