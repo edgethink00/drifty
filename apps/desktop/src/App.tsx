@@ -97,6 +97,7 @@ import { analysisModelDisplayLabel } from "./features/settings/analysisModelSetu
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { ProjectsPage } from "./features/projects/ProjectsPage";
+import { CommandBar } from "./features/command-bar/CommandBar";
 import { contextualProjectColorBySegment, contextualProjectIdBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
@@ -211,7 +212,7 @@ import { CATEGORY_COLORS } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
-import { activityNav, commandBarTabs, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
+import { activityNav, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
 import {
   captureAiClassificationRun,
   toAiProviderAnalytics,
@@ -6518,24 +6519,13 @@ export default function App() {
       ) : null}
 
       {/* Command Bar */}
-      {cmdOpen && (
-        <div className="cmd-overlay" onClick={() => setCmdOpen(false)}>
-          <div className="cmd-box" onClick={(e) => e.stopPropagation()}>
-            <div className="cmd-input-row">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={18} height={18} aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              <input placeholder="Type a command or search&hellip;" autoFocus />
-              <span className="esc-key">esc</span>
-            </div>
-            <div className="cmd-section-label">Navigate</div>
-            {commandBarTabs.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => (
-              <button key={item.id} className="cmd-item" onClick={() => handleCmdNav(item.id)}>
-                <span className="cmd-label">{item.label}</span>
-                <span className="cmd-sub">{item.sub}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {cmdOpen ? (
+        <CommandBar
+          includeProjects={projectClassificationFeatureEnabled}
+          onDismiss={() => setCmdOpen(false)}
+          onNavigate={handleCmdNav}
+        />
+      ) : null}
 
       {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
 
