@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProjectPassConsentModal, type ProjectPassConsentModalProps } from "./ProjectPassConsentModal";
@@ -14,6 +15,22 @@ function baseProps(overrides: Partial<ProjectPassConsentModalProps> = {}): Proje
     onCancel: vi.fn(),
     ...overrides,
   };
+}
+
+function ProjectPassConsentModalHarness() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>Analyze last 7 days</button>
+      <ProjectPassConsentModal
+        {...baseProps({
+          open,
+          onCancel: () => setOpen(false),
+        })}
+      />
+    </>
+  );
 }
 
 describe("ProjectPassConsentModal", () => {
@@ -66,5 +83,33 @@ describe("ProjectPassConsentModal", () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("moves focus inside, contains Tab, closes on Escape, and restores opener focus", async () => {
+    render(<ProjectPassConsentModalHarness />);
+
+    const opener = screen.getByRole("button", { name: "Analyze last 7 days" });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = screen.getByRole("dialog", { name: "Turn on project analysis" });
+    const closeButton = screen.getByRole("button", { name: "Close" });
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    const confirmButton = screen.getByRole("button", { name: "Turn on" });
+
+    await waitFor(() => expect(document.activeElement).toBe(cancelButton));
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    confirmButton.focus();
+    fireEvent.keyDown(confirmButton, { key: "Tab" });
+    expect(document.activeElement).toBe(closeButton);
+
+    closeButton.focus();
+    fireEvent.keyDown(closeButton, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(confirmButton);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(opener);
   });
 });
