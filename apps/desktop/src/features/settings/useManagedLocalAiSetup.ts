@@ -107,10 +107,9 @@ export function useManagedLocalAiSetup(
         if (!mountedRef.current) return;
         setCatalog(nextCatalog.length > 0 ? nextCatalog : MANAGED_LOCAL_AI_FALLBACK_CATALOG);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!mountedRef.current) return;
         setCatalog(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
-        if (!(error instanceof Error)) throw error;
       });
     try {
       const nextStatus = await getManagedLocalAiStatus();
@@ -138,9 +137,9 @@ export function useManagedLocalAiSetup(
       setStatus(nextStatus);
       syncManagedSetup(nextStatus, { activateProvider: false });
       notifyReadyOnce(nextStatus);
-    } catch (error) {
-      if (error instanceof Error) return;
-      throw error;
+    } catch {
+      // Status polling is best-effort; the existing interval retries on its next tick.
+      return;
     }
   }, [notifyReadyOnce, syncManagedSetup]);
 
