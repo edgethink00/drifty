@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { ActivitySegment, TeamProjectAssignmentRecord } from "@drifty/domain";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
 
-function segment(id: string, startedAt: string, durationSeconds: number): ActivitySegment {
-  return { id, startedAt, endedAt: startedAt, durationSeconds, appName: "" } as ActivitySegment;
+function segment(
+  id: string,
+  startedAt: string,
+  durationSeconds: number,
+  extra: Partial<ActivitySegment> = {},
+): ActivitySegment {
+  return { id, startedAt, endedAt: startedAt, durationSeconds, appName: "", ...extra } as ActivitySegment;
 }
 
 function assignment(segmentId: string, teamProjectId: string | null, extra: Partial<TeamProjectAssignmentRecord> = {}): TeamProjectAssignmentRecord {
@@ -45,6 +50,18 @@ describe("aggregateTeamProjectDayTotals", () => {
     ];
 
     expect(aggregateTeamProjectDayTotals(assignments, segments, 0)).toEqual([]);
+  });
+
+  it("excludes remote-device segments from published team totals", () => {
+    const segments = [
+      segment("local", "2026-07-08T03:00:00.000Z", 600),
+      segment("remote", "2026-07-08T06:00:00.000Z", 300, { deviceId: "device-b" }),
+    ];
+    const assignments = [assignment("local", "p-code"), assignment("remote", "p-code")];
+
+    expect(aggregateTeamProjectDayTotals(assignments, segments, 0)).toEqual([
+      { project_id: "p-code", activity_date: "2026-07-08", seconds: 600 },
+    ]);
   });
 
   it("returns nothing when there are no assignments", () => {

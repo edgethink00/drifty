@@ -1,4 +1,9 @@
-import { logicalDayIsoDateForDate, type ActivitySegment, type TeamProjectAssignmentRecord } from "@drifty/domain";
+import {
+  isRemoteDeviceSegment,
+  logicalDayIsoDateForDate,
+  type ActivitySegment,
+  type TeamProjectAssignmentRecord,
+} from "@drifty/domain";
 import type { TeamProjectTotalsEntry } from "./teamTypes";
 
 // Aggregate a member's locally-stored team-project assignments into publish-ready
@@ -20,6 +25,7 @@ export function aggregateTeamProjectDayTotals(
   const durationBySegmentId = new Map<string, number>();
   const startBySegmentId = new Map<string, string>();
   for (const segment of segments) {
+    if (isRemoteDeviceSegment(segment)) continue;
     durationBySegmentId.set(segment.id, segment.durationSeconds ?? 0);
     startBySegmentId.set(segment.id, segment.startedAt);
   }
