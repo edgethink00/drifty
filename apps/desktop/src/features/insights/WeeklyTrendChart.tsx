@@ -33,11 +33,11 @@ export function WeeklyTrendChart({
     <section className="editorial-panel editorial-panel--soft insight-section productivity-insight-groups__weekly-trend weekly-productivity-trend-card" aria-label="Weekly focus and drift trend">
       <div className="weekly-productivity-trend-card__head">
         <div><span className="label-mono insight-section__label">Weekly Breakdown</span></div>
-        <div className="wt-toggle" role="tablist">
-          <button type="button" className={`wt-toggle-btn${mode === "productivity" ? " is-active" : ""}`} data-mode="productivity" onClick={() => onModeChange("productivity")}>Productivity</button>
-          <button type="button" className={`wt-toggle-btn${mode === "category" ? " is-active" : ""}`} data-mode="category" onClick={() => onModeChange("category")}>Category</button>
+        <div className="wt-toggle" role="group" aria-label="Weekly breakdown mode">
+          <button type="button" className={`wt-toggle-btn${mode === "productivity" ? " is-active" : ""}`} data-mode="productivity" aria-pressed={mode === "productivity"} onClick={() => onModeChange("productivity")}>Productivity</button>
+          <button type="button" className={`wt-toggle-btn${mode === "category" ? " is-active" : ""}`} data-mode="category" aria-pressed={mode === "category"} onClick={() => onModeChange("category")}>Category</button>
           {projectModeAvailable ? (
-            <button type="button" className={`wt-toggle-btn${mode === "project" ? " is-active" : ""}`} data-mode="project" onClick={() => onModeChange("project")}>Project</button>
+            <button type="button" className={`wt-toggle-btn${mode === "project" ? " is-active" : ""}`} data-mode="project" aria-pressed={mode === "project"} onClick={() => onModeChange("project")}>Project</button>
           ) : null}
         </div>
       </div>
