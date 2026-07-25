@@ -4735,6 +4735,7 @@ export default function App() {
     setError(null);
     try {
       await trackerClient.deleteActivitySegments(ids);
+      clearLocalActivityCaches();
       const deletedIds = new Set(ids);
       setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
       await refresh(selectedDayRef.current);
@@ -4743,11 +4744,12 @@ export default function App() {
     } finally {
       setHistoryDeleting(false);
     }
-  }, [historyDeleting, refresh]);
+  }, [clearLocalActivityCaches, historyDeleting, refresh]);
 
   const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
 
   const handleHistoryRangeDeleted = useCallback(async () => {
+    clearLocalActivityCaches();
     setHistorySearchSegments([]);
     try {
       setClassificationMetrics(await trackerClient.getClassificationMetrics({ day: selectedDayRef.current }));
@@ -4757,7 +4759,7 @@ export default function App() {
     await refresh(selectedDayRef.current);
     await syncLeaderboardPublication("history_deleted", { bypassSlotGate: true });
     await refreshLeaderboardData();
-  }, [refresh, refreshLeaderboardData, syncLeaderboardPublication]);
+  }, [clearLocalActivityCaches, refresh, refreshLeaderboardData, syncLeaderboardPublication]);
 
   useEffect(() => {
     selectedDayRef.current = selectedDay;
