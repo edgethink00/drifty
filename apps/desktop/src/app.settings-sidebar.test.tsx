@@ -10,7 +10,7 @@ type AuthUserMock = {
   user_metadata?: Record<string, unknown>;
 };
 
-const { accessibilityClient, accountStatsPublisherMock, authState, billingMocks, processMocks, trackerClient, tauriEventHandlers, tauriInvoke, updaterMocks } = vi.hoisted(() => {
+const { accessibilityClient, accountStatsPublisherMock, authState, billingMocks, leaderboardMocks, processMocks, trackerClient, tauriEventHandlers, tauriInvoke, updaterMocks } = vi.hoisted(() => {
   const invoke = vi.fn().mockResolvedValue(null);
 
   return {
@@ -42,6 +42,11 @@ const { accessibilityClient, accountStatsPublisherMock, authState, billingMocks,
       fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
       createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
       createBillingPortalSession: vi.fn().mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } }),
+    },
+    leaderboardMocks: {
+      fetchGlobalLeaderboard: vi.fn(),
+      fetchOwnLeaderboardEntry: vi.fn(),
+      optOutLeaderboard: vi.fn(),
     },
     processMocks: {
       relaunch: vi.fn().mockResolvedValue(undefined),
@@ -86,6 +91,13 @@ vi.mock("./features/billing/billingService", () => ({
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
   fetchBillingEntitlement: billingMocks.fetchBillingEntitlement,
+}));
+vi.mock("./features/leaderboard/leaderboardService", () => ({
+  DEFAULT_LEADERBOARD_PERIOD: "weekly",
+  LEADERBOARD_PERIODS: ["daily", "weekly", "monthly"],
+  fetchGlobalLeaderboard: leaderboardMocks.fetchGlobalLeaderboard,
+  fetchOwnLeaderboardEntry: leaderboardMocks.fetchOwnLeaderboardEntry,
+  optOutLeaderboard: leaderboardMocks.optOutLeaderboard,
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: tauriInvoke,
@@ -166,6 +178,9 @@ describe("App settings sidebar", () => {
     trackerClient.updateTrayProductivityIcon.mockResolvedValue(undefined);
     accessibilityClient.getStatus.mockResolvedValue({ granted: false });
     accessibilityClient.requestAccess.mockResolvedValue({ granted: true });
+    leaderboardMocks.fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    leaderboardMocks.fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
+    leaderboardMocks.optOutLeaderboard.mockResolvedValue({ success: true, error: null });
   });
 
   it("exposes the current dashboard and primary destinations without secondary copy", async () => {
@@ -232,7 +247,7 @@ describe("App settings sidebar", () => {
     expect(window.localStorage.getItem("drifty.dev.webAccountPreview")).toBe("1");
   });
 
-  it("replaces the app sidebar with settings navigation and returns with Back", async () => {
+  it("replaces the app sidebar with settings navigation and returns with Close settings", async () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
@@ -244,10 +259,10 @@ describe("App settings sidebar", () => {
 
     const settingsSidebar = screen.getByRole("complementary", { name: /settings navigation/i });
     expect(within(settingsSidebar).getByRole("navigation", { name: /settings sections/i })).toBeTruthy();
-    const backButton = within(settingsSidebar).getByRole("button", { name: /^Back$/i });
+    const closeButton = within(settingsSidebar).getByRole("button", { name: /^Close settings$/i });
 
     act(() => {
-      fireEvent.click(backButton);
+      fireEvent.click(closeButton);
     });
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull());

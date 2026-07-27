@@ -12,6 +12,7 @@ import {
   resolveInitialMenuBarIconStyle,
 } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
+import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 
 type AppearanceSettingsSectionProps = {
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -36,6 +37,10 @@ export function AppearanceSettingsSection({
 }: AppearanceSettingsSectionProps) {
   const { t } = useLocalization();
   const [menuBarIconStyle, setMenuBarIconStyle] = useState<TrayIconStyle>(resolveInitialMenuBarIconStyle);
+  const colorRoleCount =
+    CATEGORY_COLOR_OPTIONS.length
+    + APP_THEME_ACCENT_COLOR_OPTIONS.length
+    + APP_THEME_PRODUCTIVITY_COLOR_OPTIONS.length;
 
   useEffect(() => {
     window.localStorage.setItem(MENU_BAR_ICON_STYLE_STORAGE_KEY, menuBarIconStyle);
@@ -49,19 +54,25 @@ export function AppearanceSettingsSection({
         <div className="settings-row"><div><div className="lbl">{t("settings.appearance.menuBarIcon")}</div><div className="desc">{t("settings.appearance.menuBarIconDescription")}</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label={t("settings.appearance.menuBarIcon")}>{MENU_BAR_ICON_STYLE_OPTIONS.map((option) => <button key={option.value} type="button" className={`settings-mode-option${menuBarIconStyle === option.value ? " is-active" : ""}`} role="radio" aria-checked={menuBarIconStyle === option.value} onClick={() => setMenuBarIconStyle(option.value)}><span>{option.value === "compact" ? t("settings.appearance.ringOnly") : t("settings.appearance.logoRing")}</span></button>)}</div></div></div>
       </div>
       <div className="settings-block"><h3>{t("settings.appearance.colors")}</h3>
-        <CategoryColorControls
-          options={CATEGORY_COLOR_OPTIONS}
-          overrides={categoryColorOverrides}
-          onColorChange={onCategoryColorChange}
-          onColorReset={onCategoryColorReset}
-        />
-        <ThemeColorControls
-          accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
-          productivityOptions={APP_THEME_PRODUCTIVITY_COLOR_OPTIONS}
-          overrides={appThemeColorOverrides}
-          onColorChange={onAppThemeColorChange}
-          onColorReset={onAppThemeColorReset}
-        />
+        <SettingsCollapsibleCard
+          title={t("settings.appearance.advancedColors")}
+          subtitle={t("settings.appearance.advancedColorsDescription")}
+          summary={t("settings.appearance.colorRoles", { count: colorRoleCount })}
+        >
+          <CategoryColorControls
+            options={CATEGORY_COLOR_OPTIONS}
+            overrides={categoryColorOverrides}
+            onColorChange={onCategoryColorChange}
+            onColorReset={onCategoryColorReset}
+          />
+          <ThemeColorControls
+            accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
+            productivityOptions={APP_THEME_PRODUCTIVITY_COLOR_OPTIONS}
+            overrides={appThemeColorOverrides}
+            onColorChange={onAppThemeColorChange}
+            onColorReset={onAppThemeColorReset}
+          />
+        </SettingsCollapsibleCard>
       </div>
     </div>
   );

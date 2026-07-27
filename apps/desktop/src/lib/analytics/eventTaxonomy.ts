@@ -22,6 +22,7 @@ export const APP_SURFACES = ["dashboard", "classification", "projects", "history
 export const DASHBOARD_PERIODS = ["day", "week", "month"] as const;
 export const SETTINGS_SECTIONS = [
   "general",
+  "permissions",
   "account",
   "appearance",
   "classification",

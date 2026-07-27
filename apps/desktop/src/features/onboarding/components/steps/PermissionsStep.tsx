@@ -26,7 +26,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
       ) : null}
       <ul className="dc-onb-row-list">
         <PermissionRow
-          title={t("settings.general.accessibility")}
+          title={t("settings.permissions.accessibility")}
           description={t("onboarding.permissions.accessibilityDescription")}
           pill={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("common.required")}
           tone={accessibilityEnabled ? "success" : "required"}

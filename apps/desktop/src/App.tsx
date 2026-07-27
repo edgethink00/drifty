@@ -87,11 +87,11 @@ import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
-import { DataExportSettingsSection } from "./features/settings/DataExportSettingsSection";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
+import { PermissionsSettingsSection } from "./features/settings/PermissionsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import { analysisModelDisplayLabel } from "./features/settings/analysisModelSetup";
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
@@ -6327,9 +6327,15 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
-                    onRequestAccessibility={() => void handleRequestAccessibility()}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
+                  />
+                )}
+                {settingsSection === "permissions" && (
+                  <PermissionsSettingsSection
+                    accessibilityGranted={accessibilityGranted}
+                    onCheckAccessibility={handleCheckAccessibility}
+                    onRequestAccessibility={handleRequestAccessibility}
                   />
                 )}
                 {settingsSection === "appearance" && (
@@ -6433,10 +6439,12 @@ export default function App() {
                   />
                 )}
                 {settingsSection === "privacy" && (
-                  <PrivacySettingsSection onHistoryDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} />
-                )}
-                {settingsSection === "data" && (
-                  <DataExportSettingsSection databasePath={status?.databasePath} todaySessionCount={segments.length} />
+                  <PrivacySettingsSection
+                    databasePath={status?.databasePath}
+                    deviceSyncEnabled={deviceSyncActive}
+                    onHistoryDeleted={handleHistoryRangeDeleted}
+                    todaySessionCount={segments.length}
+                  />
                 )}
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection

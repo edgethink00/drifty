@@ -154,12 +154,18 @@
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.35rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.7rem;
     margin: 0;
     overflow: visible;
     padding: 0.2rem 0 0.4rem;
     scrollbar-width: none;
+  }
+
+  .app-shell:has(.content--settings) .sidebar--settings .settings-nav-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
   }
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav::-webkit-scrollbar {

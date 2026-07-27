@@ -19,7 +19,6 @@ type GeneralSettingsSectionProps = {
   readonly updaterMessage: string | null;
   readonly onAutoInstallFutureUpdatesChange: (enabled: boolean) => void;
   readonly onCheckForUpdates: () => void;
-  readonly onRequestAccessibility: () => void;
   readonly onStartOfDayChange: (value: string) => void;
   readonly onStartOfWeekChange: (value: StartOfWeek) => void;
 };
@@ -34,7 +33,6 @@ export function GeneralSettingsSection({
   updaterMessage,
   onAutoInstallFutureUpdatesChange,
   onCheckForUpdates,
-  onRequestAccessibility,
   onStartOfDayChange,
   onStartOfWeekChange,
 }: GeneralSettingsSectionProps) {
@@ -75,9 +73,6 @@ export function GeneralSettingsSection({
       <div className="settings-block"><h3>{t("settings.general.updates")}</h3>
         <div className="settings-row"><div><div className="lbl">{t("settings.general.autoUpdates")}</div><div className="desc">{t("settings.general.autoUpdatesDescription")}</div></div><div className="ctrl"><Toggle checked={autoInstallFutureUpdates} onChange={onAutoInstallFutureUpdatesChange} ariaLabel={t("settings.general.autoUpdates")} /></div></div>
         <div className="settings-row"><div><div className="lbl">{t("settings.general.manualUpdate")}</div><div className="desc">{t("settings.general.manualUpdateDescription")}</div>{updaterMessage ? <p className="capture-recency" role="status">{localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t)}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="alert">{localizeUpdateMessage(updaterError, "error", effectiveLanguage, t)}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={onCheckForUpdates} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? t("settings.general.checking") : t("settings.general.checkForUpdates")}</button></div></div>
-      </div>
-      <div className="settings-block"><h3>{t("settings.general.permissions")}</h3>
-        <div className="settings-row"><div><div className="lbl">{t("settings.general.accessibility")}</div><div className="desc">{t("settings.general.accessibilityDescription")}</div></div><div className="ctrl"><button type="button" className="settings-btn" onClick={onRequestAccessibility}>{t("settings.general.grantAccessibility")}</button></div></div>
       </div>
     </div>
   );
