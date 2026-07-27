@@ -153,12 +153,10 @@
   background: color-mix(in srgb, var(--line) 45%, transparent);
   border-radius: var(--radius-pill);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  font-weight: 640;
-  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  font-weight: 590;
   padding: 0.16rem 0.5rem;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -689,12 +687,10 @@
   background: color-mix(in srgb, var(--line) 45%, transparent);
   border-radius: var(--radius-pill);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  font-weight: 640;
-  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  font-weight: 590;
   padding: 0.16rem 0.5rem;
-  text-transform: uppercase;
 }
 
 .profile-page--v2 .profile-state-pill--on {

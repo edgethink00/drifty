@@ -1089,7 +1089,7 @@ export function useLeaderboardProfileController({
   const leaderboardBlockingLoading = leaderboardRefreshing && !leaderboardHasResolvedOnce;
   const leaderboardBlockingError = leaderboardHasLoadedOnce ? null : leaderboardError;
   const leaderboardRefreshStatus = leaderboardRefreshing && leaderboardHasResolvedOnce ? "Refreshing leaderboard" : null;
-  const leaderboardAutoPublishStatus = leaderboardAutoPublishRefreshing && activeTab === "leaderboard" ? "Updating your leaderboard score" : null;
+  const leaderboardAutoPublishStatus = leaderboardAutoPublishRefreshing && activeTab === "leaderboard" ? "Updating your leaderboard" : null;
   const leaderboardBackgroundError = leaderboardHasLoadedOnce
     ? leaderboardError ?? (activeTab === "leaderboard" ? leaderboardAutoPublishError : null)
     : null;

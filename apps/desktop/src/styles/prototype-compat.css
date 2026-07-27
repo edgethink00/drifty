@@ -536,8 +536,9 @@
 
 .category-hover-card__app strong {
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
 

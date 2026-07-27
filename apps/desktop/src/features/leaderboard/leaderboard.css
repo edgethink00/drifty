@@ -520,17 +520,15 @@
   border-radius: var(--radius-pill);
   color: var(--text-soft);
   display: inline-flex;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--type-caption-size);
   gap: 0.34rem;
-  letter-spacing: 0.04em;
   line-height: 1;
   min-height: 1.42rem;
   min-width: 0;
   overflow: hidden;
   padding: 0 0.54rem;
   pointer-events: none;
-  text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1233,11 +1231,9 @@
   border: 1px solid color-mix(in srgb, var(--line) 100%, transparent);
   background: color-mix(in srgb, var(--surface-strong) 50%, transparent);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 590;
   white-space: nowrap;
 }
 
@@ -1854,12 +1850,10 @@
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: var(--radius-pill);
   color: color-mix(in srgb, var(--accent) 76%, var(--text-muted));
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  padding: 0.12rem 0.38rem;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.12rem 0.42rem;
 }
 
 .profile-editor-preview__copy strong {
@@ -2099,12 +2093,10 @@
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
   border-radius: var(--radius-pill);
   color: color-mix(in srgb, var(--accent) 72%, var(--text));
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  padding: 0.08rem 0.32rem;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 620;
+  padding: 0.08rem 0.36rem;
 }
 
 .leaderboard-row__chevron {
