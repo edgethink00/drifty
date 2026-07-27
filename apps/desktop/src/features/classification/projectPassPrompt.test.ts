@@ -32,7 +32,7 @@ const project: ProjectPassPromptProject = {
 
 describe("buildProjectPassPrompt", () => {
   it("has a stable version tag", () => {
-    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v3");
+    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v4-fixed-windows-title-context");
   });
 
   it("separates context windows from core windows and restricts output to core ids", () => {
@@ -55,6 +55,8 @@ describe("buildProjectPassPrompt", () => {
     expect(prompt).toContain('"assignments"');
     expect(prompt).toContain('"corrections"');
     expect(prompt).toContain("Ignore surrounding context ids in the output.");
+    expect(prompt).toContain("Treat every core window as an independent decision");
+    expect(prompt).toContain("exactly one assignment item for every core window id");
   });
 
   it("degrades gracefully with no projects defined", () => {
@@ -67,14 +69,14 @@ describe("buildProjectPassPrompt", () => {
 describe("summarizeProjectPassChunk", () => {
   it("pairs tail windows with their assigned project name, or 'no project'", () => {
     const summary = summarizeProjectPassChunk(
-      windows,
+      windows.slice(0, 2),
       new Map([
         ["w0", "p1"],
         ["w1", null],
       ]),
       new Map([["p1", "Drifty"]]),
     );
-    expect(summary).toContain("dominant: Code (40m)");
+    expect(summary).toContain("dominant: Code (3m)");
     expect(summary).toContain("-> Drifty");
     expect(summary).toContain("-> no project");
   });

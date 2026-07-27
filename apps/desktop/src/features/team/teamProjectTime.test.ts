@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ActivitySegment, TeamProjectAssignmentRecord } from "@drifty/domain";
+import type { ActivitySegment, ProjectWindowAssignmentRecord, TeamProjectAssignmentRecord } from "@drifty/domain";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
 
 function segment(
@@ -66,5 +66,38 @@ describe("aggregateTeamProjectDayTotals", () => {
 
   it("returns nothing when there are no assignments", () => {
     expect(aggregateTeamProjectDayTotals([], [segment("s1", "2026-07-08T03:00:00.000Z", 100)], 0)).toEqual([]);
+  });
+
+  it("publishes exact fixed-window team totals without collapsing a source segment", () => {
+    const segments = [segment("s1", "2026-07-08T03:00:00.000Z", 360, {
+      endedAt: "2026-07-08T03:06:00.000Z",
+    })];
+    const windows: ProjectWindowAssignmentRecord[] = [
+      {
+        windowId: "w0",
+        windowStartedAt: "2026-07-08T03:00:00.000Z",
+        windowEndedAt: "2026-07-08T03:03:00.000Z",
+        durationSeconds: 180,
+        segmentOverlaps: [{ segmentId: "s1", durationSeconds: 180 }],
+        projectId: null,
+        teamProjectId: "team-a",
+        source: "ai",
+      },
+      {
+        windowId: "w1",
+        windowStartedAt: "2026-07-08T03:03:00.000Z",
+        windowEndedAt: "2026-07-08T03:06:00.000Z",
+        durationSeconds: 180,
+        segmentOverlaps: [{ segmentId: "s1", durationSeconds: 180 }],
+        projectId: null,
+        teamProjectId: "team-b",
+        source: "ai",
+      },
+    ];
+
+    expect(aggregateTeamProjectDayTotals([], segments, 0, windows)).toEqual([
+      { project_id: "team-a", activity_date: "2026-07-08", seconds: 180 },
+      { project_id: "team-b", activity_date: "2026-07-08", seconds: 180 },
+    ]);
   });
 });

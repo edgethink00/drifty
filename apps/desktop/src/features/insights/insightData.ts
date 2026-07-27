@@ -97,6 +97,7 @@ export function buildWeeklyBreakdown(
   options?: ClassificationOptions,
   visibility?: InsightWeekVisibility,
   projectBySegmentId?: ReadonlyMap<string, string>,
+  projectSegments?: readonly ActivitySegment[],
 ): WeeklyBreakdownDay[] {
   const focus = Array.from({ length: 7 }, () => 0);
   const neutral = Array.from({ length: 7 }, () => 0);
@@ -118,15 +119,26 @@ export function buildWeeklyBreakdown(
     else if (productivity === "drift") drift[index] += seconds;
     else if (category !== "unknown") neutral[index] += seconds;
     categories[index].set(category, (categories[index].get(category) ?? 0) + seconds);
-    const projectId = projectBySegmentId?.get(segment.id);
-    if (projectId) {
-      projects[index].set(projectId, (projects[index].get(projectId) ?? 0) + seconds);
-    } else if (projectBySegmentId && category !== "unknown") {
-      // Classified time with no project → the shared "No project" bucket, so the
-      // Project lens totals match Category/Productivity (all classified time).
-      projects[index].set(NO_PROJECT_KEY, (projects[index].get(NO_PROJECT_KEY) ?? 0) + seconds);
-    }
     dates[index].add(localDateKey(started));
+  }
+
+  if (projectBySegmentId) {
+    for (const segment of projectSegments ?? segments) {
+      const started = new Date(segment.startedAt);
+      if (Number.isNaN(started.getTime())) continue;
+      const index = weekdayOrderIndex(started);
+      if (hidden.has(index)) continue;
+      const seconds = segment.durationSeconds;
+      const { category } = classifyActivity(segment, options);
+      const projectId = projectBySegmentId.get(segment.id);
+      if (projectId) {
+        projects[index].set(projectId, (projects[index].get(projectId) ?? 0) + seconds);
+      } else if (category !== "unknown") {
+        // Classified time with no project → the shared "No project" bucket, so the
+        // Project lens totals match Category/Productivity (all classified time).
+        projects[index].set(NO_PROJECT_KEY, (projects[index].get(NO_PROJECT_KEY) ?? 0) + seconds);
+      }
+    }
   }
 
   return weekdayIndexes.map((index) => {

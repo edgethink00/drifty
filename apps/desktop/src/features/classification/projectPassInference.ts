@@ -86,6 +86,17 @@ function buildCloudReviewRequest(supabaseUrl: string, accessToken: string, anonK
 const REVIEW_CHUNK_SENTINEL = "driftyReviewChunk";
 
 function minimalReviewWindow(window: ProjectPassAnalysisWindow): Record<string, unknown> {
+  const legacyContext = (contexts: ProjectPassAnalysisWindow["contributors"][number]["contexts"]): string | null => {
+    const formatted = contexts.map((context) => [
+      context.siteUrl ? `url=${JSON.stringify(context.siteUrl)}` : null,
+      context.windowTitle ? `window=${JSON.stringify(context.windowTitle)}` : null,
+      context.title ? `title=${JSON.stringify(context.title)}` : null,
+      context.redditCommunity ? `reddit=${JSON.stringify(context.redditCommunity)}` : null,
+      context.youtubeChannelName ? `channel=${JSON.stringify(context.youtubeChannelName)}` : null,
+      context.youtubeCategory ? `videoCategory=${JSON.stringify(context.youtubeCategory)}` : null,
+    ].filter(Boolean).join(" ")).filter(Boolean);
+    return formatted.length > 0 ? formatted.join("; ") : null;
+  };
   return {
     id: window.id,
     startedAt: window.startedAt,
@@ -104,7 +115,10 @@ function minimalReviewWindow(window: ProjectPassAnalysisWindow): Record<string, 
       appName: contributor.appName,
       domain: contributor.domain,
       durationSeconds: contributor.durationSeconds,
-      context: contributor.context,
+      // Keep the legacy string during the app/edge rollout so the previous edge
+      // can still use title context; the structured form is canonical for v4.
+      context: legacyContext(contributor.contexts),
+      contexts: contributor.contexts,
       isShorts: contributor.isShorts,
     })),
   };

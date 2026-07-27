@@ -224,11 +224,12 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setPublishNote(null);
     try {
       const range = getLogicalDayRange(window.start_date, window.end_date, startOfDayMinutes);
-      const [localActivity, assignments] = await Promise.all([
+      const [localActivity, assignments, windowAssignments] = await Promise.all([
         trackerClient.getTimeline(range),
         trackerClient.getTeamProjectAssignments(range),
+        trackerClient.getProjectWindowAssignments(range),
       ]);
-      const entries = aggregateTeamProjectDayTotals(assignments, localActivity, startOfDayMinutes);
+      const entries = aggregateTeamProjectDayTotals(assignments, localActivity, startOfDayMinutes, windowAssignments);
       if (entries.length === 0) {
         // Never publish an empty set — the RPC replaces the whole window, so an empty
         // publish would wipe a previously-shared week. Guide the user to Analyze first.

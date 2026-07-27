@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-project-window-assignments"
+description = "Enables the tracker_get_project_window_assignments command without any pre-configured scope."
+commands.allow = ["tracker_get_project_window_assignments"]
+
+[[permission]]
+identifier = "deny-tracker-get-project-window-assignments"
+description = "Denies the tracker_get_project_window_assignments command without any pre-configured scope."
+commands.deny = ["tracker_get_project_window_assignments"]

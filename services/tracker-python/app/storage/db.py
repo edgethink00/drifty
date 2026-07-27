@@ -320,6 +320,33 @@ class TrackerDatabase:
                 CREATE INDEX IF NOT EXISTS idx_team_project_assignments_project
                 ON team_project_assignments(team_project_id);
 
+                CREATE TABLE IF NOT EXISTS project_window_assignments (
+                  window_started_at TEXT PRIMARY KEY,
+                  window_id TEXT NOT NULL,
+                  window_ended_at TEXT NOT NULL,
+                  duration_seconds INTEGER NOT NULL,
+                  segment_overlaps_json TEXT NOT NULL,
+                  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+                  team_project_id TEXT REFERENCES team_projects(id) ON DELETE SET NULL,
+                  source TEXT NOT NULL DEFAULT 'ai',
+                  confidence REAL,
+                  reason TEXT,
+                  pass_id INTEGER,
+                  chunk_fingerprint TEXT,
+                  assigned_at TEXT NOT NULL,
+                  stale INTEGER NOT NULL DEFAULT 0,
+                  CHECK (project_id IS NULL OR team_project_id IS NULL)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_project_window_assignments_range
+                ON project_window_assignments(window_started_at, window_ended_at);
+
+                CREATE INDEX IF NOT EXISTS idx_project_window_assignments_project
+                ON project_window_assignments(project_id);
+
+                CREATE INDEX IF NOT EXISTS idx_project_window_assignments_team_project
+                ON project_window_assignments(team_project_id);
+
                 CREATE TABLE IF NOT EXISTS project_pass_runs (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   ran_at TEXT NOT NULL,
@@ -1408,6 +1435,34 @@ class TrackerDatabase:
             ),
         )
 
+    @staticmethod
+    def _delete_project_windows_for_segment_ids(
+        conn: sqlite3.Connection, segment_ids: set[str]
+    ) -> None:
+        if not segment_ids:
+            return
+        rows = conn.execute(
+            "SELECT window_started_at, segment_overlaps_json FROM project_window_assignments"
+        ).fetchall()
+        starts_to_delete: list[str] = []
+        for row in rows:
+            try:
+                overlaps = json.loads(row["segment_overlaps_json"])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            if isinstance(overlaps, list) and any(
+                isinstance(overlap, dict)
+                and str(overlap.get("segmentId", "")) in segment_ids
+                for overlap in overlaps
+            ):
+                starts_to_delete.append(row["window_started_at"])
+        if starts_to_delete:
+            placeholders = ",".join("?" for _ in starts_to_delete)
+            conn.execute(
+                f"DELETE FROM project_window_assignments WHERE window_started_at IN ({placeholders})",
+                starts_to_delete,
+            )
+
     def delete_activity_segments(self, segment_ids: list[str], record_tombstone: bool = True) -> int:
         normalized_ids = sorted({
             int(segment_id)
@@ -1419,6 +1474,9 @@ class TrackerDatabase:
 
         placeholders = ",".join("?" for _ in normalized_ids)
         with self.connect() as conn:
+            self._delete_project_windows_for_segment_ids(
+                conn, {str(segment_id) for segment_id in normalized_ids}
+            )
             deleted_uids = [
                 row["segment_uid"]
                 for row in conn.execute(
@@ -1530,6 +1588,18 @@ class TrackerDatabase:
                     else:
                         conn.execute("DELETE FROM youtube_video_metadata")
                 if delete_activity:
+                    if has_range:
+                        window_query = "DELETE FROM project_window_assignments WHERE 1=1"
+                        window_params: list[Any] = []
+                        if start_bound:
+                            window_query += " AND datetime(window_ended_at) >= datetime(?)"
+                            window_params.append(self._normalize_range_bound(start_bound))
+                        if end_bound:
+                            window_query += " AND datetime(window_started_at) <= datetime(?)"
+                            window_params.append(self._normalize_range_bound(end_bound))
+                        conn.execute(window_query, window_params)
+                    else:
+                        conn.execute("DELETE FROM project_window_assignments")
                     conn.execute(
                         f"DELETE FROM activity_segments WHERE id IN ({segment_subquery})",
                         tuple(segment_params),
@@ -1928,6 +1998,13 @@ class TrackerDatabase:
 
     def purge_remote_segments(self) -> int:
         with self.connect() as conn:
+            remote_segment_ids = {
+                str(row["id"])
+                for row in conn.execute(
+                    "SELECT id FROM activity_segments WHERE origin_device_id IS NOT NULL"
+                )
+            }
+            self._delete_project_windows_for_segment_ids(conn, remote_segment_ids)
             cursor = conn.execute("DELETE FROM activity_segments WHERE origin_device_id IS NOT NULL")
             return cursor.rowcount
 
@@ -2224,6 +2301,10 @@ class TrackerDatabase:
                 "UPDATE activity_project_assignments SET project_id = NULL WHERE project_id = ?",
                 (project_id,),
             )
+            conn.execute(
+                "UPDATE project_window_assignments SET project_id = NULL WHERE project_id = ?",
+                (project_id,),
+            )
             cursor = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             return cursor.rowcount
 
@@ -2352,6 +2433,162 @@ class TrackerDatabase:
             }
             for row in rows
         ]
+
+    def save_project_window_assignments(self, assignments: list[dict[str, Any]]) -> dict[str, int]:
+        saved = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            for item in assignments:
+                window_id = str(item.get("windowId", item.get("window_id", ""))).strip()
+                window_started_at = str(
+                    item.get("windowStartedAt", item.get("window_started_at", ""))
+                ).strip()
+                window_ended_at = str(
+                    item.get("windowEndedAt", item.get("window_ended_at", ""))
+                ).strip()
+                if not window_id or not window_started_at or not window_ended_at:
+                    continue
+                try:
+                    started_at = parse_iso_datetime(window_started_at)
+                    ended_at = parse_iso_datetime(window_ended_at)
+                except (TypeError, ValueError):
+                    continue
+                if ended_at <= started_at:
+                    continue
+
+                overlaps: list[dict[str, Any]] = []
+                raw_overlaps = item.get("segmentOverlaps", item.get("segment_overlaps", []))
+                if isinstance(raw_overlaps, list):
+                    for overlap in raw_overlaps:
+                        if not isinstance(overlap, dict):
+                            continue
+                        segment_id = str(overlap.get("segmentId", overlap.get("segment_id", ""))).strip()
+                        try:
+                            duration_seconds = int(
+                                overlap.get("durationSeconds", overlap.get("duration_seconds", 0))
+                            )
+                        except (TypeError, ValueError):
+                            continue
+                        if not segment_id or duration_seconds <= 0:
+                            continue
+                        overlaps.append(
+                            {"segmentId": segment_id, "durationSeconds": duration_seconds}
+                        )
+                if not overlaps:
+                    continue
+
+                project_id = item.get("projectId", item.get("project_id"))
+                team_project_id = item.get("teamProjectId", item.get("team_project_id"))
+                if project_id and team_project_id:
+                    continue
+                confidence = item.get("confidence")
+                try:
+                    duration_seconds = int(
+                        item.get(
+                            "durationSeconds",
+                            item.get("duration_seconds", sum(overlap["durationSeconds"] for overlap in overlaps)),
+                        )
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if duration_seconds <= 0:
+                    continue
+
+                conn.execute(
+                    """
+                    INSERT INTO project_window_assignments (
+                        window_started_at, window_id, window_ended_at, duration_seconds,
+                        segment_overlaps_json, project_id, team_project_id, source,
+                        confidence, reason, pass_id, chunk_fingerprint, assigned_at, stale
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ai', ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(window_started_at) DO UPDATE SET
+                        window_id = excluded.window_id,
+                        window_ended_at = excluded.window_ended_at,
+                        duration_seconds = excluded.duration_seconds,
+                        segment_overlaps_json = excluded.segment_overlaps_json,
+                        project_id = excluded.project_id,
+                        team_project_id = excluded.team_project_id,
+                        source = excluded.source,
+                        confidence = excluded.confidence,
+                        reason = excluded.reason,
+                        pass_id = excluded.pass_id,
+                        chunk_fingerprint = excluded.chunk_fingerprint,
+                        assigned_at = excluded.assigned_at,
+                        stale = excluded.stale
+                    """,
+                    (
+                        window_started_at,
+                        window_id,
+                        window_ended_at,
+                        duration_seconds,
+                        json.dumps(overlaps, separators=(",", ":")),
+                        project_id or None,
+                        team_project_id or None,
+                        float(confidence) if confidence is not None else None,
+                        item.get("reason"),
+                        item.get("passId", item.get("pass_id")),
+                        item.get("chunkFingerprint", item.get("chunk_fingerprint")),
+                        item.get("assignedAt") or item.get("assigned_at") or timestamp,
+                        1 if item.get("stale") else 0,
+                    ),
+                )
+                saved += 1
+        return {"saved": saved, "skippedManual": 0}
+
+    def get_project_window_assignments(
+        self, start: str | None = None, end: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM project_window_assignments WHERE 1 = 1"
+        params: list[Any] = []
+        if start:
+            query += " AND datetime(window_ended_at) > datetime(?)"
+            params.append(self._normalize_range_bound(start))
+        if end:
+            query += " AND datetime(window_started_at) < datetime(?)"
+            params.append(self._normalize_range_bound(end))
+        query += " ORDER BY datetime(window_started_at) ASC"
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                raw_overlaps = json.loads(row["segment_overlaps_json"])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                raw_overlaps = []
+            overlaps: list[dict[str, Any]] = []
+            if isinstance(raw_overlaps, list):
+                for overlap in raw_overlaps:
+                    if not isinstance(overlap, dict):
+                        continue
+                    segment_id = str(overlap.get("segmentId", "")).strip()
+                    try:
+                        overlap_seconds = int(overlap.get("durationSeconds", 0))
+                    except (TypeError, ValueError):
+                        continue
+                    if segment_id and overlap_seconds > 0:
+                        overlaps.append(
+                            {"segmentId": segment_id, "durationSeconds": overlap_seconds}
+                        )
+            result.append(
+                {
+                    "windowId": row["window_id"],
+                    "windowStartedAt": row["window_started_at"],
+                    "windowEndedAt": row["window_ended_at"],
+                    "durationSeconds": row["duration_seconds"],
+                    "segmentOverlaps": overlaps,
+                    "projectId": row["project_id"],
+                    "teamProjectId": row["team_project_id"],
+                    "source": row["source"],
+                    "confidence": row["confidence"],
+                    "reason": row["reason"],
+                    "passId": row["pass_id"],
+                    "chunkFingerprint": row["chunk_fingerprint"],
+                    "assignedAt": row["assigned_at"],
+                    "stale": bool(row["stale"]),
+                }
+            )
+        return result
 
     def get_team_projects(self) -> list[dict[str, Any]]:
         with self.connect() as conn:

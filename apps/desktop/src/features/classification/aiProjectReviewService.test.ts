@@ -38,6 +38,7 @@ function classified(
 
 const EXPECTED_CONTEXT_WINDOW_OVERLAP = 4;
 const EXPECTED_MAX_PARALLEL_CHUNKS = 3;
+const CONTEXT_POLICY = { siteUrl: true, windowTitle: true, contentContext: true } as const;
 
 describe("parseProjectPassOutput", () => {
   it("parses clean and fenced JSON", () => {
@@ -65,7 +66,7 @@ describe("chunkProjectPassWindows", () => {
   it("splits windows over the cap", () => {
     const windows = buildProjectPassAnalysisWindows(
       Array.from({ length: 5 }, (_, i) =>
-        seg({ id: `${i}`, startedAt: `2026-04-06T${String(9 + i).padStart(2, "0")}:00:00+00:00`, endedAt: `2026-04-06T${String(9 + i).padStart(2, "0")}:30:00+00:00`, durationSeconds: 1800, appName: `App${i}` }),
+        seg({ id: `${i}`, startedAt: `2026-04-06T${String(9 + i).padStart(2, "0")}:00:00+00:00`, endedAt: `2026-04-06T${String(9 + i).padStart(2, "0")}:03:00+00:00`, durationSeconds: 180, appName: `App${i}` }),
       ),
     );
     expect(chunkProjectPassWindows(windows, 2)).toHaveLength(3);
@@ -78,20 +79,40 @@ describe("projectPassChunkFingerprint", () => {
   const windows = buildProjectPassAnalysisWindows([seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:30:00+00:00", durationSeconds: 1800, appName: "Code" })]);
   const project = { id: "p1", name: "P", description: "d", anchors: [] };
 
-  it("is stable for identical inputs and changes with project definition", async () => {
+  it("is stable for identical inputs and changes with project definition or work profile", async () => {
     const a = await projectPassChunkFingerprint(windows, [project]);
     const b = await projectPassChunkFingerprint(windows, [project]);
     const c = await projectPassChunkFingerprint(windows, [{ ...project, description: "changed" }]);
+    const d = await projectPassChunkFingerprint(windows, [project], "Different job");
     expect(a).toBe(b);
     expect(a).not.toBe(c);
+    expect(a).not.toBe(d);
     expect(a.startsWith("pp-")).toBe(true);
+  });
+
+  it("changes when the read-only context around an identical core chunk changes", async () => {
+    const contextA = buildProjectPassAnalysisWindows([
+      seg({ id: "before-a", startedAt: "2026-04-06T08:57:00+00:00", endedAt: "2026-04-06T09:00:00+00:00", durationSeconds: 180, appName: "Mail" }),
+    ]);
+    const contextB = buildProjectPassAnalysisWindows([
+      seg({ id: "before-b", startedAt: "2026-04-06T08:57:00+00:00", endedAt: "2026-04-06T09:00:00+00:00", durationSeconds: 180, appName: "Slack" }),
+    ]);
+    const a = await projectPassChunkFingerprint(windows, [project], null, {
+      beforeContextWindows: contextA,
+      afterContextWindows: [],
+    });
+    const b = await projectPassChunkFingerprint(windows, [project], null, {
+      beforeContextWindows: contextB,
+      afterContextWindows: [],
+    });
+    expect(a).not.toBe(b);
   });
 });
 
 describe("resolveProjectPassApply — trust invariants", () => {
   const segments = [
-    classified("1", "2026-04-06T09:00:00+00:00", "2026-04-06T09:30:00+00:00", "Chrome", "social_media", "drift"),
-    classified("2", "2026-04-06T10:00:00+00:00", "2026-04-06T10:30:00+00:00", "Code", "workspace", "focus", "manual"),
+    classified("1", "2026-04-06T09:00:00+00:00", "2026-04-06T09:03:00+00:00", "Chrome", "social_media", "drift"),
+    classified("2", "2026-04-06T10:00:00+00:00", "2026-04-06T10:03:00+00:00", "Code", "workspace", "focus", "manual"),
   ];
   const windows = buildProjectPassAnalysisWindows(segments);
   const segmentsById = new Map(segments.map((s) => [s.id, s]));
@@ -113,14 +134,15 @@ describe("resolveProjectPassApply — trust invariants", () => {
       corrections: [],
     };
     const resolved = resolveProjectPassApply({ ...base, output });
-    const byId = new Map(resolved.assignments.map((a) => [a.segmentId, a.projectId]));
-    expect(byId.get("1")).toBe("p1");
-    expect(byId.get("2")).toBeNull(); // below assign threshold
+    const byId = new Map(resolved.windowAssignments.map((a) => [a.windowId, a.projectId]));
+    expect(byId.get("w0")).toBe("p1");
+    expect(byId.get("w1")).toBeNull(); // below assign threshold
+    expect(resolved.windowAssignments[0].segmentOverlaps).toEqual([{ segmentId: "1", durationSeconds: 180 }]);
   });
 
   it("drops hallucinated project ids to null", () => {
     const resolved = resolveProjectPassApply({ ...base, output: { assignments: [{ id: "w0", projectId: "ghost", confidence: 0.99 }], corrections: [] } });
-    expect(resolved.assignments[0].projectId).toBeNull();
+    expect(resolved.windowAssignments[0].projectId).toBeNull();
   });
 
   it("applies a high-confidence correction and records the prior state", () => {
@@ -163,15 +185,15 @@ describe("resolveProjectPassApply — trust invariants", () => {
 function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi; spies: Record<string, ReturnType<typeof vi.fn>> } {
   const spies = {
     getTimeline: vi.fn(async () => [
-      classified("1", "2026-04-06T09:00:00+00:00", "2026-04-06T09:30:00+00:00", "Chrome", "social_media", "drift"),
+      classified("1", "2026-04-06T09:00:00+00:00", "2026-04-06T09:03:00+00:00", "Chrome", "social_media", "drift"),
     ]),
     getProjects: vi.fn(async (): Promise<Project[]> => [
       { id: "p1", name: "SNS", description: "social work", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" },
     ]),
-    getProjectAssignments: vi.fn(async () => []),
+    getProjectWindowAssignments: vi.fn(async () => []),
     getAiReviewEvents: vi.fn(async () => []),
     recordProjectPass: vi.fn(async () => ({ id: 7, ranAt: "2026-04-06T23:00:00+00:00" })),
-    saveProjectAssignments: vi.fn(async () => ({ saved: 0, skippedManual: 0 })),
+    saveProjectWindowAssignments: vi.fn(async () => ({ saved: 0, skippedManual: 0 })),
     saveClassifications: vi.fn(async () => ({ saved: 0 })),
     saveAiReviewEvents: vi.fn(async () => ({ saved: 0 })),
     getTeamProjects: vi.fn(async () => []),
@@ -195,6 +217,7 @@ describe("runProjectPass orchestration", () => {
       tracker,
       inference,
       now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
     });
 
     expect(summary.ran).toBe(true);
@@ -202,7 +225,7 @@ describe("runProjectPass orchestration", () => {
     expect(summary.corrections).toBe(1);
     expect(spies.recordProjectPass).toHaveBeenCalledTimes(1);
     expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 1 }));
-    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: "p1", passId: 7 })]);
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: "p1", teamProjectId: null, passId: 7 })]);
     expect(spies.saveAiReviewEvents).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", passId: 7, newProductivity: "focus" })]);
   });
 
@@ -224,11 +247,10 @@ describe("runProjectPass orchestration", () => {
       tracker,
       inference,
       now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
     });
 
-    expect(spies.saveTeamProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", teamProjectId: "t1", passId: 7 })]);
-    // the personal table gets a null-projectId clearing row for the same segment
-    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: null, passId: 7 })]);
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: null, teamProjectId: "t1", passId: 7 })]);
   });
 
   it("clears the team row when a segment is reclassified from a team to a personal project", async () => {
@@ -251,12 +273,11 @@ describe("runProjectPass orchestration", () => {
       tracker,
       inference,
       now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
     });
 
-    // Segment routes to personal p1; a null team row is written so any prior team
-    // assignment for the segment is cleared and can't keep inflating team totals.
-    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", projectId: "p1" })]);
-    expect(spies.saveTeamProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", teamProjectId: null })]);
+    // One window row owns both scopes, so the personal id replaces any prior team id.
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: "p1", teamProjectId: null })]);
   });
 
   it("skips a chunk whose fingerprint already has fresh stored assignments", async () => {
@@ -271,32 +292,35 @@ describe("runProjectPass orchestration", () => {
       tracker,
       inference,
       now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
     };
 
     // First pass has nothing cached: the chunk runs and stores an assignment.
     await runProjectPass(baseOptions);
-    const fingerprint = spies.saveProjectAssignments.mock.calls[0][0][0].chunkFingerprint as string;
+    const fingerprint = spies.saveProjectWindowAssignments.mock.calls[0][0][0].chunkFingerprint as string;
     expect(typeof fingerprint).toBe("string");
 
     // Second pass sees that assignment as already stored → the chunk is skipped.
     (inference as ReturnType<typeof vi.fn>).mockClear();
     const cached = mockTracker({
-      getProjectAssignments: vi.fn(async () => [
-        { segmentId: "1", projectId: "p1", source: "ai" as const, chunkFingerprint: fingerprint, stale: false },
+      getProjectWindowAssignments: vi.fn(async () => [
+        { windowId: "w0", windowStartedAt: "2026-04-06T09:00:00.000Z", windowEndedAt: "2026-04-06T09:03:00.000Z", durationSeconds: 180, segmentOverlaps: [{ segmentId: "1", durationSeconds: 180 }], projectId: "p1", teamProjectId: null, source: "ai" as const, chunkFingerprint: fingerprint, stale: false },
       ]),
     });
     const summary = await runProjectPass({ ...baseOptions, tracker: cached.tracker });
 
     expect(inference).not.toHaveBeenCalled();
-    expect(summary.ran).toBe(true);
+    expect(summary.ran).toBe(false);
+    expect(summary.skippedReason).toBe("already analyzed");
     expect(summary.assignments).toBe(0);
     expect(summary.tokensIn).toBe(0);
+    expect(cached.spies.recordProjectPass).not.toHaveBeenCalled();
   });
 
   it("skips cleanly when there is no activity", async () => {
     const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => []) as TrackerApi["getTimeline"] });
     const inference: ProjectPassInference = vi.fn(async () => ({ output: { assignments: [], corrections: [] }, usage: {} }));
-    const summary = await runProjectPass({ range: { start: "a", end: "b" }, trigger: "schedule", tracker, inference, now: () => "t" });
+    const summary = await runProjectPass({ range: { start: "a", end: "b" }, trigger: "schedule", tracker, inference, now: () => "t", contextPolicy: CONTEXT_POLICY });
     expect(summary.ran).toBe(false);
     expect(inference).not.toHaveBeenCalled();
     expect(spies.recordProjectPass).not.toHaveBeenCalled();
@@ -317,6 +341,7 @@ describe("runProjectPass orchestration", () => {
       inference,
       now: () => "2026-04-06T23:00:00+00:00",
       workProfile: "Founder building a Mac time tracker",
+      contextPolicy: CONTEXT_POLICY,
     });
 
     expect(prompts[0]).toContain("User work profile: Founder building a Mac time tracker");
@@ -326,7 +351,7 @@ describe("runProjectPass orchestration", () => {
     const isoAt = (minute: number) =>
       `2026-04-06T${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}:00+00:00`;
     const manySegments = Array.from({ length: PROJECT_PASS_MAX_CHUNK_WINDOWS + EXPECTED_CONTEXT_WINDOW_OVERLAP + 1 }, (_, i) =>
-      classified(`${i}`, isoAt(i * 6), isoAt(i * 6 + 5), `App${i}`, "social_media", "drift"),
+      classified(`${i}`, isoAt(i * 3), isoAt(i * 3 + 3), `App${i}`, "social_media", "drift"),
     );
     const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => manySegments) as TrackerApi["getTimeline"] });
     const prompts: string[] = [];
@@ -362,6 +387,7 @@ describe("runProjectPass orchestration", () => {
       tracker,
       inference,
       now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
     });
 
     await firstInferenceStarted;
@@ -379,9 +405,9 @@ describe("runProjectPass orchestration", () => {
     expect(prompts[1]).toContain("Core analysis windows (return assignments and corrections only for these ids):");
     expect(prompts[1]).toContain(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`);
     expect(prompts[1]).toContain("Context after (read-only; do not output these ids):");
-    expect(spies.saveProjectAssignments).toHaveBeenCalledWith([expect.objectContaining({ segmentId: `${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1" })]);
-    expect(spies.saveProjectAssignments).not.toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ segmentId: `${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}` })]),
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1" })]);
+    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ windowId: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}` })]),
     );
   });
 });

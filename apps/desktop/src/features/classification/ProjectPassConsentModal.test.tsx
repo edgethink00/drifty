@@ -10,7 +10,10 @@ function baseProps(overrides: Partial<ProjectPassConsentModalProps> = {}): Proje
   return {
     open: true,
     providerLabel: "OpenRouter (GPT-5 mini)",
-    includesTitles: true,
+    includesSiteUrl: true,
+    includesWindowTitles: true,
+    includesContentContext: true,
+    storesCloudSamples: false,
     onConfirm: vi.fn(),
     onCancel: vi.fn(),
     ...overrides,
@@ -46,21 +49,26 @@ describe("ProjectPassConsentModal", () => {
 
     expect(screen.getByRole("dialog", { name: /Turn on project analysis/i })).toBeTruthy();
     expect(screen.getByText("OpenRouter (GPT-5 mini)")).toBeTruthy();
-    expect(screen.getByText(/compacted 3-minute activity-window summary/i)).toBeTruthy();
+    expect(screen.getByText(/Each 3-minute activity window is classified independently/i)).toBeTruthy();
     expect(screen.getByText(/work profile/i)).toBeTruthy();
     expect(screen.getByText(/never sends your raw history/i)).toBeTruthy();
   });
 
-  it("notes that titles are excluded when content context is off", () => {
-    render(<ProjectPassConsentModal {...baseProps({ includesTitles: false })} />);
+  it("shows the exact optional context enabled by the privacy controls", () => {
+    render(<ProjectPassConsentModal {...baseProps({ includesWindowTitles: false })} />);
 
-    expect(screen.getByText(/titles are excluded/i)).toBeTruthy();
+    const contextLine = screen.getByText(/Optional context currently included/i);
+    expect(contextLine.textContent).toContain("page URL path");
+    expect(contextLine.textContent).toContain("page/video title");
+    expect(contextLine.textContent).not.toContain("window title");
   });
 
-  it("omits the titles-excluded note when titles are included", () => {
-    render(<ProjectPassConsentModal {...baseProps({ includesTitles: true })} />);
+  it("discloses minimized cloud sample storage only for the cloud route", () => {
+    const { rerender } = render(<ProjectPassConsentModal {...baseProps({ storesCloudSamples: false })} />);
+    expect(screen.queryByText(/sample may be stored/i)).toBeNull();
 
-    expect(screen.queryByText(/titles are excluded/i)).toBeNull();
+    rerender(<ProjectPassConsentModal {...baseProps({ storesCloudSamples: true })} />);
+    expect(screen.getByText(/sample may be stored/i)).toBeTruthy();
   });
 
   it("calls onConfirm when Turn on is clicked", () => {

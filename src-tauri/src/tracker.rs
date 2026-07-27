@@ -372,6 +372,20 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_team_projects", json!({}))
     }
 
+    pub fn get_project_window_assignments(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_project_window_assignments",
+            build_period_payload(day, start, end),
+        )
+    }
+
     pub fn get_team_project_assignments(
         &self,
         app: &AppHandle,
@@ -656,6 +670,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "search_classification_rule_candidates"
         | "get_projects"
         | "get_project_assignments"
+        | "get_project_window_assignments"
         | "get_team_projects"
         | "get_team_project_assignments"
         | "get_project_pass_runs"
@@ -1204,6 +1219,7 @@ mod tests {
         "save_project_anchors",
         "delete_project_anchor",
         "save_project_assignments",
+        "save_project_window_assignments",
         "upsert_team_projects",
         "save_team_project_assignments",
         "record_project_pass",
@@ -1385,6 +1401,7 @@ mod tests {
             "search_classification_rule_candidates",
             "get_projects",
             "get_project_assignments",
+            "get_project_window_assignments",
             "get_team_projects",
             "get_team_project_assignments",
             "get_project_pass_runs",

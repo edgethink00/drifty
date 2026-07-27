@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -15,6 +15,7 @@ import {
   buildDayRibbonSegments,
   buildHourlySummary,
   buildProductivityPersona,
+  buildPersonalProjectSliceProjection,
   shiftIsoDate,
   todayIsoDate,
   totalDurationSeconds,
@@ -94,11 +95,15 @@ import { NotificationsSettingsSection } from "./features/settings/NotificationsS
 import { PermissionsSettingsSection } from "./features/settings/PermissionsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import { analysisModelDisplayLabel } from "./features/settings/analysisModelSetup";
+import {
+  AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
+  readAiPrivacyRequestSettings,
+} from "./features/settings/aiPrivacyRequestSettings";
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { CommandBar } from "./features/command-bar/CommandBar";
-import { contextualProjectColorBySegment, contextualProjectIdBySegment, projectColorMap } from "./features/flow-chart/projectFlowView";
+import { NO_PROJECT_COLOR, NO_PROJECT_LABEL as FLOW_NO_PROJECT_LABEL, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
@@ -4460,20 +4465,30 @@ export default function App() {
     analysisConnected: analysisModel.analysisConnected,
     onClassificationChanged: () => { void refreshHistoryData(); },
   });
-  // Segment→project map + ordered project series for the Trends weekly Project view,
-  // scoped to the whole insight window (not just the selected day).
-  const insightProjectBySegmentId = useMemo(
-    () => new Map(
-      projectClassification.insightAssignments
-        .filter((assignment) => assignment.projectId)
-        .map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
-    ),
-    [projectClassification.insightAssignments],
+  const [projectPassPrivacySettings, setProjectPassPrivacySettings] = useState(
+    () => readAiPrivacyRequestSettings(),
   );
+  useEffect(() => {
+    const syncSettings = () => setProjectPassPrivacySettings(readAiPrivacyRequestSettings());
+    window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, syncSettings);
+    return () => window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, syncSettings);
+  }, []);
+  // Preserve the fixed 3-minute decisions as virtual activity slices. Legacy
+  // segment rows remain as fallback for days that have not been re-analyzed yet,
+  // and manual segment assignments override every overlapping AI slice.
+  const insightProjectProjection = useMemo(
+    () => buildPersonalProjectSliceProjection(
+      activeInsightSegments,
+      projectClassification.insightWindowAssignments,
+      projectClassification.insightAssignments,
+    ),
+    [activeInsightSegments, projectClassification.insightAssignments, projectClassification.insightWindowAssignments],
+  );
+  const insightProjectBySegmentId = insightProjectProjection.projectBySegmentId;
   const weeklyProjectChart = useMemo(() => {
     const NO_PROJECT_SERIES_COLOR = "#9ca3af";
     const totals = new Map<string, number>();
-    for (const segment of activeInsightSegments) {
+    for (const segment of insightProjectProjection.segments) {
       const projectId = insightProjectBySegmentId.get(segment.id);
       if (!projectId) continue;
       totals.set(projectId, (totals.get(projectId) ?? 0) + segment.durationSeconds);
@@ -4488,31 +4503,57 @@ export default function App() {
     const series = available ? [...realSeries, { key: NO_PROJECT_KEY, color: NO_PROJECT_SERIES_COLOR }] : [];
     if (available) meta.set(NO_PROJECT_KEY, { label: NO_PROJECT_LABEL, color: NO_PROJECT_SERIES_COLOR });
     return { series, meta, available };
-  }, [activeInsightSegments, insightProjectBySegmentId, projectClassification.projects]);
+  }, [insightProjectBySegmentId, insightProjectProjection.segments, projectClassification.projects]);
   const weeklyBreakdown = useMemo(
-    () => buildWeeklyBreakdown(activeInsightSegments, insightClassificationOptions, insightWeekVisibility, insightProjectBySegmentId),
-    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility, insightProjectBySegmentId],
+    () => buildWeeklyBreakdown(
+      activeInsightSegments,
+      insightClassificationOptions,
+      insightWeekVisibility,
+      insightProjectBySegmentId,
+      insightProjectProjection.segments,
+    ),
+    [activeInsightSegments, insightClassificationOptions, insightWeekVisibility, insightProjectBySegmentId, insightProjectProjection.segments],
+  );
+  const selectedDayProjectProjection = useMemo(
+    () => buildPersonalProjectSliceProjection(
+      effectiveSelectedDaySegments,
+      projectClassification.windowAssignments,
+      projectClassification.assignments,
+    ),
+    [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.windowAssignments],
   );
   const flowProjectColorBySegment = useMemo(
-    () => contextualProjectColorBySegment(effectiveSelectedDaySegments, projectClassification.assignments, projectColorMap(projectClassification.projects), effectiveSelectedDayClassificationOptions),
-    [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.projects, effectiveSelectedDayClassificationOptions],
+    () => {
+      const colors = projectColorMap(projectClassification.projects);
+      return new Map(
+        [...selectedDayProjectProjection.projectBySegmentId].map(([segmentId, projectId]) => [
+          segmentId,
+          colors.get(projectId) ?? NO_PROJECT_COLOR,
+        ] as const),
+      );
+    },
+    [projectClassification.projects, selectedDayProjectProjection.projectBySegmentId],
   );
-  // Same contextual attribution as the colors, but as project IDs — lets the
-  // flow hover card name the project a block belongs to.
-  const flowProjectIdBySegment = useMemo(
-    () => contextualProjectIdBySegment(effectiveSelectedDaySegments, projectClassification.assignments, effectiveSelectedDayClassificationOptions),
-    [effectiveSelectedDaySegments, projectClassification.assignments, effectiveSelectedDayClassificationOptions],
+  // Flow consumes the same fixed-window virtual slices as every project total,
+  // so adjacent decisions never collapse back onto one raw source segment.
+  const flowProjectIdBySegment = selectedDayProjectProjection.projectBySegmentId;
+  const flowProjectLegend = useMemo(
+    () => {
+      const assignedIds = new Set(selectedDayProjectProjection.projectBySegmentId.values());
+      const entries: ProjectLegendEntry[] = projectClassification.projects
+        .filter((project) => project.status === "active" && assignedIds.has(project.id))
+        .map((project) => ({ projectId: project.id, name: project.name, color: project.color }));
+      const hasUnassigned = selectedDayProjectProjection.segments.some(
+        (segment) => !selectedDayProjectProjection.projectBySegmentId.has(segment.id),
+      );
+      if (hasUnassigned || entries.length === 0) {
+        entries.push({ projectId: null, name: FLOW_NO_PROJECT_LABEL, color: NO_PROJECT_COLOR });
+      }
+      return entries;
+    },
+    [projectClassification.projects, selectedDayProjectProjection.projectBySegmentId, selectedDayProjectProjection.segments],
   );
-  // segment.id → projectId for the selected day (assigned only), for the Projects
-  // page charts + dashboard donut.
-  const selectedDayProjectBySegmentId = useMemo(
-    () => new Map(
-      projectClassification.assignments
-        .filter((assignment) => assignment.projectId)
-        .map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
-    ),
-    [projectClassification.assignments],
-  );
+  const selectedDayProjectBySegmentId = selectedDayProjectProjection.projectBySegmentId;
   // The Projects tab isn't the Trends tab, so the rolling insight segments aren't
   // loaded here. Load a dedicated trend window (segments + assignments) for the
   // project trend chart + table, refreshing whenever a pass finishes. The window
@@ -4520,7 +4561,12 @@ export default function App() {
   // the page reports its window, so the first load is the one that gets drawn
   // (the sidecar serializes requests, so a discarded speculative fetch would
   // delay the real one behind it).
-  const [projectsTrend, setProjectsTrend] = useState<{ readonly segments: ActivitySegment[]; readonly assignments: ProjectAssignmentRecord[]; readonly loadedRange: { readonly startDay: string; readonly endDay: string } | null }>({ segments: [], assignments: [], loadedRange: null });
+  const [projectsTrend, setProjectsTrend] = useState<{
+    readonly segments: ActivitySegment[];
+    readonly assignments: ProjectAssignmentRecord[];
+    readonly windowAssignments: ProjectWindowAssignmentRecord[];
+    readonly loadedRange: { readonly startDay: string; readonly endDay: string } | null;
+  }>({ segments: [], assignments: [], windowAssignments: [], loadedRange: null });
   const [projectsTrendRange, setProjectsTrendRange] = useState<{ readonly startDay: string; readonly endDay: string } | null>(null);
   const handleProjectsTrendWindowChange = useCallback((next: { readonly startDay: string; readonly endDay: string }) => {
     setProjectsTrendRange((previous) =>
@@ -4534,37 +4580,36 @@ export default function App() {
     const range = getLogicalDayRange(startDay, endDay, startOfDayMinutes);
     void (async () => {
       try {
-        const [segments, assignments] = await Promise.all([
+        const [segments, assignments, windowAssignments] = await Promise.all([
           // Slim per-segment view (identity/timing/app/site only): the full
           // timeline payload is ~7x larger and multi-day windows made the tab
           // visibly slow to load.
           trackerClient.getProjectTrendTimeline?.(range) ?? trackerClient.getTimeline(range),
           trackerClient.getProjectAssignments?.(range) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
+          trackerClient.getProjectWindowAssignments(range),
         ]);
-        if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [], loadedRange: { startDay, endDay } });
+        if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [], windowAssignments, loadedRange: { startDay, endDay } });
       } catch {
-        if (!cancelled) setProjectsTrend({ segments: [], assignments: [], loadedRange: { startDay, endDay } });
+        if (!cancelled) setProjectsTrend({ segments: [], assignments: [], windowAssignments: [], loadedRange: { startDay, endDay } });
       }
     })();
     return () => { cancelled = true; };
   }, [activeTab, startOfDayMinutes, projectClassification.running, projectsTrendRange, trackerClient]); // eslint-disable-line react-hooks/exhaustive-deps
-  const projectsTrendProjectBySegmentId = useMemo(
-    () => new Map(
-      projectsTrend.assignments
-        .filter((assignment) => assignment.projectId)
-        .map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
+  const projectsTrendProjection = useMemo(
+    () => buildPersonalProjectSliceProjection(
+      projectsTrend.segments,
+      projectsTrend.windowAssignments,
+      projectsTrend.assignments,
     ),
-    [projectsTrend.assignments],
+    [projectsTrend.assignments, projectsTrend.segments, projectsTrend.windowAssignments],
   );
+  const projectsTrendProjectBySegmentId = projectsTrendProjection.projectBySegmentId;
   // Per-project split of the selected day, for the dashboard donut's Project mode
   // (the flow chart's Project toggle swaps the productivity donut to this).
   const dashboardProjectRing = useMemo(() => {
-    const assignmentBySegment = new Map(
-      projectClassification.assignments.filter((assignment) => assignment.projectId).map((assignment) => [assignment.segmentId, assignment.projectId as string] as const),
-    );
     const secondsByProject = new Map<string, number>();
-    for (const segment of effectiveSelectedDaySegments) {
-      const projectId = assignmentBySegment.get(segment.id);
+    for (const segment of selectedDayProjectProjection.segments) {
+      const projectId = selectedDayProjectProjection.projectBySegmentId.get(segment.id);
       if (projectId) secondsByProject.set(projectId, (secondsByProject.get(projectId) ?? 0) + segment.durationSeconds);
     }
     const projectById = new Map(projectClassification.projects.map((project) => [project.id, project]));
@@ -4585,8 +4630,8 @@ export default function App() {
       });
     const centerPercent = total > 0 ? Math.round(((entries[0]?.totalSeconds ?? 0) / total) * 100) : 0;
     return { entries, centerPercent };
-  }, [effectiveSelectedDaySegments, projectClassification.assignments, projectClassification.projects]);
-  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
+  }, [projectClassification.projects, selectedDayProjectProjection.projectBySegmentId, selectedDayProjectProjection.segments]);
+  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment, selectedDayProjectProjection.segments), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, selectedDayProjectProjection.segments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
   const [projectPassConsented, setProjectPassConsented] = useState(() => {
     try {
       return typeof window !== "undefined" && window.localStorage.getItem(PROJECT_PASS_CONSENT_STORAGE_KEY) === "1";
@@ -6012,7 +6057,7 @@ export default function App() {
             deviceTimelineFilter={deviceTimelineFilter}
             onDeviceTimelineFilterChange={setDeviceTimelineFilter}
             projectModeAvailable={projectClassification.projectModeAvailable}
-            projectLegend={projectClassification.projectLegend}
+            projectLegend={flowProjectLegend}
             flowProjectRingEntries={dashboardProjectRing.entries}
             flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
@@ -6144,9 +6189,9 @@ export default function App() {
             assignments={projectClassification.assignments}
             selectedDay={selectedDay}
             startOfDayMinutes={startOfDayMinutes}
-            daySegments={effectiveSelectedDaySegments}
+            daySegments={selectedDayProjectProjection.segments}
             dayProjectBySegmentId={selectedDayProjectBySegmentId}
-            trendSegments={projectsTrend.segments}
+            trendSegments={projectsTrendProjection.segments}
             trendProjectBySegmentId={projectsTrendProjectBySegmentId}
             trendLoadedRange={projectsTrend.loadedRange}
             projectsLoading={projectClassification.projectsLoading}
@@ -6156,6 +6201,10 @@ export default function App() {
             analysisSetup={analysisModel.analysisSetup}
             consentOpen={projectPassConsentOpen}
             consentProviderLabel={analysisProviderLabel}
+            consentIncludesSiteUrl={projectPassPrivacySettings.optional.siteUrl}
+            consentIncludesWindowTitles={projectPassPrivacySettings.optional.windowTitle}
+            consentIncludesContentContext={projectPassPrivacySettings.optional.contentContext}
+            consentStoresCloudSamples={analysisModel.analysisSetup.provider === "cloud"}
             onTrendWindowChange={handleProjectsTrendWindowChange}
             onConfigureModel={() => {
               navigateToTab("settings");

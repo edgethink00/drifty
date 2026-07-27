@@ -56,6 +56,8 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_delete_project_anchor",
   "tracker_save_project_assignments",
   "tracker_get_project_assignments",
+  "tracker_save_project_window_assignments",
+  "tracker_get_project_window_assignments",
   "tracker_get_team_projects",
   "tracker_upsert_team_projects",
   "tracker_save_team_project_assignments",

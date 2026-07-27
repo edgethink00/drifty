@@ -6,7 +6,10 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 export interface ProjectPassConsentModalProps {
   readonly open: boolean;
   readonly providerLabel: string;
-  readonly includesTitles: boolean;
+  readonly includesSiteUrl: boolean;
+  readonly includesWindowTitles: boolean;
+  readonly includesContentContext: boolean;
+  readonly storesCloudSamples: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }
@@ -17,7 +20,10 @@ const DESCRIPTION_ID = "project-pass-consent-description";
 export function ProjectPassConsentModal({
   open,
   providerLabel,
-  includesTitles,
+  includesSiteUrl,
+  includesWindowTitles,
+  includesContentContext,
+  storesCloudSamples,
   onConfirm,
   onCancel,
 }: ProjectPassConsentModalProps): JSX.Element | null {
@@ -28,7 +34,10 @@ export function ProjectPassConsentModal({
   return (
     <ProjectPassConsentDialog
       providerLabel={providerLabel}
-      includesTitles={includesTitles}
+      includesSiteUrl={includesSiteUrl}
+      includesWindowTitles={includesWindowTitles}
+      includesContentContext={includesContentContext}
+      storesCloudSamples={storesCloudSamples}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />
@@ -37,7 +46,10 @@ export function ProjectPassConsentModal({
 
 function ProjectPassConsentDialog({
   providerLabel,
-  includesTitles,
+  includesSiteUrl,
+  includesWindowTitles,
+  includesContentContext,
+  storesCloudSamples,
   onConfirm,
   onCancel,
 }: Omit<ProjectPassConsentModalProps, "open">): JSX.Element {
@@ -66,16 +78,23 @@ function ProjectPassConsentDialog({
 
         <ul className="project-pass-consent-modal__points">
           <li>
-            A compacted 3-minute activity-window summary — app, site, time, duration, plus your
-            project descriptions and work profile — is sent to <strong>{providerLabel}</strong>.
+            Each 3-minute activity window is classified independently. App, site domain, time,
+            duration, project descriptions, and your enabled work profile are sent to <strong>{providerLabel}</strong>.
           </li>
           <li>
             It never sends your raw history beyond that summary. Full timeline rows and session history
             stay on your Mac, and your existing AI privacy settings still apply.
           </li>
-          {includesTitles ? null : (
-            <li>Page and video titles are excluded, because you turned off content context.</li>
-          )}
+          <li>
+            Optional context currently included: {[
+              includesSiteUrl ? "page URL path" : null,
+              includesWindowTitles ? "window title" : null,
+              includesContentContext ? "page/video title, Reddit community, and video metadata" : null,
+            ].filter(Boolean).join(", ") || "none"}.
+          </li>
+          {storesCloudSamples ? (
+            <li>The same minimized and masked input/result sample may be stored in Drifty Cloud for classification quality improvement.</li>
+          ) : null}
         </ul>
 
         <div className="modal-foot project-pass-consent-modal__actions">

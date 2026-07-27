@@ -62,6 +62,10 @@ export interface ProjectsPageProps {
   readonly analysisSetup: AnalysisAiSetupState;
   readonly consentOpen: boolean;
   readonly consentProviderLabel: string;
+  readonly consentIncludesSiteUrl: boolean;
+  readonly consentIncludesWindowTitles: boolean;
+  readonly consentIncludesContentContext: boolean;
+  readonly consentStoresCloudSamples: boolean;
   readonly onTrendWindowChange: (range: { readonly startDay: string; readonly endDay: string }) => void;
   readonly onConfigureModel: () => void;
   readonly onSaveProject: (input: ProjectInput) => void;
@@ -283,7 +287,10 @@ export function ProjectsPage(props: ProjectsPageProps) {
       <ProjectPassConsentModal
         open={props.consentOpen}
         providerLabel={props.consentProviderLabel}
-        includesTitles={false}
+        includesSiteUrl={props.consentIncludesSiteUrl}
+        includesWindowTitles={props.consentIncludesWindowTitles}
+        includesContentContext={props.consentIncludesContentContext}
+        storesCloudSamples={props.consentStoresCloudSamples}
         onConfirm={props.onConsentConfirm}
         onCancel={props.onConsentCancel}
       />

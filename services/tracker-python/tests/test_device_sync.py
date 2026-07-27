@@ -426,6 +426,37 @@ class ApplySyncedSegmentsTests(DeviceSyncTestCase):
         self.assertEqual(len(remaining), 1)
         self.assertIsNone(remaining[0]["origin_device_id"])
 
+    def test_purge_remote_segments_removes_referencing_project_windows(self) -> None:
+        self.database.apply_synced_segments([
+            self._remote_segment(
+                "99999999-0000-0000-0000-000000000009",
+                started_at="2026-07-06T09:00:00+00:00",
+                ended_at="2026-07-06T09:03:00+00:00",
+            )
+        ])
+        with self.database.connect() as conn:
+            remote_segment_id = str(
+                conn.execute(
+                    "SELECT id FROM activity_segments WHERE origin_device_id IS NOT NULL"
+                ).fetchone()["id"]
+            )
+        self.database.save_project_window_assignments([
+            {
+                "windowId": "window:2026-07-06T09:00:00+00:00",
+                "windowStartedAt": "2026-07-06T09:00:00+00:00",
+                "windowEndedAt": "2026-07-06T09:03:00+00:00",
+                "durationSeconds": 180,
+                "segmentOverlaps": [
+                    {"segmentId": remote_segment_id, "durationSeconds": 180}
+                ],
+                "projectId": None,
+                "teamProjectId": None,
+            }
+        ])
+
+        self.assertEqual(self.database.purge_remote_segments(), 1)
+        self.assertEqual(self.database.get_project_window_assignments(), [])
+
 
 class SyncDeletionTests(DeviceSyncTestCase):
     def test_delete_activity_segments_records_uid_tombstone(self) -> None:

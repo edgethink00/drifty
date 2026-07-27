@@ -31,6 +31,7 @@ import type {
   ProjectPassRun,
   ProjectPassRunInput,
   ProjectPassRunRecord,
+  ProjectWindowAssignmentRecord,
   AiReviewEvent,
   AiReviewEventInput,
   AiReviewEventRevertResult,
@@ -378,6 +379,14 @@ export const trackerClient: TrackerApi = {
   },
   async getProjectAssignments(query: TimelineQuery) {
     const result = await safeInvoke("tracker_get_project_assignments", { query });
+    return result ?? [];
+  },
+  async saveProjectWindowAssignments(assignments: ProjectWindowAssignmentRecord[]) {
+    const result = await safeInvoke("tracker_save_project_window_assignments", { query: { assignments } });
+    return result ?? { saved: 0, skippedManual: 0 };
+  },
+  async getProjectWindowAssignments(query: TimelineQuery) {
+    const result = await safeInvoke("tracker_get_project_window_assignments", { query });
     return result ?? [];
   },
   async getTeamProjects() {

@@ -2498,6 +2498,95 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["projectId"])
 
+    def test_project_window_assignment_roundtrip_upsert_and_range(self) -> None:
+        project_a = self.database.save_project({"name": "A", "description": "a"})["id"]
+        project_b = self.database.save_project({"name": "B", "description": "b"})["id"]
+        seg_day1 = self._insert_segment_returning_id(
+            "2026-04-06T09:00:00+00:00", "2026-04-06T09:06:00+00:00"
+        )
+        seg_day2 = self._insert_segment_returning_id(
+            "2026-04-07T09:00:00+00:00", "2026-04-07T09:03:00+00:00"
+        )
+        first = self.database.save_project_window_assignments(
+            [
+                {
+                    "windowId": "w0",
+                    "windowStartedAt": "2026-04-06T09:00:00+00:00",
+                    "windowEndedAt": "2026-04-06T09:03:00+00:00",
+                    "durationSeconds": 180,
+                    "segmentOverlaps": [{"segmentId": seg_day1, "durationSeconds": 180}],
+                    "projectId": project_a,
+                    "teamProjectId": None,
+                    "confidence": 0.91,
+                    "chunkFingerprint": "pp-a",
+                },
+                {
+                    "windowId": "w1",
+                    "windowStartedAt": "2026-04-07T09:00:00+00:00",
+                    "windowEndedAt": "2026-04-07T09:03:00+00:00",
+                    "durationSeconds": 180,
+                    "segmentOverlaps": [{"segmentId": seg_day2, "durationSeconds": 180}],
+                    "projectId": project_a,
+                    "teamProjectId": None,
+                },
+            ]
+        )
+        self.assertEqual(first, {"saved": 2, "skippedManual": 0})
+
+        # The fixed window start is the stable local key, so rerunning that window
+        # updates one row instead of accumulating competing decisions.
+        self.database.save_project_window_assignments(
+            [
+                {
+                    "windowId": "w99",
+                    "windowStartedAt": "2026-04-06T09:00:00+00:00",
+                    "windowEndedAt": "2026-04-06T09:03:00+00:00",
+                    "durationSeconds": 180,
+                    "segmentOverlaps": [{"segmentId": seg_day1, "durationSeconds": 180}],
+                    "projectId": project_b,
+                    "teamProjectId": None,
+                    "confidence": 0.95,
+                    "chunkFingerprint": "pp-b",
+                }
+            ]
+        )
+        day1 = self.database.get_project_window_assignments(
+            "2026-04-06T00:00:00+00:00", "2026-04-07T00:00:00+00:00"
+        )
+        self.assertEqual(len(day1), 1)
+        self.assertEqual(day1[0]["windowId"], "w99")
+        self.assertEqual(day1[0]["projectId"], project_b)
+        self.assertEqual(day1[0]["segmentOverlaps"], [{"segmentId": str(seg_day1), "durationSeconds": 180}])
+        self.assertEqual(day1[0]["chunkFingerprint"], "pp-b")
+
+        self.database.delete_project(project_b)
+        self.assertIsNone(self.database.get_project_window_assignments("2026-04-06")[0]["projectId"])
+
+    def test_project_window_assignment_routes_team_project_exclusively(self) -> None:
+        self.database.upsert_team_projects(
+            "org-1", [{"id": "tp-a", "name": "A", "description": "d"}]
+        )
+        seg = self._insert_segment_returning_id(
+            "2026-04-06T09:00:00+00:00", "2026-04-06T09:03:00+00:00"
+        )
+        result = self.database.save_project_window_assignments(
+            [
+                {
+                    "windowId": "w0",
+                    "windowStartedAt": "2026-04-06T09:00:00+00:00",
+                    "windowEndedAt": "2026-04-06T09:03:00+00:00",
+                    "durationSeconds": 180,
+                    "segmentOverlaps": [{"segmentId": seg, "durationSeconds": 180}],
+                    "projectId": None,
+                    "teamProjectId": "tp-a",
+                }
+            ]
+        )
+        self.assertEqual(result["saved"], 1)
+        row = self.database.get_project_window_assignments("2026-04-06")[0]
+        self.assertIsNone(row["projectId"])
+        self.assertEqual(row["teamProjectId"], "tp-a")
+
     def test_team_project_upsert_and_get(self) -> None:
         result = self.database.upsert_team_projects(
             "org-1",

@@ -1,7 +1,7 @@
 import type { ProjectAnchor } from "./commands";
 import { formatProjectPassAnalysisWindowLine, type ProjectPassAnalysisWindow } from "./projectPassWindow";
 
-export const PROJECT_PASS_PROMPT_VERSION = "pp-v3";
+export const PROJECT_PASS_PROMPT_VERSION = "pp-v4-fixed-windows-title-context";
 
 export const PROJECT_ASSIGNMENT_MIN_CONFIDENCE = 0.6;
 
@@ -72,6 +72,10 @@ export function buildProjectPassPrompt(input: ProjectPassPromptInput): string {
     afterContextLines,
     "",
     "Rules:",
+    "- Treat every core window as an independent decision. A title or task change may",
+    "  change the project even when adjacent windows use the same app or domain.",
+    "- Return exactly one assignment item for every core window id, using projectId null",
+    "  when the window belongs to no project.",
     "- Assign each window to at most one project id, or null when it belongs to none",
     "  (personal, generic browsing, entertainment unrelated to any project). Use",
     "  surrounding windows as context, not just the window in isolation.",

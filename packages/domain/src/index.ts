@@ -8,4 +8,5 @@ export * from "./productivityRubric";
 export * from "./projectPassWindow";
 export * from "./projectRun";
 export * from "./projectPassPrompt";
+export * from "./projectWindowAssignments";
 export * from "./youtubeClassification";

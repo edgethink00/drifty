@@ -1,5 +1,6 @@
 import type { ActivityCategory, ActivitySegment, CurrentActivitySnapshot, HourBucket, ProductivityLabel, SiteDuration, StoredClassificationSource, TrackerStatus } from "./activity";
 import type { AdaptiveContextSourceFamily } from "./adaptiveContentContext";
+import type { ProjectPassWindowSegmentOverlap } from "./projectPassWindow";
 
 export const trackerInvokeCommands = [
   "tracker_get_status",
@@ -36,6 +37,8 @@ export const trackerInvokeCommands = [
   "tracker_delete_project_anchor",
   "tracker_save_project_assignments",
   "tracker_get_project_assignments",
+  "tracker_save_project_window_assignments",
+  "tracker_get_project_window_assignments",
   "tracker_get_team_projects",
   "tracker_upsert_team_projects",
   "tracker_save_team_project_assignments",
@@ -125,6 +128,11 @@ export type TrackerCommandMap = {
     result: ProjectAssignmentsSaveResult;
   };
   tracker_get_project_assignments: { args: { query: TimelineQuery }; result: ProjectAssignmentRecord[] };
+  tracker_save_project_window_assignments: {
+    args: { query: { assignments: ProjectWindowAssignmentRecord[] } };
+    result: ProjectAssignmentsSaveResult;
+  };
+  tracker_get_project_window_assignments: { args: { query: TimelineQuery }; result: ProjectWindowAssignmentRecord[] };
   tracker_get_team_projects: { args: undefined; result: TeamProject[] };
   tracker_upsert_team_projects: {
     args: { query: { organizationId: string; projects: TeamProjectInput[] } };
@@ -488,6 +496,28 @@ export interface ProjectAssignmentRecord {
   stale?: boolean | null;
 }
 
+/**
+ * AI project attribution at the fixed analysis-window grain. Raw activity stays
+ * in activity_segments; this row stores only the local window boundary, the
+ * segment overlap weights needed for projection, and the model decision.
+ */
+export interface ProjectWindowAssignmentRecord {
+  windowId: string;
+  windowStartedAt: string;
+  windowEndedAt: string;
+  durationSeconds: number;
+  segmentOverlaps: ProjectPassWindowSegmentOverlap[];
+  projectId: string | null;
+  teamProjectId: string | null;
+  source: "ai";
+  confidence?: number | null;
+  reason?: string | null;
+  passId?: number | null;
+  chunkFingerprint?: string | null;
+  assignedAt?: string | null;
+  stale?: boolean | null;
+}
+
 export interface ProjectAssignmentsSaveResult {
   saved: number;
   skippedManual: number;
@@ -713,6 +743,8 @@ export interface TrackerApi {
   deleteProjectAnchor(projectId: string, kind: ProjectAnchorKind, value: string): Promise<{ deleted: number }>;
   saveProjectAssignments(assignments: ProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
   getProjectAssignments(query: TimelineQuery): Promise<ProjectAssignmentRecord[]>;
+  saveProjectWindowAssignments(assignments: ProjectWindowAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;
+  getProjectWindowAssignments(query: TimelineQuery): Promise<ProjectWindowAssignmentRecord[]>;
   getTeamProjects(): Promise<TeamProject[]>;
   upsertTeamProjects(organizationId: string, projects: TeamProjectInput[]): Promise<TeamProject[]>;
   saveTeamProjectAssignments(assignments: TeamProjectAssignmentRecord[]): Promise<ProjectAssignmentsSaveResult>;

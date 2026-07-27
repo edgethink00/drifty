@@ -6,6 +6,7 @@ import {
   type ProjectAssignmentRecord,
   type ProjectInput,
   type ProjectPassRun,
+  type ProjectWindowAssignmentRecord,
   type TrackerApi,
 } from "@drifty/domain";
 import { NO_PROJECT_COLOR, projectColorBySegment as deriveColorBySegment, projectColorMap, projectFlowLegend, type ProjectLegendEntry } from "../flow-chart/projectFlowView";
@@ -13,6 +14,7 @@ import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { createProjectPassInference } from "./projectPassInference";
 import { resolveClassificationWorkProfileForPrompt } from "./aiClassificationService";
 import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
+import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 export type ScheduledProjectPassFailureCategory =
   | "configuration"
   | "network"
@@ -83,8 +85,12 @@ export interface UseProjectClassificationResult {
   readonly projects: Project[];
   readonly projectsLoading: boolean;
   readonly assignments: ProjectAssignmentRecord[];
+  /** Fixed-window AI assignments for the selected day. */
+  readonly windowAssignments: ProjectWindowAssignmentRecord[];
   /** Project assignments across the whole Trends insight window (empty when no insightRange). */
   readonly insightAssignments: ProjectAssignmentRecord[];
+  /** Fixed-window AI assignments across the whole Trends insight window. */
+  readonly insightWindowAssignments: ProjectWindowAssignmentRecord[];
   readonly projectColorBySegment: Map<string, string>;
   readonly projectLegend: ProjectLegendEntry[];
   readonly projectModeAvailable: boolean;
@@ -137,7 +143,9 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [assignments, setAssignments] = useState<ProjectAssignmentRecord[]>([]);
+  const [windowAssignments, setWindowAssignments] = useState<ProjectWindowAssignmentRecord[]>([]);
   const [insightAssignments, setInsightAssignments] = useState<ProjectAssignmentRecord[]>([]);
+  const [insightWindowAssignments, setInsightWindowAssignments] = useState<ProjectWindowAssignmentRecord[]>([]);
   const [passRuns, setPassRuns] = useState<ProjectPassRun[]>([]);
   const [aiReviewEvents, setAiReviewEvents] = useState<AiReviewEvent[]>([]);
   const [running, setRunning] = useState(false);
@@ -177,18 +185,28 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     );
 
     if (selectedDayRangeStart === null || selectedDayRangeEnd === null) {
-      if (isCurrentRequest()) setAssignments([]);
+      if (isCurrentRequest()) {
+        setAssignments([]);
+        setWindowAssignments([]);
+      }
       return;
     }
 
     try {
-      const nextAssignments = await tracker.getProjectAssignments?.({
-        start: selectedDayRangeStart,
-        end: selectedDayRangeEnd,
-      });
-      if (isCurrentRequest()) setAssignments(nextAssignments ?? []);
+      const range = { start: selectedDayRangeStart, end: selectedDayRangeEnd };
+      const [nextAssignments, nextWindowAssignments] = await Promise.all([
+        tracker.getProjectAssignments?.(range),
+        tracker.getProjectWindowAssignments(range),
+      ]);
+      if (isCurrentRequest()) {
+        setAssignments(nextAssignments ?? []);
+        setWindowAssignments(nextWindowAssignments ?? []);
+      }
     } catch {
-      if (isCurrentRequest()) setAssignments([]);
+      if (isCurrentRequest()) {
+        setAssignments([]);
+        setWindowAssignments([]);
+      }
     }
   }, [tracker, selectedDayRangeStart, selectedDayRangeEnd]);
 
@@ -201,18 +219,28 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     );
 
     if (!insightRangeStart || !insightRangeEnd) {
-      if (isCurrentRequest()) setInsightAssignments([]);
+      if (isCurrentRequest()) {
+        setInsightAssignments([]);
+        setInsightWindowAssignments([]);
+      }
       return;
     }
 
     try {
-      const nextAssignments = await tracker.getProjectAssignments?.({
-        start: insightRangeStart,
-        end: insightRangeEnd,
-      });
-      if (isCurrentRequest()) setInsightAssignments(nextAssignments ?? []);
+      const range = { start: insightRangeStart, end: insightRangeEnd };
+      const [nextAssignments, nextWindowAssignments] = await Promise.all([
+        tracker.getProjectAssignments?.(range),
+        tracker.getProjectWindowAssignments(range),
+      ]);
+      if (isCurrentRequest()) {
+        setInsightAssignments(nextAssignments ?? []);
+        setInsightWindowAssignments(nextWindowAssignments ?? []);
+      }
     } catch {
-      if (isCurrentRequest()) setInsightAssignments([]);
+      if (isCurrentRequest()) {
+        setInsightAssignments([]);
+        setInsightWindowAssignments([]);
+      }
     }
   }, [tracker, insightRangeStart, insightRangeEnd]);
 
@@ -277,8 +305,8 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const projectColorBySegmentMap = useMemo(() => deriveColorBySegment(assignments, colors), [assignments, colors]);
   const projectLegend = useMemo(() => projectFlowLegend(projects, assignments), [projects, assignments]);
   const projectModeAvailable = useMemo(
-    () => projects.some((project) => project.status === "active") && assignments.length > 0,
-    [projects, assignments],
+    () => projects.some((project) => project.status === "active") && (assignments.length > 0 || windowAssignments.length > 0),
+    [projects, assignments, windowAssignments],
   );
 
   const buildInference = useCallback(async () => {
@@ -298,8 +326,9 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
       setProgress(null);
       try {
         const inference = await buildInference();
+        const privacySettings = readAiPrivacyRequestSettings();
         // Privacy-gated; never let a work-profile read failure block the pass.
-        const workProfile = await resolveClassificationWorkProfileForPrompt(true).catch(() => null);
+        const workProfile = await resolveClassificationWorkProfileForPrompt(privacySettings.optional.workProfile).catch(() => null);
         const summary = await runProjectPass({
           range: effectiveRange,
           trigger: range ? "backfill" : "manual",
@@ -307,16 +336,23 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
           inference,
           now,
           workProfile,
+          contextPolicy: {
+            siteUrl: privacySettings.optional.siteUrl,
+            windowTitle: privacySettings.optional.windowTitle,
+            contentContext: privacySettings.optional.contentContext,
+          },
           startOfDayMinutes: args.startOfDayMinutes,
           onProgress: (done, total) => setProgress({ done, total }),
         });
         setLastRunSummary(summary);
         // A pass can "succeed" with nothing to show — surface that instead of
         // silently returning to the button so the user isn't left guessing.
-        if (!summary.ran) {
+        if (!summary.ran && summary.skippedReason !== "already analyzed") {
           setRunError(summary.skippedReason ? `Nothing to analyze — ${summary.skippedReason}.` : "Nothing to analyze in this range.");
         } else if (summary.assignments === 0 && summary.corrections === 0) {
-          setRunError("The analysis model returned no results. Check that your Intelligence model is set up (API key + model) under Configure in AI setup, then try again.");
+          if (summary.ran) {
+            setRunError("The analysis model returned no results. Check that your Intelligence model is set up (API key + model) under Configure in AI setup, then try again.");
+          }
         }
         await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
       } catch (error) {
@@ -337,7 +373,8 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
 
       try {
         const inference = await buildInference();
-        const workProfile = await resolveClassificationWorkProfileForPrompt(true).catch(() => null);
+        const privacySettings = readAiPrivacyRequestSettings();
+        const workProfile = await resolveClassificationWorkProfileForPrompt(privacySettings.optional.workProfile).catch(() => null);
         const summary = await runProjectPass({
           range,
           trigger,
@@ -345,6 +382,11 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
           inference,
           now,
           workProfile,
+          contextPolicy: {
+            siteUrl: privacySettings.optional.siteUrl,
+            windowTitle: privacySettings.optional.windowTitle,
+            contentContext: privacySettings.optional.contentContext,
+          },
           startOfDayMinutes: args.startOfDayMinutes,
         });
         // Only refresh views when the pass actually did work; the chunk-fingerprint
@@ -428,7 +470,9 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     projects,
     projectsLoading,
     assignments,
+    windowAssignments,
     insightAssignments,
+    insightWindowAssignments,
     projectColorBySegment: projectColorBySegmentMap,
     projectLegend,
     projectModeAvailable,

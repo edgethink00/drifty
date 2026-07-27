@@ -71,6 +71,8 @@
     "allow-tracker-delete-project-anchor",
     "allow-tracker-save-project-assignments",
     "allow-tracker-get-project-assignments",
+    "allow-tracker-save-project-window-assignments",
+    "allow-tracker-get-project-window-assignments",
     "allow-tracker-get-team-projects",
     "allow-tracker-upsert-team-projects",
     "allow-tracker-save-team-project-assignments",

@@ -1,7 +1,9 @@
 import {
+  buildTeamProjectSliceProjection,
   isRemoteDeviceSegment,
   logicalDayIsoDateForDate,
   type ActivitySegment,
+  type ProjectWindowAssignmentRecord,
   type TeamProjectAssignmentRecord,
 } from "@drifty/domain";
 import type { TeamProjectTotalsEntry } from "./teamTypes";
@@ -19,27 +21,18 @@ export function aggregateTeamProjectDayTotals(
   assignments: readonly TeamProjectAssignmentRecord[],
   segments: readonly ActivitySegment[],
   startOfDayMinutes = 0,
+  windowAssignments: readonly ProjectWindowAssignmentRecord[] = [],
 ): TeamProjectTotalsEntry[] {
-  if (assignments.length === 0) return [];
-
-  const durationBySegmentId = new Map<string, number>();
-  const startBySegmentId = new Map<string, string>();
-  for (const segment of segments) {
-    if (isRemoteDeviceSegment(segment)) continue;
-    durationBySegmentId.set(segment.id, segment.durationSeconds ?? 0);
-    startBySegmentId.set(segment.id, segment.startedAt);
-  }
+  const localSegments = segments.filter((segment) => !isRemoteDeviceSegment(segment));
+  const projection = buildTeamProjectSliceProjection(localSegments, windowAssignments, assignments);
 
   const totals = new Map<string, number>();
-  for (const assignment of assignments) {
-    if (assignment.stale) continue;
-    const projectId = assignment.teamProjectId;
+  for (const segment of projection.segments) {
+    const projectId = projection.projectBySegmentId.get(segment.id);
     if (!projectId) continue;
-    const seconds = durationBySegmentId.get(assignment.segmentId) ?? 0;
+    const seconds = segment.durationSeconds ?? 0;
     if (seconds <= 0) continue;
-    const startedAt = startBySegmentId.get(assignment.segmentId);
-    if (!startedAt) continue;
-    const day = logicalDayIsoDateForDate(new Date(startedAt), startOfDayMinutes);
+    const day = logicalDayIsoDateForDate(new Date(segment.startedAt), startOfDayMinutes);
     const key = `${projectId}\n${day}`;
     totals.set(key, (totals.get(key) ?? 0) + seconds);
   }

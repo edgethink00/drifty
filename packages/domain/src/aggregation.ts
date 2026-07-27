@@ -531,7 +531,16 @@ function flowBlockDescriptorFromSegment(
   } as const;
 }
 
-export function buildFlowBlocks(segments: ActivitySegment[], day: string, intervalMinutes: FlowIntervalMinutes = 5, options?: ClassificationOptions, startOfDayMinutes = 0, projectColorBySegment?: ReadonlyMap<string, string>, projectIdBySegment?: ReadonlyMap<string, string>): FlowBlock[] {
+export function buildFlowBlocks(
+  segments: ActivitySegment[],
+  day: string,
+  intervalMinutes: FlowIntervalMinutes = 5,
+  options?: ClassificationOptions,
+  startOfDayMinutes = 0,
+  projectColorBySegment?: ReadonlyMap<string, string>,
+  projectIdBySegment?: ReadonlyMap<string, string>,
+  projectSegments?: readonly ActivitySegment[],
+): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
   const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
@@ -589,7 +598,66 @@ export function buildFlowBlocks(segments: ActivitySegment[], day: string, interv
     }
   }
 
-  return Array.from(blocks.values()).sort((left, right) => logicalMinuteOfDay(left.minuteOfDay, boundaryMinutes) - logicalMinuteOfDay(right.minuteOfDay, boundaryMinutes));
+  const projectByBucket = projectSegments
+    ? dominantProjectByFlowBucket(
+        projectSegments,
+        day,
+        intervalMinutes,
+        boundaryMinutes,
+        projectColorBySegment,
+        projectIdBySegment,
+      )
+    : null;
+  return Array.from(blocks.values())
+    .map((block) => {
+      const project = projectByBucket?.get(`${block.day}-${block.minuteOfDay}`);
+      return project
+        ? { ...block, projectId: project.projectId, projectColor: project.projectColor }
+        : block;
+    })
+    .sort((left, right) => logicalMinuteOfDay(left.minuteOfDay, boundaryMinutes) - logicalMinuteOfDay(right.minuteOfDay, boundaryMinutes));
+}
+
+type ProjectFlowBucketWeight = {
+  readonly projectId: string | null;
+  readonly projectColor: string | null;
+  durationSeconds: number;
+};
+
+function dominantProjectByFlowBucket(
+  projectSegments: readonly ActivitySegment[],
+  day: string,
+  intervalMinutes: FlowIntervalMinutes,
+  boundaryMinutes: number,
+  projectColorBySegment?: ReadonlyMap<string, string>,
+  projectIdBySegment?: ReadonlyMap<string, string>,
+): Map<string, ProjectFlowBucketWeight> {
+  const weights = new Map<string, Map<string, ProjectFlowBucketWeight>>();
+  forEachFlowBucketContribution(
+    [...projectSegments],
+    day,
+    intervalMinutes,
+    boundaryMinutes,
+    ({ segment, bucketKey, overlapSeconds }) => {
+      const projectId = projectIdBySegment?.get(segment.id) ?? null;
+      const projectColor = projectColorBySegment?.get(segment.id) ?? null;
+      const projectKey = projectId ?? "";
+      const byProject = weights.get(bucketKey) ?? new Map<string, ProjectFlowBucketWeight>();
+      const current = byProject.get(projectKey) ?? { projectId, projectColor, durationSeconds: 0 };
+      current.durationSeconds += overlapSeconds;
+      byProject.set(projectKey, current);
+      weights.set(bucketKey, byProject);
+    },
+  );
+
+  const dominant = new Map<string, ProjectFlowBucketWeight>();
+  for (const [bucketKey, byProject] of weights) {
+    for (const candidate of byProject.values()) {
+      const current = dominant.get(bucketKey);
+      if (!current || candidate.durationSeconds > current.durationSeconds) dominant.set(bucketKey, candidate);
+    }
+  }
+  return dominant;
 }
 
 type FlowVisibleCandidate = {

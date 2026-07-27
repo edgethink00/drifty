@@ -24,6 +24,10 @@ function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProp
     analysisSetup: DEFAULT_ANALYSIS_AI_SETUP,
     consentOpen: false,
     consentProviderLabel: "Custom endpoint",
+    consentIncludesSiteUrl: true,
+    consentIncludesWindowTitles: true,
+    consentIncludesContentContext: true,
+    consentStoresCloudSamples: false,
     onTrendWindowChange: vi.fn(),
     onConfigureModel: vi.fn(),
     onSaveProject: vi.fn(),
@@ -36,12 +40,12 @@ function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProp
 }
 
 describe("ProjectsPage", () => {
-  it("shows that project-pass titles are excluded in the consent modal", () => {
+  it("shows the current project-pass context scope in the consent modal", () => {
     render(<ProjectsPage {...baseProps({ consentOpen: true })} />);
 
     expect(screen.getByRole("dialog", { name: /Turn on project analysis/i })).toBeTruthy();
-    expect(screen.getByText(/compacted 3-minute activity-window summary/i)).toBeTruthy();
-    expect(screen.getByText(/titles are excluded/i)).toBeTruthy();
+    expect(screen.getByText(/Each 3-minute activity window is classified independently/i)).toBeTruthy();
+    expect(screen.getByText(/window title, page\/video title/i)).toBeTruthy();
   });
 
   it("keeps analysis loading on the button instead of showing chunk progress", () => {

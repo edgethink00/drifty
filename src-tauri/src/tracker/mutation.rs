@@ -202,6 +202,18 @@ impl TrackerController {
         )
     }
 
+    pub fn save_project_window_assignments(
+        &self,
+        app: &AppHandle,
+        assignments: Value,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "save_project_window_assignments",
+            json!({ "assignments": assignments }),
+        )
+    }
+
     pub fn upsert_team_projects(
         &self,
         app: &AppHandle,
