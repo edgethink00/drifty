@@ -134,7 +134,7 @@ export function LeaderboardView({
                   <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`} style={{ justifySelf: "start" }}>
                     {isOptedIn
                       ? currentUserRank !== null
-                        ? `On the board · ${formatRank(currentUserRank)}`
+                        ? formatRank(currentUserRank)
                         : "On the board"
                       : "Not on the board yet"}
                   </span>

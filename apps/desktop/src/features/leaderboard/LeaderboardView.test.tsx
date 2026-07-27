@@ -135,7 +135,8 @@ describe("LeaderboardView", () => {
     renderView({ isOptedIn: true, ownFocusSeconds: 5430, ownRank: 117, leaderboard: [], publicProfile: makePublicProfile() });
 
     const participation = screen.getByLabelText(/your leaderboard participation/i);
-    expect(within(participation).getByText(/on the board · #117/i)).toBeTruthy();
+    expect(within(participation).getByText("#117")).toBeTruthy();
+    expect(within(participation).queryByText(/on the board · #117/i)).toBeNull();
     fireEvent.click(within(participation).getByRole("button", { name: /^embed$/i }));
     expect(within(screen.getByRole("dialog", { name: /^rank embed$/i })).getByText("1h 31m")).toBeTruthy();
   });
@@ -164,7 +165,8 @@ describe("LeaderboardView", () => {
 
     expect(participationBlock.contains(boardBlock)).toBe(false);
     expect(boardBlock.contains(participationBlock)).toBe(false);
-    expect(within(participationBlock).getByText(/on the board · #1/i)).toBeTruthy();
+    expect(within(participationBlock).getByText("#1")).toBeTruthy();
+    expect(within(participationBlock).queryByText(/on the board · #1/i)).toBeNull();
     expect(within(participationBlock).getByLabelText(/your leaderboard participation/i).classList.contains("leaderboard-hero")).toBe(true);
     expect(within(boardBlock).getByRole("group", { name: /leaderboard period/i })).toBeTruthy();
     expect(within(boardBlock).getByRole("list", { name: /global focus leaderboard rankings/i })).toBeTruthy();

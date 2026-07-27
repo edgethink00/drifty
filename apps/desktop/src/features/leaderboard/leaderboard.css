@@ -1226,7 +1226,7 @@
 .leaderboard-hero__status {
   display: inline-flex;
   align-items: center;
-  padding: 0.18rem 0.56rem;
+  padding: 0.13rem 0.56rem;
   border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--line) 100%, transparent);
   background: color-mix(in srgb, var(--surface-strong) 50%, transparent);
