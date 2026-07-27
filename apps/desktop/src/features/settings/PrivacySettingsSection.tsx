@@ -13,9 +13,16 @@ import { useLocalization } from "../localization/LocalizationContext";
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
   readonly deviceSyncEnabled?: boolean;
+  readonly databasePath?: string | null;
+  readonly todaySessionCount?: number;
 };
 
-export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = false }: PrivacySettingsSectionProps = {}) {
+export function PrivacySettingsSection({
+  onHistoryDeleted,
+  deviceSyncEnabled = false,
+  databasePath,
+  todaySessionCount = 0,
+}: PrivacySettingsSectionProps = {}) {
   const { t } = useLocalization();
   const [aiSettings, setAiSettings] = useState<AiPrivacyRequestSettings>(() => readAiPrivacyRequestSettings());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -36,7 +43,7 @@ export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = f
   return (
     <div className="settings-section settings-section--privacy">
       <div className="settings-block">
-        <h3>{t("settings.privacy.review")}</h3>
+        <h3>{t("settings.section.privacy")}</h3>
         <div className="settings-row">
           <div>
             <div className="lbl">{t("settings.privacy.rawTitle")}</div>
@@ -65,6 +72,21 @@ export function PrivacySettingsSection({ onHistoryDeleted, deviceSyncEnabled = f
       >
         <AiPrivacyReview />
       </SettingsCollapsibleCard>
+      <div className="settings-block">
+        <h3>{t("settings.privacy.localData")}</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.data.database")}</div>
+          </div>
+          <div className="ctrl ctrl--value">{databasePath ?? t("settings.data.unknown")}</div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.data.sessions")}</div>
+          </div>
+          <div className="ctrl ctrl--value">{t("settings.data.sessionsToday", { count: todaySessionCount })}</div>
+        </div>
+      </div>
       <div className="settings-block">
         <h3>{t("settings.privacy.danger")}</h3>
         <div className="settings-row">

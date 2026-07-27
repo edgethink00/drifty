@@ -276,16 +276,16 @@ describe("Settings content styles", () => {
   it("keeps the first heading aligned to the active settings section label", () => {
     const appSource = readFileSync("src/App.tsx", "utf8");
     const notificationsSource = readFileSync("src/features/settings/NotificationsSettingsSection.tsx", "utf8");
-    const dataExportSource = readFileSync("src/features/settings/DataExportSettingsSection.tsx", "utf8");
+    const privacySource = readFileSync("src/features/settings/PrivacySettingsSection.tsx", "utf8");
 
     expect(appSource).toContain('settingsSection === "notifications"');
     expect(appSource).toContain("<NotificationsSettingsSection");
     expect(notificationsSource).toContain('<h3>{t("settings.section.notifications")}</h3>');
     expect(appSource).toContain('settingsSection === "privacy"');
     expect(appSource).toContain("<PrivacySettingsSection");
-    expect(appSource).toContain('settingsSection === "data"');
-    expect(appSource).toContain("<DataExportSettingsSection");
-    expect(dataExportSource).toContain('<h3>{t("settings.section.data")}</h3>');
+    expect(appSource).not.toContain('settingsSection === "data"');
+    expect(privacySource).toContain('<h3>{t("settings.section.privacy")}</h3>');
+    expect(privacySource).toContain('<h3>{t("settings.privacy.localData")}</h3>');
   });
 
   it("shares one privacy review component between AI setup and Privacy settings", () => {

@@ -1,0 +1,100 @@
+.settings-permissions-intro {
+  max-width: 68ch;
+  margin: 0 0 var(--space-3);
+  padding: 0 0.5rem;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.55;
+}
+
+.settings-permission-title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-permission-requirement {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.15rem;
+  padding: 0.1rem 0.38rem;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--line));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.settings-permission-control {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, auto) minmax(10rem, auto);
+  align-items: center;
+  justify-content: end;
+  gap: var(--space-3);
+  min-width: 18rem;
+}
+
+.settings-permission-status {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.settings-permission-status[data-tone="success"] {
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+}
+
+.settings-permission-status[data-tone="required"],
+.settings-permission-status[data-tone="error"] {
+  color: var(--warn);
+}
+
+.settings-permission-status[data-tone="unavailable"] {
+  opacity: 0.72;
+}
+
+.settings-permission-error {
+  margin-top: 0.3rem;
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .settings-permission-row {
+    align-items: flex-start;
+  }
+
+  .settings-permission-control {
+    grid-template-columns: 1fr;
+    justify-items: end;
+    gap: var(--space-2);
+    min-width: 10rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .settings-permission-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-permission-control {
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, auto);
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .settings-permission-status {
+    align-self: center;
+    text-align: left;
+  }
+}

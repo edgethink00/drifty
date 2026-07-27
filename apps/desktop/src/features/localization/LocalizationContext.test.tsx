@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
@@ -18,6 +18,8 @@ beforeEach(() => {
   document.documentElement.lang = "en";
   delete document.documentElement.dataset.locale;
 });
+
+afterEach(cleanup);
 
 function ControllerHarness() {
   const controller = useLocalizationController();
@@ -81,7 +83,6 @@ describe("Korean localization preview", () => {
           updaterMessage={null}
           onAutoInstallFutureUpdatesChange={() => undefined}
           onCheckForUpdates={() => undefined}
-          onRequestAccessibility={() => undefined}
           onStartOfDayChange={() => undefined}
           onStartOfWeekChange={() => undefined}
         />
