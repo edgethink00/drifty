@@ -4534,7 +4534,10 @@ export default function App() {
     void (async () => {
       try {
         const [segments, assignments] = await Promise.all([
-          trackerClient.getTimeline(range),
+          // Slim per-segment view (identity/timing/app/site only): the full
+          // timeline payload is ~7x larger and multi-day windows made the tab
+          // visibly slow to load.
+          trackerClient.getProjectTrendTimeline?.(range) ?? trackerClient.getTimeline(range),
           trackerClient.getProjectAssignments?.(range) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
         ]);
         if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [], loadedRange: { startDay, endDay } });

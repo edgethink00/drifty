@@ -114,6 +114,29 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
     return serialized
 
 
+def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
+    """Minimal row for the Projects tab trend chart: identity, timing, and the
+    app/site labels its detail view aggregates on. Everything else the full
+    timeline serializer emits is unused there and would only inflate the
+    multi-day payload."""
+    serialized: dict[str, SerializedValue] = {
+        "id": str(row.get("id", "")),
+        "startedAt": row["started_at"],
+        "endedAt": row["ended_at"],
+        "durationSeconds": row["duration_seconds"],
+        "appName": row["app_name"],
+        "platform": row.get("platform") or "macos",
+        "source": row.get("source") or "unknown",
+    }
+    bundle_id = row.get("bundle_id")
+    if bundle_id:
+        serialized["bundleId"] = bundle_id
+    site_domain = row.get("site_domain")
+    if site_domain and not should_hide_uncertain_site_context(row):
+        serialized["siteDomain"] = site_domain
+    return serialized
+
+
 def should_hide_uncertain_site_context(row: Mapping[str, RowValue]) -> bool:
     if row.get("site_source") != "applescript-front-window":
         return False

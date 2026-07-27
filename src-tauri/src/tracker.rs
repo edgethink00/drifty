@@ -639,6 +639,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "get_timeline_page"
         | "search_timeline"
         | "get_dashboard_week_timeline"
+        | "get_project_trend_timeline"
         | "get_live_tail"
         | "get_current_snapshot"
         | "preview_browser_history_import"

@@ -16,6 +16,7 @@ from app.storage.activity_segment_serialization import (
     sanitized_raw_context_json,
     serialize_activity_row,
     serialize_dashboard_week_activity_row,
+    serialize_project_trend_activity_row,
 )
 from app.storage.timestamps import parse_iso_datetime
 
@@ -3214,6 +3215,36 @@ class TrackerDatabase:
         with self.connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [serialize_dashboard_week_activity_row(dict(row)) for row in rows]
+
+    def project_trend_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+        # Minimal segment view for the Projects tab trend chart + detail sources:
+        # attribution happens client-side against project assignments, so only
+        # identity, timing, and app/site labels are needed. window_title,
+        # site_title, and site_source feed the hide-uncertain-site-context rule
+        # and are not serialized.
+        query = """
+            SELECT
+                id,
+                started_at,
+                ended_at,
+                duration_seconds,
+                app_name,
+                bundle_id,
+                site_domain,
+                window_title,
+                site_title,
+                site_source,
+                platform,
+                source
+            FROM activity_segments
+            WHERE 1=1
+        """
+        params: list[Any] = []
+        query = self._append_overlap_filters(query, params, start, end)
+        query += " ORDER BY started_at ASC"
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [serialize_project_trend_activity_row(dict(row)) for row in rows]
 
     def raw_events(
         self,
