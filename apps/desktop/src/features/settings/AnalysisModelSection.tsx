@@ -17,8 +17,6 @@ const PROVIDER_OPTIONS: readonly { readonly value: AnalysisProvider; readonly la
 
 const ANALYSIS_MODEL_DATALIST_ID = "analysis-model-options";
 
-const RECOMMENDED_DEFAULT_MODEL = ANALYSIS_RECOMMENDED_MODELS.find((model) => model.id === DEFAULT_ANALYSIS_MODEL) ?? ANALYSIS_RECOMMENDED_MODELS[0];
-
 export function AnalysisModelSection({
   setup,
   onChange,
@@ -42,8 +40,7 @@ export function AnalysisModelSection({
           <div>
             <div className="lbl">Project analysis model</div>
             <div className="desc">
-              The project pass groups your day into projects with a heavier read over your activity, so it needs a strong model — we recommend {RECOMMENDED_DEFAULT_MODEL.label} (the
-              eval-backed default). This is separate from the small model that labels each live segment.
+              The project pass groups your day into projects with a heavier read over your activity, so it needs a strong model. This is separate from the small model that labels each live segment.
             </div>
           </div>
         </div>
