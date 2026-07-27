@@ -22,11 +22,11 @@ function renderSection(overrides: Partial<AnalysisModelSectionProps> = {}) {
 }
 
 describe("AnalysisModelSection", () => {
-  it("explains that the project pass needs a strong model and names the recommended default", () => {
+  it("explains that the project pass needs a strong model without naming a preferred model", () => {
     renderSection({ setup: buildSetup({ provider: "cloud" }) });
 
     expect(screen.getByText(/project pass/i)).toBeTruthy();
-    expect(screen.getByText(/GPT-5 mini/)).toBeTruthy();
+    expect(screen.getByText(/needs a strong model/i).textContent).not.toContain("GPT-5 mini");
     expect(screen.getByText(/separate from the small model/i)).toBeTruthy();
   });
 

@@ -33,11 +33,13 @@ function summaryRegion() {
 }
 
 describe("IntelligenceSetupPanel", () => {
-  it("explains the heavy project pass and recommends a strong model", () => {
-    renderPanel({ setup: buildSetup({ provider: "cloud" }) });
+  it("explains the heavy project pass without naming a preferred model", () => {
+    const { container } = renderPanel({ setup: buildSetup({ provider: "cloud" }) });
 
     expect(screen.getByText(/project pass/i)).toBeTruthy();
-    expect(screen.getByText(/GPT-5 mini/)).toBeTruthy();
+    const hint = container.querySelector(".intelligence-setup-panel__hint");
+    expect(hint?.textContent).toContain("Use a strong model.");
+    expect(hint?.textContent).not.toContain("GPT-5 mini");
   });
 
   it("summarizes the Drifty Cloud provider as always-available with a managed model", () => {
