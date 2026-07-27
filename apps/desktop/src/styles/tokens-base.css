@@ -21,6 +21,8 @@
   --type-mode-label-size: 0.75rem;
   --type-section-title-size: 1rem;
   --type-empty-title-size: var(--type-section-title-size);
+  --type-breakdown-title-size: 0.714rem;
+  --text-breakdown-title: color-mix(in srgb, var(--text) 86%, var(--text-soft));
   --window-chrome-height: 32px;
   --window-control-center-y: 17px;
   --window-nav-offset-x: 100px;

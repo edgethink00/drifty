@@ -1701,6 +1701,17 @@
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line-strong));
 }
 
+.week-v2-side__rail-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition-fast);
+}
+
+.week-v2-side__rail:hover .week-v2-side__rail-arrow {
+  transform: translateX(-1px);
+}
+
 .week-v2-side__rail-label {
   writing-mode: vertical-rl;
   font-family: var(--font-mono);
@@ -1788,10 +1799,19 @@
   transition: color var(--transition-fast), transform var(--transition-fast);
 }
 
-.week-v2-side__collapse svg {
-  /* 5% under the old 14px */
-  width: 13.3px;
-  height: 13.3px;
+.week-v2-side__chevron {
+  display: block;
+  width: 0.875rem;
+  height: 0.875rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.week-v2-side__chevron[data-direction="left"] {
+  transform: rotate(180deg);
 }
 
 .week-v2-side__head .week-v2-side__collapse {
@@ -1816,11 +1836,11 @@
 
 .week-v2-side__title {
   font-family: var(--font-display);
-  /* 15% under the old 14px */
-  font-size: 11.9px;
+  /* 4% quieter than the previous 0.74375rem title. */
+  font-size: var(--type-breakdown-title-size);
   font-weight: 620;
   letter-spacing: -0.02em;
-  color: var(--text);
+  color: var(--text-breakdown-title);
 }
 
 .week-v2-side__content .week-v2-side-card {
