@@ -158,13 +158,12 @@
   border-radius: 999px;
   color: var(--text-soft);
   display: inline-flex;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: .08em;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 570;
   line-height: 1;
   margin-top: 8px;
-  padding: 5px 8px;
-  text-transform: uppercase;
+  padding: 4px 9px 5px;
 }
 
 .classification-source-pill--ai {

@@ -747,8 +747,9 @@
 .flow-hover-card span,
 .timeline-hover-card__activities span {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
   line-height: 1.45;
 }
 
@@ -806,9 +807,9 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-strong) 76%, transparent);
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  font-weight: 650;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
   line-height: 1;
 }
 
