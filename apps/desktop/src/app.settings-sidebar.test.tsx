@@ -10,10 +10,11 @@ type AuthUserMock = {
   user_metadata?: Record<string, unknown>;
 };
 
-const { accessibilityClient, authState, billingMocks, processMocks, trackerClient, tauriEventHandlers, tauriInvoke, updaterMocks } = vi.hoisted(() => {
+const { accessibilityClient, accountStatsPublisherMock, authState, billingMocks, processMocks, trackerClient, tauriEventHandlers, tauriInvoke, updaterMocks } = vi.hoisted(() => {
   const invoke = vi.fn().mockResolvedValue(null);
 
   return {
+    accountStatsPublisherMock: vi.fn(),
     accessibilityClient: {
       getStatus: vi.fn(),
       requestAccess: vi.fn(),
@@ -78,6 +79,9 @@ vi.mock("./features/auth/AuthContext", () => ({
 
 vi.mock("./lib/api/accessibilityClient", () => ({ accessibilityClient }));
 vi.mock("./lib/api/trackerClient", () => ({ trackerClient }));
+vi.mock("./features/account-stats/useAccountStatsPublisher", () => ({
+  useAccountStatsPublisher: accountStatsPublisherMock,
+}));
 vi.mock("./features/billing/billingService", () => ({
   createIndividualCheckout: billingMocks.createIndividualCheckout,
   createBillingPortalSession: billingMocks.createBillingPortalSession,
@@ -202,6 +206,30 @@ describe("App settings sidebar", () => {
     });
     expect(leaderboardButton.getAttribute("aria-current")).toBe("page");
     expect(classificationButton.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("keeps the web-account publisher disabled when persisted preview state outlives Dev mode", async () => {
+    window.localStorage.setItem("drifty.dev.mode", "0");
+    window.localStorage.setItem("drifty.dev.webAccountPreview", "1");
+
+    render(<App />);
+
+    await waitFor(() => expect(accountStatsPublisherMock).toHaveBeenCalled());
+    const latestPublisherInput = accountStatsPublisherMock.mock.calls[accountStatsPublisherMock.mock.calls.length - 1]?.[0];
+    expect(latestPublisherInput).toMatchObject({ active: false });
+    await waitFor(() => expect(window.localStorage.getItem("drifty.dev.webAccountPreview")).toBe("0"));
+  });
+
+  it("keeps the web-account publisher available while Dev mode and its preview are enabled", async () => {
+    window.localStorage.setItem("drifty.dev.mode", "1");
+    window.localStorage.setItem("drifty.dev.webAccountPreview", "1");
+
+    render(<App />);
+
+    await waitFor(() => expect(accountStatsPublisherMock).toHaveBeenCalled());
+    const latestPublisherInput = accountStatsPublisherMock.mock.calls[accountStatsPublisherMock.mock.calls.length - 1]?.[0];
+    expect(latestPublisherInput).toMatchObject({ active: true });
+    expect(window.localStorage.getItem("drifty.dev.webAccountPreview")).toBe("1");
   });
 
   it("replaces the app sidebar with settings navigation and returns with Back", async () => {

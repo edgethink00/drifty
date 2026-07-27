@@ -1011,7 +1011,7 @@ export default function App() {
   // Web account preview (Dev-gated): while active, periodically publish the aggregate-only
   // account summary that powers the drifty.so account dashboard. Private self-view data —
   // owner-only RLS on the table, nothing public and nothing raw.
-  const webAccountStatsActive = devWebAccountPreviewEnabled && isCloudOnline && isSupabaseConfigured && isPolicySignedIn;
+  const webAccountStatsActive = isDevModeActive && devWebAccountPreviewEnabled && isCloudOnline && isSupabaseConfigured && isPolicySignedIn;
   useAccountStatsPublisher({
     active: webAccountStatsActive,
     userScopeKey: user?.id ?? "anonymous",
@@ -2603,11 +2603,12 @@ export default function App() {
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
+    if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-  }, [devModeEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
