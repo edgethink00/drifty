@@ -248,6 +248,7 @@ export function LeaderboardView({
 
       {publicProfile && rankEmbedOpen ? (
         <RankEmbedsModal
+          avatarUrl={profileAvatarUrl}
           displayName={previewName}
           focusSeconds={resolvedOwnFocusSeconds}
           isProfilePublic={publicProfile.draft.isPublic}

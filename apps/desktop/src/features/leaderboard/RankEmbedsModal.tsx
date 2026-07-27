@@ -15,6 +15,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type RankEmbedsModalProps = {
+  readonly avatarUrl: string;
   readonly displayName: string;
   readonly focusSeconds: number;
   readonly isProfilePublic: boolean;
@@ -38,9 +39,9 @@ const FOCUS_LABEL: Record<LeaderboardPeriod, string> = {
 };
 
 const DESIGN_OPTIONS: ReadonlyArray<{ readonly value: RankEmbedDesign; readonly label: string }> = [
-  { value: "card", label: "Card" },
-  { value: "compact", label: "Compact" },
   { value: "minimal", label: "Minimal" },
+  { value: "compact", label: "Compact" },
+  { value: "card", label: "Card" },
 ];
 
 const ACCENT_OPTIONS = [
@@ -59,6 +60,7 @@ function accentStyle(accent: string): AccentStyle {
 }
 
 export function RankEmbedsModal({
+  avatarUrl,
   displayName,
   focusSeconds,
   isProfilePublic,
@@ -68,7 +70,7 @@ export function RankEmbedsModal({
   rank,
   onClose,
 }: RankEmbedsModalProps) {
-  const [design, setDesign] = useState<RankEmbedDesign>("card");
+  const [design, setDesign] = useState<RankEmbedDesign>("minimal");
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [theme, setTheme] = useState<BadgeThemeOption>("light");
   const [accent, setAccent] = useState<string>(RANK_EMBED_DEFAULT_ACCENT);
@@ -117,7 +119,7 @@ export function RankEmbedsModal({
                 {design === "card" ? (
                   <div className="rank-embed-preview">
                     <div className="rank-embed-preview__top">
-                      <span className="rank-embed-preview__avatar" aria-hidden="true">{(displayName.charAt(0) || "D").toUpperCase()}</span>
+                      <RankEmbedAvatar avatarUrl={avatarUrl} displayName={displayName} />
                       <span className="rank-embed-preview__name">{displayName}</span>
                       <span className="rank-embed-preview__rank">{isRanked && rank !== null ? `#${rank} · ${PERIOD_LABEL[period]}` : PERIOD_LABEL[period]}</span>
                     </div>
@@ -133,7 +135,7 @@ export function RankEmbedsModal({
                   </div>
                 ) : design === "compact" ? (
                   <div className="rank-embed-preview rank-embed-preview--compact">
-                    <span className="rank-embed-preview__avatar rank-embed-preview__avatar--sm" aria-hidden="true">{(displayName.charAt(0) || "D").toUpperCase()}</span>
+                    <RankEmbedAvatar avatarUrl={avatarUrl} compact displayName={displayName} />
                     <span className="rank-embed-preview__name">{displayName}</span>
                     <span className="rank-embed-preview__rank">{rankLabel}</span>
                     <strong className="rank-embed-preview__value rank-embed-preview__value--sm">{focusLabel}</strong>
@@ -236,6 +238,21 @@ export function RankEmbedsModal({
         </div>
       </section>
     </div>
+  );
+}
+
+function RankEmbedAvatar({ avatarUrl, compact = false, displayName }: { readonly avatarUrl: string; readonly compact?: boolean; readonly displayName: string }) {
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const trimmedAvatarUrl = avatarUrl.trim();
+  const className = `rank-embed-preview__avatar${compact ? " rank-embed-preview__avatar--sm" : ""}`;
+  const initial = (displayName.charAt(0) || "D").toUpperCase();
+  const shouldShowPhoto = Boolean(trimmedAvatarUrl && failedAvatarUrl !== trimmedAvatarUrl);
+
+  return (
+    <span className={className} aria-hidden="true">
+      {initial}
+      {shouldShowPhoto ? <img src={trimmedAvatarUrl} alt="" onError={() => setFailedAvatarUrl(trimmedAvatarUrl)} /> : null}
+    </span>
   );
 }
 

@@ -4,7 +4,7 @@ import { buildRankEmbedSnippet, buildRankEmbedUrl } from "./rankEmbedSnippets";
 const PUBLIC_ID = "9f3a1b2c-0000-4d5e-8f6a-1b2c3d4e5f60";
 
 describe("rank embed snippets", () => {
-  it("builds a compact weekly light embed by default", () => {
+  it("omits the legacy card design from a default weekly light embed URL", () => {
     expect(buildRankEmbedUrl(PUBLIC_ID)).toBe(
       `https://drifty.so/embed/?id=${PUBLIC_ID}&view=rank`,
     );

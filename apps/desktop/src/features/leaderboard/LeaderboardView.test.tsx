@@ -204,12 +204,74 @@ describe("LeaderboardView", () => {
 
     const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
     const [htmlSnippet, markdownSnippet] = within(modal).getAllByRole("textbox") as HTMLInputElement[];
+    const designGroup = within(modal).getByRole("group", { name: /embed design/i });
+    const designOptions = within(designGroup).getAllByRole("button");
     expect(htmlSnippet!.value).toContain(`id=${PUBLIC_ID}`);
     expect(htmlSnippet!.value).toContain("view=rank");
+    expect(htmlSnippet!.value).toContain("design=minimal");
     expect(markdownSnippet!.value).toContain("embed/badge?");
     expect(markdownSnippet!.value).toContain("view=rank");
+    expect(designOptions.map((option) => option.textContent)).toEqual(["Minimal", "Compact", "Card"]);
+    expect(within(designGroup).getByRole("button", { name: /^minimal$/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(modal.querySelector(".rank-embed-preview--minimal")).not.toBeNull();
     expect(within(modal).queryByText(/category breakdown/i)).toBeNull();
     expect(card.refresh).not.toHaveBeenCalled();
+  });
+
+  it("uses the public profile photo in card and compact rank embed previews", () => {
+    const avatarUrl = "data:image/png;base64,profile-avatar";
+    renderView({
+      profileDisplayName: "Alex",
+      publicProfile: makePublicProfile({
+        draft: {
+          displayName: "Alex",
+          bio: "Building quiet tools.",
+          avatarUrl,
+          websiteUrl: "https://drifty.so",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        },
+      }),
+    });
+
+    fireEvent.click(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /^embed$/i }));
+    const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
+    fireEvent.click(within(modal).getByRole("button", { name: /^card$/i }));
+    const cardAvatar = modal.querySelector<HTMLImageElement>(".rank-embed-preview__avatar > img");
+    expect(cardAvatar?.getAttribute("src")).toBe(avatarUrl);
+
+    fireEvent.click(within(modal).getByRole("button", { name: /^compact$/i }));
+    const compactAvatar = modal.querySelector<HTMLImageElement>(".rank-embed-preview__avatar--sm > img");
+    expect(compactAvatar?.getAttribute("src")).toBe(avatarUrl);
+  });
+
+  it("keeps the profile initial behind a failed rank embed photo", () => {
+    renderView({
+      profileDisplayName: "Sora",
+      publicProfile: makePublicProfile({
+        draft: {
+          displayName: "Sora",
+          bio: "Building quiet tools.",
+          avatarUrl: "https://example.test/missing-avatar.png",
+          websiteUrl: "https://drifty.so",
+          githubUrl: "",
+          linkedinUrl: "",
+          isPublic: true,
+        },
+      }),
+    });
+
+    fireEvent.click(within(screen.getByLabelText(/your leaderboard participation/i)).getByRole("button", { name: /^embed$/i }));
+    const modal = screen.getByRole("dialog", { name: /^rank embed$/i });
+    fireEvent.click(within(modal).getByRole("button", { name: /^card$/i }));
+    const avatar = modal.querySelector(".rank-embed-preview__avatar");
+    const photo = avatar?.querySelector("img");
+
+    expect(photo).not.toBeNull();
+    fireEvent.error(photo!);
+    expect(avatar?.textContent).toBe("S");
+    expect(avatar?.querySelector("img")).toBeNull();
   });
 
   it("uses the profile editor avatar itself as the photo change control", () => {
