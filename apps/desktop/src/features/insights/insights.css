@@ -643,10 +643,9 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 11%, var(--surface-strong));
   color: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  letter-spacing: 0.065em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  font-weight: 580;
   white-space: nowrap;
 }
 
@@ -988,10 +987,9 @@
   border-radius: 999px;
   padding: 0.16rem var(--space-2);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.64rem;
+  font-weight: 570;
 }
 
 .drift-analysis__layout {

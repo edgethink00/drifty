@@ -345,10 +345,10 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.57rem;
-  padding: 3px 7px;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.64rem;
+  font-weight: 570;
+  padding: 3px 8px;
 }
 
 .social-live-state--on {

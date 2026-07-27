@@ -551,11 +551,9 @@
 
 .content--team .team-you-chip {
   flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 0.52rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  font-weight: 640;
   border-radius: 999px;
   padding: 0.1rem 0.34rem;
   line-height: 1;
@@ -1245,10 +1243,9 @@
 
 .team-set-role,
 .team-set-role--admin {
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.64rem;
+  font-weight: 590;
   padding: 0.16rem 0.44rem;
   border-radius: var(--radius-pill);
   white-space: nowrap;
