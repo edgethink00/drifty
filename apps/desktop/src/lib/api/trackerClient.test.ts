@@ -29,6 +29,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_get_timeline_page",
   "tracker_search_timeline",
   "tracker_get_dashboard_week_timeline",
+  "tracker_get_project_trend_timeline",
   "tracker_get_live_tail",
   "tracker_get_current_snapshot",
   "tracker_get_hourly_summary",
@@ -117,6 +118,24 @@ describe("trackerClient", () => {
 
     expect(result).toEqual([{ id: "week-segment" }]);
     expect(invoke).toHaveBeenCalledWith("tracker_get_dashboard_week_timeline", {
+      query: {
+        start: "2026-04-01T00:00:00",
+        end: "2026-04-07T23:59:59",
+      },
+    });
+  });
+
+  it("invokes tracker_get_project_trend_timeline with the selected range", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce([{ id: "trend-segment" }]);
+
+    const result = await trackerClient.getProjectTrendTimeline?.({
+      start: "2026-04-01T00:00:00",
+      end: "2026-04-07T23:59:59",
+    });
+
+    expect(result).toEqual([{ id: "trend-segment" }]);
+    expect(invoke).toHaveBeenCalledWith("tracker_get_project_trend_timeline", {
       query: {
         start: "2026-04-01T00:00:00",
         end: "2026-04-07T23:59:59",

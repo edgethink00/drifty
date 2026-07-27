@@ -1154,6 +1154,67 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertNotIn("model", compact["classification"])
         self.assertNotIn("reason", compact["classification"])
 
+    def test_project_trend_timeline_returns_slim_rows(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:00+00:00",
+                app_name="Safari",
+                bundle_id="com.apple.Safari",
+                window_title="Lecture",
+                source="accessibility",
+                browser_name="Safari",
+                site_domain="youtube.com",
+                site_title="Lecture",
+                site_url="https://www.youtube.com/watch?v=lecture123",
+                youtube_video_id="lecture123",
+                youtube_is_shorts=False,
+                site_source="applescript",
+                browser_automation_status="denied",
+                browser_automation_error="diagnostic should not be in project trend payload",
+            ),
+            5,
+        )
+
+        rows = self.database.project_trend_timeline(
+            "2026-04-06T00:00:00",
+            "2026-04-06T23:59:59",
+        )
+
+        self.assertEqual(len(rows), 1)
+        slim = rows[0]
+        self.assertEqual(
+            set(slim.keys()),
+            {"id", "startedAt", "endedAt", "durationSeconds", "appName", "platform", "source", "bundleId", "siteDomain"},
+        )
+        self.assertEqual(slim["appName"], "Safari")
+        self.assertEqual(slim["bundleId"], "com.apple.Safari")
+        self.assertEqual(slim["siteDomain"], "youtube.com")
+        self.assertEqual(slim["durationSeconds"], 5)
+
+    def test_project_trend_timeline_hides_uncertain_site_context(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T10:00:00+00:00",
+                app_name="Safari",
+                bundle_id="com.apple.Safari",
+                window_title="Unrelated window title",
+                source="accessibility",
+                browser_name="Safari",
+                site_domain="example.com",
+                site_title="Completely different site",
+                site_source="applescript-front-window",
+            ),
+            5,
+        )
+
+        rows = self.database.project_trend_timeline(
+            "2026-04-06T00:00:00",
+            "2026-04-06T23:59:59",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("siteDomain", rows[0])
+
     def test_refresh_non_ai_classifications_preserves_ai_results(self) -> None:
         self.database.insert_segment(
             {

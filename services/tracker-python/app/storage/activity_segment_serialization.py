@@ -20,6 +20,9 @@ BROWSER_AUTOMATION_STATUSES: Final[frozenset[str]] = frozenset(
 def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
     classification = classification_payload(row)
     hide_site_context = should_hide_uncertain_site_context(row)
+    # Parse raw_context_json once per row: the per-key helpers each re-parse it,
+    # which dominated serialization time on multi-day timeline queries.
+    raw_context = raw_context_mapping(row)
     youtube_is_shorts = None
     if not hide_site_context and row.get("youtube_is_shorts") is not None:
         youtube_is_shorts = bool(row.get("youtube_is_shorts"))
@@ -51,17 +54,17 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "youtubeUploadDate": row.get("youtube_upload_date"),
         "browserName": row.get("browser_name"),
         "siteSource": row.get("site_source"),
-        "browserAutomationStatus": browser_automation_status(row),
-        "browserAutomationError": raw_context_text(row, "browser_automation_error"),
-        "browserHistoryStatus": raw_context_text(row, "browser_history_status"),
-        "browserHistoryReason": raw_context_text(row, "browser_history_reason"),
-        "browserHistoryDatabaseFound": raw_context_bool(row, "browser_history_database_found"),
-        "browserHistoryProfileCount": raw_context_int(row, "browser_history_profile_count"),
-        "browserHistoryCandidateCount": raw_context_int(row, "browser_history_candidate_count"),
-        "browserHistoryErrorCount": raw_context_int(row, "browser_history_error_count"),
-        "frontmostCaptureSource": raw_context_text(row, "frontmost_capture_source"),
-        "frontmostCaptureError": raw_context_text(row, "frontmost_capture_error"),
-        "frontmostFallbackError": raw_context_text(row, "frontmost_fallback_error"),
+        "browserAutomationStatus": context_automation_status(raw_context),
+        "browserAutomationError": context_text(raw_context, "browser_automation_error"),
+        "browserHistoryStatus": context_text(raw_context, "browser_history_status"),
+        "browserHistoryReason": context_text(raw_context, "browser_history_reason"),
+        "browserHistoryDatabaseFound": context_bool(raw_context, "browser_history_database_found"),
+        "browserHistoryProfileCount": context_int(raw_context, "browser_history_profile_count"),
+        "browserHistoryCandidateCount": context_int(raw_context, "browser_history_candidate_count"),
+        "browserHistoryErrorCount": context_int(raw_context, "browser_history_error_count"),
+        "frontmostCaptureSource": context_text(raw_context, "frontmost_capture_source"),
+        "frontmostCaptureError": context_text(raw_context, "frontmost_capture_error"),
+        "frontmostFallbackError": context_text(raw_context, "frontmost_fallback_error"),
         "platform": row.get("platform", "macos"),
         "source": row.get("source", "unknown"),
         "confidence": row.get("confidence"),
@@ -69,7 +72,6 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
     }
     if classification is not None:
         serialized["classification"] = classification
-    raw_context = raw_context_mapping(row)
     if raw_context is not None:
         adaptive_context = adaptive_content_context_from_mapping(raw_context)
         if adaptive_context is not None:
@@ -111,6 +113,29 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
         serialized["confidence"] = row.get("confidence")
     if classification is not None:
         serialized["classification"] = classification
+    return serialized
+
+
+def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
+    """Minimal row for the Projects tab trend chart: identity, timing, and the
+    app/site labels its detail view aggregates on. Everything else the full
+    timeline serializer emits is unused there and would only inflate the
+    multi-day payload."""
+    serialized: dict[str, SerializedValue] = {
+        "id": str(row.get("id", "")),
+        "startedAt": row["started_at"],
+        "endedAt": row["ended_at"],
+        "durationSeconds": row["duration_seconds"],
+        "appName": row["app_name"],
+        "platform": row.get("platform") or "macos",
+        "source": row.get("source") or "unknown",
+    }
+    bundle_id = row.get("bundle_id")
+    if bundle_id:
+        serialized["bundleId"] = bundle_id
+    site_domain = row.get("site_domain")
+    if site_domain and not should_hide_uncertain_site_context(row):
+        serialized["siteDomain"] = site_domain
     return serialized
 
 
@@ -180,14 +205,21 @@ def dashboard_week_classification_payload(row: Mapping[str, RowValue]) -> dict[s
 
 
 def browser_automation_status(row: Mapping[str, RowValue]) -> str | None:
-    status = raw_context_text(row, "browser_automation_status")
+    return context_automation_status(raw_context_mapping(row))
+
+
+def context_automation_status(parsed: Mapping[str, SerializedValue] | None) -> str | None:
+    status = context_text(parsed, "browser_automation_status")
     if status not in BROWSER_AUTOMATION_STATUSES:
         return None
     return status
 
 
 def raw_context_text(row: Mapping[str, RowValue], key: str) -> str | None:
-    parsed = raw_context_mapping(row)
+    return context_text(raw_context_mapping(row), key)
+
+
+def context_text(parsed: Mapping[str, SerializedValue] | None, key: str) -> str | None:
     if parsed is None:
         return None
 
@@ -199,7 +231,10 @@ def raw_context_text(row: Mapping[str, RowValue], key: str) -> str | None:
 
 
 def raw_context_bool(row: Mapping[str, RowValue], key: str) -> bool | None:
-    parsed = raw_context_mapping(row)
+    return context_bool(raw_context_mapping(row), key)
+
+
+def context_bool(parsed: Mapping[str, SerializedValue] | None, key: str) -> bool | None:
     if parsed is None:
         return None
 
@@ -208,7 +243,10 @@ def raw_context_bool(row: Mapping[str, RowValue], key: str) -> bool | None:
 
 
 def raw_context_int(row: Mapping[str, RowValue], key: str) -> int | None:
-    parsed = raw_context_mapping(row)
+    return context_int(raw_context_mapping(row), key)
+
+
+def context_int(parsed: Mapping[str, SerializedValue] | None, key: str) -> int | None:
     if parsed is None:
         return None
 

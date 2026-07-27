@@ -69,6 +69,19 @@ impl TrackerController {
         )
     }
 
+    pub fn get_project_trend_timeline(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_project_trend_timeline",
+            build_period_payload(None, start, end),
+        )
+    }
+
     pub fn get_live_tail(
         &self,
         app: &AppHandle,

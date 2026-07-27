@@ -9,6 +9,7 @@ export const trackerInvokeCommands = [
   "tracker_get_timeline_page",
   "tracker_search_timeline",
   "tracker_get_dashboard_week_timeline",
+  "tracker_get_project_trend_timeline",
   "tracker_get_live_tail",
   "tracker_get_current_snapshot",
   "tracker_get_hourly_summary",
@@ -76,6 +77,7 @@ export type TrackerCommandMap = {
   tracker_get_timeline_page: { args: { query: TimelinePageQuery }; result: TimelinePage };
   tracker_search_timeline: { args: { query: TimelineSearchQuery }; result: TimelinePage };
   tracker_get_dashboard_week_timeline: { args: { query: DateRangeQuery }; result: ActivitySegment[] };
+  tracker_get_project_trend_timeline: { args: { query: DateRangeQuery }; result: ActivitySegment[] };
   tracker_get_live_tail: { args: { query: LiveTailQuery }; result: TrackerLiveTail };
   tracker_get_current_snapshot: { args: undefined; result: CurrentActivitySnapshot | null };
   tracker_get_hourly_summary: { args: { query: TimelineQuery }; result: HourlySummaryWireBucket[] };
@@ -678,6 +680,13 @@ export interface TrackerApi {
   getTimelinePage(query: TimelinePageQuery): Promise<TimelinePage>;
   searchTimeline(query: TimelineSearchQuery): Promise<TimelinePage>;
   getDashboardWeekTimeline(query: DateRangeQuery): Promise<ActivitySegment[]>;
+  /**
+   * Slim multi-day segment view for the Projects tab trend chart: identity,
+   * timing, and app/site labels only (attribution happens client-side against
+   * project assignments). Optional so partial implementations can fall back to
+   * the full getTimeline.
+   */
+  getProjectTrendTimeline?(query: DateRangeQuery): Promise<ActivitySegment[]>;
   getLiveTail(query: LiveTailQuery): Promise<TrackerLiveTail>;
   getCurrentSnapshot(): Promise<CurrentActivitySnapshot | null>;
   getHourlySummary(query: TimelineQuery): Promise<HourBucket[]>;

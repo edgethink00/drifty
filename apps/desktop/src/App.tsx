@@ -4515,8 +4515,10 @@ export default function App() {
   // The Projects tab isn't the Trends tab, so the rolling insight segments aren't
   // loaded here. Load a dedicated trend window (segments + assignments) for the
   // project trend chart + table, refreshing whenever a pass finishes. The window
-  // is driven by the page's Day/Week/Month range controls; the last-14-days
-  // default covers the first render before the page reports its window.
+  // is owned by the page's Day/Week/Month range controls: no fetch happens until
+  // the page reports its window, so the first load is the one that gets drawn
+  // (the sidecar serializes requests, so a discarded speculative fetch would
+  // delay the real one behind it).
   const [projectsTrend, setProjectsTrend] = useState<{ readonly segments: ActivitySegment[]; readonly assignments: ProjectAssignmentRecord[]; readonly loadedRange: { readonly startDay: string; readonly endDay: string } | null }>({ segments: [], assignments: [], loadedRange: null });
   const [projectsTrendRange, setProjectsTrendRange] = useState<{ readonly startDay: string; readonly endDay: string } | null>(null);
   const handleProjectsTrendWindowChange = useCallback((next: { readonly startDay: string; readonly endDay: string }) => {
@@ -4525,15 +4527,17 @@ export default function App() {
     );
   }, []);
   useEffect(() => {
-    if (activeTab !== "projects" || projectClassification.running) return;
+    if (activeTab !== "projects" || projectClassification.running || !projectsTrendRange) return;
     let cancelled = false;
-    const startDay = projectsTrendRange?.startDay ?? shiftIsoDate(selectedDay, -13);
-    const endDay = projectsTrendRange?.endDay ?? selectedDay;
+    const { startDay, endDay } = projectsTrendRange;
     const range = getLogicalDayRange(startDay, endDay, startOfDayMinutes);
     void (async () => {
       try {
         const [segments, assignments] = await Promise.all([
-          trackerClient.getTimeline(range),
+          // Slim per-segment view (identity/timing/app/site only): the full
+          // timeline payload is ~7x larger and multi-day windows made the tab
+          // visibly slow to load.
+          trackerClient.getProjectTrendTimeline?.(range) ?? trackerClient.getTimeline(range),
           trackerClient.getProjectAssignments?.(range) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
         ]);
         if (!cancelled) setProjectsTrend({ segments, assignments: assignments ?? [], loadedRange: { startDay, endDay } });
@@ -4542,7 +4546,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, selectedDay, startOfDayMinutes, projectClassification.running, projectsTrendRange, trackerClient]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, startOfDayMinutes, projectClassification.running, projectsTrendRange, trackerClient]); // eslint-disable-line react-hooks/exhaustive-deps
   const projectsTrendProjectBySegmentId = useMemo(
     () => new Map(
       projectsTrend.assignments
