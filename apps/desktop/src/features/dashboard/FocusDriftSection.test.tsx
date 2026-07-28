@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ActivitySegment } from "@drifty/domain";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { FocusDriftSection } from "./FocusDriftSection";
 import { applyFocusDriftReplayReveal, buildFocusDriftChart } from "./focusDriftChart";
 
@@ -48,6 +48,24 @@ describe("FocusDriftSection", () => {
     expect(container.querySelector(".focus-drift__line")).toBeNull();
     expect(container.querySelector(".focus-drift__area")).toBeNull();
     expect(container.querySelector(".focus-drift__plot")?.getAttribute("style")).not.toContain("--focus-drift-now-x");
+  });
+
+  it("shows the line hover card near tracked windows but not over the empty region", () => {
+    const chart = buildFocusDriftChart([focusSegment()], "2026-06-29");
+    const { container } = renderFocusDriftSection(chart);
+    const svg = container.querySelector<SVGSVGElement>(".focus-drift__svg");
+    const lineTarget = container.querySelector(".focus-drift__line-target");
+    if (!svg || !lineTarget) throw new Error("focus/drift chart svg or hover target missing");
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 100, 100));
+
+    // The 6pm–7pm focus segment puts its two tracked windows near x≈74–76 with
+    // a fully-focused line at the chart top (y=8).
+    fireEvent.mouseMove(lineTarget, { clientX: 74, clientY: 8 });
+    expect(container.querySelector(".focus-drift-hover-card")).toBeTruthy();
+
+    // Far to the right of the last tracked window, the same y no longer snaps.
+    fireEvent.mouseMove(lineTarget, { clientX: 95, clientY: 8 });
+    expect(container.querySelector(".focus-drift-hover-card")).toBeNull();
   });
 
   it("renders replay reveal with completed line geometry and a reveal marker", () => {
