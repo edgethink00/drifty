@@ -6,9 +6,11 @@ import { MetricTile } from "../../components/MetricTile";
 import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/formatting";
 import { FocusDriftHoverCard, formatFocusDriftHoverLabel } from "./FocusDriftHoverCard";
 import {
+  FOCUS_DRIFT_BUCKET_MINUTES,
   FOCUS_DRIFT_CHART_BOUNDS,
   FOCUS_DRIFT_CLIP_BOUNDS,
   FOCUS_DRIFT_GRID_PATH,
+  FOCUS_DRIFT_MINUTES_PER_DAY,
   FOCUS_DRIFT_Y_AXIS_TICKS,
   type FocusDriftAxisTickStyle,
   type FocusDriftChart,
@@ -94,6 +96,12 @@ function buildFocusDriftAreaPath(points: readonly FocusDriftPoint[], path: strin
   const last = points[points.length - 1];
   return first && last && path ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${path.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z` : "";
 }
+
+/** Horizontal snap reach of the line hover: one 30-minute window on either
+ *  side of a tracked point. Beyond that (untracked gaps, the region past the
+ *  last window) the cursor is over empty chart, so no card is shown. */
+const HOVER_MAX_X_DISTANCE =
+  ((FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left) * FOCUS_DRIFT_BUCKET_MINUTES) / FOCUS_DRIFT_MINUTES_PER_DAY;
 
 function isPointRevealed(point: FocusDriftPoint, chart: FocusDriftChart): boolean {
   return !point.isFuture && (chart.revealX === null || point.x <= chart.revealX);
@@ -183,6 +191,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
 
     const kind: FocusDriftHoverKind = focusDistance <= driftDistance ? "focus" : "drift";
     const nearestPoint = Math.abs(previousPoint.x - hoverX) <= Math.abs(nextPoint.x - hoverX) ? previousPoint : nextPoint;
+    if (Math.abs(chartX - nearestPoint.x) > HOVER_MAX_X_DISTANCE) {
+      setHover(null);
+      return;
+    }
     setHover({ point: nearestPoint, kind, x: event.clientX, y: event.clientY });
   }
 
