@@ -8,62 +8,259 @@
   padding: 0;
 }
 
-.ai-privacy-review__chips {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  min-width: 0;
+/* Every chip inside the card shares one chrome so the guarantees strip, the
+   zone meta badges, and the Required badges read as a single badge family in
+   both themes (green accent per the app's chip conventions, gray for neutral). */
+.ai-privacy-review .chip {
+  border: 1px solid transparent;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.ai-privacy-review__boundary {
-  align-items: start;
+.ai-privacy-review .chip.green {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+}
+
+.ai-privacy-review .chip.gray {
+  border-color: color-mix(in srgb, var(--text) 16%, var(--line-strong));
+  color: var(--text);
+}
+
+/* Data-boundary layout: what stays on this Mac (left) vs what crosses into
+   AI requests (right), split by a dashed boundary with a lock badge. */
+.ai-privacy-review__flow {
+  align-items: stretch;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(0, 1.18fr) minmax(16rem, 0.82fr);
+  grid-template-columns: minmax(0, 5fr) auto minmax(0, 7fr);
   min-width: 0;
 }
 
-.ai-privacy-review__column {
+.ai-privacy-review__zone {
   align-content: start;
-  background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   display: grid;
   gap: var(--space-2);
   min-width: 0;
   padding: var(--space-3);
 }
 
-.ai-privacy-review__label {
-  align-items: baseline;
-  color: var(--text-muted);
-  column-gap: var(--space-1);
+/* The local zone sits slightly recessed and muted: it is the side that never
+   crosses the boundary. The list centers in the remaining height so the card
+   stays balanced against the denser sent zone. */
+.ai-privacy-review__zone--local {
+  background: color-mix(in srgb, var(--text) 2.5%, var(--surface));
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* The sent zone shares the local zone's chrome so the two sides of the
+   boundary read as one symmetric structure; its brighter fill marks it as the
+   active, crossing side. */
+.ai-privacy-review__zone--sent {
+  background: var(--surface);
+}
+
+/* Zone headers adopt the settings refresh sub-section title treatment, with
+   the state chip pinned right so label and meta never collide. */
+.ai-privacy-review__zone-header {
+  align-items: center;
+  color: var(--text-soft);
+  column-gap: var(--space-2);
   display: flex;
   flex-wrap: wrap;
+  font-size: 0.94rem;
+  font-weight: 620;
+  justify-content: space-between;
+  line-height: 1.2;
+  min-width: 0;
+  row-gap: var(--space-1);
+}
+
+.ai-privacy-review__zone-header--spaced {
+  margin-top: var(--space-2);
+}
+
+.ai-privacy-review__zone-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Boundary: dashed hairline with a centered lock badge — only the minimized
+   fields on the right cross it. */
+.ai-privacy-review__boundary {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100%;
+  position: relative;
+  width: 2.25rem;
+}
+
+.ai-privacy-review__boundary::before {
+  border-left: 1px dashed color-mix(in srgb, var(--text) 34%, transparent);
+  bottom: 0;
+  content: "";
+  left: 50%;
+  position: absolute;
+  top: 0;
+}
+
+.ai-privacy-review__boundary-lock {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--text) 30%, transparent);
+  border-radius: 0.55rem;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 18%, transparent);
+  flex: 0 0 auto;
+  height: 1.875rem;
+  position: relative;
+  width: 1.875rem;
+  z-index: 1;
+}
+
+.ai-privacy-review__boundary-lock::before {
+  border: 0.12rem solid var(--text);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  content: "";
+  height: 0.4rem;
+  left: 50%;
+  position: absolute;
+  top: 0.37rem;
+  transform: translateX(-50%);
+  width: 0.64rem;
+}
+
+.ai-privacy-review__boundary-lock::after {
+  background: var(--text);
+  border-radius: 0.18rem;
+  content: "";
+  height: 0.64rem;
+  left: 50%;
+  position: absolute;
+  top: 0.82rem;
+  transform: translateX(-50%);
+  width: 0.86rem;
+}
+
+/* Local list: compact quiet rows with a small lock marker, separated by
+   hairlines instead of cards. */
+.ai-privacy-review__local-list {
+  align-self: center;
+  display: grid;
+  list-style: none;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.ai-privacy-review__local-item {
+  align-items: start;
+  column-gap: var(--space-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 0.34rem 0;
+}
+
+.ai-privacy-review__local-item:not(:last-child) {
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-privacy-review__local-lock {
+  flex: 0 0 auto;
+  height: 0.8rem;
+  margin-top: 0.14rem;
+  position: relative;
+  width: 0.8rem;
+}
+
+.ai-privacy-review__local-lock::before {
+  border: 0.075rem solid var(--text-soft);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  content: "";
+  height: 0.24rem;
+  left: 50%;
+  position: absolute;
+  top: 0.08rem;
+  transform: translateX(-50%);
+  width: 0.36rem;
+}
+
+.ai-privacy-review__local-lock::after {
+  background: var(--text-soft);
+  border-radius: 0.1rem;
+  content: "";
+  height: 0.36rem;
+  left: 50%;
+  position: absolute;
+  top: 0.36rem;
+  transform: translateX(-50%);
+  width: 0.5rem;
+}
+
+.ai-privacy-review__local-text {
+  display: grid;
+  gap: 0.06rem;
+  min-width: 0;
+}
+
+.ai-privacy-review__local-text strong {
+  color: var(--text);
+  display: block;
   font-size: var(--type-setting-desc-size);
+  font-weight: 620;
+  letter-spacing: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-privacy-review__local-text small {
+  color: var(--text-muted);
+  display: block;
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Required fields: "always included" token bars that read as already through
+   the boundary — accent-tinted, no toggle, Required badge pinned right. */
+.ai-privacy-review__tokens {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.ai-privacy-review__token {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 0.625rem;
+  column-gap: var(--space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.1rem;
+  min-width: 0;
+  padding: 0.34rem 0.5rem 0.34rem 0.75rem;
+}
+
+.ai-privacy-review__token-label {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
   line-height: 1.25;
   min-width: 0;
-  padding: 0 var(--space-1);
-  row-gap: 0.125rem;
+  overflow-wrap: anywhere;
 }
 
-.ai-privacy-review__label span,
-.ai-privacy-review__label strong {
-  color: var(--text);
-  letter-spacing: 0;
-}
-
-.ai-privacy-review__label span {
-  font-weight: 500;
-}
-
-.ai-privacy-review__label strong {
-  font-weight: 650;
-}
-
-.ai-privacy-review__list,
-.ai-privacy-review__locked-list {
+.ai-privacy-review__list {
   display: grid;
   gap: 0.5rem;
   list-style: none;
@@ -74,15 +271,10 @@
 
 .ai-privacy-review__row {
   align-items: center;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 0.625rem;
   display: grid;
   gap: var(--space-2);
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 2.75rem;
   min-width: 0;
-  padding: 0.5rem 0.875rem;
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast),
@@ -90,18 +282,16 @@
 }
 
 .ai-privacy-review__row--optional {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: 0.625rem;
   cursor: default;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
 }
 
-.ai-privacy-review__row-control {
-  align-items: center;
-  cursor: pointer;
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  padding: 0.5rem 0.875rem;
-  width: 100%;
+.ai-privacy-review__zone--sent .ai-privacy-review__row--optional {
+  background: color-mix(in srgb, var(--text) 2%, var(--surface));
 }
 
 .ai-privacy-review__row--optional:hover {
@@ -110,7 +300,7 @@
 }
 
 .ai-privacy-review__row:has(.ai-privacy-review__switch input:focus-visible) {
-  box-shadow: 0 0 0 2px var(--settings-focus-ring);
+  box-shadow: 0 0 0 2px var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
 }
 
 .ai-privacy-review__row-text {
@@ -128,8 +318,7 @@
   vertical-align: middle;
 }
 
-.ai-privacy-review__row-text strong,
-.ai-privacy-review__locked-row strong {
+.ai-privacy-review__row-text strong {
   color: var(--text);
   display: block;
   font-size: var(--type-setting-label-size);
@@ -144,15 +333,16 @@
   align-items: center;
   display: inline-flex;
   flex: 0 0 auto;
+  margin-left: var(--space-1);
   position: relative;
 }
 
 .ai-privacy-review__help {
   align-items: center;
   background: color-mix(in srgb, var(--text) 5%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
   border-radius: var(--radius-pill);
-  color: var(--text-soft);
+  color: var(--text-muted);
   cursor: help;
   display: inline-flex;
   font-family: var(--font-display);
@@ -212,27 +402,6 @@
   visibility: visible;
 }
 
-.ai-privacy-review__row em {
-  color: var(--text-muted);
-  font-size: var(--type-setting-value-size);
-  font-style: italic;
-  font-weight: 520;
-  justify-self: end;
-  line-height: 1.25;
-}
-
-.ai-privacy-review__row-text small,
-.ai-privacy-review__locked-row small {
-  color: var(--text-soft);
-  display: block;
-  font-size: var(--type-setting-desc-size);
-  font-weight: 450;
-  line-height: 1.35;
-  margin-top: 0.12rem;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .ai-privacy-review__switch {
   display: inline-grid;
   height: 1.25rem;
@@ -254,7 +423,7 @@
 
 .ai-privacy-review__switch > span {
   background: var(--bg-2);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
   display: block;
   height: 100%;
@@ -291,62 +460,28 @@
 }
 
 .ai-privacy-review__switch input:focus-visible + span {
-  box-shadow: 0 0 0 2px var(--settings-focus-ring);
+  box-shadow: 0 0 0 2px var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
 }
 
-.ai-privacy-review__locked-row {
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 0.625rem;
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: 1.25rem minmax(0, 1fr);
-  min-height: 2.75rem;
-  min-width: 0;
-  padding: 0.5rem 0.875rem;
-}
-
-.ai-privacy-exclusion-glyph {
-  align-items: center;
-  background: color-mix(in srgb, var(--warn-soft) 30%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
-  border-radius: 0.4rem;
-  display: inline-flex;
-  flex: 0 0 auto;
-  height: 1.25rem;
-  justify-content: center;
-  position: relative;
-  width: 1.25rem;
-}
-
-.ai-privacy-exclusion-glyph::before,
-.ai-privacy-exclusion-glyph::after {
-  background: color-mix(in srgb, var(--warn) 80%, var(--text));
-  border-radius: 999px;
-  content: "";
-  height: 0.12rem;
-  position: absolute;
-  width: 0.6rem;
-}
-
-.ai-privacy-exclusion-glyph::before {
-  transform: rotate(45deg);
-}
-
-.ai-privacy-exclusion-glyph::after {
-  transform: rotate(-45deg);
-}
-
-@media (max-width: 760px) {
-  .ai-privacy-review__boundary {
-    grid-template-columns: 1fr;
+/* Stacked below ~620px: local zone on top, boundary turns horizontal, the
+   sent zone follows. */
+@media (max-width: 620px) {
+  .ai-privacy-review__flow {
+    grid-template-columns: minmax(0, 1fr);
   }
-}
 
-@media (max-width: 520px) {
-  .ai-privacy-review__row,
-  .ai-privacy-review__row-control {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .ai-privacy-review__boundary {
+    flex-direction: row;
+    height: 1.75rem;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .ai-privacy-review__boundary::before {
+    border-left: 0;
+    border-top: 1px dashed color-mix(in srgb, var(--text) 34%, transparent);
+    left: 0;
+    right: 0;
+    top: 50%;
   }
 }

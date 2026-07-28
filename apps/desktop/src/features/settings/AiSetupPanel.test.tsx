@@ -293,7 +293,8 @@ describe("AiSetupPanel", () => {
     expect(within(requiredFields).getByText(/Activity duration/i)).toBeTruthy();
     expect(within(requiredFields).getByText(/Browser or site domain/i)).toBeTruthy();
     expect(within(requiredFields).queryByRole("switch", { name: /Browser or site domain/i })).toBeNull();
-    expect(within(requiredFields).getAllByText(/Required/i)).toHaveLength(3);
+    expect(within(requiredFields).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(requiredFields).getAllByText(/^Required$/i)).toHaveLength(3);
     expect(within(optionalFields).getByRole("switch", { name: /Site URL/i })).toBeTruthy();
     expect(within(optionalFields).getByRole("switch", { name: /Window title/i })).toBeTruthy();
     expect(within(optionalFields).getByRole("switch", { name: /^Content context$/i })).toBeTruthy();
