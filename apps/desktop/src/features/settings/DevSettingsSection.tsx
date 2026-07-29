@@ -20,6 +20,7 @@ import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
+import { showBootShellPreview } from "../loading/bootShell";
 
 type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
@@ -237,6 +238,21 @@ export function DevSettingsSection({
       />
       <div className="settings-block settings-block--dev-preview">
         <h3>Dev</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Startup loading screen</div>
+            <div className="desc">Show the real startup loading screen over the app for three seconds.</div>
+          </div>
+          <div className="ctrl">
+            <button
+              type="button"
+              className="settings-btn"
+              onClick={() => { showBootShellPreview(); }}
+            >
+              Preview 3 seconds
+            </button>
+          </div>
+        </div>
         {DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED ? (
           <DashboardDemoReplayControls
             settings={demoDashboardReplaySettings}

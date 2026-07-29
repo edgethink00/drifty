@@ -21,6 +21,10 @@ const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
 }));
 
+const bootShellActions = vi.hoisted(() => ({
+  showBootShellPreview: vi.fn(),
+}));
+
 vi.mock("../../appFeatureSwitches", () => ({
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: false,
   get DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED() {
@@ -32,6 +36,10 @@ vi.mock("../../appFeatureSwitches", () => ({
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
 }));
 
+vi.mock("../loading/bootShell", () => ({
+  showBootShellPreview: bootShellActions.showBootShellPreview,
+}));
+
 describe("DevSettingsSection", () => {
   afterEach(() => {
     cleanup();
@@ -39,6 +47,7 @@ describe("DevSettingsSection", () => {
 
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
+    bootShellActions.showBootShellPreview.mockClear();
   });
 
   it("shows Sentry smoke controls in production Dev settings", () => {
@@ -83,6 +92,15 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
+  });
+
+  it("previews the real startup loading screen for three seconds", () => {
+    renderProductionDevSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview 3 seconds" }));
+
+    expect(screen.getByText("Startup loading screen")).toBeTruthy();
+    expect(bootShellActions.showBootShellPreview).toHaveBeenCalledTimes(1);
   });
 
   it("shows pre-release update status and disables the check while busy", () => {

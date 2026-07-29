@@ -24,6 +24,7 @@ import "./features/profile/profile-page.css";
 import "./features/social/social.css";
 import "./styles/chartHoverMotion.css";
 import "./styles/modal-chrome.css";
+import { hideBootShell } from "./features/loading/bootShell";
 
 declare global {
   interface Window {
@@ -141,7 +142,7 @@ function BootstrapLoader() {
     if (LoadedApp) {
       window.__DRIFTY_SET_BOOT_STATUS__?.("App component ready");
       window.__DRIFTY_BOOTSTRAPPED__ = true;
-      document.getElementById("boot-shell")?.remove();
+      hideBootShell();
       document.getElementById("boot-error")?.remove();
     }
   }, [LoadedApp]);

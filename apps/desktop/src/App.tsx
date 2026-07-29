@@ -84,6 +84,7 @@ import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus"
 import { AuthModal } from "./features/auth/AuthModal";
 import { FeedbackModal } from "./features/feedback/FeedbackModal";
 import { DebugLogModal } from "./features/settings/DebugLogModal";
+import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
@@ -2365,7 +2366,7 @@ export default function App() {
   useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Renderer mounted. Showing minimal shell\u2026");
     window.__DRIFTY_BOOTSTRAPPED__ = true;
-    document.getElementById("boot-shell")?.remove();
+    hideBootShell();
   }, []);
 
   useEffect(() => {

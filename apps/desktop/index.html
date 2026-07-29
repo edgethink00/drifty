@@ -34,28 +34,36 @@
         const theme = window.__DRIFTY_RESOLVE_BOOT_THEME__();
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
-        if (surface === "watcher" || surface === "drift-alarm") document.documentElement.dataset.surface = surface;
+        if (surface === "watcher" || surface === "drift-alarm") {
+          document.documentElement.dataset.surface = surface;
+        } else {
+          document.documentElement.dataset.bootActive = "true";
+        }
       })();
     </script>
     <style>
       :root {
         --boot-canvas: #0f0f0d;
+        --boot-scrim: rgba(15, 15, 13, 0.6);
         --boot-text: #e8e6df;
         --boot-text-soft: #8a8780;
+        --boot-mark-filter: invert(1);
         --boot-warn: #c85a4e;
         --boot-warn-line: rgba(200, 90, 78, 0.3);
       }
       :root[data-theme="light"] {
         --boot-canvas: #f2f1ed;
+        --boot-scrim: rgba(242, 241, 237, 0.6);
         --boot-text: #1c1c19;
         --boot-text-soft: #79776f;
+        --boot-mark-filter: none;
         --boot-warn: #9e4238;
         --boot-warn-line: rgba(158, 66, 56, 0.3);
       }
       html, body {
         margin: 0;
         min-height: 100%;
-        background: var(--boot-canvas);
+        background: transparent;
         color: var(--boot-text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
@@ -81,27 +89,59 @@
         display: grid;
         place-items: center;
         padding: 24px;
-        background: var(--boot-canvas);
+        background: var(--boot-scrim);
+        backdrop-filter: blur(50px) saturate(0.88);
+        -webkit-backdrop-filter: blur(50px) saturate(0.88);
         pointer-events: none;
+        z-index: 2147483646;
+      }
+      html[data-boot-active="true"] #root {
+        visibility: hidden;
+      }
+      #boot-shell[hidden] {
+        display: none;
+      }
+      .boot-window-drag-strip {
+        position: fixed;
+        top: 0;
+        left: 96px;
+        right: 0;
+        height: 32px;
+        pointer-events: auto;
       }
       html[data-surface="watcher"] #boot-shell,
       html[data-surface="drift-alarm"] #boot-shell {
         display: none;
       }
+      .boot-loading__content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        animation: boot-breathe 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+      .boot-loading__mark {
+        width: 46px;
+        height: 46px;
+        display: block;
+        filter: var(--boot-mark-filter);
+        opacity: 0.72;
+      }
       .boot-loading {
-        color: color-mix(in srgb, var(--boot-text-soft) 85%, transparent);
+        color: color-mix(in srgb, var(--boot-text) 72%, transparent);
         font-size: 15px;
         font-weight: 500;
         letter-spacing: 0.01em;
-        animation: boot-pulse 1.6s ease-in-out infinite;
+        line-height: 1.4;
       }
-      @keyframes boot-pulse {
-        0%, 100% { opacity: 0.45; }
-        50%      { opacity: 0.9; }
+      @keyframes boot-breathe {
+        0%, 100% { opacity: 0.62; }
+        50%      { opacity: 0.82; }
       }
       @media (prefers-reduced-motion: reduce) {
-        .boot-loading {
+        .boot-loading__content {
           animation: none;
+          opacity: 0.72;
         }
       }
       .boot-error {
@@ -164,16 +204,15 @@
         el.style.display = "block";
         el.textContent = String(event.reason?.message || event.reason || "Unknown promise rejection");
       });
-      window.setTimeout(() => {
-        const status = document.getElementById("boot-status");
-        if (!status || window.__DRIFTY_BOOTSTRAPPED__) return;
-        status.textContent = "drifty still loading\u2026";
-      }, 2500);
     </script>
   </head>
   <body>
     <div id="boot-shell" aria-busy="true" aria-label="Loading Drifty">
-      <span id="boot-status" class="boot-loading">drifty loading&hellip;</span>
+      <div class="boot-window-drag-strip" data-tauri-drag-region aria-hidden="true"></div>
+      <div class="boot-loading__content">
+        <img class="boot-loading__mark" src="/src/assets/drifty-mark.svg" alt="" aria-hidden="true" />
+        <span id="boot-status" class="boot-loading" role="status" aria-live="polite">drifty loading&hellip;</span>
+      </div>
     </div>
     <div id="boot-error" class="boot-error"></div>
     <div id="root"></div>
