@@ -247,7 +247,7 @@ describe("App settings sidebar", () => {
     expect(window.localStorage.getItem("drifty.dev.webAccountPreview")).toBe("1");
   });
 
-  it("replaces the app sidebar with settings navigation and returns with Close settings", async () => {
+  it("replaces the app sidebar with settings navigation and returns with Back", async () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
@@ -259,10 +259,10 @@ describe("App settings sidebar", () => {
 
     const settingsSidebar = screen.getByRole("complementary", { name: /settings navigation/i });
     expect(within(settingsSidebar).getByRole("navigation", { name: /settings sections/i })).toBeTruthy();
-    const closeButton = within(settingsSidebar).getByRole("button", { name: /^Close settings$/i });
+    const backButton = within(settingsSidebar).getByRole("button", { name: /^Back$/i });
 
     act(() => {
-      fireEvent.click(closeButton);
+      fireEvent.click(backButton);
     });
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull());

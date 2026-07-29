@@ -86,9 +86,9 @@ export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, on
     <aside className={isCollapsed ? "sidebar sidebar--settings sidebar--collapsed" : "sidebar sidebar--settings"} aria-label={t("settings.sidebar.label")}>
       <button type="button" className="settings-sidebar-back" onClick={onBack}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="m4 4 8 8M12 4l-8 8" />
+          <path d="M9.8 3.8 5.6 8l4.2 4.2" />
         </svg>
-        <span>{t("settings.sidebar.close")}</span>
+        <span>{t("common.back")}</span>
       </button>
 
       <div className="settings-sidebar-heading">

@@ -42,7 +42,7 @@ describe("SettingsSidebar", () => {
     expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["App", "Account & data", "AI"]);
     expect(screen.getByRole("button", { name: /^Permissions$/ }).getAttribute("aria-current")).toBe("page");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Close settings$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
