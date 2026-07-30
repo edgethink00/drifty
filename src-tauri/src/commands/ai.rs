@@ -16,6 +16,7 @@ pub struct AiClassificationChatRequest {
     pub max_tokens: Option<u32>,
     pub timeout_ms: Option<u64>,
     pub temperature: Option<f64>,
+    pub response_format: Option<serde_json::Value>,
     pub reasoning_format: Option<String>,
     #[serde(default)]
     pub chat_template_kwargs: serde_json::Map<String, serde_json::Value>,
@@ -104,6 +105,9 @@ pub fn post_openai_chat(
     }
     if let Some(max_tokens) = request.max_tokens.filter(|value| *value > 0) {
         body.insert("max_tokens".to_string(), json!(max_tokens));
+    }
+    if let Some(response_format) = request.response_format {
+        body.insert("response_format".to_string(), response_format);
     }
     if let Some(reasoning_format) = request
         .reasoning_format

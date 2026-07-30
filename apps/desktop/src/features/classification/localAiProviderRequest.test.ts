@@ -92,6 +92,22 @@ function promptFromRequest(request: LocalAiProviderRequest | null): string {
 }
 
 describe("toLocalProviderRequest", () => {
+  it("requests the production intent contract and strict OpenRouter JSON schema", () => {
+    const request = toLocalProviderRequest(
+      { provider: "openrouter_byok", apiKey: "test-key", model: "google/gemini-3.1-flash-lite" },
+      [basePayload],
+      null,
+    );
+
+    expect(request).not.toBeNull();
+    expect(promptFromRequest(request)).toContain('"intent":string');
+    expect(promptFromRequest(request)).not.toContain('"productivity":string');
+    expect(request?.request["responseFormat"]).toMatchObject({
+      type: "json_schema",
+      json_schema: { name: "drifty_live_intent_classification", strict: true },
+    });
+  });
+
   it("omits Reddit-specific prompt guidance for non-Reddit payloads", () => {
     const prompt = promptFor([basePayload]);
 

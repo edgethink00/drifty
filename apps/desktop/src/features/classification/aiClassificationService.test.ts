@@ -372,7 +372,8 @@ describe("runAiClassification cloud contract", () => {
 
   function localAiResponse(segmentId: string, result: {
     readonly category: string;
-    readonly productivity: string;
+    readonly intent?: string;
+    readonly productivity?: string;
     readonly confidence: number;
     readonly reason: string;
   }) {
@@ -1308,6 +1309,13 @@ describe("runAiClassification cloud contract", () => {
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
           }),
+          responseFormat: expect.objectContaining({
+            type: "json_schema",
+            json_schema: expect.objectContaining({
+              name: "drifty_live_intent_classification",
+              strict: true,
+            }),
+          }),
         }),
       });
       const request = nativeInvoke.mock.calls[0]?.[1]?.request as Record<string, unknown>;
@@ -1317,6 +1325,41 @@ describe("runAiClassification cloud contract", () => {
         aiResult: true,
         model: "qwen/qwen3.6-flash",
         latencyMs: 321,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("derives local productivity from intent and blocks unsupported shopping drift", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      siteDomain: "giftshop.example",
+      siteTitle: "선물가게",
+    });
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
+        category: "shopping",
+        intent: "leisure",
+        confidence: 0.9,
+        reason: "Consumer browsing.",
+      }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "google/gemini-3.1-flash-lite" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(promptFromNativeCall(nativeInvoke, 0)).toContain('"intent":string');
+      expect(promptFromNativeCall(nativeInvoke, 0)).not.toContain('"productivity":string');
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "shopping",
+        productivity: "neutral",
+        promptVersion: "v8.2-intent-shopping-guard",
       })]);
     } finally {
       cleanupServiceMocks();
@@ -1738,7 +1781,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v7-definitions-anchors" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.2-intent-shopping-guard" })]);
     } finally {
       cleanupServiceMocks();
     }

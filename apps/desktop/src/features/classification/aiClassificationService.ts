@@ -1,10 +1,12 @@
-import { classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
+import { applyLiveShoppingEvidenceGuard, classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
   ActivityClassificationRecord,
   ActivitySegment,
   ClassificationMetrics,
+  LiveActivityIntent,
+  LiveClassificationPromptItem,
   UnclassifiedSegmentsQuery,
   ProductivityLabel,
 } from "@drifty/domain";
@@ -39,7 +41,7 @@ const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v7-definitions-anchors";
+const AI_CLASSIFICATION_PROMPT_VERSION = "v8.2-intent-shopping-guard";
 const ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD = 0.55;
 const MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS = 512;
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
@@ -73,6 +75,7 @@ const ACTIVITY_CATEGORIES = new Set<ActivityCategory>([
 ]);
 
 const PRODUCTIVITY_LABELS = new Set<ProductivityLabel>(["focus", "neutral", "drift"]);
+const LIVE_INTENTS = new Set<LiveActivityIntent>(LIVE_ACTIVITY_INTENTS);
 const enhancedContextRetriedFingerprints = new Set<string>();
 const enhancedContextRetriedFingerprintOrder: string[] = [];
 
@@ -81,6 +84,7 @@ type EdgeClassification = {
   segmentId?: unknown;
   inputFingerprint?: unknown;
   category?: unknown;
+  intent?: unknown;
   productivity?: unknown;
   confidence?: unknown;
   reason?: unknown;
@@ -1154,13 +1158,15 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
         ? classification.id
         : "";
     const sourcePayload = payloadById.get(segmentId);
-    if (!sourcePayload || !isActivityCategory(classification.category) || !isProductivityLabel(classification.productivity)) return [];
+    if (!sourcePayload || !isActivityCategory(classification.category)) return [];
+    const productivity = resolveProviderProductivity(classification, classification.category, sourcePayload);
+    if (!productivity) return [];
 
     return [{
       segmentId,
       inputFingerprint: typeof classification.inputFingerprint === "string" ? classification.inputFingerprint : sourcePayload.inputFingerprint,
       category: classification.category,
-      productivity: classification.productivity,
+      productivity,
       source: "llm",
       confidence: typeof classification.confidence === "number" ? classification.confidence : 0.5,
       reason: typeof classification.reason === "string" ? classification.reason : null,
@@ -1615,7 +1621,7 @@ function enhancedRetryImproves(
     && enhancedConfidence > firstPassConfidence;
 }
 
-// A-3: under the v7 prompt the model signals insufficient evidence structurally —
+// Under the v8.2 prompt the model signals insufficient evidence structurally —
 // category "unknown", or a confidence at/below the retry threshold — not through a
 // specific English phrase in the (terse, redacted, non-English-capable) reason.
 // Key the retry gate off that structured signal instead of a brittle regex.
@@ -1708,8 +1714,43 @@ function isActivityCategory(value: unknown): value is ActivityCategory {
   return typeof value === "string" && ACTIVITY_CATEGORIES.has(value as ActivityCategory);
 }
 
+function isLiveActivityIntent(value: unknown): value is LiveActivityIntent {
+  return typeof value === "string" && LIVE_INTENTS.has(value as LiveActivityIntent);
+}
+
 function isProductivityLabel(value: unknown): value is ProductivityLabel {
   return typeof value === "string" && PRODUCTIVITY_LABELS.has(value as ProductivityLabel);
+}
+
+function resolveProviderProductivity(
+  classification: EdgeClassification,
+  category: ActivityCategory,
+  payload: MinimizedActivityPayload,
+): ProductivityLabel | null {
+  const item = toLiveClassificationPromptItem(payload);
+  if (isLiveActivityIntent(classification.intent)) {
+    return resolveLiveActivityClassificationProductivity(classification.intent, category, item);
+  }
+  if (!isProductivityLabel(classification.productivity)) return null;
+  // Cloud responses and older local providers already contain productivity;
+  // applying the narrow shopping gate again is deterministic and idempotent.
+  return applyLiveShoppingEvidenceGuard(classification.productivity, category, item);
+}
+
+function toLiveClassificationPromptItem(payload: MinimizedActivityPayload): LiveClassificationPromptItem {
+  return {
+    id: payload.segmentId,
+    appName: payload.appName,
+    domain: payload.siteDomain ?? undefined,
+    urlHost: payload.siteDomain ?? undefined,
+    siteUrl: payload.siteUrl ?? undefined,
+    windowTitle: payload.windowTitle ?? undefined,
+    title: payload.siteTitle ?? payload.youtubeTitle ?? undefined,
+    youtubeChannelName: payload.youtubeChannelName ?? undefined,
+    youtubeCategory: payload.youtubeCategory ?? undefined,
+    redditCommunity: payload.redditCommunity,
+    durationSeconds: payload.durationSeconds,
+  };
 }
 
 async function edgeFunctionErrorMessage(error: unknown): Promise<string> {

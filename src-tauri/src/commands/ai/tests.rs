@@ -118,6 +118,28 @@ fn posts_optional_generation_controls_for_managed_local_runtime() {
 }
 
 #[test]
+fn posts_optional_structured_response_format() {
+    let (address, server) = capture_one_chat_request();
+    let mut request = chat_request(format!("http://{address}"));
+    request.response_format = Some(json!({
+        "type": "json_schema",
+        "json_schema": { "name": "drifty_live_intent_classification" }
+    }));
+
+    post_openai_chat(request).expect("chat request succeeds");
+
+    let request = server.join().expect("join server");
+    let body = request_body_json(&request);
+    assert_eq!(
+        body.get("response_format"),
+        Some(&json!({
+            "type": "json_schema",
+            "json_schema": { "name": "drifty_live_intent_classification" }
+        }))
+    );
+}
+
+#[test]
 fn posts_provider_preferences_when_supplied() {
     let (address, server) = capture_one_chat_request();
     let mut request = chat_request(format!("http://{address}"));
@@ -259,6 +281,7 @@ fn chat_request(base_url: String) -> AiClassificationChatRequest {
         max_tokens: None,
         timeout_ms: None,
         temperature: None,
+        response_format: None,
         chat_template_kwargs: serde_json::Map::new(),
         reasoning_format: None,
     }
