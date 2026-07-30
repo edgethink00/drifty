@@ -1,6 +1,4 @@
-use tauri::menu::{
-    AboutMetadata, CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu,
-};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Runtime};
 
 use crate::shell_action::{self, app_menu_id, ShellAction};
@@ -63,15 +61,9 @@ fn find_check_menu_item<R: Runtime>(
 }
 
 fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
-    let about = PredefinedMenuItem::about(
-        app,
-        Some("About Drifty"),
-        Some(AboutMetadata {
-            name: Some("Drifty".into()),
-            version: Some(app.package_info().version.to_string()),
-            ..Default::default()
-        }),
-    )?;
+    // Use AppKit's bundle-backed About panel directly, avoiding the custom
+    // options path implicated in the observed native icon-encoding crash.
+    let about = PredefinedMenuItem::about(app, Some("About Drifty"), None)?;
     let check_updates = MenuItem::with_id(
         app,
         app_menu_id::CHECK_FOR_UPDATES,
