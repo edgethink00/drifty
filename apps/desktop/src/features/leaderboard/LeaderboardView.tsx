@@ -14,6 +14,7 @@ export type LeaderboardPublicProfileControls = {
   readonly draft: ProfileDraft;
   readonly focusSeconds7d: number;
   readonly isPreviewProfile?: boolean;
+  readonly localMetricsStatus?: "loading" | "ready" | "error";
   readonly profileError: string | null;
   readonly profileLoading: boolean;
   readonly profileMessage: string | null;
@@ -89,7 +90,16 @@ export function LeaderboardView({
   const profileHandle = resolveProfileHandle(email);
   const weekFocusSeconds = publicProfile?.focusSeconds7d ?? 0;
   const dailyAverageSeconds = Math.round(weekFocusSeconds / 7);
-  const last30FocusSeconds = (publicProfile?.dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
+  const dailyProductivity = publicProfile?.dailyProductivity ?? null;
+  const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
+  const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
+  const localMetricsStatusMessage = localMetricsStatus === "loading"
+    ? "Calculating your local focus totals…"
+    : localMetricsStatus === "error"
+      ? "Local focus totals are unavailable."
+      : dailyProductivity === null
+        ? "Calculating your 30-day focus total…"
+        : null;
   const socialPills = buildSocialPills(profileDraft);
   const filteredLeaderboard = useMemo(() => {
     if (!trimmedSearchQuery) return leaderboard;
@@ -99,10 +109,7 @@ export function LeaderboardView({
   if (!isSupabaseEnabled) {
     return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Sync required" title="Leaderboard unavailable" detail="Supabase is not configured for this workspace." /></section>;
   }
-  if (isLoading) {
-    return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Refreshing" title="Loading leaderboard" detail="Checking the latest opt-in rankings." /></section>;
-  }
-  if (error) {
+  if (error && !isLoading) {
     return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Fetch error" title="Unable to load leaderboard" detail={error} /></section>;
   }
 
@@ -112,9 +119,9 @@ export function LeaderboardView({
   const publicRankReady = Boolean(publicProfile?.publicId && publicProfile.draft.isPublic && currentUserRank !== null);
 
   return (
-    <section className="leaderboard-panel" aria-label="Leaderboard">
-      <div className="leaderboard-panel__stack">
-        <section className="leaderboard-profile-block" aria-label="Leaderboard participation">
+    <section className="leaderboard-panel" aria-label="Leaderboard" aria-busy={isLoading || undefined}>
+      <div className={`leaderboard-panel__stack${isLoading ? " leaderboard-loading-shell" : ""}`}>
+        <section className="leaderboard-profile-block" aria-label="Leaderboard participation" aria-hidden={isLoading || undefined}>
           <section
             className="leaderboard-hero"
             aria-label="Your leaderboard participation"
@@ -124,44 +131,75 @@ export function LeaderboardView({
               <div
                 style={{ position: "relative", display: "flex", alignItems: "center", gap: "var(--space-4)", minWidth: 0 }}
               >
-                <ProfileAvatar
-                  className="leaderboard-hero__avatar"
-                  name={previewName}
-                  src={profileAvatarUrl || null}
-                  style={{ width: 77, height: 77, borderRadius: 18, fontSize: "1.68rem", flex: "0 0 auto" }}
-                />
-                <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
-                  <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`} style={{ justifySelf: "start" }}>
-                    {isOptedIn
-                      ? currentUserRank !== null
-                        ? formatRank(currentUserRank)
-                        : "On the board"
-                      : "Not on the board yet"}
-                  </span>
-                  <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
-                  {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
-                </div>
-                {editProfile ? (
-                  <button
-                    type="button"
-                    className="leaderboard-profile-edit-button"
-                    aria-label="Edit public profile"
-                    onClick={editProfile}
-                    style={{ position: "absolute", top: 0, right: 0, margin: 0 }}
-                  >
-                    <PencilIcon />
-                  </button>
-                ) : null}
+                {isLoading ? (
+                  <>
+                    <span
+                      className="leaderboard-hero__avatar leaderboard-loading-shell__bone"
+                      style={{ width: 77, height: 77, borderRadius: 18, flex: "0 0 auto" }}
+                    />
+                    <span className="leaderboard-loading-shell__identity-copy">
+                      <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__rank" />
+                      <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__name" />
+                      <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__handle" />
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ProfileAvatar
+                      className="leaderboard-hero__avatar"
+                      name={previewName}
+                      src={profileAvatarUrl || null}
+                      style={{ width: 77, height: 77, borderRadius: 18, fontSize: "1.68rem", flex: "0 0 auto" }}
+                    />
+                    <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
+                      <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`} style={{ justifySelf: "start" }}>
+                        {isOptedIn
+                          ? currentUserRank !== null
+                            ? formatRank(currentUserRank)
+                            : "On the board"
+                          : "Not on the board yet"}
+                      </span>
+                      <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
+                      {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
+                    </div>
+                    {editProfile ? (
+                      <button
+                        type="button"
+                        className="leaderboard-profile-edit-button"
+                        aria-label="Edit public profile"
+                        onClick={editProfile}
+                        style={{ position: "absolute", top: 0, right: 0, margin: 0 }}
+                      >
+                        <PencilIcon />
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
-              {publicProfile ? (
-                <div
-                  aria-label="Focus totals"
-                  style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%" }}
-                >
-                  <HeroStat label="Focus · this week" value={formatRoundedDuration(weekFocusSeconds)} accent />
-                  <HeroStat label="Daily avg" value={formatRoundedDuration(dailyAverageSeconds)} />
-                  <HeroStat label="Last 30 days" value={formatRoundedDuration(last30FocusSeconds)} />
-                </div>
+              {publicProfile || isLoading ? (
+                <>
+                  <div
+                    aria-label="Focus totals"
+                    style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%" }}
+                  >
+                    {isLoading ? (
+                      <>
+                        <HeroStat label="Focus · this week" value="" accent loading />
+                        <HeroStat label="Daily avg" value="" loading />
+                        <HeroStat label="Last 30 days" value="" loading />
+                      </>
+                    ) : (
+                      <>
+                        <HeroStat label="Focus · this week" value={localMetricsStatus === "ready" ? formatRoundedDuration(weekFocusSeconds) : "—"} accent />
+                        <HeroStat label="Daily avg" value={localMetricsStatus === "ready" ? formatRoundedDuration(dailyAverageSeconds) : "—"} />
+                        <HeroStat label="Last 30 days" value={dailyProductivity !== null ? formatRoundedDuration(last30FocusSeconds) : "—"} />
+                      </>
+                    )}
+                  </div>
+                  {!isLoading && localMetricsStatusMessage ? (
+                    <p className="sr-only" role="status" aria-live="polite">{localMetricsStatusMessage}</p>
+                  ) : null}
+                </>
               ) : null}
             </div>
 
@@ -169,7 +207,17 @@ export function LeaderboardView({
               style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
             >
               <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
-                {isOptedIn ? (
+                {isLoading ? (
+                  <button
+                    type="button"
+                    className={isOptedIn
+                      ? "ghost-button leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                      : "settings-btn settings-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"}
+                    disabled
+                  >
+                    {isOptedIn ? "Leave leaderboard" : "Join leaderboard"}
+                  </button>
+                ) : isOptedIn ? (
                   <button
                     type="button"
                     className="ghost-button leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
@@ -191,7 +239,28 @@ export function LeaderboardView({
                 )}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-                {publicProfile ? (
+                {isLoading ? (
+                  publicProfile ? (
+                    <>
+                      <button type="button" className="settings-btn settings-btn--primary profile-btn hero-action-btn hero-action-btn--mono" disabled>
+                        <EmbedIcon />
+                        Embed
+                      </button>
+                      {isOptedIn ? (
+                        <button type="button" className="ghost-button profile-btn hero-action-btn" disabled>
+                          <ShareIcon />
+                          Share
+                        </button>
+                      ) : null}
+                      {socialPills.map((pill) => (
+                        <span key={pill.key} className="ghost-button profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
+                          {pill.icon}
+                          {pill.label}
+                        </span>
+                      ))}
+                    </>
+                  ) : null
+                ) : publicProfile ? (
                   <>
                     <button
                       type="button"
@@ -210,7 +279,7 @@ export function LeaderboardView({
                     ) : null}
                   </>
                 ) : null}
-                {socialPills.map((pill) => (
+                {!isLoading && socialPills.map((pill) => (
                   <a key={pill.key} href={pill.href} target="_blank" rel="noreferrer" className="ghost-button profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
                     {pill.icon}
                     {pill.label}
@@ -219,8 +288,8 @@ export function LeaderboardView({
               </div>
             </div>
           </section>
-          {actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
-          {publicProfile?.profileError || publicProfile?.profileMessage ? (
+          {!isLoading && actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
+          {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
             <div className="leaderboard-public-profile__messages">
               {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}
               {publicProfile.profileMessage ? <p className="capture-recency">{publicProfile.profileMessage}</p> : null}
@@ -232,6 +301,7 @@ export function LeaderboardView({
           activePeriod={activePeriod}
           currentUserRank={currentUserRank}
           filteredLeaderboard={filteredLeaderboard}
+          isLoading={isLoading}
           isOptedIn={isOptedIn}
           leaderboard={leaderboard}
           previewName={previewName}
@@ -243,10 +313,10 @@ export function LeaderboardView({
           onSearchQueryChange={setSearchQuery}
           onSelectProfile={onSelectProfile}
         />
-        {publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
+        {!isLoading && publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
       </div>
 
-      {publicProfile && rankEmbedOpen ? (
+      {!isLoading && publicProfile && rankEmbedOpen ? (
         <RankEmbedsModal
           avatarUrl={profileAvatarUrl}
           displayName={previewName}
@@ -305,12 +375,28 @@ function ShareIcon() {
   );
 }
 
-function HeroStat({ label, value, accent = false }: { readonly label: string; readonly value: string; readonly accent?: boolean }) {
+function HeroStat({
+  label,
+  value,
+  accent = false,
+  loading = false,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly accent?: boolean;
+  readonly loading?: boolean;
+}) {
   const color = accent ? "var(--accent-strong)" : "var(--text)";
   return (
-    <div style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
+    <div className="leaderboard-hero__focus-stat" style={{ display: "grid", gap: "0.4rem" }}>
       <span className="label-mono" style={{ fontSize: "0.56rem", color: accent ? "var(--accent-strong)" : undefined }}>{label}</span>
-      <strong style={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1, color, whiteSpace: "nowrap" }}>{value}</strong>
+      <strong style={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1, color, whiteSpace: "nowrap" }}>
+        {loading ? (
+          <span className="leaderboard-loading-shell__stat-value">
+            <span className="leaderboard-loading-shell__bone" />
+          </span>
+        ) : value}
+      </strong>
     </div>
   );
 }

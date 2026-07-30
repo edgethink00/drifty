@@ -2673,3 +2673,134 @@
     padding-top: var(--space-4);
   }
 }
+
+/* Loading uses the finished profile, toolbar, and row frames. Only data-bearing
+   content is replaced, so responsive rules cannot drift between states. */
+.leaderboard-loading-shell__identity-copy,
+.leaderboard-hero__focus-stat {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.leaderboard-loading-shell__identity-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.leaderboard-loading-shell__bone {
+  background: color-mix(in srgb, var(--surface-strong) 74%, var(--line));
+  border-radius: var(--radius-pill);
+  display: block;
+  opacity: 0.58;
+}
+
+.leaderboard-loading-shell__rank {
+  height: 1.1rem;
+  width: 4.8rem;
+}
+
+.leaderboard-loading-shell__name {
+  height: 0.9rem;
+  max-width: 9.5rem;
+  width: 72%;
+}
+
+.leaderboard-loading-shell__handle {
+  height: 0.62rem;
+  max-width: 6.5rem;
+  width: 52%;
+}
+
+.leaderboard-hero__focus-stat {
+  min-width: 6.5rem;
+}
+
+.leaderboard-loading-shell__stat-value {
+  display: block;
+  height: 1.5rem;
+  line-height: 1;
+  width: 3.6rem;
+}
+
+.leaderboard-loading-shell__stat-value > .leaderboard-loading-shell__bone {
+  border-radius: var(--radius-sm);
+  height: 100%;
+  width: 100%;
+}
+
+.leaderboard-loading-shell .leaderboard-period-control,
+.leaderboard-search--loading {
+  opacity: 0.58;
+}
+
+.leaderboard-loading-shell .hero-action-btn {
+  filter: saturate(0.72);
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.leaderboard-loading-shell__status::before {
+  animation: leaderboardLoadingDot 2.8s ease-in-out infinite;
+}
+
+.leaderboard-loading-shell__toolbar-value {
+  display: block;
+  height: 1.12em;
+  width: 4.8rem;
+}
+
+.leaderboard-loading-shell__toolbar-value--wide {
+  width: 6rem;
+}
+
+.leaderboard-loading-shell__row {
+  pointer-events: none;
+}
+
+.leaderboard-loading-shell__row-rank,
+.leaderboard-loading-shell__row-name,
+.leaderboard-loading-shell__row-value {
+  height: 0.68rem;
+}
+
+.leaderboard-loading-shell__row-rank {
+  width: 1.2rem;
+}
+
+.leaderboard-loading-shell__row-name {
+  max-width: 9.5rem;
+  width: 42%;
+}
+
+.leaderboard-loading-shell__row:nth-child(2n) .leaderboard-loading-shell__row-name {
+  width: 56%;
+}
+
+.leaderboard-loading-shell__row-value {
+  display: block;
+  justify-self: end;
+  margin-left: auto;
+  width: 3.6rem;
+}
+
+.leaderboard-loading-shell .leaderboard-row__chevron {
+  height: 0.68rem;
+  width: 0.42rem;
+}
+
+@keyframes leaderboardLoadingDot {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+
+  50% {
+    opacity: 0.82;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaderboard-loading-shell__status::before {
+    animation: none;
+  }
+}

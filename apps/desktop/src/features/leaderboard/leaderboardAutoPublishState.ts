@@ -14,6 +14,8 @@ export const LEADERBOARD_AUTO_PUBLISH_SLOT_MS = 60 * 60 * 1000;
 export const LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS = 24 * 60 * 60 * 1000;
 export const LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
 
+const LEADERBOARD_AUTO_PUBLISH_PERIODS = ["daily", "weekly", "monthly"] as const satisfies readonly LeaderboardPeriod[];
+
 function leaderboardAutoPublishSlotIndex(ms: number): number {
   return Math.floor(ms / LEADERBOARD_AUTO_PUBLISH_SLOT_MS);
 }
@@ -206,6 +208,44 @@ export function shouldPublishLeaderboardPeriod({
     reason: "payload_changed",
     requiresRemoteOptInCheck: true,
   };
+}
+
+export function shouldSkipLeaderboardAutoPublishPayloadBuild({
+  records,
+  userScopeKey,
+  now,
+  bypassSlotGate = false,
+}: {
+  readonly records: readonly LeaderboardAutoPublishRecord[];
+  readonly userScopeKey: string;
+  readonly now: Date;
+  readonly bypassSlotGate?: boolean;
+}): boolean {
+  if (bypassSlotGate) return false;
+
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return false;
+
+  return LEADERBOARD_AUTO_PUBLISH_PERIODS.every((period) => {
+    const record = findLeaderboardAutoPublishRecord(records, userScopeKey, period);
+    if (!record) return false;
+
+    const lastErrorMs = toTimestamp(record.lastErrorAt);
+    if (
+      lastErrorMs !== null
+      && nowMs >= lastErrorMs
+      && nowMs - lastErrorMs < LEADERBOARD_AUTO_PUBLISH_FAILURE_BACKOFF_MS
+    ) {
+      return true;
+    }
+
+    const lastSuccessMs = toTimestamp(record.lastSuccessAt);
+    if (lastSuccessMs === null || nowMs < lastSuccessMs) return false;
+
+    const successAgeMs = nowMs - lastSuccessMs;
+    return successAgeMs < LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS
+      && leaderboardAutoPublishSlotIndex(nowMs) <= leaderboardAutoPublishSlotIndex(lastSuccessMs);
+  });
 }
 
 export function upsertLeaderboardAutoPublishRecords(

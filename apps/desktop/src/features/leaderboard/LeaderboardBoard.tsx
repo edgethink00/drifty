@@ -12,6 +12,7 @@ export type LeaderboardBoardProps = {
   readonly activePeriod: LeaderboardPeriod;
   readonly currentUserRank: number | null;
   readonly filteredLeaderboard: readonly LeaderboardRow[];
+  readonly isLoading?: boolean;
   readonly isOptedIn: boolean;
   readonly leaderboard: readonly LeaderboardRow[];
   readonly previewName: string;
@@ -28,6 +29,7 @@ export function LeaderboardBoard({
   activePeriod,
   currentUserRank,
   filteredLeaderboard,
+  isLoading = false,
   isOptedIn,
   leaderboard,
   previewName,
@@ -40,10 +42,11 @@ export function LeaderboardBoard({
   onSelectProfile,
 }: LeaderboardBoardProps) {
   return (
-    <section className="leaderboard-board-block" aria-label="Global leaderboard">
+    <section className="leaderboard-board-block" aria-label="Global leaderboard" aria-busy={isLoading || undefined}>
       <LeaderboardToolbar
         activePeriod={activePeriod}
         filteredCount={filteredLeaderboard.length}
+        isLoading={isLoading}
         leaderboardCount={leaderboard.length}
         searchQuery={searchQuery}
         statusMessage={statusMessage}
@@ -53,7 +56,9 @@ export function LeaderboardBoard({
         onSearchQueryChange={onSearchQueryChange}
       />
 
-      {leaderboard.length === 0 ? (
+      {isLoading ? (
+        <LeaderboardLoadingRankList activePeriod={activePeriod} />
+      ) : leaderboard.length === 0 ? (
         <StateBlock
           eyebrow="Waiting for entries"
           title="No ranked participants yet"
@@ -82,6 +87,7 @@ export function LeaderboardBoard({
 function LeaderboardToolbar({
   activePeriod,
   filteredCount,
+  isLoading,
   leaderboardCount,
   searchQuery,
   statusMessage,
@@ -92,6 +98,7 @@ function LeaderboardToolbar({
 }: {
   readonly activePeriod: LeaderboardPeriod;
   readonly filteredCount: number;
+  readonly isLoading: boolean;
   readonly leaderboardCount: number;
   readonly searchQuery: string;
   readonly statusMessage: string | null;
@@ -102,13 +109,14 @@ function LeaderboardToolbar({
 }) {
   return (
     <div className="leaderboard-toolbar">
-      <div className="leaderboard-period-control seg" role="group" aria-label="Leaderboard period">
+      <div className="leaderboard-period-control seg" role="group" aria-label="Leaderboard period" aria-hidden={isLoading || undefined}>
         {leaderboardPeriodOptions.map((item) => (
           <button
             key={item.period}
             type="button"
             className={activePeriod === item.period ? "on" : undefined}
             aria-pressed={activePeriod === item.period}
+            disabled={isLoading}
             onClick={() => onPeriodChange?.(item.period)}
           >
             <span>{item.label}</span>
@@ -116,7 +124,11 @@ function LeaderboardToolbar({
         ))}
       </div>
       <div className="leaderboard-toolbar__status-slot">
-        {statusMessage ? (
+        {isLoading ? (
+          <span className="leaderboard-refresh-status leaderboard-loading-shell__status" role="status" aria-live="polite">
+            Loading latest rankings…
+          </span>
+        ) : statusMessage ? (
           <span className="leaderboard-refresh-status" data-tone={statusTone} role="status" aria-live="polite">
             {statusMessage}
           </span>
@@ -126,29 +138,74 @@ function LeaderboardToolbar({
           </span>
         )}
       </div>
-      <div className="leaderboard-toolbar__stats" aria-label="Leaderboard totals">
+      <div className="leaderboard-toolbar__stats" aria-label="Leaderboard totals" aria-hidden={isLoading || undefined}>
         <div>
           <span className="label-mono">Total users</span>
-          <strong>{leaderboardCount}</strong>
+          <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value" /> : leaderboardCount}</strong>
         </div>
         <div>
           <span className="label-mono">Total worktime</span>
-          <strong>{formatRoundedDuration(totalFocusSeconds7d)}</strong>
+          <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value" /> : formatRoundedDuration(totalFocusSeconds7d)}</strong>
         </div>
         <div>
           <span className="label-mono">Showing</span>
-          <strong>{filteredCount === leaderboardCount ? `${leaderboardCount} participants` : `${filteredCount} of ${leaderboardCount}`}</strong>
+          <strong>{isLoading
+            ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value leaderboard-loading-shell__toolbar-value--wide" />
+            : filteredCount === leaderboardCount
+              ? `${leaderboardCount} participants`
+              : `${filteredCount} of ${leaderboardCount}`}</strong>
         </div>
       </div>
-      <label className="leaderboard-search">
+      <label className={`leaderboard-search${isLoading ? " leaderboard-search--loading" : ""}`} aria-hidden={isLoading || undefined}>
         <span className="sr-only">Search leaderboard</span>
         <input
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
+          disabled={isLoading}
           placeholder="Search people or rank…"
           type="search"
         />
       </label>
+    </div>
+  );
+}
+
+function LeaderboardLoadingRankList({ activePeriod }: { readonly activePeriod: LeaderboardPeriod }) {
+  return (
+    <div className="leaderboard-list-frame" aria-hidden="true">
+      <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`}>
+        <span>Participant</span>
+        <span>Focus time</span>
+        {activePeriod !== "daily" ? <span>Daily avg</span> : null}
+      </div>
+      <ol className="leaderboard-list">
+        {Array.from({ length: 5 }, (_, index) => (
+          <li className="leaderboard-row leaderboard-loading-shell__row" key={index}>
+            <button className="leaderboard-row__profile-button" type="button" tabIndex={-1}>
+              <div className="leaderboard-row__main">
+                <span className="leaderboard-row__rank">
+                  <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__row-rank" />
+                </span>
+                <span className="leaderboard-row__avatar leaderboard-loading-shell__bone" />
+                <div className="leaderboard-row__copy">
+                  <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__row-name" />
+                </div>
+              </div>
+              <div className="leaderboard-row__meta leaderboard-row__meta--compact">
+                <div className="leaderboard-stat">
+                  <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__row-value" />
+                </div>
+                {activePeriod !== "daily" ? (
+                  <div className="leaderboard-stat">
+                    <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__row-value" />
+                  </div>
+                ) : null}
+              </div>
+              <span className="leaderboard-row__chevron leaderboard-loading-shell__bone" />
+            </button>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

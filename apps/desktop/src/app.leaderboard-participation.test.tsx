@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
-import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
+import { shiftIsoDate, todayIsoDate, type ActivitySegment } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardPeriod, LeaderboardResult, LeaderboardRow, OwnLeaderboardEntry } from "./features/leaderboard/leaderboardService";
@@ -556,6 +556,52 @@ describe("App leaderboard participation", () => {
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
+  it("skips automatic monthly payload construction when every local period record is in the current slot", async () => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const sameSlotSuccessAt = new Date(2026, 5, 2, 13, 5, 0, 0).toISOString();
+
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    fetchOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "Alex Remote",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    window.localStorage.setItem(LEADERBOARD_AUTO_PUBLISH_STORAGE_KEY, JSON.stringify(
+      (["daily", "weekly", "monthly"] as const).map((period) => ({
+        userScopeKey: "user-1",
+        period,
+        payloadKey: `${period}-current-slot`,
+        lastAttemptAt: sameSlotSuccessAt,
+        lastSuccessAt: sameSlotSuccessAt,
+        lastErrorAt: null,
+      })),
+    ));
+    getTimeline.mockReset().mockResolvedValue([]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchOwnProfile).toHaveBeenCalledTimes(1);
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    const monthlyWindowStart = `${shiftIsoDate(todayIsoDate(), -29)}T04:00:00`;
+    expect(getTimeline.mock.calls.some(([range]) => range.start === monthlyWindowStart)).toBe(false);
+    expect(fetchOwnLeaderboardEntry).not.toHaveBeenCalled();
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+  });
+
   it("automatically republishes only periods whose hour slot has advanced", async () => {
     const today = todayIsoDate();
     const windowStartDay = shiftIsoDate(today, -6);
@@ -1047,6 +1093,41 @@ describe("App leaderboard participation", () => {
     expect(compactRefreshStatus).toBeTruthy();
     expect(compactRefreshStatus?.classList.contains("leaderboard-refresh-status")).toBe(true);
     expect(compactRefreshStatus?.closest(".capture-recency--error")).toBeNull();
+  });
+
+  it("renders remote rankings before local focus totals finish", async () => {
+    const deferredTimeline = createDeferred<ActivitySegment[]>();
+    getTimeline.mockReset().mockReturnValue(deferredTimeline.promise);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [makeLeaderboardRow("weekly")] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: makeOwnLeaderboardEntry("weekly") });
+
+    render(<App />);
+
+    await openSocialLeaderboard();
+
+    expect(await screen.findByRole("button", { name: /view alex profile/i })).toBeTruthy();
+    expect(screen.getByText("Calculating your local focus totals…")).toBeTruthy();
+    expect(within(screen.getByLabelText("Focus totals")).getAllByText("—")).toHaveLength(3);
+
+    deferredTimeline.resolve([]);
+    await waitFor(() => {
+      expect(screen.queryByText("Calculating your local focus totals…")).toBeNull();
+    });
+  });
+
+  it("keeps remote rankings visible when local focus totals fail", async () => {
+    getTimeline.mockReset().mockRejectedValue(new Error("Local tracker unavailable"));
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [makeLeaderboardRow("weekly")] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: makeOwnLeaderboardEntry("weekly") });
+
+    render(<App />);
+
+    await openSocialLeaderboard();
+
+    expect(await screen.findByRole("button", { name: /view alex profile/i })).toBeTruthy();
+    expect(await screen.findByText("Local focus totals are unavailable.")).toBeTruthy();
+    expect(screen.queryByText("Unable to load leaderboard")).toBeNull();
+    expect(within(screen.getByLabelText("Focus totals")).getAllByText("—")).toHaveLength(3);
   });
 
   it("clears joined controls after opt-out even when the follow-up refresh fails", async () => {

@@ -9,6 +9,7 @@ import {
   buildLeaderboardAutoPublishPayloadKey,
   findLeaderboardAutoPublishRecord,
   readLeaderboardAutoPublishRecords,
+  shouldSkipLeaderboardAutoPublishPayloadBuild,
   shouldPublishLeaderboardPeriod,
   upsertLeaderboardAutoPublishRecords,
   writeLeaderboardAutoPublishRecords,
@@ -173,6 +174,79 @@ describe("leaderboardAutoPublishState", () => {
 
     expect(blockedDecision).toEqual({ shouldPublish: false, reason: "failure_backoff", requiresRemoteOptInCheck: false });
     expect(retryDecision.shouldPublish).toBe(true);
+  });
+
+  it("skips payload construction only when every period is already gated locally", () => {
+    const records = (["daily", "weekly", "monthly"] as const).map((period) => makeRecord({
+      period,
+      lastSuccessAt: "2026-07-03T12:05:00.000Z",
+    }));
+
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records,
+      userScopeKey: "user-1",
+      now: new Date("2026-07-03T12:30:00.000Z"),
+    })).toBe(true);
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records: records.slice(0, 2),
+      userScopeKey: "user-1",
+      now: new Date("2026-07-03T12:30:00.000Z"),
+    })).toBe(false);
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records,
+      userScopeKey: "user-1",
+      now: new Date("2026-07-03T12:30:00.000Z"),
+      bypassSlotGate: true,
+    })).toBe(false);
+  });
+
+  it("does not preflight-skip a new slot, due heartbeat, or invalid clock", () => {
+    const records = (["daily", "weekly", "monthly"] as const).map((period) => makeRecord({
+      period,
+      lastSuccessAt: "2026-07-03T11:55:00.000Z",
+    }));
+
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records,
+      userScopeKey: "user-1",
+      now: new Date("2026-07-03T12:30:00.000Z"),
+    })).toBe(false);
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records: records.map((record) => ({
+        ...record,
+        lastSuccessAt: new Date(BASE_TIME.getTime() - LEADERBOARD_AUTO_PUBLISH_HEARTBEAT_MS).toISOString(),
+      })),
+      userScopeKey: "user-1",
+      now: BASE_TIME,
+    })).toBe(false);
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records: records.map((record) => ({ ...record, lastSuccessAt: "2026-07-03T13:00:00.000Z" })),
+      userScopeKey: "user-1",
+      now: BASE_TIME,
+    })).toBe(false);
+  });
+
+  it("treats a recent failure as a local skip only when all remaining periods are also gated", () => {
+    const records = (["daily", "weekly", "monthly"] as const).map((period) => makeRecord({
+      period,
+      lastSuccessAt: "2026-07-03T12:05:00.000Z",
+    }));
+    const withFailure = records.map((record) => record.period === "daily"
+      ? { ...record, lastSuccessAt: "2026-07-03T11:55:00.000Z", lastErrorAt: "2026-07-03T12:29:00.000Z" }
+      : record);
+
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records: withFailure,
+      userScopeKey: "user-1",
+      now: new Date("2026-07-03T12:30:00.000Z"),
+    })).toBe(true);
+    expect(shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records: withFailure.map((record) => record.period === "weekly"
+        ? { ...record, lastSuccessAt: "2026-07-03T11:55:00.000Z" }
+        : record),
+      userScopeKey: "user-1",
+      now: new Date("2026-07-03T12:30:00.000Z"),
+    })).toBe(false);
   });
 
   it("recovers from malformed local storage", () => {

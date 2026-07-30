@@ -324,8 +324,49 @@ describe("LeaderboardView", () => {
   it("renders a loading state while leaderboard data is being fetched", () => {
     renderView({ isLoading: true });
 
-    expect(screen.getByText(/loading leaderboard/i)).toBeTruthy();
-    expect(screen.getByText(/checking the latest opt-in rankings/i)).toBeTruthy();
+    const panel = screen.getByLabelText(/^leaderboard$/i);
+    const status = within(panel).getByRole("status");
+    const loadingHero = panel.querySelector(".leaderboard-hero");
+    const loadingList = panel.querySelector(".leaderboard-list-frame");
+
+    expect(panel.getAttribute("aria-busy")).toBe("true");
+    expect(status.textContent).toBe("Loading latest rankings…");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    expect(loadingHero?.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(loadingList?.getAttribute("aria-hidden")).toBe("true");
+    expect(panel.querySelector(".leaderboard-toolbar")).not.toBeNull();
+    expect(panel.querySelectorAll(".leaderboard-loading-shell__row")).toHaveLength(5);
+    expect(within(panel).getByRole("button", { name: "Weekly", hidden: true }).hasAttribute("disabled")).toBe(true);
+    expect(panel.querySelector(".leaderboard-search input")?.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByText(/checking the latest opt-in rankings/i)).toBeNull();
+  });
+
+  it("keeps local focus metrics quiet while they are loading", () => {
+    renderView({ publicProfile: makePublicProfile({ localMetricsStatus: "loading", focusSeconds7d: 0 }) });
+
+    const totals = screen.getByLabelText(/focus totals/i);
+    expect(within(totals).getAllByText("—")).toHaveLength(3);
+    expect(within(totals).queryByText("0m")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Calculating your local focus totals…");
+  });
+
+  it("marks local focus metrics unavailable without showing zero totals", () => {
+    renderView({ publicProfile: makePublicProfile({ localMetricsStatus: "error", focusSeconds7d: 0 }) });
+
+    const totals = screen.getByLabelText(/focus totals/i);
+    expect(within(totals).getAllByText("—")).toHaveLength(3);
+    expect(within(totals).queryByText("0m")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Local focus totals are unavailable.");
+  });
+
+  it("shows ready weekly totals without inventing a 30-day zero", () => {
+    renderView({ publicProfile: makePublicProfile({ focusSeconds7d: 3600 }) });
+
+    const totals = screen.getByLabelText(/focus totals/i);
+    expect(within(totals).getByText("1h")).toBeTruthy();
+    expect(within(totals).getByText("—")).toBeTruthy();
+    expect(within(totals).queryByText("0m")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Calculating your 30-day focus total…");
   });
 
   it("renders background refresh status as a non-error toolbar status", () => {
@@ -354,6 +395,13 @@ describe("LeaderboardView", () => {
 
     expect(screen.getByText(/unable to load leaderboard/i)).toBeTruthy();
     expect(screen.getByText("RPC exploded")).toBeTruthy();
+  });
+
+  it("keeps the stable loading frame ahead of a stale fetch error", () => {
+    renderView({ error: "Previous RPC error", isLoading: true });
+
+    expect(screen.getByRole("status").textContent).toBe("Loading latest rankings…");
+    expect(screen.queryByText(/unable to load leaderboard/i)).toBeNull();
   });
 
   it("renders an opted-out state with the exact trimmed public-name preview", () => {

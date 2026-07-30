@@ -17,6 +17,7 @@ import {
   clearLeaderboardAutoPublishRecordsForUser,
   findLeaderboardAutoPublishRecord,
   readLeaderboardAutoPublishRecords,
+  shouldSkipLeaderboardAutoPublishPayloadBuild,
   shouldPublishLeaderboardPeriod,
   upsertLeaderboardAutoPublishRecords,
   writeLeaderboardAutoPublishRecords,
@@ -63,6 +64,7 @@ type UseLeaderboardProfileControllerResult = {
   readonly leaderboardActionLoading: boolean;
   readonly leaderboardError: string | null;
   readonly leaderboardLoading: boolean;
+  readonly leaderboardLocalMetricsStatus: "loading" | "ready" | "error";
   readonly leaderboardStatusMessage: string | null;
   readonly leaderboardStatusTone: "error" | "neutral";
   readonly leaderboardProfileBio: string;
@@ -126,6 +128,11 @@ export type LeaderboardAutoPublishOptions = {
 type LeaderboardOptInCache = {
   readonly userScopeKey: string;
   readonly optedIn: boolean;
+};
+
+type LeaderboardLocalMetricsRequest = {
+  readonly scopeKey: string;
+  readonly promise: Promise<ActivitySegment[]>;
 };
 
 type LeaderboardAutoPublishPrepared = {
@@ -311,7 +318,11 @@ export function useLeaderboardProfileController({
   const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
   const [selectedProfileError, setSelectedProfileError] = useState<string | null>(null);
   const [leaderboardSegments, setLeaderboardSegments] = useState<ActivitySegment[]>([]);
+  const [leaderboardLocalMetricsStatus, setLeaderboardLocalMetricsStatus] = useState<"loading" | "ready" | "error">("loading");
   const leaderboardRefreshRequestRef = useRef(0);
+  const leaderboardLocalMetricsRequestRef = useRef(0);
+  const leaderboardLocalMetricsScopeRef = useRef<string | null>(null);
+  const leaderboardLocalMetricsInFlightRef = useRef<LeaderboardLocalMetricsRequest | null>(null);
   const leaderboardHasResolvedOnceRef = useRef(false);
   const leaderboardHasLoadedOnceRef = useRef(false);
   const leaderboardOwnEntryScopeRef = useRef<string | null>(null);
@@ -323,7 +334,10 @@ export function useLeaderboardProfileController({
   const [leaderboardAutoPublishError, setLeaderboardAutoPublishError] = useState<string | null>(null);
 
   const leaderboardWindowEndDay = logicalTodayIsoDate(startOfDayMinutes);
-  const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, activeLeaderboardPeriod);
+  // The profile hero is explicitly labelled "this week". Keep its local range
+  // stable while the public board switches between daily, weekly, and monthly.
+  const leaderboardWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "weekly");
+  const leaderboardLocalMetricsScopeKey = `${leaderboardWindowStartDay}:${leaderboardWindowEndDay}:${startOfDayMinutes}`;
   const publishableLeaderboardSegments = useMemo<ActivitySegment[]>(
     () => leaderboardSegments.filter((segment: ActivitySegment) => !isBrowserHistoryImportSegment(segment)),
     [leaderboardSegments],
@@ -333,8 +347,10 @@ export function useLeaderboardProfileController({
     [publishableLeaderboardSegments, showAiClassificationImpact],
   );
   const localRollingFocusSeconds = useMemo(
-    () => buildRollingFocusSeconds(publishableLeaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions, startOfDayMinutes),
-    [leaderboardClassificationOptions, leaderboardWindowEndDay, leaderboardWindowStartDay, publishableLeaderboardSegments, startOfDayMinutes],
+    () => leaderboardLocalMetricsStatus === "ready" && leaderboardLocalMetricsScopeRef.current === leaderboardLocalMetricsScopeKey
+      ? buildRollingFocusSeconds(publishableLeaderboardSegments, leaderboardWindowStartDay, leaderboardWindowEndDay, leaderboardClassificationOptions, startOfDayMinutes)
+      : 0,
+    [leaderboardClassificationOptions, leaderboardLocalMetricsScopeKey, leaderboardLocalMetricsStatus, leaderboardWindowEndDay, leaderboardWindowStartDay, publishableLeaderboardSegments, startOfDayMinutes],
   );
   const leaderboardProfileDisplayName = useMemo(() => profile?.display_name || fallbackDisplayName(user?.email), [profile?.display_name, user?.email]);
   const leaderboardUsesPreviewProfile = shouldUsePreviewData();
@@ -352,6 +368,50 @@ export function useLeaderboardProfileController({
     leaderboardOptInCacheRef.current = null;
   }, [leaderboardOwnEntryScopeKey]);
 
+  useEffect(() => () => {
+    leaderboardRefreshRequestRef.current += 1;
+    leaderboardLocalMetricsRequestRef.current += 1;
+  }, []);
+
+  const refreshLeaderboardLocalMetrics = useCallback(async () => {
+    const requestId = ++leaderboardLocalMetricsRequestRef.current;
+    const scopeKey = leaderboardLocalMetricsScopeKey;
+    const shouldPreserveResolvedMetrics = leaderboardLocalMetricsScopeRef.current === scopeKey;
+    if (!shouldPreserveResolvedMetrics) setLeaderboardLocalMetricsStatus("loading");
+
+    let request = leaderboardLocalMetricsInFlightRef.current;
+    if (!request || request.scopeKey !== scopeKey) {
+      request = {
+        scopeKey,
+        promise: trackerClient.getTimeline(getLogicalDayRange(
+          leaderboardWindowStartDay,
+          leaderboardWindowEndDay,
+          startOfDayMinutes,
+        )),
+      };
+      leaderboardLocalMetricsInFlightRef.current = request;
+    }
+
+    try {
+      const segments = await request.promise;
+      if (leaderboardLocalMetricsRequestRef.current !== requestId) return;
+
+      setLeaderboardSegments(segments);
+      leaderboardLocalMetricsScopeRef.current = scopeKey;
+      setLeaderboardLocalMetricsStatus("ready");
+    } catch {
+      if (leaderboardLocalMetricsRequestRef.current !== requestId) return;
+      if (shouldPreserveResolvedMetrics) return;
+
+      leaderboardLocalMetricsScopeRef.current = null;
+      setLeaderboardLocalMetricsStatus("error");
+    } finally {
+      if (leaderboardLocalMetricsInFlightRef.current?.promise === request.promise) {
+        leaderboardLocalMetricsInFlightRef.current = null;
+      }
+    }
+  }, [leaderboardLocalMetricsScopeKey, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes]);
+
   const refreshLeaderboardData = useCallback(async (authenticatedUser = user) => {
     const requestId = ++leaderboardRefreshRequestRef.current;
     const hasResolvedLeaderboardState = leaderboardHasResolvedOnceRef.current;
@@ -363,6 +423,10 @@ export function useLeaderboardProfileController({
       setLeaderboardRows([]);
       setOwnLeaderboardEntry(null);
       setLeaderboardSegments([]);
+      leaderboardLocalMetricsRequestRef.current += 1;
+      leaderboardLocalMetricsScopeRef.current = null;
+      leaderboardLocalMetricsInFlightRef.current = null;
+      setLeaderboardLocalMetricsStatus("loading");
       leaderboardOwnEntryScopeRef.current = null;
       leaderboardHasResolvedOnceRef.current = false;
       leaderboardHasLoadedOnceRef.current = false;
@@ -373,14 +437,14 @@ export function useLeaderboardProfileController({
       return;
     }
 
+    void refreshLeaderboardLocalMetrics();
     setLeaderboardRefreshing(true);
     if (!hasResolvedLeaderboardState || shouldPreserveLeaderboardState) setLeaderboardError(null);
 
     try {
-      const [globalResult, ownResult, leaderboardTimeline] = await Promise.all([
+      const [globalResult, ownResult] = await Promise.all([
         fetchGlobalLeaderboard(activeLeaderboardPeriod, 100),
         canLoadOwnLeaderboardEntry ? fetchOwnLeaderboardEntry(activeLeaderboardPeriod) : Promise.resolve({ success: true, error: null, data: null }),
-        trackerClient.getTimeline(getLogicalDayRange(leaderboardWindowStartDay, leaderboardWindowEndDay, startOfDayMinutes)),
       ]);
 
       if (leaderboardRefreshRequestRef.current !== requestId) return;
@@ -389,7 +453,6 @@ export function useLeaderboardProfileController({
         if (!shouldPreserveLeaderboardState) {
           setLeaderboardRows([]);
           setOwnLeaderboardEntry(null);
-          setLeaderboardSegments([]);
           leaderboardOwnEntryScopeRef.current = null;
         }
         leaderboardHasResolvedOnceRef.current = true;
@@ -408,7 +471,6 @@ export function useLeaderboardProfileController({
         if (!shouldPreserveLeaderboardState) {
           setLeaderboardRows(globalResult.data ?? []);
           setOwnLeaderboardEntry(null);
-          setLeaderboardSegments(leaderboardTimeline);
           leaderboardOwnEntryScopeRef.current = null;
         }
         leaderboardHasResolvedOnceRef.current = true;
@@ -419,7 +481,6 @@ export function useLeaderboardProfileController({
           result: "error",
           period: activeLeaderboardPeriod,
           row_count_bucket: toCountBucket((globalResult.data ?? []).length),
-          segment_count_bucket: toCountBucket(leaderboardTimeline.length),
           error_kind: toAnalyticsErrorKind(ownResult.error),
         });
         return;
@@ -427,7 +488,6 @@ export function useLeaderboardProfileController({
 
       setLeaderboardRows(globalResult.data ?? []);
       setOwnLeaderboardEntry(ownResult.data ?? null);
-      setLeaderboardSegments(leaderboardTimeline);
       leaderboardOwnEntryScopeRef.current = authenticatedUserScopeKey;
       leaderboardHasResolvedOnceRef.current = true;
       leaderboardHasLoadedOnceRef.current = true;
@@ -439,14 +499,12 @@ export function useLeaderboardProfileController({
         result: "success",
         period: activeLeaderboardPeriod,
         row_count_bucket: toCountBucket((globalResult.data ?? []).length),
-        segment_count_bucket: toCountBucket(leaderboardTimeline.length),
       });
     } catch (nextError) {
       if (leaderboardRefreshRequestRef.current !== requestId) return;
       if (!shouldPreserveLeaderboardState) {
         setLeaderboardRows([]);
         setOwnLeaderboardEntry(null);
-        setLeaderboardSegments([]);
         leaderboardOwnEntryScopeRef.current = null;
       }
       leaderboardHasResolvedOnceRef.current = true;
@@ -461,13 +519,17 @@ export function useLeaderboardProfileController({
     } finally {
       if (leaderboardRefreshRequestRef.current === requestId) setLeaderboardRefreshing(false);
     }
-  }, [activeLeaderboardPeriod, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes, user]);
+  }, [activeLeaderboardPeriod, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, refreshLeaderboardLocalMetrics, user]);
 
   useEffect(() => {
     if (!isSupabaseConfigured && !shouldUsePreviewData()) {
       setLeaderboardRows([]);
       setOwnLeaderboardEntry(null);
       setLeaderboardSegments([]);
+      leaderboardLocalMetricsRequestRef.current += 1;
+      leaderboardLocalMetricsScopeRef.current = null;
+      leaderboardLocalMetricsInFlightRef.current = null;
+      setLeaderboardLocalMetricsStatus("loading");
       leaderboardOwnEntryScopeRef.current = null;
       leaderboardHasResolvedOnceRef.current = false;
       leaderboardHasLoadedOnceRef.current = false;
@@ -585,6 +647,12 @@ export function useLeaderboardProfileController({
     if (leaderboardOwnEntryScopeKey === "signed-out") return;
     if (leaderboardManualActionInFlightRef.current) return;
     if (leaderboardAutoPublishInFlightRef.current) return;
+    if (shouldSkipLeaderboardAutoPublishPayloadBuild({
+      records: readLeaderboardAutoPublishRecords(),
+      userScopeKey: leaderboardOwnEntryScopeKey,
+      now: new Date(),
+      bypassSlotGate: options.bypassSlotGate === true,
+    })) return;
 
     leaderboardAutoPublishInFlightRef.current = true;
     if (activeTab === "leaderboard") {
@@ -1104,6 +1172,7 @@ export function useLeaderboardProfileController({
     leaderboardActionLoading,
     leaderboardError: leaderboardBlockingError,
     leaderboardLoading: leaderboardBlockingLoading,
+    leaderboardLocalMetricsStatus,
     leaderboardStatusMessage,
     leaderboardStatusTone,
     leaderboardProfileBio,
