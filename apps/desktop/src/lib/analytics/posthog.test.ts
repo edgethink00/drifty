@@ -2,10 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   POSTHOG_EVENT_NAMES,
   POSTHOG_EVENT_PROPERTY_ALLOWLIST,
+  createPostHogAccountIdentityResolver,
+  createPostHogDailyActiveRecorder,
   createPostHogEventPayload,
+  derivePostHogAccountDistinctId,
+  getOrCreatePostHogInstallDistinctId,
+  getPostHogReportingDateKey,
+  resolvePostHogEventIdentity,
   sanitizePostHogEventProperties,
+  shouldEnablePostHog,
   toAnalyticsErrorKind,
   toCountBucket,
+  type PostHogIdentity,
   type PostHogEventPropertiesByName,
 } from "./posthog";
 
@@ -25,6 +33,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     const payload = createPostHogEventPayload({
       apiKey: "phc_test",
       distinctId: "launch-session",
+      identityScope: "install",
       event: "auth_state_changed",
       properties: sanitized,
     });
@@ -53,6 +62,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(POSTHOG_EVENT_NAMES).toEqual(
       expect.arrayContaining([
         "app_surface_opened",
+        "app_active",
         "onboarding_completed",
         "permission_action",
         "tracker_action",
@@ -112,6 +122,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     const payload = createPostHogEventPayload({
       apiKey: "phc_test",
       distinctId: "launch-session",
+      identityScope: "install",
       event: "ai_classification_run",
       properties,
     });
@@ -127,6 +138,10 @@ describe("PostHog desktop analytics privacy boundary", () => {
         app_platform: "macos",
         runtime: "web",
         channel: "development",
+        analytics_schema_version: "v2",
+        app_version: "1.3.3",
+        identity_scope: "install",
+        reporting_time_zone: "Asia/Seoul",
         trigger: "manual",
         provider_kind: "cloud",
         result: "success",
@@ -153,6 +168,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     const payload = createPostHogEventPayload({
       apiKey: "phc_test",
       distinctId: "launch-session",
+      identityScope: "install",
       event: "project_classification_run",
       properties: sanitized,
     });
@@ -184,6 +200,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     const payload = createPostHogEventPayload({
       apiKey: "phc_test",
       distinctId: "launch-session",
+      identityScope: "install",
       event: "ai_classification_run",
       properties: sanitized,
     });
@@ -205,5 +222,151 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect("raw_payload" in payload.properties).toBe(false);
     expect("invalid_bucket" in payload.properties).toBe(false);
     expect("error_kind" in payload.properties).toBe(false);
+  });
+
+  it("enables production analytics only for the Tauri runtime", () => {
+    const base = {
+      hasProjectKey: true,
+      mode: "production",
+      channel: "production",
+      hasWindow: true,
+      isTauri: true,
+    } as const;
+
+    expect(shouldEnablePostHog(base)).toBe(true);
+    expect(shouldEnablePostHog({ ...base, isTauri: false })).toBe(false);
+    expect(shouldEnablePostHog({ ...base, channel: "development" })).toBe(false);
+    expect(shouldEnablePostHog({ ...base, mode: "test" })).toBe(false);
+    expect(shouldEnablePostHog({ ...base, hasProjectKey: false })).toBe(false);
+  });
+
+  it("persists a dedicated install identity without reusing account or device ids", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    const first = getOrCreatePostHogInstallDistinctId(storage, () => "11111111-1111-4111-8111-111111111111");
+    const second = getOrCreatePostHogInstallDistinctId(storage, () => "22222222-2222-4222-8222-222222222222");
+
+    expect(first).toBe("install_11111111-1111-4111-8111-111111111111");
+    expect(second).toBe(first);
+  });
+
+  it("falls back to a process identity when analytics storage reads or writes fail", () => {
+    const storage = {
+      getItem: () => {
+        throw new Error("storage read blocked");
+      },
+      setItem: () => {
+        throw new Error("storage write blocked");
+      },
+    };
+
+    expect(() => getOrCreatePostHogInstallDistinctId(storage, () => "fallback-id")).not.toThrow();
+    expect(getOrCreatePostHogInstallDistinctId(storage, () => "fallback-id")).toBe("install_fallback-id");
+  });
+
+  it("uses the stable account identity only for app_active events", () => {
+    const install = { distinctId: "install_test", scope: "install" } satisfies PostHogIdentity;
+    const account = { distinctId: "account_test", scope: "account" } satisfies PostHogIdentity;
+
+    expect(resolvePostHogEventIdentity("app_active", install, account)).toBe(account);
+    expect(resolvePostHogEventIdentity("app_active", install, null)).toBe(install);
+    expect(resolvePostHogEventIdentity("auth_state_changed", install, account)).toBe(install);
+    expect(resolvePostHogEventIdentity("billing_action", install, account)).toBe(install);
+    expect(resolvePostHogEventIdentity("ai_classification_run", install, account)).toBe(install);
+  });
+
+  it("ignores stale account identity resolutions after an account switch or sign-out", async () => {
+    const pending = new Map<string, (distinctId: string) => void>();
+    const resolver = createPostHogAccountIdentityResolver(
+      (userId) => new Promise<string>((resolve) => pending.set(userId, resolve)),
+    );
+
+    const first = resolver.resolve("first-user");
+    const second = resolver.resolve("second-user");
+    pending.get("first-user")?.("account_first");
+    await expect(first).resolves.toBeNull();
+    pending.get("second-user")?.("account_second");
+    await expect(second).resolves.toEqual({ distinctId: "account_second", scope: "account" });
+
+    const signedOut = resolver.resolve("third-user");
+    resolver.clear();
+    pending.get("third-user")?.("account_third");
+    await expect(signedOut).resolves.toBeNull();
+  });
+
+  it("deduplicates concurrent daily-active delivery and remembers success without storage", async () => {
+    const recordDailyActive = createPostHogDailyActiveRecorder();
+    const identity = { distinctId: "account_test", scope: "account" } satisfies PostHogIdentity;
+    const storage = {
+      getItem: () => {
+        throw new Error("storage read blocked");
+      },
+      setItem: () => {
+        throw new Error("storage write blocked");
+      },
+    };
+    let deliverCount = 0;
+    let finishDelivery!: (delivered: boolean) => void;
+    const pendingDelivery = new Promise<boolean>((resolve) => {
+      finishDelivery = resolve;
+    });
+    const input = {
+      identity,
+      reportingDate: "2026-07-31",
+      storage,
+      deliver: () => {
+        deliverCount += 1;
+        return pendingDelivery;
+      },
+    };
+
+    const first = recordDailyActive(input);
+    await expect(recordDailyActive(input)).resolves.toBe(false);
+    expect(deliverCount).toBe(1);
+    finishDelivery(true);
+    await expect(first).resolves.toBe(true);
+    await expect(recordDailyActive(input)).resolves.toBe(false);
+    expect(deliverCount).toBe(1);
+  });
+
+  it("retries daily-active delivery after a failed request", async () => {
+    const recordDailyActive = createPostHogDailyActiveRecorder();
+    const identity = { distinctId: "account_test", scope: "account" } satisfies PostHogIdentity;
+    let deliverCount = 0;
+    const input = {
+      identity,
+      reportingDate: "2026-07-31",
+      storage: null,
+      deliver: async () => {
+        deliverCount += 1;
+        return deliverCount > 1;
+      },
+    };
+
+    await expect(recordDailyActive(input)).resolves.toBe(false);
+    await expect(recordDailyActive(input)).resolves.toBe(true);
+    await expect(recordDailyActive(input)).resolves.toBe(false);
+    expect(deliverCount).toBe(2);
+  });
+
+  it("derives a stable account pseudonym without exposing the Supabase UUID", async () => {
+    const userId = "11111111-1111-4111-8111-111111111111";
+    const first = await derivePostHogAccountDistinctId(userId);
+    const second = await derivePostHogAccountDistinctId(userId);
+    const other = await derivePostHogAccountDistinctId("22222222-2222-4222-8222-222222222222");
+
+    expect(first).toMatch(/^account_[0-9a-f]{64}$/);
+    expect(first).toBe(second);
+    expect(first).not.toBe(other);
+    expect(first).not.toContain(userId);
+  });
+
+  it("uses the configured KST reporting date for daily active de-duplication", () => {
+    expect(getPostHogReportingDateKey(new Date("2026-07-31T14:59:59.000Z"))).toBe("2026-07-31");
+    expect(getPostHogReportingDateKey(new Date("2026-07-31T15:00:00.000Z"))).toBe("2026-08-01");
   });
 });

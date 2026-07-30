@@ -1,5 +1,6 @@
 import type {
   ACCOUNT_KINDS,
+  APP_ACTIVE_TRIGGERS,
   AI_PROVIDER_KINDS,
   AI_SETUP_ACTIONS,
   APP_ERROR_ACTIONS,
@@ -36,6 +37,9 @@ type EmptyPostHogProperties = Record<never, never>;
 
 export type PostHogEventPropertiesByName = {
   readonly app_opened: EmptyPostHogProperties;
+  readonly app_active: {
+    readonly active_trigger: (typeof APP_ACTIVE_TRIGGERS)[number];
+  };
   readonly app_surface_opened: {
     readonly surface: (typeof APP_SURFACES)[number];
     readonly dashboard_period?: (typeof DASHBOARD_PERIODS)[number];

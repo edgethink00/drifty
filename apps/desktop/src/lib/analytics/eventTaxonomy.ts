@@ -1,5 +1,6 @@
 export const POSTHOG_EVENT_NAMES = [
   "app_opened",
+  "app_active",
   "app_surface_opened",
   "onboarding_opened",
   "onboarding_step_viewed",
@@ -53,6 +54,7 @@ export const TRACKER_MODES = ["tracking", "idle", "degraded", "unavailable", "pr
 export const RESULT_VALUES = ["success", "error", "cancelled", "skipped", "unavailable", "disabled"] as const;
 export const AUTH_STATES = ["signed_in", "signed_out"] as const;
 export const ACCOUNT_KINDS = ["anonymous_account", "account", "none"] as const;
+export const APP_ACTIVE_TRIGGERS = ["launch", "auth_resolved", "foreground", "day_rollover"] as const;
 export const CLOUD_AUTH_ACTIONS = ["sign_in_started", "sign_in_completed", "sign_out", "sign_up_completed"] as const;
 export const CLOUD_AUTH_METHODS = ["oauth", "email", "anonymous", "website", "unknown"] as const;
 export const BILLING_ACTIONS = [
@@ -105,6 +107,9 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   readonly [Event in PostHogEventName]: Readonly<Record<string, PostHogPropertyRule>>;
 } = {
   app_opened: {},
+  app_active: {
+    active_trigger: APP_ACTIVE_TRIGGERS,
+  },
   app_surface_opened: {
     surface: APP_SURFACES,
     dashboard_period: DASHBOARD_PERIODS,

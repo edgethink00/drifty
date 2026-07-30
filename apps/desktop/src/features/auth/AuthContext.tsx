@@ -186,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseEnabled() || !supabase) {
       setStatus("unauthenticated");
       setCloudConnectionStatus("disabled");
+      recordPostHogAuthState(null);
       return;
     }
 
