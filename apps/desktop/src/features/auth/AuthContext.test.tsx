@@ -267,9 +267,7 @@ describe("AuthContext", () => {
         redirectTo: "https://drifty.so/auth/desktop-google-callback/",
         skipBrowserRedirect: true,
         queryParams: {
-          prompt: "select_account consent",
-          access_type: "offline",
-          include_granted_scopes: "false",
+          prompt: "select_account",
         },
       },
     });

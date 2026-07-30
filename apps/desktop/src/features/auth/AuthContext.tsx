@@ -807,9 +807,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         redirectTo: DESKTOP_GOOGLE_AUTH_BRIDGE_URL,
         skipBrowserRedirect: true,
         queryParams: {
-          prompt: "select_account consent",
-          access_type: "offline",
-          include_granted_scopes: "false",
+          prompt: "select_account",
         },
       },
     });
