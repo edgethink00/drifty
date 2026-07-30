@@ -8,6 +8,7 @@ export type DashboardDemoReplaySidebarCard = {
   readonly indicatorClassName: "idle" | "tracking";
   readonly collapsedLabel: string;
   readonly statusLabel: string;
+  readonly durationLabel: string;
   readonly appLabel: string;
   readonly siteLabel: string | null;
   readonly metaLabel: string;
@@ -37,7 +38,8 @@ export function buildDashboardDemoReplaySidebarCard(
     controlState: "replay",
     indicatorClassName: input.replayState.phase === "playing" ? "tracking" : "idle",
     collapsedLabel: input.replayState.phase === "playing" ? "Replay running" : "Replay paused",
-    statusLabel: `${phaseLabel} ${replayKindLabel} · ${formatDuration(totalSeconds)}`,
+    statusLabel: `${phaseLabel} ${replayKindLabel}`,
+    durationLabel: formatDuration(totalSeconds),
     appLabel: currentSegment?.appName ?? "No replay activity",
     siteLabel: currentSegment?.siteDomain ?? currentSegment?.siteTitle ?? null,
     metaLabel: metaLabelForReplayKind({

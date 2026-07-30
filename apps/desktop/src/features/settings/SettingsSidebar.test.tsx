@@ -51,6 +51,10 @@ describe("SettingsSidebar", () => {
 
     render(<SettingsSidebar activeSection="general" isCollapsed={false} showDevSection={true} onBack={vi.fn()} onSectionChange={onSectionChange} />);
 
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    const settingsButtons = within(settingsNav).getAllByRole("button");
+    expect(settingsButtons[settingsButtons.length - 1]?.textContent).toBe("Dev");
+
     fireEvent.click(screen.getByRole("button", { name: /^Dev$/ }));
 
     expect(onSectionChange).toHaveBeenCalledWith("dev");

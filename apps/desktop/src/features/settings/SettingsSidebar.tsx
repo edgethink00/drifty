@@ -22,18 +22,18 @@ const SETTINGS_NAV_GROUPS = [
     ],
   },
   {
-    id: "advanced",
-    labelKey: "settings.sidebar.groupAdvanced",
-    items: [
-      { id: "dev", labelKey: "common.dev" },
-    ],
-  },
-  {
     id: "ai",
     labelKey: "settings.sidebar.groupAi",
     items: [
       { id: "aiSetup", labelKey: "settings.section.aiSetup" },
       { id: "classification", labelKey: "settings.section.classification" },
+    ],
+  },
+  {
+    id: "advanced",
+    labelKey: "settings.sidebar.groupAdvanced",
+    items: [
+      { id: "dev", labelKey: "common.dev" },
     ],
   },
 ] as const;

@@ -2,6 +2,7 @@ import type { ChangeEvent, RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
+import { SIDEBAR_CTA_PREVIEW_OPTIONS, type SidebarCtaPreviewCase } from "../sidebar/sidebarCtaSlotPreview";
 import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
@@ -25,6 +26,7 @@ import { showBootShellPreview } from "../loading/bootShell";
 type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
+  readonly sidebarCtaPreviewCase: SidebarCtaPreviewCase | null;
   readonly demoDashboardReplaySettings?: DemoDashboardReplaySettings;
   readonly endOfDayReviewSettingsRowRef: RefObject<HTMLDivElement>;
   readonly enhancedContextSettings: EnhancedContextSettings;
@@ -49,6 +51,7 @@ type DevSettingsSectionProps = {
   readonly canInstallPreReleaseUpdate: boolean;
   readonly onClearDashboardAiUnavailablePreview: () => void;
   readonly onDashboardAiUnavailablePreviewCaseChange: (previewCase: DashboardAiUnavailablePreviewCase) => void;
+  readonly onSidebarCtaPreviewCaseChange: (previewCase: SidebarCtaPreviewCase | null) => void;
   readonly onDemoDashboardReplayDurationSecondsChange?: (value: number) => void;
   readonly onDemoDashboardReplayPreRollSecondsChange?: (value: number) => void;
   readonly onEndOfDayReviewPreview: () => void;
@@ -88,6 +91,7 @@ type DevSettingsSectionProps = {
 export function DevSettingsSection({
   dashboardAiUnavailablePreview,
   dashboardAiUnavailablePreviewCase,
+  sidebarCtaPreviewCase,
   demoDashboardReplaySettings,
   endOfDayReviewSettingsRowRef,
   enhancedContextSettings,
@@ -112,6 +116,7 @@ export function DevSettingsSection({
   canInstallPreReleaseUpdate,
   onClearDashboardAiUnavailablePreview,
   onDashboardAiUnavailablePreviewCaseChange,
+  onSidebarCtaPreviewCaseChange,
   onDemoDashboardReplayDurationSecondsChange,
   onDemoDashboardReplayPreRollSecondsChange,
   onEndOfDayReviewPreview,
@@ -291,6 +296,34 @@ export function DevSettingsSection({
             </div>
           </div>
         ) : null}
+        <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="Sidebar CTA slot preview">
+          <div>
+            <div className="lbl">Sidebar CTA preview</div>
+            <div className="desc">
+              Force the freed sidebar slot into one state. Each case runs through the real resolver, so hidden cases stay hidden. {sidebarCtaPreviewCase ? "Preview active." : "Off — showing your live state."}
+            </div>
+          </div>
+          <div className="ctrl settings-row__actions">
+            <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="Sidebar CTA preview cases">
+              {SIDEBAR_CTA_PREVIEW_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`settings-mode-option${sidebarCtaPreviewCase === option.id ? " is-active" : ""}`}
+                  role="radio"
+                  aria-checked={sidebarCtaPreviewCase === option.id}
+                  onClick={() => onSidebarCtaPreviewCaseChange(sidebarCtaPreviewCase === option.id ? null : option.id)}
+                >
+                  <span>{option.label}</span>
+                  <small>{option.detail}</small>
+                </button>
+              ))}
+            </div>
+            {sidebarCtaPreviewCase ? (
+              <button type="button" className="settings-btn" onClick={() => onSidebarCtaPreviewCaseChange(null)}>Clear preview</button>
+            ) : null}
+          </div>
+        </div>
         <DevPreviewControls
           endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
           showWatcherPeekSettings={showWatcherPeekSettings}

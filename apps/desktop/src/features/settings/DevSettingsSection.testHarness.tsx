@@ -13,6 +13,7 @@ export function renderProductionDevSettings(
   const props = {
     dashboardAiUnavailablePreview: null,
     dashboardAiUnavailablePreviewCase: "connect-ai",
+    sidebarCtaPreviewCase: null,
     demoDashboardReplaySettings: {
       preRollSeconds: 5,
       durationSeconds: 45,
@@ -43,6 +44,7 @@ export function renderProductionDevSettings(
     canInstallPreReleaseUpdate: false,
     onClearDashboardAiUnavailablePreview: vi.fn(),
     onDashboardAiUnavailablePreviewCaseChange: vi.fn(),
+    onSidebarCtaPreviewCaseChange: vi.fn(),
     onDemoDashboardReplayDurationSecondsChange: vi.fn(),
     onDemoDashboardReplayPreRollSecondsChange: vi.fn(),
     onEndOfDayReviewPreview: vi.fn(),

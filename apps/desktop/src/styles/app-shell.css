@@ -524,45 +524,47 @@
 
 .tracker-control {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  min-height: 46.2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 7px;
   width: 100%;
-  padding: 7px 7px 7px;
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--shell-floating-surface) 42%, transparent);
+  padding: 7px 6px 7px 9px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--shell-floating-surface) 30%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow:
-    var(--shadow),
-    0 2px 7px color-mix(in srgb, black 7%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--text) 3.2%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
+    0 1px 3px color-mix(in srgb, black 2.5%, transparent);
 }
 
 .tracker-control:hover,
 .tracker-control:focus-within {
-  background: color-mix(in srgb, var(--shell-floating-surface) 52%, transparent);
-  backdrop-filter: blur(22px) saturate(1.12);
-  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  background: color-mix(in srgb, var(--shell-floating-surface) 90%, transparent);
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
   box-shadow:
-    0 14px 32px color-mix(in srgb, black 10%, transparent),
-    0 2px 8px color-mix(in srgb, black 8%, transparent);
+    0 8px 20px color-mix(in srgb, black 8%, transparent),
+    0 2px 6px color-mix(in srgb, black 4%, transparent);
 }
 
 .tracker-control[data-state="unavailable"] {
-  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .live-pill {
   min-width: 0;
-  min-height: 58px;
+  min-height: 0;
   background: transparent;
   color: var(--text);
   border: 0;
-  border-radius: 12px;
-  padding: 1.5px 10px 2px;
+  border-radius: 0;
+  padding: 0;
   display: grid;
-  align-items: start;
+  align-items: center;
   width: 100%;
   max-height: none;
   overflow: visible;
@@ -628,14 +630,14 @@
 .live-pill__summary-copy {
   min-width: 0;
   display: grid;
-  gap: 4.5px;
+  gap: 1.3px;
 }
 
 .live-pill__status-row {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .live-pill__status-dot {
@@ -651,9 +653,9 @@
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--text) 72%, transparent);
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 560;
-  line-height: 1.24;
+  line-height: 1.12;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -682,11 +684,11 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 0;
   overflow: hidden;
-  font-size: 13.5px;
-  font-weight: 680;
-  line-height: 1.14;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.08;
 }
 
 .live-pill__summary-app {
@@ -774,44 +776,64 @@
 }
 
 .sidebar-tracker-toggle {
-  width: 100%;
-  min-height: 32px;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
   display: grid;
   place-items: center;
   margin: 0;
-  padding: 0 12px;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, black 21%, color-mix(in srgb, var(--shell-floating-surface-strong) 42%, transparent));
+  border-radius: 7px;
+  background: transparent;
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: .08em;
-  line-height: 1;
-  text-transform: uppercase;
   box-shadow: none;
 }
 
 :root[data-theme="dark"] .sidebar-tracker-toggle {
-  background: color-mix(in srgb, white 28.6%, color-mix(in srgb, var(--shell-floating-surface-strong) 44%, transparent));
-  color: white;
+  background: transparent;
+  color: var(--text);
   box-shadow: none;
 }
 
 .sidebar-tracker-toggle:hover:not(:disabled) {
-  background: color-mix(in srgb, black 28%, color-mix(in srgb, var(--shell-floating-surface-strong) 62%, transparent));
+  background: color-mix(in srgb, var(--text) 7.5%, transparent);
   transform: none;
 }
 
 :root[data-theme="dark"] .sidebar-tracker-toggle:hover:not(:disabled) {
-  background: color-mix(in srgb, white 35.2%, color-mix(in srgb, var(--shell-floating-surface-strong) 64%, transparent));
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .sidebar-tracker-toggle span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
+  border: 0;
+}
+
+.sidebar-tracker-toggle__icon {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+
+.sidebar-tracker-toggle__icon--pause,
+.sidebar-tracker-toggle__icon--play,
+.sidebar-tracker-toggle__icon--stop {
+  display: none;
+}
+
+.sidebar-tracker-toggle[data-state="pause"] .sidebar-tracker-toggle__icon--pause,
+.sidebar-tracker-toggle[data-state="resume"] .sidebar-tracker-toggle__icon--play,
+.sidebar-tracker-toggle[data-state="replay"] .sidebar-tracker-toggle__icon--stop {
+  display: block;
 }
 
 .sidebar-tracker-toggle::before {
