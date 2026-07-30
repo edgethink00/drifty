@@ -83,6 +83,16 @@ def evaluate_ioreg_power_state(output: str, observed_at: datetime | None = None)
             metadata=metadata,
         )
 
+    # A visible user session can remain active with the lid closed in external-display mode.
+    user_is_active = _normalized(metadata.get("IOPMUserIsActive")) == "yes"
+    if user_is_active:
+        return PowerStateSample(
+            observed_at=sample_time,
+            should_capture=True,
+            reason="active_power_state",
+            metadata=metadata,
+        )
+
     clamshell_closed = _normalized(metadata.get("AppleClamshellState")) == "yes"
     clamshell_causes_sleep = _normalized(metadata.get("AppleClamshellCausesSleep")) == "yes"
     if clamshell_closed and clamshell_causes_sleep:

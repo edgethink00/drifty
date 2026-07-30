@@ -1116,6 +1116,50 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.trim_latest_segment.assert_called_once_with(power_state.observed_at.isoformat())
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
 
+    def test_daemon_resumes_with_default_sample_after_power_suppression(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            suppressed = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
+                should_capture=False,
+                reason="clamshell_sleep_state",
+            )
+            active = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 6, tzinfo=timezone.utc),
+                should_capture=True,
+                reason="active_power_state",
+            )
+            snapshot = Snapshot(
+                observed_at="2026-04-06T09:06:00+00:00",
+                app_name="cmux",
+                bundle_id="dev.cmux",
+                window_title="workspace",
+                source="accessibility",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "current_power_state", side_effect=[suppressed, active]
+            ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                tracker_main, "_apply_developer_diagnostics_env"
+            ), patch.object(
+                tracker_main, "current_snapshot", return_value=snapshot
+            ), patch.object(
+                tracker_main.time, "monotonic", return_value=190.0
+            ), patch.object(
+                tracker_main, "enqueue_youtube_metadata_fetch"
+            ), patch.object(
+                tracker_main, "backfill_browser_history_context"
+            ), patch.object(
+                tracker_main.time, "sleep", side_effect=[None, KeyboardInterrupt]
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        mock_db.record_snapshot.assert_called_once()
+        self.assertEqual(mock_db.record_snapshot.call_args.args[1], tracker_main.SAMPLE_SECONDS)
+        mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
+        mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
+
     def test_daemon_records_runtime_fingerprint_on_start(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"

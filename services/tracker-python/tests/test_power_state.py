@@ -66,6 +66,28 @@ class PowerStateTests(unittest.TestCase):
         self.assertTrue(sample.should_capture)
         self.assertEqual(sample.reason, "active_power_state")
 
+    def test_evaluate_captures_user_active_closed_clamshell(self) -> None:
+        sample = evaluate_ioreg_power_state(
+            '"Wake Type" = "UserActivity Assertion"\n'
+            '"IOPMUserIsActive" = Yes\n'
+            '"AppleClamshellState" = Yes\n'
+            '"AppleClamshellCausesSleep" = Yes\n'
+        )
+
+        self.assertTrue(sample.should_capture)
+        self.assertEqual(sample.reason, "active_power_state")
+
+    def test_evaluate_suppresses_darkwake_even_when_closed_clamshell_reports_user_active(self) -> None:
+        sample = evaluate_ioreg_power_state(
+            '"Wake Type" = "DarkWake"\n'
+            '"IOPMUserIsActive" = Yes\n'
+            '"AppleClamshellState" = Yes\n'
+            '"AppleClamshellCausesSleep" = Yes\n'
+        )
+
+        self.assertFalse(sample.should_capture)
+        self.assertEqual(sample.reason, "non_user_visible_wake_type:darkwake")
+
     def test_evaluate_suppresses_closed_clamshell_sleep_state(self) -> None:
         sample = evaluate_ioreg_power_state(
             '"AppleClamshellState" = Yes\n'
@@ -90,6 +112,31 @@ class PowerStateTests(unittest.TestCase):
 
         self.assertTrue(sample.should_capture)
         self.assertEqual(sample.reason, "non_darwin_power_state_unavailable")
+
+    def test_current_power_state_captures_user_active_closed_clamshell_from_ioreg(self) -> None:
+        completed = MagicMock(
+            returncode=0,
+            stdout=(
+                '    | |   "Wake Type" = "UserActivity Assertion"\n'
+                '    | |   "IOPMUserIsActive" = Yes\n'
+                '    | |   "AppleClamshellState" = Yes\n'
+                '    | |   "AppleClamshellCausesSleep" = Yes\n'
+            ),
+        )
+        with patch("app.tracker.power_state.platform.system", return_value="Darwin"), patch(
+            "app.tracker.power_state.subprocess.run", return_value=completed
+        ) as run:
+            sample = current_power_state()
+
+        self.assertTrue(sample.should_capture)
+        self.assertEqual(sample.reason, "active_power_state")
+        run.assert_called_once_with(
+            ["ioreg", "-r", "-n", "IOPMrootDomain", "-d", "1"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
 
     def test_current_power_state_captures_when_probe_fails(self) -> None:
         completed = MagicMock(returncode=1, stdout="")
