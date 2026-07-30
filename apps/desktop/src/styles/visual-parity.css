@@ -117,6 +117,7 @@
 .live-pill .app-class,
 .sidebar-tracker-toggle,
 .sidebar-tracker-toggle span,
+.sidebar-tracker-toggle__icon,
 .account-trigger,
 .account-trigger__copy,
 .account-trigger__chevrons {
@@ -440,8 +441,8 @@
     height: 8px;
   }
 
-  .sidebar--collapsed .live-pill .app-name,
-  .sidebar--collapsed .live-pill .app-class {
+.sidebar--collapsed .live-pill .app-name,
+.sidebar--collapsed .live-pill .app-class {
     max-width: 0;
     max-height: 0;
     margin: 0;
@@ -449,6 +450,10 @@
     overflow: hidden;
     pointer-events: none;
     transform: translateX(-4px);
+  }
+
+  .sidebar--collapsed .sidebar-tracker-toggle__icon {
+    display: none;
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle {

@@ -54,6 +54,16 @@ import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type Pendi
 import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
+import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
+import {
+  buildSidebarCtaPreviewInput,
+  type SidebarCtaPreviewCase,
+} from "./features/sidebar/sidebarCtaSlotPreview";
+import {
+  isSidebarUpgradeDismissed,
+  readSidebarUpgradeDismissedUntil,
+  storeSidebarUpgradeDismissal,
+} from "./features/sidebar/sidebarUpgradeDismissal";
 import {
   aiConnectionIssueKindFromMessage,
 } from "./features/ai-connection/aiConnectionHealth";
@@ -515,6 +525,8 @@ export default function App() {
   });
   const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
   const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
+  const [sidebarCtaPreviewCase, setSidebarCtaPreviewCase] = useState<SidebarCtaPreviewCase | null>(null);
+  const [sidebarUpgradeDismissedUntil, setSidebarUpgradeDismissedUntil] = useState(readSidebarUpgradeDismissedUntil);
   const [dismissedDashboardAiRecoveryKey, setDismissedDashboardAiRecoveryKey] = useState<string | null>(null);
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
   const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
@@ -1067,6 +1079,30 @@ export default function App() {
   }, [aiClassificationProviderKey]);
   const isSettingsTab = activeTab === "settings";
   const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
+  // Dev preview feeds the same resolver a synthetic input instead of swapping in
+  // a canned state, so what you see is the production branching.
+  const isSidebarCtaPreviewActive = isDevModeActive && sidebarCtaPreviewCase !== null;
+  const sidebarCtaSlot = resolveSidebarCtaSlot(
+    isSidebarCtaPreviewActive && sidebarCtaPreviewCase
+      ? buildSidebarCtaPreviewInput(sidebarCtaPreviewCase, Date.now())
+      : {
+        aiStatus: aiConnectionStatus,
+        billingCheckoutLoading: billingCheckoutLoadingInterval !== null,
+        billingEntitlement,
+        billingEntitlementError,
+        billingEntitlementLoading,
+        localAiProvider: localAiSetup.provider,
+        localAiConfigured: localAiConnectionFingerprint !== null,
+      },
+  );
+  const sidebarUpgradeDismissed = !isSidebarCtaPreviewActive
+    && sidebarCtaSlot?.kind === "upgrade"
+    && isSidebarUpgradeDismissed(sidebarUpgradeDismissedUntil, Date.now());
+  const shouldShowSidebarCtaSlot = !isSettingsTab
+    && !isSidebarVisuallyCollapsed
+    && sidebarCtaSlot !== null
+    && !sidebarUpgradeDismissed;
+  const shouldHideTopbarAiStatus = shouldShowSidebarCtaSlot && sidebarCtaSlot?.kind === "ai";
   const refreshRequestRef = useRef(0);
   const lastFullDayRefreshAtRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
@@ -4336,7 +4372,7 @@ export default function App() {
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
-  const liveTrackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Retry tracker" : status.running ? "Pause tracking" : "Start tracking";
+  const liveTrackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Retry tracker" : status.running ? "Pause tracking" : "Resume tracking";
   const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
     currentDay: effectiveTodayDayForWeekModel,
     currentMinuteOfDay: effectiveCurrentMinuteOfDay,
@@ -4353,7 +4389,8 @@ export default function App() {
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
   const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable || isTrackerDegraded ? "unavailable" : "idle");
   const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : "Tracker paused");
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? "Tracker setup needed" : isTrackerDegraded ? (status?.message ?? "Tracker could not start") : `${trackerStateLabel} · ${formatDuration(dayTotalSeconds)}`);
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? "Tracker setup needed" : isTrackerDegraded ? (status?.message ?? "Tracker could not start") : trackerStateLabel);
+  const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerDegraded ? null : formatDuration(dayTotalSeconds));
   const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? "Start tracker to collect activity" : isTrackerDegraded ? "Retry activity tracking" : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? `Last capture: ${lastCaptureDistanceLabel}`;
@@ -5691,7 +5728,9 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+          {!shouldHideTopbarAiStatus ? (
+            <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+          ) : null}
           {titlebarUpdate ? (
             <TopbarUpdateButton
               isInstalling={updaterInstalling}
@@ -5946,7 +5985,37 @@ export default function App() {
         </div>
 
         <div className="sidebar-foot">
-          <div className="tracker-control" data-state={sidebarTrackerControlState}>
+          {shouldShowSidebarCtaSlot && sidebarCtaSlot ? (
+            <SidebarCtaSlot
+              state={sidebarCtaSlot}
+              onDismiss={sidebarCtaSlot.kind === "upgrade" && !isSidebarCtaPreviewActive
+                ? () => setSidebarUpgradeDismissedUntil(storeSidebarUpgradeDismissal())
+                : undefined}
+              onAction={() => {
+                if (sidebarCtaSlot.kind === "ai") {
+                  openAiSetupSettings();
+                  return;
+                }
+                if (sidebarCtaSlot.kind === "device-limit") {
+                  openAccountSettings();
+                  return;
+                }
+                void handleStartDriftyCloudSetup();
+              }}
+            />
+          ) : null}
+          <div
+            className="tracker-control"
+            role="group"
+            data-state={sidebarTrackerControlState}
+            aria-label={[
+              sidebarTrackerStatusLabel,
+              sidebarTrackerAppLabel,
+              sidebarTrackerSiteLabel,
+              sidebarTrackerDurationLabel,
+              sidebarTrackerMetaLabel,
+            ].filter(Boolean).join(" · ")}
+          >
             <div className="live-pill">
               <div className="live-pill__summary">
                 <div className={`k ${sidebarTrackerIndicatorClassName}`}>
@@ -5961,10 +6030,6 @@ export default function App() {
                   </span>
                   <span className="live-pill__summary-name">
                     <span className="live-pill__summary-app">{sidebarTrackerAppLabel}</span>
-                    {sidebarTrackerSiteLabel ? <span className="live-pill__summary-site">{sidebarTrackerSiteLabel}</span> : null}
-                  </span>
-                  <span className="live-pill__summary-meta">
-                    <span className="live-pill__summary-meta-line">{sidebarTrackerMetaLabel}</span>
                   </span>
                 </div>
               </div>
@@ -5984,6 +6049,14 @@ export default function App() {
               aria-label={sidebarTrackerActionLabel}
               title={sidebarTrackerActionLabel}
             >
+              <svg className="sidebar-tracker-toggle__icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+                <g className="sidebar-tracker-toggle__icon--pause">
+                  <rect x="2.5" y="2" width="2.25" height="8" rx="0.8" />
+                  <rect x="7.25" y="2" width="2.25" height="8" rx="0.8" />
+                </g>
+                <path className="sidebar-tracker-toggle__icon--play" d="M3 1.8 10 6 3 10.2Z" />
+                <rect className="sidebar-tracker-toggle__icon--stop" x="3" y="3" width="6" height="6" rx="1" />
+              </svg>
               <span>{sidebarTrackerActionLabel}</span>
             </button>
           </div>
@@ -6500,6 +6573,7 @@ export default function App() {
                   <DevSettingsSection
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
                     dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
+                    sidebarCtaPreviewCase={sidebarCtaPreviewCase}
                     demoDashboardReplaySettings={demoDashboardReplaySettings}
                     projectPassRuns={projectClassification.passRuns}
                     endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
@@ -6524,6 +6598,7 @@ export default function App() {
                     canInstallPreReleaseUpdate={developerPreReleaseUpdateController.canInstallPreReleaseUpdate}
                     onClearDashboardAiUnavailablePreview={clearDashboardAiUnavailablePreview}
                     onDashboardAiUnavailablePreviewCaseChange={setDashboardAiUnavailablePreviewCase}
+                    onSidebarCtaPreviewCaseChange={setSidebarCtaPreviewCase}
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
                     onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
                     onEndOfDayReviewPreview={handleEndOfDayReviewPreview}

@@ -58,7 +58,8 @@ describe("buildDashboardDemoReplaySidebarCard", () => {
     });
 
     // Then
-    expect(card?.statusLabel).toBe("Replaying day · 0m");
+    expect(card?.statusLabel).toBe("Replaying day");
+    expect(card?.durationLabel).toBe("0m");
     expect(card?.appLabel).toBe("Focus Studio");
     expect(card?.metaLabel).toBe("Replay time: 9:00 AM");
     expect(card?.actionLabel).toBe("Stop replay");

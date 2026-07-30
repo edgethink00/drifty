@@ -1,0 +1,370 @@
+/**
+ * The freed sidebar slot. One state at a time, sitting above the tracking rail.
+ *
+ * Geometry follows the compact `.tracker-control` below it, with a slightly
+ * roomier 8px frame and the copy inset a further 10px.
+ *
+ * The reference uses an opaque-enough pastel state surface plus a matching soft
+ * shadow. Keeping the card too translucent made the real sidebar canvas show
+ * through as grey and removed the warm red, green, or amber identity.
+ *
+ * Rows are `auto auto`, not `1fr auto`: the copy takes exactly the height it
+ * needs and the gap below stays fixed, so a two- or three-line description
+ * grows the card instead of squeezing the space above the action.
+ */
+.sidebar-cta-slot-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.sidebar-cta-slot {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 12px;
+  margin: 0;
+  padding: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--shell-floating-surface) 42%, transparent);
+  color: var(--text);
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow:
+    var(--shadow),
+    0 2px 7px color-mix(in srgb, black 7%, transparent);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast),
+    backdrop-filter var(--transition-fast);
+}
+
+/* Same hover language as `.tracker-control`: the surface lifts and blurs. */
+.sidebar-cta-slot:hover:not(:disabled),
+.sidebar-cta-slot:focus-within:not(:disabled) {
+  background: color-mix(in srgb, var(--shell-floating-surface) 52%, transparent);
+  backdrop-filter: blur(22px) saturate(1.12);
+  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  box-shadow:
+    0 8px 20px color-mix(in srgb, black 8%, transparent),
+    0 2px 6px color-mix(in srgb, black 4%, transparent);
+}
+
+.sidebar-cta-slot:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 76%, var(--text));
+  outline-offset: 2px;
+}
+
+/* Only the general free-account pitch is dismissible. The control stays a
+ * sibling of the whole-card action so the markup never nests one button inside
+ * another. */
+.sidebar-cta-slot__dismiss {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 11px;
+  inset-inline-end: 11px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 48%, transparent);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.sidebar-cta-slot__dismiss svg {
+  width: 10px;
+  height: 10px;
+}
+
+.sidebar-cta-slot-wrap[data-dismissible="true"]:hover .sidebar-cta-slot__dismiss,
+.sidebar-cta-slot-wrap[data-dismissible="true"]:focus-within .sidebar-cta-slot__dismiss {
+  opacity: 1;
+}
+
+.sidebar-cta-slot-wrap[data-dismissible="true"] .sidebar-cta-slot__copy {
+  padding-inline-end: 34px;
+}
+
+.sidebar-cta-slot__dismiss:hover,
+.sidebar-cta-slot__dismiss:focus-visible {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  opacity: 1;
+  outline: none;
+}
+
+.sidebar-cta-slot__dismiss:disabled {
+  cursor: wait;
+}
+
+.sidebar-cta-slot:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+/* Tone: each existing state owns one restrained pastel family. The surface,
+ * corner bloom, and shadow all read from the same family so the card feels
+ * intentional rather than like neutral glass with an unrelated glow.
+ *
+ * The glow reads off the `*-wash` tokens, which exist for exactly this job. The
+ * obvious shortcut — mixing a few percent of `--warn` / `--gold` into the
+ * surface — is what drifted this card away from the approved design: those
+ * bases are a dark brick and a dark bronze, so at low strength they go muddy
+ * grey-mauve rather than pastel. Mixing the pale `*-soft` tokens instead fails
+ * the other way in dark mode, where they are near-black browns (`--warn-soft`
+ * is #2e1a18) that swallow the glow entirely. Searching every two-token
+ * combination showed the amber in particular is not on any line between the
+ * palette's existing tokens, so the wash colours are named tokens rather than
+ * mixes, and each theme carries its own value.
+ *
+ * Strengths mirror the approved design per theme: dark canvases show the same
+ * tint louder, so they run about two points lower. */
+.sidebar-cta-slot[data-tone="ai"],
+.sidebar-cta-slot[data-tone="ended"],
+.sidebar-cta-slot[data-tone="billing"] {
+  --cta-tone-fill: var(--warn-soft);
+  --cta-tone-glow: var(--warn-wash);
+  --cta-tone-strength: 30%;
+}
+
+.sidebar-cta-slot[data-tone="upgrade"],
+.sidebar-cta-slot[data-tone="trial"] {
+  --cta-tone-fill: var(--accent-soft);
+  --cta-tone-glow: var(--accent-wash);
+  --cta-tone-strength: 34%;
+}
+
+.sidebar-cta-slot[data-tone="device"] {
+  --cta-tone-fill: var(--gold-soft);
+  --cta-tone-glow: var(--gold-wash);
+  --cta-tone-strength: 30%;
+}
+
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="ai"],
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="ended"],
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="billing"] {
+  --cta-tone-strength: 15%;
+}
+
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="upgrade"],
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="trial"] {
+  --cta-tone-strength: 17%;
+}
+
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="device"] {
+  --cta-tone-strength: 15%;
+}
+
+.sidebar-cta-slot[data-tone] {
+  --cta-tone-fill-strength: 24%;
+  --cta-shadow-ambient: 16%;
+  --cta-shadow-contact: 9%;
+  --cta-shadow-ambient-hover: 21%;
+  --cta-shadow-contact-hover: 12%;
+  --cta-inset-strength: 62%;
+  background: color-mix(in srgb, var(--cta-tone-fill) var(--cta-tone-fill-strength), var(--surface));
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient), transparent),
+    0 2px 7px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-contact), transparent),
+    inset 0 1px 0 color-mix(in srgb, white var(--cta-inset-strength), transparent);
+}
+
+.sidebar-cta-slot[data-alert="critical"] {
+  --cta-shadow-ambient: 20%;
+  --cta-shadow-contact: 12%;
+  --cta-shadow-ambient-hover: 25%;
+  --cta-shadow-contact-hover: 15%;
+}
+
+.sidebar-cta-slot[data-alert="warn"] {
+  --cta-shadow-ambient: 17%;
+  --cta-shadow-contact: 11%;
+  --cta-shadow-ambient-hover: 21%;
+  --cta-shadow-contact-hover: 13%;
+}
+
+.sidebar-cta-slot[data-tone]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 92% 10%,
+    color-mix(in srgb, var(--cta-tone-glow) var(--cta-tone-strength), transparent),
+    transparent 5.2rem
+  );
+}
+
+.sidebar-cta-slot[data-tone]:hover:not(:disabled),
+.sidebar-cta-slot[data-tone]:focus-within:not(:disabled) {
+  background: color-mix(in srgb, var(--cta-tone-fill) var(--cta-tone-fill-strength), var(--surface));
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient-hover), transparent),
+    0 2px 8px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-contact-hover), transparent),
+    inset 0 1px 0 color-mix(in srgb, white var(--cta-inset-strength), transparent);
+}
+
+/* The 10px inset lives on the children, matching how the rail insets its own
+   copy rather than padding the frame. */
+.sidebar-cta-slot__copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  align-self: start;
+  display: grid;
+  align-content: start;
+  /* The title starts 16px from the outer edge (8px frame + 8px inset), matching
+     the looser vertical rhythm of the approved long-card preview. */
+  padding: 8px 10px 4px;
+}
+
+.sidebar-cta-slot__title {
+  min-width: 0;
+  font-size: 14.33px;
+  font-weight: 690;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+/* The remaining-days count is the only value here that actually changes, so it
+   carries the urgency instead of sitting in plain body colour. */
+.sidebar-cta-slot__emphasis {
+  color: var(--accent-strong);
+}
+
+.sidebar-cta-slot[data-alert="warn"] .sidebar-cta-slot__emphasis {
+  color: var(--gold);
+}
+
+.sidebar-cta-slot[data-alert="critical"] .sidebar-cta-slot__emphasis {
+  color: var(--warn);
+}
+
+.sidebar-cta-slot__detail {
+  min-width: 0;
+  margin-top: 10px;
+  color: color-mix(in srgb, var(--text) 68%, transparent);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.54;
+  overflow-wrap: break-word;
+  text-wrap: wrap;
+}
+
+/* Confirmed white-pill treatment from the isolated preview. The label and arrow
+   remain one centred phrase, while the filled row makes the whole-card click
+   target visible without changing the card's spacing or semantic state tone. */
+.sidebar-cta-slot__action {
+  position: relative;
+  z-index: 1;
+  min-height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: -2px 0 0;
+  padding: 8px 13px;
+  border-radius: 999px;
+  background: color-mix(in srgb, white 72%, transparent);
+  color: #1c1c19;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #1c1c19 5.5%, transparent),
+    0 3px 10px color-mix(in srgb, black 4.5%, transparent);
+  font-size: 12.13px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.sidebar-cta-slot:hover:not(:disabled) .sidebar-cta-slot__action,
+.sidebar-cta-slot:focus-within:not(:disabled) .sidebar-cta-slot__action {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, white 86%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #1c1c19 7%, transparent),
+    0 6px 14px color-mix(in srgb, black 7.5%, transparent);
+}
+
+.sidebar-cta-slot__action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-cta-slot__arrow {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  opacity: 0.72;
+  transition:
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.sidebar-cta-slot:hover:not(:disabled) .sidebar-cta-slot__arrow,
+.sidebar-cta-slot:focus-within:not(:disabled) .sidebar-cta-slot__arrow {
+  opacity: 1;
+}
+
+.sidebar-cta-slot:hover:not(:disabled) .sidebar-cta-slot__arrow[data-direction="forward"] {
+  transform: translateX(1.5px);
+}
+
+.sidebar-cta-slot:hover:not(:disabled) .sidebar-cta-slot__arrow[data-direction="external"] {
+  transform: translate(1.2px, -1.2px);
+}
+
+/* Dark canvases amplify coloured shadows, so preserve the same family while
+   reducing only its intensity. */
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone] {
+  --cta-tone-fill-strength: 34%;
+  --cta-shadow-ambient: 8%;
+  --cta-shadow-contact: 5%;
+  --cta-shadow-ambient-hover: 12%;
+  --cta-shadow-contact-hover: 7%;
+  --cta-inset-strength: 4.5%;
+}
+
+:root[data-theme="dark"] .sidebar-cta-slot[data-alert="critical"] {
+  --cta-shadow-ambient: 13%;
+  --cta-shadow-contact: 8%;
+  --cta-shadow-ambient-hover: 17%;
+  --cta-shadow-contact-hover: 10%;
+}
+
+:root[data-theme="dark"] .sidebar-cta-slot[data-alert="warn"] {
+  --cta-shadow-ambient: 11%;
+  --cta-shadow-contact: 7%;
+  --cta-shadow-ambient-hover: 14%;
+  --cta-shadow-contact-hover: 9%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-cta-slot,
+  .sidebar-cta-slot__dismiss,
+  .sidebar-cta-slot__action,
+  .sidebar-cta-slot__arrow {
+    transition: none;
+  }
+}
