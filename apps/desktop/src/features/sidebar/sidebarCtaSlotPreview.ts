@@ -1,4 +1,5 @@
 import type { BillingEntitlement } from "../billing/billingService";
+import type { ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 
 /**
  * Dev-mode preview for the sidebar CTA slot.
@@ -17,6 +18,7 @@ export type SidebarCtaPreviewCase =
   | "trial-ended"
   | "billing"
   | "device-limit"
+  | "model-download"
   | "byok-hidden";
 
 export type SidebarCtaPreviewOption = {
@@ -35,6 +37,7 @@ export const SIDEBAR_CTA_PREVIEW_OPTIONS = [
   { id: "trial-ended", label: "Trial ended", detail: "Upgrade to Pro" },
   { id: "billing", label: "Billing issue", detail: "Upgrade to Pro" },
   { id: "device-limit", label: "Device limit", detail: "Manage devices" },
+  { id: "model-download", label: "Model download", detail: "42% · status only" },
   { id: "byok-hidden", label: "BYOK · hidden", detail: "Slot stays empty" },
 ] as const satisfies readonly SidebarCtaPreviewOption[];
 
@@ -46,6 +49,7 @@ type PreviewInput = {
   readonly billingEntitlementLoading: boolean;
   readonly localAiProvider: "managed_local" | "openrouter_byok" | "self_hosted";
   readonly localAiConfigured: boolean;
+  readonly managedLocalAiStatus: ManagedLocalAiStatus | null;
   readonly now: number;
 };
 
@@ -82,6 +86,7 @@ export function buildSidebarCtaPreviewInput(previewCase: SidebarCtaPreviewCase, 
     billingEntitlementLoading: false,
     localAiProvider: "managed_local",
     localAiConfigured: true,
+    managedLocalAiStatus: null,
     now,
   } as const;
 
@@ -104,6 +109,23 @@ export function buildSidebarCtaPreviewInput(previewCase: SidebarCtaPreviewCase, 
       return { ...base, billingEntitlement: lockedEntitlement("payment_required") };
     case "device-limit":
       return { ...base, billingEntitlement: lockedEntitlement("device_limit_reached") };
+    case "model-download":
+      return {
+        ...base,
+        billingEntitlement: ACTIVE_ENTITLEMENT,
+        managedLocalAiStatus: {
+          state: "installing",
+          selectedModelId: "drifty-qwen3-5-4b-default",
+          installedModels: [],
+          baseUrl: null,
+          model: null,
+          message: "Downloading managed local model... (42%)",
+          artifactDir: null,
+          progress: { percent: 42, downloadedBytes: 1_176_000_000, totalBytes: 2_800_000_000 },
+          errorKind: null,
+          memoryUsageBytes: null,
+        },
+      };
     case "byok-hidden":
       return { ...base, billingEntitlement: null, localAiProvider: "openrouter_byok" };
     default:

@@ -1,7 +1,13 @@
+import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingEntitlement } from "../billing/billingService";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
+import {
+  MANAGED_LOCAL_AI_FALLBACK_CATALOG,
+  type ManagedLocalAiStatus,
+} from "../settings/managedLocalAiClient";
+import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressText";
 import type { LocalAiProvider } from "../settings/localAiSetup";
 
 import "./SidebarCtaSlot.css";
@@ -11,25 +17,38 @@ import "./SidebarCtaSlot.css";
  * still uses `plan: "individual"` and `create-polar-checkout` rejects anything
  * else with a 400, so the rename stays in display copy only.
  */
-export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit";
+export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download";
 
 /** Drives the tinted drop shadow: red for "act now", gold for "handle soon". */
 export type SidebarCtaSlotAlert = "critical" | "warn";
 
-export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing" | "device";
+export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing" | "device" | "download";
 
-export type SidebarCtaSlotState = {
+type SidebarCtaActionState = {
   readonly actionLabelKey: TranslationKey;
   readonly alert: SidebarCtaSlotAlert | null;
   readonly copyKey: TranslationKey;
   readonly direction: "forward" | "external";
   readonly disabled: boolean;
-  readonly kind: SidebarCtaSlotKind;
+  readonly kind: Exclude<SidebarCtaSlotKind, "download">;
   readonly titleKey: TranslationKey;
   /** Rendered after the title in the accent colour; only the trial countdown uses it. */
   readonly titleEmphasisCount: number | null;
   readonly tone: SidebarCtaSlotTone;
 };
+
+type SidebarCtaDownloadState = {
+  readonly alert: null;
+  readonly downloadSizeLabel: string | null;
+  readonly kind: "download";
+  readonly modelLabel: string | null;
+  readonly progressPercent: number;
+  readonly progressText: string;
+  readonly titleKey: TranslationKey;
+  readonly tone: "download";
+};
+
+export type SidebarCtaSlotState = SidebarCtaActionState | SidebarCtaDownloadState;
 
 type ResolveSidebarCtaSlotInput = {
   readonly aiStatus: Pick<AiConnectionStatus, "label" | "tone">;
@@ -39,6 +58,7 @@ type ResolveSidebarCtaSlotInput = {
   readonly billingEntitlementLoading: boolean;
   readonly localAiProvider: LocalAiProvider;
   readonly localAiConfigured: boolean;
+  readonly managedLocalAiStatus?: ManagedLocalAiStatus | null;
   readonly now?: number;
 };
 
@@ -69,8 +89,12 @@ export function resolveSidebarCtaSlot({
   billingEntitlementLoading,
   localAiProvider,
   localAiConfigured,
+  managedLocalAiStatus = null,
   now = Date.now(),
 }: ResolveSidebarCtaSlotInput): SidebarCtaSlotState | null {
+  const managedDownload = managedLocalDownloadState(managedLocalAiStatus);
+  if (managedDownload) return managedDownload;
+
   const aiDisconnected = aiStatus.label !== "AI setup needed"
     && (aiStatus.tone === "error" || aiStatus.tone === "warning");
   const usesExternalProvider = localAiProvider === "openrouter_byok" || localAiProvider === "self_hosted";
@@ -164,6 +188,23 @@ export function resolveSidebarCtaSlot({
   return null;
 }
 
+function managedLocalDownloadState(status: ManagedLocalAiStatus | null): SidebarCtaDownloadState | null {
+  if (status?.state !== "installing") return null;
+  const model = MANAGED_LOCAL_AI_FALLBACK_CATALOG.find((candidate) => candidate.id === status.selectedModelId) ?? null;
+  const progressPercent = Math.min(Math.max(Math.round(status.progress?.percent ?? 0), 0), 100);
+  const fallbackTotal = model?.downloadSize.replace(/^~/, "") ?? null;
+  return {
+    alert: null,
+    downloadSizeLabel: model?.downloadSize ?? null,
+    kind: "download",
+    modelLabel: model?.label ?? null,
+    progressPercent,
+    progressText: managedLocalAiProgressText(status.progress) ?? (fallbackTotal ? `0.0/${fallbackTotal}` : "0%"),
+    titleKey: "sidebar.cta.download.title",
+    tone: "download",
+  };
+}
+
 function aiDisconnectedState(): SidebarCtaSlotState {
   return {
     actionLabelKey: "sidebar.cta.ai.action",
@@ -202,6 +243,46 @@ export function SidebarCtaSlot({
   readonly state: SidebarCtaSlotState;
 }) {
   const { t } = useLocalization();
+  if (state.kind === "download") {
+    const title = t(state.titleKey);
+    const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");
+    const detail = state.downloadSizeLabel ? `${modelLabel} · ${state.downloadSizeLabel}` : modelLabel;
+    const style = { "--sidebar-download-progress": `${state.progressPercent}%` } as CSSProperties;
+    return (
+      <div className="sidebar-cta-slot-wrap">
+        <div
+          className="sidebar-cta-slot sidebar-cta-slot--download"
+          data-kind={state.kind}
+          data-tone={state.tone}
+          role="status"
+          aria-label={`${title} · ${detail} · ${state.progressText} · ${state.progressPercent}%`}
+          style={style}
+        >
+          <span className="sidebar-cta-slot__copy sidebar-cta-slot__download-copy">
+            <strong className="sidebar-cta-slot__title sidebar-cta-slot__download-title">{title}</strong>
+            <span className="sidebar-cta-slot__detail sidebar-cta-slot__download-detail">{detail}</span>
+            <span className="sidebar-cta-slot__download-progress">
+              <span className="sidebar-cta-slot__download-meta">
+                <span>{state.progressText}</span>
+                <span className="sidebar-cta-slot__download-percent">{state.progressPercent}%</span>
+              </span>
+              <span
+                className="sidebar-cta-slot__download-track"
+                role="progressbar"
+                aria-label={title}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={state.progressPercent}
+              >
+                <span className="sidebar-cta-slot__download-fill" />
+              </span>
+            </span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   const actionLabel = t(state.actionLabelKey);
   const copy = t(state.copyKey);
   const title = t(state.titleKey);

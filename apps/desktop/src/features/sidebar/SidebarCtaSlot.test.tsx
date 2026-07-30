@@ -27,6 +27,53 @@ const baseInput = {
 afterEach(cleanup);
 
 describe("SidebarCtaSlot", () => {
+  it("prioritizes a managed model download over billing and AI actions", () => {
+    expect(resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { label: "Connection issue", tone: "warning" },
+      billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "payment_required" },
+      managedLocalAiStatus: {
+        state: "installing",
+        selectedModelId: "drifty-qwen3-5-4b-default",
+        installedModels: [],
+        baseUrl: null,
+        model: null,
+        message: "Downloading managed local model... (42%)",
+        artifactDir: null,
+        progress: { percent: 42.4, downloadedBytes: 1_176_000_000, totalBytes: 2_800_000_000 },
+        errorKind: null,
+        memoryUsageBytes: null,
+      },
+    })).toMatchObject({
+      kind: "download",
+      modelLabel: "Qwen 3.5 4B",
+      downloadSizeLabel: "~2.8 GB",
+      progressPercent: 42,
+      progressText: "1.2/2.8 GB",
+      titleKey: "sidebar.cta.download.title",
+    });
+  });
+
+  it("clamps managed model progress to the progressbar range", () => {
+    expect(resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { label: "AI setup needed", tone: "error" },
+      billingEntitlement: activeEntitlement,
+      managedLocalAiStatus: {
+        state: "installing",
+        selectedModelId: "drifty-qwen3-5-4b-default",
+        installedModels: [],
+        baseUrl: null,
+        model: null,
+        message: "Downloading managed local model...",
+        artifactDir: null,
+        progress: { percent: 101.4, downloadedBytes: 2_800_000_000, totalBytes: 2_800_000_000 },
+        errorKind: null,
+        memoryUsageBytes: null,
+      },
+    })).toMatchObject({ kind: "download", progressPercent: 100 });
+  });
+
   it("prioritizes a confirmed AI disconnection", () => {
     expect(resolveSidebarCtaSlot({
       ...baseInput,
@@ -217,6 +264,36 @@ describe("SidebarCtaSlot", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss upgrade" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders download progress as passive status with no action button", () => {
+    const state = resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { label: "AI setup needed", tone: "error" },
+      billingEntitlement: null,
+      managedLocalAiStatus: {
+        state: "installing",
+        selectedModelId: "drifty-qwen3-5-4b-default",
+        installedModels: [],
+        baseUrl: null,
+        model: null,
+        message: "Downloading managed local model... (42%)",
+        artifactDir: null,
+        progress: { percent: 42, downloadedBytes: 1_176_000_000, totalBytes: 2_800_000_000 },
+        errorKind: null,
+        memoryUsageBytes: null,
+      },
+    });
+    if (!state || state.kind !== "download") throw new Error("Expected download state");
+
+    const { container } = render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
+
+    const status = screen.getByRole("status", { name: /Downloading model.*Qwen 3\.5 4B.*1\.2\/2\.8 GB.*42%/i });
+    expect(status.getAttribute("data-kind")).toBe("download");
+    expect(status.style.getPropertyValue("--sidebar-download-progress")).toBe("42%");
+    expect(screen.getByRole("progressbar", { name: "Downloading model" }).getAttribute("aria-valuenow")).toBe("42");
+    expect(container.querySelector(".sidebar-cta-slot__action")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("localizes the complete CTA state instead of only its action", () => {

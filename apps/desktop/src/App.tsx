@@ -219,6 +219,7 @@ import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown, NO
 import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
+import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
@@ -1078,6 +1079,7 @@ export default function App() {
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
   }, [aiClassificationProviderKey]);
   const isSettingsTab = activeTab === "settings";
+  const managedLocalAiStatus = useManagedLocalAiStatusObserver(!onboardingOpen && !isSettingsTab);
   const isSidebarVisuallyCollapsed = !isSettingsTab && sidebarCollapsed;
   // Dev preview feeds the same resolver a synthetic input instead of swapping in
   // a canned state, so what you see is the production branching.
@@ -1093,6 +1095,7 @@ export default function App() {
         billingEntitlementLoading,
         localAiProvider: localAiSetup.provider,
         localAiConfigured: localAiConnectionFingerprint !== null,
+        managedLocalAiStatus,
       },
   );
   const sidebarUpgradeDismissed = !isSidebarCtaPreviewActive
@@ -1102,7 +1105,8 @@ export default function App() {
     && !isSidebarVisuallyCollapsed
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
-  const shouldHideTopbarAiStatus = shouldShowSidebarCtaSlot && sidebarCtaSlot?.kind === "ai";
+  const shouldHideTopbarAiStatus = shouldShowSidebarCtaSlot
+    && (sidebarCtaSlot?.kind === "ai" || sidebarCtaSlot?.kind === "download");
   const refreshRequestRef = useRef(0);
   const lastFullDayRefreshAtRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
@@ -6000,6 +6004,7 @@ export default function App() {
                   openAccountSettings();
                   return;
                 }
+                if (sidebarCtaSlot.kind === "download") return;
                 void handleStartDriftyCloudSetup();
               }}
             />

@@ -45,8 +45,8 @@
 }
 
 /* Same hover language as `.tracker-control`: the surface lifts and blurs. */
-.sidebar-cta-slot:hover:not(:disabled),
-.sidebar-cta-slot:focus-within:not(:disabled) {
+.sidebar-cta-slot:not(.sidebar-cta-slot--download):hover:not(:disabled),
+.sidebar-cta-slot:not(.sidebar-cta-slot--download):focus-within:not(:disabled) {
   background: color-mix(in srgb, var(--shell-floating-surface) 52%, transparent);
   backdrop-filter: blur(22px) saturate(1.12);
   -webkit-backdrop-filter: blur(22px) saturate(1.12);
@@ -142,7 +142,8 @@
 }
 
 .sidebar-cta-slot[data-tone="upgrade"],
-.sidebar-cta-slot[data-tone="trial"] {
+.sidebar-cta-slot[data-tone="trial"],
+.sidebar-cta-slot[data-tone="download"] {
   --cta-tone-fill: var(--accent-soft);
   --cta-tone-glow: var(--accent-wash);
   --cta-tone-strength: 34%;
@@ -161,7 +162,8 @@
 }
 
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone="upgrade"],
-:root[data-theme="dark"] .sidebar-cta-slot[data-tone="trial"] {
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="trial"],
+:root[data-theme="dark"] .sidebar-cta-slot[data-tone="download"] {
   --cta-tone-strength: 17%;
 }
 
@@ -211,8 +213,8 @@
   );
 }
 
-.sidebar-cta-slot[data-tone]:hover:not(:disabled),
-.sidebar-cta-slot[data-tone]:focus-within:not(:disabled) {
+.sidebar-cta-slot[data-tone]:not(.sidebar-cta-slot--download):hover:not(:disabled),
+.sidebar-cta-slot[data-tone]:not(.sidebar-cta-slot--download):focus-within:not(:disabled) {
   background: color-mix(in srgb, var(--cta-tone-fill) var(--cta-tone-fill-strength), var(--surface));
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient-hover), transparent),
@@ -266,6 +268,73 @@
   line-height: 1.54;
   overflow-wrap: break-word;
   text-wrap: wrap;
+}
+
+/* Managed local downloads are passive status, not another CTA. The existing
+ * green tone remains, while the action row gives way to a compact live meter. */
+.sidebar-cta-slot--download {
+  display: block;
+  cursor: default;
+}
+
+.sidebar-cta-slot__download-copy {
+  padding-block-end: 9px;
+}
+
+.sidebar-cta-slot__download-title,
+.sidebar-cta-slot__download-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-cta-slot__download-title {
+  text-wrap: nowrap;
+}
+
+.sidebar-cta-slot__download-detail {
+  overflow-wrap: normal;
+  text-wrap: nowrap;
+}
+
+.sidebar-cta-slot__download-progress {
+  display: grid;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.sidebar-cta-slot__download-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: color-mix(in srgb, var(--text) 58%, transparent);
+  font-size: 0.625rem;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.sidebar-cta-slot__download-percent {
+  color: var(--accent-strong);
+}
+
+.sidebar-cta-slot__download-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, black 5%, transparent);
+}
+
+.sidebar-cta-slot__download-fill {
+  display: block;
+  width: var(--sidebar-download-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #a8cf71));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 18%, transparent);
+  transition: width 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Confirmed white-pill treatment from the isolated preview. The label and arrow
@@ -365,6 +434,10 @@
   .sidebar-cta-slot__dismiss,
   .sidebar-cta-slot__action,
   .sidebar-cta-slot__arrow {
+    transition: none;
+  }
+
+  .sidebar-cta-slot__download-fill {
     transition: none;
   }
 }
