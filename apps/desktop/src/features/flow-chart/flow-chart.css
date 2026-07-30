@@ -302,25 +302,11 @@ button.flow-cell:focus {
 .flow-cell--project { background: var(--flow-project-color, var(--category-unknown)); }
 
 /* Unclassified time is "no verdict yet": keep the established unknown tone in
-   both color modes so it stays readable, and pulse only while AI
-   classification is still pending. */
+   both color modes. Actual AI progress belongs to the global connection status,
+   so unresolved cells stay calm and readable instead of implying they are all
+   actively processing. */
 .flow-cell--unclassified.flow-cell--unclassified {
   background: var(--category-unknown);
-}
-
-.flow-cell--unclassified-pending {
-  animation: flow-cell-classifying-pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes flow-cell-classifying-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .flow-cell--unclassified-pending {
-    animation: none;
-  }
 }
 
 .flow-breakdown-layout__chart .flow-chart-row,

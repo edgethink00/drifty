@@ -72,6 +72,12 @@ const blockPlacementCases: BlockPlacementCase[] = [
 ];
 
 describe("FlowChartView", () => {
+  it("keeps the unclassified tone static instead of implying per-cell progress", () => {
+    expect(cssRule(".flow-cell--unclassified.flow-cell--unclassified")).toContain("background: var(--category-unknown);");
+    expect(styles).not.toContain(".flow-cell--unclassified-pending");
+    expect(styles).not.toContain("@keyframes flow-cell-classifying-pulse");
+  });
+
   it("keeps category legend dots at the JEO-10 enlarged marker size", () => {
     const categoryDotRule = cssRule(".flow-chart-legend__dot");
     const toneDotRule = cssRule(".flow-chart-legend__tone-dot");

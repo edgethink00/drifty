@@ -28,7 +28,7 @@ describe("classificationSourceLabel", () => {
     expect(classificationSourceLabel("llm", true)).toBe("AI");
     expect(classificationSourceLabel("llm", true, true)).toBe("AI cache");
     expect(classificationSourceLabel(null, true, true)).toBe("AI cache");
-    expect(classificationSourceLabel("unknown")).toBe("Unclassified rule");
+    expect(classificationSourceLabel("unknown")).toBe("Not classified yet");
   });
 });
 

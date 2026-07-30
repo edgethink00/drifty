@@ -48,26 +48,31 @@ describe("FlowChartView color mode", () => {
     expect(cell.classList.contains("flow-cell--workspace")).toBe(true);
   });
 
-  it("marks unknown-category blocks as unclassified with a pending pulse in both color modes", () => {
-    const pendingBlock = makeFlowBlock({
+  it("keeps unknown-category blocks as stable unclassified gray in both color modes", async () => {
+    const unclassifiedBlock = makeFlowBlock({
       category: "unknown",
       productivity: "neutral",
       classificationSource: "unknown",
       siteDomain: "notion.so",
       siteTitle: "Notion",
     });
-    render(<FlowChartView blocks={[pendingBlock]} appIcons={{}} intervalMinutes={3} />);
+    render(<FlowChartView blocks={[unclassifiedBlock]} appIcons={{}} intervalMinutes={3} />);
 
     const cell = screen.getByRole("button", { name: /unclassified.*neutral/i });
     expect(cell.classList.contains("flow-cell--unclassified")).toBe(true);
-    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(true);
+    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(false);
+    expect(within(screen.getByLabelText("Flow chart tones")).getByText("Unclassified")).toBeTruthy();
+
+    fireEvent(cell, new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
+    await waitFor(() => expect(screen.getByText("Not classified yet")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
     expect(cell.classList.contains("flow-cell--unclassified")).toBe(true);
-    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(true);
+    expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(false);
+    expect(within(screen.getByLabelText("Flow chart tones")).getByText("Unclassified")).toBeTruthy();
   });
 
-  it("does not pulse stored unclassified blocks such as system-skipped blank screens", () => {
+  it("uses the same stable unclassified gray for stored blank-screen blocks", () => {
     const storedBlock = makeFlowBlock({
       category: "unknown",
       productivity: "neutral",

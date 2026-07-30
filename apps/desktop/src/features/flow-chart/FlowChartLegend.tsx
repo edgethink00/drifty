@@ -1,6 +1,6 @@
 import type { CSSProperties, Dispatch, MouseEvent, RefObject, SetStateAction } from "react";
 import type { ActivityCategory, FlowBlock, ProductivityLabel } from "@drifty/domain";
-import { PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { buildLegendActivityBreakdown, moveFlowHoverCardToPointer, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
 import type { ProjectLegendEntry } from "./projectFlowView";
@@ -22,7 +22,7 @@ type FlowLegendToneStyle = CSSProperties & Record<"--flow-legend-tone", string>;
 
 const FLOW_CATEGORY_GROUPS = [
   { productivity: "focus", categories: ["workspace", "learning"] },
-  { productivity: "neutral", categories: ["communication", "music", "utility", "unknown"] },
+  { productivity: "neutral", categories: ["communication", "music", "utility"] },
   { productivity: "drift", categories: ["entertainment", "social_media", "shopping", "game"] },
 ] as const satisfies readonly FlowCategoryGroup[];
 
@@ -70,6 +70,21 @@ export function FlowChartLegend({
     x: event.clientX,
     y: event.clientY,
   });
+  const unclassifiedToneStyle: FlowLegendToneStyle = { "--flow-legend-tone": CATEGORY_COLORS.unknown };
+  const unclassifiedLegend = (
+    <span className="flow-chart-legend__group flow-chart-legend__group--unclassified">
+      <span
+        className="flow-chart-legend__parent flow-chart-legend__parent--tone"
+        onMouseEnter={(event) => showLegendHover(event, categoryLabel("unknown"), "Not classified yet", (block) => block.category === "unknown")}
+        onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
+        onMouseLeave={() => setHoveredLegend(null)}
+        title="Unclassified blocks"
+      >
+        <span className="flow-chart-legend__tone-dot" style={unclassifiedToneStyle} />
+        {categoryLabel("unknown")}
+      </span>
+    </span>
+  );
 
   return (
     <div className="flow-chart-legend" aria-label="Flow chart tones">
@@ -119,6 +134,7 @@ export function FlowChartLegend({
           );
         })
       )}
+      {unclassifiedLegend}
     </div>
   );
 }

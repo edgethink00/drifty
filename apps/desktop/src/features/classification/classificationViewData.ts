@@ -431,7 +431,7 @@ export function classificationSourceLabel(source?: ClassificationSource | string
   if (source === "manual") return "Manual";
   if (source === "rule") return "Custom rule";
   if (source === "stored") return "Stored";
-  return "Unclassified rule";
+  return "Not classified yet";
 }
 
 export function classificationRuleTargetLabel(targetKind: ClassificationRuleTargetKind): string {

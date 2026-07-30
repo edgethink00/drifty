@@ -91,7 +91,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                 }
                 const isProjectMode = colorMode === "project";
                 const unclassifiedClass = !isProjectMode && block.category === "unknown"
-                  ? ` flow-cell--unclassified${block.classificationSource === "unknown" ? " flow-cell--unclassified-pending" : ""}`
+                  ? " flow-cell--unclassified"
                   : "";
                 const colorClass = isProjectMode
                   ? "flow-cell--project"
