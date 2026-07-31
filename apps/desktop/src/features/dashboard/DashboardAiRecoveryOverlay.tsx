@@ -4,7 +4,7 @@ import {
   isCloudBillingVariant,
   type DashboardAiUnavailableState,
   type DashboardAiUnavailableVariant,
-} from "./DashboardAiUnavailableNotice";
+} from "./dashboardAiUnavailableState";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 

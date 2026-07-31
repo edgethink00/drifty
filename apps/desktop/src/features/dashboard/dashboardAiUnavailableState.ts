@@ -69,31 +69,6 @@ export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailable
   return CONNECT_AI_STATE;
 }
 
-export function DashboardAiUnavailableNotice({
-  state,
-  onAction,
-}: {
-  readonly state: DashboardAiUnavailableState;
-  readonly onAction: (variant: DashboardAiUnavailableVariant) => void;
-}) {
-  return (
-    <section className={`dashboard-ai-notice dashboard-ai-notice--${state.variant}`} aria-label="AI unavailable notice" role="status">
-      <div className="dashboard-ai-notice__heading">
-        <div className="dashboard-ai-notice__title-row">
-          <span className="dashboard-ai-notice__signal" aria-hidden="true">
-            <span className="dashboard-ai-notice__signal-dot" />
-          </span>
-          <strong>{state.title}</strong>
-        </div>
-        <p className="dashboard-ai-notice__body">{state.body}</p>
-        <button type="button" className="settings-btn settings-btn--primary" onClick={() => onAction(state.variant)}>
-          {state.ctaLabel}
-        </button>
-      </div>
-    </section>
-  );
-}
-
 export function isCloudBillingVariant(variant: DashboardAiUnavailableVariant): boolean {
   return variant === "trial-ended" || variant === "cloud-billing";
 }

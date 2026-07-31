@@ -338,14 +338,6 @@
 }
 
 @media (max-width: 620px) {
-  .dashboard-ai-notice {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboard-ai-notice .settings-btn {
-    justify-self: start;
-  }
-
   .dashboard-ai-recovery {
     align-items: end;
     padding: var(--space-2);

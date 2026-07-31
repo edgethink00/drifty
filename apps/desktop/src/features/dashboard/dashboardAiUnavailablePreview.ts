@@ -1,5 +1,5 @@
 import type { BillingEntitlement } from "../billing/billingService";
-import type { DashboardAiUnavailableInput } from "./DashboardAiUnavailableNotice";
+import type { DashboardAiUnavailableInput } from "./dashboardAiUnavailableState";
 
 export type DashboardAiUnavailablePreviewCase = "trial-ended" | "cloud-billing" | "device-limit" | "provider-disconnected" | "connect-ai";
 

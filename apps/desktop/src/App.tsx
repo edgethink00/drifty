@@ -22,15 +22,12 @@ import {
 } from "@drifty/domain";
 import logoUrl from "./assets/drifty-mark.svg";
 import {
-  isCloudBillingVariant,
   resolveDashboardAiUnavailableState,
-  type DashboardAiUnavailableVariant,
-} from "./features/dashboard/DashboardAiUnavailableNotice";
+} from "./features/dashboard/dashboardAiUnavailableState";
 import {
   isDashboardAiRecoveryOverlayVariant,
 } from "./features/dashboard/DashboardAiRecoveryOverlay";
 import {
-  clearDashboardAiRecoveryDismissal,
   isDashboardAiRecoveryDismissed,
   storeDashboardAiRecoveryDismissal,
 } from "./features/dashboard/dashboardAiRecoveryDismissal";
@@ -1106,8 +1103,6 @@ export default function App() {
     && !isSidebarVisuallyCollapsed
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
-  const shouldHideTopbarAiStatus = shouldShowSidebarCtaSlot
-    && (sidebarCtaSlot?.kind === "ai" || sidebarCtaSlot?.kind === "download");
   const refreshRequestRef = useRef(0);
   const lastFullDayRefreshAtRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
@@ -5031,21 +5026,6 @@ export default function App() {
     navigateToTab("settings");
   }, [navigateToTab]);
 
-  const handleDashboardAiUnavailableAction = useCallback((variant: DashboardAiUnavailableVariant) => {
-    if (isCloudBillingVariant(variant)) {
-      clearDashboardAiRecoveryDismissal(variant);
-      setDismissedDashboardAiRecoveryKey((dismissedKey) => (dismissedKey === variant ? null : dismissedKey));
-      return;
-    }
-
-    if (variant === "device-limit") {
-      openAccountSettings();
-      return;
-    }
-
-    openDashboardAiSetup();
-  }, [openAccountSettings, openDashboardAiSetup]);
-
   const handleDismissDashboardAiRecovery = useCallback(() => {
     if (dashboardAiRecoveryKey === null) return;
     storeDashboardAiRecoveryDismissal(dashboardAiRecoveryKey);
@@ -5733,9 +5713,7 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          {!shouldHideTopbarAiStatus ? (
-            <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
-          ) : null}
+          <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
           {titlebarUpdate ? (
             <TopbarUpdateButton
               isInstalling={updaterInstalling}
@@ -6119,7 +6097,6 @@ export default function App() {
             classificationActionLoading={classificationActionLoading}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
-            dashboardAiUnavailableState={dashboardAiUnavailableState}
             dashboardAppUsage={stickyDashboardAppUsage}
             browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
             dashboardCategoryTotals={stickyDashboardCategoryTotals}
@@ -6160,7 +6137,6 @@ export default function App() {
             weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
             weekCurrentMinuteOfDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveCurrentMinuteOfDay : null}
             weekDashboardAxisScalePercent={effectiveWeekDashboardAxisScalePercent}
-            onDashboardAiUnavailableAction={handleDashboardAiUnavailableAction}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}

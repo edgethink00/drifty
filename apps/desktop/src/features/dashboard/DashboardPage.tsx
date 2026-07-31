@@ -20,11 +20,7 @@ import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen } from "../settings/settingsStorage";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
-import {
-  DashboardAiUnavailableNotice,
-  type DashboardAiUnavailableState,
-  type DashboardAiUnavailableVariant,
-} from "./DashboardAiUnavailableNotice";
+import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
@@ -35,7 +31,6 @@ type DashboardPageProps = {
   readonly classificationActionLoading: boolean;
   readonly currentMinuteOfDay: number | null;
   readonly dashboardAiRecoveryState: DashboardAiUnavailableState | null;
-  readonly dashboardAiUnavailableState: DashboardAiUnavailableState | null;
   readonly dashboardAppUsage: AppUsagePanelItem[];
   readonly dashboardCategoryTotals: CategoryDuration[];
   readonly dashboardDateNavigator: ReactNode;
@@ -79,7 +74,6 @@ type DashboardPageProps = {
   readonly weekCurrentCalendarDay: string | null;
   readonly weekCurrentMinuteOfDay: number | null;
   readonly weekDashboardAxisScalePercent?: number;
-  readonly onDashboardAiUnavailableAction: (variant: DashboardAiUnavailableVariant) => void;
   readonly onDismissDashboardAiRecovery: () => void;
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
@@ -94,7 +88,6 @@ export function DashboardPage({
   classificationActionLoading,
   currentMinuteOfDay,
   dashboardAiRecoveryState,
-  dashboardAiUnavailableState,
   dashboardAppUsage,
   dashboardCategoryTotals,
   dashboardDateNavigator,
@@ -135,7 +128,6 @@ export function DashboardPage({
   weekCurrentCalendarDay,
   weekCurrentMinuteOfDay,
   weekDashboardAxisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
-  onDashboardAiUnavailableAction,
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
   onOpenDashboardAiSetup,
@@ -200,12 +192,6 @@ export function DashboardPage({
 
   return (
     <div className={pageClassName}>
-      {dashboardAiUnavailableState ? (
-        <DashboardAiUnavailableNotice
-          state={dashboardAiUnavailableState}
-          onAction={onDashboardAiUnavailableAction}
-        />
-      ) : null}
       {dashboardAiRecoveryState ? (
         <DashboardAiRecoveryOverlay
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
