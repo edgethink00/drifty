@@ -30,6 +30,12 @@ describe("boot shell markup", () => {
     expect(indexSource).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*\.boot-loading__content\s*{[^}]*animation:\s*none;/s);
   });
 
+  it("uses the requested boot spacing, mark size, and loading-copy size", () => {
+    expect(indexSource).toMatch(/\.boot-loading__content\s*{[^}]*gap:\s*11\.4px;/s);
+    expect(indexSource).toMatch(/\.boot-loading__mark\s*{[^}]*width:\s*51\.681px;[^}]*height:\s*51\.681px;/s);
+    expect(indexSource).toMatch(/\.boot-loading\s*{[^}]*font-size:\s*17\.325px;/s);
+  });
+
   it("keeps the boot shell out of companion windows", () => {
     expect(indexSource).toMatch(/html\[data-surface="watcher"\] #boot-shell,[\s\S]*html\[data-surface="drift-alarm"\] #boot-shell\s*{\s*display:\s*none;/);
   });
