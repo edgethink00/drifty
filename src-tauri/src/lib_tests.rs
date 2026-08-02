@@ -235,6 +235,7 @@ fn exit_cleanup_steps_preserve_production_order() {
     let tray_worker_calls = std::sync::Arc::clone(&calls);
 
     run_exit_cleanup_steps(
+        || push_exit_call(&calls, "tracker-recovery-worker"),
         || push_exit_call(&tray_worker_calls, "tray-refresh-worker"),
         || push_exit_call(&managed_ai_calls, "managed-ai"),
         || push_exit_call(&daemon_calls, "tracker-daemon"),
@@ -247,6 +248,7 @@ fn exit_cleanup_steps_preserve_production_order() {
             .expect("cleanup call log should not be poisoned")
             .as_slice(),
         [
+            "tracker-recovery-worker",
             "tray-refresh-worker",
             "managed-ai",
             "tracker-daemon",
@@ -266,6 +268,7 @@ fn exit_cleanup_steps_continue_after_a_panicking_step() {
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_exit_cleanup_steps(
+            || push_exit_call(&calls, "tracker-recovery-worker"),
             || push_exit_call(&tray_worker_calls, "tray-refresh-worker"),
             || push_exit_call(&managed_ai_calls, "managed-ai"),
             || {
@@ -283,6 +286,7 @@ fn exit_cleanup_steps_continue_after_a_panicking_step() {
             .expect("cleanup call log should not be poisoned")
             .as_slice(),
         [
+            "tracker-recovery-worker",
             "tray-refresh-worker",
             "managed-ai",
             "tracker-daemon",

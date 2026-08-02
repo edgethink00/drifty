@@ -268,6 +268,45 @@ impl TrackerController {
         self.invoke::<TrackerStatus>(app, "stop_tracking", json!({}))
     }
 
+    pub(crate) fn daemon_running(&self, app: &AppHandle) -> Result<bool, TrackerError> {
+        let runtime = resolve_tracker_runtime(app)?;
+        let db_path = resolve_db_path(app);
+        let pid_path = tracker_daemon_pid_path(&db_path);
+        let pid = match std::fs::read_to_string(&pid_path) {
+            Ok(value) => match value.trim().parse::<u32>() {
+                Ok(pid) if pid > 0 => pid,
+                _ => return Ok(false),
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(TrackerError::CommandFailed(error.to_string())),
+        };
+        let output = Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "command="])
+            .output()
+            .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
+        if !output.status.success() {
+            return Ok(false);
+        }
+        let command = String::from_utf8_lossy(&output.stdout);
+        Ok(tracker_daemon_command_matches(
+            command.trim(),
+            &runtime,
+            &db_path,
+        ))
+    }
+
+    pub(crate) fn recover_start(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
+        let runtime = resolve_tracker_runtime(app)?;
+        let db_path = resolve_db_path(app);
+        let request = json!({
+            "command": "start_tracking",
+            "payload": {},
+        });
+        let raw =
+            invoke_one_shot_with_timeout(&runtime, &db_path, &request, Duration::from_secs(3))?;
+        parse_envelope::<TrackerStatus>(&raw)
+    }
+
     pub fn get_current_snapshot(&self, app: &AppHandle) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "get_current_snapshot", json!({}))
     }
@@ -583,6 +622,30 @@ impl TrackerRuntime {
     }
 }
 
+fn tracker_daemon_pid_path(db: &Path) -> PathBuf {
+    db.parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(".state")
+        .join("tracker.pid")
+}
+
+fn tracker_daemon_command_matches(command: &str, runtime: &TrackerRuntime, db: &Path) -> bool {
+    let suffix = format!(" daemon --db {}", db.to_string_lossy());
+    let Some(prefix) = command.strip_suffix(&suffix) else {
+        return false;
+    };
+    match runtime.kind {
+        TrackerRuntimeKind::PackagedSidecar => {
+            let expected = runtime.executable_path.to_string_lossy();
+            prefix == expected || prefix.ends_with(expected.as_ref())
+        }
+        TrackerRuntimeKind::SourcePython => runtime
+            .base_args
+            .first()
+            .is_some_and(|script| prefix.ends_with(script.to_string_lossy().as_ref())),
+    }
+}
+
 fn invoke_one_shot(
     runtime: &TrackerRuntime,
     db: &Path,
@@ -599,6 +662,44 @@ fn invoke_one_shot(
     }
 
     Ok(output.stdout)
+}
+
+fn invoke_one_shot_with_timeout(
+    runtime: &TrackerRuntime,
+    db: &Path,
+    request: &Value,
+    timeout: Duration,
+) -> Result<Vec<u8>, TrackerError> {
+    let mut child = command_from_argv(runtime.argv_for_one_shot(db, request))?
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
+    let started_at = Instant::now();
+    loop {
+        match child
+            .try_wait()
+            .map_err(|error| TrackerError::CommandFailed(error.to_string()))?
+        {
+            Some(_) => {
+                let output = child
+                    .wait_with_output()
+                    .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
+                if !output.status.success() {
+                    return Err(TrackerError::CommandFailed(
+                        String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                    ));
+                }
+                return Ok(output.stdout);
+            }
+            None if started_at.elapsed() >= timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(TrackerError::ServeTimedOut(timeout));
+            }
+            None => thread::sleep(Duration::from_millis(20)),
+        }
+    }
 }
 
 /// A long-lived tracker `serve` process. Requests and responses are
@@ -1670,6 +1771,68 @@ mod tests {
                 "/tmp/db.sqlite3",
             ]
         );
+    }
+
+    #[test]
+    fn daemon_command_match_preserves_paths_with_spaces() {
+        let runtime = TrackerRuntime::source_python(
+            PathBuf::from("/usr/bin/python3"),
+            PathBuf::from("/repo with spaces/services/tracker-python/app/main.py"),
+        );
+        let db = Path::new("/Library/Application Support/Drifty/tracker.sqlite3");
+        let command = "/usr/bin/python3 /repo with spaces/services/tracker-python/app/main.py daemon --db /Library/Application Support/Drifty/tracker.sqlite3";
+
+        assert!(tracker_daemon_command_matches(command, &runtime, db));
+        assert!(tracker_daemon_command_matches(
+            "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /repo with spaces/services/tracker-python/app/main.py daemon --db /Library/Application Support/Drifty/tracker.sqlite3",
+            &runtime,
+            db,
+        ));
+        assert!(!tracker_daemon_command_matches(
+            "/usr/bin/python3 /repo with spaces/services/tracker-python/app/main.py serve --db /Library/Application Support/Drifty/tracker.sqlite3",
+            &runtime,
+            db,
+        ));
+    }
+
+    #[test]
+    fn recovery_one_shot_is_killed_at_its_own_short_timeout() {
+        let dir = temp_dir_path("recovery-one-shot-timeout");
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let script = dir.join("fake-recovery-sidecar");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nif [ \"$1\" = \"warmup\" ]; then exit 0; fi\nexec sleep 600\n",
+        )
+        .expect("write fake recovery sidecar");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+                .expect("mark script executable");
+        }
+        assert!(Command::new(&script)
+            .arg("warmup")
+            .status()
+            .expect("warm up fake recovery sidecar")
+            .success());
+
+        let runtime = TrackerRuntime::packaged_sidecar(script);
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        let result = invoke_one_shot_with_timeout(
+            &runtime,
+            &dir.join("tracker.sqlite3"),
+            &json!({ "command": "start_tracking", "payload": {} }),
+            timeout,
+        );
+
+        assert!(matches!(
+            result,
+            Err(TrackerError::ServeTimedOut(duration)) if duration == timeout
+        ));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

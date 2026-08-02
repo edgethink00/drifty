@@ -8,6 +8,7 @@ mod openrouter_key_store;
 mod observability;
 mod shell_action;
 mod tracker;
+mod tracker_recovery;
 mod tracking_pause;
 mod tray;
 
@@ -61,6 +62,7 @@ use commands::{
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
+use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
 use tracking_pause::TrackingPauseState;
 use tray::{
     setup_tray, shutdown_tray_refresh_worker, tray_update_drift_alarm_status,
@@ -129,6 +131,7 @@ impl AppExitCoordinator {
 }
 
 fn run_exit_cleanup_steps(
+    mut stop_tracker_recovery: impl FnMut(),
     mut stop_tray_refresh_worker: impl FnMut(),
     mut stop_managed_ai: impl FnMut(),
     mut stop_tracker_daemon: impl FnMut(),
@@ -136,7 +139,8 @@ fn run_exit_cleanup_steps(
 ) {
     let mut first_panic = None;
     for cleanup in [
-        &mut stop_tray_refresh_worker as &mut dyn FnMut(),
+        &mut stop_tracker_recovery as &mut dyn FnMut(),
+        &mut stop_tray_refresh_worker,
         &mut stop_managed_ai,
         &mut stop_tracker_daemon,
         &mut stop_tracker_serve_process,
@@ -156,6 +160,8 @@ fn run_exit_cleanup_steps(
 fn shutdown_app_for_exit(app: &AppHandle) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
         run_exit_cleanup_steps(
+            // The recovery worker must stop before the intentional daemon stop.
+            || shutdown_tracker_recovery(app),
             // Stop and join before tracker shutdown because refresh reads tracker stats.
             || shutdown_tray_refresh_worker(app),
             || managed_ai_stop_runtime_for_app_exit(app),
@@ -305,6 +311,7 @@ pub fn run() {
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
         .manage(TrayRefreshWorker::default())
+        .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
         .manage(DriftAlarmState::default())
         .manage(AppExitCoordinator::default())
@@ -413,6 +420,7 @@ pub fn run() {
                     }
                 });
             }
+            setup_tracker_recovery(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
