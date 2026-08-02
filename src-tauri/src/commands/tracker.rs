@@ -7,6 +7,8 @@ use crate::tracker::{
     tracker_status_error_message, tracker_stop_error_message, AppIdentity,
     DeveloperDiagnosticsSettings, TrackerController, TrackerStartupState, TrackerStatus,
 };
+use crate::tracking_pause::{self, TrackingPauseState};
+use crate::tray;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -331,15 +333,25 @@ pub async fn tracker_start(
     controller: State<'_, TrackerController>,
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
-    let generation = app
-        .state::<TrackerStartupState>()
-        .begin_start_attempt();
+    let generation = app.state::<TrackerStartupState>().begin_start_attempt();
     async_runtime::spawn_blocking(move || {
+        let pause_state = app.state::<TrackingPauseState>();
+        let _operation = pause_state.lock_operation();
         let startup_state = app.state::<TrackerStartupState>();
         match controller.start(&app) {
-            Ok(status) => {
+            Ok(status) if status.running => {
                 startup_state.complete_start_success(generation);
+                tracking_pause::clear_after_manual_start(&app);
+                tray::queue_tracking_controls_refresh(&app, Some(status.running));
                 Ok(status)
+            }
+            Ok(status) => {
+                let error = crate::tracker::TrackerError::TrackerReturnedError(
+                    "tracker did not report running after start".to_string(),
+                );
+                startup_state.record_start_failure(generation, &error);
+                tray::queue_tracking_controls_refresh(&app, Some(status.running));
+                Err(tracker_start_error_message())
             }
             Err(error) => {
                 startup_state.record_start_failure(generation, &error);
@@ -357,17 +369,31 @@ pub async fn tracker_stop(
     controller: State<'_, TrackerController>,
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
-    let generation = app
-        .state::<TrackerStartupState>()
-        .begin_stop_attempt();
+    let generation = app.state::<TrackerStartupState>().begin_stop_attempt();
     async_runtime::spawn_blocking(move || {
+        let pause_state = app.state::<TrackingPauseState>();
+        let _operation = pause_state.lock_operation();
         let startup_state = app.state::<TrackerStartupState>();
+        if let Err(error) = tracking_pause::prepare_indefinite_pause(&app) {
+            eprintln!("[tracking-pause] Refusing an unpersisted manual stop: {error}");
+            return Err(tracker_stop_error_message());
+        }
         match controller.stop(&app) {
-            Ok(status) => {
+            Ok(status) if !status.running => {
                 startup_state.complete_stop_success(generation);
+                tracking_pause::commit_indefinite_pause(&app);
+                tray::queue_tracking_controls_refresh(&app, Some(status.running));
                 Ok(status)
             }
-            Err(_) => Err(tracker_stop_error_message()),
+            Ok(status) => {
+                tracking_pause::abort_indefinite_pause(&app);
+                tray::queue_tracking_controls_refresh(&app, Some(status.running));
+                Err(tracker_stop_error_message())
+            }
+            Err(_) => {
+                tracking_pause::abort_indefinite_pause(&app);
+                Err(tracker_stop_error_message())
+            }
         }
     })
     .await

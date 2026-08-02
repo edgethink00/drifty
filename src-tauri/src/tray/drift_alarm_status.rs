@@ -9,7 +9,8 @@ pub struct TrayDriftAlarmStatus {
     last_checked_at: Option<String>,
     last_checked_label: String,
     result_label: String,
-    detail_label: Option<String>,
+    #[serde(default)]
+    developer_details_enabled: bool,
     #[serde(default)]
     tracker_running: Option<bool>,
 }
@@ -22,7 +23,7 @@ impl Default for TrayDriftAlarmStatus {
             last_checked_at: None,
             last_checked_label: "Off".to_string(),
             result_label: "Alerts disabled".to_string(),
-            detail_label: None,
+            developer_details_enabled: false,
             tracker_running: None,
         }
     }
@@ -55,9 +56,13 @@ pub fn drift_alerts_status_label(status: &TrayDriftAlarmStatus) -> String {
     }
 }
 
-pub fn drift_last_check_label(status: &TrayDriftAlarmStatus) -> String {
+pub fn drift_summary_label(status: &TrayDriftAlarmStatus) -> Option<String> {
+    if !status.enabled || !status.developer_details_enabled {
+        return None;
+    }
+
     if status.enabled && status.tracker_running == Some(false) {
-        return "Last drift check: Not checking".to_string();
+        return Some("Last check: Not checking".to_string());
     }
 
     let label = status.last_checked_label.trim();
@@ -68,23 +73,12 @@ pub fn drift_last_check_label(status: &TrayDriftAlarmStatus) -> String {
     } else {
         label
     };
-    format!("Last drift check: {display_label}")
-}
-
-pub fn drift_result_label(status: &TrayDriftAlarmStatus) -> String {
-    if status.enabled && status.tracker_running == Some(false) {
-        return "Last result: Tracker paused".to_string();
+    let result = status.result_label.trim();
+    if result.is_empty() {
+        Some(format!("Last check: {display_label}"))
+    } else {
+        Some(format!("Last check: {display_label} · {result}"))
     }
-
-    format!("Last result: {}", status.result_label)
-}
-
-pub fn drift_detail_label(status: &TrayDriftAlarmStatus) -> Option<String> {
-    let detail = status.detail_label.as_ref()?.trim();
-    if detail.is_empty() {
-        return None;
-    }
-    Some(format!("Detail: {detail}"))
 }
 
 #[cfg(test)]
@@ -99,7 +93,7 @@ mod tests {
             last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "Suppressed: AI unavailable".to_string(),
-            detail_label: Some("youtube.com - 2m".to_string()),
+            developer_details_enabled: false,
             tracker_running: None,
         };
 
@@ -117,7 +111,7 @@ mod tests {
             last_checked_at: None,
             last_checked_label: "Never".to_string(),
             result_label: "No eligible drift".to_string(),
-            detail_label: None,
+            developer_details_enabled: false,
             tracker_running: None,
         };
         let disabled_status = TrayDriftAlarmStatus {
@@ -126,7 +120,7 @@ mod tests {
             last_checked_at: None,
             last_checked_label: "Off".to_string(),
             result_label: "Alerts disabled".to_string(),
-            detail_label: None,
+            developer_details_enabled: false,
             tracker_running: None,
         };
 
@@ -171,6 +165,7 @@ mod tests {
         .expect("tray status with cached tracker state should deserialize");
 
         assert_eq!(status.tracker_running(), Some(true));
+        assert_eq!(drift_summary_label(&status), None);
     }
 
     #[test]
@@ -181,46 +176,79 @@ mod tests {
             last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "Tracker paused".to_string(),
-            detail_label: None,
+            developer_details_enabled: true,
             tracker_running: Some(false),
         };
 
         assert_eq!(
-            drift_last_check_label(&status),
-            "Last drift check: Not checking"
+            drift_summary_label(&status).as_deref(),
+            Some("Last check: Not checking")
         );
     }
 
     #[test]
-    fn drift_detail_label_omits_blank_details() {
+    fn drift_summary_is_hidden_when_alerts_are_off() {
+        let status = TrayDriftAlarmStatus {
+            enabled: false,
+            status_label: "Drift alerts: Off".to_string(),
+            last_checked_at: None,
+            last_checked_label: "Off".to_string(),
+            result_label: "Alerts disabled".to_string(),
+            developer_details_enabled: true,
+            tracker_running: None,
+        };
+
+        assert_eq!(drift_summary_label(&status), None);
+    }
+
+    #[test]
+    fn drift_summary_is_hidden_outside_developer_mode() {
         let status = TrayDriftAlarmStatus {
             enabled: true,
             status_label: "Drift alerts: Monitoring".to_string(),
             last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "No eligible drift".to_string(),
-            detail_label: Some(" ".to_string()),
-            tracker_running: None,
+            developer_details_enabled: false,
+            tracker_running: Some(true),
         };
 
-        assert_eq!(drift_detail_label(&status), None);
+        assert_eq!(drift_summary_label(&status), None);
     }
 
     #[test]
-    fn drift_detail_label_formats_candidate_details() {
+    fn drift_summary_combines_last_check_and_result_on_one_line() {
         let status = TrayDriftAlarmStatus {
             enabled: true,
             status_label: "Drift alerts: Suppressed".to_string(),
             last_checked_at: Some("2026-06-12T00:00:00.000Z".to_string()),
             last_checked_label: "9:00:00 AM".to_string(),
             result_label: "Suppressed: AI low confidence".to_string(),
-            detail_label: Some("youtube.com - 2m".to_string()),
+            developer_details_enabled: true,
             tracker_running: None,
         };
 
         assert_eq!(
-            drift_detail_label(&status),
-            Some("Detail: youtube.com - 2m".to_string())
+            drift_summary_label(&status).as_deref(),
+            Some("Last check: 9:00:00 AM · Suppressed: AI low confidence")
+        );
+    }
+
+    #[test]
+    fn drift_summary_omits_empty_result_without_leaving_a_separator() {
+        let status = TrayDriftAlarmStatus {
+            enabled: true,
+            status_label: "Drift alerts: Monitoring".to_string(),
+            last_checked_at: None,
+            last_checked_label: "Never".to_string(),
+            result_label: " ".to_string(),
+            developer_details_enabled: true,
+            tracker_running: None,
+        };
+
+        assert_eq!(
+            drift_summary_label(&status).as_deref(),
+            Some("Last check: Never")
         );
     }
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -19,6 +20,12 @@ from app.storage.activity_segment_serialization import (
     serialize_project_trend_activity_row,
 )
 from app.storage.timestamps import parse_iso_datetime
+from app.storage.database_maintenance import (
+    DatabasePreparationResult,
+    create_rotating_backup,
+    permanent_deletion_guard,
+    prepare_database,
+)
 
 if TYPE_CHECKING:
     from app.tracker.browser_automation import BrowserMetadata
@@ -95,12 +102,26 @@ class ImportedActivityInsertResult:
 
 
 class TrackerDatabase:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, *, perform_maintenance: bool = True):
         self.db_path = db_path
         self.path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection: sqlite3.Connection | None = None
+        self.maintenance_error: str | None = None
+        self.maintenance_result = (
+            prepare_database(self.db_path)
+            if perform_maintenance
+            else DatabasePreparationResult(existed=self.db_path.exists())
+        )
         self._init_db()
+        if perform_maintenance and self.maintenance_result.existed:
+            try:
+                create_rotating_backup(self.connect(), self.db_path)
+            except (OSError, sqlite3.DatabaseError) as error:
+                # A failed safety copy must never make an otherwise healthy
+                # source-of-truth database unavailable to the tracker.
+                self.maintenance_error = str(error)
+                print(f"[tracker-db] Backup skipped: {error}", file=sys.stderr)
 
     def connect(self) -> sqlite3.Connection:
         """Return this instance's long-lived connection, opening it on first use.
@@ -1473,24 +1494,31 @@ class TrackerDatabase:
             return 0
 
         placeholders = ",".join("?" for _ in normalized_ids)
-        with self.connect() as conn:
-            self._delete_project_windows_for_segment_ids(
-                conn, {str(segment_id) for segment_id in normalized_ids}
-            )
-            deleted_uids = [
-                row["segment_uid"]
-                for row in conn.execute(
-                    f"SELECT segment_uid FROM activity_segments WHERE id IN ({placeholders}) AND segment_uid IS NOT NULL",
+        with permanent_deletion_guard(self.db_path) as invalidate_recovery_copies:
+            with self.connect() as conn:
+                rows = conn.execute(
+                    f"SELECT id, segment_uid FROM activity_segments WHERE id IN ({placeholders})",
+                    tuple(normalized_ids),
+                ).fetchall()
+                if not rows:
+                    return 0
+
+                # Remove recovery copies before the transaction mutates the live
+                # database. If invalidation fails, the transaction never deletes.
+                invalidate_recovery_copies()
+                self._delete_project_windows_for_segment_ids(
+                    conn, {str(row["id"]) for row in rows}
+                )
+                cursor = conn.execute(
+                    f"DELETE FROM activity_segments WHERE id IN ({placeholders})",
                     tuple(normalized_ids),
                 )
-            ]
-            cursor = conn.execute(
-                f"DELETE FROM activity_segments WHERE id IN ({placeholders})",
-                tuple(normalized_ids),
-            )
-            if record_tombstone and deleted_uids:
-                self._record_sync_deletion(conn, "uids", segment_uids=deleted_uids)
-            return cursor.rowcount
+                deleted_uids = [
+                    row["segment_uid"] for row in rows if row["segment_uid"] is not None
+                ]
+                if record_tombstone and deleted_uids:
+                    self._record_sync_deletion(conn, "uids", segment_uids=deleted_uids)
+                return cursor.rowcount
 
     @staticmethod
     def _expand_history_range_bound(value: str | None, *, end_of_day: bool) -> str | None:
@@ -1537,43 +1565,50 @@ class TrackerDatabase:
         classifications = 0
         youtube_metadata = 0
 
-        with self.connect() as conn:
-            if delete_activity:
-                activity_segments = int(
-                    conn.execute(
-                        f"SELECT COUNT(*) AS count FROM activity_segments WHERE id IN ({segment_subquery})",
-                        tuple(segment_params),
-                    ).fetchone()["count"]
-                )
-                classifications = int(
-                    conn.execute(
-                        f"SELECT COUNT(*) AS count FROM activity_classifications WHERE segment_id IN ({segment_subquery})",
-                        tuple(segment_params),
-                    ).fetchone()["count"]
-                )
-            elif delete_ai_classifications:
-                classifications = int(
-                    conn.execute(
-                        "SELECT COUNT(*) AS count FROM activity_classifications "
-                        f"WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
-                        tuple(segment_params),
-                    ).fetchone()["count"]
-                )
-
-            if delete_youtube_metadata:
-                if has_range:
-                    youtube_metadata = int(
+        def inspect_and_delete(invalidate_recovery_copies: Callable[[], None]) -> None:
+            nonlocal activity_segments, classifications, youtube_metadata
+            with self.connect() as conn:
+                if delete_activity:
+                    activity_segments = int(
                         conn.execute(
-                            f"SELECT COUNT(*) AS count FROM youtube_video_metadata WHERE video_id IN ({segment_video_subquery})",
-                            tuple(segment_video_params),
+                            f"SELECT COUNT(*) AS count FROM activity_segments WHERE id IN ({segment_subquery})",
+                            tuple(segment_params),
                         ).fetchone()["count"]
                     )
-                else:
-                    youtube_metadata = int(
-                        conn.execute("SELECT COUNT(*) AS count FROM youtube_video_metadata").fetchone()["count"]
+                    classifications = int(
+                        conn.execute(
+                            f"SELECT COUNT(*) AS count FROM activity_classifications WHERE segment_id IN ({segment_subquery})",
+                            tuple(segment_params),
+                        ).fetchone()["count"]
+                    )
+                elif delete_ai_classifications:
+                    classifications = int(
+                        conn.execute(
+                            "SELECT COUNT(*) AS count FROM activity_classifications "
+                            f"WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
+                            tuple(segment_params),
+                        ).fetchone()["count"]
                     )
 
-            if not dry_run:
+                if delete_youtube_metadata:
+                    if has_range:
+                        youtube_metadata = int(
+                            conn.execute(
+                                f"SELECT COUNT(*) AS count FROM youtube_video_metadata WHERE video_id IN ({segment_video_subquery})",
+                                tuple(segment_video_params),
+                            ).fetchone()["count"]
+                        )
+                    else:
+                        youtube_metadata = int(
+                            conn.execute("SELECT COUNT(*) AS count FROM youtube_video_metadata").fetchone()["count"]
+                        )
+
+                if dry_run:
+                    return
+                if activity_segments + classifications + youtube_metadata > 0:
+                    # Fail closed before making an advertised permanent deletion:
+                    # an older backup or quarantined copy must not resurrect it.
+                    invalidate_recovery_copies()
                 if delete_ai_classifications:
                     conn.execute(
                         f"DELETE FROM activity_classifications WHERE ai_result = 1 AND segment_id IN ({segment_subquery})",
@@ -1614,6 +1649,12 @@ class TrackerDatabase:
                             range_start=self._normalize_range_bound(start_bound) if start_bound else None,
                             range_end=self._normalize_range_bound(end_bound) if end_bound else None,
                         )
+
+        if dry_run:
+            inspect_and_delete(lambda: None)
+        else:
+            with permanent_deletion_guard(self.db_path) as invalidate_recovery_copies:
+                inspect_and_delete(invalidate_recovery_copies)
 
         if not dry_run and activity_segments >= 1000:
             # VACUUM cannot run inside a transaction; the deleting with-block
@@ -1997,16 +2038,20 @@ class TrackerDatabase:
         return {"applied": applied, "skipped": skipped}
 
     def purge_remote_segments(self) -> int:
-        with self.connect() as conn:
-            remote_segment_ids = {
-                str(row["id"])
-                for row in conn.execute(
-                    "SELECT id FROM activity_segments WHERE origin_device_id IS NOT NULL"
-                )
-            }
-            self._delete_project_windows_for_segment_ids(conn, remote_segment_ids)
-            cursor = conn.execute("DELETE FROM activity_segments WHERE origin_device_id IS NOT NULL")
-            return cursor.rowcount
+        with permanent_deletion_guard(self.db_path) as invalidate_recovery_copies:
+            with self.connect() as conn:
+                remote_segment_ids = {
+                    str(row["id"])
+                    for row in conn.execute(
+                        "SELECT id FROM activity_segments WHERE origin_device_id IS NOT NULL"
+                    )
+                }
+                if not remote_segment_ids:
+                    return 0
+                invalidate_recovery_copies()
+                self._delete_project_windows_for_segment_ids(conn, remote_segment_ids)
+                cursor = conn.execute("DELETE FROM activity_segments WHERE origin_device_id IS NOT NULL")
+                return cursor.rowcount
 
     def search_classification_rule_candidates(self, query: str, target_kind: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         needle = query.strip().lower()

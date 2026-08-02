@@ -225,7 +225,7 @@ describe("runProjectPass orchestration", () => {
     expect(summary.corrections).toBe(1);
     expect(spies.recordProjectPass).toHaveBeenCalledTimes(1);
     expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 1 }));
-    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: "p1", teamProjectId: null, passId: 7 })]);
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: "p1", teamProjectId: null, passId: 7, assignedAt: "2026-04-06T23:00:00+00:00" })]);
     expect(spies.saveAiReviewEvents).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "1", passId: 7, newProductivity: "focus" })]);
   });
 
@@ -324,6 +324,58 @@ describe("runProjectPass orchestration", () => {
     expect(summary.ran).toBe(false);
     expect(inference).not.toHaveBeenCalled();
     expect(spies.recordProjectPass).not.toHaveBeenCalled();
+  });
+
+  it("does not infer or persist when only the current incomplete window has activity", async () => {
+    const { tracker, spies } = mockTracker({
+      getTimeline: vi.fn(async () => [
+        classified("1", "2026-04-06T09:03:00+00:00", "2026-04-06T09:04:00+00:00", "Code", "workspace", "focus"),
+      ]) as TrackerApi["getTimeline"],
+    });
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: {},
+    }));
+
+    const summary = await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "schedule",
+      tracker,
+      inference,
+      now: () => "2026-04-06T09:04:30+00:00",
+      contextPolicy: CONTEXT_POLICY,
+    });
+
+    expect(summary).toEqual(expect.objectContaining({ ran: false, skippedReason: "no completed activity windows" }));
+    expect(inference).not.toHaveBeenCalled();
+    expect(spies.recordProjectPass).not.toHaveBeenCalled();
+    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalled();
+  });
+
+  it("captures now once so completion filtering and persisted timestamps share one boundary", async () => {
+    const { tracker, spies } = mockTracker();
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: {},
+    }));
+    const now = vi
+      .fn<() => string>()
+      .mockReturnValueOnce("2026-04-06T09:03:00+00:00")
+      .mockReturnValue("2026-04-06T09:03:01+00:00");
+
+    await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "schedule",
+      tracker,
+      inference,
+      now,
+      contextPolicy: CONTEXT_POLICY,
+    });
+
+    expect(now).toHaveBeenCalledTimes(1);
+    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([
+      expect.objectContaining({ assignedAt: "2026-04-06T09:03:00+00:00" }),
+    ]);
   });
 
   it("grounds the prompt on the work profile when provided", async () => {

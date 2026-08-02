@@ -13,14 +13,14 @@ use std::{
     time::Duration,
 };
 
+use chrono::{DateTime, Local, Utc};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuBuilder, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State};
 
 use self::drift_alarm_status::{
-    drift_alerts_status_label, drift_detail_label, drift_last_check_label, drift_result_label,
-    TrayDriftAlarmStatus,
+    drift_alerts_status_label, drift_summary_label, TrayDriftAlarmStatus,
 };
 use self::productivity_icon::{
     latest_tray_productivity_mix, update_tray_productivity_mix, TrayProductivityMix,
@@ -30,6 +30,7 @@ pub use self::productivity_icon::TrayProductivityState;
 use crate::donut_icon::{self, DonutIconRenderInput, TrayIconStyle};
 use crate::shell_action::{self, tray_menu_id, ShellAction};
 use crate::tracker::TrackerController;
+use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState};
 
 const TRAY_ID: &str = "drifty-menu";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
@@ -249,6 +250,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let version = app.package_info().version.to_string();
     let drift_status = latest_tray_drift_alarm_status(app);
+    let pause_snapshot = tracking_pause::snapshot(app);
+    let tracker_running = drift_status.tracker_running();
     let app_info = MenuItem::with_id(
         app,
         tray_menu_id::APP_INFO,
@@ -270,40 +273,81 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         false,
         None::<&str>,
     )?;
-    let drift_last_check = MenuItem::with_id(
+    let drift_summary = drift_summary_label(&drift_status)
+        .map(|label| {
+            MenuItem::with_id(app, tray_menu_id::DRIFT_SUMMARY, label, false, None::<&str>)
+        })
+        .transpose()?;
+    let show_pause_options = pause_options_visible(tracker_running, pause_snapshot);
+    let pause_header = MenuItem::with_id(
         app,
-        tray_menu_id::DRIFT_LAST_CHECK,
-        drift_last_check_label(&drift_status),
+        tray_menu_id::PAUSE_HEADER,
+        "Pause Tracking",
         false,
         None::<&str>,
     )?;
-    let drift_result = MenuItem::with_id(
+    let pause_15 = MenuItem::with_id(
         app,
-        tray_menu_id::DRIFT_RESULT,
-        drift_result_label(&drift_status),
-        false,
+        tray_menu_id::PAUSE_FOR_15,
+        "15 Minutes",
+        show_pause_options,
         None::<&str>,
     )?;
-    let drift_detail = drift_detail_label(&drift_status)
-        .map(|label| MenuItem::with_id(app, tray_menu_id::DRIFT_DETAIL, label, false, None::<&str>))
+    let pause_30 = MenuItem::with_id(
+        app,
+        tray_menu_id::PAUSE_FOR_30,
+        "30 Minutes",
+        show_pause_options,
+        None::<&str>,
+    )?;
+    let pause_60 = MenuItem::with_id(
+        app,
+        tray_menu_id::PAUSE_FOR_60,
+        "1 Hour",
+        show_pause_options,
+        None::<&str>,
+    )?;
+    let pause_forever = MenuItem::with_id(
+        app,
+        tray_menu_id::PAUSE_FOREVER,
+        "Forever",
+        show_pause_options,
+        None::<&str>,
+    )?;
+    let pause_status = pause_status_label(pause_snapshot)
+        .map(|label| MenuItem::with_id(app, tray_menu_id::PAUSE_STATUS, label, false, None::<&str>))
         .transpose()?;
 
-    let mut builder = MenuBuilder::new(app)
-        .text(tray_menu_id::OPEN_DASHBOARD, "Open Dashboard")
-        .text(
-            tray_menu_id::TRACKING_TOGGLE,
-            tracking_action_label(drift_status.tracker_running()),
-        )
-        .separator()
-        .items(&[&drift_alerts_status, &drift_last_check, &drift_result]);
+    let mut builder = MenuBuilder::new(app);
 
-    if let Some(detail) = &drift_detail {
-        builder = builder.item(detail);
+    if show_pause_options {
+        builder = builder.items(&[
+            &pause_header,
+            &pause_15,
+            &pause_30,
+            &pause_60,
+            &pause_forever,
+        ]);
+    } else {
+        builder = builder.text(
+            tray_menu_id::TRACKING_TOGGLE,
+            tracking_action_label(tracker_running, pause_snapshot),
+        );
+    }
+
+    if let Some(status) = &pause_status {
+        builder = builder.item(status);
+    }
+
+    let mut builder = builder.separator().item(&drift_alerts_status);
+
+    if let Some(summary) = &drift_summary {
+        builder = builder.item(summary);
     }
 
     builder
         .separator()
-        .text(tray_menu_id::TOGGLE_THEME, "Toggle Theme")
+        .text(tray_menu_id::OPEN_DASHBOARD, "Open Dashboard")
         .text(tray_menu_id::SETTINGS, "Settings")
         .separator()
         .items(&[&app_info, &update_status])
@@ -328,31 +372,131 @@ fn update_status_label() -> &'static str {
     UPDATE_STATUS_LABEL
 }
 
-fn tracking_action_label(running: Option<bool>) -> &'static str {
-    if running.unwrap_or(false) {
+fn tracking_action_label(
+    running: Option<bool>,
+    pause_snapshot: TrackingPauseSnapshot,
+) -> &'static str {
+    if pause_snapshot.is_active() {
+        "Resume Tracking"
+    } else if running.unwrap_or(false) {
         "Pause Tracking"
     } else {
         "Start Tracking"
     }
 }
 
+fn pause_options_visible(running: Option<bool>, pause_snapshot: TrackingPauseSnapshot) -> bool {
+    !pause_snapshot.is_active() && running == Some(true)
+}
+
+fn pause_status_label(pause_snapshot: TrackingPauseSnapshot) -> Option<String> {
+    match pause_snapshot {
+        TrackingPauseSnapshot::Inactive => None,
+        TrackingPauseSnapshot::Indefinite => Some("Paused until you resume".to_string()),
+        TrackingPauseSnapshot::Timed {
+            resumes_at_unix_seconds,
+        } => Some(format!(
+            "Paused · resumes at {}",
+            local_clock_label(resumes_at_unix_seconds)
+        )),
+        TrackingPauseSnapshot::ResumeFailed { .. } => {
+            Some("Paused · automatic resume failed".to_string())
+        }
+    }
+}
+
+fn local_clock_label(unix_seconds: i64) -> String {
+    let Some(utc) = DateTime::<Utc>::from_timestamp(unix_seconds, 0) else {
+        return "unknown time".to_string();
+    };
+    let label = utc.with_timezone(&Local).format("%I:%M %p").to_string();
+    label.strip_prefix('0').unwrap_or(&label).to_string()
+}
+
 pub(crate) fn toggle_tracking(app: &AppHandle) {
+    let pause_state = app.state::<TrackingPauseState>();
+    let _operation = pause_state.lock_operation();
     let controller = app.state::<TrackerController>();
     let is_running = controller
         .get_status(app)
         .map(|status| status.running)
         .unwrap_or(false);
+    if is_running {
+        if let Err(error) = tracking_pause::prepare_indefinite_pause(app) {
+            eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
+            return;
+        }
+    }
     let next_status = if is_running {
         controller.stop(app)
     } else {
         controller.start(app)
     };
     if let Ok(status) = next_status {
-        update_cached_tracker_running(app, Some(status.running));
+        if is_running && !status.running {
+            tracking_pause::commit_indefinite_pause(app);
+        } else if is_running {
+            tracking_pause::abort_indefinite_pause(app);
+        } else if !is_running && status.running {
+            tracking_pause::clear_after_manual_start(app);
+        }
+        refresh_tracking_controls(app, Some(status.running));
+        return;
+    }
+    if is_running {
+        tracking_pause::abort_indefinite_pause(app);
     }
     let _ = refresh_tray_menu(app);
     update_tray_icon(app);
 }
+
+pub(crate) fn pause_tracking_forever(app: &AppHandle) {
+    let pause_state = app.state::<TrackingPauseState>();
+    let _operation = pause_state.lock_operation();
+    let controller = app.state::<TrackerController>();
+    let is_running = controller
+        .get_status(app)
+        .map(|status| status.running)
+        .unwrap_or(false);
+    if !is_running {
+        return;
+    }
+    if let Err(error) = tracking_pause::prepare_indefinite_pause(app) {
+        eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
+        return;
+    }
+    match controller.stop(app) {
+        Ok(status) if !status.running => {
+            tracking_pause::commit_indefinite_pause(app);
+            refresh_tracking_controls(app, Some(false));
+        }
+        Ok(status) => {
+            tracking_pause::abort_indefinite_pause(app);
+            refresh_tracking_controls(app, Some(status.running));
+        }
+        Err(error) => {
+            tracking_pause::abort_indefinite_pause(app);
+            eprintln!("[tracking-pause] Could not pause tracking forever: {error}");
+            let _ = refresh_tray_menu(app);
+        }
+    }
+}
+
+pub(crate) fn refresh_tracking_controls(app: &AppHandle, running: Option<bool>) {
+    update_cached_tracker_running(app, running);
+    let _ = refresh_tray_menu(app);
+    update_tray_icon(app);
+}
+
+pub(crate) fn queue_tracking_controls_refresh(app: &AppHandle, running: Option<bool>) {
+    let callback_app = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        refresh_tracking_controls(&callback_app, running);
+    }) {
+        eprintln!("[tray] Could not queue tracking-control refresh: {error}");
+    }
+}
+
 fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
     if let Some(state) = app.try_state::<TrayDriftAlarmState>() {
         if let Ok(mut latest) = state.0.lock() {

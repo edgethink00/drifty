@@ -1083,7 +1083,10 @@ def enqueue_youtube_metadata_fetch(db_path: Path, video_id: str | None, site_url
     if not video_id or not site_url:
         return
 
-    db = TrackerDatabase(db_path)
+    # The owning daemon/serve database has already completed startup
+    # maintenance. Short-lived metadata helpers must not re-run quick_check and
+    # backup discovery for every video.
+    db = TrackerDatabase(db_path, perform_maintenance=False)
     if not db.youtube_metadata_should_fetch(video_id):
         return
 
@@ -1101,13 +1104,13 @@ def enqueue_youtube_metadata_fetch(db_path: Path, video_id: str | None, site_url
 
 def _fetch_youtube_metadata_background(db_path: Path, video_id: str, site_url: str) -> None:
     try:
-        db = TrackerDatabase(db_path)
+        db = TrackerDatabase(db_path, perform_maintenance=False)
         if not db.youtube_metadata_should_fetch(video_id):
             return
         metadata = fetch_youtube_metadata(site_url, video_id, timeout_seconds=YOUTUBE_METADATA_TIMEOUT_SECONDS)
         db.save_youtube_metadata(metadata)
     except Exception:
-        TrackerDatabase(db_path).save_youtube_metadata_failure(video_id)
+        TrackerDatabase(db_path, perform_maintenance=False).save_youtube_metadata_failure(video_id)
     finally:
         with _YOUTUBE_METADATA_LOCK:
             _YOUTUBE_METADATA_IN_FLIGHT.discard(video_id)

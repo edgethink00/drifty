@@ -8,6 +8,7 @@ mod openrouter_key_store;
 mod observability;
 mod shell_action;
 mod tracker;
+mod tracking_pause;
 mod tray;
 
 use std::{
@@ -24,8 +25,8 @@ use commands::{
     extreme_nudge_apply, focus_target_activate_browser_tab, focus_target_browser_tab_exists,
     focus_target_open_app, managed_ai_catalog, managed_ai_delete, managed_ai_install,
     managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
-    sentry_capture_native_smoke,
-    setup_drift_alarm_window, setup_watcher_window, startup_get_open_at_login_status,
+    sentry_capture_native_smoke, setup_drift_alarm_window, setup_watcher_window,
+    startup_get_open_at_login_status,
     startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_get_app_icons,
@@ -60,6 +61,7 @@ use commands::{
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
+use tracking_pause::TrackingPauseState;
 use tray::{
     setup_tray, shutdown_tray_refresh_worker, tray_update_drift_alarm_status,
     tray_update_icon_style, tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState,
@@ -303,6 +305,7 @@ pub fn run() {
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
         .manage(TrayRefreshWorker::default())
+        .manage(TrackingPauseState::default())
         .manage(DriftAlarmState::default())
         .manage(AppExitCoordinator::default())
         .plugin(
@@ -361,26 +364,55 @@ pub fn run() {
             setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
             setup_drift_alarm_window(app)?;
+            let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
 
-            let startup_state = app.state::<TrackerStartupState>();
-            let generation = startup_state.begin_start_attempt();
             let app_handle = app.handle().clone();
-            let _ = tauri::async_runtime::spawn_blocking(move || {
-                let controller = *app_handle.state::<TrackerController>();
-                let startup_state = app_handle.state::<TrackerStartupState>();
-                match controller.start(&app_handle) {
-                    Ok(_) => {
-                        startup_state.complete_start_success(generation);
+            if tracking_pause_restored {
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    tracking_pause::enforce_restored_pause(&app_handle);
+                });
+            } else {
+                let startup_state = app.state::<TrackerStartupState>();
+                let generation = startup_state.begin_start_attempt();
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    let pause_state = app_handle.state::<TrackingPauseState>();
+                    let _operation = pause_state.lock_operation();
+                    if tracking_pause::snapshot(&app_handle).is_active() {
+                        return;
                     }
-                    Err(error) => {
-                        startup_state.record_start_failure(generation, &error);
-                        eprintln!(
-                            "[tracker] Automatic start failed; exposing recoverable degraded status"
-                        );
+                    let controller = *app_handle.state::<TrackerController>();
+                    let startup_state = app_handle.state::<TrackerStartupState>();
+                    match controller.start(&app_handle) {
+                        Ok(status) if status.running => {
+                            startup_state.complete_start_success(generation);
+                            tray::queue_tracking_controls_refresh(
+                                &app_handle,
+                                Some(status.running),
+                            );
+                        }
+                        Ok(status) => {
+                            let error = tracker::TrackerError::TrackerReturnedError(
+                                "tracker did not report running after automatic start".to_string(),
+                            );
+                            startup_state.record_start_failure(generation, &error);
+                            tray::queue_tracking_controls_refresh(
+                                &app_handle,
+                                Some(status.running),
+                            );
+                            eprintln!(
+                                "[tracker] Automatic start returned a stopped tracker; exposing recoverable degraded status"
+                            );
+                        }
+                        Err(error) => {
+                            startup_state.record_start_failure(generation, &error);
+                            eprintln!(
+                                "[tracker] Automatic start failed; exposing recoverable degraded status"
+                            );
+                        }
                     }
-                }
-            });
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

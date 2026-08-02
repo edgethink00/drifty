@@ -18,6 +18,12 @@ export type ProjectPassAnalysisWindowOptions = {
   readonly intervalMinutes?: FlowIntervalMinutes;
   readonly startOfDayMinutes?: number;
   readonly range?: ProjectPassWindowRange;
+  /**
+   * When provided, omit fixed windows whose end is still in the future at this
+   * instant. This keeps an in-progress cell out of persisted project decisions
+   * until a later pass can observe the completed interval.
+   */
+  readonly completedThrough?: string;
   /** Provider-visible fields, mirroring the live-classification privacy controls. */
   readonly contextPolicy?: ProjectPassContextPolicy;
   /** @deprecated Compatibility for eval callers; prefer contextPolicy. */
@@ -356,6 +362,8 @@ export function buildProjectPassAnalysisWindows(
   const intervalMs = intervalMinutes * 60 * 1000;
   const rangeStartMs = parsedMs(options.range?.start);
   const rangeEndMs = parsedMs(options.range?.end);
+  const completedThroughMs = parsedMs(options.completedThrough);
+  if (options.completedThrough !== undefined && completedThroughMs === null) return [];
   const legacyTitlePolicy = options.includeTitleContext;
   const contextPolicy = options.contextPolicy ?? {
     siteUrl: legacyTitlePolicy === true,
@@ -394,6 +402,7 @@ export function buildProjectPassAnalysisWindows(
 
   return Array.from(buckets.values())
     .sort((left, right) => left.startedAtMs - right.startedAtMs)
+    .filter((bucket) => completedThroughMs === null || bucket.endedAtMs <= completedThroughMs)
     .map((bucket, index) => finalizeBucket(bucket, index, intervalMinutes))
     .filter((window): window is ProjectPassAnalysisWindow => window !== null);
 }

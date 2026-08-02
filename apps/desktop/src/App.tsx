@@ -1276,6 +1276,7 @@ export default function App() {
     });
     const nextNativeStatus = {
       ...nextStatus,
+      developerDetailsEnabled: isDevModeActive,
       trackerRunning: status?.running ?? null,
     };
     recordDriftAlarmDebugEvent({
@@ -1292,7 +1293,7 @@ export default function App() {
     }
 
     setDriftAlarmTrayStatus(nextStatus);
-  }, [driftAlertsEnabled, status?.running]);
+  }, [driftAlertsEnabled, isDevModeActive, status?.running]);
   const driftAlarmPreviewCounterRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
@@ -2914,26 +2915,6 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (!isTauriRuntime()) return undefined;
-
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void listen("tray-toggle-theme", toggleTheme).then((nextUnlisten) => {
-      if (disposed) {
-        cleanupTauriEventListener(nextUnlisten);
-        return;
-      }
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      disposed = true;
-      cleanupTauriEventListener(unlisten);
-    };
-  }, [toggleTheme]);
-
-  useEffect(() => {
     let disposed = false;
     const unlisteners: Array<() => void> = [];
 
@@ -4307,9 +4288,10 @@ export default function App() {
     if (typeof client.updateTrayDriftAlarmStatus !== "function") return;
     void client.updateTrayDriftAlarmStatus({
       ...driftAlarmTrayStatus,
+      developerDetailsEnabled: isDevModeActive,
       trackerRunning: status?.running ?? null,
     }).catch(() => undefined);
-  }, [driftAlarmTrayStatus, status?.running]);
+  }, [driftAlarmTrayStatus, isDevModeActive, status?.running]);
   const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 6 }), [effectiveDashboardSegments]);
   const dashboardTopApps = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 1, groupBy: "app" }), [effectiveDashboardSegments]);
   const dayField = useMemo(() => buildQuarterHourDayField(effectiveSelectedDaySegments, selectedDay, startOfDayMinutes), [effectiveSelectedDaySegments, selectedDay, startOfDayMinutes]);

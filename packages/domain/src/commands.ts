@@ -441,6 +441,7 @@ export interface DriftAlarmTrayStatus {
   readonly lastCheckedLabel: string;
   readonly resultLabel: string;
   readonly detailLabel: string | null;
+  readonly developerDetailsEnabled?: boolean;
   readonly trackerRunning?: boolean | null;
 }
 

@@ -290,6 +290,7 @@ export function runProjectPass(options: RunProjectPassOptions): Promise<ProjectP
 
 async function runProjectPassInner(options: RunProjectPassOptions): Promise<ProjectPassSummary> {
   const { tracker, inference, range, trigger } = options;
+  const runAt = options.now();
   const [segments, projects, teamProjects] = await Promise.all([
     tracker.getTimeline({ start: range.start, end: range.end }),
     tracker.getProjects(),
@@ -314,10 +315,19 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   const windows = buildProjectPassAnalysisWindows(segments, {
     range,
     startOfDayMinutes: options.startOfDayMinutes ?? 0,
+    completedThrough: runAt,
     contextPolicy: options.contextPolicy,
   });
   if (windows.length === 0) {
-    return { ran: false, skippedReason: "no activity in range", chunks: 0, assignments: 0, corrections: 0, tokensIn: 0, tokensOut: 0 };
+    return {
+      ran: false,
+      skippedReason: segments.length === 0 ? "no activity in range" : "no completed activity windows",
+      chunks: 0,
+      assignments: 0,
+      corrections: 0,
+      tokensIn: 0,
+      tokensOut: 0,
+    };
   }
 
   const revertedSegmentIds = new Set(
@@ -385,7 +395,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       validProjectIds,
       revertedSegmentIds,
       chunkFingerprint: fingerprint,
-      now: options.now(),
+      now: runAt,
     });
     return { usage, ...resolved, cached: false };
   }, (done) => options.onProgress?.(done, chunks.length));

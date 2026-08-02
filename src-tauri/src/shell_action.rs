@@ -17,11 +17,14 @@ pub(crate) mod tray_menu_id {
     pub(crate) const UPDATE_STATUS: &str = "menu-update-status";
     pub(crate) const OPEN_DASHBOARD: &str = "menu-open-dashboard";
     pub(crate) const TRACKING_TOGGLE: &str = "menu-tracking-toggle";
+    pub(crate) const PAUSE_HEADER: &str = "menu-pause-header";
+    pub(crate) const PAUSE_FOR_15: &str = "menu-pause-for-15";
+    pub(crate) const PAUSE_FOR_30: &str = "menu-pause-for-30";
+    pub(crate) const PAUSE_FOR_60: &str = "menu-pause-for-60";
+    pub(crate) const PAUSE_FOREVER: &str = "menu-pause-forever";
+    pub(crate) const PAUSE_STATUS: &str = "menu-pause-status";
     pub(crate) const DRIFT_ALERTS_STATUS: &str = "menu-drift-alerts-status";
-    pub(crate) const DRIFT_LAST_CHECK: &str = "menu-drift-last-check";
-    pub(crate) const DRIFT_RESULT: &str = "menu-drift-result";
-    pub(crate) const DRIFT_DETAIL: &str = "menu-drift-detail";
-    pub(crate) const TOGGLE_THEME: &str = "menu-toggle-theme";
+    pub(crate) const DRIFT_SUMMARY: &str = "menu-drift-summary";
     pub(crate) const SETTINGS: &str = "menu-settings";
     pub(crate) const QUIT: &str = "menu-quit";
 }
@@ -30,7 +33,8 @@ pub(crate) mod tray_menu_id {
 pub(crate) enum ShellAction {
     OpenDashboard,
     ToggleTracking,
-    ToggleTheme,
+    PauseTrackingFor(u64),
+    PauseTrackingForever,
     Settings,
     CheckForUpdates,
     ToggleDevMode,
@@ -53,7 +57,10 @@ impl ShellAction {
         match id {
             tray_menu_id::OPEN_DASHBOARD => Some(Self::OpenDashboard),
             tray_menu_id::TRACKING_TOGGLE => Some(Self::ToggleTracking),
-            tray_menu_id::TOGGLE_THEME => Some(Self::ToggleTheme),
+            tray_menu_id::PAUSE_FOR_15 => Some(Self::PauseTrackingFor(15)),
+            tray_menu_id::PAUSE_FOR_30 => Some(Self::PauseTrackingFor(30)),
+            tray_menu_id::PAUSE_FOR_60 => Some(Self::PauseTrackingFor(60)),
+            tray_menu_id::PAUSE_FOREVER => Some(Self::PauseTrackingForever),
             tray_menu_id::SETTINGS => Some(Self::Settings),
             tray_menu_id::UPDATE_STATUS => Some(Self::CheckForUpdates),
             tray_menu_id::QUIT => Some(Self::Quit),
@@ -62,7 +69,6 @@ impl ShellAction {
     }
 }
 
-const EVENT_TOGGLE_THEME: &str = "tray-toggle-theme";
 const EVENT_OPEN_SETTINGS: &str = "tray-open-settings";
 const EVENT_CHECK_FOR_UPDATES: &str = "tray-check-for-updates";
 const EVENT_TOGGLE_DEV_MODE: &str = "app-menu-toggle-dev-mode";
@@ -72,6 +78,8 @@ const EVENT_CHECK_LATEST_BUILD: &str = "app-menu-check-latest-build";
 enum ShellActionEffect {
     RevealMainWindow,
     ToggleTracking,
+    PauseTrackingFor(u64),
+    PauseTrackingForever,
     EmitMainWindowEvent(&'static str),
     ExitApp(i32),
 }
@@ -81,10 +89,11 @@ impl ShellAction {
         match self {
             Self::OpenDashboard => &[ShellActionEffect::RevealMainWindow],
             Self::ToggleTracking => &[ShellActionEffect::ToggleTracking],
-            Self::ToggleTheme => &[
-                ShellActionEffect::RevealMainWindow,
-                ShellActionEffect::EmitMainWindowEvent(EVENT_TOGGLE_THEME),
-            ],
+            Self::PauseTrackingFor(15) => &[ShellActionEffect::PauseTrackingFor(15)],
+            Self::PauseTrackingFor(30) => &[ShellActionEffect::PauseTrackingFor(30)],
+            Self::PauseTrackingFor(60) => &[ShellActionEffect::PauseTrackingFor(60)],
+            Self::PauseTrackingFor(_) => &[],
+            Self::PauseTrackingForever => &[ShellActionEffect::PauseTrackingForever],
             Self::Settings => &[
                 ShellActionEffect::RevealMainWindow,
                 ShellActionEffect::EmitMainWindowEvent(EVENT_OPEN_SETTINGS),
@@ -109,6 +118,8 @@ impl ShellAction {
 trait ShellActionTarget {
     fn reveal_main_window(&mut self);
     fn toggle_tracking(&mut self);
+    fn pause_tracking_for(&mut self, minutes: u64);
+    fn pause_tracking_forever(&mut self);
     fn emit_main_window_event(&mut self, event: &'static str);
     fn exit_app(&mut self, exit_code: i32);
 }
@@ -123,6 +134,8 @@ fn dispatch_to_target(action: ShellAction, target: &mut impl ShellActionTarget) 
         match effect {
             ShellActionEffect::RevealMainWindow => target.reveal_main_window(),
             ShellActionEffect::ToggleTracking => target.toggle_tracking(),
+            ShellActionEffect::PauseTrackingFor(minutes) => target.pause_tracking_for(minutes),
+            ShellActionEffect::PauseTrackingForever => target.pause_tracking_forever(),
             ShellActionEffect::EmitMainWindowEvent(event) => target.emit_main_window_event(event),
             ShellActionEffect::ExitApp(exit_code) => target.exit_app(exit_code),
         }
@@ -140,6 +153,14 @@ impl ShellActionTarget for TauriShellActionTarget<'_> {
 
     fn toggle_tracking(&mut self) {
         tray::toggle_tracking(self.app);
+    }
+
+    fn pause_tracking_for(&mut self, minutes: u64) {
+        crate::tracking_pause::pause_tracking_for(self.app, minutes);
+    }
+
+    fn pause_tracking_forever(&mut self) {
+        tray::pause_tracking_forever(self.app);
     }
 
     fn emit_main_window_event(&mut self, event: &'static str) {
@@ -169,6 +190,15 @@ mod tests {
 
         fn toggle_tracking(&mut self) {
             self.effects.push(ShellActionEffect::ToggleTracking);
+        }
+
+        fn pause_tracking_for(&mut self, minutes: u64) {
+            self.effects
+                .push(ShellActionEffect::PauseTrackingFor(minutes));
+        }
+
+        fn pause_tracking_forever(&mut self) {
+            self.effects.push(ShellActionEffect::PauseTrackingForever);
         }
 
         fn emit_main_window_event(&mut self, event: &'static str) {
@@ -210,7 +240,22 @@ mod tests {
         for (id, action) in [
             (tray_menu_id::OPEN_DASHBOARD, ShellAction::OpenDashboard),
             (tray_menu_id::TRACKING_TOGGLE, ShellAction::ToggleTracking),
-            (tray_menu_id::TOGGLE_THEME, ShellAction::ToggleTheme),
+            (
+                tray_menu_id::PAUSE_FOR_15,
+                ShellAction::PauseTrackingFor(15),
+            ),
+            (
+                tray_menu_id::PAUSE_FOR_30,
+                ShellAction::PauseTrackingFor(30),
+            ),
+            (
+                tray_menu_id::PAUSE_FOR_60,
+                ShellAction::PauseTrackingFor(60),
+            ),
+            (
+                tray_menu_id::PAUSE_FOREVER,
+                ShellAction::PauseTrackingForever,
+            ),
             (tray_menu_id::SETTINGS, ShellAction::Settings),
             (tray_menu_id::UPDATE_STATUS, ShellAction::CheckForUpdates),
             (tray_menu_id::QUIT, ShellAction::Quit),
@@ -233,7 +278,10 @@ mod tests {
         for id in [
             tray_menu_id::OPEN_DASHBOARD,
             tray_menu_id::TRACKING_TOGGLE,
-            tray_menu_id::TOGGLE_THEME,
+            tray_menu_id::PAUSE_FOR_15,
+            tray_menu_id::PAUSE_FOR_30,
+            tray_menu_id::PAUSE_FOR_60,
+            tray_menu_id::PAUSE_FOREVER,
             tray_menu_id::SETTINGS,
             tray_menu_id::UPDATE_STATUS,
             tray_menu_id::QUIT,
@@ -254,7 +302,22 @@ mod tests {
             ),
             (tray_menu_id::OPEN_DASHBOARD, ShellAction::OpenDashboard),
             (tray_menu_id::TRACKING_TOGGLE, ShellAction::ToggleTracking),
-            (tray_menu_id::TOGGLE_THEME, ShellAction::ToggleTheme),
+            (
+                tray_menu_id::PAUSE_FOR_15,
+                ShellAction::PauseTrackingFor(15),
+            ),
+            (
+                tray_menu_id::PAUSE_FOR_30,
+                ShellAction::PauseTrackingFor(30),
+            ),
+            (
+                tray_menu_id::PAUSE_FOR_60,
+                ShellAction::PauseTrackingFor(60),
+            ),
+            (
+                tray_menu_id::PAUSE_FOREVER,
+                ShellAction::PauseTrackingForever,
+            ),
             (tray_menu_id::SETTINGS, ShellAction::Settings),
             (tray_menu_id::UPDATE_STATUS, ShellAction::CheckForUpdates),
             (tray_menu_id::QUIT, ShellAction::Quit),
@@ -277,9 +340,9 @@ mod tests {
             app_menu_id::BUILD_INFO,
             tray_menu_id::APP_INFO,
             tray_menu_id::DRIFT_ALERTS_STATUS,
-            tray_menu_id::DRIFT_LAST_CHECK,
-            tray_menu_id::DRIFT_RESULT,
-            tray_menu_id::DRIFT_DETAIL,
+            tray_menu_id::DRIFT_SUMMARY,
+            tray_menu_id::PAUSE_HEADER,
+            tray_menu_id::PAUSE_STATUS,
             "quit",
             "unknown",
         ] {
@@ -304,13 +367,19 @@ mod tests {
         for id in [
             tray_menu_id::APP_INFO,
             tray_menu_id::DRIFT_ALERTS_STATUS,
-            tray_menu_id::DRIFT_LAST_CHECK,
-            tray_menu_id::DRIFT_RESULT,
-            tray_menu_id::DRIFT_DETAIL,
+            tray_menu_id::DRIFT_SUMMARY,
+            tray_menu_id::PAUSE_HEADER,
+            tray_menu_id::PAUSE_STATUS,
             "unknown",
         ] {
             assert_eq!(ShellAction::from_tray_menu_id(id), None);
         }
+
+        assert_eq!(
+            ShellAction::from_tray_menu_id("menu-toggle-theme"),
+            None,
+            "the removed tray-only theme shortcut must not remain dispatchable"
+        );
     }
 
     #[test]
@@ -341,11 +410,8 @@ mod tests {
                 &[ShellActionEffect::ToggleTracking][..],
             ),
             (
-                ShellAction::ToggleTheme,
-                &[
-                    ShellActionEffect::RevealMainWindow,
-                    ShellActionEffect::EmitMainWindowEvent(EVENT_TOGGLE_THEME),
-                ][..],
+                ShellAction::PauseTrackingFor(15),
+                &[ShellActionEffect::PauseTrackingFor(15)][..],
             ),
             (
                 ShellAction::Settings,

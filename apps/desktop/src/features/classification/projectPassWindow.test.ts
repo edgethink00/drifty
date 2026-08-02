@@ -31,6 +31,43 @@ describe("buildProjectPassAnalysisWindows", () => {
     expect(windows[1].segmentIds).toEqual(["2"]);
   });
 
+  it("holds the latest fixed cell until its full 3-minute interval has ended", () => {
+    const segments = [
+      seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:04:00+00:00", durationSeconds: 240, appName: "Code" }),
+    ];
+
+    const duringLatestCell = buildProjectPassAnalysisWindows(segments, {
+      completedThrough: "2026-04-06T09:04:30+00:00",
+    });
+    expect(duringLatestCell).toHaveLength(1);
+    expect(duringLatestCell[0].startedAt).toBe("2026-04-06T09:00:00.000Z");
+
+    const afterLatestCell = buildProjectPassAnalysisWindows(segments, {
+      completedThrough: "2026-04-06T09:06:00+00:00",
+    });
+    expect(afterLatestCell).toHaveLength(2);
+    expect(afterLatestCell[1].startedAt).toBe("2026-04-06T09:03:00.000Z");
+  });
+
+  it("fails closed when a requested completion boundary is invalid", () => {
+    const windows = buildProjectPassAnalysisWindows(
+      [seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:03:00+00:00", durationSeconds: 180, appName: "Code" })],
+      { completedThrough: "not-a-timestamp" },
+    );
+
+    expect(windows).toEqual([]);
+  });
+
+  it("includes a fixed cell exactly when its end reaches the completion boundary", () => {
+    const windows = buildProjectPassAnalysisWindows(
+      [seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:03:00+00:00", durationSeconds: 180, appName: "Code" })],
+      { completedThrough: "2026-04-06T09:03:00+00:00" },
+    );
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0].endedAt).toBe("2026-04-06T09:03:00.000Z");
+  });
+
   it("summarizes top contributors and keeps correction ids on the dominant contributor for mixed cells", () => {
     const windows = buildProjectPassAnalysisWindows([
       seg({ id: "code", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:02:00+00:00", durationSeconds: 120, appName: "Code", classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 } }),

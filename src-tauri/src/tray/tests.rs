@@ -20,13 +20,74 @@ fn update_status_label_prompts_manual_update_checks() {
 
 #[test]
 fn tracking_action_label_starts_when_stopped_or_unknown() {
-    assert_eq!(tracking_action_label(Some(false)), "Start Tracking");
-    assert_eq!(tracking_action_label(None), "Start Tracking");
+    assert_eq!(
+        tracking_action_label(Some(false), TrackingPauseSnapshot::Inactive),
+        "Start Tracking"
+    );
+    assert_eq!(
+        tracking_action_label(None, TrackingPauseSnapshot::Inactive),
+        "Start Tracking"
+    );
 }
 
 #[test]
 fn tracking_action_label_pauses_when_running() {
-    assert_eq!(tracking_action_label(Some(true)), "Pause Tracking");
+    assert_eq!(
+        tracking_action_label(Some(true), TrackingPauseSnapshot::Inactive),
+        "Pause Tracking"
+    );
+}
+
+#[test]
+fn inline_pause_options_are_visible_only_for_confirmed_running_tracking() {
+    assert!(pause_options_visible(
+        Some(true),
+        TrackingPauseSnapshot::Inactive
+    ));
+    assert!(!pause_options_visible(
+        Some(false),
+        TrackingPauseSnapshot::Inactive
+    ));
+    assert!(!pause_options_visible(
+        None,
+        TrackingPauseSnapshot::Inactive
+    ));
+}
+
+#[test]
+fn tracking_action_label_resumes_for_indefinite_timed_and_failed_pauses() {
+    for pause in [
+        TrackingPauseSnapshot::Indefinite,
+        TrackingPauseSnapshot::Timed {
+            resumes_at_unix_seconds: 1_800_000_000,
+        },
+        TrackingPauseSnapshot::ResumeFailed {
+            resumes_at_unix_seconds: 1_800_000_000,
+        },
+    ] {
+        assert_eq!(tracking_action_label(Some(false), pause), "Resume Tracking");
+        assert!(!pause_options_visible(Some(false), pause));
+    }
+}
+
+#[test]
+fn pause_status_labels_explain_indefinite_timed_and_failed_states() {
+    assert_eq!(
+        pause_status_label(TrackingPauseSnapshot::Indefinite).as_deref(),
+        Some("Paused until you resume")
+    );
+    assert!(pause_status_label(TrackingPauseSnapshot::Timed {
+        resumes_at_unix_seconds: 1_800_000_000,
+    })
+    .expect("timed label")
+    .starts_with("Paused · resumes at "));
+    assert_eq!(
+        pause_status_label(TrackingPauseSnapshot::ResumeFailed {
+            resumes_at_unix_seconds: 1_800_000_000,
+        })
+        .as_deref(),
+        Some("Paused · automatic resume failed")
+    );
 }
 
 #[test]
