@@ -1179,6 +1179,90 @@ class TrackerMainTests(unittest.TestCase):
 
         mock_db.set_meta.assert_any_call(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY, "runtime-fp")
 
+    def test_daemon_checks_for_a_due_backup_while_it_remains_running(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
+                should_capture=False,
+                reason="non_user_visible_wake_type:darkwake",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "current_power_state", return_value=power_state
+            ), patch.object(
+                tracker_main.time,
+                "time",
+                side_effect=[0.0, float(tracker_main.DATABASE_BACKUP_CHECK_SECONDS)],
+            ), patch.object(
+                tracker_main.time, "sleep", side_effect=KeyboardInterrupt
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        mock_db.create_periodic_backup.assert_called_once_with()
+
+    def test_unexpected_periodic_backup_error_does_not_skip_sampling(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            mock_db.create_periodic_backup.side_effect = RuntimeError("backup bug")
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
+                should_capture=False,
+                reason="non_user_visible_wake_type:darkwake",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "current_power_state", return_value=power_state
+            ) as current_power_state, patch.object(
+                tracker_main.time,
+                "time",
+                side_effect=[0.0, float(tracker_main.DATABASE_BACKUP_CHECK_SECONDS)],
+            ), patch.object(
+                tracker_main, "capture_tracker_exception"
+            ) as capture_exception, patch.object(
+                tracker_main.sys, "stderr", MagicMock()
+            ), patch.object(
+                tracker_main.time, "sleep", side_effect=KeyboardInterrupt
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        current_power_state.assert_called_once_with()
+        capture_exception.assert_called_once()
+        self.assertEqual(
+            capture_exception.call_args.args[1],
+            {"phase": "database_periodic_backup"},
+        )
+
+    def test_periodic_backup_check_handles_interval_and_clock_correction(self) -> None:
+        mock_db = MagicMock()
+        interval = float(tracker_main.DATABASE_BACKUP_CHECK_SECONDS)
+
+        self.assertEqual(
+            tracker_main._maybe_create_periodic_backup(
+                mock_db, 100.0, now_wall_seconds=100.0 + interval - 1
+            ),
+            100.0,
+        )
+        mock_db.create_periodic_backup.assert_not_called()
+
+        self.assertEqual(
+            tracker_main._maybe_create_periodic_backup(
+                mock_db, 100.0, now_wall_seconds=100.0 + interval
+            ),
+            100.0 + interval,
+        )
+        mock_db.create_periodic_backup.assert_called_once_with()
+
+        self.assertEqual(
+            tracker_main._maybe_create_periodic_backup(
+                mock_db, 100.0 + interval, now_wall_seconds=50.0
+            ),
+            50.0,
+        )
+        mock_db.create_periodic_backup.assert_called_once_with()
+
     def test_daemon_survives_tick_exception_and_keeps_sampling(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"

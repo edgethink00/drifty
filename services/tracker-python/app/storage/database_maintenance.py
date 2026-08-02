@@ -146,13 +146,21 @@ def _quarantine_candidates(db_path: Path) -> list[Path]:
 @contextmanager
 def permanent_deletion_guard(
     db_path: Path,
+    source: sqlite3.Connection,
+    *,
+    on_backup_error: Callable[[OSError | sqlite3.DatabaseError], None] | None = None,
+    refresh_backup: bool = True,
 ) -> Iterator[Callable[[], None]]:
-    """Serialize a permanent delete and invalidate older recovery copies.
+    """Serialize a permanent delete and replace older recovery copies.
 
     The caller invokes the yielded function immediately before mutating the
     live database, while its SQLite transaction is still able to roll back.
     Holding the maintenance lock until that transaction commits prevents a
-    concurrent backup from capturing the rows being permanently deleted.
+    concurrent backup from capturing the rows being permanently deleted. Once
+    the caller's transaction exits, a verified snapshot of the post-transaction
+    database replaces the invalidated copies before the lock is released. A
+    batched caller may defer that last step, but must create one forced backup
+    after the batch finishes.
     """
 
     with _maintenance_lock(db_path):
@@ -166,7 +174,22 @@ def permanent_deletion_guard(
                 path.unlink()
             invalidated = True
 
-        yield invalidate_recovery_copies
+        try:
+            yield invalidate_recovery_copies
+        finally:
+            if invalidated and refresh_backup:
+                try:
+                    _create_rotating_backup_locked(
+                        source,
+                        db_path,
+                        now=datetime.now(timezone.utc),
+                        interval_seconds=0,
+                        retention=DEFAULT_BACKUP_RETENTION,
+                    )
+                except (OSError, sqlite3.DatabaseError) as error:
+                    if on_backup_error is None:
+                        raise
+                    on_backup_error(error)
 
 
 def _latest_valid_backup(db_path: Path) -> Path | None:
@@ -253,24 +276,41 @@ def create_rotating_backup(
 
     resolved_now = now or datetime.now(timezone.utc)
     with _maintenance_lock(db_path):
-        if not _backup_is_due(db_path, resolved_now, interval_seconds):
-            return None
-        backup_dir = database_backup_dir(db_path)
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        final_path = _backup_path(db_path, resolved_now)
-        temp_path = backup_dir / f".{final_path.name}.{uuid.uuid4().hex}.tmp"
-        destination: sqlite3.Connection | None = None
-        try:
-            destination = sqlite3.connect(temp_path)
-            source.backup(destination, pages=256, sleep=0.01)
+        return _create_rotating_backup_locked(
+            source,
+            db_path,
+            now=resolved_now,
+            interval_seconds=interval_seconds,
+            retention=retention,
+        )
+
+
+def _create_rotating_backup_locked(
+    source: sqlite3.Connection,
+    db_path: Path,
+    *,
+    now: datetime,
+    interval_seconds: int,
+    retention: int,
+) -> Path | None:
+    if not _backup_is_due(db_path, now, interval_seconds):
+        return None
+    backup_dir = database_backup_dir(db_path)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    final_path = _backup_path(db_path, now)
+    temp_path = backup_dir / f".{final_path.name}.{uuid.uuid4().hex}.tmp"
+    destination: sqlite3.Connection | None = None
+    try:
+        destination = sqlite3.connect(temp_path)
+        source.backup(destination, pages=256, sleep=0.01)
+        destination.close()
+        destination = None
+        if not quick_check_database(temp_path, immutable=True):
+            raise sqlite3.DatabaseError("database backup failed quick_check")
+        os.replace(temp_path, final_path)
+        _rotate_backups(db_path, retention)
+        return final_path
+    finally:
+        if destination is not None:
             destination.close()
-            destination = None
-            if not quick_check_database(temp_path, immutable=True):
-                raise sqlite3.DatabaseError("database backup failed quick_check")
-            os.replace(temp_path, final_path)
-            _rotate_backups(db_path, retention)
-            return final_path
-        finally:
-            if destination is not None:
-                destination.close()
-            temp_path.unlink(missing_ok=True)
+        temp_path.unlink(missing_ok=True)

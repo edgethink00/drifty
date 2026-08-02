@@ -115,13 +115,47 @@ class TrackerDatabase:
         )
         self._init_db()
         if perform_maintenance and self.maintenance_result.existed:
-            try:
-                create_rotating_backup(self.connect(), self.db_path)
-            except (OSError, sqlite3.DatabaseError) as error:
-                # A failed safety copy must never make an otherwise healthy
-                # source-of-truth database unavailable to the tracker.
-                self.maintenance_error = str(error)
-                print(f"[tracker-db] Backup skipped: {error}", file=sys.stderr)
+            self.create_periodic_backup()
+
+    def _record_maintenance_error(
+        self, error: OSError | sqlite3.DatabaseError, *, operation: str
+    ) -> None:
+        self.maintenance_error = str(error)
+        print(f"[tracker-db] {operation}: {error}", file=sys.stderr)
+
+    def _record_post_delete_backup_error(
+        self, error: OSError | sqlite3.DatabaseError
+    ) -> None:
+        # The permanent delete has already committed and older recovery copies
+        # are gone. Do not report the delete as failed merely because the new
+        # safety copy could not be written.
+        self._record_maintenance_error(
+            error, operation="Post-delete backup unavailable"
+        )
+
+    def create_periodic_backup(self) -> Path | None:
+        """Best-effort daily backup for a long-running tracker process."""
+
+        try:
+            backup = create_rotating_backup(self.connect(), self.db_path)
+            self.maintenance_error = None
+            return backup
+        except (OSError, sqlite3.DatabaseError) as error:
+            # A failed safety copy must never make an otherwise healthy
+            # source-of-truth database unavailable to the tracker.
+            self._record_maintenance_error(error, operation="Backup skipped")
+            return None
+
+    def _create_post_delete_backup(self) -> Path | None:
+        try:
+            backup = create_rotating_backup(
+                self.connect(), self.db_path, interval_seconds=0
+            )
+            self.maintenance_error = None
+            return backup
+        except (OSError, sqlite3.DatabaseError) as error:
+            self._record_post_delete_backup_error(error)
+            return None
 
     def connect(self) -> sqlite3.Connection:
         """Return this instance's long-lived connection, opening it on first use.
@@ -1484,7 +1518,13 @@ class TrackerDatabase:
                 starts_to_delete,
             )
 
-    def delete_activity_segments(self, segment_ids: list[str], record_tombstone: bool = True) -> int:
+    def delete_activity_segments(
+        self,
+        segment_ids: list[str],
+        record_tombstone: bool = True,
+        *,
+        refresh_recovery_backup: bool = True,
+    ) -> int:
         normalized_ids = sorted({
             int(segment_id)
             for segment_id in segment_ids
@@ -1494,7 +1534,12 @@ class TrackerDatabase:
             return 0
 
         placeholders = ",".join("?" for _ in normalized_ids)
-        with permanent_deletion_guard(self.db_path) as invalidate_recovery_copies:
+        with permanent_deletion_guard(
+            self.db_path,
+            self.connect(),
+            on_backup_error=self._record_post_delete_backup_error,
+            refresh_backup=refresh_recovery_backup,
+        ) as invalidate_recovery_copies:
             with self.connect() as conn:
                 rows = conn.execute(
                     f"SELECT id, segment_uid FROM activity_segments WHERE id IN ({placeholders})",
@@ -1536,6 +1581,8 @@ class TrackerDatabase:
         scopes: dict[str, Any] | None = None,
         dry_run: bool = False,
         record_tombstone: bool = True,
+        *,
+        refresh_recovery_backup: bool = True,
     ) -> dict[str, Any]:
         scopes = scopes or {}
         delete_activity = bool(scopes.get("activity"))
@@ -1653,14 +1700,23 @@ class TrackerDatabase:
         if dry_run:
             inspect_and_delete(lambda: None)
         else:
-            with permanent_deletion_guard(self.db_path) as invalidate_recovery_copies:
+            with permanent_deletion_guard(
+                self.db_path,
+                self.connect(),
+                on_backup_error=self._record_post_delete_backup_error,
+                refresh_backup=refresh_recovery_backup,
+            ) as invalidate_recovery_copies:
                 inspect_and_delete(invalidate_recovery_copies)
 
         if not dry_run and activity_segments >= 1000:
             # VACUUM cannot run inside a transaction; the deleting with-block
             # above has already committed, so the shared connection is back in
-            # autocommit mode here.
-            self.connect().execute("VACUUM")
+            # autocommit mode here. A compaction failure must not turn that
+            # committed deletion into a misleading failed command response.
+            try:
+                self.connect().execute("VACUUM")
+            except (OSError, sqlite3.DatabaseError) as error:
+                self._record_maintenance_error(error, operation="Vacuum skipped")
 
         return {
             "activitySegments": activity_segments,
@@ -1989,56 +2045,75 @@ class TrackerDatabase:
     def apply_synced_deletions(self, deletions: list[dict[str, Any]]) -> dict[str, int]:
         applied = 0
         skipped = 0
+        recovery_backup_due = False
         timestamp = datetime.now(timezone.utc).isoformat()
-        for deletion in deletions:
-            deletion_uid = deletion.get("deletionUid")
-            kind = deletion.get("kind")
-            if not deletion_uid or kind not in ("range", "uids"):
-                skipped += 1
-                continue
-            with self.connect() as conn:
-                already = conn.execute(
-                    "SELECT 1 FROM applied_sync_deletions WHERE deletion_uid = ?",
-                    (deletion_uid,),
-                ).fetchone()
-            if already is not None:
-                skipped += 1
-                continue
+        try:
+            for deletion in deletions:
+                deletion_uid = deletion.get("deletionUid")
+                kind = deletion.get("kind")
+                if not deletion_uid or kind not in ("range", "uids"):
+                    skipped += 1
+                    continue
+                with self.connect() as conn:
+                    already = conn.execute(
+                        "SELECT 1 FROM applied_sync_deletions WHERE deletion_uid = ?",
+                        (deletion_uid,),
+                    ).fetchone()
+                if already is not None:
+                    skipped += 1
+                    continue
 
-            if kind == "range":
-                # Replaying a remote deletion must not record a fresh tombstone, or two
-                # synced devices would ping-pong the same deletion forever.
-                self.delete_history_range(
-                    start=deletion.get("rangeStart"),
-                    end=deletion.get("rangeEnd"),
-                    scopes={"activity": True},
-                    record_tombstone=False,
-                )
-            else:
-                segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
-                if segment_uids:
-                    placeholders = ",".join("?" for _ in segment_uids)
-                    with self.connect() as conn:
-                        ids = [
-                            str(row["id"])
-                            for row in conn.execute(
-                                f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})",
-                                tuple(segment_uids),
+                if kind == "range":
+                    # Replaying a remote deletion must not record a fresh tombstone, or two
+                    # synced devices would ping-pong the same deletion forever.
+                    recovery_backup_due = True
+                    self.delete_history_range(
+                        start=deletion.get("rangeStart"),
+                        end=deletion.get("rangeEnd"),
+                        scopes={"activity": True},
+                        record_tombstone=False,
+                        refresh_recovery_backup=False,
+                    )
+                else:
+                    segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
+                    if segment_uids:
+                        placeholders = ",".join("?" for _ in segment_uids)
+                        with self.connect() as conn:
+                            ids = [
+                                str(row["id"])
+                                for row in conn.execute(
+                                    f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})",
+                                    tuple(segment_uids),
+                                )
+                            ]
+                        if ids:
+                            recovery_backup_due = True
+                            self.delete_activity_segments(
+                                ids,
+                                record_tombstone=False,
+                                refresh_recovery_backup=False,
                             )
-                        ]
-                    if ids:
-                        self.delete_activity_segments(ids, record_tombstone=False)
 
-            with self.connect() as conn:
-                conn.execute(
-                    "INSERT OR IGNORE INTO applied_sync_deletions (deletion_uid, applied_at) VALUES (?, ?)",
-                    (deletion_uid, timestamp),
-                )
-            applied += 1
+                with self.connect() as conn:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO applied_sync_deletions (deletion_uid, applied_at) VALUES (?, ?)",
+                        (deletion_uid, timestamp),
+                    )
+                applied += 1
+        finally:
+            if recovery_backup_due:
+                # A sync page may contain up to hundreds of tombstones. One
+                # verified post-batch snapshot preserves the same privacy
+                # boundary without rewriting the full database per tombstone.
+                self._create_post_delete_backup()
         return {"applied": applied, "skipped": skipped}
 
     def purge_remote_segments(self) -> int:
-        with permanent_deletion_guard(self.db_path) as invalidate_recovery_copies:
+        with permanent_deletion_guard(
+            self.db_path,
+            self.connect(),
+            on_backup_error=self._record_post_delete_backup_error,
+        ) as invalidate_recovery_copies:
             with self.connect() as conn:
                 remote_segment_ids = {
                     str(row["id"])

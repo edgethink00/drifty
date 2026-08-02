@@ -10,6 +10,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from app.storage.database_maintenance import database_backup_dir, quick_check_database
 from app.storage.db import TrackerDatabase
 from app.tracker.macos_workspace import Snapshot
 
@@ -547,6 +548,41 @@ class SyncDeletionTests(DeviceSyncTestCase):
             }
         ])
         self.assertEqual(result["applied"], 1)
+        self.assertEqual(self.database.fetch_timeline("2026-07-06"), [])
+
+    def test_apply_synced_deletion_page_creates_one_post_batch_backup(self) -> None:
+        segment_uids = [
+            "99999999-0000-0000-0000-000000000010",
+            "99999999-0000-0000-0000-000000000011",
+        ]
+        self.database.apply_synced_segments(
+            [
+                self._remote_segment(
+                    segment_uid,
+                    started_at=f"2026-07-06T09:0{index}:00+00:00",
+                    ended_at=f"2026-07-06T09:0{index}:30+00:00",
+                )
+                for index, segment_uid in enumerate(segment_uids)
+            ]
+        )
+
+        result = self.database.apply_synced_deletions(
+            [
+                {
+                    "deletionUid": f"77777777-0000-0000-0000-00000000001{index}",
+                    "kind": "uids",
+                    "segmentUids": [segment_uid],
+                }
+                for index, segment_uid in enumerate(segment_uids)
+            ]
+        )
+
+        self.assertEqual(result, {"applied": 2, "skipped": 0})
+        backups = list(
+            database_backup_dir(self.db_path).glob("tracker-*.sqlite3")
+        )
+        self.assertEqual(len(backups), 1)
+        self.assertTrue(quick_check_database(backups[0], immutable=True))
         self.assertEqual(self.database.fetch_timeline("2026-07-06"), [])
 
 

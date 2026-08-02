@@ -54,6 +54,7 @@ DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
 IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "180"))
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
+DATABASE_BACKUP_CHECK_SECONDS = 60 * 60
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
@@ -1262,6 +1263,24 @@ def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float 
     return capture_tick
 
 
+def _maybe_create_periodic_backup(
+    db: TrackerDatabase,
+    last_check_wall_seconds: float,
+    *,
+    now_wall_seconds: float | None = None,
+) -> float:
+    current = time.time() if now_wall_seconds is None else now_wall_seconds
+    elapsed = current - last_check_wall_seconds
+    if elapsed < 0:
+        # A wall-clock correction should restart the inexpensive hourly check
+        # window rather than suppress backups for an unbounded period.
+        return current
+    if elapsed < DATABASE_BACKUP_CHECK_SECONDS:
+        return last_check_wall_seconds
+    db.create_periodic_backup()
+    return current
+
+
 def daemon():
     ensure_state_dir()
     pid_path().write_text(str(os.getpid()))
@@ -1269,9 +1288,24 @@ def daemon():
     db.set_meta("tracker_script_path", _current_script_path())
     db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
     last_capture_tick: float | None = None
+    last_backup_check = time.time()
 
     try:
         while True:
+            backup_check_started_at = time.time()
+            try:
+                last_backup_check = _maybe_create_periodic_backup(
+                    db,
+                    last_backup_check,
+                    now_wall_seconds=backup_check_started_at,
+                )
+            except Exception as exc:
+                # Maintenance must never suppress the primary capture loop,
+                # even if an unexpected backup bug escapes the storage layer.
+                last_backup_check = backup_check_started_at
+                capture_tracker_exception(exc, {"phase": "database_periodic_backup"})
+                print("tracker database periodic backup failed:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
             try:
                 last_capture_tick = _daemon_tick(db, last_capture_tick)
             except Exception as exc:

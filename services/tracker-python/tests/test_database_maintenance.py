@@ -94,6 +94,23 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertEqual(reopened.maintenance_error, "disk full")
         reopened.close()
 
+    def test_long_running_database_can_create_a_due_backup_without_reopening(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        self._insert_marker(database, "created-while-running")
+
+        backup = database.create_periodic_backup()
+
+        self.assertIsNotNone(backup)
+        self.assertTrue(quick_check_database(backup, immutable=True))
+        with closing(sqlite3.connect(backup)) as snapshot:
+            self.assertEqual(
+                snapshot.execute(
+                    "SELECT value FROM tracker_meta WHERE key = 'maintenance-test'"
+                ).fetchone()[0],
+                "created-while-running",
+            )
+        database.close()
+
     def test_short_lived_connection_can_skip_repeating_startup_maintenance(self) -> None:
         database = TrackerDatabase(self.db_path)
         self._insert_marker(database, "worker")
@@ -261,12 +278,20 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.assertEqual(database.delete_activity_segments([segment_id]), 1)
         self.assertFalse(backup.exists())
         self.assertFalse(quarantined_copy.exists())
+        refreshed_backups = list(
+            database_backup_dir(self.db_path).glob("tracker-*.sqlite3")
+        )
+        self.assertEqual(len(refreshed_backups), 1)
+        self.assertTrue(quick_check_database(refreshed_backups[0], immutable=True))
         database.close()
 
         self.db_path.write_bytes(b"not a sqlite database")
         recovered = TrackerDatabase(self.db_path)
 
-        self.assertIsNone(recovered.maintenance_result.restored_backup_path)
+        self.assertEqual(
+            recovered.maintenance_result.restored_backup_path,
+            refreshed_backups[0],
+        )
         self.assertEqual(recovered.fetch_timeline("2026-08-02"), [])
         recovered.close()
 
@@ -293,6 +318,108 @@ class DatabaseMaintenanceTests(unittest.TestCase):
 
         self.assertEqual(result["activitySegments"], 1)
         self.assertFalse(backup.exists())
+        refreshed_backups = list(
+            database_backup_dir(self.db_path).glob("tracker-*.sqlite3")
+        )
+        self.assertEqual(len(refreshed_backups), 1)
+        with closing(sqlite3.connect(refreshed_backups[0])) as snapshot:
+            self.assertEqual(
+                snapshot.execute("SELECT COUNT(*) FROM activity_segments").fetchone()[0],
+                0,
+            )
+        database.close()
+
+    def test_post_delete_backup_failure_keeps_the_delete_and_records_diagnostics(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        database.insert_segment(
+            {
+                "started_at": "2026-08-02T09:00:00+00:00",
+                "ended_at": "2026-08-02T09:01:00+00:00",
+                "duration_seconds": 60,
+                "app_name": "Delete even if disk is full",
+            }
+        )
+        with database.connect() as connection:
+            segment_id = str(
+                connection.execute("SELECT id FROM activity_segments").fetchone()["id"]
+            )
+        older_backup = create_rotating_backup(
+            database.connect(), self.db_path, interval_seconds=0
+        )
+        self.assertIsNotNone(older_backup)
+
+        with patch(
+            "app.storage.database_maintenance._create_rotating_backup_locked",
+            side_effect=OSError("disk full"),
+        ):
+            deleted = database.delete_activity_segments([segment_id])
+
+        self.assertEqual(deleted, 1)
+        self.assertEqual(database.fetch_timeline("2026-08-02"), [])
+        self.assertFalse(older_backup.exists())
+        self.assertEqual(
+            list(database_backup_dir(self.db_path).glob("tracker-*.sqlite3")), []
+        )
+        self.assertEqual(database.maintenance_error, "disk full")
+        database.close()
+
+    def test_vacuum_failure_does_not_turn_a_committed_delete_into_failure(self) -> None:
+        database = TrackerDatabase(self.db_path)
+        with database.connect() as connection:
+            connection.execute(
+                """
+                WITH RECURSIVE sequence(value) AS (
+                    SELECT 1
+                    UNION ALL
+                    SELECT value + 1 FROM sequence WHERE value < 1000
+                )
+                INSERT INTO activity_segments (
+                    started_at,
+                    ended_at,
+                    duration_seconds,
+                    app_name,
+                    platform,
+                    source
+                )
+                SELECT
+                    '2026-08-02T09:00:00+00:00',
+                    '2026-08-02T09:00:01+00:00',
+                    1,
+                    'Bulk delete',
+                    'macos',
+                    'accessibility'
+                FROM sequence
+                """
+            )
+
+        class VacuumFailingConnection:
+            def __init__(self, connection: sqlite3.Connection):
+                self.connection = connection
+
+            def __enter__(self):
+                self.connection.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.connection.__exit__(*args)
+
+            def execute(self, sql: str, parameters=()):
+                if sql == "VACUUM":
+                    raise sqlite3.OperationalError("vacuum locked")
+                return self.connection.execute(sql, parameters)
+
+            def __getattr__(self, name: str):
+                return getattr(self.connection, name)
+
+        failing_connection = VacuumFailingConnection(database.connect())
+        with patch.object(database, "connect", return_value=failing_connection):
+            result = database.delete_history_range(
+                scopes={"activity": True},
+            )
+
+        self.assertEqual(result["activitySegments"], 1000)
+        self.assertEqual(database.fetch_timeline("2026-08-02"), [])
+        self.assertEqual(database.maintenance_error, "vacuum locked")
         database.close()
 
     def test_recovery_copy_cleanup_failure_prevents_permanent_delete(self) -> None:
