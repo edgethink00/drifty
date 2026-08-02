@@ -1,6 +1,6 @@
 import { BrowserHistoryBootstrapPreference } from "../BrowserHistoryBootstrapPreference";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
-import { TRIAL_DAYS, ToggleButton } from "./shared";
+import { ToggleButton } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
@@ -44,22 +44,29 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
 }
 
 function summaryItemsForFlow(flow: OnboardingFlow, t: LocalizationController["t"]): ReadonlyArray<{ readonly label: string; readonly sub?: string }> {
+  const accountSummary = flow.accountSkippedForDev
+    ? t("onboarding.ready.accountSkippedForDev")
+    : t("onboarding.ready.accountConnected");
   if (flow.setupChoice === "local_ai" || flow.isUserManagedProviderSetup) {
     return [
-      { label: flow.setupChoice === "local_ai" ? t("onboarding.ready.localSelected") : flow.isByokSetup ? t("onboarding.ready.byokSelected") : t("onboarding.ready.customSelected") },
-      { label: t("onboarding.ready.accountConnected") },
       {
-        label: flow.setupChoice === "local_ai"
+        label: flow.setupChoice === "local_ai" ? t("onboarding.ready.localSelected") : flow.isByokSetup ? t("onboarding.ready.byokSelected") : t("onboarding.ready.customSelected"),
+        sub: flow.setupChoice === "local_ai"
           ? flow.managedLocalReady ? t("onboarding.ready.localReady") : t("onboarding.ready.localDownloading")
           : flow.isByokSetup ? t("onboarding.ready.openRouterConnected") : t("onboarding.ready.customConnected"),
       },
+      { label: accountSummary },
       { label: t("onboarding.ready.trackingReady") },
     ];
   }
   return [
-    { label: t("onboarding.ready.cloudSelected") },
-    { label: t("onboarding.ready.accountConnected") },
-    { label: t("onboarding.ready.trialStarted", { days: TRIAL_DAYS }), sub: t("onboarding.ready.trialReady") },
+    {
+      label: t("onboarding.ready.cloudSelected"),
+      sub: flow.cloudTrialStartedNotice
+        ? t("onboarding.ready.cloudTrialActive")
+        : t("onboarding.ready.cloudAccountReady"),
+    },
+    { label: accountSummary },
     { label: t("onboarding.ready.trackingReady") },
   ];
 }

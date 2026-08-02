@@ -4,10 +4,18 @@ import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPassw
 import { GoogleMark } from "../onboarding/components/GoogleMark";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type AuthMode = "sign-in" | "sign-up";
 
-export function AuthModal({ onClose }: { onClose?: () => void }) {
+export function AuthModal({
+  onClose,
+  showGoogleSignIn = true,
+}: {
+  onClose?: () => void;
+  showGoogleSignIn?: boolean;
+}) {
+  const { t } = useLocalization();
   const {
     status,
     callbackStatus,
@@ -30,11 +38,11 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
     return (
       <div className="auth-modal__overlay">
         <div className="auth-modal">
-          {onClose ? <ModalCloseButton label="Close" onClick={onClose} /> : null}
+          {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={onClose} /> : null}
           <div className="modal-head">
             <div className="modal-head__copy">
-              <h2>Cloud sync disabled</h2>
-              <p>Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.</p>
+              <h2>{t("auth.modal.disabledTitle")}</h2>
+              <p>{t("auth.modal.disabledDescription")}</p>
             </div>
           </div>
         </div>
@@ -49,12 +57,12 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
 
     const nextEmail = email.trim();
     if (!nextEmail) {
-      setError("Enter your email address to continue.");
+      setError(t("auth.modal.emailRequired"));
       return;
     }
 
     if (!password) {
-      setError("Enter your password to continue.");
+      setError(t("auth.modal.passwordRequired"));
       return;
     }
 
@@ -77,10 +85,10 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
         return;
       }
       if ("needsEmailConfirmation" in result && result.needsEmailConfirmation) {
-        setNotice("Account created. Check your email to confirm your address.");
+        setNotice(t("auth.modal.confirmation"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      setError(err instanceof Error ? err.message : t("auth.modal.unexpectedError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -96,24 +104,24 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
         setError(error.message);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to start Google sign-in.");
+      setError(err instanceof Error ? err.message : t("auth.modal.googleStartError"));
     } finally {
       setIsGoogleSubmitting(false);
     }
   }
 
   const isSignUp = authMode === "sign-up";
-  const submitLabel = isSignUp ? "Create account" : "Sign in";
+  const submitLabel = isSignUp ? t("auth.modal.createAccount") : t("auth.modal.signIn");
   const isBusy = isSubmitting || isGoogleSubmitting || status === "loading";
 
   return (
     <div className="auth-modal__overlay">
       <div className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        {onClose ? <ModalCloseButton label="Close" onClick={onClose} /> : null}
+        {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={onClose} /> : null}
         <div className="modal-head">
           <div className="modal-head__copy">
-            <h2 id="auth-modal-title">{isSignUp ? "Create your account" : "Sign in to Drifty"}</h2>
-            <p>{isSignUp ? "Create a drifty account with email and password." : "Use your drifty account to sync and publish."}</p>
+            <h2 id="auth-modal-title">{isSignUp ? t("auth.modal.signUpTitle") : t("auth.modal.signInTitle")}</h2>
+            <p>{isSignUp ? t("auth.modal.signUpDescription") : t("auth.modal.signInDescription")}</p>
           </div>
         </div>
 
@@ -133,9 +141,9 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
                 type="button"
                 className="auth-modal__callback-dismiss"
                 onClick={clearCallbackStatus}
-                aria-label="Dismiss callback notice"
+                aria-label={t("auth.modal.dismissCallback")}
               >
-                Dismiss
+                {t("auth.modal.dismiss")}
               </button>
             </div>
           ) : (
@@ -147,7 +155,7 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
 
         <form className="auth-modal__form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
           <label className="auth-modal__field" htmlFor="auth-email">
-            <span>Email</span>
+            <span>{t("auth.modal.email")}</span>
             <input
               id="auth-email"
               type="email"
@@ -159,7 +167,7 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
             />
           </label>
           <label className="auth-modal__field" htmlFor="auth-password">
-            <span>Password</span>
+            <span>{t("auth.modal.password")}</span>
             <input
               id="auth-password"
               type="password"
@@ -176,12 +184,12 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
             className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
             disabled={isBusy}
           >
-            {isSubmitting ? (isSignUp ? "Creating…" : "Signing in…") : submitLabel}
+            {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
           </button>
         </form>
 
         <p className="auth-modal__mode-switch">
-          <span>{isSignUp ? "Have an account?" : "Need an account?"}</span>
+          <span>{isSignUp ? t("auth.modal.haveAccount") : t("auth.modal.needAccount")}</span>
           <button
             type="button"
             onClick={() => {
@@ -191,28 +199,32 @@ export function AuthModal({ onClose }: { onClose?: () => void }) {
             }}
             disabled={isBusy}
           >
-            {isSignUp ? "Sign in" : "Create account"}
+            {isSignUp ? t("auth.modal.signIn") : t("auth.modal.createAccount")}
           </button>
         </p>
 
-        <div className="auth-modal__separator"><span>or</span></div>
+        {showGoogleSignIn ? (
+          <>
+            <div className="auth-modal__separator"><span>{t("auth.modal.or")}</span></div>
 
-        <button
-          type="button"
-          className="secondary-button auth-modal__google"
-          onClick={() => void handleGoogleSignIn()}
-          disabled={isBusy}
-        >
-          <GoogleMark />
-          {isGoogleSubmitting ? "Opening…" : "Continue with Google"}
-        </button>
+            <button
+              type="button"
+              className="secondary-button auth-modal__google"
+              onClick={() => void handleGoogleSignIn()}
+              disabled={isBusy}
+            >
+              <GoogleMark />
+              {isGoogleSubmitting ? t("auth.modal.opening") : t("auth.modal.continueGoogle")}
+            </button>
+          </>
+        ) : null}
 
         <div className="auth-modal__footer auth-modal__footer--centered">
           <span>
-            By continuing, you accept
-            {" "}<a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">Terms</a>
+            {t("auth.modal.byContinuing")}
+            {" "}<a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("auth.modal.terms")}</a>
             {" & "}
-            <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">Privacy</a>.
+            <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("auth.modal.privacy")}</a>.
           </span>
         </div>
 

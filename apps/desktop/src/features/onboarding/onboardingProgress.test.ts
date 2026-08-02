@@ -78,6 +78,16 @@ describe("onboardingProgress", () => {
     }).step).toBe("account");
   });
 
+  it("keeps an in-progress Nudges step on Nudges", () => {
+    expect(clampOnboardingProgressStep(progressSnapshot({
+      step: "nudges",
+      setupChoice: "simple",
+    }), {
+      accountConnected: true,
+      skipAccountStep: false,
+    }).step).toBe("nudges");
+  });
+
   it("clears progress after completion", () => {
     writeOnboardingProgress("user-1", baseProgress);
     clearOnboardingProgress("user-1");

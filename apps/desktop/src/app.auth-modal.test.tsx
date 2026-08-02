@@ -377,6 +377,24 @@ describe("App auth modal", () => {
     expect(authState.signUpWithEmail).not.toHaveBeenCalled();
   });
 
+  it("creates an account with email directly from the auth modal", async () => {
+    authState.signUpWithEmail.mockResolvedValueOnce({ error: null, needsEmailConfirmation: true });
+    render(<App />);
+    await openAuthModalFromAccountMenu();
+
+    const authDialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
+    fireEvent.click(within(authDialog).getByRole("button", { name: /create account/i }));
+    fireEvent.change(within(authDialog).getByLabelText(/^email$/i), { target: { value: " new@example.com " } });
+    fireEvent.change(within(authDialog).getByLabelText(/^password$/i), { target: { value: "long-enough1" } });
+    fireEvent.click(within(authDialog).getByRole("button", { name: /^create account$/i }));
+
+    await waitFor(() => {
+      expect(authState.signUpWithEmail).toHaveBeenCalledWith("new@example.com", "long-enough1");
+    });
+    expect((await within(authDialog).findByRole("status")).textContent).toMatch(/confirm your email and drifty will reopen automatically/i);
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+  });
+
   it("opens feedback from the account menu and sends explicit feedback with selected images", async () => {
     render(<App />);
 

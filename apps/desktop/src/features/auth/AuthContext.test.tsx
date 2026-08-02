@@ -355,9 +355,41 @@ describe("AuthContext", () => {
     expect(signUp).toHaveBeenCalledWith({
       email: "person@example.com",
       password: "long-enough1",
+      options: {
+        emailRedirectTo: "https://drifty.so/auth/callback/",
+      },
     });
     expect(result.error?.message).toMatch(/at least 12 characters/i);
     expect(result.needsEmailConfirmation).toBe(false);
+  });
+
+  it("creates an email account through Supabase and reports confirmation when no session is returned", async () => {
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    signUp.mockResolvedValue({ data: { session: null }, error: null });
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    const result = await authApi!.signUpWithEmail("person@example.com", "long-enough1");
+
+    expect(signUp).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "long-enough1",
+      options: {
+        emailRedirectTo: "https://drifty.so/auth/callback/",
+      },
+    });
+    expect(result.error).toBeNull();
+    expect(result.needsEmailConfirmation).toBe(true);
   });
 
   it("returns an error when direct Google OAuth does not return a URL", async () => {

@@ -22,6 +22,7 @@ import { SelfDataReviewStep } from "./components/steps/SelfDataReviewStep";
 import { ReadyStep } from "./components/steps/ReadyStep";
 import { useLocalization } from "../localization/LocalizationContext";
 import { onboardingActivityLabel, onboardingDomainLabel } from "./onboardingOptionLabels";
+import { DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
@@ -211,6 +212,8 @@ export function OnboardingDesignCodeContent({
                 <AccountStep
                   accountConnected={flow.accountConnected}
                   authCallbackStatus={authCallbackStatus}
+                  devAuthSkipEnabled={DEV_ONBOARDING_AUTH_SKIP_ENABLED}
+                  onSkipAuthForDev={flow.skipAccountForDev}
                   onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
                   onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
                 />

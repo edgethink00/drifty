@@ -48,4 +48,18 @@ describe("app feature switches", () => {
     expect(switches.resolveDevOnboardingAuthBypass(true)).toBe(true);
     expect(switches.resolveDevOnboardingAuthBypass(false)).toBe(false);
   });
+
+  it("passes through the compile-time onboarding force-open flag", async () => {
+    const switches = await import("./appFeatureSwitches");
+
+    expect(switches.resolveDevOnboardingForceOpen(true)).toBe(true);
+    expect(switches.resolveDevOnboardingForceOpen(false)).toBe(false);
+  });
+
+  it("passes through the compile-time onboarding auth-skip control flag", async () => {
+    const switches = await import("./appFeatureSwitches");
+
+    expect(switches.resolveDevOnboardingAuthSkip(true)).toBe(true);
+    expect(switches.resolveDevOnboardingAuthSkip(false)).toBe(false);
+  });
 });

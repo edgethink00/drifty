@@ -85,7 +85,7 @@ import {
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthog";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled } from "./appFeatureSwitches";
+import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, isDevOnboardingForceOpenEnabled } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
@@ -719,6 +719,7 @@ export default function App() {
     openEndOfDayReviewDashboard();
   }, [openEndOfDayReviewDashboard, openEndOfDayReviewSettings]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalShowsGoogle, setAuthModalShowsGoogle] = useState(true);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
@@ -741,6 +742,14 @@ export default function App() {
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
   const [compactHistoryCacheRevision, setCompactHistoryCacheRevision] = useState(0);
   const [weekDashboardCacheRevision, setWeekDashboardCacheRevision] = useState(0);
+  const openDefaultAuthModal = useCallback(() => {
+    setAuthModalShowsGoogle(true);
+    setAuthModalOpen(true);
+  }, []);
+  const openOnboardingEmailAuthModal = useCallback(() => {
+    setAuthModalShowsGoogle(false);
+    setAuthModalOpen(true);
+  }, []);
   const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => ({
       fallbackCandidates: segments,
@@ -808,7 +817,6 @@ export default function App() {
     status: authStatus,
     cloudConnectionStatus: reportedCloudConnectionStatus,
     callbackStatus,
-    signInWithWebsite,
     signInWithGoogle,
     signInAnonymously,
     signOut,
@@ -828,7 +836,7 @@ export default function App() {
   const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
   const shouldBlockLocalTrackerAccess = isEffectiveAuthRequired && (hasEffectiveBlockingAuthConfigurationError || !hasRequiredAccountAuth);
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
-  const requestCloudBillingAuth = useCallback(() => setAuthModalOpen(true), []);
+  const requestCloudBillingAuth = openDefaultAuthModal;
   const {
     billingCheckoutLoadingInterval,
     billingEntitlement,
@@ -920,8 +928,8 @@ export default function App() {
       setDeviceSyncPurging(false);
     }
   }, []);
-  const requestLeaderboardAuth = useCallback(() => setAuthModalOpen(true), []);
-  const requestTeamAuth = useCallback(() => setAuthModalOpen(true), []);
+  const requestLeaderboardAuth = openDefaultAuthModal;
+  const requestTeamAuth = openDefaultAuthModal;
   // Owned here (not inside the Team surface) so the sidebar team nav can list teams.
   const realTeamController = useTeamController({
     activeTab,
@@ -4991,12 +4999,14 @@ export default function App() {
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
       setAuthModalOpen(false);
+      setAuthModalShowsGoogle(true);
       setResumeOnboardingAfterAuthModal(false);
     }
   }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired]);
 
   const handleCloseAuthModal = useCallback(() => {
     setAuthModalOpen(false);
+    setAuthModalShowsGoogle(true);
     if (resumeOnboardingAfterAuthModal && !hasRequiredAccountAuth) {
       setOnboardingOpen(true);
     }
@@ -5022,6 +5032,11 @@ export default function App() {
   useEffect(() => {
     if (isDevOnboardingBypassEnabled()) {
       setOnboardingOpen(false);
+      return;
+    }
+
+    if (isDevOnboardingForceOpenEnabled()) {
+      setOnboardingOpen(true);
       return;
     }
 
@@ -5563,8 +5578,8 @@ export default function App() {
     return (
       <>
         {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
-        <AuthRequiredGate onSignIn={() => setAuthModalOpen(true)} />
-        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
+        <AuthRequiredGate onSignIn={openDefaultAuthModal} />
+        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
       </>
     );
   }
@@ -5628,7 +5643,7 @@ export default function App() {
       cloudTrialStartedNotice={cloudTrialStartedNotice}
       authCallbackStatus={callbackStatus}
       onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
-      onStartCloudTrialWithEmail={() => void signInWithWebsite()}
+      onStartCloudTrialWithEmail={openOnboardingEmailAuthModal}
       onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
       onComplete={handleOnboardingComplete}
     />
@@ -5645,7 +5660,7 @@ export default function App() {
         <>
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
           {onboardingModal}
-          {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
+          {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
         </>
       </LocalizationProvider>
     );
@@ -6056,7 +6071,7 @@ export default function App() {
               setAccountMenuOpen(false);
             }}
             onSignIn={() => {
-              setAuthModalOpen(true);
+              openDefaultAuthModal();
               setAccountMenuOpen(false);
             }}
             onSignOut={() => {
@@ -6400,7 +6415,7 @@ export default function App() {
                         }}
 	                    onRefreshCloudStatus={refreshBillingEntitlement}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
-                    onSignIn={() => setAuthModalOpen(true)}
+                    onSignIn={openDefaultAuthModal}
                     onStartCloudSetup={handleStartDriftyCloudSetup}
                   />
                 )}
@@ -6637,7 +6652,7 @@ export default function App() {
         />
       ) : null}
 
-      {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} /> : null}
+      {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
 
       {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
       {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}

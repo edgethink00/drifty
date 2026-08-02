@@ -33,6 +33,8 @@ function shouldUploadSentrySourcemaps(command: string): boolean {
 export default defineConfig(({ command, mode }) => {
   const devSkipOnboarding = command === "serve" && mode !== "production" && process.env.SKIP_ONBOARDING === "1";
   const devSkipOnboardingAuth = command === "serve" && mode !== "production" && process.env.SKIP_ONBOARDING_AUTH === "1";
+  const devForceOnboarding = command === "serve" && mode !== "production" && process.env.FORCE_ONBOARDING === "1";
+  const devAllowOnboardingAuthSkip = command === "serve" && mode !== "production" && process.env.ALLOW_ONBOARDING_AUTH_SKIP === "1";
   const buildCommit = resolveBuildCommit();
   const appVersion = resolveAppVersion();
   const uploadSentrySourcemaps = shouldUploadSentrySourcemaps(command);
@@ -43,6 +45,8 @@ export default defineConfig(({ command, mode }) => {
       __DRIFTY_APP_VERSION__: JSON.stringify(appVersion),
       __DRIFTY_DEV_SKIP_ONBOARDING__: JSON.stringify(devSkipOnboarding),
       __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__: JSON.stringify(devSkipOnboardingAuth),
+      __DRIFTY_DEV_FORCE_ONBOARDING__: JSON.stringify(devForceOnboarding),
+      __DRIFTY_DEV_ALLOW_ONBOARDING_AUTH_SKIP__: JSON.stringify(devAllowOnboardingAuthSkip),
     },
     plugins: [
       react(),

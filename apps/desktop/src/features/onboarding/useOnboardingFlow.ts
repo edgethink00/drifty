@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthog";
-import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED } from "../../appFeatureSwitches";
+import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED, DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
@@ -99,6 +99,7 @@ export function useOnboardingFlow({
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(restoredProgress?.extremeNudgeEnabled ?? false);
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
+  const [accountSkippedForDev, setAccountSkippedForDev] = useState(false);
   const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -134,7 +135,7 @@ export function useOnboardingFlow({
   const canAdvance = canAdvanceOnboarding({
     accessibilityReady: permissions.accessibilityReady,
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
-    accountConnected,
+    accountConnected: accountConnected || accountSkippedForDev,
     apiKeyIsValid: connection.apiKeyIsValid,
     connectionPhase: connection.connectionPhase,
     customEndpointIsValid: connection.customEndpointIsValid,
@@ -277,6 +278,14 @@ export function useOnboardingFlow({
     if (nextStep) setStep(nextStep);
   }
 
+  function skipAccountForDev() {
+    if (!DEV_ONBOARDING_AUTH_SKIP_ENABLED || step !== "account") return;
+    setAccountSkippedForDev(true);
+    setStorageError(null);
+    setSetupError(null);
+    goToNextStep();
+  }
+
   function goToPreviousStep() {
     const previousStep = steps[stepIndex - 1]?.id;
     if (previousStep) setStep(previousStep);
@@ -303,6 +312,7 @@ export function useOnboardingFlow({
     ...permissions,
     safariHistoryPermission,
     accountConnected,
+    accountSkippedForDev,
     addMainActivity,
     browserHistoryBootstrapEnabled,
     blockedHint,
@@ -323,6 +333,7 @@ export function useOnboardingFlow({
     setExtremeNudgeEnabled,
     setMainActivityOther,
     setOpenAtLoginEnabled,
+    skipAccountForDev,
     setStep,
     setupError,
     step,

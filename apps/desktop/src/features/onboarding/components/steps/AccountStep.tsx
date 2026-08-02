@@ -6,11 +6,15 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 export function AccountStep({
   accountConnected,
   authCallbackStatus,
+  devAuthSkipEnabled,
+  onSkipAuthForDev,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
 }: {
   readonly accountConnected: boolean;
   readonly authCallbackStatus: OAuthCallbackStatus | null;
+  readonly devAuthSkipEnabled: boolean;
+  readonly onSkipAuthForDev: () => void;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
 }) {
@@ -59,6 +63,15 @@ export function AccountStep({
       {!accountConnected && authCallbackStatus ? (
         <div className={callbackNoticeClassName} role={callbackNoticeRole}>
           {authCallbackStatus.message}
+        </div>
+      ) : null}
+      {!accountConnected && devAuthSkipEnabled ? (
+        <div className="dc-onb-account__dev-skip">
+          <button type="button" className="dc-onb-account__dev-skip-button" onClick={onSkipAuthForDev}>
+            <span className="dc-onb-account__dev-badge" aria-hidden="true">DEV</span>
+            <span>{t("onboarding.account.devSkip")}</span>
+          </button>
+          <p>{t("onboarding.account.devSkipHelper")}</p>
         </div>
       ) : null}
       <p className="dc-onb-account__helper">

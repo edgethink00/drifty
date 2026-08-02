@@ -36,6 +36,7 @@ import { dispatchTeamInviteDeepLink } from "../team/teamInviteDeepLinks";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
+const DESKTOP_EMAIL_AUTH_BRIDGE_URL = "https://drifty.so/auth/callback/";
 const DESKTOP_GOOGLE_AUTH_BRIDGE_URL = "https://drifty.so/auth/desktop-google-callback/";
 const GOOGLE_BROWSER_OPENED_MESSAGE = "Browser opened. Waiting for sign-in to return to Drifty.";
 const GOOGLE_BROWSER_OPEN_FAILED_MESSAGE = "Unable to open Google sign-in. Try again, or continue with email.";
@@ -706,6 +707,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: DESKTOP_EMAIL_AUTH_BRIDGE_URL,
+      },
     });
     const normalizedError = normalizeAuthPasswordError(error);
     const needsEmailConfirmation = !data.session && !normalizedError;

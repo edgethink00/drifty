@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { TrackerStatus } from "@drifty/domain";
 import type { ReactNode } from "react";
 import type { OAuthCallbackStatus } from "./features/auth/AuthContext";
@@ -138,6 +138,7 @@ vi.mock("./appFeatureSwitches", () => ({
   get DEV_ONBOARDING_AUTH_BYPASS_ENABLED() {
     return appFeatureSwitches.devOnboardingAuthBypassEnabled;
   },
+  DEV_ONBOARDING_AUTH_SKIP_ENABLED: false,
   DEV_SETTINGS_ENABLED: true,
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: true,
   DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: true,
@@ -145,6 +146,7 @@ vi.mock("./appFeatureSwitches", () => ({
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: true,
   END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED: false,
   isDevOnboardingBypassEnabled: () => appFeatureSwitches.devOnboardingBypassEnabled,
+  isDevOnboardingForceOpenEnabled: () => false,
 }));
 
 import App from "./App";
@@ -213,6 +215,9 @@ describe("App onboarding cloud login", () => {
     authState.callbackStatus = null;
     authState.hasRequiredAccountAuth = false;
     authState.signInWithWebsite.mockResolvedValue({ error: null });
+    authState.signInWithGoogle.mockResolvedValue({ error: null });
+    authState.signInWithEmail.mockResolvedValue({ error: null });
+    authState.signUpWithEmail.mockResolvedValue({ error: null, needsEmailConfirmation: false });
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
     fetchPublicProfile.mockResolvedValue({ success: true, error: null, data: null });
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
@@ -264,6 +269,92 @@ describe("App onboarding cloud login", () => {
     });
 
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+  }, 15_000);
+
+  it("keeps failed in-app email sign-in recoverable inside account onboarding", async () => {
+    authState.signInWithEmail.mockResolvedValueOnce({ error: new Error("Invalid email or password.") });
+    render(<App />);
+
+    await advanceToAccountStep();
+    await clickButton(/continue with email/i);
+    const authDialog = await screen.findByRole("dialog", { name: /sign in to drifty/i });
+    fireEvent.change(within(authDialog).getByLabelText(/^email$/i), { target: { value: "alex@example.com" } });
+    fireEvent.change(within(authDialog).getByLabelText(/^password$/i), { target: { value: "incorrect password" } });
+    fireEvent.click(within(authDialog).getByRole("button", { name: /^sign in$/i }));
+
+    expect((await within(authDialog).findByRole("alert")).textContent).toContain("Invalid email or password.");
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
+    fireEvent.click(within(authDialog).getByRole("button", { name: /^close$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
+    });
+    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+  });
+
+  it("creates an email account from onboarding and resumes after confirmation", async () => {
+    authState.signUpWithEmail.mockResolvedValueOnce({ error: null, needsEmailConfirmation: true });
+    const { rerender } = render(<App />);
+
+    await advanceToAccountStep();
+    await clickButton(/continue with email/i);
+    const authDialog = await screen.findByRole("dialog", { name: /sign in to drifty/i });
+    expect(within(authDialog).queryByRole("button", { name: /continue with google/i })).toBeNull();
+
+    fireEvent.click(within(authDialog).getByRole("button", { name: /^create account$/i }));
+    fireEvent.change(within(authDialog).getByLabelText(/^email$/i), { target: { value: " new@example.com " } });
+    fireEvent.change(within(authDialog).getByLabelText(/^password$/i), { target: { value: "correct horse battery" } });
+    fireEvent.click(within(authDialog).getByRole("button", { name: /^create account$/i }));
+
+    await waitFor(() => {
+      expect(authState.signUpWithEmail).toHaveBeenCalledWith("new@example.com", "correct horse battery");
+    });
+    expect((await within(authDialog).findByRole("status")).textContent).toMatch(/confirm your email and drifty will reopen automatically/i);
+    expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect(authState.signInWithGoogle).not.toHaveBeenCalled();
+
+    authState.user = { id: "cloud-user-signup", email: "new@example.com" };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+
+    await act(async () => {
+      rerender(<App />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /create your account/i })).toBeNull();
+    });
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+  });
+
+  it("closes in-app email auth and resumes onboarding after account authentication succeeds", async () => {
+    const { rerender } = render(<App />);
+
+    await advanceToAccountStep();
+    await clickButton(/continue with email/i);
+    const authDialog = await screen.findByRole("dialog", { name: /sign in to drifty/i });
+    fireEvent.change(within(authDialog).getByLabelText(/^email$/i), { target: { value: "alex@example.com" } });
+    fireEvent.change(within(authDialog).getByLabelText(/^password$/i), { target: { value: "correct horse battery" } });
+    fireEvent.click(within(authDialog).getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() => {
+      expect(authState.signInWithEmail).toHaveBeenCalledWith("alex@example.com", "correct horse battery");
+    });
+    authState.user = { id: "cloud-user-email", email: "alex@example.com" };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+
+    await act(async () => {
+      rerender(<App />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
+    });
+    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(authState.signInWithWebsite).not.toHaveBeenCalled();
   }, 15_000);
 
   it("shows Google browser handoff status on the account onboarding step", async () => {
