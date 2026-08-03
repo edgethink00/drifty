@@ -14,32 +14,64 @@ import {
   normalizeOpenRouterPrimaryModel,
   type LocalAiSetupState,
 } from "./localAiSetup";
+import {
+  aiConnectionIssueKindFromMessage,
+  type AiConnectionIssueKind,
+} from "../ai-connection/aiConnectionHealth";
+import {
+  openRouterConnectionFailureMessage,
+  openRouterEmbeddedIssueKind,
+  openRouterIssueKindFromResponse,
+} from "../ai-connection/openRouterError";
 
 export type AiConnectionTestResult =
   | { readonly kind: "success"; readonly message: string }
-  | { readonly kind: "error"; readonly message: string };
+  | { readonly kind: "error"; readonly issueKind: AiConnectionIssueKind; readonly message: string; readonly retryAfterMs?: number };
 
 export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<AiConnectionTestResult> {
   const request = localAiConnectionRequest(setup);
-  if (!request) return { kind: "error", message: "Complete the selected provider settings before testing." };
+  if (!request) return {
+    kind: "error",
+    issueKind: "provider",
+    message: "Complete the selected provider settings before testing.",
+  };
 
   try {
     const response = await invokeOpenAiChatWithManagedLocalRetry(request, managedLocalProviderFromSetup(setup));
     const status = typeof response.status === "number" ? response.status : 0;
     if (status < 200 || status >= 300) {
-      return { kind: "error", message: `Provider returned HTTP ${status || "unknown"}.` };
+      const issueKind = setup.provider === "openrouter_byok"
+        ? openRouterIssueKindFromResponse(status, response.body)
+        : "provider";
+      return {
+        kind: "error",
+        issueKind,
+        message: openRouterConnectionFailureMessage(issueKind, status),
+        ...retryAfterResult(response.retryAfterMs),
+      };
+    }
+    if (setup.provider === "openrouter_byok") {
+      const embeddedIssue = openRouterEmbeddedIssueKind(response.body);
+      if (embeddedIssue) return { kind: "error", issueKind: embeddedIssue, message: openRouterConnectionFailureMessage(embeddedIssue, status) };
     }
     if (!hasAssistantContent(typeof response.body === "string" ? response.body : "")) {
-      return { kind: "error", message: "Provider responded, but no assistant message was returned." };
+      return { kind: "error", issueKind: "provider", message: "Provider responded, but no assistant message was returned." };
     }
     const latencyMs = typeof response.latencyMs === "number" && Number.isFinite(response.latencyMs) ? response.latencyMs : 0;
     return { kind: "success", message: `Connected in ${latencyMs} ms.` };
   } catch (error) {
+    const message = messageFromConnectionError(error);
     return {
       kind: "error",
-      message: messageFromConnectionError(error),
+      issueKind: aiConnectionIssueKindFromMessage(message),
+      message,
     };
   }
+}
+
+function retryAfterResult(value: unknown): { readonly retryAfterMs: number } | Record<string, never> {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return {};
+  return { retryAfterMs: Math.round(value) };
 }
 
 function managedLocalProviderFromSetup(setup: LocalAiSetupState): Extract<LocalAiProviderConfig, { readonly provider: "managed_local" }> | null {

@@ -67,6 +67,15 @@ pub(super) fn normalize_runtime_status(
         return Ok(running);
     }
 
+    if process::stop_child_if_start_timed_out(spec.id)? {
+        return Ok(status_for_model_error(
+            spec,
+            artifact_dir,
+            "Managed local AI runtime did not become ready within two minutes.",
+            ManagedAiStatusErrorKind::RuntimeFailed,
+        ));
+    }
+
     if process::child_alive_for_model(spec.id)? {
         return Ok(status_for_spec(
             ManagedAiInstallState::Starting,
@@ -80,11 +89,11 @@ pub(super) fn normalize_runtime_status(
         status.state,
         ManagedAiInstallState::Starting | ManagedAiInstallState::Running
     ) {
-        return Ok(status_for_spec(
-            ManagedAiInstallState::Error,
+        return Ok(status_for_model_error(
             spec,
             artifact_dir,
             "Managed local AI runtime is not running.",
+            ManagedAiStatusErrorKind::RuntimeFailed,
         ));
     }
 
@@ -129,4 +138,9 @@ pub(super) fn stop_runtime_for_tests() {
 #[cfg(test)]
 pub(super) fn set_runtime_listener_pids_for_tests(pids: Option<Vec<u32>>) {
     process::set_runtime_listener_pids_for_tests(pids);
+}
+
+#[cfg(test)]
+pub(super) fn age_tracked_child_for_tests(age: std::time::Duration) {
+    process::age_tracked_child_for_tests(age);
 }

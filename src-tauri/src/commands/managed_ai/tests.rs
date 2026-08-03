@@ -1,13 +1,18 @@
 use std::path::{Path, PathBuf};
 
 use super::{
-    install_model_at_root_with_downloader, managed_ai_catalog, model_dir, read_status,
-    require_model, runtime, start_model_at_root, status_for_spec, write_status,
+    install_model_at_root_with_downloader, managed_ai_catalog, model_dir, model_resource_failure,
+    read_status, require_model, runtime, start_model_at_root, status_for_spec, write_status,
     DownloadProgressWriteGate, ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState,
     ManagedAiModelSpec, ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 mod runtime_tests;
+
+#[cfg(test)]
+fn set_machine_memory_bytes_for_tests(bytes: Option<u64>) {
+    super::hardware::set_machine_memory_bytes_for_tests(bytes);
+}
 
 #[test]
 fn catalog_uses_current_local_models() {
@@ -23,6 +28,23 @@ fn catalog_uses_current_local_models() {
 }
 
 #[test]
+fn catalog_pins_model_artifacts_with_exact_sizes_and_sha256() {
+    for model in managed_ai_catalog() {
+        let spec = require_model(&model.id).expect("catalog model has spec");
+        assert!(spec.download_url.contains("/resolve/"));
+        assert!(!spec.download_url.contains("/resolve/main/"));
+        assert_eq!(spec.expected_sha256.len(), 64);
+        assert!(spec
+            .expected_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit()));
+        assert!(spec.expected_size_bytes > 0);
+    }
+    let gemma = require_model("drifty-gemma-4-12b-local").expect("Gemma spec");
+    assert_eq!(gemma.expected_size_bytes, 7_121_861_440);
+}
+
+#[test]
 fn catalog_fit_matrix_matches_machine_memory() {
     const GIB: u64 = 1024 * 1024 * 1024;
     let fit_labels = |machine: u64| {
@@ -32,9 +54,18 @@ fn catalog_fit_matrix_matches_machine_memory() {
             .collect::<Vec<_>>()
     };
 
-    assert_eq!(fit_labels(8 * GIB), vec!["good", "tight", "insufficient", "insufficient"]);
-    assert_eq!(fit_labels(16 * GIB), vec!["good", "good", "tight", "insufficient"]);
-    assert_eq!(fit_labels(32 * GIB), vec!["good", "good", "good", "insufficient"]);
+    assert_eq!(
+        fit_labels(8 * GIB),
+        vec!["good", "tight", "insufficient", "insufficient"]
+    );
+    assert_eq!(
+        fit_labels(16 * GIB),
+        vec!["good", "good", "tight", "insufficient"]
+    );
+    assert_eq!(
+        fit_labels(32 * GIB),
+        vec!["good", "good", "good", "insufficient"]
+    );
     assert_eq!(fit_labels(36 * GIB), vec!["good", "good", "good", "tight"]);
     assert_eq!(fit_labels(48 * GIB), vec!["good", "good", "good", "good"]);
 }
@@ -49,9 +80,18 @@ fn catalog_recommends_best_fitting_model_for_machine() {
             .map(|model| model.id)
     };
 
-    assert_eq!(recommended_id(8 * GIB).as_deref(), Some("drifty-qwen3-5-2b-economy"));
-    assert_eq!(recommended_id(16 * GIB).as_deref(), Some("drifty-qwen3-5-4b-default"));
-    assert_eq!(recommended_id(64 * GIB).as_deref(), Some("drifty-qwen3-5-4b-default"));
+    assert_eq!(
+        recommended_id(8 * GIB).as_deref(),
+        Some("drifty-qwen3-5-2b-economy")
+    );
+    assert_eq!(
+        recommended_id(16 * GIB).as_deref(),
+        Some("drifty-qwen3-5-4b-default")
+    );
+    assert_eq!(
+        recommended_id(64 * GIB).as_deref(),
+        Some("drifty-qwen3-5-4b-default")
+    );
 }
 
 #[test]
@@ -63,7 +103,9 @@ fn catalog_without_machine_memory_keeps_static_recommendation_and_no_fit() {
         .expect("static recommendation preserved");
 
     assert_eq!(recommended.id, "drifty-qwen3-5-4b-default");
-    assert!(models.iter().all(|model| model.fit.is_none() && model.fit_detail.is_none()));
+    assert!(models
+        .iter()
+        .all(|model| model.fit.is_none() && model.fit_detail.is_none()));
 }
 
 #[test]
@@ -71,21 +113,30 @@ fn catalog_fit_detail_explains_tight_and_insufficient_models() {
     const GIB: u64 = 1024 * 1024 * 1024;
     let models = super::catalog_for_machine(Some(16 * GIB));
 
-    let gemma = models.iter().find(|model| model.id == "drifty-gemma-4-12b-local").expect("gemma");
+    let gemma = models
+        .iter()
+        .find(|model| model.id == "drifty-gemma-4-12b-local")
+        .expect("gemma");
     assert_eq!(gemma.fit.as_deref(), Some("tight"));
     assert_eq!(
         gemma.fit_detail.as_deref(),
         Some("May be slow and heavy alongside other apps on a 16 GB Mac.")
     );
 
-    let smart = models.iter().find(|model| model.id == "drifty-qwen3-6-27b-smart").expect("smart");
+    let smart = models
+        .iter()
+        .find(|model| model.id == "drifty-qwen3-6-27b-smart")
+        .expect("smart");
     assert_eq!(smart.fit.as_deref(), Some("insufficient"));
     assert_eq!(
         smart.fit_detail.as_deref(),
         Some("Needs at least 36 GB of memory — this Mac has 16 GB.")
     );
 
-    let default = models.iter().find(|model| model.id == "drifty-qwen3-5-4b-default").expect("default");
+    let default = models
+        .iter()
+        .find(|model| model.id == "drifty-qwen3-5-4b-default")
+        .expect("default");
     assert_eq!(default.fit.as_deref(), Some("good"));
     assert!(default.fit_detail.is_none());
 }
@@ -174,6 +225,57 @@ fn install_reports_global_error_for_non_download_failures() {
 }
 
 #[test]
+fn resource_preflight_reports_insufficient_memory_for_the_selected_model() {
+    let spec = require_model("drifty-qwen3-6-27b-smart").expect("model spec");
+    let failure = model_resource_failure(spec, Some(16 * 1024 * 1024 * 1024), Some(u64::MAX))
+        .expect("memory failure");
+
+    assert!(matches!(
+        failure.error_kind,
+        ManagedAiStatusErrorKind::InsufficientMemory
+    ));
+    assert!(failure.message.contains("requires more memory"));
+    assert_eq!(failure.required_bytes, 36 * 1024 * 1024 * 1024);
+    assert_eq!(failure.available_bytes, 16 * 1024 * 1024 * 1024);
+}
+
+#[test]
+fn resource_preflight_reports_insufficient_storage_before_download() {
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let failure = model_resource_failure(spec, Some(16 * 1024 * 1024 * 1024), Some(1024))
+        .expect("storage failure");
+
+    assert!(matches!(
+        failure.error_kind,
+        ManagedAiStatusErrorKind::InsufficientStorage
+    ));
+    assert!(failure.message.contains("Not enough free storage"));
+    assert_eq!(failure.required_bytes, 6 * 1024 * 1024 * 1024);
+    assert_eq!(failure.available_bytes, 1024);
+}
+
+#[test]
+fn storage_full_io_errors_keep_the_model_and_a_typed_recovery() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let status = install_model_at_root_with_downloader(
+        root.path(),
+        "drifty-qwen3-5-4b-default",
+        storage_full_download,
+        None,
+    )
+    .expect("install model");
+
+    assert_eq!(
+        status.selected_model_id.as_deref(),
+        Some("drifty-qwen3-5-4b-default")
+    );
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::InsufficientStorage)
+    ));
+}
+
+#[test]
 fn install_records_downloader_reported_progress_before_marking_installed() {
     let root = tempfile::tempdir().expect("create temp root");
     let status = install_model_at_root_with_downloader(
@@ -205,8 +307,13 @@ fn install_records_downloader_reported_progress_before_marking_installed() {
 #[test]
 fn install_tracks_multiple_downloaded_models() {
     let root = tempfile::tempdir().expect("create temp root");
-    install_model_at_root_with_downloader(root.path(), "drifty-qwen3-5-4b-default", fake_download, None)
-        .expect("install default model");
+    install_model_at_root_with_downloader(
+        root.path(),
+        "drifty-qwen3-5-4b-default",
+        fake_download,
+        None,
+    )
+    .expect("install default model");
 
     let status = install_model_at_root_with_downloader(
         root.path(),
@@ -309,7 +416,8 @@ fn fake_download(
 ) -> Result<PathBuf, ManagedAiError> {
     let artifact_dir = model_dir(root, spec.id);
     std::fs::create_dir_all(&artifact_dir)?;
-    std::fs::write(artifact_dir.join(spec.file_name), b"gguf")?;
+    let file = std::fs::File::create(artifact_dir.join(spec.file_name))?;
+    file.set_len(spec.expected_size_bytes)?;
     Ok(artifact_dir)
 }
 
@@ -393,4 +501,12 @@ fn storage_failing_download(
     _progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
 ) -> Result<PathBuf, ManagedAiError> {
     Err(std::io::Error::new(std::io::ErrorKind::Other, "disk full").into())
+}
+
+fn storage_full_download(
+    _root: &Path,
+    _spec: ManagedAiModelSpec,
+    _progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
+    Err(std::io::Error::from_raw_os_error(28).into())
 }

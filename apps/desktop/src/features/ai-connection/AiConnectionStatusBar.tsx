@@ -12,6 +12,8 @@ export type AiConnectionStatus = {
   readonly label: string;
   readonly providerLabel: string;
   readonly memoryLabel: string | null;
+  /** Machine-readable cause for recovery copy; null for healthy/setup states. */
+  readonly issueKind: AiConnectionIssueKind | null;
   readonly activity?: AiConnectionActivity;
 };
 
@@ -43,6 +45,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
       label: labelForIssueKind(input.classificationIssueKind),
       providerLabel: input.localProviderLabel ?? "Drifty Cloud",
       memoryLabel: memoryLabelForLocalProvider(input),
+      issueKind: input.classificationIssueKind,
     };
   }
 
@@ -56,6 +59,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
       label: "Classifying…",
       providerLabel: remainingLabel ?? input.localProviderLabel ?? "Drifty Cloud",
       memoryLabel: memoryLabelForLocalProvider(input),
+      issueKind: null,
       activity: "classifying",
     };
   }
@@ -67,6 +71,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
         label: "Connected",
         providerLabel: input.localProviderLabel ?? "Local AI",
         memoryLabel: memoryLabelForLocalProvider(input),
+        issueKind: null,
       };
     case "failed":
       return {
@@ -74,6 +79,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
         label: labelForIssueKind(input.localProviderStatus.issueKind),
         providerLabel: input.localProviderLabel ?? "Local AI",
         memoryLabel: memoryLabelForLocalProvider(input),
+        issueKind: input.localProviderStatus.issueKind,
       };
     case "checking":
       return {
@@ -81,6 +87,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
         label: "Checking",
         providerLabel: input.localProviderLabel ?? "Local AI",
         memoryLabel: memoryLabelForLocalProvider(input),
+        issueKind: null,
       };
     case "unconfigured":
       break;
@@ -94,6 +101,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
       label: "Connected",
       providerLabel: "Drifty Cloud",
       memoryLabel: null,
+      issueKind: null,
     };
   }
 
@@ -103,6 +111,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
       label: labelForIssueKind(input.cloudIssueKind),
       providerLabel: "Drifty Cloud",
       memoryLabel: null,
+      issueKind: input.cloudIssueKind,
     };
   }
 
@@ -111,6 +120,7 @@ export function resolveAiConnectionStatus(input: AiConnectionStatusInput): AiCon
     label: "AI setup needed",
     providerLabel: "Open settings",
     memoryLabel: null,
+    issueKind: null,
   };
 }
 
@@ -163,7 +173,13 @@ function formatMemoryUsageLabel(memoryUsageBytes: number | null): string | null 
 function toneForIssueKind(issueKind: AiConnectionIssueKind): AiConnectionTone {
   switch (issueKind) {
     case "network":
+    case "rate_limited":
+    case "unavailable":
       return "warning";
+    case "authentication":
+    case "credits":
+    case "access":
+    case "model_unavailable":
     case "provider":
       return "error";
     default:
@@ -175,6 +191,18 @@ function labelForIssueKind(issueKind: AiConnectionIssueKind): string {
   switch (issueKind) {
     case "network":
       return "Connection issue";
+    case "authentication":
+      return "Key issue";
+    case "credits":
+      return "Credits needed";
+    case "access":
+      return "Access blocked";
+    case "model_unavailable":
+      return "Model unavailable";
+    case "rate_limited":
+      return "Rate limited";
+    case "unavailable":
+      return "Provider unavailable";
     case "provider":
       return "Issue";
     default:

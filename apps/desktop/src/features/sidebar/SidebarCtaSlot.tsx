@@ -37,6 +37,17 @@ type SidebarCtaActionState = {
   readonly tone: SidebarCtaSlotTone;
 };
 
+type SidebarCtaAiState = SidebarCtaActionState & {
+  readonly kind: "ai";
+  readonly providerLabel: string;
+  readonly requiredResourceBytes: number | null;
+  readonly availableResourceBytes: number | null;
+};
+
+type SidebarCtaNonAiActionState = SidebarCtaActionState & {
+  readonly kind: Exclude<SidebarCtaActionState["kind"], "ai">;
+};
+
 type SidebarCtaDownloadState = {
   readonly alert: null;
   readonly downloadSizeLabel: string | null;
@@ -48,16 +59,18 @@ type SidebarCtaDownloadState = {
   readonly tone: "download";
 };
 
-export type SidebarCtaSlotState = SidebarCtaActionState | SidebarCtaDownloadState;
+export type SidebarCtaSlotState = SidebarCtaAiState | SidebarCtaNonAiActionState | SidebarCtaDownloadState;
 
 type ResolveSidebarCtaSlotInput = {
-  readonly aiStatus: Pick<AiConnectionStatus, "label" | "tone">;
+  readonly aiStatus: Pick<AiConnectionStatus, "issueKind" | "label" | "providerLabel" | "tone">;
   readonly billingCheckoutLoading: boolean;
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
   readonly localAiProvider: LocalAiProvider;
   readonly localAiConfigured: boolean;
+  /** True only after the configured provider has failed consecutive health checks. */
+  readonly localAiDisconnectConfirmed: boolean;
   readonly managedLocalAiStatus?: ManagedLocalAiStatus | null;
   readonly now?: number;
 };
@@ -89,21 +102,35 @@ export function resolveSidebarCtaSlot({
   billingEntitlementLoading,
   localAiProvider,
   localAiConfigured,
+  localAiDisconnectConfirmed,
   managedLocalAiStatus = null,
   now = Date.now(),
 }: ResolveSidebarCtaSlotInput): SidebarCtaSlotState | null {
   const managedDownload = managedLocalDownloadState(managedLocalAiStatus);
   if (managedDownload) return managedDownload;
+  const managedError = localAiProvider === "managed_local"
+    ? managedLocalErrorState(managedLocalAiStatus)
+    : null;
+  if (managedError) return managedError;
 
-  const aiDisconnected = aiStatus.label !== "AI setup needed"
+  const aiDisconnected = aiStatus.issueKind !== null
     && (aiStatus.tone === "error" || aiStatus.tone === "warning");
+  const sidebarRecoveryNeeded = aiDisconnected && isSidebarRecoveryIssue(aiStatus.issueKind);
   const usesExternalProvider = localAiProvider === "openrouter_byok" || localAiProvider === "self_hosted";
 
   // BYOK and self-hosted users have deliberately chosen inference outside
   // Drifty Cloud. Keep every Cloud monetization state out of their sidebar,
   // while still giving a broken provider a direct recovery path.
   if (usesExternalProvider) {
-    return localAiConfigured && aiDisconnected ? aiDisconnectedState() : null;
+    return localAiConfigured
+      && sidebarRecoveryNeeded
+      && (aiStatus.issueKind !== "network" || localAiDisconnectConfirmed)
+      ? aiDisconnectedState(
+        aiStatus.issueKind,
+        aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
+        true,
+      )
+      : null;
   }
 
   if (billingEntitlement?.status === "locked") {
@@ -144,7 +171,15 @@ export function resolveSidebarCtaSlot({
   const unresolvedBillingFailure = billingEntitlement === null
     && billingEntitlementError !== null
     && !localAiConfigured;
-  if (aiDisconnected && !unresolvedBillingFailure) return aiDisconnectedState();
+  const confirmedAiDisconnection = sidebarRecoveryNeeded
+    && (!localAiConfigured || aiStatus.issueKind !== "network" || localAiDisconnectConfirmed);
+  if (confirmedAiDisconnection && !unresolvedBillingFailure) {
+    return aiDisconnectedState(
+      aiStatus.issueKind,
+      aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
+      localAiConfigured,
+    );
+  }
   if (billingEntitlementLoading || (billingEntitlement === null && billingEntitlementError !== null)) return null;
 
   if (billingEntitlement?.status === "trialing") {
@@ -188,6 +223,91 @@ export function resolveSidebarCtaSlot({
   return null;
 }
 
+function managedLocalErrorState(status: ManagedLocalAiStatus | null): SidebarCtaAiState | null {
+  if (status?.state !== "error") return null;
+
+  switch (status.errorKind) {
+    case "download_failed":
+      return managedLocalRecoveryState(
+        "sidebar.cta.ai.localDownloadFailedTitle",
+        "sidebar.cta.ai.localDownloadFailedDetail",
+      );
+    case "model_artifact_missing":
+      return managedLocalRecoveryState(
+        "sidebar.cta.ai.localModelMissingTitle",
+        "sidebar.cta.ai.localModelMissingDetail",
+      );
+    case "insufficient_memory":
+      return hasResourceSnapshot(status)
+        ? managedLocalRecoveryState(
+          "sidebar.cta.ai.localMemoryMeasuredTitle",
+          "sidebar.cta.ai.localMemoryMeasuredDetail",
+          status.requiredResourceBytes,
+          status.availableResourceBytes,
+        )
+        : managedLocalRecoveryState(
+          "sidebar.cta.ai.localMemoryTitle",
+          "sidebar.cta.ai.localMemoryDetail",
+        );
+    case "insufficient_storage":
+      return hasResourceSnapshot(status)
+        ? managedLocalRecoveryState(
+          "sidebar.cta.ai.localStorageMeasuredTitle",
+          "sidebar.cta.ai.localStorageMeasuredDetail",
+          status.requiredResourceBytes,
+          status.availableResourceBytes,
+        )
+        : managedLocalRecoveryState(
+          "sidebar.cta.ai.localStorageTitle",
+          "sidebar.cta.ai.localStorageDetail",
+        );
+    case "runtime_missing":
+      return managedLocalRecoveryState(
+        "sidebar.cta.ai.localRuntimeMissingTitle",
+        "sidebar.cta.ai.localRuntimeMissingDetail",
+      );
+    case "runtime_failed":
+      return managedLocalRecoveryState(
+        "sidebar.cta.ai.localRuntimeFailedTitle",
+        "sidebar.cta.ai.localRuntimeFailedDetail",
+      );
+    case null:
+      return null;
+    default:
+      return assertNever(status.errorKind);
+  }
+}
+
+function hasResourceSnapshot(status: ManagedLocalAiStatus): status is ManagedLocalAiStatus & {
+  readonly requiredResourceBytes: number;
+  readonly availableResourceBytes: number;
+} {
+  return typeof status.requiredResourceBytes === "number"
+    && typeof status.availableResourceBytes === "number";
+}
+
+function managedLocalRecoveryState(
+  titleKey: TranslationKey,
+  copyKey: TranslationKey,
+  requiredResourceBytes: number | null = null,
+  availableResourceBytes: number | null = null,
+): SidebarCtaAiState {
+  return {
+    actionLabelKey: "sidebar.cta.ai.action",
+    alert: "critical",
+    copyKey,
+    direction: "forward",
+    disabled: false,
+    kind: "ai",
+    providerLabel: "Local AI",
+    requiredResourceBytes,
+    availableResourceBytes,
+    titleKey,
+    titleEmphasisCount: null,
+    tone: "ai",
+  };
+}
+
 function managedLocalDownloadState(status: ManagedLocalAiStatus | null): SidebarCtaDownloadState | null {
   if (status?.state !== "installing") return null;
   const model = MANAGED_LOCAL_AI_FALLBACK_CATALOG.find((candidate) => candidate.id === status.selectedModelId) ?? null;
@@ -205,18 +325,74 @@ function managedLocalDownloadState(status: ManagedLocalAiStatus | null): Sidebar
   };
 }
 
-function aiDisconnectedState(): SidebarCtaSlotState {
+function aiDisconnectedState(
+  issueKind: NonNullable<AiConnectionStatus["issueKind"]>,
+  providerLabel: string,
+  automaticRetry: boolean,
+): SidebarCtaAiState {
+  const copy = aiRecoveryCopy(issueKind, automaticRetry);
   return {
     actionLabelKey: "sidebar.cta.ai.action",
     alert: "critical",
-    copyKey: "sidebar.cta.ai.detail",
+    copyKey: copy.detail,
     direction: "forward",
     disabled: false,
     kind: "ai",
-    titleKey: "sidebar.cta.ai.title",
+    providerLabel,
+    requiredResourceBytes: null,
+    availableResourceBytes: null,
+    titleKey: copy.title,
     titleEmphasisCount: null,
     tone: "ai",
   };
+}
+
+function isSidebarRecoveryIssue(issueKind: AiConnectionStatus["issueKind"]): boolean {
+  return issueKind !== null && issueKind !== "rate_limited" && issueKind !== "unavailable";
+}
+
+function aiRecoveryCopy(
+  issueKind: NonNullable<AiConnectionStatus["issueKind"]>,
+  automaticRetry: boolean,
+): { readonly title: TranslationKey; readonly detail: TranslationKey } {
+  switch (issueKind) {
+    case "network":
+      return {
+        title: "sidebar.cta.ai.networkTitle",
+        detail: automaticRetry ? "sidebar.cta.ai.networkRetryDetail" : "sidebar.cta.ai.networkDetail",
+      };
+    case "authentication":
+      return { title: "sidebar.cta.ai.authenticationTitle", detail: "sidebar.cta.ai.authenticationDetail" };
+    case "credits":
+      return { title: "sidebar.cta.ai.creditsTitle", detail: "sidebar.cta.ai.creditsDetail" };
+    case "access":
+      return { title: "sidebar.cta.ai.accessTitle", detail: "sidebar.cta.ai.accessDetail" };
+    case "model_unavailable":
+      return { title: "sidebar.cta.ai.modelUnavailableTitle", detail: "sidebar.cta.ai.modelUnavailableDetail" };
+    case "provider":
+      return { title: "sidebar.cta.ai.providerTitle", detail: "sidebar.cta.ai.providerDetail" };
+    case "rate_limited":
+    case "unavailable":
+      throw new SidebarCtaSlotError(`Transient issue cannot create a sidebar recovery: ${issueKind}`);
+    default:
+      return assertNever(issueKind);
+  }
+}
+
+function aiRecoveryProviderLabel(
+  localAiProvider: LocalAiProvider,
+  localAiConfigured: boolean,
+): string {
+  if (!localAiConfigured) return "Drifty Cloud";
+  switch (localAiProvider) {
+    case "openrouter_byok":
+      return "OpenRouter";
+    case "managed_local":
+    case "self_hosted":
+      return "Local AI";
+    default:
+      return assertNever(localAiProvider);
+  }
 }
 
 function trialEndedState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
@@ -233,6 +409,17 @@ function trialEndedState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
   };
 }
 
+function assertNever(value: never): never {
+  throw new SidebarCtaSlotError(String(value));
+}
+
+class SidebarCtaSlotError extends Error {
+  constructor(value: string) {
+    super(`Unhandled sidebar AI provider: ${value}`);
+    this.name = "SidebarCtaSlotError";
+  }
+}
+
 export function SidebarCtaSlot({
   onDismiss,
   onAction,
@@ -242,7 +429,7 @@ export function SidebarCtaSlot({
   readonly onAction: () => void;
   readonly state: SidebarCtaSlotState;
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   if (state.kind === "download") {
     const title = t(state.titleKey);
     const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");
@@ -284,8 +471,19 @@ export function SidebarCtaSlot({
   }
 
   const actionLabel = t(state.actionLabelKey);
-  const copy = t(state.copyKey);
-  const title = t(state.titleKey);
+  const interpolationParams = state.kind === "ai"
+    ? {
+      provider: state.providerLabel,
+      ...(state.requiredResourceBytes !== null
+        ? { required: formatResourceCapacity(state.requiredResourceBytes, effectiveLanguage) }
+        : {}),
+      ...(state.availableResourceBytes !== null
+        ? { available: formatResourceCapacity(state.availableResourceBytes, effectiveLanguage) }
+        : {}),
+    }
+    : undefined;
+  const copy = t(state.copyKey, interpolationParams);
+  const title = t(state.titleKey, interpolationParams);
   const titleEmphasis = state.titleEmphasisCount === null
     ? null
     : t(state.titleEmphasisCount === 1 ? "sidebar.cta.trial.day" : "sidebar.cta.trial.days", { count: state.titleEmphasisCount });
@@ -357,4 +555,11 @@ export function SidebarCtaSlot({
       ) : null}
     </div>
   );
+}
+
+function formatResourceCapacity(bytes: number, language: "en" | "ko"): string {
+  const gibibytes = bytes / (1024 ** 3);
+  const rounded = Math.round(gibibytes * 10) / 10;
+  const locale = language === "ko" ? "ko-KR" : "en-US";
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rounded)} GB`;
 }

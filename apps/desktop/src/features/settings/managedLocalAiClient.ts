@@ -18,7 +18,13 @@ export type ManagedLocalAiInstalledModel = {
   readonly artifactDir: string;
 };
 
-export type ManagedLocalAiStatusErrorKind = "download_failed" | "model_artifact_missing";
+export type ManagedLocalAiStatusErrorKind =
+  | "download_failed"
+  | "model_artifact_missing"
+  | "insufficient_memory"
+  | "insufficient_storage"
+  | "runtime_missing"
+  | "runtime_failed";
 
 export type ManagedLocalAiStatus = {
   readonly state: ManagedLocalAiInstallState;
@@ -31,6 +37,9 @@ export type ManagedLocalAiStatus = {
   readonly progress: ManagedLocalAiDownloadProgress | null;
   readonly errorKind: ManagedLocalAiStatusErrorKind | null;
   readonly memoryUsageBytes: number | null;
+  /** Present on structured resource preflight failures; optional for legacy fixtures/status files. */
+  readonly requiredResourceBytes?: number | null;
+  readonly availableResourceBytes?: number | null;
 };
 
 export async function listManagedLocalAiModels(): Promise<readonly ManagedLocalAiModel[]> {
@@ -55,7 +64,7 @@ export async function deleteManagedLocalAiModel(modelId: string): Promise<Manage
 }
 
 export function fallbackManagedLocalAiStatus(message: string): ManagedLocalAiStatus {
-  return { state: "error", selectedModelId: null, installedModels: [], baseUrl: null, model: null, message, artifactDir: null, progress: null, errorKind: null, memoryUsageBytes: null };
+  return { state: "error", selectedModelId: null, installedModels: [], baseUrl: null, model: null, message, artifactDir: null, progress: null, errorKind: null, memoryUsageBytes: null, requiredResourceBytes: null, availableResourceBytes: null };
 }
 
 export function installingManagedLocalAiStatus(modelId: string, installedModels: readonly ManagedLocalAiInstalledModel[] = []): ManagedLocalAiStatus {
@@ -70,6 +79,8 @@ export function installingManagedLocalAiStatus(modelId: string, installedModels:
     progress: null,
     errorKind: null,
     memoryUsageBytes: null,
+    requiredResourceBytes: null,
+    availableResourceBytes: null,
   };
 }
 
@@ -105,7 +116,14 @@ export function parseManagedLocalAiStatus(value: unknown): ManagedLocalAiStatus 
     progress: parseProgress(value.progress),
     errorKind: parseErrorKind(value.errorKind),
     memoryUsageBytes: parseMemoryUsageBytes(value.memoryUsageBytes),
+    requiredResourceBytes: parseResourceBytes(value.requiredResourceBytes),
+    availableResourceBytes: parseResourceBytes(value.availableResourceBytes),
   };
+}
+
+function parseResourceBytes(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return Math.round(value);
 }
 
 function parseMemoryUsageBytes(value: unknown): number | null {
@@ -137,7 +155,17 @@ function parseProgress(value: unknown): ManagedLocalAiDownloadProgress | null {
 }
 
 function parseErrorKind(value: unknown): ManagedLocalAiStatusErrorKind | null {
-  return value === "download_failed" || value === "model_artifact_missing" ? value : null;
+  switch (value) {
+    case "download_failed":
+    case "model_artifact_missing":
+    case "insufficient_memory":
+    case "insufficient_storage":
+    case "runtime_missing":
+    case "runtime_failed":
+      return value;
+    default:
+      return null;
+  }
 }
 
 function parseFit(value: unknown): ManagedLocalAiModelFit | null {

@@ -217,6 +217,7 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
+import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
@@ -299,6 +300,29 @@ function isRendererFocused(): boolean {
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
+}
+
+function managedLocalAiTopbarLabel(status: ManagedLocalAiStatus | null): string | null {
+  if (status?.state !== "error") return null;
+
+  switch (status.errorKind) {
+    case "download_failed":
+      return "Download failed";
+    case "model_artifact_missing":
+      return "Model missing";
+    case "insufficient_memory":
+      return "Memory needed";
+    case "insufficient_storage":
+      return "Storage needed";
+    case "runtime_missing":
+      return "Runtime missing";
+    case "runtime_failed":
+      return "Start failed";
+    case null:
+      return "Issue";
+    default:
+      return assertNever(status.errorKind);
+  }
 }
 
 export default function App() {
@@ -1090,9 +1114,28 @@ export default function App() {
   // Dev preview feeds the same resolver a synthetic input instead of swapping in
   // a canned state, so what you see is the production branching.
   const isSidebarCtaPreviewActive = isDevModeActive && sidebarCtaPreviewCase !== null;
+  const sidebarCtaPreviewInput = isSidebarCtaPreviewActive && sidebarCtaPreviewCase
+    ? buildSidebarCtaPreviewInput(sidebarCtaPreviewCase, Date.now())
+    : null;
+  const managedLocalTopbarLabel = sidebarCtaPreviewInput
+    ? managedLocalAiTopbarLabel(sidebarCtaPreviewInput.managedLocalAiStatus)
+    : isManagedLocalAiRoute(localAiSetup)
+      ? managedLocalAiTopbarLabel(managedLocalAiStatus)
+      : null;
+  const effectiveAiConnectionStatus = managedLocalTopbarLabel
+    ? {
+      tone: "error" as const,
+      label: managedLocalTopbarLabel,
+      providerLabel: "Local AI",
+      memoryLabel: sidebarCtaPreviewInput ? null : aiConnectionStatus.memoryLabel,
+      issueKind: "provider" as const,
+    }
+    : sidebarCtaPreviewInput
+      ? { ...sidebarCtaPreviewInput.aiStatus, memoryLabel: null }
+      : aiConnectionStatus;
   const sidebarCtaSlot = resolveSidebarCtaSlot(
-    isSidebarCtaPreviewActive && sidebarCtaPreviewCase
-      ? buildSidebarCtaPreviewInput(sidebarCtaPreviewCase, Date.now())
+    sidebarCtaPreviewInput
+      ? sidebarCtaPreviewInput
       : {
         aiStatus: aiConnectionStatus,
         billingCheckoutLoading: billingCheckoutLoadingInterval !== null,
@@ -1101,7 +1144,8 @@ export default function App() {
         billingEntitlementLoading,
         localAiProvider: localAiSetup.provider,
         localAiConfigured: localAiConnectionFingerprint !== null,
-        managedLocalAiStatus,
+        localAiDisconnectConfirmed: localAiConnectionPersistentFailure,
+        managedLocalAiStatus: isManagedLocalAiRoute(localAiSetup) ? managedLocalAiStatus : null,
       },
   );
   const sidebarUpgradeDismissed = !isSidebarCtaPreviewActive
@@ -5710,7 +5754,7 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+          <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
           {titlebarUpdate ? (
             <TopbarUpdateButton
               isInstalling={updaterInstalling}

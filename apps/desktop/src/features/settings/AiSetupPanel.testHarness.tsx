@@ -14,7 +14,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
     { id: "drifty-qwen3-5-2b-economy", tier: "economy", label: "Qwen 3.5 2B", detail: "Small local model.", downloadSize: "~1.4 GB", diskRequired: "3 GB free", minimumMemory: "8 GB RAM", estimatedRuntimeMemoryBytes: 2_147_483_648, recommended: false },
     { id: "drifty-qwen3-5-4b-default", tier: "default", label: "Qwen 3.5 4B", detail: "Recommended local model.", downloadSize: "~2.8 GB", diskRequired: "6 GB free", minimumMemory: "16 GB RAM", estimatedRuntimeMemoryBytes: 3_758_096_384, recommended: true },
     { id: "drifty-gemma-4-12b-local", tier: "gemma", label: "Gemma 4 12B", detail: "Current Gemma 4 12B local model.", downloadSize: "~7.2 GB", diskRequired: "15 GB free", minimumMemory: "16 GB RAM", estimatedRuntimeMemoryBytes: 9_288_286_208, recommended: false },
-    { id: "drifty-qwen3-6-27b-smart", tier: "smart", label: "Qwen 3.6 27B", detail: "Stronger local model.", downloadSize: "~15 GB", diskRequired: "30 GB free", minimumMemory: "36 GB RAM", estimatedRuntimeMemoryBytes: 19_864_223_744, recommended: false },
+    { id: "drifty-qwen3-6-27b-smart", tier: "smart", label: "Qwen 3.6 27B", detail: "Stronger local model.", downloadSize: "~16.8 GB", diskRequired: "30 GB free", minimumMemory: "36 GB RAM", estimatedRuntimeMemoryBytes: 19_864_223_744, recommended: false },
   ] as const;
   const defaultManagedStatus: ManagedLocalAiStatus = {
     state: "not_installed",
@@ -128,7 +128,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 export function renderPanel({
-  connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null },
+  connectionStatus = { tone: "ok", label: "Connected", providerLabel: "Cloud AI", memoryLabel: null, issueKind: null },
   currentBillingPlan = "individual",
   billingEntitlementStatus = "active",
   initialSetup = DEFAULT_LOCAL_AI_SETUP,

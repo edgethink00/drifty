@@ -28,6 +28,7 @@ describe("AiSetupPanel connection status", () => {
         label: "Connected",
         providerLabel: "Cloud AI",
         memoryLabel: null,
+        issueKind: null,
       },
     });
 
@@ -36,13 +37,14 @@ describe("AiSetupPanel connection status", () => {
   });
 
   it("keeps connected Cloud status as the model card source of truth while showing a failed manual probe", async () => {
-    testCloudAiConnectionMock.mockResolvedValueOnce({ kind: "error", message: "Old provider error" });
+    testCloudAiConnectionMock.mockResolvedValueOnce({ kind: "error", issueKind: "provider", message: "Old provider error" });
     renderPanel({
       connectionStatus: {
         tone: "ok",
         label: "Connected",
         providerLabel: "Cloud AI",
         memoryLabel: null,
+        issueKind: null,
       },
     });
 
@@ -55,13 +57,14 @@ describe("AiSetupPanel connection status", () => {
   });
 
   it("clears a stale Cloud probe error when Cloud AI becomes connected", async () => {
-    testCloudAiConnectionMock.mockResolvedValueOnce({ kind: "error", message: "Old provider error" });
+    testCloudAiConnectionMock.mockResolvedValueOnce({ kind: "error", issueKind: "provider", message: "Old provider error" });
     const { setConnectionStatus } = renderPanel({
       connectionStatus: {
         tone: "error",
         label: "AI setup needed",
         providerLabel: "Open settings",
         memoryLabel: null,
+        issueKind: null,
       },
     });
 
@@ -75,6 +78,7 @@ describe("AiSetupPanel connection status", () => {
         label: "Connected",
         providerLabel: "Cloud AI",
         memoryLabel: null,
+        issueKind: null,
       });
     });
 

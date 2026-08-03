@@ -52,4 +52,50 @@ describe("getManagedLocalAiStatus", () => {
 
     expect(status.memoryUsageBytes).toBeNull();
   });
+
+  it.each([
+    "download_failed",
+    "model_artifact_missing",
+    "insufficient_memory",
+    "insufficient_storage",
+    "runtime_missing",
+    "runtime_failed",
+  ] as const)("preserves the structured %s recovery kind", async (errorKind) => {
+    invokeMock.mockResolvedValue({
+      state: "error",
+      selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Managed local AI needs attention.",
+      artifactDir: null,
+      progress: null,
+      errorKind,
+      memoryUsageBytes: null,
+    });
+
+    await expect(getManagedLocalAiStatus()).resolves.toMatchObject({ errorKind });
+  });
+
+  it("preserves measured resource requirements for recovery copy", async () => {
+    invokeMock.mockResolvedValue({
+      state: "error",
+      selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Not enough free storage.",
+      artifactDir: null,
+      progress: null,
+      errorKind: "insufficient_storage",
+      memoryUsageBytes: null,
+      requiredResourceBytes: 6 * 1024 ** 3,
+      availableResourceBytes: 1.8 * 1024 ** 3,
+    });
+
+    await expect(getManagedLocalAiStatus()).resolves.toMatchObject({
+      requiredResourceBytes: 6 * 1024 ** 3,
+      availableResourceBytes: Math.round(1.8 * 1024 ** 3),
+    });
+  });
 });

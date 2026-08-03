@@ -171,6 +171,7 @@ describe("runAiClassification cloud contract", () => {
     reusable?: (fingerprints: string[]) => Record<string, ActivityClassificationRecord>;
     timeline?: ActivitySegment[];
     edgeResult?: Partial<ActivityClassificationRecord>;
+    nativeBody?: unknown;
     nativeStatus?: number;
     saveError?: Error;
   } = {}) {
@@ -203,7 +204,7 @@ describe("runAiClassification cloud contract", () => {
     });
     const nativeInvoke = vi.fn().mockResolvedValue({
       status: options.nativeStatus ?? 200,
-      body: JSON.stringify({
+      body: options.nativeBody === undefined ? JSON.stringify({
         choices: [{
           message: {
             content: JSON.stringify({
@@ -218,7 +219,7 @@ describe("runAiClassification cloud contract", () => {
           },
         }],
         usage: { prompt_tokens: 120, completion_tokens: 24 },
-      }),
+      }) : JSON.stringify(options.nativeBody),
       latencyMs: 321,
     });
 
@@ -1326,6 +1327,30 @@ describe("runAiClassification cloud contract", () => {
         model: "qwen/qwen3.6-flash",
         latencyMs: 321,
       })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("treats a typed OpenRouter error inside HTTP 200 as a transport failure", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, saveClassifications } = await importServiceWithSegments([segment], {
+        session: null,
+        nativeStatus: 200,
+        nativeBody: {
+          error: {
+            code: 402,
+            message: "Insufficient credits",
+            metadata: { error_type: "payment_required" },
+          },
+        },
+      });
+      await expect(runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "qwen/qwen3.6-flash" },
+      })).rejects.toThrow("OpenRouter credits are required");
+      expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
       cleanupServiceMocks();
     }

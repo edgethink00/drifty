@@ -59,7 +59,7 @@ export const MANAGED_LOCAL_AI_FALLBACK_CATALOG = [
     tier: "smart",
     label: "Qwen 3.6 27B",
     detail: "Most accurate classification — needs a powerful Mac and more memory.",
-    downloadSize: "~15 GB",
+    downloadSize: "~16.8 GB",
     diskRequired: "30 GB free",
     minimumMemory: "36 GB RAM",
     estimatedRuntimeMemoryBytes: 19_864_223_744,

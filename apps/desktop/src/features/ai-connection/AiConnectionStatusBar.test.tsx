@@ -127,6 +127,20 @@ describe("resolveAiConnectionStatus", () => {
     });
   });
 
+  it.each([
+    ["authentication", "error", "Key issue"],
+    ["credits", "error", "Credits needed"],
+    ["access", "error", "Access blocked"],
+    ["model_unavailable", "error", "Model unavailable"],
+    ["rate_limited", "warning", "Rate limited"],
+    ["unavailable", "warning", "Provider unavailable"],
+  ] as const)("renders a specific %s topbar state", (issueKind, tone, label) => {
+    expect(resolveAiConnectionStatus(statusInput({
+      localProviderStatus: { kind: "failed", issueKind },
+      localProviderLabel: "DeepSeek V4 Flash BYOK",
+    }))).toMatchObject({ issueKind, tone, label, providerLabel: "DeepSeek V4 Flash BYOK" });
+  });
+
   it("returns setup with an error tone when no AI provider is connected", () => {
     const status = resolveAiConnectionStatus(statusInput());
 
@@ -149,6 +163,7 @@ describe("AiConnectionStatusBar", () => {
           label: "Issue",
           providerLabel: "Gemma 4 12B",
           memoryLabel: null,
+          issueKind: "provider",
         }}
         onOpenSettings={onOpenSettings}
       />,
@@ -170,6 +185,7 @@ describe("AiConnectionStatusBar", () => {
           label: "Connection issue",
           providerLabel: "Drifty Cloud",
           memoryLabel: null,
+          issueKind: "network",
         }}
         onOpenSettings={onOpenSettings}
       />,
@@ -188,6 +204,7 @@ describe("AiConnectionStatusBar", () => {
           label: "Classifying…",
           providerLabel: "12 left",
           memoryLabel: null,
+          issueKind: null,
           activity: "classifying",
         }}
         onOpenSettings={vi.fn()}
@@ -208,6 +225,7 @@ describe("AiConnectionStatusBar", () => {
           label: "Connected",
           providerLabel: "Local AI",
           memoryLabel: "2.5 GB RAM",
+          issueKind: null,
         }}
         onOpenSettings={vi.fn()}
       />,

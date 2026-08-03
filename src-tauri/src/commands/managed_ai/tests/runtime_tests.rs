@@ -15,8 +15,27 @@ fn lock_runtime_globals() -> MutexGuard<'static, ()> {
         .unwrap_or_else(PoisonError::into_inner)
 }
 
+
+struct SufficientMemoryForTests;
+
+impl SufficientMemoryForTests {
+    fn pin() -> Self {
+        // CI runners can report <8 GiB, which would trip the product memory
+        // preflight before these runtime-path tests exercise their target.
+        super::set_machine_memory_bytes_for_tests(Some(16 * 1024 * 1024 * 1024));
+        Self
+    }
+}
+
+impl Drop for SufficientMemoryForTests {
+    fn drop(&mut self) {
+        super::set_machine_memory_bytes_for_tests(None);
+    }
+}
+
 #[test]
 fn start_requires_runtime_assets() {
+    let _memory = SufficientMemoryForTests::pin();
     let root = tempfile::tempdir().expect("create temp root");
     let status =
         start_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("start status");
@@ -31,6 +50,7 @@ fn start_requires_runtime_assets() {
 #[test]
 fn start_spawns_runtime_for_downloaded_model() {
     let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
     let root = tempfile::tempdir().expect("create temp root");
     let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
     fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
@@ -60,6 +80,30 @@ fn start_spawns_runtime_for_downloaded_model() {
     ] {
         assert!(args.contains(expected), "missing runtime arg {expected}");
     }
+}
+
+#[test]
+fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+    write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
+        .expect("write fake runtime");
+
+    let started = start_model_at_root(root.path(), spec.id).expect("start status");
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+    runtime::age_tracked_child_for_tests(Duration::from_secs(121));
+
+    let status = read_status(root.path()).expect("read timed-out runtime status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeFailed)
+    ));
+    assert!(status.message.contains("within two minutes"));
 }
 
 #[test]
@@ -146,6 +190,10 @@ fn read_status_downgrades_stale_running_without_runtime_process() {
 
     assert!(matches!(status.state, ManagedAiInstallState::Error));
     assert_eq!(status.message, "Managed local AI runtime is not running.");
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeFailed)
+    ));
 }
 
 #[test]
