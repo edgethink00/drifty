@@ -41,9 +41,9 @@ export type LocalAiConnectionEvent =
 // failures before tearing down an established "connected" state.
 export const CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD = 2;
 
-// The dashboard "AI provider disconnected" overlay is reserved for failures
-// confirmed by more than one probe, so a single failed launch test cannot
-// summon it before the automatic re-test has a chance to run.
+// Persistent disconnect status for chrome/status surfaces requires more than
+// one probe so a single failed launch test cannot flip the pill before the
+// automatic re-test has a chance to run.
 export const ESTABLISHED_DISCONNECT_FAILURE_THRESHOLD = 2;
 
 export function nextLocalAiConnectionCheck(

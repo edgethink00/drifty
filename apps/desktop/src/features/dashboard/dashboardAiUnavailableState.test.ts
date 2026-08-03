@@ -23,11 +23,10 @@ describe("resolveDashboardAiUnavailableState", () => {
       hasRequiredAccountAuth: true,
       isSupabaseConfigured: true,
       localAiReady: false,
-      observedAiClassificationFailure: false,
     })).toMatchObject({ variant: "trial-ended", title: "Free trial ended" });
   });
 
-  it("keeps billing, device, and provider recovery reasons distinct", () => {
+  it("keeps billing and device recovery reasons distinct", () => {
     const resolveLocked = (lockedReason: "payment_required" | "device_limit_reached") => resolveDashboardAiUnavailableState({
       billingEntitlement: { ...trialExpiredEntitlement, lockedReason },
       billingEntitlementError: null,
@@ -36,21 +35,10 @@ describe("resolveDashboardAiUnavailableState", () => {
       hasRequiredAccountAuth: true,
       isSupabaseConfigured: true,
       localAiReady: false,
-      observedAiClassificationFailure: false,
     });
 
     expect(resolveLocked("payment_required")?.variant).toBe("cloud-billing");
     expect(resolveLocked("device_limit_reached")?.variant).toBe("device-limit");
-    expect(resolveDashboardAiUnavailableState({
-      billingEntitlement: trialExpiredEntitlement,
-      billingEntitlementError: null,
-      billingEntitlementLoading: false,
-      canUseCloudAiClassification: false,
-      hasRequiredAccountAuth: true,
-      isSupabaseConfigured: true,
-      localAiReady: true,
-      observedAiClassificationFailure: true,
-    })?.variant).toBe("provider-disconnected");
   });
 
   it("stays quiet when cloud or local AI can run richer analysis", () => {
@@ -62,7 +50,6 @@ describe("resolveDashboardAiUnavailableState", () => {
       hasRequiredAccountAuth: true,
       isSupabaseConfigured: true,
       localAiReady: false,
-      observedAiClassificationFailure: false,
     })).toBeNull();
 
     expect(resolveDashboardAiUnavailableState({
@@ -73,7 +60,6 @@ describe("resolveDashboardAiUnavailableState", () => {
       hasRequiredAccountAuth: true,
       isSupabaseConfigured: true,
       localAiReady: true,
-      observedAiClassificationFailure: false,
     })).toBeNull();
   });
 });

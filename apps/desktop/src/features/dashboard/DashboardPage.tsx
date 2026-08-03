@@ -28,7 +28,6 @@ import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
-  readonly classificationActionLoading: boolean;
   readonly currentMinuteOfDay: number | null;
   readonly dashboardAiRecoveryState: DashboardAiUnavailableState | null;
   readonly dashboardAppUsage: AppUsagePanelItem[];
@@ -77,7 +76,6 @@ type DashboardPageProps = {
   readonly onDismissDashboardAiRecovery: () => void;
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
-  readonly onRetrySelectedDayAiClassification: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
   readonly onSelectDay: (day: string) => void;
 };
@@ -85,7 +83,6 @@ type DashboardPageProps = {
 export function DashboardPage({
   appIcons,
   billingCheckoutLoadingInterval,
-  classificationActionLoading,
   currentMinuteOfDay,
   dashboardAiRecoveryState,
   dashboardAppUsage,
@@ -131,7 +128,6 @@ export function DashboardPage({
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
   onOpenDashboardAiSetup,
-  onRetrySelectedDayAiClassification,
   onSelectBillingPlan,
   onSelectDay,
 }: DashboardPageProps) {
@@ -195,11 +191,9 @@ export function DashboardPage({
       {dashboardAiRecoveryState ? (
         <DashboardAiRecoveryOverlay
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-          retrying={classificationActionLoading}
           state={dashboardAiRecoveryState}
           onClose={onDismissDashboardAiRecovery}
           onOpenAiSetup={onOpenDashboardAiSetup}
-          onRetryAi={onRetrySelectedDayAiClassification}
           onSelectBillingPlan={onSelectBillingPlan}
         />
       ) : null}

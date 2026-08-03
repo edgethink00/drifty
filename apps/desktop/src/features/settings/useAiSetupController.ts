@@ -40,7 +40,7 @@ type UseAiSetupControllerResult = {
   readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
   readonly localAiConnectionFingerprint: string | null;
   readonly localAiConnectionProviderLabel: ReturnType<typeof localAiProviderLabel>;
-  /** True once the failure is confirmed by repeated probes — gates the heavy "AI provider disconnected" dashboard surfaces. */
+  /** True once the failure is confirmed by repeated probes — gates chrome/status disconnect surfaces. */
   readonly localAiConnectionPersistentFailure: boolean;
   readonly localAiMemoryUsageBytes: number | null;
   readonly localAiProviderStatus: LocalAiProviderStatus;

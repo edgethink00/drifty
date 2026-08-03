@@ -348,11 +348,6 @@
     padding: var(--space-4);
   }
 
-  .dashboard-ai-recovery__actions,
-  .dashboard-ai-recovery__actions .settings-btn {
-    width: 100%;
-  }
-
   .individual-plan-cards {
     grid-template-columns: 1fr;
   }
