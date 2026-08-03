@@ -4,7 +4,7 @@ import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventSty
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { logicalMinuteOfDay } from "@drifty/domain";
-import type { AppIconMap, CategoryDuration, ProductivityDuration } from "@drifty/domain";
+import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
@@ -13,6 +13,9 @@ import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
 import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
+import { CompactClassificationHoverCard } from "./HoverCards";
+import type { CompactClassificationHoverState } from "./HoverCards";
+import { buildWeekBreakdownHoverRows } from "./weekBreakdownHover";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -83,6 +86,8 @@ type WeekIdentityStripStyle = CSSProperties & {
 
 type WeekSideTrendSegment = {
   readonly key: string;
+  readonly label: string;
+  readonly seconds: number;
   readonly heightPercent: number;
   readonly color: string;
   readonly title: string;
@@ -91,6 +96,7 @@ type WeekSideTrendSegment = {
 type WeekSideTrendColumn = {
   readonly day: string;
   readonly dayLabel: string;
+  readonly totalSeconds: number;
   readonly off: boolean;
   readonly barHeightPercent: number;
   readonly segments: WeekSideTrendSegment[];
@@ -137,10 +143,13 @@ function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardCol
     return {
       day: row.day,
       dayLabel: row.dayName,
+      totalSeconds: row.totalSeconds,
       off,
       barHeightPercent: Math.min((row.totalSeconds / (axisMaxHours * 3600)) * 100, 100),
       segments: slices.map((slice) => ({
         key: slice.key,
+        label: slice.label,
+        seconds: slice.seconds,
         heightPercent: off ? 0 : (slice.seconds / row.totalSeconds) * 100,
         color: slice.color,
         title: `${slice.label} · ${formatCompactDurationFromSeconds(slice.seconds)}`,
@@ -157,6 +166,8 @@ type WeekDashboardProps = {
   readonly header?: ReactNode;
   readonly rows: WeekDayRow[];
   readonly calendarEvents: Map<string, WeekCalendarEvent[]>;
+  readonly segments: readonly ActivitySegment[];
+  readonly classificationOptions: ClassificationOptions;
   readonly appIcons: AppIconMap;
   readonly startDay: string;
   readonly endDay: string;
@@ -189,6 +200,8 @@ export function WeekDashboard({
   header,
   rows,
   calendarEvents,
+  segments,
+  classificationOptions,
   appIcons,
   startDay,
   endDay,
@@ -211,6 +224,7 @@ export function WeekDashboard({
   const sideOpen = controlledSideOpen ?? localSideOpen;
   const toggleSide = onToggleSide ?? (() => setLocalSideOpen((open) => !open));
   const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
+  const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
   // Element state (not just a ref) so the hover layer's delegation effect can
   // re-subscribe when the calendar body mounts.
   const [calendarBodyElement, setCalendarBodyElement] = useState<HTMLDivElement | null>(null);
@@ -227,6 +241,18 @@ export function WeekDashboard({
   const productivityRingEntries = buildProductivityRingEntries(productivityEntries);
   const productivityCenterPercent = buildProductivityCenterPercent(productivityEntries);
   const sideTrendChart = useMemo(() => buildWeekSideTrendChart(rows, colorMode), [colorMode, rows]);
+  const buildHoverRows = useCallback((key: string, mode: WeekDashboardColorMode, day?: string) => (
+    buildWeekBreakdownHoverRows({
+      segments,
+      classificationOptions,
+      startDay,
+      endDay,
+      startOfDayMinutes,
+      mode,
+      key,
+      day,
+    })
+  ), [classificationOptions, endDay, segments, startDay, startOfDayMinutes]);
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
@@ -348,7 +374,10 @@ export function WeekDashboard({
                     type="button"
                     className={option.id === colorMode ? "on" : undefined}
                     aria-pressed={option.id === colorMode}
-                    onClick={() => setColorMode(option.id)}
+                    onClick={() => {
+                      setBreakdownHover(null);
+                      setColorMode(option.id);
+                    }}
                   >
                     {option.label}
                   </button>
@@ -492,6 +521,7 @@ export function WeekDashboard({
             centerPercent={productivityCenterPercent}
             flowBlocks={[]}
             appIcons={appIcons}
+            getAppBreakdown={(entry) => buildHoverRows(entry.key, "productivity")}
           />
           <CompactClassificationBar<CategoryDuration>
             title="Categories"
@@ -502,7 +532,7 @@ export function WeekDashboard({
             getLabel={(entry) => categoryLabel(entry.category)}
             getColor={(entry) => CATEGORY_COLORS[entry.category]}
             getDotClassName={(entry) => `category-dot--${entry.category}`}
-            getAppBreakdown={() => []}
+            getAppBreakdown={(entry) => buildHoverRows(entry.category, "category")}
             appIcons={appIcons}
             visibleLimit={5}
           />
@@ -531,6 +561,37 @@ export function WeekDashboard({
                               style={{ height: `${segment.heightPercent.toFixed(2)}%`, background: segment.color }}
                               key={segment.key}
                               title={segment.title}
+                              tabIndex={0}
+                              role="img"
+                              aria-label={`${column.dayLabel} ${segment.title}`}
+                              onMouseEnter={(event) => setBreakdownHover({
+                                label: segment.label,
+                                durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+                                shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
+                                dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
+                                color: segment.color,
+                                disableRemoteFavicons: true,
+                                appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
+                                x: event.clientX,
+                                y: event.clientY,
+                              })}
+                              onMouseMove={(event) => setBreakdownHover((current) => current ? { ...current, x: event.clientX, y: event.clientY } : current)}
+                              onMouseLeave={() => setBreakdownHover(null)}
+                              onFocus={(event) => {
+                                const bounds = event.currentTarget.getBoundingClientRect();
+                                setBreakdownHover({
+                                  label: segment.label,
+                                  durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+                                  shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
+                                  dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
+                                  color: segment.color,
+                                  disableRemoteFavicons: true,
+                                  appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
+                                  x: bounds.left + bounds.width / 2,
+                                  y: bounds.top + bounds.height / 2,
+                                });
+                              }}
+                              onBlur={() => setBreakdownHover(null)}
                             />
                           ))}
                         </div>
@@ -543,6 +604,7 @@ export function WeekDashboard({
             </div>
           </section>
         </BreakdownSidePanel>
+        {breakdownHover ? <CompactClassificationHoverCard hover={breakdownHover} appIcons={appIcons} /> : null}
       </div>
     </section>
   );

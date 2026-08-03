@@ -31,6 +31,8 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       currentMinuteOfDay={4 * 60}
       dashboardAiRecoveryState={null}
       dashboardAppUsage={[]}
+      dashboardSegments={[]}
+      dashboardClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={[]}
       dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}

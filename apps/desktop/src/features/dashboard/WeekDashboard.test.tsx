@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { CategoryDuration, ProductivityDuration } from "@drifty/domain";
+import type { ActivitySegment, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 
@@ -19,8 +19,11 @@ const weekRows: WeekDayRow[] = [
   dayNumber: String(index + 1),
   focusScore: index === 2 ? 80 : 0,
   focusSeconds: index === 2 ? 3600 : 0,
-  slices: [],
-  productivitySlices: [],
+  slices: index === 2 ? [{ category: "workspace", ratio: 1, totalSeconds: 4500 }] : [],
+  productivitySlices: index === 2 ? [
+    { productivity: "focus", ratio: 0.8, totalSeconds: 3600 },
+    { productivity: "drift", ratio: 0.2, totalSeconds: 900 },
+  ] : [],
   totalSeconds: index === 2 ? 4500 : 0,
 }));
 
@@ -31,6 +34,42 @@ const productivityEntries: ProductivityDuration[] = [
 
 const categoryEntries: CategoryDuration[] = [
   { category: "workspace", ratio: 1, segments: 1, totalSeconds: 4500 },
+];
+
+const weekSegments: ActivitySegment[] = [
+  {
+    id: "week-focus-code",
+    startedAt: "2024-01-03T09:00:00",
+    endedAt: "2024-01-03T10:00:00",
+    durationSeconds: 3600,
+    appName: "Visual Studio Code",
+    bundleId: "com.microsoft.VSCode",
+    platform: "macos",
+    source: "nsworkspace",
+    classification: {
+      category: "workspace",
+      productivity: "focus",
+      source: "manual",
+      confidence: 1,
+    },
+  },
+  {
+    id: "week-drift-browser",
+    startedAt: "2024-01-03T10:00:00",
+    endedAt: "2024-01-03T10:15:00",
+    durationSeconds: 900,
+    appName: "Safari",
+    browserName: "Safari",
+    siteDomain: "news.example",
+    platform: "macos",
+    source: "nsworkspace",
+    classification: {
+      category: "workspace",
+      productivity: "drift",
+      source: "manual",
+      confidence: 1,
+    },
+  },
 ];
 
 function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): WeekCalendarEvent {
@@ -76,6 +115,8 @@ function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
       appIcons={{}}
       axisScalePercent={axisScalePercent}
       calendarEvents={calendarEvents}
+      segments={weekSegments}
+      classificationOptions={{ includeAiClassifications: false }}
       categoryEntries={categoryEntries}
       endDay="2024-01-07"
       focusDeltaPercent={null}
@@ -161,5 +202,39 @@ describe("WeekDashboard breakdown panel", () => {
     const { container } = renderWeekDashboard();
 
     expect(container.querySelector(".week-v2-grid--side-open")).toBeTruthy();
+  });
+
+  it("shows the shared detail card for a weekly breakdown segment", () => {
+    const { container } = renderWeekDashboard();
+    const segment = container.querySelector<HTMLElement>('.week-v2-side-card--weekly-breakdown .wt-seg[aria-label^="Wed Workspace"]');
+
+    expect(segment).toBeTruthy();
+    fireEvent.mouseEnter(segment!, { clientX: 160, clientY: 180 });
+
+    const hoverCard = document.body.querySelector<HTMLElement>(".compact-classification-hover-card");
+    expect(hoverCard).toBeTruthy();
+    expect(screen.getByText("Visual Studio Code")).toBeTruthy();
+    expect(screen.getByText("news.example")).toBeTruthy();
+    expect(hoverCard?.textContent).toContain("1h 15m");
+    expect(hoverCard?.textContent).toContain("100% of tracked time");
+
+    fireEvent.mouseLeave(segment!);
+    expect(document.body.querySelector(".compact-classification-hover-card")).toBeNull();
+  });
+
+  it("fills the week productivity and category hover cards with app rows", () => {
+    const { container } = renderWeekDashboard();
+    const productivityArc = container.querySelector<SVGPathElement>(".flow-compact-productivity-circle__segment");
+
+    expect(productivityArc).toBeTruthy();
+    fireEvent.mouseEnter(productivityArc!, { clientX: 120, clientY: 140 });
+    expect(screen.getByText("Visual Studio Code")).toBeTruthy();
+    fireEvent.mouseLeave(productivityArc!);
+
+    const categorySegment = container.querySelector<HTMLElement>(".flow-compact-split-chart__bar .flow-compact-split-chart__segment");
+    expect(categorySegment).toBeTruthy();
+    fireEvent.mouseEnter(categorySegment!, { clientX: 120, clientY: 140 });
+    expect(screen.getByText("Visual Studio Code")).toBeTruthy();
+    expect(screen.getByText("news.example")).toBeTruthy();
   });
 });

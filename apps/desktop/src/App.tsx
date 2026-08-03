@@ -6132,6 +6132,8 @@ export default function App() {
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAppUsage={stickyDashboardAppUsage}
+            dashboardSegments={effectiveDashboardSegments}
+            dashboardClassificationOptions={dashboardClassificationOptions}
             browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
             dashboardCategoryTotals={stickyDashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
