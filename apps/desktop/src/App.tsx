@@ -23,10 +23,8 @@ import {
 import logoUrl from "./assets/drifty-mark.svg";
 import {
   resolveDashboardAiUnavailableState,
+  isCloudBillingVariant,
 } from "./features/dashboard/dashboardAiUnavailableState";
-import {
-  isDashboardAiRecoveryOverlayVariant,
-} from "./features/dashboard/DashboardAiRecoveryOverlay";
 import {
   isDashboardAiRecoveryDismissed,
   storeDashboardAiRecoveryDismissal,
@@ -4279,13 +4277,9 @@ export default function App() {
         hasRequiredAccountAuth,
         isSupabaseConfigured,
         localAiReady: Boolean(localAiClassificationOptions),
-        // Only a failure confirmed by repeated probes may summon the
-        // "AI provider disconnected" notice; single transient errors stay off
-        // the dashboard while the automatic re-test recovers in the background.
-        observedAiClassificationFailure: localAiConnectionPersistentFailure,
       })
       : null;
-  const dashboardAiRecoveryKey = dashboardAiUnavailableState && isDashboardAiRecoveryOverlayVariant(dashboardAiUnavailableState.variant)
+  const dashboardAiRecoveryKey = dashboardAiUnavailableState && isCloudBillingVariant(dashboardAiUnavailableState.variant)
     ? dashboardAiUnavailableState.variant
     : null;
   const dashboardAiRecoveryDismissed = dashboardAiRecoveryKey !== null
@@ -6135,7 +6129,6 @@ export default function App() {
           <DashboardPage
             appIcons={appIcons}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-            classificationActionLoading={classificationActionLoading}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAppUsage={stickyDashboardAppUsage}
@@ -6181,18 +6174,6 @@ export default function App() {
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}
-            onRetrySelectedDayAiClassification={() => {
-              void (async () => {
-                // Probe the provider before the classification retry: when
-                // nothing is left to classify, the run alone yields no
-                // connectivity evidence and the disconnect state would
-                // linger. Sequential, so one click never races two provider
-                // round-trips (managed local runtime starts are heavy) and
-                // the classification verdict lands last as freshest evidence.
-                await aiConnectionTest.runAuto();
-                await handleRunSelectedDayAiClassification();
-              })();
-            }}
             onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
             onSelectDay={selectDay}
           />

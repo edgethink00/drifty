@@ -28,7 +28,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
     <DashboardPage
       appIcons={{}}
       billingCheckoutLoadingInterval={null}
-      classificationActionLoading={false}
       currentMinuteOfDay={4 * 60}
       dashboardAiRecoveryState={null}
       dashboardAppUsage={[]}
@@ -66,7 +65,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       onDismissDashboardAiRecovery={noop}
       onFlowIntervalChange={noop}
       onOpenDashboardAiSetup={noop}
-      onRetrySelectedDayAiClassification={noop}
       onSelectBillingPlan={noop}
       onSelectDay={noop}
     />,

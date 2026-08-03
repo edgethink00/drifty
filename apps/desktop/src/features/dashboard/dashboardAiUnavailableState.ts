@@ -1,6 +1,6 @@
 import type { BillingEntitlement } from "../billing/billingService";
 
-export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-billing" | "device-limit" | "provider-disconnected" | "connect-ai";
+export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-billing" | "device-limit" | "connect-ai";
 
 export type DashboardAiUnavailableState = {
   readonly variant: DashboardAiUnavailableVariant;
@@ -17,7 +17,6 @@ export type DashboardAiUnavailableInput = {
   readonly hasRequiredAccountAuth: boolean;
   readonly isSupabaseConfigured: boolean;
   readonly localAiReady: boolean;
-  readonly observedAiClassificationFailure: boolean;
 };
 
 const TRIAL_ENDED_STATE = {
@@ -41,13 +40,6 @@ const DEVICE_LIMIT_STATE = {
   ctaLabel: "Manage devices",
 } satisfies DashboardAiUnavailableState;
 
-const PROVIDER_DISCONNECTED_STATE = {
-  variant: "provider-disconnected",
-  title: "AI provider disconnected",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Check OpenRouter or your local provider to resume richer AI analysis.",
-  ctaLabel: "Open AI setup",
-} satisfies DashboardAiUnavailableState;
-
 const CONNECT_AI_STATE = {
   variant: "connect-ai",
   title: "Connect an AI provider",
@@ -56,9 +48,8 @@ const CONNECT_AI_STATE = {
 } satisfies DashboardAiUnavailableState;
 
 export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailableInput): DashboardAiUnavailableState | null {
-  if (input.localAiReady && !input.observedAiClassificationFailure) return null;
+  if (input.localAiReady) return null;
   if (input.canUseCloudAiClassification) return null;
-  if (input.localAiReady && input.observedAiClassificationFailure) return PROVIDER_DISCONNECTED_STATE;
   if (input.billingEntitlement?.status === "locked") {
     if (input.billingEntitlement.lockedReason === "device_limit_reached") return DEVICE_LIMIT_STATE;
     return input.billingEntitlement.lockedReason === "trial_expired" ? TRIAL_ENDED_STATE : CLOUD_BILLING_STATE;

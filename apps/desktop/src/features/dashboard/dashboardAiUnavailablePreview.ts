@@ -1,7 +1,7 @@
 import type { BillingEntitlement } from "../billing/billingService";
 import type { DashboardAiUnavailableInput } from "./dashboardAiUnavailableState";
 
-export type DashboardAiUnavailablePreviewCase = "trial-ended" | "cloud-billing" | "device-limit" | "provider-disconnected" | "connect-ai";
+export type DashboardAiUnavailablePreviewCase = "trial-ended" | "cloud-billing" | "device-limit" | "connect-ai";
 
 export type DashboardAiUnavailablePreviewOption = {
   readonly id: DashboardAiUnavailablePreviewCase;
@@ -29,11 +29,6 @@ export const DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS = [
     id: "device-limit",
     label: "Device limit",
     detail: "Two active Macs used",
-  },
-  {
-    id: "provider-disconnected",
-    label: "Provider error",
-    detail: "OpenRouter or local provider setup",
   },
   {
     id: "connect-ai",
@@ -94,14 +89,6 @@ const DEVICE_LIMIT_ENTITLEMENT = {
   ],
 } as const satisfies BillingEntitlement;
 
-const CONNECTED_ENTITLEMENT = {
-  plan: "individual",
-  status: "active",
-  canUseApp: true,
-  trialEndsAt: null,
-  currentPeriodEnd: null,
-} as const satisfies BillingEntitlement;
-
 export function buildDashboardAiUnavailablePreviewInput(caseId: DashboardAiUnavailablePreviewCase): DashboardAiUnavailableInput {
   switch (caseId) {
     case "trial-ended":
@@ -113,7 +100,6 @@ export function buildDashboardAiUnavailablePreviewInput(caseId: DashboardAiUnava
         hasRequiredAccountAuth: true,
         isSupabaseConfigured: true,
         localAiReady: false,
-        observedAiClassificationFailure: false,
       };
     case "cloud-billing":
       return {
@@ -124,7 +110,6 @@ export function buildDashboardAiUnavailablePreviewInput(caseId: DashboardAiUnava
         hasRequiredAccountAuth: true,
         isSupabaseConfigured: true,
         localAiReady: false,
-        observedAiClassificationFailure: false,
       };
     case "device-limit":
       return {
@@ -135,18 +120,6 @@ export function buildDashboardAiUnavailablePreviewInput(caseId: DashboardAiUnava
         hasRequiredAccountAuth: true,
         isSupabaseConfigured: true,
         localAiReady: false,
-        observedAiClassificationFailure: false,
-      };
-    case "provider-disconnected":
-      return {
-        billingEntitlement: CONNECTED_ENTITLEMENT,
-        billingEntitlementError: null,
-        billingEntitlementLoading: false,
-        canUseCloudAiClassification: false,
-        hasRequiredAccountAuth: true,
-        isSupabaseConfigured: true,
-        localAiReady: true,
-        observedAiClassificationFailure: true,
       };
     case "connect-ai":
       return {
@@ -157,7 +130,6 @@ export function buildDashboardAiUnavailablePreviewInput(caseId: DashboardAiUnava
         hasRequiredAccountAuth: false,
         isSupabaseConfigured: false,
         localAiReady: false,
-        observedAiClassificationFailure: false,
       };
     default:
       return assertNever(caseId);
