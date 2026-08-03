@@ -31,6 +31,8 @@ type DashboardPageProps = {
   readonly currentMinuteOfDay: number | null;
   readonly dashboardAiRecoveryState: DashboardAiUnavailableState | null;
   readonly dashboardAppUsage: AppUsagePanelItem[];
+  readonly dashboardSegments: readonly ActivitySegment[];
+  readonly dashboardClassificationOptions: ClassificationOptions;
   readonly dashboardCategoryTotals: CategoryDuration[];
   readonly dashboardDateNavigator: ReactNode;
   readonly dashboardEffectiveProductivityTotals: ProductivityDuration[];
@@ -86,6 +88,8 @@ export function DashboardPage({
   currentMinuteOfDay,
   dashboardAiRecoveryState,
   dashboardAppUsage,
+  dashboardSegments,
+  dashboardClassificationOptions,
   dashboardCategoryTotals,
   dashboardDateNavigator,
   dashboardEffectiveProductivityTotals,
@@ -238,6 +242,8 @@ export function DashboardPage({
           header={headInsideBlock ? pageHead : null}
           rows={weekRows}
           calendarEvents={weekCalendarEvents}
+          segments={dashboardSegments}
+          classificationOptions={dashboardClassificationOptions}
           appIcons={appIcons}
           startDay={dashboardRange.startDay}
           endDay={dashboardRange.endDay}
