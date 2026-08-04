@@ -54,8 +54,8 @@ describe("tracker client native command contract", () => {
     );
   });
 
-  it("authorizes every renderer tracker command in the main window", () => {
-    for (const command of trackerClientInvokeCommands.filter((name) => name.startsWith("tracker_"))) {
+  it("authorizes every renderer tracker and tray command in the main window", () => {
+    for (const command of trackerClientInvokeCommands) {
       expect(mainWindowCapability.permissions, `${command} is missing its main-window capability`).toContain(
         allowPermission(command),
       );

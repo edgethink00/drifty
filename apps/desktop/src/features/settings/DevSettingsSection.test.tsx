@@ -78,6 +78,16 @@ describe("DevSettingsSection", () => {
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
+  it("keeps the redesigned Companion behind an explicit Dev beta toggle", () => {
+    const props = renderProductionDevSettings(75, { companionBetaEnabled: false });
+
+    expect(screen.getByText(/released legacy watcher/i)).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Floating" })).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle Companion beta" }));
+
+    expect(props.onCompanionBetaEnabledChange).toHaveBeenCalledWith(true);
+  });
+
   it("keeps core Dev preview controls visible without release-channel feature gates", () => {
     renderProductionDevSettings();
 
@@ -101,6 +111,60 @@ describe("DevSettingsSection", () => {
 
     expect(screen.getByText("Startup loading screen")).toBeTruthy();
     expect(bootShellActions.showBootShellPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it("previews production milestones through the active notification surface", () => {
+    const props = renderProductionDevSettings();
+    fireEvent.click(screen.getByRole("button", { name: "30-day record" }));
+    fireEvent.click(screen.getByRole("button", { name: "Daily #1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Weekly #1" }));
+
+    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(1, "record-30d");
+    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(2, "daily-rank-1");
+    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(3, "weekly-rank-1");
+  });
+
+  it("switches the live Companion review policy between floating, menu bar, and off", () => {
+    const props = renderProductionDevSettings();
+
+    expect(screen.getByRole("radio", { name: "Floating" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "Menu bar" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
+
+    expect(props.onCompanionSurfacePolicyChange).toHaveBeenNthCalledWith(1, "menuBar");
+    expect(props.onCompanionSurfacePolicyChange).toHaveBeenNthCalledWith(2, "off");
+  });
+
+  it("switches the menu bar resident between the donut and focused time", () => {
+    const props = renderProductionDevSettings();
+
+    expect(screen.getByRole("radio", { name: "Donut" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "Focus time" }));
+
+    expect(props.onCompanionMenuBarDisplayModeChange).toHaveBeenCalledWith("focusTime");
+  });
+
+  it("locks the Companion Day review to final V3", () => {
+    renderProductionDevSettings();
+
+    expect(screen.getByText("V3 final")).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Full" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "V2" })).toBeNull();
+  });
+
+  /* Drift alarms, the break-over card and the day review only ever appeared
+     after real drift, so their layout could not be reviewed on demand. */
+  it("previews the decision cards through the active notification surface", () => {
+    const props = renderProductionDevSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Drift alarm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Break over" }));
+    fireEvent.click(screen.getByRole("button", { name: "Extreme nudge" }));
+    fireEvent.click(screen.getByRole("button", { name: "Day review" }));
+
+    expect(props.onPreviewCompanionMoment).toHaveBeenNthCalledWith(1, "drift-alarm");
+    expect(props.onPreviewCompanionMoment).toHaveBeenNthCalledWith(2, "break-return");
+    expect(props.onPreviewCompanionMoment).toHaveBeenNthCalledWith(3, "extreme-nudge");
+    expect(props.onPreviewCompanionDayReview).toHaveBeenCalledTimes(1);
   });
 
   it("shows pre-release update status and disables the check while busy", () => {

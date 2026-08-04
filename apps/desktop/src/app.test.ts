@@ -9,6 +9,7 @@ import {
   buildEffectiveProductivityDurations,
   buildProductivityDurations,
   buildProductivityPersona,
+  computeCurrentFocusStrikeSeconds,
   computePreservedFocusStrikeSeconds,
   DRIFTY_PRODUCTIVITY_RUBRIC_VERSION,
   classifyActivity,
@@ -380,6 +381,51 @@ describe('domain helpers', () => {
     });
 
     expect(computePreservedFocusStrikeSeconds([focusStart, focusFollowup, drift], drift)).toBe(40 * 60);
+  });
+
+  it('keeps a live focus strike across app switches when both apps classify as focus', () => {
+    const code = segment({
+      id: 'focus-code',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const figma = segment({
+      id: 'focus-figma',
+      start: localIso(9, 21),
+      end: localIso(9, 36),
+      appName: 'Figma',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+
+    expect(computeCurrentFocusStrikeSeconds([code, figma], figma)).toBe(35 * 60);
+  });
+
+  it('ends a live focus strike at an observed non-focus segment', () => {
+    const code = segment({
+      id: 'focus-before-other',
+      start: localIso(9, 0),
+      end: localIso(9, 20),
+      appName: 'Code',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+    const messages = segment({
+      id: 'other-between-focus',
+      start: localIso(9, 20),
+      end: localIso(9, 23),
+      appName: 'Messages',
+      classification: { category: 'communication', productivity: 'neutral', source: 'manual', confidence: 1, reason: 'Test other' },
+    });
+    const figma = segment({
+      id: 'focus-after-other',
+      start: localIso(9, 23),
+      end: localIso(9, 33),
+      appName: 'Figma',
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1, reason: 'Test focus' },
+    });
+
+    expect(computeCurrentFocusStrikeSeconds([code, messages, figma], figma)).toBe(10 * 60);
   });
 
   it('breaks the preserved focus strike after a gap over five minutes', () => {

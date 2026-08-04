@@ -7,13 +7,14 @@ import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/wa
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
 import { DevPreviewControls, type DriftAlarmPreviewOption } from "./DevPreviewControls";
-import type { AiReviewEvent, ProjectPassRun } from "@drifty/domain";
+import type { AiReviewEvent, ProjectPassRun, TrayDisplayMode } from "@drifty/domain";
 import type { DemoDashboardReplaySettings } from "./settingsStorage";
 import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUpdateController";
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { DevSettingsDashboardLayoutBlock } from "./DevSettingsDashboardLayoutBlock";
 import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
+import { DevSettingsCompanionPillBlock } from "./DevSettingsCompanionPillBlock";
 import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock } from "./DevSettingsDiagnosticsBlock";
 import { DevSettingsEnhancedContextBlock } from "./DevSettingsEnhancedContextBlock";
 import { DevSettingsProjectClassificationBlock } from "./DevSettingsProjectClassificationBlock";
@@ -22,6 +23,11 @@ import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./set
 import { useLocalization } from "../localization/LocalizationContext";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { showBootShellPreview } from "../loading/bootShell";
+import type {
+  CompanionMilestonePreviewId,
+  CompanionMomentPreviewId,
+} from "../companion/companionPillPreview";
+import type { CompanionSurfacePolicy } from "../companion/companionPillSettings";
 
 type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
@@ -40,6 +46,15 @@ type DevSettingsSectionProps = {
   readonly projectClassificationCorrectionsBusy: boolean;
   readonly projectPassRuns: readonly ProjectPassRun[];
   readonly weekDashboardAxisScalePercent: number;
+  readonly companionBetaEnabled: boolean;
+  readonly companionSurfacePolicy: CompanionSurfacePolicy;
+  readonly companionMenuBarDisplayMode: TrayDisplayMode;
+  readonly onCompanionBetaEnabledChange: (enabled: boolean) => void;
+  readonly onCompanionSurfacePolicyChange: (policy: CompanionSurfacePolicy) => void;
+  readonly onCompanionMenuBarDisplayModeChange: (mode: TrayDisplayMode) => void;
+  readonly onPreviewCompanionMilestone: (previewId: CompanionMilestonePreviewId) => void;
+  readonly onPreviewCompanionMoment: (previewId: CompanionMomentPreviewId) => void;
+  readonly onPreviewCompanionDayReview: () => void;
   readonly watcherMode: WatcherMode;
   readonly watcherPeekEnabled: boolean;
   readonly watcherPeriodicMaxMinutes: number;
@@ -105,6 +120,15 @@ export function DevSettingsSection({
   projectClassificationCorrectionsBusy,
   projectPassRuns,
   weekDashboardAxisScalePercent,
+  companionBetaEnabled,
+  companionSurfacePolicy,
+  companionMenuBarDisplayMode,
+  onCompanionBetaEnabledChange,
+  onCompanionSurfacePolicyChange,
+  onCompanionMenuBarDisplayModeChange,
+  onPreviewCompanionMilestone,
+  onPreviewCompanionMoment,
+  onPreviewCompanionDayReview,
   watcherMode,
   watcherPeekEnabled,
   watcherPeriodicMaxMinutes,
@@ -230,6 +254,17 @@ export function DevSettingsSection({
         weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
         onResetWeekDashboardAxisScalePercent={onResetWeekDashboardAxisScalePercent}
         onWeekDashboardAxisScalePercentChange={onWeekDashboardAxisScalePercentChange}
+      />
+      <DevSettingsCompanionPillBlock
+        betaEnabled={companionBetaEnabled}
+        policy={companionSurfacePolicy}
+        menuBarDisplayMode={companionMenuBarDisplayMode}
+        onBetaEnabledChange={onCompanionBetaEnabledChange}
+        onPolicyChange={onCompanionSurfacePolicyChange}
+        onMenuBarDisplayModeChange={onCompanionMenuBarDisplayModeChange}
+        onPreviewMilestone={onPreviewCompanionMilestone}
+        onPreviewMoment={onPreviewCompanionMoment}
+        onPreviewDayReview={onPreviewCompanionDayReview}
       />
       <DevSettingsAxFallbackCard
         forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}

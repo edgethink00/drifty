@@ -19,7 +19,11 @@ export type WatcherPeekEvent = {
   minutesSinceLastWatcher: number | null;
   focusSecondsToday: number;
   currentHourFocusSeconds: number;
+  /** Continuous Focus classification across app/site switches. */
+  focusStrikeSeconds?: number | null;
   preservedFocusStrikeSeconds?: number | null;
+  /** Present on the resident surface so pause/resume stays in sync with the app. */
+  trackingPaused?: boolean;
 };
 
 export type WatcherPeekResponse = "return" | "snooze" | "dismiss";

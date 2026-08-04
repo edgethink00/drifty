@@ -1,6 +1,7 @@
 mod accessibility;
 mod ai;
 mod cloud_sync;
+mod companion_panel;
 mod developer_updates;
 mod drift_alarm;
 mod extreme_nudge;

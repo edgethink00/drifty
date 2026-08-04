@@ -14,7 +14,14 @@ describe("SettingsSidebar", () => {
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     expect(within(settingsNav).queryByRole("button", { name: /^Dev$/ })).toBeNull();
     expect(within(settingsNav).getByRole("button", { name: /^Permissions$/ })).toBeTruthy();
-    expect(within(settingsNav).getByRole("button", { name: /^Notifications$/ })).toBeTruthy();
+    expect(within(settingsNav).getByRole("button", { name: /^Companion & Alerts$/ })).toBeTruthy();
+  });
+
+  it("keeps the legacy Notifications label while Companion beta is off", () => {
+    render(<SettingsSidebar activeSection="general" companionBetaActive={false} isCollapsed={false} showDevSection onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /^Notifications$/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Companion & Alerts$/ })).toBeNull();
   });
 
   it("groups sections, marks the current page, and labels the exit action", () => {
@@ -29,7 +36,7 @@ describe("SettingsSidebar", () => {
       "General",
       "Permissions",
       "Appearance",
-      "Notifications",
+      "Companion & Alerts",
     ]);
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "AI setup",

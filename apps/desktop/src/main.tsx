@@ -91,6 +91,14 @@ function BootstrapLoader() {
           return;
         }
 
+        if (nextSurface === "companion") {
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing companion module…");
+          const mod = await import("./features/companion/CompanionWindowApp");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Companion module imported");
+          setLoadedApp(() => mod.CompanionWindowApp);
+          return;
+        }
+
         if (nextSurface === "drift-alarm") {
           window.__DRIFTY_SET_BOOT_STATUS__?.("Importing drift alarm module…");
           const mod = await import("./features/companion/DriftAlarmWindowApp");
@@ -169,9 +177,14 @@ async function syncInitialMenuBarIconStyle(): Promise<void> {
 
 function resolveLocationSurface(location: Pick<Location, "pathname" | "search">): ResolvedBootstrapSurface {
   const requestedSurface = new URLSearchParams(location.search).get("driftySurface");
-  if (requestedSurface === "watcher" || requestedSurface === "drift-alarm") return requestedSurface;
+  if (
+    requestedSurface === "watcher"
+    || requestedSurface === "companion"
+    || requestedSurface === "drift-alarm"
+  ) return requestedSurface;
   if (import.meta.env.DEV && requestedSurface === "privacy-review-concepts") return requestedSurface;
   if (location.pathname === "/watcher") return "watcher";
+  if (location.pathname === "/companion") return "companion";
   if (location.pathname === "/drift-alarm") return "drift-alarm";
   return "app";
 }
@@ -185,6 +198,7 @@ async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const label = getCurrentWindow().label;
     if (label === "watcher-peek") return "watcher";
+    if (label === "companion-pill") return "companion";
     if (label === "drift-alarm") return "drift-alarm";
     return "app";
   } catch {
@@ -194,7 +208,11 @@ async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
 
 function resolveCurrentSurface(): ResolvedBootstrapSurface {
   const documentSurface = document.documentElement.dataset.surface;
-  if (documentSurface === "watcher" || documentSurface === "drift-alarm") {
+  if (
+    documentSurface === "watcher"
+    || documentSurface === "companion"
+    || documentSurface === "drift-alarm"
+  ) {
     return documentSurface;
   }
   if (import.meta.env.DEV && documentSurface === "privacy-review-concepts") {

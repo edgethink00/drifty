@@ -203,6 +203,9 @@ body {
 html[data-surface="watcher"],
 html[data-surface="watcher"] body,
 html[data-surface="watcher"] #root,
+html[data-surface="companion"],
+html[data-surface="companion"] body,
+html[data-surface="companion"] #root,
 html[data-surface="drift-alarm"],
 html[data-surface="drift-alarm"] body,
 html[data-surface="drift-alarm"] #root {
@@ -210,6 +213,7 @@ html[data-surface="drift-alarm"] #root {
 }
 
 html[data-surface="watcher"] body,
+html[data-surface="companion"] body,
 html[data-surface="drift-alarm"] body {
   color: var(--text);
 }

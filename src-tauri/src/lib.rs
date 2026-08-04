@@ -4,8 +4,8 @@ mod auth_session_store;
 mod cloud_device_store;
 mod commands;
 mod donut_icon;
-mod openrouter_key_store;
 mod observability;
+mod openrouter_key_store;
 mod shell_action;
 mod tracker;
 mod tracker_recovery;
@@ -26,48 +26,50 @@ use commands::{
     extreme_nudge_apply, focus_target_activate_browser_tab, focus_target_browser_tab_exists,
     focus_target_open_app, managed_ai_catalog, managed_ai_delete, managed_ai_install,
     managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
-    sentry_capture_native_smoke, setup_drift_alarm_window, setup_watcher_window,
-    startup_get_open_at_login_status,
+    sentry_capture_native_smoke, setup_companion_pill_window,
+    setup_drift_alarm_window, setup_watcher_window, startup_get_open_at_login_status,
     startup_set_open_at_login_enabled, system_open_settings_pane,
-    tracker_apply_classification_rules, tracker_delete_activity_segments,
-    tracker_delete_classification_rule, tracker_delete_history_range, tracker_get_app_icons,
-    tracker_get_classification_metrics, tracker_get_classification_rules,
-    tracker_get_current_snapshot, tracker_get_dashboard_week_timeline, tracker_get_hourly_summary,
-    tracker_get_project_trend_timeline,
-    tracker_get_live_tail, tracker_get_raw_events, tracker_get_reusable_ai_classifications,
-    tracker_get_status, tracker_get_timeline, tracker_get_timeline_page, tracker_get_top_sites,
-    tracker_get_browser_history_environment, tracker_get_unclassified_segments,
-    tracker_import_browser_history, tracker_preview_browser_history_import,
-    tracker_refresh_non_ai_classifications,
-    tracker_get_projects, tracker_save_project, tracker_delete_project,
-    tracker_save_project_anchors, tracker_delete_project_anchor,
-    tracker_save_project_assignments, tracker_get_project_assignments,
-    tracker_save_project_window_assignments, tracker_get_project_window_assignments,
-    tracker_record_project_pass,
-    tracker_get_team_projects, tracker_upsert_team_projects,
-    tracker_save_team_project_assignments, tracker_get_team_project_assignments,
-    tracker_get_project_pass_runs,
-    tracker_save_ai_review_events, tracker_get_ai_review_events, tracker_revert_ai_review_event,
-    tracker_get_sync_outbox, tracker_get_sync_state, tracker_set_sync_state,
-    tracker_apply_synced_segments, tracker_get_pending_sync_deletions,
-    tracker_mark_sync_deletions_pushed, tracker_apply_synced_deletions,
-    tracker_purge_remote_segments,
-    tracker_save_classification_rule, tracker_save_classifications,
+    tracker_apply_classification_rules, tracker_apply_synced_deletions,
+    tracker_apply_synced_segments, tracker_delete_activity_segments,
+    tracker_delete_classification_rule, tracker_delete_history_range, tracker_delete_project,
+    tracker_delete_project_anchor, tracker_get_ai_review_events, tracker_get_app_icons,
+    tracker_get_browser_history_environment, tracker_get_classification_metrics,
+    tracker_get_classification_rules, tracker_get_current_snapshot,
+    tracker_get_dashboard_week_timeline, tracker_get_hourly_summary, tracker_get_live_tail,
+    tracker_get_pending_sync_deletions, tracker_get_project_assignments,
+    tracker_get_project_pass_runs, tracker_get_project_trend_timeline,
+    tracker_get_project_window_assignments, tracker_get_projects, tracker_get_raw_events,
+    tracker_get_reusable_ai_classifications, tracker_get_status, tracker_get_sync_outbox,
+    tracker_get_sync_state, tracker_get_team_project_assignments, tracker_get_team_projects,
+    tracker_get_timeline, tracker_get_timeline_page, tracker_get_top_sites,
+    tracker_get_unclassified_segments, tracker_import_browser_history,
+    tracker_mark_sync_deletions_pushed, tracker_preview_browser_history_import,
+    tracker_purge_remote_segments, tracker_record_project_pass,
+    tracker_refresh_non_ai_classifications, tracker_revert_ai_review_event,
+    tracker_save_ai_review_events, tracker_save_classification_rule, tracker_save_classifications,
+    tracker_save_project, tracker_save_project_anchors, tracker_save_project_assignments,
+    tracker_save_project_window_assignments, tracker_save_team_project_assignments,
     tracker_search_classification_rule_candidates, tracker_search_timeline,
-    tracker_set_developer_diagnostics, tracker_start, tracker_stop, update_prompt_show_native,
-    watcher_peek_cursor_inside, watcher_peek_dismiss, watcher_peek_end_of_day_review_action,
-    watcher_peek_extreme_nudge_action, watcher_peek_hide, watcher_peek_respond,
-    watcher_peek_set_interactive, watcher_peek_show, window_set_onboarding_presentation,
-    DriftAlarmState,
+    tracker_set_developer_diagnostics, tracker_set_sync_state, tracker_start, tracker_stop,
+    tracker_upsert_team_projects, update_prompt_show_native, watcher_companion_clamp_to_screen,
+    watcher_companion_cursor_over_capsule, watcher_companion_dismiss_moment,
+    watcher_companion_present_prepared, watcher_companion_set_click_through,
+    watcher_companion_set_enabled, watcher_companion_set_state,
+    watcher_companion_set_surface_policy, watcher_companion_update,
+    watcher_companion_visibility_action, watcher_peek_cursor_inside, watcher_peek_dismiss,
+    watcher_peek_end_of_day_review_action, watcher_peek_extreme_nudge_action, watcher_peek_hide,
+    watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
+    window_set_onboarding_presentation, DriftAlarmState,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
 use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
 use tracking_pause::TrackingPauseState;
 use tray::{
-    setup_tray, shutdown_tray_refresh_worker, tray_update_drift_alarm_status,
-    tray_update_icon_style, tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState,
-    TrayProductivityState, TrayRefreshWorker,
+    setup_tray, shutdown_tray_refresh_worker, tray_update_display_mode,
+    tray_update_drift_alarm_status, tray_update_icon_style, tray_update_productivity_icon,
+    TrayDisplayState, TrayDriftAlarmState, TrayIconStyleState, TrayProductivityState,
+    TrayRefreshWorker,
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
@@ -310,6 +312,7 @@ pub fn run() {
         .manage(TrayProductivityState::default())
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
+        .manage(TrayDisplayState::default())
         .manage(TrayRefreshWorker::default())
         .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
@@ -356,6 +359,9 @@ pub fn run() {
         reveal_main_window(app);
     }));
 
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+
     let builder = builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
@@ -370,6 +376,7 @@ pub fn run() {
         .setup(|app| {
             setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
+            setup_companion_pill_window(app)?;
             setup_drift_alarm_window(app)?;
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
@@ -493,6 +500,7 @@ pub fn run() {
             tray_update_productivity_icon,
             tray_update_drift_alarm_status,
             tray_update_icon_style,
+            tray_update_display_mode,
             auth_take_pending_deep_links,
             auth_load_saved_session,
             auth_save_session,
@@ -523,6 +531,16 @@ pub fn run() {
             watcher_peek_respond,
             watcher_peek_end_of_day_review_action,
             watcher_peek_extreme_nudge_action,
+            watcher_companion_set_enabled,
+            watcher_companion_set_surface_policy,
+            watcher_companion_set_state,
+            watcher_companion_present_prepared,
+            watcher_companion_set_click_through,
+            watcher_companion_cursor_over_capsule,
+            watcher_companion_clamp_to_screen,
+            watcher_companion_update,
+            watcher_companion_dismiss_moment,
+            watcher_companion_visibility_action,
             drift_alarm_current,
             drift_alarm_show,
             drift_alarm_hide,

@@ -1,0 +1,190 @@
+import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
+
+export const COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY =
+  "drifty.companion.dailyFocusMilestones.v1";
+
+export type CompanionDailyFocusMilestoneId = "day1h" | "day3h" | "day8h";
+
+export type CompanionDailyFocusMilestoneProgress = {
+  readonly day: string;
+  readonly observedFocusSeconds: number;
+  readonly celebrated: readonly CompanionDailyFocusMilestoneId[];
+};
+
+type StoredCompanionDailyFocusMilestoneProgress = {
+  readonly day: string;
+  readonly celebrated: readonly CompanionDailyFocusMilestoneId[];
+};
+
+type DailyFocusMilestoneDefinition = {
+  readonly id: CompanionDailyFocusMilestoneId;
+  readonly thresholdSeconds: number;
+  readonly title: string;
+  readonly subtitle: string;
+  readonly tier: 1 | 2;
+};
+
+export const COMPANION_DAILY_FOCUS_MILESTONES: readonly DailyFocusMilestoneDefinition[] = [
+  {
+    id: "day1h",
+    thresholdSeconds: 60 * 60,
+    title: "1 hour of focus today",
+    subtitle: "The day has real work in it now",
+    tier: 1,
+  },
+  {
+    id: "day3h",
+    thresholdSeconds: 3 * 60 * 60,
+    title: "3 hours of focus today",
+    subtitle: "A solid day by any measure",
+    tier: 1,
+  },
+  {
+    id: "day8h",
+    thresholdSeconds: 8 * 60 * 60,
+    title: "8 hours of focus today",
+    subtitle: "That is a full day of deep work",
+    tier: 2,
+  },
+];
+
+export type CompanionDailyFocusMilestoneEvaluation = {
+  readonly progress: CompanionDailyFocusMilestoneProgress;
+  readonly events: readonly CompanionPillMilestoneEvent[];
+};
+
+/**
+ * Establish the live-session baseline without replaying achievements that
+ * happened while Drifty or the Companion was unavailable. A resident surface
+ * should acknowledge the work happening now, not dump stale celebrations when
+ * it returns after sleep, an app restart, or a deliberate temporary hide.
+ */
+export function initializeCompanionDailyFocusMilestones(
+  day: string,
+  focusSecondsToday: number,
+  stored: StoredCompanionDailyFocusMilestoneProgress | null = readCompanionDailyFocusMilestones(),
+): CompanionDailyFocusMilestoneProgress {
+  const normalizedSeconds = normalizeFocusSeconds(focusSecondsToday);
+  const celebrated = new Set<CompanionDailyFocusMilestoneId>(
+    stored?.day === day ? stored.celebrated : [],
+  );
+
+  for (const milestone of COMPANION_DAILY_FOCUS_MILESTONES) {
+    if (normalizedSeconds >= milestone.thresholdSeconds) celebrated.add(milestone.id);
+  }
+
+  return {
+    day,
+    observedFocusSeconds: normalizedSeconds,
+    celebrated: orderedMilestoneIds(celebrated),
+  };
+}
+
+/** Advance the current logical day and return every newly crossed rung. */
+export function evaluateCompanionDailyFocusMilestones({
+  progress,
+  day,
+  focusSecondsToday,
+  announce,
+}: {
+  readonly progress: CompanionDailyFocusMilestoneProgress;
+  readonly day: string;
+  readonly focusSecondsToday: number;
+  readonly announce: boolean;
+}): CompanionDailyFocusMilestoneEvaluation {
+  if (progress.day !== day) {
+    return {
+      progress: initializeCompanionDailyFocusMilestones(day, focusSecondsToday, null),
+      events: [],
+    };
+  }
+
+  const normalizedSeconds = normalizeFocusSeconds(focusSecondsToday);
+  const celebrated = new Set(progress.celebrated);
+  const crossed: DailyFocusMilestoneDefinition[] = [];
+
+  for (const milestone of COMPANION_DAILY_FOCUS_MILESTONES) {
+    if (celebrated.has(milestone.id) || normalizedSeconds < milestone.thresholdSeconds) continue;
+    celebrated.add(milestone.id);
+    if (progress.observedFocusSeconds < milestone.thresholdSeconds) crossed.push(milestone);
+  }
+
+  return {
+    progress: {
+      day,
+      observedFocusSeconds: normalizedSeconds,
+      celebrated: orderedMilestoneIds(celebrated),
+    },
+    events: announce
+      ? crossed.map((milestone) => buildDailyFocusMilestoneEvent(milestone, day, normalizedSeconds))
+      : [],
+  };
+}
+
+export function readCompanionDailyFocusMilestones(): StoredCompanionDailyFocusMilestoneProgress | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!isStoredProgress(value)) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export function persistCompanionDailyFocusMilestones(
+  progress: CompanionDailyFocusMilestoneProgress,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY,
+      JSON.stringify({ day: progress.day, celebrated: progress.celebrated }),
+    );
+  } catch {
+    // The in-memory session still prevents duplicates if storage is unavailable.
+  }
+}
+
+function buildDailyFocusMilestoneEvent(
+  milestone: DailyFocusMilestoneDefinition,
+  day: string,
+  focusSecondsToday: number,
+): CompanionPillMilestoneEvent {
+  return {
+    kind: "milestone",
+    id: `companion-daily-focus:${day}:${milestone.id}`,
+    milestoneKind: "total",
+    tier: milestone.tier,
+    title: milestone.title,
+    subtitle: milestone.subtitle,
+    destination: "dashboard",
+    statSeconds: focusSecondsToday,
+  };
+}
+
+function orderedMilestoneIds(
+  values: ReadonlySet<CompanionDailyFocusMilestoneId>,
+): CompanionDailyFocusMilestoneId[] {
+  return COMPANION_DAILY_FOCUS_MILESTONES
+    .map((milestone) => milestone.id)
+    .filter((id) => values.has(id));
+}
+
+function normalizeFocusSeconds(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function isStoredProgress(value: unknown): value is StoredCompanionDailyFocusMilestoneProgress {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { day?: unknown; celebrated?: unknown };
+  return typeof candidate.day === "string"
+    && Array.isArray(candidate.celebrated)
+    && candidate.celebrated.every(isDailyFocusMilestoneId);
+}
+
+function isDailyFocusMilestoneId(value: unknown): value is CompanionDailyFocusMilestoneId {
+  return value === "day1h" || value === "day3h" || value === "day8h";
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-companion-clamp-to-screen"
+description = "Enables the watcher_companion_clamp_to_screen command without any pre-configured scope."
+commands.allow = ["watcher_companion_clamp_to_screen"]
+
+[[permission]]
+identifier = "deny-watcher-companion-clamp-to-screen"
+description = "Denies the watcher_companion_clamp_to_screen command without any pre-configured scope."
+commands.deny = ["watcher_companion_clamp_to_screen"]

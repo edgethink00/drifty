@@ -65,7 +65,7 @@ export function DevPreviewControls({
         <div className="settings-row" role="group" aria-label="End-of-day review" ref={endOfDayReviewSettingsRowRef} tabIndex={-1}>
           <div>
             <div className="lbl">End-of-day review</div>
-            <div className="desc">Dev-only local summary after 6:00 PM, or preview it now.</div>
+            <div className="desc">Automatic local summary after 6:00 PM. Preview it now.</div>
           </div>
           <div className="ctrl"><button type="button" className="settings-btn" onClick={onEndOfDayReviewPreview}>Preview</button></div>
         </div>

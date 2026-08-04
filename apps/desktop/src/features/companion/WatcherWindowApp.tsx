@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { EndOfDayReview, type EndOfDayReviewEvent } from "./EndOfDayReview";
 import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import {
+  buildMilestoneSparks,
+  CompanionPillMoment,
+  type CompanionPillDismissReason,
+  type CompanionPillMilestoneEvent,
+} from "./CompanionPillMoment";
 import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import {
   dismissNativeWatcherPeek,
@@ -9,7 +15,7 @@ import {
   setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction,
   triggerNativeExtremeNudgeAction,
-  type WatcherWindowEvent,
+  type CompanionPillWindowEvent,
 } from "./watcherBridge";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 
@@ -17,7 +23,7 @@ const WATCHER_THEME_STORAGE_KEY = "drifty.theme";
 const WATCHER_DEFAULT_THEME = "light";
 
 export function WatcherWindowApp() {
-  const [event, setEvent] = useState<WatcherWindowEvent | null>(null);
+  const [event, setEvent] = useState<CompanionPillWindowEvent | null>(null);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem(WATCHER_THEME_STORAGE_KEY);
@@ -34,9 +40,7 @@ export function WatcherWindowApp() {
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
-    void listenToNativeWatcherShow((nextEvent) => {
-      setEvent(nextEvent);
-    }).then((nextUnlisten) => {
+    void listenToNativeWatcherShow(setEvent).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
         return;
@@ -81,16 +85,45 @@ export function WatcherWindowApp() {
     ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action));
   }, []);
 
+  const handleMilestoneDismiss = useCallback((_reason: CompanionPillDismissReason) => {
+    setEvent(null);
+    ignoreWatcherBridgePromise(hideNativeWatcherPeek());
+  }, []);
+
+  const handleOpenMilestoneDestination = useCallback((destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => {
+    setEvent(null);
+    const action = destination === "leaderboard"
+      ? "openLeaderboard"
+      : destination === "insights"
+        ? "openTrends"
+        : "openDashboard";
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction(action));
+  }, []);
+
   const isReviewEvent = isEndOfDayReviewEvent(event);
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
+  const isMilestone = isMilestoneEvent(event);
 
   useEffect(() => {
-    if (isReviewEvent || isExtremeNudgeToastEvent) ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
-  }, [isExtremeNudgeToastEvent, isReviewEvent]);
+    if (isReviewEvent || isExtremeNudgeToastEvent || isMilestone) {
+      ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
+    }
+  }, [isExtremeNudgeToastEvent, isMilestone, isReviewEvent]);
 
   return (
-    <main className="watcher-window-surface" aria-label="Drifty watcher window">
-      {isReviewEvent ? (
+    <main
+      className={`watcher-window-surface${isMilestone ? " companion-pill-surface" : ""}`}
+      data-state={isMilestone ? "milestone" : undefined}
+      aria-label="Drifty watcher window"
+    >
+      {isMilestone ? (
+        <StandaloneMilestone
+          event={event}
+          onDismiss={handleMilestoneDismiss}
+          onOpenDashboard={handleOpenDashboard}
+          onOpenDestination={handleOpenMilestoneDestination}
+        />
+      ) : isReviewEvent ? (
         <EndOfDayReview
           event={event}
           onOpenDashboard={handleOpenDashboard}
@@ -101,18 +134,30 @@ export function WatcherWindowApp() {
       ) : isExtremeNudgeToastEvent ? (
         <ExtremeNudgeToast event={event} onAction={handleExtremeNudgeAction} onDismiss={handleToastDismiss} />
       ) : (
-        <WatcherPeek event={event} onDismiss={handleDismiss} onPhaseChange={handlePhaseChange} />
+        <WatcherPeek
+          event={isWatcherPeekEvent(event) ? event : null}
+          onDismiss={handleDismiss}
+          onPhaseChange={handlePhaseChange}
+        />
       )}
     </main>
   );
 }
 
-function isEndOfDayReviewEvent(event: WatcherWindowEvent | null): event is EndOfDayReviewEvent {
+function isEndOfDayReviewEvent(event: CompanionPillWindowEvent | null): event is EndOfDayReviewEvent {
   return event !== null && "kind" in event && event.kind === "endOfDayReview";
 }
 
-function isExtremeNudgeToast(event: WatcherWindowEvent | null): event is ExtremeNudgeToastEvent {
+function isExtremeNudgeToast(event: CompanionPillWindowEvent | null): event is ExtremeNudgeToastEvent {
   return event !== null && "kind" in event && event.kind === "extremeNudgeToast";
+}
+
+function isMilestoneEvent(event: CompanionPillWindowEvent | null): event is CompanionPillMilestoneEvent {
+  return event !== null && "kind" in event && event.kind === "milestone";
+}
+
+function isWatcherPeekEvent(event: CompanionPillWindowEvent | null): event is WatcherPeekEvent {
+  return event !== null && !("kind" in event);
 }
 
 function ignoreWatcherBridgePromise(promise: Promise<unknown>) {
@@ -121,4 +166,40 @@ function ignoreWatcherBridgePromise(promise: Promise<unknown>) {
 
 function ignoreWatcherBridgeRejection() {
   return undefined;
+}
+
+function StandaloneMilestone({
+  event,
+  onDismiss,
+  onOpenDashboard,
+  onOpenDestination,
+}: {
+  readonly event: CompanionPillMilestoneEvent;
+  readonly onDismiss: (reason: CompanionPillDismissReason) => void;
+  readonly onOpenDashboard: () => void;
+  readonly onOpenDestination: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
+}) {
+  return (
+    <div
+      className="pill"
+      data-state="milestone"
+      data-mood="focus"
+      data-tier={String(event.tier)}
+      data-mile-kind={event.milestoneKind}
+    >
+      <div className="pill__clip">
+        <CompanionPillMoment
+          event={event}
+          onDismiss={onDismiss}
+          onOpenDashboard={onOpenDashboard}
+          onOpenDestination={onOpenDestination}
+        />
+      </div>
+      <span className="sparks" aria-hidden="true">
+        {buildMilestoneSparks(event.tier, event.id).map((style, index) => (
+          <i key={index} style={style} />
+        ))}
+      </span>
+    </div>
+  );
 }

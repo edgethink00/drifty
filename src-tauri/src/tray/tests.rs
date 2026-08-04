@@ -19,6 +19,56 @@ fn update_status_label_prompts_manual_update_checks() {
 }
 
 #[test]
+fn focused_time_title_uses_hours_and_zero_padded_minutes() {
+    assert_eq!(format_focus_time(0.0), "0:00");
+    assert_eq!(format_focus_time(9_660.0), "2:41");
+    assert_eq!(format_focus_time(f64::NAN), "0:00");
+}
+
+#[test]
+fn focused_time_title_is_three_percent_larger_than_the_menu_bar_default() {
+    assert!((scaled_tray_title_size(13.0) - 13.39).abs() < f64::EPSILON);
+}
+
+#[test]
+fn focused_time_title_reduces_weight_by_four_percent_and_locates_secondary_copy() {
+    assert!((reduced_tray_title_weight(680.0) - 652.8).abs() < f64::EPSILON);
+    assert_eq!(focused_label_start_utf16("2:41 focused"), Some(5));
+}
+
+#[test]
+fn donut_focus_time_replaces_the_dot_with_a_compact_productivity_ring() {
+    let (_, hybrid_width, hybrid_height) = render_tray_display_icon(
+        TrayDisplayMode::DonutFocusTime,
+        0.6,
+        0.2,
+        0.2,
+        true,
+        TrayIconStyle::Expanded,
+    );
+    let (_, dot_width, dot_height) = render_tray_display_icon(
+        TrayDisplayMode::FocusTime,
+        0.6,
+        0.2,
+        0.2,
+        true,
+        TrayIconStyle::Expanded,
+    );
+
+    assert_eq!((hybrid_width, hybrid_height), (22, 18));
+    assert_eq!((dot_width, dot_height), (14, 18));
+}
+
+#[test]
+fn tray_icon_spacing_adds_only_transparent_pixels_after_the_indicator() {
+    let source = vec![255, 64, 32, 255];
+    let (padded, width, height) = add_trailing_icon_space((source, 1, 1), 2);
+
+    assert_eq!((width, height), (3, 1));
+    assert_eq!(padded, vec![255, 64, 32, 255, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
 fn tracking_action_label_starts_when_stopped_or_unknown() {
     assert_eq!(
         tracking_action_label(Some(false), TrackingPauseSnapshot::Inactive),
@@ -93,34 +143,101 @@ fn pause_status_labels_explain_indefinite_timed_and_failed_states() {
 #[test]
 fn tray_icon_render_key_matches_for_unchanged_input() {
     assert_eq!(
-        TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Compact),
-        TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Compact),
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.25,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut
+        ),
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.25,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut
+        ),
     );
 }
 
 #[test]
 fn tray_icon_render_key_changes_when_any_render_input_changes() {
-    let base = TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Compact);
+    let base = TrayIconRenderKey::new(
+        0.5,
+        0.25,
+        0.25,
+        true,
+        TrayIconStyle::Compact,
+        TrayDisplayMode::Donut,
+    );
 
     assert_ne!(
         base,
-        TrayIconRenderKey::new(0.6, 0.25, 0.25, true, TrayIconStyle::Compact)
+        TrayIconRenderKey::new(
+            0.6,
+            0.25,
+            0.25,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut
+        )
     );
     assert_ne!(
         base,
-        TrayIconRenderKey::new(0.5, 0.3, 0.25, true, TrayIconStyle::Compact)
+        TrayIconRenderKey::new(
+            0.5,
+            0.3,
+            0.25,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut
+        )
     );
     assert_ne!(
         base,
-        TrayIconRenderKey::new(0.5, 0.25, 0.3, true, TrayIconStyle::Compact)
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.3,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut
+        )
     );
     assert_ne!(
         base,
-        TrayIconRenderKey::new(0.5, 0.25, 0.25, false, TrayIconStyle::Compact)
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.25,
+            false,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::Donut
+        )
     );
     assert_ne!(
         base,
-        TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Expanded)
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.25,
+            true,
+            TrayIconStyle::Expanded,
+            TrayDisplayMode::Donut
+        )
+    );
+    assert_ne!(
+        base,
+        TrayIconRenderKey::new(
+            0.5,
+            0.25,
+            0.25,
+            true,
+            TrayIconStyle::Compact,
+            TrayDisplayMode::FocusTime
+        )
     );
 }
 
@@ -128,10 +245,24 @@ fn tray_icon_render_key_changes_when_any_render_input_changes() {
 fn older_queued_render_cannot_overwrite_newer_direct_render() {
     let mut state = TrayIconRenderState::default();
     let queued_a_generation = state.claim_request();
-    let queued_a_key = TrayIconRenderKey::new(0.5, 0.25, 0.25, true, TrayIconStyle::Compact);
+    let queued_a_key = TrayIconRenderKey::new(
+        0.5,
+        0.25,
+        0.25,
+        true,
+        TrayIconStyle::Compact,
+        TrayDisplayMode::Donut,
+    );
 
     let direct_b_generation = state.claim_request();
-    let direct_b_key = TrayIconRenderKey::new(0.6, 0.25, 0.15, true, TrayIconStyle::Compact);
+    let direct_b_key = TrayIconRenderKey::new(
+        0.6,
+        0.25,
+        0.15,
+        true,
+        TrayIconStyle::Compact,
+        TrayDisplayMode::Donut,
+    );
     assert!(
         state.should_apply(direct_b_generation, direct_b_key),
         "newer direct update should apply"

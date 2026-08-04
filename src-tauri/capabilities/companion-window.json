@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "companion-window",
+  "description": "Least-privilege capability for the resident non-activating companion pill.",
+  "windows": ["companion-pill"],
+  "platforms": ["macOS"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:event:allow-listen",
+    "allow-tracker-get-status",
+    "allow-tracker-start",
+    "allow-tracker-stop",
+    "allow-watcher-peek-cursor-inside",
+    "allow-watcher-peek-end-of-day-review-action",
+    "allow-watcher-peek-extreme-nudge-action",
+    "allow-watcher-companion-set-state",
+    "allow-watcher-companion-present-prepared",
+    "allow-watcher-companion-set-click-through",
+    "allow-watcher-companion-cursor-over-capsule",
+    "allow-watcher-companion-clamp-to-screen",
+    "allow-watcher-companion-dismiss-moment",
+    "allow-watcher-companion-visibility-action"
+  ]
+}

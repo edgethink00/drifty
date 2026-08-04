@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-companion-present-prepared"
+description = "Enables the watcher_companion_present_prepared command without any pre-configured scope."
+commands.allow = ["watcher_companion_present_prepared"]
+
+[[permission]]
+identifier = "deny-watcher-companion-present-prepared"
+description = "Denies the watcher_companion_present_prepared command without any pre-configured scope."
+commands.deny = ["watcher_companion_present_prepared"]

@@ -85,6 +85,7 @@
     "allow-tray-update-productivity-icon",
     "allow-tray-update-drift-alarm-status",
     "allow-tray-update-icon-style",
+    "allow-tray-update-display-mode",
     "allow-auth-take-pending-deep-links",
     "allow-auth-load-saved-session",
     "allow-auth-save-session",
@@ -109,6 +110,9 @@
     "allow-window-set-onboarding-presentation",
     "allow-watcher-peek-show",
     "allow-watcher-peek-hide",
+    "allow-watcher-companion-set-enabled",
+    "allow-watcher-companion-set-surface-policy",
+    "allow-watcher-companion-update",
     "allow-drift-alarm-show",
     "allow-drift-alarm-hide",
     "core:event:allow-listen"

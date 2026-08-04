@@ -38,6 +38,7 @@
       "capabilities": [
         "main-window",
         "watcher-window",
+        "companion-window",
         "drift-alarm-window"
       ]
     }

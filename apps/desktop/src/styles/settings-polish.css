@@ -866,6 +866,24 @@
   flex-wrap: wrap;
 }
 
+.settings-row--companion-previews .settings-row__actions {
+  justify-content: flex-end;
+  max-width: 420px;
+}
+
+.settings-row--companion-previews .settings-btn {
+  font-family: var(--font-sans);
+  font-size: var(--type-setting-value-size);
+  font-weight: 620;
+  letter-spacing: -.005em;
+  text-transform: none;
+}
+
+.settings-row--companion-previews .settings-btn:disabled {
+  cursor: default;
+  opacity: .42;
+}
+
 .settings-row--drift-copy {
   align-items: center;
 }
