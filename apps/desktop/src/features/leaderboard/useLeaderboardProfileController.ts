@@ -42,6 +42,11 @@ import {
   type LeaderboardPublishPayload,
 } from "./leaderboardPublisher";
 
+// The public board only exposes aggregate scores. A light foreground-only poll
+// lets scheduled aggregate events appear while the board is open without
+// creating a persistent background request stream.
+const LEADERBOARD_PUBLIC_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 type UseLeaderboardProfileControllerInput = {
   readonly activeTab: string;
   readonly allowsEffectiveAnonymousAuth: boolean;
@@ -543,6 +548,16 @@ export function useLeaderboardProfileController({
     if (activeTab !== "leaderboard") return;
 
     void refreshLeaderboardData();
+  }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
+
+  useEffect(() => {
+    if (activeTab !== "leaderboard" || (!isSupabaseConfigured && !shouldUsePreviewData())) return;
+
+    const intervalId = window.setInterval(() => {
+      void refreshLeaderboardData();
+    }, LEADERBOARD_PUBLIC_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
   }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
 
   useEffect(() => {
