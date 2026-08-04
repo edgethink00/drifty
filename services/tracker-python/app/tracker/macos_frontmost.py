@@ -64,6 +64,31 @@ def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | N
           tell frontApp
             if exists front window then
               set windowTitle to name of front window
+              if windowTitle is missing value then set windowTitle to ""
+              -- Aside exposes an empty AXUnknown shadow window as its front
+              -- window. Recover the title from the real main window only when
+              -- that exact synthetic shape is present.
+              if appName is "Aside" and windowTitle is "" then
+                set frontSubrole to ""
+                set frontChildCount to -1
+                try
+                  set frontSubrole to subrole of front window as text
+                end try
+                try
+                  set frontChildCount to count of UI elements of front window
+                end try
+                if frontSubrole is "AXUnknown" and frontChildCount is 0 then
+                  try
+                    set targetWindow to first window whose value of attribute "AXMain" is true
+                    set windowTitle to name of targetWindow as text
+                  on error
+                    try
+                      set targetWindow to first window whose subrole is "AXStandardWindow"
+                      set windowTitle to name of targetWindow as text
+                    end try
+                  end try
+                end if
+              end if
             end if
           end tell
           return appName & linefeed & bundleId & linefeed & windowTitle

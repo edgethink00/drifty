@@ -150,6 +150,34 @@ def _tab_matching_script(
     fallback_url: str,
     fallback_title: str,
 ) -> str:
+    aside_synthetic_window_recovery = ""
+    if app_name == "Aside":
+        aside_synthetic_window_recovery = '''
+              -- Aside keeps an empty AXUnknown shadow window ahead of its real
+              -- browser window. Only bypass that exact synthetic shape; normal
+              -- Chromium front-window selection remains unchanged.
+              if axTitle is "" then
+                set frontSubrole to ""
+                set frontChildCount to -1
+                try
+                  set frontSubrole to subrole of front window as text
+                end try
+                try
+                  set frontChildCount to count of UI elements of front window
+                end try
+                if frontSubrole is "AXUnknown" and frontChildCount is 0 then
+                  try
+                    set targetWindow to first window whose value of attribute "AXMain" is true
+                    set axTitle to name of targetWindow as text
+                  on error
+                    try
+                      set targetWindow to first window whose subrole is "AXStandardWindow"
+                      set axTitle to name of targetWindow as text
+                    end try
+                  end try
+                end if
+              end if
+        '''
     return f'''
         set axTitle to ""
         tell application "System Events"
@@ -158,6 +186,7 @@ def _tab_matching_script(
             if name of frontProc is not equal to "{app_name}" then return "STALE"
             tell frontProc
               if exists front window then set axTitle to name of front window
+{aside_synthetic_window_recovery}
             end tell
           end try
         end tell
