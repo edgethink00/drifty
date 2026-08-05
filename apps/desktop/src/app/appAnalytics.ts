@@ -6,7 +6,7 @@ import {
   toAnalyticsErrorKind,
   toCountBucket,
   type PostHogEventPropertiesByName,
-} from "../lib/analytics/posthog";
+} from "../lib/analytics/posthogClient";
 import type { TabId } from "./navigation";
 
 type AppSurfaceAnalyticsValue = PostHogEventPropertiesByName["app_surface_opened"]["surface"];

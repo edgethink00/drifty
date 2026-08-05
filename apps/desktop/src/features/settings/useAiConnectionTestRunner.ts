@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { localAiSetupFingerprint } from "../ai-connection/aiConnectionHealth";
-import { capturePostHogEvent, toAnalyticsErrorKind, type PostHogEventPropertiesByName } from "../../lib/analytics/posthog";
+import { capturePostHogEvent, toAnalyticsErrorKind, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { testCloudAiConnection } from "./cloudAiConnectionTest";
 import { isActiveProviderTestable } from "./aiSetupProviderSelection";

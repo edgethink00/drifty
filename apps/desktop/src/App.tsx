@@ -79,7 +79,7 @@ import { setOnboardingWindowPresentation } from "./lib/api/windowChromeClient";
 import {
   capturePostHogEvent,
   toAnalyticsErrorKind,
-} from "./lib/analytics/posthog";
+} from "./lib/analytics/posthogClient";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, isDevOnboardingForceOpenEnabled } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";

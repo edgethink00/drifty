@@ -1,6 +1,9 @@
 import type { LeaderboardPageProps } from "../leaderboard/LeaderboardPage";
 import { LeaderboardPage } from "../leaderboard/LeaderboardPage";
 import { SocialProfileView } from "./SocialProfileView";
+import "../leaderboard/leaderboard.css";
+import "../leaderboard/rank-embeds.css";
+import "./social.css";
 
 export type SocialSection = "profile" | "leaderboard";
 

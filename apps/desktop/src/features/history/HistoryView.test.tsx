@@ -3,13 +3,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import type { ActivitySegment } from "@drifty/domain";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryView } from "./HistoryView";
-import { readAppStyles } from "../../test/readStyles";
+import { readAppStyles, readCssWithImports } from "../../test/readStyles";
 import { fireIntersection, installMockIntersectionObserver } from "../../test/intersectionObserverMock";
 
-const styles = readAppStyles();
+const styles = `${readAppStyles()}\n${readCssWithImports("src/features/history/history.css")}`;
 
 function cssRule(selector: string): string {
-  return styles.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{[\\s\\S]*?\\}`))?.[0] ?? "";
+  return [...styles.matchAll(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{[\\s\\S]*?\\}`, "g"))]
+    .map(([rule]) => rule)
+    .join("\n");
 }
 
 const historySegments: ActivitySegment[] = [

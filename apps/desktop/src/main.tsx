@@ -12,7 +12,6 @@ import {
   type ResolvedBootstrapSurface,
 } from "./lib/bootstrap/rejectionAction";
 import "./styles.css";
-import "./features/history/history.css";
 import "./features/dashboard/dashboard.css";
 import "./features/dashboard/compact-charts.css";
 import "./features/flow-chart/flow-chart.css";
@@ -20,10 +19,7 @@ import "./features/dashboard/week-dashboard.css";
 import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
 import "./features/loading/loading-skeletons.css";
-import "./features/leaderboard/leaderboard.css";
-import "./features/leaderboard/rank-embeds.css";
 import "./features/profile/profile-page.css";
-import "./features/social/social.css";
 import "./styles/chartHoverMotion.css";
 import "./styles/modal-chrome.css";
 import { hideBootShell } from "./features/loading/bootShell";
@@ -76,6 +72,7 @@ class BootstrapErrorBoundary extends React.Component<
 
 function BootstrapLoader() {
   const [LoadedApp, setLoadedApp] = React.useState<React.ComponentType | null>(null);
+  const shouldInitializePostHogRef = React.useRef(false);
 
   React.useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Bootstrap shell mounted");
@@ -118,15 +115,14 @@ function BootstrapLoader() {
         }
 
         window.__DRIFTY_SET_BOOT_STATUS__?.("Importing App module…");
-        const [{ AuthProvider }, { initializePostHog }, mod] = await Promise.all([
+        const [{ AuthProvider }, mod] = await Promise.all([
           import("./features/auth/AuthContext"),
-          import("./lib/analytics/posthog"),
           import("./App"),
         ]);
-        initializePostHog();
         void syncInitialMenuBarIconStyle();
         window.__DRIFTY_SET_BOOT_STATUS__?.("App module imported");
         const App = mod.default;
+        shouldInitializePostHogRef.current = true;
         setLoadedApp(() => function AppWithAuthProvider() {
           return (
             <AuthProvider>
@@ -154,6 +150,15 @@ function BootstrapLoader() {
       window.__DRIFTY_BOOTSTRAPPED__ = true;
       hideBootShell();
       document.getElementById("boot-error")?.remove();
+      if (shouldInitializePostHogRef.current) {
+        void import("./lib/analytics/posthogClient")
+          .then(({ schedulePostHogInitialization }) => schedulePostHogInitialization())
+          .catch((error) => {
+            captureSentryException(error, {
+              tags: { surface: "bootstrap", phase: "posthog_schedule" },
+            });
+          });
+      }
       scheduleSentryInitialization();
     }
   }, [LoadedApp]);

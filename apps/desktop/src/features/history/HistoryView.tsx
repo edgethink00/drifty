@@ -5,6 +5,7 @@ import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import "./history.css";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;

@@ -7,7 +7,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
-import { capturePostHogEvent } from "../../lib/analytics/posthog";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED, DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";

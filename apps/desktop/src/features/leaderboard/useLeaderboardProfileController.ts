@@ -4,7 +4,7 @@ import { buildRollingFocusSeconds, isBrowserHistoryImportSegment } from "@drifty
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { capturePostHogEvent, toAnalyticsErrorKind, toCountBucket } from "../../lib/analytics/posthog";
+import { capturePostHogEvent, toAnalyticsErrorKind, toCountBucket } from "../../lib/analytics/posthogClient";
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
 import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";

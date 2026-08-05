@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
-import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
+import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthogClient";
 import type { NotificationPermissionState, OnboardingStep } from "./onboardingFlow";
 
 type UseOnboardingPermissionsOptions = {
