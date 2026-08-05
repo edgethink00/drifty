@@ -241,6 +241,16 @@ fn companion_pill_window_accepts_the_first_click_from_an_inactive_app() {
     );
 }
 
+#[test]
+fn auxiliary_windows_use_the_lightweight_renderer_entry() {
+    let source = include_str!("../watcher.rs");
+
+    assert!(source.contains("auxiliary.html?driftySurface=watcher"));
+    assert!(source.contains("auxiliary.html?driftySurface=companion"));
+    assert!(!source.contains("index.html?driftySurface=watcher"));
+    assert!(!source.contains("index.html?driftySurface=companion"));
+}
+
 /// The milestone window is grown by a transparent gutter so confetti can fly
 /// past the capsule. The stylesheet insets the capsule by the same amount, so
 /// if the two ever disagree the pill is drawn off-centre inside its window.

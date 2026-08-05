@@ -1,8 +1,10 @@
-import "./instrument";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { captureSentryException } from "./lib/observability/sentry";
+import {
+  captureSentryException,
+  scheduleSentryInitialization,
+} from "./lib/observability/sentryClient";
 import {
   applyRejectionAction,
   resolveRejectionAction,
@@ -152,6 +154,7 @@ function BootstrapLoader() {
       window.__DRIFTY_BOOTSTRAPPED__ = true;
       hideBootShell();
       document.getElementById("boot-error")?.remove();
+      scheduleSentryInitialization();
     }
   }, [LoadedApp]);
 

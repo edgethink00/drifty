@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
 }));
 
-vi.mock("../../lib/observability/sentry", () => ({
+vi.mock("../../lib/observability/sentryClient", () => ({
   captureSentryException: mocks.captureSentryException,
 }));
 

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, TrayDisplayMode } from "@drifty/domain";
@@ -37,17 +37,15 @@ import {
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
-import { SocialPage, type SocialSection } from "./features/social/SocialPage";
+import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
-import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
 import type { TeamWorkspaceAction } from "./features/team/TeamWorkspace";
 import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
-import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
@@ -66,7 +64,6 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
-import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
@@ -88,8 +85,6 @@ import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
-import { FeedbackModal } from "./features/feedback/FeedbackModal";
-import { DebugLogModal } from "./features/settings/DebugLogModal";
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
@@ -108,7 +103,6 @@ import {
 } from "./features/settings/aiPrivacyRequestSettings";
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
-import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { CommandBar } from "./features/command-bar/CommandBar";
 import { NO_PROJECT_COLOR, NO_PROJECT_LABEL as FLOW_NO_PROJECT_LABEL, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 
@@ -278,6 +272,7 @@ import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
 import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
+import { DeferredPageImportFallback } from "./features/loading/DeferredPageImportFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
@@ -288,6 +283,27 @@ import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDrift
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
 import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 
+const LazyClassificationPage = lazy(async () => ({
+  default: (await import("./features/classification/ClassificationPage")).ClassificationPage,
+}));
+const LazyHistoryView = lazy(async () => ({
+  default: (await import("./features/history/HistoryView")).HistoryView,
+}));
+const LazyProjectsPage = lazy(async () => ({
+  default: (await import("./features/projects/ProjectsPage")).ProjectsPage,
+}));
+const LazySocialPage = lazy(async () => ({
+  default: (await import("./features/social/SocialPage")).SocialPage,
+}));
+const LazyTeamsBetaSurface = lazy(async () => ({
+  default: (await import("./features/team/TeamsBetaSurface")).TeamsBetaSurface,
+}));
+const LazyFeedbackModal = lazy(async () => ({
+  default: (await import("./features/feedback/FeedbackModal")).FeedbackModal,
+}));
+const LazyDebugLogModal = lazy(async () => ({
+  default: (await import("./features/settings/DebugLogModal")).DebugLogModal,
+}));
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const MANUAL_UPDATE_STATUS_NOTICE_MS = 6_000;
@@ -6384,6 +6400,7 @@ export default function App() {
 
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>
+        <Suspense fallback={<DeferredPageImportFallback label={activeTab} />}>
 
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
@@ -6444,7 +6461,7 @@ export default function App() {
 
         {/* Classification */}
         {activeTab === "classification" ? (
-          <ClassificationPage
+          <LazyClassificationPage
             appIcons={appIcons}
             canShiftClassificationForward={canShiftClassificationForward}
             classificationActivityPeakSeconds={classificationActivityPeakSeconds}
@@ -6501,7 +6518,7 @@ export default function App() {
         {activeTab === "history" ? (
           <div className="page page--history">
             {isDeferredTabBodyReady ? (
-              <HistoryView
+              <LazyHistoryView
                 appIcons={appIcons}
                 deleting={historyDeleting}
                 hasMoreSegments={displayedHistoryHasMoreSegments}
@@ -6525,7 +6542,7 @@ export default function App() {
 
         {/* Projects */}
         {activeTab === "projects" && projectClassificationFeatureEnabled ? (
-          <ProjectsPage
+          <LazyProjectsPage
             projects={projectClassification.projects}
             assignments={projectClassification.assignments}
             selectedDay={selectedDay}
@@ -6595,7 +6612,7 @@ export default function App() {
 
         {/* Social: public profile, embeds, and leaderboard */}
         {activeTab === "leaderboard" ? (
-          <SocialPage
+          <LazySocialPage
             activeSection={socialSection}
             actionError={leaderboardActionError}
             activePeriod={activeLeaderboardPeriod}
@@ -6642,7 +6659,7 @@ export default function App() {
         ) : null}
 
         {activeTab === "team" && canOpenTeamsBeta ? (
-          <TeamsBetaSurface
+          <LazyTeamsBetaSurface
             hasRequiredAccountAuth={hasRequiredAccountAuth}
             isPolicySignedIn={isPolicySignedIn}
             isSupabaseConfigured={isSupabaseConfigured}
@@ -6924,6 +6941,7 @@ export default function App() {
             </div>
           </div>
         ) : null}
+        </Suspense>
       </MainContentShell>
 
       {!isTauriRuntime() ? (
@@ -6960,17 +6978,23 @@ export default function App() {
 
       {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
 
-      {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
+      {feedbackModalOpen ? (
+        <Suspense fallback={null}>
+          <LazyFeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} />
+        </Suspense>
+      ) : null}
       {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}
 
       {debugLogPreview ? (
-        <DebugLogModal
-          text={debugLogPreview.text}
-          note={`Generated ${new Date(debugLogPreview.exportedAt).toLocaleTimeString()} · v${BUILD_INFO.version}`}
-          onClose={() => setDebugLogPreview(null)}
-          onCopy={() => void handleCopyDebugLogs()}
-          onDownload={handleDownloadDebugLogs}
-        />
+        <Suspense fallback={null}>
+          <LazyDebugLogModal
+            text={debugLogPreview.text}
+            note={`Generated ${new Date(debugLogPreview.exportedAt).toLocaleTimeString()} · v${BUILD_INFO.version}`}
+            onClose={() => setDebugLogPreview(null)}
+            onCopy={() => void handleCopyDebugLogs()}
+            onDownload={handleDownloadDebugLogs}
+          />
+        </Suspense>
       ) : null}
 
 

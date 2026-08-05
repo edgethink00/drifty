@@ -209,7 +209,7 @@ pub fn setup_watcher_window(app: &tauri::App) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(
         app,
         WATCHER_PEEK_WINDOW_LABEL,
-        WebviewUrl::App("index.html?driftySurface=watcher".into()),
+        WebviewUrl::App("auxiliary.html?driftySurface=watcher".into()),
     )
     .title("")
     .inner_size(WATCHER_PEEK_WIDTH, WATCHER_PEEK_HEIGHT)
@@ -237,7 +237,7 @@ pub fn setup_companion_pill_window(app: &tauri::App) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(
         app,
         COMPANION_PILL_WINDOW_LABEL,
-        WebviewUrl::App("index.html?driftySurface=companion".into()),
+        WebviewUrl::App("auxiliary.html?driftySurface=companion".into()),
     )
     .title("")
     .inner_size(COMPANION_PILL_CANVAS_WIDTH, COMPANION_PILL_COLLAPSED_HEIGHT)
